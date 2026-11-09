@@ -1,6 +1,7 @@
 """Kinematics: build123d's joints harvested into the xbf's mechanism (AP242's links, pairs,
 ground and configurations) and read back; a chain's links and a prismatic pair; a pair the
-built tree contradicts refused by name; ``posed`` by a configuration's name and by joint values
+built tree contradicts refused by name, and a child that ``connect_to`` turned at its joint's zero though
+it was built where it stands; ``posed`` by a configuration's name and by joint values
 placing a part where the closed form and the sampler say, a model of its own whose STEP carries no
 mechanism and whose xbf keeps it at the asked values; what a pose names wrong refused by name; a
 mechanism state outside its joint's range failing the build in one line, one on a bound built; the structure's ``kinematics`` the same from the file and from the
@@ -670,7 +671,47 @@ def bike():
 """
 
 
+# Two links read turned, as a STEP's leaves are, the lower built where it stands and connected at 0: a
+# RigidJoint on a Plane of the axis takes its X from the world's Z, the hinge's frame from the link's own.
+ZERO = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/elbow.xbf")
+def elbow():
+    turn = bd.Rot(30, 40, 50)
+    upper = turn * bd.Box(100, 20, 20)
+    upper.label = "upper"
+    lower = turn * bd.Pos(100, 0, 0) * bd.Box(100, 20, 20)
+    lower.label = "lower"
+    axis = bd.Axis((50, 0, 0), (0, 1, 0)).located(turn)
+    hinge = bd.RevoluteJoint("elbow", upper, axis=axis, angular_range=(-90, 90))
+    bd.RigidJoint("elbow", lower, {at})
+    hinge.connect_to(lower.joints["elbow"], angle=0)
+    return bd.Compound(children=[upper, lower], label="elbow")
+"""
+
+
 class RefusalTest(_Folder):
+    def test_a_child_turned_at_its_joint_s_zero_is_refused_and_one_at_the_joint_s_own_frame_stays(self) -> None:
+        import build123d as bd
+
+        report = self.build("elbow", ZERO.format(at="bd.Plane(origin=axis.position, z_dir=axis.direction).location"),
+                            ok=False)
+        self.assertRegex(report["error"], r"joint 'elbow' turns elbow/lower by 2\d\.\d+ deg at its zero, moving its "
+                                          r"parts up to \d+(\.\d+)? mm: its RigidJoint stood at the joint's origin")
+        self.assertIn("Build the RigidJoint at the frame the joint places it at, upper.joints['elbow'].location",
+                      report["error"])
+        self.assertFalse((self.folder / "XBF/elbow.xbf").exists(), "a refused document is not written")
+        # At the hinge's own frame the lower link stays where it was built, as built 0.
+        self.build("elbow", ZERO.format(at="hinge.location"))
+        loaded = document.Loaded(self.folder / "XBF/elbow.xbf")
+        self.assertEqual(loaded.mechanism.as_built, {"elbow": (0.0,)})
+        lower = next(instance for instance in loaded.structure()["instances"] if instance["path"].endswith("lower"))
+        built = mechanism._numpy(bd.Rot(30, 40, 50) * bd.Pos(100, 0, 0))
+        np.testing.assert_allclose(np.array(lower["matrix"]).reshape(4, 4).T, built, atol=1e-9)
+
     def test_a_child_frame_at_the_revolute_s_own_frame_is_joint_zero(self) -> None:
         # A rigid frame made of the world datum turns about the axis from the revolute's own by the
         # angle between their X's: outside a narrow range, no value of the pair, and refused.
@@ -787,7 +828,9 @@ def bench():
     parts = [plate]
 
     def mount(joint, part, at, axis, **connect):
-        bd.RigidJoint(joint.label, part, bd.Plane(origin=at, z_dir=axis).location)
+        # A slide's child by position alone, as kinematics.md's recipe has it: on the slide's plane it is turned.
+        frame = bd.Location(at) if isinstance(joint, bd.LinearJoint) else bd.Plane(origin=at, z_dir=axis).location
+        bd.RigidJoint(joint.label, part, frame)
         joint.connect_to(part.joints[joint.label], **connect)
         parts.append(part)
 

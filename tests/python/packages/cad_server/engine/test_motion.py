@@ -44,7 +44,7 @@ def arm():
     bd.RigidJoint("mount", link, bd.Plane(origin=elbow.position, z_dir=elbow.direction).location)
     slide = bd.Axis((60, 0, 30), (1, 0, 0))
     bd.LinearJoint("slide", link, axis=slide, linear_range=(0, 80))
-    bd.RigidJoint("carriage", tip, bd.Plane(origin=slide.position, z_dir=slide.direction).location)
+    bd.RigidJoint("carriage", tip, bd.Location(slide.position))  # a slide's child by position alone
     link.joints["slide"].connect_to(tip.joints["carriage"], position=0)
     base.joints["elbow"].connect_to(link.joints["mount"], angle=0)
     arm = bd.Compound(children=[base, link, tip], label="arm")

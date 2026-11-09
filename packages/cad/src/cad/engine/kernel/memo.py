@@ -425,6 +425,11 @@ def install() -> bool:
             elif not getattr(static, "__kernel_memo__", False):
                 setattr(cls, attr, _query(f"{cls_name}.{attr}", static))
         kernel_history.install()
+        # What each connect_to does to the part it moves, for the harvest's check that a child stands where it
+        # was built at its joint's zero (``mechanism.watch``): installed, as the memo is, before a body runs.
+        from cad.engine import mechanism
+
+        mechanism.watch()
         # build123d's booleans and ``clean`` unify through the class its topology module imported:
         # the one-place class (``_one_place``), as a model's own unify is.
         from build123d.topology import shape_core
@@ -789,6 +794,9 @@ def uninstall() -> bool:
         if getattr(unify, "__kernel_one_place__", False):
             shape_core.ShapeUpgrade_UnifySameDomain = unify.__mro__[1]
         kernel_history.uninstall()
+        from cad.engine import mechanism
+
+        mechanism.unwatch()
         _installed = False
         return True
 
