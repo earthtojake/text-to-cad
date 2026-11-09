@@ -256,6 +256,11 @@ def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray
     return radius
 
 
+#: A triangle narrower than this share of its longest side (twice its area over that side squared) is a
+#: needle: the ball's inside test skips it, its edges bounding the ball (``_exact_balls``).
+NEEDLE = 1e-3
+
+
 def _exact_balls(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray, c_t: np.ndarray,
                  allowed: np.ndarray, floor: float) -> tuple[np.ndarray, np.ndarray]:
     """For each point ``p[k]`` (outward normal ``n[k]``): the least radius at which the ball tangent there
@@ -293,10 +298,15 @@ def _exact_balls(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray,
                 hh = h0 + t * h1
                 ok = (disc >= 0) & (t > 0) & (t < 1) & (hh > floor)
                 best = np.minimum(best, np.where(ok, (aa + 2 * t * ae + t * t * ee) / (2.0 * hh), np.inf))
-        # insides: the sphere tangent at p and to the triangle's plane, touching inside the triangle
+        # insides: the sphere tangent at p and to the triangle's plane, touching inside the triangle. A needle
+        # (narrower than NEEDLE of its longest side: a tall cone strip's tessellation) has no plane to speak of
+        # -- its normal is its corners' rounding, and a ball "inside" it read 0.015 mm under a 2 mm wall 10 mm
+        # away --, and its inside lies within that width of its edges, which bound the ball already
         m = np.cross(b_t - a_t, c_t - a_t)
         size = np.linalg.norm(m, axis=1)
-        good = size > 0
+        longest = np.max(np.stack([np.linalg.norm(b_t - a_t, axis=1), np.linalg.norm(c_t - b_t, axis=1),
+                                   np.linalg.norm(a_t - c_t, axis=1)]), axis=0)
+        good = size > NEEDLE * longest * longest
         m = m / np.where(good, size, 1.0)[:, None]
         v0, v1 = b_t - a_t, c_t - a_t
         d00, d01, d11 = (np.einsum("ij,ij->i", v0, v0), np.einsum("ij,ij->i", v0, v1),

@@ -281,6 +281,23 @@ class ThicknessTest(unittest.TestCase):
         self.assertFalse({"molding.wall_max", "molding.thick_section", "molding.wall_transition"}
                          & {f.code for f in result.findings})
 
+    def test_a_uniform_cup_reads_no_transition_wherever_it_stands(self) -> None:
+        # a 2 mm cup 40 x 30 x 80 drafted 1 deg, its inside corners 1.2 mm: its tall corner strips tessellate as
+        # needles, whose ill-set plane once held a ball of 0.015 mm under a 2 mm wall -- 2 to 4 false
+        # transitions, a count that moved with the cup
+        with bd.BuildPart() as cup:
+            with bd.BuildSketch():
+                bd.RectangleRounded(40, 30, 3.2)
+            bd.extrude(amount=80, taper=1.0)
+            bd.offset(amount=-2.0, openings=cup.faces().sort_by(bd.Axis.Z)[0])
+        for turn, move in ((bd.Rot(0, 0, 0), (0, 0, 0)), (bd.Rot(0, 0, 0), (1000, -700, 300)),
+                           (bd.Rot(0, 0, 37), (5, 5, 5)), (bd.Rot(90, 0, 0), (0, 0, 0))):
+            pull = (turn * bd.Pos(0, 0, 1)).position
+            result = _check(bd.Pos(*move) * turn * cup.part, pull=f"{pull.X:.15g},{pull.Y:.15g},{pull.Z:.15g}")
+            self.assertEqual(result.measurements["transitions"]["items"], [], (turn, move))
+            self.assertNotIn("molding.wall_transition", {f.code for f in result.findings})
+            self.assertAlmostEqual(result.measurements["thickness"]["nominal_mm"], 2.0, places=6)
+
     def test_the_ball_against_its_closed_form(self) -> None:
         # One flat face of a 4 mm slab, from above: the ball is half the slab.
         vertices = np.array([[-50, -50, 0], [50, -50, 0], [50, 50, 0], [-50, 50, 0.0]])
