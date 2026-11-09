@@ -25,6 +25,10 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
+After the install command, `cad setup` or `cad update`, tell the person to restart each app it
+names, in its words. For Claude Desktop that is "quit and reopen Claude Desktop": the app reads
+CAD's server only as it starts. Until then, in its Code tab, give the `cad viewer` link instead.
+
 ## Geometry Inspection
 
 Measure the exact upload file with `cad`, not by reading the file as text:

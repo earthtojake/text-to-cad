@@ -170,6 +170,17 @@ if tool == "claude":
         data["mcpServers"].pop(args[4])
         config.write_text(json.dumps(data), encoding="utf-8")
         done()
+    if args[:4] == ["mcp", "remove", "--scope", "local"]:
+        # A project's server, which Claude Code finds by the folder it runs in.
+        config = home / ".claude.json"
+        data = json.loads(config.read_text(encoding="utf-8"))
+        here = os.path.realpath(os.getcwd())
+        project = next((key for key in data.get("projects", {}) if os.path.realpath(key) == here), None)
+        if project is None or args[4] not in data["projects"][project].get("mcpServers", {}):
+            refuse("No MCP server found with name: " + args[4])
+        data["projects"][project]["mcpServers"].pop(args[4])
+        config.write_text(json.dumps(data), encoding="utf-8")
+        done()
 elif tool == "codex":
     state = world.setdefault("codex", {})
     if args == ["--version"]:
@@ -499,6 +510,35 @@ class DetectionAndPlan(Fixture):
         self.assertIn("uninstall this one in Cursor", by_app["cursor"][1][1])
         self.assertEqual(by_app["grok"], [("leave", "served by the Claude Code plugin"),
                                           ("remove duplicate", "text-to-cad 1.2.3 (from /checkout)")])
+
+    def test_claude_code_loses_every_cad_server_it_starts_itself_and_keeps_the_rest(self) -> None:
+        # Claude Code takes CAD from the plugin's skills: a CAD server someone added with `claude mcp add`, for
+        # the user or for one project, goes, by Claude Code's own command (a project's run in that project);
+        # another server stays, and so does Claude Desktop's own CAD server.
+        home = self.make(("claude",))
+        project, gone = home.root / "project", home.root / "deleted"
+        project.mkdir()
+        cad = {"command": "uvx", "args": ["--from", "cad-mcp==1.2.2", "cad-mcp"]}
+        other = {"command": "npx", "args": ["-y", "some-server"]}
+        (home.home / ".claude.json").write_text(json.dumps({
+            "mcpServers": {"cad": cad, "other": other},
+            "projects": {str(project): {"mcpServers": {"text-to-cad": cad, "other": other}},
+                         str(gone): {"mcpServers": {"cad": cad}}}}), encoding="utf-8")
+        home.desktop.parent.mkdir(parents=True)
+        steps = home.plan()
+        removals = [step for step in steps if step.action == "remove server"]
+        self.assertEqual([([argv[1:] for argv in step.commands], step.cwd) for step in removals],
+                         [([["mcp", "remove", "--scope", "user", "cad"]], None),
+                          ([["mcp", "remove", "--scope", "local", "text-to-cad"]], str(project))])
+        self.assertTrue(all("Code tab the server from Claude Desktop's config" in step.subject for step in removals))
+        self.assertIn(("claude", "leave"), actions(steps))  # the deleted project's: Claude Code never starts it
+        self.assertIn(("claude-desktop", "install"), actions(steps))
+        home.apply(steps)
+        left = json.loads((home.home / ".claude.json").read_text(encoding="utf-8"))
+        self.assertEqual(left["mcpServers"], {"other": other})
+        self.assertEqual(left["projects"][str(project)]["mcpServers"], {"other": other})
+        self.assertEqual(json.loads(home.desktop.read_text(encoding="utf-8"))["mcpServers"], {"cad": ENTRY})
+        self.assertEqual([copy.name for copy in home.detect()["claude"].copies if copy.kind == "server"], ["cad"])
 
     def test_claude_code_s_directory_copy_is_replaced_and_one_held_by_its_scope_keeps_ours_out(self) -> None:
         home = self.make(("claude",))

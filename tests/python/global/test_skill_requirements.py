@@ -35,6 +35,10 @@ it is missing, install text-to-cad, outside a sandbox or with its permission:
 On Windows, in PowerShell: `{install_windows}`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+
+After the install command, `cad setup` or `cad update`, tell the person to restart each app it
+names, in its words. For Claude Desktop that is "quit and reopen Claude Desktop": the app reads
+CAD's server only as it starts. Until then, in its Code tab, give the `cad viewer` link instead.
 """
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)
