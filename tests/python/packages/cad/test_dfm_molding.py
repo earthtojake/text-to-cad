@@ -162,6 +162,30 @@ class UndercutTest(unittest.TestCase):
         self.assertIn(sorted(item["side_actions"]), (["+x", "-x"], ["+y", "-y"]))
         self.assertLess(item["stroke_mm"], 10.0, "each half travels its own half, not the whole diameter")
 
+    def test_a_groove_s_depth_is_said_and_a_shallow_re_entrant_lip_is_bumped_off(self) -> None:
+        # a 3 mm round groove in a rim, its centre inset: 0.5 mm in, its opening is 0.042 mm narrower each side
+        # than the groove (3 - sqrt(9 - 0.25)), a lip the slides scrape over (a bump-off, a warning); 1 mm in,
+        # 0.17 mm -- over BUMP_OFF_MM, nothing frees it (an error). Each says how deep it is against the pull.
+        disc = bd.Cylinder(35, 16, align=BOTTOM) - bd.Cylinder(5, 40)
+        turned = bd.Rot(0, 90, 0) * bd.Pos(2, -1, 0)
+        for turn, pull, inset in ((bd.Rot(0, 0, 0), "z", 0.5), (bd.Rot(0, 0, 0), "z", 1.0), (turned, "x", 0.5)):
+            result = _check(turn * (disc - bd.Pos(0, 0, 8) * bd.Torus(35 - inset, 3)), pull=pull)
+            (item,) = result.measurements["undercuts"]["items"]
+            self.assertAlmostEqual(item["depth_mm"], 3.0 + inset, delta=0.15, msg=(pull, inset))
+            codes = {(f.severity, f.code) for f in result.findings if f.code.startswith("molding.undercut")}
+            finding = next(f for f in result.findings if f.code.startswith("molding.undercut"))
+            self.assertIn("mm deep against the pull", finding.message)
+            self.assertIn(f"{item['leaning']} leaning", finding.message)
+            if inset == 0.5:
+                self.assertEqual(codes, {("warning", "molding.undercut_bump_off")}, pull)
+                self.assertEqual((item["release"], item["kind"]), ("bump_off", "external"))
+                self.assertLessEqual(item["interference_mm"], type_side.BUMP_OFF_MM)
+                self.assertIn("resin's flexibility", finding.message)
+            else:
+                self.assertEqual(codes, {("error", "molding.undercut_unreleasable")}, pull)
+                self.assertGreater(item["slide_depth_mm"], type_side.BUMP_OFF_MM)
+                self.assertLess(item["slide_depth_mm"], 0.18)
+
     def test_inside_undercuts_take_a_lifter_or_a_collapsing_core(self) -> None:
         inner = 20.0 + 15.0 * math.tan(math.radians(3.0)) - 2.0 / math.cos(math.radians(3.0))
         snap = _tray() + bd.Pos(0, inner - 0.6, 15) * bd.Box(10, 2, 1.5)

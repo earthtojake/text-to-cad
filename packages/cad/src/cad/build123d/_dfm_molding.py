@@ -44,7 +44,8 @@ import numpy as np
 
 from cad._internal import meshops_molding as ops
 from cad._internal.dfm import checkpoint
-from cad._internal.dfm.molding import pull_doubtful
+from cad._internal.dfm._common import mm
+from cad._internal.dfm.molding import BUMP_OFF_MM, pull_doubtful
 from cad.build123d import _dfm_brep
 
 __all__ = ["measure"]
@@ -902,6 +903,7 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
                 release = {"release": "unknown", "kind": None, "directions": [], "vectors": [], "angled": [],
                            "stroke_mm": None}
             item.update(_release_fields(release, geo.points[mine], pull))
+            item["leaning"] = ", ".join(geo.ref(face).rsplit("/", 1)[-1] for face in sorted(whole or per_face))
         items.append(item)
     items.sort(key=lambda item: -(item["trapped_area_mm2"] or 0))
     leaning = trapped.trapped & ~trapped.zero & in_group
@@ -927,11 +929,37 @@ def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarra
     else:
         side, across = ops.basis(pull)
     heights, widths = points @ pull, points @ across
-    return {"kind": release["kind"], "release": release["release"], "side_actions": release["directions"],
-            "side_action_count": len(release["directions"]) if release["release"] == "side_action" else 0,
-            "angled": any(release.get("angled") or []), "stroke_mm": _r(release.get("stroke_mm"), 3),
-            "height_mm": _r(float(heights.max() - heights.min()), 3),
-            "width_mm": _r(float(widths.max() - widths.min()), 3)}
+    found = release["release"]
+    depth = release.get("depth_mm")
+    slide = release.get("slide_depth_mm")
+    allowance = BUMP_OFF_MM
+    # A feature this shallow against the pull is stripped off it as the part ejects, or one no slide
+    # frees cleanly is scraped over its lip by the slide (BUMP_OFF_MM, text-to-cad's own figure).
+    over = None
+    if depth is not None and depth <= allowance and found in ("side_action", "lifter", "collapsible_core", "none"):
+        over = "the pull"
+    elif found == "none" and slide is not None and slide <= allowance:
+        over = "a slide"
+    fields = {"kind": release["kind"], "release": "bump_off" if over else found,
+              "side_actions": release["directions"],
+              "side_action_count": len(release["directions"]) if found == "side_action" and not over else 0,
+              "angled": any(release.get("angled") or []), "stroke_mm": _r(release.get("stroke_mm"), 3),
+              "height_mm": _r(float(heights.max() - heights.min()), 3),
+              "width_mm": _r(float(widths.max() - widths.min()), 3)}
+    fields["depth_said"] = "its depth unmeasured (the part's release budget spent)"
+    if depth is not None:
+        fields["depth_mm"] = _r(depth, 4)
+        fields["depth_said"] = (f"at least {mm(_r(depth, 3))} mm deep against the pull"
+                                if release.get("depth_limited") else f"{mm(_r(depth, 3))} mm deep against the pull")
+    if slide is not None:
+        fields["slide_depth_mm"] = _r(slide, 4)
+        fields["depth_said"] += f", {mm(_r(slide, 3))} mm against its best slide"
+    if over:
+        if over == "a slide":
+            fields["kind"] = "external"  # the slides' steel scrapes over the lip from outside
+        fields["bump_off_over"] = over
+        fields["interference_mm"] = _r(depth if over == "the pull" else slide, 4)
+    return fields
 
 
 def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
@@ -962,6 +990,7 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
         "lifter_count": releases.count("lifter"),
         "collapsible_core_count": releases.count("collapsible_core"),
         "unreleasable_count": releases.count("none"),
+        "bump_off_count": releases.count("bump_off"),
         "unsearched_count": releases.count("unknown"),
         "items": items[:_ITEMS],
     }

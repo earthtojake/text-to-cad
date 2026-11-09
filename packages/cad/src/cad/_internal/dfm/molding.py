@@ -5,7 +5,8 @@ misread draft, undercuts and walls, so a mesh is refused (``manufacturing._MESH_
 
 - ``draft``: every wall face's draft and which way it opens (``+pull``, ``-pull``, ``none``, ``split``);
 - ``undercuts``: the trapped features, each with what releases it (``side_action`` and its directions and
-  stroke, ``lifter``, ``collapsible_core``, ``none``) and whether it faces outside or in;
+  stroke, ``lifter``, ``collapsible_core``, ``bump_off`` -- at most ``BUMP_OFF_MM`` deep, stripped as it
+  ejects -- ``none``), how deep it is and whether it faces outside or in;
 - ``thickness``: the nominal wall, each face's (or region's) thin and thick readings, and whether it is a
   wall's or a rib's or boss's (``feature``: their rules judge those, the wall's range does not);
 - ``transitions``: each step in the wall, its run over its change, read on the stepped side (a free-form
@@ -57,6 +58,9 @@ PROTOLABS_WALLS = Source("protolabs-walls", "Protolabs", "Improving part design 
 XOMETRY_RIBS = Source("xometry-ribs", "Xometry", "Plastic ribs for injection-molding design",
                       "https://www.xometry.com/resources/injection-molding/plastic-ribs-for-injection-molding-design/",
                       _ACCESSED)
+BUMP_OFFS = Source("protolabs-bumpoff", "Protolabs", "Creating complex undercuts with bumpoffs",
+                   "https://www.protolabs.com/resources/design-tips/creating-complex-undercuts-with-bumpoffs/",
+                   "2026-11-09")
 MOLDMINDS = Source("moldminds-clamp", "Moldminds", "Clamp force calculator (material tonnage factors)",
                    "https://moldminds.com/clamp-force-calculator/", _ACCESSED)
 RJC = Source("rjc-tonnage", "RJC Mold", "Injection molding machine tonnage",
@@ -90,6 +94,10 @@ _KN_PER_TON = 8.896443  # a US (short) ton-force in kilonewtons
 
 _MOLDED = ("+pull", "-pull", "none")
 _RELEASED = ("side_action", "lifter", "collapsible_core", "unknown")
+#: The deepest lip (mm) taken as stripped off as the part ejects (a bump-off) -- against the straight pull, or
+#: against the slide of a feature no slide frees cleanly: text-to-cad's own figure, no guide's. Protolabs gives
+#: none; it says a bump-off works on a flexible resin over a ramped or rounded leading edge (``BUMP_OFFS``).
+BUMP_OFF_MM = 0.1
 
 
 #: Hubs' and Protolabs' recommended draft, in their words.
@@ -122,11 +130,20 @@ def _draft_rules(source: str, least: float, severity: str, preferred: tuple[floa
 def _undercut_rules(source: str) -> tuple[Rule, ...]:
     return (
         Rule("molding.undercut", "undercuts", "trapped_area_mm2", "max", 0.0, "mm2", "undercut area", source,
-             severity="warning", item_when={"release": _RELEASED},
+             severity="warning", item_when={"release": _RELEASED}, detail="{leaning} leaning, {depth_said}",
              fix="the undercut needs the side action, lifter or core the finding names (tooling cost): make it pull "
                  "straight -- a pass-through core, a slot, a shut-off -- or keep it and budget the action"),
+        Rule("molding.undercut_bump_off", "undercuts", "trapped_area_mm2", "max", 0.0, "mm2", "undercut area",
+             "protolabs-bumpoff", severity="warning", item_when={"release": "bump_off"},
+             detail="{leaning} leaning, {depth_said}: a {interference_mm:.3g} mm lip over {bump_off_over}, stripped off "
+                    f"as the part ejects (a bump-off: {BUMP_OFF_MM:g} mm at most, text-to-cad's own figure); a "
+                    "bump-off depends on the resin's flexibility",
+             note="a bump-off depends on the resin's flexibility: TPE, unfilled PE or PP, not glass-filled nylon or PC",
+             fix="round or ramp the lip's leading edge and mold it in a flexible resin, or open the lip"),
         Rule("molding.undercut_unreleasable", "undercuts", "trapped_area_mm2", "max", 0.0, "mm2", "trapped area",
              source, item_when={"release": "none"},
+             detail=f"{{leaning}} leaning, {{depth_said}}: over the {BUMP_OFF_MM:g} mm a bump-off takes "
+                    "(text-to-cad's own figure)",
              fix="no slide, lifter or core frees this feature: open it to one side or split the part"),
     )
 
@@ -222,7 +239,7 @@ RULES = RuleSet(
      *_rib_rules((0.6, "xometry-ribs"), ("height_ratio", 3.0, "hubs-im"), ("base_fillet_ratio", 0.25, "hubs-im"),
                  ("gap_to_wall", 2.5, "xometry-ribs"), (0.5, "xometry-ribs")),
      _SNAP, _BOSS_ROOT, _CORNER),
-    (HUBS, PROTOLABS, PROTOLABS_WALLS, XOMETRY_RIBS),
+    (HUBS, PROTOLABS, PROTOLABS_WALLS, XOMETRY_RIBS, BUMP_OFFS),
     note="general practice from published design guides, no shop's limits: draft (0.5 deg on vertical faces, 2 "
          "deg recommended), a wall table per resin, corner, transition, undercut, snap-fit and root guidance, rib "
          "and boss proportions; a press's and a mold's own limits are compared with the measurements")
@@ -445,6 +462,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         counts = ", ".join(f"{undercuts[key]} {words}" for key, words in
                            (("side_action_count", "side action(s)"), ("lifter_count", "lifter(s)"),
                             ("collapsible_core_count", "collapsible core(s)"),
+                            ("bump_off_count", "bumped off"),
                             ("unreleasable_count", "with no release"),
                             ("unsearched_count", "not searched (the part's release budget spent)"))
                            if undercuts.get(key))
@@ -455,8 +473,8 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             f"{undercuts['candidate_area_mm2']:g} mm2 ({undercuts['candidate_area_pct_of_surface']:g}% of the "
             f"surface) does not withdraw along a straight two-half pull, {undercuts['candidate_face_count']} "
             f"faces; the largest is {faces[0].get('area_mm2', 0):g} mm2"
-            + (f"; {undercuts['undercut_count']} feature(s): {counts} (each judged by molding.undercut or "
-               "molding.undercut_unreleasable)" if undercuts.get("undercut_count") else ""),
+            + (f"; {undercuts['undercut_count']} feature(s): {counts} (each judged by molding.undercut, "
+               "molding.undercut_bump_off or molding.undercut_unreleasable)" if undercuts.get("undercut_count") else ""),
             _location(faces[0]),
             (_pull_hint(report, f"{undercuts['candidate_area_pct_of_surface']:g}% of the surface is trapped along "
                                 f"this pull (a quarter or more: an engineering trigger, no source's)")

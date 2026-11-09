@@ -773,6 +773,10 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
       direction serves (an internal groove or thread round the pull);
     - ``none``: some point is cleared by none of these (a sealed pocket, an interlock).
 
+    Each says how deep it is (``interference``): ``depth_mm`` against the straight pull (``depth_limited``
+    where no move up to the stroke limit frees it), and one released by none ``slide_depth_mm`` against its
+    best slide too (a re-entrant lip).
+
     With ``cache`` (one dict per part), a feature of the same shape as one already classified (a row of
     identical contacts) is given its release once that release frees a probe of its own points too.
     """
@@ -805,6 +809,13 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
         if _replays(cache[key], pts[probe], nrm[probe], p, cast, ladder, tol):
             return dict(cache[key])
     found = _classify(pts, nrm, p, cast, scale, tol, lateral, candidates, stroke_limit)
+    # How deep it is: against the straight pull (a bump-off's strain); one nothing releases, against its
+    # best slide too (a re-entrant lip the slide's steel would scrape over).
+    reach = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
+    found["depth_mm"] = interference(pts, nrm, (p, -p), cast, limit=reach, zero_tol_deg=zero_tol_deg)
+    found["depth_limited"] = found["depth_mm"] >= reach
+    if found["release"] == "none":
+        found["slide_depth_mm"] = interference(pts, nrm, lateral, cast, limit=reach, zero_tol_deg=zero_tol_deg)
     if key is not None:
         cache[key] = found
     return found
@@ -904,6 +915,64 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
         return {"release": "collapsible_core", "kind": "internal", "directions": [], "vectors": [], "angled": [],
                 "stroke_mm": float(finite.max()) if len(finite) else None}
     return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
+
+
+def interference(points: np.ndarray, normals: np.ndarray, ways: Sequence[np.ndarray], cast: Cast, *,
+                 limit: float, zero_tol_deg: float) -> float:
+    """How far a feature's material overlaps its best way out (mm): per point, the least offset square to a
+    way (along its own normal's part square to it, or eight round it) from which a ray along that way leaves
+    the part -- the material between is bent past as the part strips off, so the offset need not be clear
+    itself -- 0 where the way is open from the point itself; the least over ``ways``, the deepest point's. A
+    3 mm groove pulled straight is 3 deep; a groove's 0.02 mm re-entrant lip against a slide is 0.02 deep
+    against the slide. ``limit`` where no offset up to it frees some point. Measured at the points given, so a
+    lip's last hundredth between two of them may be missed."""
+    pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    nrm = np.asarray(normals, dtype=float).reshape(-1, 3)
+    if not len(pts):
+        return 0.0
+    tol = math.sin(math.radians(max(zero_tol_deg, 0.05)))
+    units = [np.asarray(way, dtype=float) / np.linalg.norm(way) for way in ways]
+    best = np.full(len(pts), np.inf)
+    for way in units:
+        open_ = (nrm @ way >= -tol) & ~np.isfinite(cast(pts, np.repeat(way[None, :], len(pts), axis=0)))
+        best[open_] = 0.0
+    offsets = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 12), [limit]]))
+
+    def free(index: np.ndarray, offset: np.ndarray, square: np.ndarray, way: np.ndarray) -> np.ndarray:
+        step = square[index] if square.ndim == 2 else np.broadcast_to(square, (len(index), 3))
+        moved = pts[index] + offset[:, None] * step
+        return ~np.isfinite(cast(moved, np.repeat(way[None, :], len(moved), axis=0)))
+
+    def squares(way: np.ndarray) -> list[np.ndarray]:
+        # eight round the way, and each point's own normal square to it (a groove's floor out of the
+        # groove, a lip's face off the lip): the eight alone overstate a depth by up to 8%
+        own = nrm - (nrm @ way)[:, None] * way[None, :]
+        size = np.linalg.norm(own, axis=1)
+        own = np.where(size[:, None] > 1e-6, own / np.maximum(size, 1e-12)[:, None], lateral_directions(way, 1)[0])
+        return [own, *lateral_directions(way, 8)]
+
+    previous = 0.0
+    for offset in offsets:
+        # Each rung tried along every way and offset direction for the points no lower rung freed; one
+        # freed is bisected back toward the rung below, the least of its directions kept.
+        left = np.nonzero(~np.isfinite(best))[0]
+        if not len(left):
+            break
+        for way in units:
+            for square in squares(way):
+                ok = free(left, np.full(len(left), float(offset)), square, way)
+                found = left[ok]
+                if len(found):
+                    lo, hi = np.full(len(found), previous), np.full(len(found), float(offset))
+                    for _ in range(6):
+                        mid = 0.5 * (lo + hi)
+                        yes = free(found, mid, square, way)
+                        hi = np.where(yes, mid, hi)
+                        lo = np.where(yes, lo, mid)
+                    best[found] = np.minimum(best[found], hi)
+        previous = float(offset)
+    worst = float(best.max())
+    return worst if math.isfinite(worst) else float(limit)
 
 
 def _strokes(points: np.ndarray, side: np.ndarray, pull: np.ndarray, cast: Cast, scale: float) -> np.ndarray:

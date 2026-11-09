@@ -75,9 +75,13 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
 
 - `draft` items carry `draft_deg` and `opens` (`+pull`, `-pull`, `none` for zero draft, `split` where
   the parting crosses the face). Faces square to the pull are not walls and appear in no draft figure.
-- `undercuts` items carry the `release` each needs: `side_action`, `lifter`, `collapsible_core`, or
-  `none`. `molding.undercut` (a warning) is tooling cost; `molding.undercut_unreleasable` (an error)
-  is a feature no action tried frees. Distinguish a need for side actions from impossibility.
+- `undercuts` items carry the `release` each needs: `side_action`, `lifter`, `collapsible_core`,
+  `bump_off`, or `none`, and how deep each is (`depth_mm` against the straight pull; `slide_depth_mm`
+  against the best slide where nothing frees it). `molding.undercut` (a warning) is tooling cost;
+  `molding.undercut_bump_off` (a warning) is a lip of 0.1 mm or less (text-to-cad's own figure) stripped
+  off as the part ejects -- it needs a flexible resin and a rounded lead-in; `molding.undercut_unreleasable`
+  (an error) is a feature no action tried frees, its lip deeper than that. Distinguish a need for side
+  actions from impossibility.
 - `thickness.nominal_mm` and `thick_sections` (a face's `feature` says whether it is a wall's, a rib's or
   a boss's: the wall range judges walls alone); `transitions` (a step between two walls read on its
   stepped side, `basis: step`: its run over its change, `min_mm`, `max_mm`, the two points in `at_xyz`,
