@@ -168,7 +168,8 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                                           "the display JSON object (mode, grid, camera, clip, exploded, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
-                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks}; "
+                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
+                                          "window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; "
                                           "a KiCad schematic {sheet, border, title} (title: KiCad's title block, on unless "
                                           "false; border: the page's edge and frame). Every snapshot is drawn light")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")

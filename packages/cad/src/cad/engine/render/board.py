@@ -23,7 +23,7 @@ MODES = {
     "assembly": {"area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"},
     "placement": {"area", "fab", "courtyard", "outline"},
 }
-DISPLAY_KEYS = {"mode", "side", "poured", "layers", "active", "others", "dim", "zones", "tracks"}
+DISPLAY_KEYS = {"mode", "side", "poured", "layers", "active", "others", "dim", "zones", "tracks", "window"}
 #: What the layers but the active one are (KiCad's high-contrast modes): drawn as they are, faded, or left out.
 OTHERS = ("shown", "dimmed", "hidden")
 # What a set saved when a board had a drawing sheet may still name: no layer now, left out.
@@ -98,7 +98,25 @@ def display_options(value: Any, grid: bool = False) -> dict:
         raise SnapshotRefused("board layers is a list of layer ids")
     if layers is not None:
         display["layers"] = [layer for layer in layers if layer not in GONE]
+    if display.get("window") is not None:
+        display["window"] = window_box(display["window"])
     return display
+
+
+def window_box(value: Any) -> list[float]:
+    """A board display's ``window``: ``[x0, y0, x1, y1]``, two opposite corners of the box a still frames, in
+    KiCad's board millimetres (y down, as ``board.area`` and ``#@x10y5..x20y15`` name a box), answered
+    ordered (``x0 < x1``, ``y0 < y1``); anything else refused saying what it is."""
+    from cad.engine.snapshot import SnapshotRefused, _numbers
+
+    if not _numbers(value, 4):
+        raise SnapshotRefused("a board's window is [x0, y0, x1, y1]: two opposite corners of a box in the board's "
+                              "millimetres, as KiCad shows them (y down), e.g. [40, 60, 80, 90]", part="display")
+    x0, y0, x1, y1 = (float(number) for number in value)
+    if x0 == x1 or y0 == y1:
+        raise SnapshotRefused(f"a board's window has no area: [{x0:g}, {y0:g}, {x1:g}, {y1:g}] is "
+                              f"{abs(x1 - x0):g} x {abs(y1 - y0):g} mm", part="display")
+    return [min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)]
 
 
 def refusals(still: Any, name: str) -> None:
@@ -110,6 +128,9 @@ def refusals(still: Any, name: str) -> None:
         raise SnapshotRefused(f"{name} is a flat board: Preview, pose and transparent output are not supported")
     if still.camera is not None:
         plan_view(still.camera, name)
+        if display_options(still.display).get("window") is not None:
+            raise SnapshotRefused(f"{name}: a window frames the still, so it takes no camera; give one or the other",
+                                  part="camera")
 
 
 def _rgba(color) -> tuple[int, int, int, int]:
@@ -468,7 +489,10 @@ class Held:
         # Fixed supersampling smooths native strokes; renderScale still names the requested output.
         ss = 2
         width, height = (n * ss for n in still.drawn)
-        if still.camera is not None:
+        if display.get("window") is not None:
+            cx, cy, scale = _window_view(display["window"], payload["board"]["origin"], sheet, bottom, width, height,
+                                         self.path.name)
+        elif still.camera is not None:
             cx, cy, half = plan_view(still.camera, self.path.name)
             scale = height / (2 * half)
         else:
@@ -521,6 +545,27 @@ class Held:
         return output.getvalue(), {"kind": self.kind, "renderer": "pillow", "width": still.size[0], "height": still.size[1],
             "camera": "plan" if still.camera is not None else "top", "projection": "orthographic", "displayMode": display["mode"],
             "preview": False, "boardDisplay": display, "warnings": warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
+
+
+def _window_view(window: list[float], origin, sheet: dict, bottom: bool, width: float, height: float,
+                 name: str) -> tuple[float, float, float]:
+    """The view of a still that frames ``window`` (KiCad's millimetres, ``window_box``): its centre on the sheet
+    (y up, as a plan camera's target) and its pixels per millimetre, the whole box shown, centred, as large as
+    the picture holds it (a picture of another shape than the box shows more of the board round it). Seen from
+    below the board is mirrored, so is the box. A box that misses the board is refused, naming the board's."""
+    from cad.engine.snapshot import SnapshotRefused
+
+    x0, y0, x1, y1 = (window[0] + origin[0], window[1] + origin[1], window[2] + origin[0], window[3] + origin[1])
+    if x1 < 0 or y1 < 0 or x0 > sheet["width"] or y0 > sheet["height"]:
+        bx0, by0 = -origin[0], -origin[1]
+        raise SnapshotRefused(
+            f"{name}: the window [{window[0]:g}, {window[1]:g}, {window[2]:g}, {window[3]:g}] misses the board, which "
+            f"spans [{bx0:g}, {by0:g}, {bx0 + sheet['width']:g}, {by0 + sheet['height']:g}] in its millimetres (y down)",
+            part="display")
+    centre_x = (x0 + x1) / 2
+    if bottom:
+        centre_x = sheet["width"] - centre_x
+    return centre_x, -(y0 + y1) / 2, min(width / (x1 - x0), height / (y1 - y0))
 
 
 def _placement(pen, board, place, scale, bottom, line):

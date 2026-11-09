@@ -266,7 +266,13 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"F.Cu","others":"hidden"}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/u1.png --window 108,42,132,66 --width 1600
 ```
+
+`--window X0,Y0,X1,Y1` draws only that box of the board, filling the picture: two opposite corners in
+KiCad's millimetres (y down, the box `board.area(x0, y0, x1, y1)` names), as close as a fan-out or a
+finding needs (`--window=-10,5,20,30` when the first is negative). With `--width` alone the height
+follows the box's shape. It goes with any display (`--display copper`), and takes no `--camera`.
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.

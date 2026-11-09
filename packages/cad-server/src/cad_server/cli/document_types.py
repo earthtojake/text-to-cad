@@ -511,6 +511,29 @@ def _schematic_inspect(argv: list[str], prog: str) -> int:
     return _answer(as_json, found, lines)
 
 
+def _display_object(given: str | None, prog: str, as_json: bool, shape: str, *, mode: bool = False) -> dict | int:
+    """A snapshot's ``--display`` as the object a flag of the type's folds into: its JSON, or the JSON file it
+    names, or (``mode``: a board's) a mode's name; a failure's exit status when it is none of them. Refused as
+    the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON that does not
+    read, are the command line's, said before anything renders."""
+    import json
+
+    given = (given or "").strip()
+    if mode and given and not given.startswith("{") and not given.endswith(".json"):
+        return {"mode": given}
+    if given.endswith(".json") and not Path(given).expanduser().is_file():
+        return _failed(as_json, prog, f"--display {given}: no such file", "not_found")
+    try:
+        if given.endswith(".json"):
+            given = Path(given).expanduser().read_text(encoding="utf-8")
+        display = json.loads(given) if given else {}
+    except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
+        return _failed(as_json, prog, f"--display is not JSON: {error}", "invalid_argument")
+    if not isinstance(display, dict):
+        return _failed(as_json, prog, f"--display is {shape}", "invalid_argument")
+    return display
+
+
 def _schematic_snapshot(argv: list[str], prog: str) -> int:
     """``cad kicad_sch snapshot``: the engine's verb, ``--sheet`` and ``--border`` folded into its display."""
     import json
@@ -521,22 +544,75 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
     sheet, border = args.sheet, args.border
     del args.sheet, args.border
     if sheet is not None or border:
-        given = args.display
-        # Refused as the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON
-        # that does not read, are the command line's, said before anything renders.
-        if given and given.strip().endswith(".json") and not Path(given.strip()).expanduser().is_file():
-            return _failed(bool(args.json), prog, f"--display {given.strip()}: no such file", "not_found")
-        try:
-            if given and given.strip().endswith(".json"):
-                given = Path(given.strip()).expanduser().read_text(encoding="utf-8")
-            display = json.loads(given) if given else {}
-        except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
-            return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
-        if not isinstance(display, dict):
-            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border, title}",
-                           "invalid_argument")
+        display = _display_object(args.display, prog, bool(args.json),
+                                  "a schematic's display object: {sheet, border, title}")
+        if isinstance(display, int):
+            return display
         display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
         args.display = json.dumps(display)
+    return answered(VERBS["snapshot"][2], args, prog)
+
+
+def _board_snapshot_parser(prog: str) -> argparse.ArgumentParser:
+    from cad_server.engine.cli import parser_for
+
+    parser = parser_for("snapshot", prog, document_type="kicad_pcb")
+    parser.add_argument("--window", metavar="X0,Y0,X1,Y1",
+                        help="draw only this box of the board, filling the picture: two opposite corners in the "
+                             "board's millimetres as KiCad shows them (y down; the box board.area(x0, y0, x1, y1) and "
+                             "#@x10y5..x20y15 name), e.g. --window 40,60,80,90 (--window=-10,5,20,30 when the first is negative). With --width alone the height follows "
+                             "the box's shape (and the width with --height alone); the same as --display "
+                             "'{\"window\": [X0, Y0, X1, Y1]}'. Takes no --camera")
+    return parser
+
+
+def window_value(text: str) -> list[float]:
+    """``--window X0,Y0,X1,Y1``: four numbers, the box in the board's millimetres; ``ValueError`` saying the form."""
+    import math
+
+    parts = [part.strip() for part in str(text).split(",")]
+    try:
+        numbers = [float(part) for part in parts] if len(parts) == 4 else None
+    except ValueError:
+        numbers = None
+    if numbers is None or not all(math.isfinite(number) for number in numbers):
+        raise ValueError(f"--window is X0,Y0,X1,Y1, four numbers in the board's millimetres (y down), e.g. "
+                         f"40,60,80,90; not {text!r}")
+    if numbers[0] == numbers[2] or numbers[1] == numbers[3]:
+        raise ValueError(f"--window {text} has no area: its corners share an x or a y")
+    return numbers
+
+
+def _board_snapshot(argv: list[str], prog: str) -> int:
+    """``cad kicad_pcb snapshot``: the engine's verb, ``--window`` folded into its display, and the picture's
+    other side, when one is given alone, following the window's shape."""
+    import json
+
+    from cad_server.engine.cli import VERBS, answered
+
+    args = _typed(_board_snapshot_parser(prog), "kicad_pcb", "snapshot", "document").parse_args(argv)
+    window = args.window
+    del args.window
+    if window is not None:
+        try:
+            box = window_value(window)
+        except ValueError as error:
+            return _failed(bool(args.json), prog, str(error), "invalid_argument")
+        if args.camera is not None:
+            return _failed(bool(args.json), prog, "--window frames the still, so it takes no --camera: give one or "
+                                                  "the other", "invalid_argument")
+        display = _display_object(args.display, prog, bool(args.json),
+                                  "a board's mode or its display object: {mode, side, layers, ..., window}", mode=True)
+        if isinstance(display, int):
+            return display
+        display["window"] = box
+        args.display = json.dumps(display)
+        across, down = abs(box[2] - box[0]), abs(box[3] - box[1])
+        if args.size_profile is None and (args.width is None) != (args.height is None):
+            if args.height is None:
+                args.height = max(16, round(args.width * down / across))
+            else:
+                args.width = max(16, round(args.height * across / down))
     return answered(VERBS["snapshot"][2], args, prog)
 
 
@@ -545,6 +621,7 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
     ("kicad_pcb", "export"): _kicad_export("kicad_pcb"),
     ("kicad_pcb", "inspect"): _board_inspect,
+    ("kicad_pcb", "snapshot"): _board_snapshot,
     ("kicad_sch", "erc"): _kicad_rules("kicad_sch", "erc"),
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
@@ -582,6 +659,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return generated_parser((f"cad.{document_type}", operation), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
+    if (document_type, operation) == ("kicad_pcb", "snapshot"):
+        return _board_snapshot_parser(prog)
     if document_type == "kicad_sch":
         return _schematic_parser(prog, operation)
     if operation in _ENGINE_SOURCES:
