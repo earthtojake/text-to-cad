@@ -22,14 +22,25 @@ height of a capital, and the width scales the glyphs horizontally), mirrored for
 text seen from the other side of the board, slanted for italic text as KiCad slants
 its own (an eighth of a glyph's height above the baseline), and turned by its angle. A
 character the font has no glyph for is drawn as a box the size of an ``X``.
+
+With ``markup`` (every text KiCad draws: a schematic's, its drawing sheet's, and a board's -- its
+silkscreen, fab and copper text, its footprints' fields, its pads' and tracks' net names), KiCad's text
+markup is drawn as KiCad draws it rather than letter for letter: ``~{...}`` its content with a bar over
+it, ``_{...}`` a subscript and ``^{...}`` a superscript (``SUPER_SUB_SIZE`` the size, shifted down or up
+by a share of it), the markers themselves never drawn and the width, so the justification, measured on
+what is drawn. :func:`parse_markup` reads it as KiCad's ``markup_parser.h`` does: markup nests; a marker
+whose brace never closes, a stray brace, an escape sequence (``{slash}``) and a URL stay literal. The
+viewer's twin (``@cad/core``'s ``plot2d/strokeFont.js``) reads and draws the same, held to the same cases
+(its ``strokeFont.parity.json``).
 """
 
 from __future__ import annotations
 
 import math
+import re
 from typing import Sequence
 
-__all__ = ["GLYPHS", "glyph_strokes", "text_strokes"]
+__all__ = ["GLYPHS", "glyph_strokes", "parse_markup", "text_strokes"]
 
 #: ASCII 32 (space) to 126 (``~``), in the Hershey distribution's encoding (module doc).
 GLYPHS: tuple[str, ...] = (
@@ -74,6 +85,15 @@ _CAP_HEIGHT = _BASELINE - _CAP_TOP
 _LINE_SPACING = 1.62
 # KiCad's italic: a point moves right by this share of its height above the baseline (ITALIC_TILT).
 _ITALIC_TILT = 1 / 8
+#: KiCad's sub- and superscript: this share of the text's size (font.h's SUPER_SUB_SIZE_MULTIPLIER), a
+#: subscript's baseline that share of its own size below, a superscript's above (SUB_ and SUPER_HEIGHT_OFFSET).
+SUPER_SUB_SIZE = 0.8
+_SUB_OFFSET = 0.15
+_SUPER_OFFSET = 0.35
+# KiCad's overbar: this many times the size above the baseline (as kicad-cli plots it), each end trimmed by
+# a share of the size.
+_OVERBAR_HEIGHT = 1.26
+_OVERBAR_TRIM = 0.1
 
 
 def _decode(glyph: str) -> tuple[float, float, list[list[tuple[float, float]]]]:
@@ -123,6 +143,109 @@ def _line_strokes(line: str, scale_x: float, scale_y: float, tilt: float = 0.0) 
     return pen * scale_x, strokes
 
 
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _escape_end(text: str, index: int) -> int:
+    """Where an escape sequence (``{slash}``: a brace, an identifier, a brace) at ``index`` ends, or -1."""
+    if not text.startswith("{", index):
+        return -1
+    found = _IDENTIFIER.match(text, index + 1)
+    return found.end() + 1 if found and text.startswith("}", found.end()) else -1
+
+
+def _url_end(text: str, index: int) -> int:
+    """Where a URL at ``index`` (``http://`` or ``https://``, then at least one character, to the next space) ends, or -1."""
+    for scheme in ("http://", "https://"):
+        after = index + len(scheme)
+        if text.startswith(scheme, index) and after < len(text) and text[after] != " ":
+            space = text.find(" ", after)
+            return len(text) if space < 0 else space
+    return -1
+
+
+def parse_markup(text: str) -> list:
+    """``text`` as KiCad's markup parser reads it (``markup_parser.h``): runs, each a plain string or
+    ``(marker, runs)`` for an overbar (``~``), a subscript (``_``) or a superscript (``^``). Markup
+    nests. A marker whose brace never closes, a lone ``~``, ``_`` or ``^``, a stray brace, an escape
+    sequence inside markup (``{slash}``, whose brace closes nothing) and a URL (``http://`` or
+    ``https://`` to the next space) are text, as written.
+
+    One pass with a stack of the markers open; a marker still open at the end is KiCad's failed match,
+    text, and the text is read again with it so (whether a marker closes depends on nothing but where it is)."""
+    failed: set[int] = set()
+    while True:
+        top: list = []
+        stack: list[tuple[int, str, list]] = []  # (where, marker, runs) of each marker open
+
+        def put(piece) -> None:
+            runs = stack[-1][2] if stack else top
+            if isinstance(piece, str) and runs and isinstance(runs[-1], str):
+                runs[-1] += piece
+            else:
+                runs.append(piece)
+
+        at = 0
+        while at < len(text):
+            character = text[at]
+            if stack and character == "}":
+                _where, marker, runs = stack.pop()
+                put((marker, runs))
+                at += 1
+            elif character in "~_^" and text.startswith("{", at + 1) and at not in failed:
+                stack.append((at, character, []))
+                at += 2
+            elif stack and (escape := _escape_end(text, at)) > 0:
+                put(text[at:escape])
+                at = escape
+            elif not stack and (url := _url_end(text, at)) > 0:
+                put(text[at:url])
+                at = url
+            else:
+                put(character)
+                at += 1
+        if not stack:
+            return top
+        failed.update(where for where, _marker, _runs in stack)
+
+
+def _markup_strokes(line: str, scale_x: float, scale_y: float, tilt: float) -> tuple[float, list[list[tuple[float, float]]]]:
+    """One line's strokes with its markup drawn (the module doc), the pen from x = 0 on the baseline."""
+    strokes: list[list[tuple[float, float]]] = []
+    baseline = _BASELINE * scale_y
+
+    def lay(runs: list, pen: float, scale: float, lift: float) -> float:
+        # ``scale`` the run's size against the text's, ``lift`` its baseline above the text's (mm, up).
+        for run in runs:
+            if isinstance(run, str):
+                for character in run:
+                    left, right, glyph = glyph_strokes(character)
+                    for stroke in glyph:
+                        placed = []
+                        for x, y in stroke:
+                            up = -(y - _BASELINE) * scale_y * scale + lift
+                            placed.append((pen + (x - left) * scale_x * scale + up * tilt, baseline - up))
+                        strokes.append(placed)
+                    pen += (right - left) * scale_x * scale
+                continue
+            marker, inner = run
+            if marker == "~":
+                start = pen
+                pen = lay(inner, pen, scale, lift)
+                height = _CAP_HEIGHT * scale_y * scale
+                trim = _CAP_HEIGHT * scale_x * scale * _OVERBAR_TRIM
+                bar = lift + height * _OVERBAR_HEIGHT
+                if pen - start > 2 * trim:
+                    strokes.append([(start + trim + bar * tilt, baseline - bar), (pen - trim + bar * tilt, baseline - bar)])
+                continue
+            small = scale * SUPER_SUB_SIZE
+            size = _CAP_HEIGHT * scale_y * small
+            pen = lay(inner, pen, small, lift - size * _SUB_OFFSET if marker == "_" else lift + size * _SUPER_OFFSET)
+        return pen
+
+    return lay(parse_markup(line), 0.0, 1.0, 0.0), strokes
+
+
 def text_strokes(
     text: str,
     *,
@@ -132,6 +255,7 @@ def text_strokes(
     justify: Sequence[str] = (),
     mirror: bool = False,
     italic: bool = False,
+    markup: bool = False,
 ) -> list[list[tuple[float, float]]]:
     """``text`` as stroke polylines in millimetres, y down, placed as KiCad places text.
 
@@ -141,7 +265,8 @@ def text_strokes(
     ``left``, ``right``, ``top`` or ``bottom``. ``mirror`` flips the text about its anchor's
     vertical, as KiCad mirrors text seen from the far side of the board. ``angle`` is degrees
     counter-clockwise as seen on the board (KiCad's), applied last. A text of several lines
-    stacks them downwards, each justified on its own. ``italic`` slants it as KiCad does.
+    stacks them downwards, each justified on its own. ``italic`` slants it as KiCad does. ``markup``
+    draws KiCad's ``~{overbar}``, ``_{subscript}`` and ``^{superscript}`` as KiCad does (the module doc).
     """
     height, width = float(size[0]), float(size[1])
     if height <= 0:
@@ -149,7 +274,9 @@ def text_strokes(
     scale_y = height / _CAP_HEIGHT
     scale_x = (width if width > 0 else height) / _CAP_HEIGHT
     lines = str(text).split("\n")
-    laid = [_line_strokes(line, scale_x, scale_y, _ITALIC_TILT if italic else 0.0) for line in lines]
+    tilt = _ITALIC_TILT if italic else 0.0
+    laid = [_markup_strokes(line, scale_x, scale_y, tilt) if markup and any(isinstance(run, tuple) for run in parse_markup(line))
+            else _line_strokes(line, scale_x, scale_y, tilt) for line in lines]
     line_height = height * _LINE_SPACING
     block_height = height + line_height * (len(lines) - 1)
     # Where the first line's capitals' centre lands against the anchor: on it, or half the

@@ -15,12 +15,14 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
   colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
   mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
-  active, others, zones, tracks}`` (the active layer drawn on top, ``others`` the rest
+  active, others, zones, tracks, window}`` (the active layer drawn on top, ``others`` the rest
   ``shown``, ``dimmed`` or ``hidden`` -- the outline and the holes through an active copper layer kept at full
-  strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1).
+  strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1,
+  and ``window``, ``[x0, y0, x1, y1]`` in KiCad's millimetres, the box of the board the still frames, filling it).
 - ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
   painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
-  ``{sheet, border}`` (the root sheet, ``/``, unless it names another: ``/Power/``).
+  ``{sheet, border, title}`` (the root sheet, ``/``, unless it names another: ``/Power/``; KiCad's title
+  block drawn unless ``title`` is false, the page's edge and frame with ``border``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. An engine that cannot make an

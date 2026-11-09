@@ -152,7 +152,7 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   expect(pane.querySelector('[data-schematic-row="part:R1"]')).toBeNull();
   // Its Export is KiCad's: the PDF, the SVGs, the netlist and the BOM.
   expect(exportChoices({ file: '/models/divider.kicad_sch', planar: false }).map(choice => choice.format)).toEqual(['pdf', 'svg', 'netlist', 'bom']);
-  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: true });
   view.dispose();
 });
 
@@ -282,7 +282,7 @@ it('in the dark theme the sheet is drawn dark, and the view a snapshot replays n
   const view = await open({ colorScheme: 'dark' });
   await onSheet(view.pane, '/');
   await waitFor(() => expect(drawn.includes('dark')).toBe(true));
-  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: true });
   view.dispose();
 });
 
@@ -304,7 +304,7 @@ it("a note on a pick hands over the view and its sheet, and no references: light
   // `cad kicad_sch snapshot --job` refuses a packet's references (a schematic's still lights none), as the prompt-files
   // route does any but a board's: a packet that named the pick would answer 400 and the note would not go.
   const request = promptFiles.create.mock.calls[0][0] as any;
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: false } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: true } })]);
   expect(request).not.toHaveProperty('references');
   view.dispose();
 });

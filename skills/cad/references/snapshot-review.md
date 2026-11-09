@@ -143,10 +143,12 @@ cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": [
 ## Annotations and Quick Edit views
 
 A Quick Edit prompt carries a snapshot packet: inline JSON up to 1 KiB, or the
-absolute path of a `.snapshot.json`. Save inline JSON to a temporary
-`.snapshot.json` first. The packet holds:
+path of a `.snapshot.json` (in a folder of the server's under `/tmp`). Its files are
+named relative to your workspace, else from `~/`; `cad <type> snapshot` reads either
+from the workspace. Save inline JSON to a temporary `.snapshot.json` first. The packet
+holds:
 
-- `input`: what the person looked at: a model's id, or a file's absolute path;
+- `input`: what the person looked at: a model's id, or a file's path;
 - `jobs`: one per view they captured (the current view and each view they drew
   in), each with the view's `camera`, its `display` and an output `label`; a posed
   document's or a robot's carries its pose as `jointValues`. A document's display
