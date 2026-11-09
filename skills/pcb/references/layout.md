@@ -49,18 +49,27 @@ board at its block's end, and the next step reads what the last one saved. Each 
      headless KiCad has no interactive router.
    - **The rest with the router, as you direct it:** `route(b, plan)` (`from cad.kicad import
      route`) routes only the connections you name, in your order, each on the layers you allow it,
-     at its netclass's width and clearance (or yours, never under the board's rules), within its via
-     limit (for the whole entry) or at your via cost, round all the copper already there; it moves
-     and deletes nothing. It is no autorouter: with no plan it writes no copper, and it chooses
-     neither what is routed nor in what order. It routes no differential pair: a net KiCad pairs by
-     name (`D+`/`D-`, `_P`/`_N`) is refused. Leave a poured net out of the plan: a pour is no
-     connection to the router, so it would track every pad; name as a pair only a pad its pour
-     cannot reach, and refill after. Put the connections with the least room first (a pin between
-     two others, a short link) and the long nets last. A connection it cannot route is answered by
-     name with what walls it in: move it before that net, allow it another layer, or route it by
-     hand. A connection already joined is said so and gets no copper, so the step runs again
-     harmlessly. Route a large board in steps, a group of nets each, checking after each (step 6),
-     and say in the handover which nets the router placed.
+     at its netclass's width and clearance (or yours, never under the board's rules, nor outside a
+     custom rule's track width that holds everywhere: that is refused by name), within its via
+     limit (for the whole entry) or at your via cost, round all the copper already there (texts,
+     text boxes, tables, barcodes and dimensions on copper included) and out of other nets'
+     solder-mask openings; it moves and deletes nothing. It is no autorouter: with no plan it
+     writes no copper, and it chooses neither what is routed nor in what order. It routes no
+     differential pair: a net KiCad pairs by name (`D+`/`D-`, `_P`/`_N`) is refused. A custom
+     rule it does not keep (one with a condition, or a length, skew or track-angle rule) is a
+     warning before routing (`route: warning: ...`) naming the rule and the fix: give those
+     entries what it asks or route those nets by hand, and read DRC after. Leave a poured net out
+     of the plan: a pour is no connection to the router, so it would track every pad; name as a
+     pair only a pad its pour cannot reach, and refill after. Put the connections with the least
+     room first (a pin between two others, a short link) and the long nets last. A connection it
+     cannot route is answered by name with what walls it in and what to do: move it before that
+     net, allow it another layer or more vias (under `vias: 0` it says which layers it could not
+     reach), or route it by hand. A connection already joined is said so and gets no copper, so
+     the step runs again harmlessly. Route a large board in steps, the nets of one area each,
+     checking after each (step 6): a plan whose region would not fit the router's memory is
+     narrowed (a warning says so) or refused, saying to route it in parts. A block that raises
+     saves nothing, so raising after `route` is a dry run. Say in the handover which nets the
+     router placed.
    - **Check** with DRC and the copper stills (step 6), then **fix by hand** whatever reads badly: a
      detour, a needless via, a track crowding a pad. KiCad's DRC on the saved board, not the plan,
      says the result is clear.

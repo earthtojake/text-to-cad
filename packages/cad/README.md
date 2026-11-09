@@ -715,22 +715,43 @@ board after the block, `board.net_changes` (`cad.kicad._drift`).
 Inside a board's edit, `cad.kicad.route(board, plan)` writes copper for the connections a plan names, in its
 order: each a net or a pair of pads, with the copper layers it may use (required; there is no default plan),
 its width and clearance (the net's netclass's by default, never under the board's rules), its via limit (for
-the whole entry) and via cost. The plan is checked whole before anything is routed; a mistake in it is a
-`ValueError` naming what to give, and so is a board it cannot route by: an outline that does not close, a pad
-drawn with a primitive it cannot read, a net KiCad pairs by name with another (a differential pair, which it
-does not route), a region past its memory (route the plan in parts). It reads the open board (`get_as_string`)
-and KiCad's rules for it: each net's netclass, the board's minimums, and the custom rules, of which each
-clearance one names is kept everywhere (the largest), a `disallow` or an `assertion` is refused by name, every
-other constraint is left to DRC, and a `.kicad_dru` its KiCad cannot read, or cannot give over the API,
-refuses the board. It searches each connection on a grid whose free nodes are worked out from the exact shapes
-(a move between two free nodes is clear along its whole length), pulls each path tight in continuous geometry,
-checks every segment and via once more, exactly, and writes the tracks and vias in one commit: nothing on the
-board is moved or deleted, nothing else is written, and the block's save writes the file. Octolinear and
-deterministic: the same board and plan give the same copper, in another process too. The answer, a `Routed`,
-holds every connection's outcome (`.ok`, `.failed`, `.human_lines()`): one it cannot route is answered by name
-with what walls it in, on stderr too, and the rest go on. A copper pour is neither an obstacle nor a
-connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the block refills the
-pours round the new copper. It runs in the script's process.
+the whole entry) and via cost (in mm of track; the search settles for a path within 1.2 times the cheapest, so
+the trade is about that, not exact). A plan is a list, in order. The plan is checked whole before anything is
+routed; a mistake in it is a `ValueError` naming what to give, and so is a board it cannot route by: an outline
+that does not close, a pad drawn with a primitive it cannot read or whose padstack layers share no point, a
+TrueType copper text with no outline saved, a net KiCad pairs by name with another (a differential pair, which
+it does not route), a region past its memory even at the least margin (route the plan in parts). A region whose
+margin round the plan's pads would not fit the router's memory (600 MB for its fields and its largest search)
+is narrowed to fit first, and said.
+
+It reads the open board (`get_as_string`) and KiCad's rules for it: each net's netclass, the board's minimums,
+the solder-mask clearances, and the custom rules. Each clearance a custom rule names is kept everywhere (the
+largest of each); a track width, via diameter, hole size, annular width or via count of a rule with no condition
+and no layer is kept as DRC holds it (an entry's width outside it is refused naming the rule, the via the router
+places is taken up to its least and refused past its most, and a net's via count, its vias on the board counted,
+lowers each entry's via limit); a `disallow` or an `assertion` is refused by name; every other constraint that can
+bear on new copper, and every size of a rule with a condition or a layer, is a warning naming the rule and the
+fix, for DRC to judge after; a `.kicad_dru` its KiCad cannot read, or cannot give over the API, refuses the
+board. It routes round everything on the board: pads (a padstack's every layer; a route ends where every layer
+has copper), tracks, vias, holes, keep-outs (their arcs to the true arc), the edge, and every copper graphic,
+text (by KiCad's stroke metrics, a TrueType one by the outline KiCad saves), text box, table, barcode and
+dimension; new copper keeps out of other nets' solder-mask openings (DRC's `solder_mask_bridge`), and new
+untented vias whose openings the clearance cannot hold are refused. It searches each connection on a grid whose
+free nodes are worked out from the exact shapes (a move between two free nodes is clear along its whole
+length), pulls each path tight in continuous geometry, checks every segment and via once more, exactly, and
+writes the tracks and vias in one commit: nothing on the board is moved or deleted, nothing else is written,
+and the block's save writes the file; a block that raises saves nothing, so a dry run is a route and a raise.
+Octolinear and deterministic: the same board and plan give the same copper, in another process and on another
+OS: between the board's text and every decision there is only IEEE-754 arithmetic (its angles are its own, not
+the C library's), and the tests hold one board's routed copper to a digest on Linux, macOS and Windows.
+
+The answer, a `Routed`, holds every connection's outcome and the plan entry it came from (`Connection.entry`),
+with `.ok`, `.failed`, `.warnings` and `.human_lines()`: one it cannot route is answered by name with what walls
+it in and what to do (with no via left, the layers it reaches and the via limit as the cause), on stderr too,
+and the rest go on; each warning is on stderr (`route: warning: ...`) before routing. A copper pour is neither
+an obstacle nor a connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the
+block refills the pours round the new copper. It runs in the script's process. It does not route differential
+pairs, keep a length, skew or track-angle rule, or choose what to route or in what order.
 
 ## Manufacturing checks
 
