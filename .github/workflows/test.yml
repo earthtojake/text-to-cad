@@ -63,6 +63,7 @@ jobs:
       cadgen: ${{ steps.select.outputs.cadgen }}
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
       fea: ${{ steps.select.outputs.fea }}
+      blender: ${{ steps.select.outputs.blender }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -288,6 +289,45 @@ jobs:
       - name: Run the fea suite
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
         shell: bash
+
+  # Blender as a Python module (bpy), as the render skill runs it: `cad run` makes the blender integration's
+  # environment (bpy 5.2.3 on Python 3.13, without cad; about 430 MB from PyPI for Linux, some 20 s, not cached, as
+  # the KiCad job fetches kicode), and the skill's GPL helper (skills/render/scripts/cad_glb.py) loads a GLB this
+  # checkout's cad exports, plays its clips in both orders and renders a 64x64 still with Cycles on the CPU, then one
+  # with EEVEE, which skips naming Blender's reason if the runner's software OpenGL cannot draw it. Its suite
+  # (tests/python/packages/blender, test-blender.sh) is this job's alone. Only bpy's environment and how cad run
+  # chooses it, the GLB writer and its clips, the render skill, and the suite and its runner select it (and a full
+  # run). Linux only: bpy's wheel is one build per platform and no runner has a GPU. About 3 minutes: the install,
+  # the environment, a model's build and export, two bpy runs (7 tests in 30 s locally, warm).
+  blender:
+    name: Blender renders
+    needs: changes
+    if: needs.changes.outputs.blender == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      # What bpy's Linux wheel loads from the system and does not carry: X11's client libraries, the keyboard map,
+      # and OpenGL and EGL with Mesa's software drivers (EEVEE draws through them; Cycles on the CPU needs none).
+      - name: Install the X and OpenGL libraries bpy loads
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-6 libxfixes3 libxi6 libxrender1 libxxf86vm1 libxkbcommon0 libsm6 libice6 \
+            libgl1 libegl1 libglx-mesa0 libegl-mesa0 libgl1-mesa-dri
+
+      - name: Run the blender suite
+        run: scripts/test/test-blender.sh
 
   core-js:
     name: core-js

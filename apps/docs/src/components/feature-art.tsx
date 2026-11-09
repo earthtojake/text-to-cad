@@ -382,12 +382,36 @@ function StressArt() {
   );
 }
 
+// A render: the bracket lit by an area light, in the camera's frame, and the still it makes.
+function RenderArt() {
+  return (
+    <Sheet view="14 14 186 126">
+      <g className={faint}>
+        <Fade>
+          <path d="M54 42 L104 70 M50 50 L100 96 M44 54 L92 118" strokeWidth={0.9} strokeDasharray="3 2" />
+          <path d="M100 100 L150 129 L192 105" strokeWidth={0.9} strokeDasharray="3 2" />
+        </Fade>
+      </g>
+      <IsoBracket size="small" />
+      <g className={accent}>
+        <Draw d="M30 36 L52 28 L58 42 L36 50 Z" strokeWidth={1.2} />
+        <Draw late d="M90 34 V22 H102 M180 22 H192 V34 M192 122 V134 H180 M102 134 H90 V122" strokeWidth={1.4} />
+        <Fade late>
+          <text x={22} y={118} style={{ ...label, fontSize: 6.5 }}>hero.png</text>
+          <text x={22} y={130} style={{ ...label, fontSize: 6.5 }}>Cycles · GPU</text>
+        </Fade>
+      </g>
+    </Sheet>
+  );
+}
+
 const ART: Record<string, () => ReactNode> = {
   parts: PartsArt,
   boards: BoardsArt,
   checks: ChecksArt,
   stress: StressArt,
   drawings: DrawingsArt,
+  renders: RenderArt,
   fabrication: FabricationArt,
   robots: RobotsArt,
 };

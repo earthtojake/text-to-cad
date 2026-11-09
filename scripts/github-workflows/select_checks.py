@@ -23,6 +23,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
+    blender                       blender (the render skill's helper in bpy's environment, made by cad run)
     core_js                       core-js
     web  web_ui  web_client
     mcp
@@ -61,7 +62,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea", "blender")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -110,6 +111,7 @@ HEAVY_POLICY = {
 # Skill suites that need nothing installed: they read their skill's files.
 LIGHT_SKILL_TESTS = (
     f"{SKILL_SUITES}/print3d",
+    f"{SKILL_SUITES}/render",
     f"{SKILL_SUITES}/sendcutsend",
 )
 
@@ -232,6 +234,19 @@ FEA_SHARED = (f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.p
               f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/programs.py",
               f"{SERVER_SRC}/_internal/cli_from_function.py")
 FEA_SUITE = "tests/python/packages/fea"
+# Blender as a Python module: the render skill's helper, run in the blender integration's environment that `cad run`
+# makes for a script that imports bpy (bpy's pins and platforms in the registry, the library's integrations table,
+# the environment's making in the server's extras and base, `cad run` and the import scan that chooses it), on a GLB
+# the engine writes (the GLB writer and the clips it bakes: motions, animations and their keys). Each also reaches what
+# its package reaches; the blender job, which makes bpy's environment from PyPI, runs on these, the skill, its own
+# suite and runner, and a full run.
+BLENDER_CODE = (f"{LIBRARY_SRC}/registry.py", f"{LIBRARY_SRC}/_internal/integrations.py",
+                f"{SERVER_SRC}/_internal/extras.py", f"{SERVER_SRC}/_internal/base.py",
+                f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/scan.py",
+                f"{SERVER_SRC}/cli/run.py")
+BLENDER_GLB = (f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/export/motion.py",
+               f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py")
+BLENDER_SUITE = "tests/python/packages/blender"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
 PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 ALIAS_PROJECTS = ("packages/aliases/cadgen",)
@@ -268,7 +283,8 @@ RULES: tuple[Rule, ...] = (
     # law, documented commands), never by a build or a test of the code beside it. The one
     # exception, each distribution's README, is its wheel's long description.
     Rule((*(f"{project}/{name}" for project in PACKAGE_PROJECTS for name in ("README.md", "LICENSE")),
-          *(f"{project}/README.md" for project in ALIAS_PROJECTS)), select(flags=["packaging"]), final=True),
+          *(f"{project}/README.md" for project in ALIAS_PROJECTS),
+          "packages/cad-server/COPYING"), select(flags=["packaging"]), final=True),  # the GPL text cad-server ships
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
@@ -299,11 +315,15 @@ RULES: tuple[Rule, ...] = (
     # The engine and shared modules a stress study reads a document, finds CalculiX and writes its result through:
     # a change there runs the solves too. Before the engine's final rule, which adds the rest.
     Rule(FEA_SHARED, select(flags=["fea"])),
+    # The GLB the render skill's helper imports, and the clips in it: Blender reads them.
+    Rule(BLENDER_GLB, select(flags=["blender"])),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
          CADGEN_CONSUMERS),
     # The stress study's code runs what its package runs, and the fea job, which installs netgen and CalculiX.
     Rule(FEA_CODE, select(flags=["fea"])),
+    # bpy's environment and how cad run chooses it: what its package runs, and the blender job.
+    Rule(BLENDER_CODE, select(flags=["blender"])),
     Rule((f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**"),
          select(skills=[f"{SKILL_SUITES}/fea"])),
 
@@ -331,6 +351,7 @@ RULES: tuple[Rule, ...] = (
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
     Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
          final=True),
+    Rule((f"{BLENDER_SUITE}/**", "scripts/test/test-blender.sh"), select(flags=["blender"]), final=True),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
@@ -339,6 +360,8 @@ RULES: tuple[Rule, ...] = (
     # commands a skill documents among them; scripts by their skill's suite, each a light one.
     Rule(("skills/**",), NOTHING),
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
+    # The render skill's helper runs in bpy, in the blender job; its pages and licence files are its light suite's.
+    Rule(("skills/render/**",), select(flags=["blender"])),
 
     # The test runners and the gates each one feeds.
     Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),

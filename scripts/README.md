@@ -90,6 +90,12 @@ where those files ship, so these scripts are what produces them.
   as the server does (in `tmp/kicad-suite`, naming its Python to the tests, `CAD_TEST_KICODE_PYTHON`):
   `tests/python/packages/kicad`, each file with private engine, state and cache folders. Called by
   `test.yml`'s KiCad job; no KiCad install, footprint library or browser is needed.
+- `test-blender.sh` — the render skill's Blender helper (`skills/render/scripts/cad_glb.py`) in the
+  environment `cad run` makes for a script that imports bpy (bpy 5.2.3 on Python 3.13, from PyPI the
+  first time): a model built and exported to a GLB by the checkout's `cad`, its clips played in both
+  orders, and a Cycles and an EEVEE still. `tests/python/packages/blender`, each file with private
+  engine, state and cache folders. Called by `test.yml`'s Blender renders job; on Linux it needs X11's
+  client libraries and OpenGL from the system.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.

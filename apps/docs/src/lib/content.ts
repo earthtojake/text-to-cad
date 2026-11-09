@@ -56,7 +56,7 @@ export const pluginRequestUrl = `${siteConfig.repository}/issues/new?title=${enc
 // How to take part, the README's Contributing in substance: each way in, with its links. Code is in
 // backticks, which the page sets as code.
 export const contributing = {
-  intro: "text-to-cad is MIT-licensed and built in the open.",
+  intro: "text-to-cad is MIT-licensed, but for one GPL file (the render skill's Blender helper), and built in the open.",
   items: [
     {
       title: "Bugs and plugin requests",
@@ -119,6 +119,13 @@ export const features = [
     path: "skills/engineering-drawing/SKILL.md",
     summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
     file: "bracket.pdf",
+  },
+  {
+    id: "renders",
+    name: "Renders",
+    path: "skills/render/SKILL.md",
+    summary: "Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.",
+    file: "hero.png, turntable.mp4",
   },
   {
     id: "fabrication",

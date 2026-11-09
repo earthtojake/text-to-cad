@@ -72,6 +72,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
             r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
+            r"^tests/python/packages/blender/(.*/)?test_[^/]*\.py$",     # test-blender.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
@@ -252,7 +253,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(path=path):
                 # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
                 solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"} | solves)
+                # The registry pins bpy and its platforms for the blender integration: Blender's job runs too.
+                renders = {"blender"} if path == "packages/cad/src/cad/registry.py" else set()
+                self.assertEqual(jobs_for(path),
+                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "blender"} | solves | renders)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -301,6 +305,37 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for("packages/cad/src/cad/_internal/fea/study.py")["skills_tests"], [f"{SKILLS}/fea"])
         self.assertNotIn("fea", jobs_for("packages/cad/src/cad/build123d/_geometry.py"))
 
+    def test_blenders_job_makes_bpys_environment_and_runs_the_render_helper(self):
+        self.assertIn("scripts/test/test-blender.sh", JOBS["blender"])
+        self.assertIn("timeout-minutes: 20", JOBS["blender"])
+        # bpy's Linux wheel loads X11's client libraries and OpenGL from the system.
+        for package in ("libx11-6", "libxkbcommon0", "libgl1", "libegl1", "libgl1-mesa-dri"):
+            self.assertIn(package, JOBS["blender"])
+        # The suite and its runner are that job's alone: no package job collects them.
+        for path in ("tests/python/packages/blender/test_render_helper.py", "scripts/test/test-blender.sh"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"blender", "skills"})
+        # The skill's helper and pages reach it, and nothing else but the light contracts.
+        for path in ("skills/render/scripts/cad_glb.py", "skills/render/SKILL.md"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"blender", "skills"})
+        # bpy's environment and how cad run chooses it, and the GLB and its clips, reach it beside their package's jobs.
+        for path in ("packages/cad/src/cad/registry.py", "packages/cad/src/cad/_internal/integrations.py",
+                     "packages/cad-server/src/cad_server/_internal/extras.py",
+                     "packages/cad-server/src/cad_server/_internal/scan.py",
+                     "packages/cad-server/src/cad_server/cli/run.py",
+                     "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/engine/export/motion.py",
+                     "packages/cad/src/cad/engine/export/animation.py"):
+            with self.subTest(path=path):
+                self.assertLessEqual({"blender", "cadgen-linux"}, jobs_for(path))
+        # ...and the rest of the engine does not.
+        for path in ("packages/cad/src/cad/engine/api.py", "packages/cad/src/cad/engine/export/stl.py",
+                     "packages/cad/pyproject.toml", "skills/cad/SKILL.md"):
+            with self.subTest(path=path):
+                self.assertNotIn("blender", jobs_for(path))
+        # The GPL text cad-server's wheel carries is its licence: the wheel's job alone.
+        self.assertEqual(jobs_for("packages/cad-server/COPYING"), {"packaging", "skills"})
+
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")
         self.assertIn(f"{SERVER}/viewer/test_launcher.py", viewer["cadgen_tests"])
@@ -333,7 +368,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea", "blender"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -345,7 +380,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
         # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
-        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs", "blender"})
         self.assertNotIn("kicad", jobs_for("packages/cad-server/pyproject.toml"))
 
     def test_the_installer_rehearsals_start_on_the_same_changes_and_no_job_runs_them(self):
@@ -420,7 +455,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "blender"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

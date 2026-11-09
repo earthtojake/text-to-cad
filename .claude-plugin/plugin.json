@@ -12,7 +12,7 @@
   "privacyPolicyUrl": "https://www.texttocad.dev/privacy-policy",
   "termsOfServiceUrl": "https://www.texttocad.dev/terms-of-service",
   "repository": "https://github.com/earthtojake/text-to-cad",
-  "license": "MIT",
+  "license": "MIT AND GPL-3.0-or-later",
   "keywords": [
     "cad",
     "robotics",
