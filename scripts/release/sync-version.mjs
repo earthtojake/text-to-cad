@@ -50,9 +50,8 @@ export const pinTargets = [
   "mcp.json",
   "gemini-extension.json",
   "docs/install.md",
-  // The turn-off command the privacy policy prints, the plugin's own launch line. The README and
-  // the docs site's homepage pin nothing: a target without a pin is refused.
-  "apps/docs/src/app/privacy-policy/page.tsx",
+  // The README, the docs site's homepage and its policy pages pin nothing (the privacy policy's
+  // telemetry commands run `cad`, the installed command): a target without a pin is refused.
 ];
 
 // The one-line installer's scripts carry the release they were published with, which each installs
