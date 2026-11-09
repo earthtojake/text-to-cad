@@ -944,7 +944,8 @@ class Screen:
         self.faces = faces
         self.size = float(size) or 1.0
         count = len(faces)
-        # Only a heavy face is screened (``heavy``): any other's exact intersection costs less than its boxes.
+        # Only a heavy face is screened (``heavy``): any other's exact intersection costs less than its boxes
+        # (tested in batches too, every face's: measured a loss on every part tried).
         self.heavy = np.array([heavy(face) for face in faces], dtype=bool)
         self._read = np.zeros(count, dtype=bool)
         self.boundaries: dict[int, tuple[np.ndarray, np.ndarray, float] | None] = {}
@@ -1024,10 +1025,6 @@ class Screen:
         order = np.argsort(code, kind="stable")
         low, high = low[order], high[order]
         cuts = np.arange(0, len(order), SCREEN_CHUNK)
-        # The triangles' nodes on the boundary lie on the edges' curves, which may stand an edge's tolerance off
-        # the surface's trim: the boxes are widened by that too.
-        margin = (SCREEN_SLACK * deflection + float(BRep_Tool.Tolerance_s(face)) + 2.0 * tolerance
-                  + 1e-9 * self.size)
         # The full intersector accepts a crossing its classifier puts within a tolerance of the boundary in
         # (u, v) (``IntCurvesFace_Intersector::InternalCall``): the larger of its own (1e-7) and the edges'
         # largest 3D tolerance at the surface's coarser resolution, a (u, v) distance that is longest in
@@ -1045,6 +1042,11 @@ class Screen:
         if not math.isfinite(uv):
             unknown = True
         reach = 2.0 * (tolerance + float(BRep_Tool.Tolerance_s(face)) + uv) + SCREEN_SLACK * edge_deflection + 1e-7
+        if not math.isfinite(reach):
+            return None  # how far beyond its trim the kernel accepts a crossing is unknown: not screened
+        # The boxes hold the surface over each triangle (its deflection), the boundary's nodes an edge's tolerance
+        # off the trim, and every crossing the full intersector accepts beyond the trim (the reach).
+        margin = SCREEN_SLACK * deflection + reach + 1e-9 * self.size
         boundary = None if unknown else (np.array(starts).reshape(-1, 3), np.array(ends).reshape(-1, 3), reach)
         return (np.minimum.reduceat(low, cuts, axis=0) - margin, np.maximum.reduceat(high, cuts, axis=0) + margin,
                 boundary)
@@ -1159,6 +1161,9 @@ class Intersector:
         self._full: Any = None if free else IntCurvesFace_Intersector(face, tolerance)
         self._points: list[tuple[float, float, float]] = []
         self._done = False
+        from OCP.Standard import Standard_Failure
+
+        self._failure = Standard_Failure  # read once: a ray's import of it cost a fifth of a cast
 
     def _near_boundary(self, line: Any, start: float, end: float) -> list[tuple[float, float]]:
         """The stretches of the ray -- the line between ``start`` and ``end`` -- that pass within reach of the
@@ -1232,24 +1237,36 @@ class Intersector:
         stretch the kernel fails on (``Standard_Failure``, a degenerate patch of its surface) or does not finish
         loses its own crossings only, never the rest of the ray's; it is counted against the face
         (``Screen.failed``), which the check says, never a family lost to it."""
-        from OCP.Standard import Standard_Failure
-
+        Standard_Failure = self._failure  # noqa: N806 - the kernel's name
         self._points: list[tuple[float, float, float]] = []
         self._done = False
-        if self._fast is not None:
+        if self._fast is None:
+            # any face but a heavy one: the kernel's intersector alone, as it answers
+            full = self._full
             try:
-                self._fast.Perform(line, start, end)
-                fast = self._fast.IsDone()
+                full.Perform(line, start, end)
             except Standard_Failure:
-                fast = False
-            if fast:
+                if self._screen is not None:
+                    self._screen.failed[self._index] = self._screen.failed.get(self._index, 0) + 1
+                return
+            if full.IsDone():
                 self._done = True
-                self._take(self._fast)
-                stretches = self._near_boundary(line, start, end)
-            else:
-                stretches = [(start, end)]  # the full intersector answers for the whole ray
+                self._points = [(float(full.WParameter(k)), float(full.UParameter(k)), float(full.VParameter(k)))
+                                for k in range(1, full.NbPnt() + 1)]
+                if len(self._points) > 1:
+                    self._points.sort()
+            return
+        try:
+            self._fast.Perform(line, start, end)
+            fast = self._fast.IsDone()
+        except Standard_Failure:
+            fast = False
+        if fast:
+            self._done = True
+            self._take(self._fast)
+            stretches = self._near_boundary(line, start, end)
         else:
-            stretches = [(start, end)]
+            stretches = [(start, end)]  # the full intersector answers for the whole ray
         if not stretches:
             return
         if self._full is None:

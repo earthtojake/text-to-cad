@@ -32,6 +32,10 @@ ALONG = 0.02
 #: The direction a point's material is told along (``Model.solid``): oblique to every axis, so no ray of it runs
 #: along a face of a part drawn square.
 SOLID_RAY = np.array([0.2672612419124244, 0.5345224838248488, 0.8017837257372732])
+#: The directions a point the first ray met a face at nearly edge-on (or at once) is told along again, in turn,
+#: before the solid classifier (a tenth of a second a point on a free-form part) is asked: the same ray's
+#: components turned about, oblique to every axis and to each other.
+SOLID_RAYS = (SOLID_RAY, SOLID_RAY[[2, 0, 1]], SOLID_RAY[[1, 2, 0]])
 #: How far off its face a ray starts, so it does not hit the face it leaves.
 LIFT = 1e-3
 #: The sample budget: about ``SAMPLE_SCALE * sqrt(faces)`` points shared over the faces by area, at most
@@ -47,7 +51,7 @@ GRIDS_KEPT = 64
 
 
 def unit(vector: Iterable[float]) -> np.ndarray:
-    v = np.asarray(list(vector), dtype=float)
+    v = np.asarray(vector if isinstance(vector, np.ndarray) else list(vector), dtype=float)
     size = float(np.linalg.norm(v))
     return v / size if size > 1e-300 else v
 
@@ -199,6 +203,19 @@ def turned(surface: brep.Surface, rotation: np.ndarray) -> brep.Surface:
     return dataclasses.replace(surface, **changes) if changes else surface
 
 
+_GP: tuple[Any, Any, Any] | None = None
+
+
+def _gp() -> tuple[Any, Any, Any]:
+    """``gp_Dir``, ``gp_Lin`` and ``gp_Pnt``, imported once: an import a ray cost a tenth of its cast."""
+    global _GP
+    if _GP is None:
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+        _GP = (gp_Dir, gp_Lin, gp_Pnt)
+    return _GP
+
+
 def _spread(count: int) -> list[tuple[float, float]]:
     """``count`` barycentric points spread over a triangle: the centres of its pieces when it is cut in
     ``ceil(sqrt(count))`` along each side, taken evenly."""
@@ -274,6 +291,36 @@ class _Projected:
         enter = np.maximum(self.t0[index] - pt, skip)
         order = np.argsort(enter)
         return index[order], enter[order]
+
+    def candidates_all(self, origins: np.ndarray, skip: float, end: float) -> list[tuple[np.ndarray, np.ndarray]]:
+        """``candidates`` for many origins, their boxes tested together: the same faces in the same order."""
+        origins = np.asarray(origins, dtype=float).reshape(-1, 3)
+        none = (np.zeros(0, dtype=int), np.zeros(0))
+        pu, pv, pt = origins @ self.u, origins @ self.v, origins @ self.d
+        fi = (pu - self.lo[0]) / self.cell[0]
+        fj = (pv - self.lo[1]) / self.cell[1]
+        inside = (0.0 <= fi) & (fi <= self.side) & (0.0 <= fj) & (fj <= self.side)
+        rows = np.flatnonzero(inside)
+        if not len(rows):
+            return [none] * len(origins)
+        cells = (np.minimum(fi[rows].astype(int), self.side - 1) * self.side
+                 + np.minimum(fj[rows].astype(int), self.side - 1))
+        buckets = [self.buckets[int(cell)] for cell in cells]
+        counts = np.array([len(bucket) for bucket in buckets], dtype=np.int64)
+        index = np.concatenate(buckets) if len(buckets) else np.zeros(0, dtype=int)
+        ray = np.repeat(rows, counts)
+        keep = ((self.u0[index] <= pu[ray]) & (pu[ray] <= self.u1[index]) & (self.v0[index] <= pv[ray])
+                & (pv[ray] <= self.v1[index]) & (self.t1[index] - pt[ray] >= skip) & (self.t0[index] - pt[ray] <= end))
+        enter = np.maximum(self.t0[index] - pt[ray], skip)
+        found = [none] * len(origins)
+        bounds = np.concatenate([[0], np.cumsum(counts)])
+        for k, row in enumerate(rows):
+            a, b = bounds[k], bounds[k + 1]
+            mine = keep[a:b]
+            picked, entries = index[a:b][mine], enter[a:b][mine]
+            order = np.argsort(entries)  # as ``candidates`` sorts one ray's: ties fall alike
+            found[row] = (picked[order], entries[order])
+        return found
 
 
 @dataclass(frozen=True)
@@ -610,10 +657,10 @@ class Model:
         """The ray's nearest crossing (or, with ``nearest`` False, any crossing): its distance, the face's
         index and the (u, v) on it. Each face the ray's line could cross, by its box, is intersected exactly
         (``IntCurvesFace_Intersector``), nearest box first, until no nearer crossing can follow."""
-        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+        gp_Dir, gp_Lin, gp_Pnt = _gp()  # noqa: N806 - the kernel's names
 
         checkpoint()  # a ray at a time: a check asked to stop stops between rays
-        o = np.asarray(list(origin), dtype=float)
+        o = np.asarray(origin if isinstance(origin, np.ndarray) else list(origin), dtype=float)
         d = unit(direction)
         self.rays_cast += 1
         if given is None:
@@ -662,6 +709,34 @@ class Model:
         given = grid.candidates(o, skip, 1e9) if grid is not None else None
         return self._cast(o, d, skip, 1e9, False, given) is not None
 
+    def blocked_each(self, origins: np.ndarray, directions: np.ndarray, skip: float = 1e-4) -> np.ndarray:
+        """``blocked`` for many rays, each its own direction: the same candidates each ``blocked`` reads (a grid's
+        where one is made along its direction, else every box's), the boxes of those with none tested
+        together."""
+        origins = np.asarray(origins, dtype=float).reshape(-1, 3)
+        ways = np.array([unit(d) for d in np.asarray(directions, dtype=float).reshape(-1, 3)]).reshape(-1, 3)
+        givens: list[Any] = [None] * len(origins)
+        general = []
+        for row, (o, d) in enumerate(zip(origins, ways)):
+            grid = self._shared(d, 1)
+            if grid is not None:
+                givens[row] = grid.candidates(o, skip, 1e9)
+            elif np.count_nonzero(np.abs(d) > 1e-12) == 1:
+                givens[row] = self._candidates(o, d, skip, 1e9)  # along a world axis: its own slab test
+            else:
+                general.append(row)
+        for start in range(0, len(general), 256):
+            rows = general[start:start + 256]
+            mask, enter = self._slabs(origins[rows], ways[rows], skip, 1e9)
+            for k, row in enumerate(rows):
+                index = np.flatnonzero(mask[k])
+                order = np.argsort(enter[k, index])
+                givens[row] = (index[order], enter[k, index][order])
+        found = np.zeros(len(origins), dtype=bool)
+        for row, given in enumerate(givens):
+            found[row] = bool(len(given[0])) and self._cast(origins[row], ways[row], skip, 1e9, False, given) is not None
+        return found
+
     def projected(self, direction: np.ndarray, build: bool = True) -> _Projected | None:
         """The faces' boxes seen along ``direction`` in a grid (``_Projected``), made once per direction."""
         d = unit(direction)
@@ -689,21 +764,19 @@ class Model:
         found = np.zeros(len(points), dtype=bool)
         origins = points + normals * LIFT
         grid = self._shared(d, len(points))
-        if grid is not None:
-            for row, origin in enumerate(origins):
-                found[row] = self._cast(origin, d, skip, 1e9, False, grid.candidates(origin, skip, 1e9)) is None
-            return found
         for start in range(0, len(points), chunk):
             block = origins[start:start + chunk]
-            mask, enter = self._slabs(block, d, skip, 1e9)
-            for row in range(len(block)):
-                index = np.flatnonzero(mask[row])
-                if not len(index):
-                    found[start + row] = True
-                    continue
-                order = np.argsort(enter[row, index])
-                given = (index[order], enter[row, index][order])
-                found[start + row] = self._cast(block[row], d, skip, 1e9, False, given) is None
+            if grid is not None:
+                givens = grid.candidates_all(block, skip, 1e9)
+            else:
+                mask, enter = self._slabs(block, d, skip, 1e9)
+                givens = []
+                for row in range(len(block)):
+                    index = np.flatnonzero(mask[row])
+                    order = np.argsort(enter[row, index])
+                    givens.append((index[order], enter[row, index][order]))
+            for row, given in enumerate(givens):
+                found[start + row] = not len(given[0]) or self._cast(block[row], d, skip, 1e9, False, given) is None
         return found
 
     def first_all(self, origins: np.ndarray, directions: np.ndarray, skip: float = 1e-4,
@@ -716,14 +789,16 @@ class Model:
         for start in range(0, len(origins), chunk):
             block, ways = origins[start:start + chunk], dirs[start:start + chunk]
             mask, enter = (None, None) if grid is not None else self._slabs(block, ways, skip, 1e9)
-            for row in range(len(block)):
-                if grid is not None:
-                    given = grid.candidates(block[row], skip, 1e9)
-                else:
+            if grid is not None:
+                givens = grid.candidates_all(block, skip, 1e9)
+            else:
+                givens = []
+                for row in range(len(block)):
                     index = np.flatnonzero(mask[row])
                     order = np.argsort(enter[row, index])
-                    given = (index[order], enter[row, index][order])
-                hit = self._cast(block[row], ways[row], skip, 1e9, True, given)
+                    givens.append((index[order], enter[row, index][order]))
+            for row, given in enumerate(givens):
+                hit = self._cast(block[row], ways[row], skip, 1e9, True, given) if len(given[0]) else None
                 if hit is None:
                     found.append(None)
                     continue
@@ -738,22 +813,32 @@ class Model:
     def solid(self, points: np.ndarray) -> np.ndarray:
         """Whether each point lies in the part's material (on its boundary is not): the first face a ray from it
         meets looks away from it (the ray leaving the material there), by the model's own ray cast along one
-        oblique direction; a ray that meets a face nearly edge-on, or at once, is classified exactly instead (one
-        classifier kept). A solid classifier costs 40 ms a point on a freeform part, a ray a fraction of one."""
+        oblique direction; a ray that meets a face nearly edge-on is cast again along the next of ``SOLID_RAYS``,
+        and one that meets a face at once (on the boundary), or edge-on along all three, is classified exactly
+        instead (one classifier kept). A solid classifier costs 40 to 400 ms a point on a freeform part, a ray a
+        fraction of one."""
         points = np.asarray(points, dtype=float).reshape(-1, 3)
         found = np.zeros(len(points), dtype=bool)
         if not len(points):
             return found
-        hits = self.first_all(points, np.tile(SOLID_RAY, (len(points), 1)), skip=1e-7)
-        doubtful = []
-        for k, hit in enumerate(hits):
-            if hit is None:
-                continue  # it leaves the part: outside
-            facing = float(np.asarray(hit.normal) @ SOLID_RAY)
-            if abs(facing) < 0.05 or hit.distance < 1e-6:
-                doubtful.append(k)
-            else:
-                found[k] = facing > 0.0
+        grazing, doubtful = list(range(len(points))), []
+        for ray in SOLID_RAYS:
+            if not grazing:
+                break
+            hits = self.first_all(points[grazing], np.tile(ray, (len(grazing), 1)), skip=1e-7)
+            still = []
+            for k, hit in zip(grazing, hits):
+                if hit is None:
+                    continue  # it leaves the part: outside
+                facing = float(np.asarray(hit.normal) @ ray)
+                if hit.distance < 1e-6:
+                    doubtful.append(k)  # on the boundary, or all but: the classifier's (on is not in)
+                elif abs(facing) < 0.05:
+                    still.append(k)  # met edge-on: told along the next ray
+                else:
+                    found[k] = facing > 0.0
+            grazing = still
+        doubtful += grazing
         if doubtful:
             if self._classifier is None:
                 from OCP.BRepClass3d import BRepClass3d_SolidClassifier

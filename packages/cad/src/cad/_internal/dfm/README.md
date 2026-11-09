@@ -155,8 +155,9 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   and of 48 edges or more, or a B-spline of 4000 control points or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
   crossing of the surface beyond the face's trim against every edge again, with a classifier made anew each call:
   6 ms a ray on a 526-edge face, against microseconds on any other. So a heavy face's candidates are screened by its
-  triangulation (`Screen`: chunks of 16 triangles, each box widened by three deflections, the face's tolerance and
-  twice its edges' -- a ray that meets none cannot cross the face), and cast with the intersector that does not
+  triangulation (`Screen`: chunks of 16 triangles, each box widened by three deflections and the reach below -- a
+  ray that meets none cannot cross the face, nor the full intersector accept a crossing of it beyond its trim),
+  and cast with the intersector that does not
   re-classify; on the stretches of the line within reach of the face's edges (`Intersector`: the edges walked to
   2e-5 of the part, the reach twice the edges' largest tolerance, the face's, and the (u, v) tolerance the
   kernel's classifier accepts at the boundary in millimetres along the surface's finer direction, plus three

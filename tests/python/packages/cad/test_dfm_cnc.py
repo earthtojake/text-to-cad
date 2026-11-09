@@ -54,6 +54,55 @@ def _codes(result: Any) -> set[str]:
     return {finding.code for finding in result.findings}
 
 
+class BatchedRaysTest(unittest.TestCase):
+    """The rays a CNC check casts many at a time (``Model.escape_all``, ``first_all``, ``blocked_each``: their
+    boxes tested together) answer as each cast alone; and a point is in the material as the kernel's solid
+    classifier says (``Model.solid``, a ray met edge-on told along the next of three)."""
+
+    def _model(self) -> Any:
+        from cad.build123d import _dfm_brep, _dfm_cnc_model
+
+        block = bd.Box(60, 40, 30) - bd.Pos(0, 0, 10) * bd.Cylinder(8, 30) - bd.Pos(18, 8, 15) * bd.Sphere(6)
+        # a slanted face (a wedge's chamfer), a torus round a boss and a hole through
+        block = block - bd.Pos(30, 0, 15) * bd.Rot(0, 35, 20) * bd.Box(20, 80, 20)
+        block = block + bd.Pos(-20, -10, 15) * bd.Torus(6, 2)
+        return _dfm_cnc_model.Model(_dfm_brep.Part("p", "p", block))
+
+    def test_batched_rays_answer_as_each_alone(self) -> None:
+        rng = np.random.default_rng(5)
+        batched, alone = self._model(), self._model()
+        origins = rng.uniform((-40, -30, -25), (40, 30, 25), size=(300, 3))
+        ways = rng.normal(size=(300, 3))
+        ways /= np.linalg.norm(ways, axis=1)[:, None]
+        for d in (np.array([0.0, 0.0, 1.0]), np.array([0.6, 0.0, 0.8]), ways[0]):
+            normals = np.tile(-d, (len(origins), 1))
+            self.assertEqual(batched.escape_all(origins, normals, d).tolist(),
+                             [alone.escapes(o, n, d) for o, n in zip(origins, normals)])
+        for mine, o, w in zip(batched.first_all(origins, ways), origins, ways):
+            theirs = alone.first(o, w)
+            self.assertEqual(mine is None, theirs is None)
+            if mine is not None and theirs is not None:
+                # the same crossing (``first_all`` normalizes its directions once more: the last digit may differ)
+                self.assertEqual(mine.face, theirs.face)
+                self.assertAlmostEqual(mine.distance, theirs.distance, delta=1e-9)
+        self.assertEqual(batched.blocked_each(origins, ways).tolist(), [alone.blocked(o, w) for o, w in zip(origins, ways)])
+
+    def test_a_point_is_in_the_material_as_the_classifier_says(self) -> None:
+        from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+        from OCP.gp import gp_Pnt
+        from OCP.TopAbs import TopAbs_IN
+
+        model = self._model()
+        rng = np.random.default_rng(9)
+        points = rng.uniform((-35, -25, -18), (35, 25, 18), size=(400, 3))
+        classifier = BRepClass3d_SolidClassifier(model.part.shape.wrapped)
+        expected = []
+        for point in points:
+            classifier.Perform(gp_Pnt(*point), 1e-6)
+            expected.append(classifier.State() == TopAbs_IN)
+        np.testing.assert_array_equal(model.solid(points), expected)
+
+
 class HolesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

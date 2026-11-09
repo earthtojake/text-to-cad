@@ -1507,7 +1507,10 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
         ok_at = np.zeros((n, len(leans)), dtype=bool)
         for j, lean in enumerate(leans):
             ways = np.array([unit(math.cos(lean) * b + math.sin(lean) * t) for b, t in zip(bases, s.tangents)])
-            ok_at[:, j] = [_allowed(state, w) and model.escapes(o, b, w) for o, b, w in zip(s.points, bases, ways)]
+            rows = np.flatnonzero([_allowed(state, w) for w in ways])
+            if len(rows):
+                # each station's line out along its own lean, cast together (``Model.escapes``, each)
+                ok_at[rows, j] = ~model.blocked_each(s.points[rows] + bases[rows] * LIFT, ways[rows])
         reached = np.zeros(n, dtype=bool)
         live = np.zeros(len(leans), dtype=bool)
         near = np.abs(leans[:, None] - leans[None, :]) <= math.radians(LEAN_STEP_DEG) + 1e-9
