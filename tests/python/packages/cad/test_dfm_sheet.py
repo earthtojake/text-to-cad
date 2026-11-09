@@ -372,9 +372,14 @@ class TypeSideTest(unittest.TestCase):
         self.assertIn("no material given: medium (steel)", said)
 
     def test_context_scales_tabs_and_takes_the_sheet_given(self) -> None:
-        report = {"parts": {"items": [{"thickness_mm": 2.0}]}, "bends": {"items": [{"inside_radius_mm": 2.0}]}}
+        report = {"parts": {"items": [{"thickness_mm": 2.0}]}, "bends": {"items": [{"inside_radius_mm": 2.0}]},
+                  "tabs": {"items": [{"width_mm": 5.0, "thickness_mm": 3.0}]}}
         found = sheet_rules.context(report, {"material": "steel"})
         self.assertEqual((found["tab_min_mm"], found["notch_min_mm"]), (4.0, 2.0))
+        # an item scales by its own part's thickness, and by the stock's where --thickness names it
+        self.assertEqual(report["tabs"]["items"][0]["tab_min_mm"], 6.0)
+        sheet_rules.context(report, {"thickness": 1.0})
+        self.assertEqual(report["tabs"]["items"][0]["tab_min_mm"], 3.2)
         self.assertEqual((found["sheet_long_mm"], found["sheet_short_mm"], found["sheet_given"]),
                          (*sheet_rules.DEFAULT_SHEET, False))
         found = sheet_rules.context(report, {"material": "aluminum", "sheet_size": "300x500"})
@@ -385,8 +390,13 @@ class TypeSideTest(unittest.TestCase):
 
         report = {"parts": {"items": [{"thickness_mm": 2.0, "is_sheet": True, "flat_length_mm": 600.0,
                                        "flat_width_mm": 100.0, "location": "p/face 1"}]}}
-        given, _ = rules.evaluate(report, sheet_rules.RULES, sheet_rules.context(report, {"sheet_size": "500x300"}))
-        self.assertEqual([(f.code, f.severity) for f in given], [("sheet.flat_length", "error")])
+        # the sheet given is the user's own figure: a finding of fact that cites no guide, and no rule's verdict
+        self.assertEqual(rules.evaluate(report, sheet_rules.RULES,
+                                        sheet_rules.context(report, {"sheet_size": "500x300"}))[0], [])
+        (given,) = sheet_rules.findings(report, {"sheet_size": "500x300"}, False)
+        self.assertEqual((given.code, given.severity), ("sheet.flat_length", "error"))
+        self.assertIn("600 mm is over the 500 mm of the 500 x 300 mm sheet given (--sheet-size)", given.message)
+        self.assertNotIn("source", given.message)
         report["parts"]["items"][0]["flat_length_mm"] = 3100.0
         assumed, _ = rules.evaluate(report, sheet_rules.RULES, sheet_rules.context(report, {}))
         self.assertEqual([(f.code, f.severity) for f in assumed], [("sheet.flat_length", "warning")])
@@ -438,6 +448,41 @@ def checked(shape: bd.Shape, **options):
     from cad import build123d as cb
 
     return cb.sheet_metal(shape, **options)
+
+
+def verdicts(result) -> list[tuple[str, str]]:
+    """The errors and warnings of a result: (severity, code), sorted."""
+    return sorted((f.severity, f.code) for f in result.findings if f.severity in ("error", "warning"))
+
+
+def turned(shape: bd.Shape, degrees: float = 37.0) -> bd.Shape:
+    """``shape`` turned about a skew axis and moved: no face of it along a world axis."""
+    return shape.rotate(bd.Axis((0, 0, 0), (1, 2, 3)), degrees).translate((13.3, -7.1, 4.4))
+
+
+class PerPartTest(unittest.TestCase):
+    """Each part of a document is judged by its own thickness, whichever comes first."""
+
+    def test_two_thicknesses_are_each_judged_by_their_own_in_either_order(self) -> None:
+        thin = bent([("line", 40), ("bend", 90, 1), ("line", 30)], 1.0, 50, "thin")  # r = t: no warning
+        # a 5 mm hole 3 mm from the bend's tangent line of a 3 mm part: under 2 t = 6 mm
+        thick = bent([("line", 40), ("bend", 90, 3), ("line", 30)], 3.0, 50, "thick") - bd.Pos(34.5, 25, 0) * bd.Cylinder(2.5, 20)
+        thick.label = "thick"
+        for first, second in ((thin, thick), (thick, thin)):
+            result = checked(bd.Compound(children=[first, bd.Pos(100, 0, 0) * second]))
+            self.assertEqual(verdicts(result), [("error", "sheet.hole_to_bend")], result.summary)
+            (failure,) = failed(result, "sheet.hole_to_bend")
+            self.assertAlmostEqual(failure["value"], 3.0, places=6)
+            self.assertIn("2 parts, 1 and 3 mm", result.summary)
+            (hole,) = [f for f in result.findings if f.code == "sheet.hole_to_bend"]
+            self.assertIn("3 mm is under the 6 mm minimum", hole.message)
+
+    def test_a_flat_plate_beside_a_bent_bracket_keeps_the_flat_thickness_limit(self) -> None:
+        plate = bd.Pos(0, 100, 4) * bd.Box(80, 60, 8)  # 8 mm, flat: within the 10 mm a laser cuts
+        plate.label = "plate"
+        bracket = bent([("line", 40), ("bend", 90, 2), ("line", 30)], 2.0, 50, "bracket")
+        result = checked(bd.Compound(children=[bracket, plate]))
+        self.assertEqual(verdicts(result), [], [f.message for f in result.findings])
 
 
 def failed(result, rule: str) -> list[dict]:

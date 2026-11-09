@@ -1804,7 +1804,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     item: dict[str, Any] = {
         "name": part.name, "thickness_mm": _r(t), "given_thickness_mm": options.get("thickness"),
         "sheet_area_fraction": _r(analysis.sheet_fraction), "skin_faces": len(analysis.skins),
-        "not_sheet_faces": len(analysis.not_sheet), "box_mm": [_r(v) for v in box[::-1]],
+        "not_sheet_faces": len(analysis.not_sheet), "bent": False, "box_mm": [_r(v) for v in box[::-1]],
         "box_short_mm": _r(box[1]), "location": part.ref("face", largest),
     }
     is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5
@@ -1858,6 +1858,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
                      "angle_deg": b["angle_deg"], "location": b["location"], "xyz": b["xyz"]}
                     for b in out["bends"] if b["kind"] == "curl"]
     item["bend_count"] = len(analysis.bends)
+    item["bent"] = bool(analysis.bends)  # its own: bending's thickness limit is a bent part's
     item["flange_count"] = sum(1 for flange in analysis.flanges if flange.joint is None)
     try:
         analysis.unfold()
@@ -1991,6 +1992,14 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             results.append(_part(part, options))
         except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone
             results.append({family: error for family in FAMILIES})
+    for result in results:
+        # every item carries its own part's thickness: what its rules scale by (``sheet._scales``)
+        parts = result.get("parts")
+        thickness = parts[0].get("thickness_mm") if isinstance(parts, list) and parts else None
+        for family, found in result.items():
+            if thickness is not None and isinstance(found, list) and family in FAMILIES[2:]:
+                for item in found:
+                    item.setdefault("thickness_mm", thickness)
     report: dict[str, Any] = {}
     partial = []
     for family in FAMILIES:
@@ -2013,7 +2022,6 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                              for ordinal in (result.get("_lost") or {}).get(family, ())})
         if unmeasured:
             report[family]["unmeasured_faces"] = unmeasured
-    report["bent"] = bool((report.get("bends") or {}).get("items"))
     report["partial"] = bool(partial)
     report["partial_sections"] = partial
     found = [finding for result in results for finding in result.get("_findings", ())]
