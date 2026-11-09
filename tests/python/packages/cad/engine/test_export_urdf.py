@@ -341,6 +341,8 @@ class HandBuiltTest(_Folder):
         shoulder, knuckle = description.joints
         shoulder.armature, shoulder.damping, shoulder.friction = 0.012, 0.5, 0.2
         knuckle.armature = 0.003
+        # The knuckle bounds its effort and gives no speed: URDF requires one, so it is written 0, and said.
+        knuckle.effort, knuckle.velocity = 7.0, None
         upper = description.link("arm")
         geometry = upper.collisions[0].geometry
         # Two hulls of one part: the part is named once.
@@ -351,10 +353,14 @@ class HandBuiltTest(_Folder):
         # A line a kind, naming every joint or part that declares it.
         self.assertEqual([str(warning.message) for warning in said.warnings],
                          ["armature of 2 joints not written (a URDF has none; an MJCF carries it): shoulder, knuckle",
-                          "contact friction of 1 part not written (a URDF has none; an MJCF carries it): arm"])
+                          "contact friction of 1 part not written (a URDF has none; an MJCF carries it): arm",
+                          "velocity of 1 joint written 0 (each declares an effort and no velocity, and a ROS controller "
+                          "reads 0 as none allowed: give limits(..., velocity=) where the hardware's is known): "
+                          "knuckle"])
         text = path.read_text(encoding="utf-8")
         self.assertIn('<dynamics damping="0.5" friction="0.2"/>', text)
         self.assertEqual(text.count("<dynamics"), 1)  # the knuckle declares none
+        self.assertIn('effort="7" velocity="0"/>', text)
 
     def test_a_ball_is_refused_by_name_and_nothing_is_written(self) -> None:
         with self.assertRaisesRegex(ExportRefused, "joint 'shoulder' is spherical, and URDF has no ball joint"):

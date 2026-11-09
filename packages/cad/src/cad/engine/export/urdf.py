@@ -59,7 +59,8 @@ massless link between them: ``<name>`` the turn (revolute or continuous) to ``<n
 ``<limit>`` carries the joint's drive limits (``cad.build123d.limits``: ``effort`` in N*m or N,
 ``velocity`` in rad/s or m/s), a continuous joint's only where it has one; where the model gives
 none, ``0``, which URDF requires and a ROS controller reads literally (``cad urdf validate`` warns of
-it). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its ``<dynamics damping
+it); a joint that declares one of the two and not the other has the other written ``0``, said once for every
+such joint (``export.note``). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its ``<dynamics damping
 friction>``, each where declared; URDF has no armature, so a declared one is not written, and said
 once for every joint that declares one (``export.note``: an MJCF carries it). A bound the description leaves open is written
 ``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
@@ -315,6 +316,8 @@ class _Writer:
         # What URDF has no word for, said once a kind when the file is rendered (``_unwritten``): the joints
         # that declare an armature, the parts that declare a contact friction.
         self.unwritten: dict[str, list[str]] = {"armature": [], "contact friction": []}
+        # The joints that declare an effort and no velocity, or a velocity and no effort: the other written 0.
+        self.zeroed: dict[str, list[str]] = {"velocity": [], "effort": []}
         # The description's own links are named first, then its joints, each in tree order; what the writer
         # adds (a cylindrical joint's link and slide, a named frame's link and joint) after, as it is written.
         order, pending = [], [self.root.name]
@@ -362,12 +365,19 @@ class _Writer:
 
     def _unwritten(self) -> None:
         """A line a kind for what the file declares and URDF cannot say, naming every joint or part that
-        declares it: ``armature of 6 joints not written (a URDF has none; an MJCF carries it): ...``."""
+        declares it: ``armature of 6 joints not written (a URDF has none; an MJCF carries it): ...``; and a line
+        for the joints whose velocity, or effort, is written 0 because they declare only the other."""
         for what, of in (("armature", "joint"), ("contact friction", "part")):
             names = list(dict.fromkeys(self.unwritten[what]))
             if names:
                 note(f"{what} of {len(names)} {of}{'s' if len(names) != 1 else ''} not written (a URDF has none; "
                      f"an MJCF carries it): {', '.join(names)}")
+        for what, other in (("velocity", "effort"), ("effort", "velocity")):
+            names = list(dict.fromkeys(self.zeroed[what]))
+            if names:
+                note(f"{what} of {len(names)} joint{'s' if len(names) != 1 else ''} written 0 (each declares an "
+                     f"{other} and no {what}, and a ROS controller reads 0 as none allowed: give limits(..., "
+                     f"{what}=) where the hardware's is known): {', '.join(names)}")
 
     def _subtree(self, body: list[Xml], link: Link) -> None:
         body.append(self._link(self.links[link.name], link))
@@ -412,6 +422,8 @@ class _Writer:
         if kind != "fixed":
             element.add("axis", [("xyz", "0 0 1")])
         driven = [("effort", _number(joint.effort or 0, snap=0)), ("velocity", _number(joint.velocity or 0, snap=0))]
+        if kind in ("revolute", "prismatic", "continuous") and (joint.effort is None) != (joint.velocity is None):
+            self.zeroed["velocity" if joint.velocity is None else "effort"].append(self.joint_of.get(joint.name, name))
         if kind in ("revolute", "prismatic"):
             lower, upper = bounds(joint, index)
             element.add("limit", [("lower", _number(-UNBOUNDED if lower is None else lower)),
