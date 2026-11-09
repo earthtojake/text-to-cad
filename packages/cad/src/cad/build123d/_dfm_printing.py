@@ -331,8 +331,56 @@ class Context:
                         info.gap.append((gap[0], k, other))
 
 
-#: A wall ray's hit counts while the face it lands on is turned toward it by at least cos(KNIFE_DEG).
-_FACING = math.cos(math.radians(mo.KNIFE_DEG))
+#: A wall ray's hit counts while the face it lands on is turned toward it within KNIFE_DEG: a face turned
+#: exactly KNIFE_DEG (a 45-degree gusset's) is at the limit, not past it (``ANGLE_EPS``), however the rounding
+#: of its normal reads in this placement of the part.
+_FACING = math.cos(math.radians(mo.KNIFE_DEG + mo.ANGLE_EPS))
+#: Walls and gaps whose sampled figure is under these are refined to the exact least distance (``_refine``).
+REFINE_WALL_MM = 5.0
+#: A face of more edges than this is not refined (a web around many holes: its sampled figure stands).
+REFINE_EDGES = 16
+
+
+def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, outward: bool) -> None:
+    """A listed wall's thickness (``outward`` False) or gap's width refined to the exact least distance between
+    its face and the face across (``brep.least_segments``), where that segment leaves the face within 45 degrees
+    of its normal (into the material, or the void), the face across looks back along it as a wall's or a gap's
+    far side does, and an exact ray along it meets the face across first, at that distance: sampled rays land
+    a few points a face and read a wall between two holes, or a slot's narrowest, wide (``refined`` true, ``xyz``
+    the thinnest point). Faces sharing an edge or a corner are not refined: their least distance is 0."""
+    key = "gap_mm" if outward else "thickness_mm"
+    if i == j or j in ctx.adjacent(part, i):
+        return
+    a, b = ctx.info(part, i), ctx.info(part, j)
+    corners = {tuple(np.round([v.X, v.Y, v.Z], 6)) for v in a.face.vertices()}
+    if any(tuple(np.round([v.X, v.Y, v.Z], 6)) in corners for v in b.face.vertices()):
+        return
+    if a.surface.kind == b.surface.kind == "plane" and \
+            abs(float(np.asarray(a.surface.normal) @ np.asarray(b.surface.normal))) > 1 - 1e-9:
+        return  # parallel planes: every ray between them is as long, the sampled one exact
+    if len(ctx.adjacent(part, i)) > REFINE_EDGES:
+        return
+    checkpoint()
+    segments = brep.least_segments(a.face, b.face, len(ctx.adjacent(part, j)) > REFINE_EDGES)
+    if not segments or segments[0][0] >= float(item[key]) - 1e-6:
+        return
+    rays = ctx.rays(part)
+    for length, pa, pb, normal, there in segments:
+        way = (pb - pa) / length
+        if float(way @ (normal if outward else -normal)) < _FACING:
+            continue
+        if outward:
+            if float(there @ way) > -_FACING:
+                continue  # the face across looks back at the gap
+        elif float(there @ way) < _FACING:
+            continue  # the wall's far side looks on along the ray
+        hit = _first_hits(rays, (pa + way * 1e-5)[None], way[None], 1e-6, length + 1e-3)[0]
+        if hit is None or (hit[1] + 1 != j and abs(hit[0] + 1e-5 - length) > 1e-4):
+            continue
+        item[key] = _r(length, JUDGED)
+        item["xyz"] = _xyz(pa)
+        item["refined"] = True
+        return
 
 
 def _facing(rays: brep.Rays, props: dict[int, Any], hit: tuple, direction: np.ndarray) -> bool:
@@ -624,7 +672,7 @@ def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, 
     edges = ctx.parts[part].edges()
     zones = []
     for edge in ctx.edges(part):
-        if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG:
+        if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG - mo.ANGLE_EPS:
             continue
         depth = mo.thin_depth(minimum, edge.angle_deg)
         if depth:
@@ -667,26 +715,36 @@ def _walls(ctx: Context) -> dict[str, Any]:
             items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[thinnest[1]].point),
                           "thickness_mm": _r(thinnest[0], JUDGED), "median_mm": _r(float(np.median(values)), 4),
                           "opposite": ctx.ref(part, thinnest[2]), "faces": [ctx.ref(part, thinnest[2])],
-                          "supported": joined >= 2, "joined_sides": joined, "samples": len(values), "sampled": True})
+                          "supported": joined >= 2, "joined_sides": joined, "samples": len(values), "sampled": True,
+                          "_at": (part, info.ordinal, thinnest[2])})
     if not every:
         return {"items": [], "samples_valid": 0, "note": "no ray met a wall: the shape is open or empty"}
     field_ = np.array(every)
+    for item in sorted(items, key=lambda item: item["thickness_mm"])[:CAP]:
+        if item["thickness_mm"] < REFINE_WALL_MM:
+            part, i, j = item["_at"]
+            _refine(ctx, part, item, i, j, outward=False)
     seen, unique = set(), []
     for item in sorted(items, key=lambda item: item["thickness_mm"]):
+        item.pop("_at", None)
         pair = tuple(sorted((item["location"], item["opposite"])))
         if pair not in seen:
             seen.add(pair)
             unique.append(item)
     items, count = _capped(unique, lambda item: item["thickness_mm"])
     thinnest = sorted(where, key=lambda pair: pair[0])[:8]
+    # the least is the thinner of the field's and a refined item's: the summary never reads thicker than a finding
+    least = min([float(field_.min())] + [float(item["thickness_mm"]) for item in items if item.get("refined")])
     return {"items": items, "count": count, "samples_valid": int(len(field_)),
-            "min_mm": _r(float(field_.min()), 4), "p05_mm": _r(float(np.percentile(field_, 5)), 4),
+            "min_mm": _r(least, 4), "p05_mm": _r(float(np.percentile(field_, 5)), 4),
             "p25_mm": _r(float(np.percentile(field_, 25)), 4), "median_mm": _r(float(np.median(field_)), 4),
             "max_mm": _r(float(field_.max()), 4),
             "method": "exact rays into the material from samples on every face, each to the first face it crosses "
                       "that looks back along it (within 45 deg); none within a knife edge's thin depth that starts "
-                      "or lands on its flanks. Sampled (each item sampled: true): a face's thinnest sample, which can read above "
-                      "the wall's exact least thickness between the samples",
+                      "or lands on its flanks. Sampled (each item sampled: true): a face's thinnest sample; the "
+                      f"listed items under {REFINE_WALL_MM:g} mm refined to the exact least distance to the face "
+                      "across (refined: true) where it runs within 45 deg of both faces' normals and nothing lies "
+                      "between; the field's figures are the samples'",
             "thinnest_samples": [{"location_xyz": _xyz(point), "thickness_mm": _r(value, 4)} for value, point in thinnest]}
 
 
@@ -698,8 +756,10 @@ def _gaps(ctx: Context) -> dict[str, Any]:
             if not info.gap:
                 continue
             width, k, other = min(info.gap)
-            items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[k].point),
-                          "gap_mm": _r(width, JUDGED), "faces": [ctx.ref(part, other)]})
+            item = {"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[k].point),
+                    "gap_mm": _r(width, JUDGED), "faces": [ctx.ref(part, other)]}
+            _refine(ctx, part, item, info.ordinal, other, outward=True)
+            items.append(item)
     # a slot is seen from both its walls: keep each pair once
     seen, unique = set(), []
     for item in sorted(items, key=lambda item: item["gap_mm"]):
@@ -712,7 +772,9 @@ def _gaps(ctx: Context) -> dict[str, Any]:
     return {"items": unique, "count": count, "reported_below_mm": GAP_CEILING,
             "min_mm": unique[0]["gap_mm"] if unique else None,
             "method": "exact rays out of the material from samples on every face, to another face of the same part "
-                      "(not a neighbour, not the same hole)"}
+                      "(not a neighbour, not the same hole), each face's narrowest refined to the exact least "
+                      "distance to the face across (refined: true) where it runs within 45 deg of both faces' "
+                      "normals and nothing lies between"}
 
 
 def _orientation(axis: np.ndarray) -> str:
@@ -1263,7 +1325,7 @@ def _knife_edges(ctx: Context) -> dict[str, Any]:
     items = []
     for part in range(len(ctx.parts)):
         for edge in ctx.edges(part):
-            if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG:
+            if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG - mo.ANGLE_EPS:
                 continue
             depth = mo.thin_depth(minimum, edge.angle_deg)
             items.append({"location": ctx.parts[part].ref("edge", edge.ordinal), "xyz": _xyz(edge.midpoint),

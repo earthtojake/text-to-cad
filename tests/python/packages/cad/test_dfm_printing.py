@@ -242,6 +242,31 @@ class WallTest(unittest.TestCase):
         self.assertFalse(self.result.ok)
 
 
+class ExactWallTest(unittest.TestCase):
+    def test_a_face_at_45_deg_across_a_wall_is_its_far_side_in_every_placement(self) -> None:
+        # a fin whose far side leans at exactly 45 degrees: a ray from its upright side lands on a face turned
+        # KNIFE_DEG from it, a wall's far side however the part is turned about the plate's normal
+        section = bd.make_face(bd.Polyline((0, 0), (1, 0), (11, 10), (0, 10), close=True))
+        fin = bd.Box(30, 30, 2, align=A) + bd.Pos(-5, 0, 2) * bd.extrude(bd.Plane.XZ * section, 6, both=True)
+        found = set()
+        for turn in (0.0, 77.0, 88.0, 220.0):
+            result = check(bd.Pos(11.1, -7.3, 0) * bd.Rotation(0, 0, turn) * fin, "lean")
+            thinnest = min(item["thickness_mm"] for item in items(result, "wall_thickness"))
+            found.add(round(thinnest, 6))
+        self.assertEqual(len(found), 1, found)
+
+    def test_a_web_between_two_holes_is_its_exact_least(self) -> None:
+        # two 4 mm holes 5 mm apart: a 1 mm web the samples read wider; the gap between two 4 mm pins likewise
+        plate = bd.Box(30, 20, 6, align=A) - bd.Pos(-2.5, 0, 0) * bd.Cylinder(2, 20) - bd.Pos(2.5, 0, 0) * bd.Cylinder(2, 20)
+        web = min(items(check(plate, "web"), "wall_thickness"), key=lambda item: item["thickness_mm"])
+        self.assertAlmostEqual(web["thickness_mm"], 1.0, places=6)
+        self.assertTrue(web["refined"])
+        pins = bd.Box(30, 20, 2, align=A) + bd.Pos(-1.3, 0, 2) * bd.Cylinder(2, 8, align=A) \
+            + bd.Pos(3.3, 0, 2) * bd.Cylinder(2.2, 8, align=A)
+        gap = min(items(check(pins, "pins"), "gaps"), key=lambda item: item["gap_mm"])
+        self.assertAlmostEqual(gap["gap_mm"], 0.4, places=6)
+
+
 class FeatureTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -288,8 +313,13 @@ class FeatureTest(unittest.TestCase):
         pin = near(self.pbf, "pins", (25, 0, 26.75), 1.0)
         self.assertEqual((pin["diameter_mm"], pin["height_mm"], pin["aspect_ratio"]), (1.5, 13.5, 9.0))
         self.assertIn("printing.pin_aspect", codes(self.pbf), "Hubs metal: 8:1")
-        # Hubs FDM: pins under 5 mm "can be made up of only perimeter prints" -- no minimum, so no FDM limit
-        self.assertEqual([o["status"] for o in outcome(self.fdm, "printing.pin_diameter")], ["not_evaluated"])
+        # Hubs FDM gives pins no minimum; Xometry's FDM tips do: "Pins should be at least 1 mm in diameter" --
+        # a recommendation, a warning: this 1.5 mm pin passes, a 0.8 mm one is warned
+        self.assertEqual([o["status"] for o in outcome(self.fdm, "printing.pin_diameter")], ["passed"])
+        thin = check(bd.Box(20, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Cylinder(0.4, 6, align=A), "thin_pin")
+        finding = next(f for f in thin.findings if f.code == "printing.pin_diameter")
+        self.assertEqual(finding.severity, "warning")
+        self.assertIn("Xometry", finding.message)
 
 
 class DetailAndGapTest(unittest.TestCase):

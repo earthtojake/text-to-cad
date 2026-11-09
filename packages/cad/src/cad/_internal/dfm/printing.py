@@ -99,6 +99,9 @@ SOURCES = {source.id: source for source in (
          "https://www.xometry.com/capabilities/3d-printing-service/"),
     _src("xometry-guide", "Xometry (Xometry Pro)", "Ultimate 3D printing design guide",
          "https://xometry.pro/en-uk/3d-printing-design-guide/"),
+    Source("xometry-fdm-tips", "Xometry (Xometry Pro)",
+           "FDM 3D printing design tips: best practices and techniques for stronger prints",
+           "https://xometry.pro/en/articles/fdm-design-tips/", "2026-11-08"),
     # a rule no fetched guide states: text-to-cad's own figure, said as such in every verdict of it
     Source(OWN, "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
            "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
@@ -187,7 +190,8 @@ def _general() -> tuple[Rule, ...]:
     add("hole", "sla", 0.5, "hubs-sla", "error", "minimum diameter of 0.5 mm")
     add("hole", "sls", 1.5, "hubs-sls", "error", "all holes should be larger than 1.5 mm")
     add("hole", "pbf", 1.5, "hubs-metal", "error", "minimum hole diameter DMLS/SLM: 1.5 mm")
-    # no FDM pin row: Hubs FDM says pins under 5 mm "can be made up of only perimeter prints", no minimum
+    # Hubs FDM gives pins no minimum (under 5 mm they "can be made up of only perimeter prints"): FDM's is
+    # Xometry's below
     add("pin", "sls", 0.8, "hubs-sls", "warning", "a minimum of 0.8 mm is recommended")
     add("pin", "mjf", 0.5, "hubs-mjf", "warning", "minimum feature size 0.5 mm")
     add("pin", "pbf", 0.6, "hubs-metal", "error", "minimum feature size DMLS/SLM 0.6 mm")
@@ -247,6 +251,8 @@ def _general() -> tuple[Rule, ...]:
     add("wall_u", "fdm", 1.2, "xometry-fdm", "warning", "recommended at least 1.2-1.5 mm for supporting walls")
     add("hole", "fdm", 1.0, "xometry-fdm", "warning", "greater than 0.04 in (1 mm) to retain a circular shape")
     add("emboss", "fdm", 1.0, "xometry-fdm", "warning")
+    # "Pins should be at least 1 mm in diameter and kept as short as possible." -- a should: a warning
+    add("pin", "fdm", 1.0, "xometry-fdm-tips", "warning", "pins should be at least 1 mm in diameter")
     add("fit", "fdm", 1.0, "xometry-fdm", "error")
     add("wall_s", "sla", 0.4, "xometry-sla", "error")
     add("wall_u", "sla", 0.6, "xometry-sla", "error")

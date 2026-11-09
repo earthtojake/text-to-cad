@@ -21,8 +21,7 @@ technology is named; a machine datasheet moves them):
   question.
 - **Walls, pins and holes.** Walls 0.8 mm or more (two nozzle widths; SLA 0.5 supported / 1.0 free,
   SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); holes 1 mm or wider (SLS 1.5), vertical where they
-  can be; pins 0.8 mm (SLS, a recommendation; SLA 0.5; FDM gives no minimum, a pin under 5 mm being
-  perimeters alone); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule) -- raised or
+  can be; pins 1 mm (FDM, Xometry's recommendation) or 0.8 mm (SLS, a recommendation; SLA 0.5); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule) -- raised or
   sunk detail alone: a step running across a face is the part's shape, not text.
 - **No knife edges.** A chamfer or a draft that meets a face under 45 degrees thins to nothing over
   its last millimetres: blunt it to the wall minimum (`printing.knife_edge`, a warning: the tip prints
@@ -78,9 +77,11 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   triangle on a mesh of 5000 triangles or fewer), each straight in to the face it leaves through, a
   knife edge's own sliver left to the knife family: a thin `min_mm` beside a thick `p05_mm` is a small
   thin place (a web between two cuts, a feather where two surfaces meet at a glancing angle); name it
-  from its item's `xyz` and judge it there. Every reading is sampled, on the B-rep too (`sampled`): a
-  place smaller than the rays' spacing can be missed, and more rays find false thin places as well as
-  true ones, so a mesh's thin reading is confirmed on the STEP or the model before the design changes.
+  from its item's `xyz` and judge it there. A mesh's walls are an item per face and the face across (one
+  fin, one item). Every reading is sampled (`sampled`); on the B-rep the thinnest walls and gaps are then
+  refined to the exact least distance (`refined`). On a mesh a place smaller than the rays' spacing can be
+  missed, and more rays find false thin places as well as true ones, so a mesh's thin reading is confirmed
+  on the STEP or the model before the design changes.
 - `printing.knife_edge` is a convex edge under 45 degrees of material, which thins to nothing:
   `thin_depth_mm` says how far in it stays under the minimum wall. A warning (text-to-cad's own rule;
   no guide defines a knife edge, and the tip prints rounded): blunt it, chamfer it at 45 degrees or
