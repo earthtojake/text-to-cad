@@ -35,16 +35,31 @@ board at its block's end, and the next step reads what the last one saved. Each 
    still tangle, swap pins or gates in the schematic (two inputs of one gate, two units of a quad
    op-amp, pins the datasheet says are interchangeable), export and import the netlist again, and run
    ERC; never swap on the board alone.
-5. **Route by hand, not with an autorouter** (no Freerouting). Tracks run octolinear (0°, 45°, 90°).
-   Run a bus as parallel tracks at one even pitch. Take the shortest path a signal can, with no
-   detours. Give power the width or pour its current needs. Routes are written as geometry: tracks,
-   arcs and vias in a commit (`b.begin_commit()`, `b.create_items([...])`, `b.push_commit(...)`);
-   headless KiCad has no interactive router. Fast nets and differential pairs follow the next section.
+5. **Route as stated geometry, never with a third-party autorouter** (no Freerouting). Tracks run
+   octolinear (0°, 45°, 90°). Run a bus as parallel tracks at one even pitch. Take the shortest path a
+   signal can, with no detours. Give power the width or pour its current needs. Routes are written as
+   geometry: tracks, arcs and vias in a commit (`b.begin_commit()`, `b.create_items([...])`,
+   `b.push_commit(...)`); headless KiCad has no interactive router. Fast nets and differential pairs
+   follow the next section. A board with more nets than you can lay out one by one (a hundred or more)
+   still starts by hand: power, fast nets and pairs, and each fine-pitch part's fan-out, each placed as
+   you mean it. The remaining signal nets may then be planned by a path search in your own script: on
+   the octolinear grid, each net at its netclass width and clearance, every step written as geometry
+   and held to the same checks (step 6 and the property script) as a hand-placed track. Say in the
+   handover which nets a search placed. A search on a grid sees an obstacle only at cell centres, so its
+   edge can sit up to half a cell's diagonal inside a free cell: grow every obstacle by that much
+   (0.071 mm on a 0.1 mm grid) before searching. KiCad's DRC on the saved board, not the grid, says the
+   result is clear.
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
    `cad kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
    errors are what to fix now. Moving a part after routing is fine: reroute what it touched. A pour's
    thermal reliefs round dense small pads can neck below the minimum connection width
    (`connection_width`); connect such a pour to its pads solid (the zone's pad connection).
+   Copper that overlaps another net's pad on any of its layers can be taken onto that pad's net when
+   KiCad saves: a ground stitching via through a supply pad on the far side becomes a supply via, with
+   any copper polygon joined to it, and DRC reports it as that net's copper, not as a short. Keep each
+   via and net polygon clear of other nets' pads on every layer it spans (a through via spans them
+   all), and after the save read back that each is still on the net you gave it (`board.vias`,
+   `board.shapes`: each item's `id` and `net`).
 7. **Check what DRC doesn't.** Write a script of the layout's own properties and run it after every
    step (below). Fix what it finds the same way.
 

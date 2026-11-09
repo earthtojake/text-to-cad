@@ -72,6 +72,13 @@ it is on that sheet's page. Errors fail it; warnings are said. Fix the cause, ne
   vector members by index (`D3` meets `Q3`), so rename one to say what it is.
 - `different_unit_net`, `multiple_net_names`: two names on one net; keep one.
 
+A clean ERC says no rule broke, not that each pin is on the net the circuit means. A wire that runs
+across a pin's end joins that pin, so one drawn past a pin on its way elsewhere can short it into
+another net, a transistor's drain onto its supply, with every rule met; the pin-by-pin comparison
+with the board agrees too, since the netlist carries the short. Read the pins of each driver,
+regulator and connector back (`sch.resolve("#Q1.3").net`, `sch.net("/Power/VBUS").pins`) against
+the circuit you meant.
+
 `libraries_not_checked` is a note, not a finding: the check runs KiCad with private settings, so it
 cannot see your global symbol and footprint library tables (it reads a project's own `sym-lib-table` and
 `fp-lib-table`, a row of them naming a stock library by KiCad's variable in the KiCad you installed:
