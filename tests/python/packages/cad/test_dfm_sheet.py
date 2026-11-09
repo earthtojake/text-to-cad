@@ -441,6 +441,28 @@ def _boxes_bracket() -> bd.Part:
     return part
 
 
+class FlangeTest(unittest.TestCase):
+    def test_a_bend_running_past_its_flange_has_no_flange_there(self) -> None:
+        t, r = 2.0, 2.0
+        part = bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 60, "L")
+        # the wall cut to 30 mm wide at its tangent line (z = r + t), the bend left 60 long: 15 mm each side of
+        # it bends to nothing
+        wall = part.bounding_box().max.X
+        for y in (0.0, 45.0):
+            part -= bd.Pos(wall - 5, y, r + t) * bd.Box(10, 15, 40, align=(bd.Align.MIN,) * 3)
+        part.label = "L"
+        result = checked(part, material="aluminum")
+        [short] = failed(result, "sheet.flange_length")
+        flange = next(item for item in items(result.measurements, "flanges") if item["stations_off_flange"])
+        self.assertEqual(flange["length_tangent_mm"], 0.0)
+        self.assertEqual(flange["location"], flange["bend"])  # at the bend's stretch past the flange
+        self.assertEqual(short["location"], flange["location"])
+        # the full-width wall reaches its tangent everywhere: no station off it, the rule passes
+        whole = checked(bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 60, "L"), material="aluminum")
+        self.assertEqual(failed(whole, "sheet.flange_length"), [])
+        self.assertEqual({item["stations_off_flange"] for item in items(whole.measurements, "flanges")}, {0})
+
+
 class ModellingMistakeTest(unittest.TestCase):
     """The mistakes an agent writing build123d makes: no wrong part or flat pattern reads as a pass."""
 

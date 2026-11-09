@@ -1466,7 +1466,12 @@ def _flanges(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], 
             origins = _frame_points(bend, np.full(len(ws), x0 + sign * eps), ws)
             direction = np.repeat((sign * bend.frame[1])[None], len(ws), axis=0)
             hit, _, _ = plane.cast(origins, direction, barriers, skip=1e-9)
-            lengths = hit[np.isfinite(hit)] + eps
+            # a station whose start is off the flat -- the bend runs on past its flange there -- has no flange
+            # at all: length 0, judged by the same rule as a short one, at that stretch of the bend
+            off = ~plane.inside(origins, outer) if outer else np.zeros(len(ws), dtype=bool)
+            stations = np.where(off, 0.0, hit + eps)
+            kept = off | np.isfinite(hit)
+            lengths = stations[kept]
             if not len(lengths):
                 continue
             least, half = float(lengths.min()), float(np.median(lengths))
@@ -1481,9 +1486,15 @@ def _flanges(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], 
                 "length_outside_mm": _r(least + outside) if outside is not None else None,
                 "length_outside_half_mm": _r(half + outside) if outside is not None else None,
                 "length_outside_minus_radius_mm": _r(least + outside - bend.inside_radius) if outside is not None else None,
-                "stations": len(lengths), "location": analysis.ref(flange.faces[0]),
+                "stations": len(lengths), "stations_off_flange": int(off.sum()),
+                "location": analysis.ref(flange.faces[0]),
             }
-            at = _frame_points(bend, np.array([x0 + sign * least / 2]), np.array([ws[len(ws) // 2]]))
+            if off.any():
+                # the bend's stretch past the flange: the item is at the bend, where the first such station is
+                at = _frame_points(bend, np.array([x0]), np.array([ws[int(np.flatnonzero(off)[0])]]))
+                item["location"] = analysis.ref(bend.inner[0])
+            else:
+                at = _frame_points(bend, np.array([x0 + sign * least / 2]), np.array([ws[len(ws) // 2]]))
             item["xyz"] = analysis.locate(at[0])[1]
             items.append(item)
             by_side[(bend.number, flange_number)] = item

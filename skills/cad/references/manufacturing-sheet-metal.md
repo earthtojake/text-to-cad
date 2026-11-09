@@ -37,7 +37,8 @@ the thickness `t`; a shop's tooling and bend table move them):
 - **Flanges and holes.** A flange's height from the outside of the bend is at least `2t + r` (a
   straight length of at least `t` past the bend; `4t` keeps every shop happy); a hole sits at least
   `2t` from where the bend's radius starts and `t` from an edge, holes `2t` apart, each at least `t`
-  across; nothing crosses a bend.
+  across; nothing crosses a bend. A bend that runs on past its flange has no flange there: length 0,
+  `sheet.flange_length` (end the bend with the flange, or cut a relief).
 - **Reliefs.** Where a flange ends before the sheet's edge, a relief at the bend's end, at least `t`
   wide and reaching past the bend radius, so the bend does not tear.
 - **Cut features.** Slots, notches and tabs at least `t` wide (and wider than the kerf), no longer than
