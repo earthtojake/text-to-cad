@@ -417,7 +417,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   `kind` (`undercut`: five axes would reach it; `no_line_of_sight`: nothing straight would), `hole` and
   `hole_axis` (a hole's face, and its axis). Items of `kind` `special_cutter` are the edges only a T-slot,
   dovetail or keyseat cutter makes, joined by the faces they share, whatever line of sight says: `cutter`,
-  `edge_count`, `edges` (their fractions 0). Directions: 3
+  `edge_count`, `edges` (their fractions 0), `advice` (the hint's ask: a recess whose dovetails are all within
+  `SQUARABLE_DEG`, 10 degrees, of square is a wall drafted back, asked squared so an end mill makes it; any
+  other kept to a standard cutter). Directions: 3
   axes the six world axes; 4 axes those plus every 15 degrees about the rotary axis (X, Y or Z, the one
   that reaches most); 5 axes those plus every 15 degrees about each world axis, then the part's own and 200
   over the sphere (so five reach at least what four do).

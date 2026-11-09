@@ -96,7 +96,8 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   clears the part and the disc can get there (a keyseat's down a bore no narrower than it; a T-slot's
   through an opening as wide as it or from a side the slot opens to): a chamber behind a small bore or
   port is `no_way_in`, an error. A V or dovetail of no standard angle (the 66 degree O-ring dovetail, a
-  75 degree V) is a special cutter ground to it, named with its angle. A slot cutter's neck narrower than
+  75 degree V) is a special cutter ground to it, named with its angle; a wall a few degrees past square
+  (an 87 degree dovetail) is asked squared, which an end mill makes. A slot cutter's neck narrower than
   the recess is tall (`narrow_opening`) and a profile's obtuse root, which side-milling rounds
   (`obtuse_root`), are warnings.
 - `setups.setup_count` estimates clampings from the reachable directions and the sides square corners

@@ -287,8 +287,7 @@ _RULES: tuple[Rule, ...] = (
              "the other end, or plan an angled setup or more axes", note="a drill comes in along the hole's axis"),
     Rule("cnc.special_cutter", "access", "edge_count", "max", 0, "edges", "edges only a special cutter makes",
          "hubs-cnc", severity="warning", when=_MILLING, item_when={"kind": "special_cutter"},
-         fix="a {cutter} cuts it: keep the undercut 3 to 40 mm wide in a standard size (a dovetail 45 or 60 "
-             "degrees), or open it to a setup direction", detail="the recess's faces no straight tool reaches: {also}",
+         fix="a {cutter} cuts it: {advice}", detail="the recess's faces no straight tool reaches: {also}",
          note="undercuts (T-slots and dovetails) are machined using special tools; their width can vary between "
               "3 mm and 40 mm"),
     Rule("cnc.no_line_of_sight", "access", "unreached_any_direction_fraction", "max", ACCESS_TOLERANCE, "share",

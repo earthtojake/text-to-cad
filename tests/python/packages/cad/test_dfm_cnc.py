@@ -768,6 +768,16 @@ class DiscCutterTest(unittest.TestCase):
         [special] = [i for i in result.measurements["access"]["items"] if i["kind"] == "special_cutter"]
         self.assertIn("dovetail cutter of 66 deg", special["cutter"])
         self.assertTrue(result.ok)
+        hint = next(f.hint for f in result.findings if f.code == "cnc.special_cutter")
+        self.assertIn("standard size", hint)
+        # a through slot whose walls lean 4 degrees back past square (86-degree dovetails): a wall drafted the
+        # wrong way, not a dovetail drawn as one -- the hint asks it squared; nothing names a function
+        lean = 2.5 * math.tan(math.radians(4))
+        drafted = plate - bd.extrude(bd.Plane.YZ.offset(-41) * bd.make_face(bd.Polyline(
+            (-5, 12.01), (5, 12.01), (5 + lean, 9.5), (-5 - lean, 9.5), close=True)), 82)
+        finding = next(f for f in cnc(_part(drafted), material="aluminum").findings if f.code == "cnc.special_cutter")
+        self.assertIn("leans 4 degree(s) back past square: square it", finding.hint)
+        self.assertNotIn("_", finding.message.split("(")[-1] + finding.hint)
 
     def test_a_slot_cutter_s_narrow_neck_is_said_where_it_narrows(self) -> None:
         # a T-slot through along x, its neck 12 wide for half its length and 4 for the rest, the undercut 8 tall

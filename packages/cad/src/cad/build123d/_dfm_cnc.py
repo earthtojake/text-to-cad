@@ -1250,9 +1250,28 @@ def _special(model: Model, found: list[tuple[Any, str, float | None]], unmade: l
                       "unreached_fraction": 0.0, "unreached_any_direction_fraction": 0.0, "hole": False,
                       "hole_axis": None, "surface": model.surface(face).kind, "location": model.ref(face),
                       "faces": [model.ref(f) for f in sorted(faces)][:20], "xyz": brep.rounded(edges[0][0].midpoint),
-                      "also": "no face beyond its own edges' (_one_cause lists them)", "_faces": set(faces),
-                      "_own": own})
+                      "also": "none beyond its own edges' faces",
+                      "advice": _special_advice([angle for edge, _ in edges
+                                                 for e, way, angle in found if e is edge and way == "dovetail_cutter"]),
+                      "_faces": set(faces), "_own": own})
     return items
+
+
+#: A dovetail this near square (degrees short of 90) is a wall drafted back, not a dovetail drawn as one.
+SQUARABLE_DEG = 10.0
+
+
+def _special_advice(dovetails: list[float | None]) -> str:
+    """What the special cutter's hint asks: a wall a few degrees past square (a dovetail of 80 degrees or
+    more, ``dovetails`` the recess's dovetails' angles, None a standard one's) squared, so an end mill makes
+    it; else the cutter kept to a standard size."""
+    angles = [angle for angle in dovetails if angle is not None]
+    if angles and len(angles) == len(dovetails) and min(angles) >= 90.0 - SQUARABLE_DEG:
+        lean = 90.0 - min(angles)
+        return (f"its wall leans {lean:.0f} degree(s) back past square: square it (90 degrees) and an end mill "
+                "makes it, or keep it and plan the cutter ground to it")
+    return ("keep the undercut 3 to 40 mm wide in a standard size (a dovetail 45 or 60 degrees), or open it to a "
+            "setup direction")
 
 
 def _station_count(edge: Any, state: dict[str, Any]) -> int:
