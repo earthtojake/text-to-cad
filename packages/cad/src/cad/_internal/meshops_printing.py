@@ -49,6 +49,9 @@ KNIFE_DEG = 45.0
 #: makes reads 44.999999999999936 on one axis and 45.000000000000014 on the other, and both are 45 (Hubs FDM:
 #: "up to 45°" self-supports). Every comparison of a surface's angle with a limit subtracts it.
 ANGLE_EPS = 1e-6
+#: The digits a figure a rule judges is kept to, both paths: a limit is compared with the measurement, never
+#: with a figure rounded for display first (a 0.79996 mm wall is under 0.8 mm).
+JUDGED = 9
 #: Overhangs too small to need support (the owner's figures, both paths): a slope, ceiling or cantilever with
 #: less than OVERHANG_AREA_MM2 under the angle limit, or a cantilever reaching less than the nozzle's width
 #: (``--nozzle``, else OVERHANG_REACH_MM: one extrusion width lays it), is listed with ``counted`` false and
@@ -619,9 +622,9 @@ def build_fit(lo: np.ndarray, hi: np.ndarray, machine: dict[str, Any]) -> dict[s
     ratio, order = fit(box, volume)
     placed = max(float(box[k]) / float(volume[k]) for k in range(3))
     return {"volume_mm": [float(v) for v in volume], "volume_origin": machine["origin"],
-            "bbox_mm": [round(float(v), 4) for v in box], "fill_ratio": round(ratio, 4),
+            "bbox_mm": [round(float(v), 4) for v in box], "fill_ratio": round(ratio, JUDGED),
             "fits": bool(ratio <= 1.0 + 1e-9), "as_placed_fill_ratio": round(placed, 4),
-            "best_axes": ",".join("xyz"[k] for k in order), "max_dimension_mm": round(float(box.max()), 4),
+            "best_axes": ",".join("xyz"[k] for k in order), "max_dimension_mm": round(float(box.max()), JUDGED),
             "location": "build_volume", "xyz": [round(float(v), 4) for v in (np.asarray(lo) + np.asarray(hi)) / 2.0]}
 
 

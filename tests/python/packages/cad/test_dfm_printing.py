@@ -81,6 +81,10 @@ class OverhangTest(unittest.TestCase):
         self.assertIn("printing.overhang_angle", codes(result))
         overhang = next(f for f in result.findings if f.code == "printing.overhang_angle")
         self.assertEqual(overhang.severity, "warning", "support is a warning, not a failure")
+        # one cause, one finding: the rule judges the face, the area's fact is its sum, naming the rule
+        total = next(f for f in result.findings if f.code == "overhangs")
+        self.assertEqual(total.severity, "info")
+        self.assertIn("printing.overhang_angle judges each", total.message)
         self.assertEqual({f.code for f in result.findings if f.severity == "error"}, set())
         knife = next(f for f in result.findings if f.code == "printing.knife_edge")
         self.assertEqual(knife.severity, "warning", "the 30 deg tip is a knife, reported once: it prints rounded")
@@ -214,6 +218,13 @@ class WallTest(unittest.TestCase):
         self.assertGreaterEqual(wall["joined_sides"], 2)
         self.assertIn("printing.wall_supported", codes(self.result))
 
+    def test_a_wall_just_under_the_limit_fails_unrounded(self) -> None:
+        part = bd.Box(20, 20, 2, align=A) + bd.Pos(0, 0, 2) * bd.Box(0.79996, 15, 10, align=A)
+        result = check(part, "fin")
+        fin = near(result, "wall_thickness", (0, 0, 7), 9.0, supported=False)
+        self.assertAlmostEqual(fin["thickness_mm"], 0.79996, places=7)
+        self.assertIn("printing.wall_unsupported", codes(result), "0.79996 mm is under 0.8, not rounded to it")
+
     def test_a_free_fin_is_unsupported(self) -> None:
         fin = near(self.result, "wall_thickness", (40, 0, 7), 9.0, supported=False)
         self.assertAlmostEqual(fin["thickness_mm"], 0.6, places=6)
@@ -297,6 +308,14 @@ class DetailAndGapTest(unittest.TestCase):
         result = check(land, "land", technology="sls")
         self.assertEqual(items(result, "details"), [])
         self.assertNotIn("printing.emboss_height", codes(result))
+
+    def test_a_narrow_step_running_across_the_face_is_geometry_not_a_detail(self) -> None:
+        # a 2 mm strip 0.2 high from one side of the block to the other (a hinge knuckle's shoulder), beside a
+        # 2 mm island of the same height: only the island is raised text
+        part = bd.Box(30, 10, 4, align=A) + bd.Pos(-8, 0, 4) * bd.Box(2, 10, 0.2, align=A)
+        part += bd.Pos(8, 0, 4) * bd.Box(2, 4, 0.2, align=A)
+        found = items(check(part, "strip", technology="sls"), "details")
+        self.assertEqual([(item["kind"], item["xyz"][0] > 0) for item in found], [("emboss", True)])
 
 
 class AssemblyTest(unittest.TestCase):
@@ -395,10 +414,47 @@ class PlateTest(unittest.TestCase):
         self.assertAlmostEqual(result.measurements["stair_stepping"]["area_mm2"], 400 / math.cos(math.radians(10)),
                                delta=0.5)
 
+    def test_an_open_or_unsound_part_is_an_error(self) -> None:
+        report = {"solid": {"items": [{"part": "lid", "location": "lid/face 1", "closed": False, "sound": False,
+                                       "issues": ["BRepCheck_NotClosed"]}], "body_count": 1, "part_count": 1}}
+        found = {f.code: f for f in rules.findings(report, {"technology": "fdm"}, False)}
+        self.assertEqual((found["not_watertight"].severity, found["not_sound"].severity), ("error", "error"))
+        mesh = {"mesh": {"watertight": False, "open_body_count": 1, "body_count": 1,
+                         "open_bodies": [{"xyz": [1.0, 2.0, 3.0], "boundary_edges": 4, "area_mm2": 500.0}]}}
+        said = next(f for f in rules.findings(mesh, {"technology": "fdm"}, False) if f.code == "not_watertight")
+        self.assertEqual((said.severity, said.location), ("error", "1, 2, 3"))
+        self.assertIn("4 open edge(s)", said.message)
+
     def test_a_sound_closed_solid(self) -> None:
         solid = check(bd.Box(10, 10, 10), "box").measurements["solid"]
         self.assertEqual((solid["watertight"], solid["sound"], solid["body_count"]), (True, True, 1))
         self.assertAlmostEqual(solid["volume_mm3"], 1000.0, places=6)
+
+
+class TurnedOnThePlateTest(unittest.TestCase):
+    def test_a_part_turned_about_z_reads_the_same_on_both_paths(self) -> None:
+        # turned on the plate, nothing it stands on changes: the verdicts, the overhangs, the walls, the support
+        part = tee() + bd.Pos(-12, 3, 20) * bd.Box(0.6, 4, 4, align=A)
+
+        def read(result):
+            m = result.measurements
+            return (result.ok, sorted({f.code for f in result.findings if f.severity != "info"}),
+                    m["overhangs"]["down_facing_area_below_limit_mm2"], m["wall_thickness"]["min_mm"],
+                    m["support_volume"]["estimated_support_volume_mm3"])
+
+        with tempfile.TemporaryDirectory() as folder:
+            seen = {}
+            for turn in (0, 30, 90, -17):
+                shape = bd.Rot(0, 0, turn) * part
+                path = Path(folder) / f"tee{turn}.stl"
+                bd.export_stl(shape, str(path))
+                seen[turn] = (read(check(shape, "tee")), read(cad.stl.dfm(path, process="printing")))
+        for turn, paths in seen.items():
+            for at, (base, turned) in enumerate(zip(seen[0], paths)):
+                with self.subTest(turn=turn, path=("brep", "mesh")[at]):
+                    self.assertEqual(turned[:2], base[:2])
+                    for value, reference in zip(turned[2:], base[2:]):
+                        self.assertAlmostEqual(value, reference, delta=0.01 * reference + 0.05)
 
 
 class OrientationTest(unittest.TestCase):
@@ -471,9 +527,12 @@ class RulesTest(unittest.TestCase):
         for given, said in (({"technology": "sla", "nozzle": 0.4}, "--nozzle is FDM's"),
                             ({"build_volume": "200x200"}, "--build-volume is three lengths"),
                             ({"angle_limit": 91}, "--angle-limit is an angle"),
-                            ({"layer_height": 0}, "--layer-height is a length")):
+                            ({"layer_height": 0}, "--layer-height is a length"),
+                            ({"material": "aluminum"}, "aluminum is a metal, and --technology fdm prints a plastic"),
+                            ({"material": "pla", "technology": "pbf"}, "--technology pbf prints a metal")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
                 manufacturing.options("step", "printing", given)
+        self.assertIsNotNone(manufacturing.options("step", "printing", {"material": "titanium", "technology": "pbf"}))
         assumed = rules.machine_volume({"technology": "pbf"})
         self.assertEqual(assumed["volume_mm"], [250.0, 150.0, 150.0])
         self.assertTrue(assumed["origin"].startswith("assumed"))

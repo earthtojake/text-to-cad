@@ -80,6 +80,11 @@ _OVERHANG_METHOD = ("each down-facing face's angle from horizontal off the plate
 DETAIL_ACROSS_MM = 3.0
 
 
+#: The digits a figure a rule judges is kept to (``meshops_printing.JUDGED``): the messages print as many digits
+#: as tell the value from the limit.
+JUDGED = mo.JUDGED
+
+
 def _r(value: float | None, digits: int = 4) -> float | None:
     return None if value is None or not math.isfinite(value) else round(float(value), digits)
 
@@ -508,7 +513,7 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
             if counted and kind != "bridge":
                 below_total += below
             items.append({"location": ctx.ref(info.part, info.ordinal), "xyz": _xyz(down[worst].point),
-                          "angle_deg": _r(float(angles.min()), 3), "area_mm2": _r(float(area.sum()), 3),
+                          "angle_deg": _r(float(angles.min()), JUDGED), "area_mm2": _r(float(area.sum()), 3),
                           "area_below_limit_mm2": _r(below, 3), "height_mm": _r(float(heights.min()), 3),
                           "max_height_mm": _r(float(heights.max()), 3), "kind": kind, "surface": info.surface.kind,
                           "reach_mm": reach, "counted": bool(counted)})
@@ -582,7 +587,7 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
             spread = mo.span(points, a, b, inside=inside if fine else None, refine=2.0 * step if fine else None)
             kind = {"bridge": "bridge", "cantilever": "cantilever"}.get(spread["kind"], "ceiling")
             found.append({"part": part, "ordinal": info.ordinal, "kind": kind,
-                          "length_mm": _r(spread["length_mm"], 4), "reach_mm": _r(spread["reach_mm"], 4),
+                          "length_mm": _r(spread["length_mm"], JUDGED), "reach_mm": _r(spread["reach_mm"], JUDGED),
                           "supporting_edges": supported, "area_mm2": _r(info.area, 3), "refined": fine,
                           "height_mm": _r(z - ctx.z0, 4), "angle_deg": _r(math.degrees(math.acos(min(1.0, -n[2]))), 3),
                           "location": ctx.ref(part, info.ordinal),
@@ -661,7 +666,7 @@ def _walls(ctx: Context) -> dict[str, Any]:
             where.extend((float(t), info.samples[k].point) for t, k, _ in thickness)
             joined = max(_connections(ctx, part, info.ordinal), _connections(ctx, part, thinnest[2]))
             items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[thinnest[1]].point),
-                          "thickness_mm": _r(thinnest[0], 4), "median_mm": _r(float(np.median(values)), 4),
+                          "thickness_mm": _r(thinnest[0], JUDGED), "median_mm": _r(float(np.median(values)), 4),
                           "opposite": ctx.ref(part, thinnest[2]), "faces": [ctx.ref(part, thinnest[2])],
                           "supported": joined >= 2, "joined_sides": joined, "samples": len(values), "sampled": True})
     if not every:
@@ -695,7 +700,7 @@ def _gaps(ctx: Context) -> dict[str, Any]:
                 continue
             width, k, other = min(info.gap)
             items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[k].point),
-                          "gap_mm": _r(width, 4), "faces": [ctx.ref(part, other)]})
+                          "gap_mm": _r(width, JUDGED), "faces": [ctx.ref(part, other)]})
     # a slot is seen from both its walls: keep each pair once
     seen, unique = set(), []
     for item in sorted(items, key=lambda item: item["gap_mm"]):
@@ -755,7 +760,7 @@ def _measure_rounds(ctx: Context, concave: bool) -> list[dict[str, Any]]:
         largest = max(group.faces, key=lambda ordinal: ctx.info(part, ordinal).area)
         center = group.origin + group.axis * (0.5 * (group.lo + group.hi))
         length = group.hi - group.lo
-        item = {"location": ctx.ref(part, largest), "xyz": _xyz(center), "diameter_mm": _r(2.0 * group.radius, 4),
+        item = {"location": ctx.ref(part, largest), "xyz": _xyz(center), "diameter_mm": _r(2.0 * group.radius, JUDGED),
                 "orientation": _orientation(group.axis), "axis": _xyz(group.axis),
                 "coverage_deg": _r(min(360.0, group.coverage_deg), 2),
                 "faces": [ctx.ref(part, ordinal) for ordinal in group.faces if ordinal != largest]}
@@ -780,7 +785,7 @@ def _measure_rounds(ctx: Context, concave: bool) -> list[dict[str, Any]]:
             item["low_z_mm"] = _r(min(ctx.info(part, ordinal).zmin for ordinal in group.faces) - ctx.z0, 4)
         else:
             item["height_mm"] = _r(length, 4)
-            item["aspect_ratio"] = _r(length / (2.0 * group.radius), 3)
+            item["aspect_ratio"] = _r(length / (2.0 * group.radius), JUDGED)
         items.append(item)
     return items
 
@@ -799,6 +804,9 @@ def _pins(ctx: Context) -> dict[str, Any]:
 def _details(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     found: dict[tuple[int, int, str], dict[str, Any]] = {}
+    # each region's steps, whatever their width: the sides stepping down from a top ("emboss") or up from a
+    # floor ("engrave")
+    sides: dict[tuple[int, int, str], set[int]] = {}
     for part, infos in enumerate(ctx.faces):
         for side in infos:
             ns = side.surface.normal
@@ -823,6 +831,8 @@ def _details(ctx: Context) -> dict[str, Any]:
                     height = float((np.array(top.surface.origin) - np.array(bottom.surface.origin)) @ nt)
                     if not 1e-6 < height <= DETAIL_CEILING:
                         continue
+                    sides.setdefault((part, top.ordinal, "emboss"), set()).add(side.ordinal)
+                    sides.setdefault((part, bottom.ordinal, "engrave"), set()).add(side.ordinal)
                     # which side is the detail is its extent across: a raised one is narrow through the
                     # material (the side's rays in), a sunk one across the air (its rays out); a step wide both
                     # ways is the part's geometry, not a detail
@@ -838,20 +848,27 @@ def _details(ctx: Context) -> dict[str, Any]:
                     if item is None:
                         found[key] = item = {"location": ctx.ref(part, region.ordinal),
                                              "xyz": _xyz(side.samples[0].point if side.samples else [0, 0, 0]),
-                                             "kind": key[2], "height_mm": _r(height, 4), "width_mm": _r(width, 4),
+                                             "kind": key[2], "height_mm": _r(height, JUDGED), "width_mm": _r(width, JUDGED),
                                              "faces": []}
-                    item["height_mm"] = _r(min(item["height_mm"], height), 4)
+                    item["height_mm"] = _r(min(item["height_mm"], height), JUDGED)
                     if width is not None and (item["width_mm"] is None or width < item["width_mm"]):
-                        item["width_mm"] = _r(width, 4)
+                        item["width_mm"] = _r(width, JUDGED)
                     if ctx.ref(part, side.ordinal) not in item["faces"]:
                         item["faces"].append(ctx.ref(part, side.ordinal))
-    items, count = _capped(list(found.values()), lambda item: (item["height_mm"], item["width_mm"] or 0.0))
+    # A detail is an island or a pocket: its region (the raised top, the sunk floor) is bounded by its steps all
+    # round. A step that runs on to the region's other faces -- across a face from edge to edge, a hinge
+    # knuckle's shoulder, a ledge -- is the part's geometry, which the walls and gaps judge.
+    kept = [item for key, item in found.items()
+            if set(ctx.adjacent(key[0], key[1])) <= sides.get(key, set())]
+    items, count = _capped(kept, lambda item: (item["height_mm"], item["width_mm"] or 0.0))
     for item in items:
         item["faces"] = item["faces"][:12]
     return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM,
             "method": "steps between parallel planes up to step_ceiling_mm high; a step is a detail while it is "
-                      "narrower than across_below_mm (text-to-cad's own figure: no guide states one), and wider "
-                      "the part's geometry, which the walls and gaps judge"}
+                      "narrower than across_below_mm (text-to-cad's own figure: no guide states one) and its steps "
+                      "bound the raised top or the sunk floor all round (an island or a pocket: text, a logo, a "
+                      "mark); wider, or a step running on across a face, is the part's geometry, which the walls and "
+                      "gaps judge"}
 
 
 def _face_at(ctx: Context, part: int, point: np.ndarray) -> int:
@@ -968,7 +985,7 @@ def _clearances(ctx: Context) -> dict[str, Any]:
     for rough, margin, a, b, faces, q1, q2 in sorted(candidates, key=lambda row: row[0]):
         if rough - margin > EXACT_BELOW or exact_pairs + len(faces) > EXACT_QUERIES:
             items.append({"location": ctx.ref(a, faces[0][0]), "xyz": _xyz((q1 + q2) / 2.0),
-                          "distance_mm": _r(rough, 5), "kind": "gap" if rough > margin else "near",
+                          "distance_mm": _r(rough, JUDGED), "kind": "gap" if rough > margin else "near",
                           "overlap_mm3": None, "exact": False, "uncertainty_mm": _r(margin, 4),
                           "faces": [ctx.ref(b, faces[0][1])],
                           "parts": [ctx.parts[a].name or ctx.parts[a].owner,
@@ -1000,7 +1017,7 @@ def _clearances(ctx: Context) -> dict[str, Any]:
                     pass
         kind = "gap" if distance > 1e-6 else ("overlap" if overlap is not None and (
             math.isnan(overlap) or overlap > 1e-6) else "contact")
-        items.append({"location": ctx.ref(a, fa), "xyz": _xyz((p1 + p2) / 2.0), "distance_mm": _r(distance, 5),
+        items.append({"location": ctx.ref(a, fa), "xyz": _xyz((p1 + p2) / 2.0), "distance_mm": _r(distance, JUDGED),
                       "kind": kind, "exact": True, "overlap_mm3": None if overlap is None or math.isnan(overlap) else _r(overlap, 4),
                       "faces": [ctx.ref(b, fb)],
                       "parts": [ctx.parts[a].name or ctx.parts[a].owner, ctx.parts[b].name or ctx.parts[b].owner]})
@@ -1166,8 +1183,8 @@ def _trapped(ctx: Context) -> dict[str, Any]:
                           "volume_mm3": _r(cavity["volume_mm3"], 2), "sealed": bool(cavity["sealed"] and not diameters),
                           "exact": cavity["exact"], "escape_holes": len(diameters),
                           "escape_hole_diameters_mm": [_r(d, 4) for d in diameters],
-                          "min_escape_hole_mm": _r(diameters[0], 4) if diameters else None,
-                          "min_wall_mm": _r(thinnest[0], 4) if thinnest else None,
+                          "min_escape_hole_mm": _r(diameters[0], JUDGED) if diameters else None,
+                          "min_wall_mm": _r(thinnest[0], JUDGED) if thinnest else None,
                           "faces": [ctx.ref(part, ordinal) for ordinal in cavity["faces"][:12]]})
     items, count = _capped(items, lambda item: (item["escape_holes"], -(item["volume_mm3"] or 0)))
     return {"items": items, "count": count, "sealed_count": sum(1 for item in items if item["sealed"]),
@@ -1304,7 +1321,7 @@ def _sections(ctx: Context) -> dict[str, Any]:
         found = mo.sections(made[0])
         if found["thickness_mm"] is not None:
             items.append({"location": ctx.ref(part, _face_at(ctx, part, found["center"])), "xyz": _xyz(found["center"]),
-                          "thickness_mm": _r(found["thickness_mm"], 3), "at_least": found["at_least"],
+                          "thickness_mm": _r(found["thickness_mm"], JUDGED), "at_least": found["at_least"],
                           "pitch_mm": _r(made[0].pitch, 4)})
         if found.get("max_cross_section_mm2", 0) > best.get("max_cross_section_mm2", -1):
             best = found

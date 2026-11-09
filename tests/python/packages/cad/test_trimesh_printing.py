@@ -105,6 +105,18 @@ class MeshCleanTest(unittest.TestCase):
 
 
 class OverhangTest(unittest.TestCase):
+    def test_a_round_on_the_plates_edge_is_no_overhang_as_on_exact_geometry(self) -> None:
+        from build123d import Axis, fillet
+
+        part = Box(30, 20, 6, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        part = fillet(part.edges().group_by(Axis.Z)[0], 0.6)
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.dfm(_stl(part, Path(td), "rounded"), process="printing")
+        overhangs = result.measurements["overhangs"]
+        self.assertEqual(overhangs["down_facing_area_below_limit_mm2"], 0.0)
+        self.assertEqual({item["kind"] for item in overhangs["items"]}, {"plate_edge"})
+        self.assertNotIn("printing.overhang_angle", [finding.code for finding in result.findings])
+
     def test_underside_below_limit_is_flagged_above_limit_is_not(self) -> None:
         """A 30 deg underside is a violation at 45 deg and clear at 20 deg."""
         with tempfile.TemporaryDirectory() as td:
@@ -316,6 +328,9 @@ class OpenMeshTest(unittest.TestCase):
         codes = [finding.code for finding in result.findings]
         self.assertFalse(result.measurements.get("partial"), result.measurements.get("partial_sections"))
         self.assertEqual(codes[0], "not_watertight", "said first: every figure after it is of an open surface")
+        self.assertEqual(result.findings[0].severity, "error", "an open surface has no inside to print")
+        self.assertIn("1 open body(ies)", result.findings[0].message)
+        self.assertFalse(result.ok)
         self.assertNotIn("measurement_failed", codes)
         self.assertNotIn("internal_void", codes, "an open mesh's voxel voids are its holes")
         walls = [o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "printing.wall"]
@@ -354,10 +369,12 @@ class CheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             result = cad.stl.dfm(_stl(_wedge(30.0), Path(td), "wedge30"), process="printing")
 
-        # the overhang is a fact, not a verdict; its 30 deg tip is a knife edge, a warning (the tip prints rounded)
+        # the overhang's area is a fact: printing.overhang_angle judges the face (one cause, one finding), the sum
+        # names it; its 30 deg tip is a knife edge, a warning (the tip prints rounded)
         self.assertIn(("warning", "printing.knife_edge"), {(f.severity, f.code) for f in result.findings})
+        self.assertIn(("warning", "printing.overhang_angle"), {(f.severity, f.code) for f in result.findings})
         overhang = next(f for f in result.findings if f.code == "overhangs")
-        self.assertEqual(overhang.severity, "warning")
+        self.assertEqual(overhang.severity, "info")
         self.assertEqual(len(overhang.location.split(", ")), 3)
 
 
@@ -409,9 +426,10 @@ class MultiBodyWallTest(unittest.TestCase):
         self.assertAlmostEqual(result.measurements["wall_thickness"]["min_mm"], 0.5, delta=0.01)
 
     def test_a_body_resting_on_another_is_closed_and_measured(self) -> None:
-        """A two-material print: a 10 mm baffle standing on a 2 mm diffuser shares the diffuser's top, so
-        neither body is closed. Each is closed again as the bodies are split (trimesh's repair, which needs
-        networkx: the trimesh extra carries it) and measured against itself: the diffuser's 2 mm wall too."""
+        """A two-material print: a 10 mm baffle standing on a 2 mm diffuser shares the diffuser's top, so the
+        whole's edges there are used four times. Each body is closed again as the bodies are split (trimesh's
+        repair, which needs networkx: the trimesh extra carries it), judged watertight per body, and measured
+        against itself: the diffuser's 2 mm wall too."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "two.stl"
             diffuser = trimesh.creation.box((20, 20, 2))
@@ -421,7 +439,8 @@ class MultiBodyWallTest(unittest.TestCase):
             result = cad.stl.dfm(path, process="printing", samples=400)
 
         self.assertTrue(result.ok, [(finding.code, finding.message) for finding in result.findings])
-        self.assertFalse(result.measurements["mesh"]["watertight"])
+        self.assertTrue(result.measurements["mesh"]["watertight"], "each body is closed")
+        self.assertAlmostEqual(result.measurements["mesh"]["volume_mm3"], 4800.0, delta=1.0)
         walls = sorted(body["min_mm"] for body in result.measurements["wall_thickness"]["per_body"] if body["min_mm"])
         self.assertEqual([round(wall, 3) for wall in walls], [2.0, 10.0])
 

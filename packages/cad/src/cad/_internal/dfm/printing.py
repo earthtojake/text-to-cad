@@ -349,6 +349,10 @@ def _ruled() -> RuleSet:
 
 
 RULES = _ruled()
+#: The overhang angle ``printing.overhang_angle`` judges each face against, per technology.
+OVERHANG_JUDGED: dict[str, float] = {technology: float(limit) for rule in RULES.rules
+                                     if rule.id == "printing.overhang_angle" and isinstance(rule.limit, dict)
+                                     for technology, limit in rule.limit.items()}
 
 
 # --- options ------------------------------------------------------------------------------------------------
@@ -386,8 +390,19 @@ def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate(resolved: dict[str, Any], document_type: str) -> None:
-    if resolved["technology"] not in TECHNOLOGIES:
-        raise ArgumentRefused(f"--technology is one of {', '.join(TECHNOLOGIES)}, not {resolved['technology']!r}")
+    technology = resolved["technology"]
+    if technology not in TECHNOLOGIES:
+        raise ArgumentRefused(f"--technology is one of {', '.join(TECHNOLOGIES)}, not {technology!r}")
+    # A technology prints one class of material: metal powder bed fusion a metal, the others a plastic (a
+    # filament, a resin, a polymer powder). A material of the other class is a mistake, refused as molding
+    # refuses a metal.
+    material = materials.resolve(resolved.get("material"))
+    wanted = "metal" if technology == "pbf" else "plastic"
+    if material is not None and materials.material_class(material) != wanted:
+        other = ("give --technology pbf (metal powder bed fusion) to print a metal" if wanted == "plastic"
+                 else "give --technology fdm, sla, sls or mjf to print a plastic")
+        raise ArgumentRefused(f"--material {material} is a {materials.material_class(material)}, and "
+                              f"--technology {technology} prints a {wanted}: {other}, or give a {wanted}")
     given = resolved.get("angle_limit")
     if given is not None and not 0.0 <= float(given) <= 90.0:
         raise ArgumentRefused(f"--angle-limit is an angle in degrees from 0 to 90, not {given}")
@@ -438,10 +453,18 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     mesh = _ok(report.get("mesh"))
     if mesh:
         if mesh.get("watertight") is False:
-            found.append(CheckFinding("warning", "not_watertight", "the mesh is not watertight (holes or open edges): "
-                                      "a slicer may misread it, and its volume, walls, cavities and support are "
-                                      "measured of an open surface -- read every figure below with that",
-                                      "mesh", "repair the mesh, or export it again from the model"))
+            # An open surface has no inside: a slicer cannot fill it, and every figure below is of a surface,
+            # not a solid -- the part is not printable as it is (an error, as an open B-rep is).
+            opened = mesh.get("open_bodies") or []
+            named = "; ".join(f"one at {where(body.get('xyz'))} ({body.get('boundary_edges')} open edge(s))"
+                              for body in opened[:3])
+            count = mesh.get("open_body_count") or len(opened) or 1
+            found.append(CheckFinding("error", "not_watertight", f"the mesh is not watertight: {count} open "
+                                      f"body(ies){': ' + named if named else ''}. A slicer cannot tell its inside, "
+                                      "and its volume, walls, cavities and support are measured of an open surface "
+                                      "-- read every figure below with that",
+                                      where(opened[0].get("xyz")) if opened else "mesh",
+                                      "close the surface (repair the mesh), or export it again from the model"))
         if (mesh.get("body_count") or 0) > 1:
             found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: walls are "
                                       "measured per body", "mesh"))
@@ -454,10 +477,11 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     solid = _ok(report.get("solid"))
     for item in solid.get("items") or ():
         if item.get("closed") is False:
-            found.append(CheckFinding("warning", "not_watertight", f"{item['part']} is not closed (an open shell): "
-                                      "a slicer cannot tell its inside", item.get("location")))
+            found.append(CheckFinding("error", "not_watertight", f"{item['part']} is not closed (an open shell): "
+                                      "a slicer cannot tell its inside, and every figure of it is of a surface",
+                                      item.get("location"), "close the shell into a solid, or rebuild the part as one"))
         if item.get("sound") is False:
-            found.append(CheckFinding("warning", "not_sound", f"{item['part']} fails the kernel's validity check "
+            found.append(CheckFinding("error", "not_sound", f"{item['part']} fails the kernel's validity check "
                                       f"({', '.join(item.get('issues') or ['invalid'])}): a slicer may misread it",
                                       item.get("location"), "rebuild the faulty feature; export the STEP again"))
     if (solid.get("body_count") or 0) > 1:
@@ -470,11 +494,15 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     if (overhangs.get("down_facing_area_below_limit_mm2") or 0) > 0:
         faces = overhangs.get("largest_faces_below_limit") or [{}]
         assembled = f"; {IN_PLACE}" if parts > 1 else ""
+        # One cause, one finding: where printing.overhang_angle judges each face, this is the sum of them (info,
+        # naming the rule); a warning only where no rule judges the faces and the technology needs support.
+        judged = overhangs["angle_limit_used_deg"] <= OVERHANG_JUDGED.get(technology, -1.0)
         found.append(CheckFinding(
-            "warning" if technology not in POWDER else "info", "overhangs",
+            "warning" if technology not in POWDER and not judged else "info", "overhangs",
             f"{overhangs['down_facing_area_below_limit_mm2']:g} mm2 ({overhangs['down_facing_area_below_limit_pct']:g}%"
             f" of the surface) faces down at under {overhangs['angle_limit_used_deg']:g} deg from horizontal, off "
-            f"the plate, {overhangs['face_count_below_limit']} {'faces' if solid else 'triangles'}{assembled}",
+            f"the plate, {overhangs['face_count_below_limit']} {'faces' if solid else 'triangles'}"
+            f"{': printing.overhang_angle judges each' if judged else ''}{assembled}",
             faces[0].get("location") or where(faces[0].get("location_xyz")),
             "support it, chamfer the undersides to the angle or steeper, or turn the part (--candidates ranks the "
             "orientations; turn it in the model)" if technology not in POWDER else None))

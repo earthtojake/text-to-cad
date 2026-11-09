@@ -103,6 +103,18 @@ def _load(path: str, units: str = "mm") -> trimesh.Trimesh:
     return _mesh.load(path, units)
 
 
+def _lies_on(piece: trimesh.Trimesh, closed: list[trimesh.Trimesh], tolerance: float) -> bool:
+    """Whether every triangle of the open ``piece`` lies on a face of the ``closed`` bodies: its centre and its
+    edges' middles within ``tolerance`` of their surface (the face two bodies share, left over by the split)."""
+    if not closed:
+        return False
+    triangles = np.asarray(piece.triangles, dtype=float)
+    points = np.concatenate([triangles.mean(axis=1), (triangles + np.roll(triangles, 1, axis=1)).reshape(-1, 3) / 2.0])
+    whole = closed[0] if len(closed) == 1 else trimesh.util.concatenate(closed)
+    _closest, distance, _triangle = trimesh.proximity.closest_point(whole, points)
+    return bool(np.all(distance <= tolerance))
+
+
 def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
     """The mesh's bodies, each solid with the sealed voids inside it, and how many voids there are.
 
@@ -111,10 +123,16 @@ def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
     does not reach the surface -- is that part's, and its walls are measured with it, never as a body
     of its own. A void goes with the solid that holds its centre, else with the largest. An open sliver of no
     area worth a thousandth of the whole (an exporter's stray facets) is no body: a ray from one measured
-    a wall the part has not."""
+    a wall the part has not. Nor is the face two bodies share: the split closes each body with its own copy
+    of it and leaves the face over as an open piece of its own, every triangle of it a closed body's."""
     parts = list(mesh.split(only_watertight=False))  # repair: two bodies sharing a face are closed again
     if len(parts) <= 1:
         return [mesh], 0
+    closed = [part for part in parts if part.is_watertight]
+    tolerance = 1e-6 * max(1.0, float(np.linalg.norm(mesh.extents)))
+    parts = [part for part in parts if part.is_watertight or not _lies_on(part, closed, tolerance)] or parts
+    if len(parts) <= 1:
+        return parts, 0
     total = float(mesh.area) or 1.0
     solids, voids = [], []
     for part in parts:
@@ -155,6 +173,19 @@ def _mesh_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] 
     facts["body_count"] = len(bodies)
     if voids:
         facts["internal_void_count"] = voids
+    if not facts["watertight"] and len(bodies) > 1:
+        # Judged per body as the walls split them: two bodies sharing a face (a two-material print) are each
+        # closed once split, though the face they share leaves the whole's edges used four times.
+        opened = [body for body in bodies if not body.is_watertight]
+        closed = [body for body in bodies if body.is_watertight]
+        facts.pop("open_body_count", None)
+        facts.pop("open_bodies", None)
+        facts["watertight"] = not opened
+        facts["volume_mm3"] = round(abs(sum(float(body.volume) for body in closed)), 1) if closed else None
+        if opened:
+            listed = [entry for body in opened for entry in _mesh.closure(body)["open_bodies"]]
+            facts.update(open_body_count=len(opened),
+                         open_bodies=sorted(listed, key=lambda entry: -entry["area_mm2"])[:8])
     return facts
 
 
@@ -187,9 +218,20 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
             if area > 0:
                 hist[f"{bins[b]}-{bins[b+1]}deg"] = round(area, 2)
 
+    items = _overhang_regions(mesh, counted, surface_angle, z_min, max(1.0, 5 * layer), reach_floor) if regions else []
+    # The headline is the exact path's: the regions that need support, a bridge, a round on the plate's edge and a
+    # region under the floors aside (they are listed, counted false, and no rule judges them).
+    headline = counted
+    if regions:
+        headline = np.zeros(len(mesh.faces), dtype=bool)
+        for item in items:
+            if item["counted"] and item["kind"] != "bridge":
+                headline[item["_faces"]] = True
+    for item in items:
+        item.pop("_faces", None)
     worst = []
-    if counted.any():
-        w_idx = np.where(counted)[0]
+    if headline.any():
+        w_idx = np.where(headline)[0]
         order = w_idx[np.argsort(-areas[w_idx])][:8]
         worst = [
             {
@@ -200,23 +242,24 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
             for i in order
         ]
 
-    items = _overhang_regions(mesh, counted, surface_angle, z_min, max(1.0, 5 * layer), reach_floor) if regions else []
     excluded = sum(item["area_below_limit_mm2"] for item in items if item["kind"] in ("plate_edge", "bridge"))
     return {
         "items": sorted(items, key=lambda item: (item["angle_deg"], -item["area_mm2"]))[:CAP],
         "count": len(items),
         "angle_limit_used_deg": angle_limit,
         "supported_area_excluded_mm2": round(float(excluded), 2),
-        "down_facing_area_below_limit_mm2": round(float(areas[counted].sum()), 2),
+        "down_facing_area_below_limit_mm2": round(float(areas[headline].sum()), 2),
         "down_facing_area_below_limit_pct": round(
-            100 * float(areas[counted].sum()) / total_area, 1) if total_area else 0.0,
-        "face_count_below_limit": int(counted.sum()),
+            100 * float(areas[headline].sum()) / total_area, 1) if total_area else 0.0,
+        "face_count_below_limit": int(headline.sum()),
         "down_facing_angle_histogram_mm2": hist,
         "largest_faces_below_limit": worst,
         "area_floor_mm2": mo.OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor,
         "method": "regions of down-facing triangles under the angle limit off the plate; one under area_floor_mm2, "
                   "or a cantilever reaching under reach_floor_mm (the nozzle given, else one bead), is listed with "
-                  "counted false and judged by no rule: text-to-cad's own floors, no guide states them",
+                  "counted false and judged by no rule: text-to-cad's own floors, no guide states them; the "
+                  "down-facing area counts the regions that need support (bridges and plate-edge rounds aside), "
+                  "as on exact geometry",
     }
 
 
@@ -245,7 +288,12 @@ def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarr
         spread = mo.span(points, a, b, inside=mo.in_triangles_xy(tri) if len(region) <= 2000 else None,
                          refine=size / 40.0)
         heights = centers[region, 2] - z_min
-        touches = float(vertices[mesh.faces[region]][:, :, 2].min()) <= z_min + 0.1
+        # on the plate's edge: the region reaches the plate, or runs on into down-facing triangles that do (a
+        # round's lowest row, on the plate, is no overhang and is not in the region) -- as the exact path reads a
+        # round whose face touches the plate
+        lowest = vertices[mesh.faces[outer[mesh.face_normals[outer, 2] < -1e-6]]][:, :, 2]
+        touches = float(vertices[mesh.faces[region]][:, :, 2].min()) <= z_min + 0.1 or (
+            lowest.size > 0 and float(lowest.min()) <= z_min + 0.1)
         if spread["kind"] == "bridge":
             kind = "bridge"
         elif touches and float(heights.max()) <= plate_band:
@@ -259,11 +307,12 @@ def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarr
         # too small to need support: under the area floor, or a cantilever shorter than a bead is wide
         big = kind != "plate_edge" and area >= mo.OVERHANG_AREA_MM2 and not (
             kind == "cantilever" and spread["reach_mm"] is not None and spread["reach_mm"] < reach_floor)
-        items.append({"xyz": _p(centers[worst]), "angle_deg": _r(float(tilt[region].min()), 3),
+        items.append({"xyz": _p(centers[worst]), "angle_deg": _r(float(tilt[region].min()), mo.JUDGED),
                       "area_mm2": _r(area, 3), "area_below_limit_mm2": _r(area, 3),
                       "height_mm": _r(float(heights.min()), 3), "max_height_mm": _r(float(heights.max()), 3),
-                      "kind": kind, "flat": flat, "length_mm": _r(spread["length_mm"]),
-                      "reach_mm": _r(spread["reach_mm"]), "supporting_edges": int(carries.sum()), "counted": bool(big)})
+                      "kind": kind, "flat": flat, "length_mm": _r(spread["length_mm"], mo.JUDGED),
+                      "reach_mm": _r(spread["reach_mm"]), "supporting_edges": int(carries.sum()), "counted": bool(big),
+                      "_faces": region})
     return items
 
 
@@ -423,7 +472,7 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, cell: float) -> list
     wall is joined on two sides is not known: ``supported`` None)."""
     found = _cluster(origins, thickness, cell)
     found.sort(key=lambda row: row[0])
-    return [{"xyz": _p(point), "thickness_mm": _r(value), "samples": count, "supported": None, "sampled": True}
+    return [{"xyz": _p(point), "thickness_mm": _r(value, mo.JUDGED), "samples": count, "supported": None, "sampled": True}
             for value, point, count in found[:CAP]]
 
 
@@ -678,7 +727,7 @@ def _gap_facts(mesh: trimesh.Trimesh, samples: int, split: tuple[list[trimesh.Tr
             cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
             found = _cluster(points[~defect], widths[~defect], cell)
             found.sort(key=lambda row: row[0])
-            items = [{"xyz": _p(point), "gap_mm": _r(value), "samples": count} for value, point, count in found[:CAP]]
+            items = [{"xyz": _p(point), "gap_mm": _r(value, mo.JUDGED), "samples": count} for value, point, count in found[:CAP]]
     return {"items": items, "count": len(items), "reported_below_mm": GAP_CEILING,
             "min_mm": items[0]["gap_mm"] if items else None, "overlap": overlap, "defect_below_mm": GAP_DEFECT_MM,
             "method": "a ray out of the material from every triangle to a facing wall of the same body (holes read "
@@ -712,7 +761,7 @@ def _clearance_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], 
             overlap = bool(b.is_watertight and b.contains(a.vertices[:2000]).any()) or bool(
                 a.is_watertight and a.contains(b.vertices[:2000]).any())
             kind = "overlap" if overlap else ("contact" if best[0] <= 1e-6 else "gap")
-            items.append({"xyz": _p(best[1]), "distance_mm": _r(0.0 if overlap else best[0], 5), "kind": kind,
+            items.append({"xyz": _p(best[1]), "distance_mm": _r(0.0 if overlap else best[0], mo.JUDGED), "kind": kind,
                           "bodies": [i, j]})
     items.sort(key=lambda item: item["distance_mm"])
     return {"items": items[:CAP], "count": len(items), "body_count": len(bodies), "reported_below_mm": CLEARANCE_REACH,
@@ -746,7 +795,7 @@ def _trapped_facts(field: _Field, walls: dict) -> dict:
         items.append({"xyz": _p(cavity.centroid), "volume_mm3": _r(cavity.volume_mm3, 2),
                       "sealed": bool(cavity.sealed and not diameters), "exact": False, "escape_holes": len(diameters),
                       "escape_hole_diameters_mm": [_r(d, 3) for d in diameters],
-                      "min_escape_hole_mm": _r(diameters[0], 3) if diameters else None,
+                      "min_escape_hole_mm": _r(diameters[0], mo.JUDGED) if diameters else None,
                       "min_wall_mm": _r(near.get(k), 4)})
     items.sort(key=lambda item: (item["escape_holes"], -(item["volume_mm3"] or 0)))
     return {"items": items[:CAP], "count": len(items), "sealed_count": sum(1 for item in items if item["sealed"]),
@@ -760,7 +809,7 @@ def _section_facts(field: _Field) -> dict:
     found = mo.sections(field.grid)
     items = []
     if found["thickness_mm"] is not None:
-        items.append({"xyz": _p(found["center"]), "thickness_mm": _r(found["thickness_mm"], 3),
+        items.append({"xyz": _p(found["center"]), "thickness_mm": _r(found["thickness_mm"], mo.JUDGED),
                       "at_least": found["at_least"], "pitch_mm": _r(field.pitch, 4)})
     report = {"items": items, "count": len(items), "max_thickness_mm": items[0]["thickness_mm"] if items else None,
               "measured_up_to_mm": 12.0,
