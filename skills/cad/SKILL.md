@@ -311,7 +311,11 @@ cad step ranges arm.step --step 0.5 --json
 - **The stop** each way is where the joint's child link meets its parent link (each with the links
   fixed to it), whatever the other joints do. The finding also names the two parts that meet.
 - **A clash**, said beside a stop, is anything the joint moves meeting another link first in this
-  pose of the other joints: a self-collision of the pose, not the joint's range.
+  pose of the other joints: a self-collision of the pose, not the joint's range. Write the stop. A
+  clash moves with the other joints (an arm drawn folded clashes its wrist on its shoulder a few
+  degrees out; a thigh meets the torso only while the hip's other joints stand as drawn), and a
+  simulator's contacts hold it, since the two links collide there. Where the hardware's own travel
+  is narrower than the stop (a servo's position range), write that.
 - **Units and zero.** Stops are in degrees or millimetres around the as-built pose, and in the
   joint's own values where its as-built value is not zero. Write them into the joint's
   `angular_range` or `linear_range` in the body, rounded towards zero, and run the model again.
@@ -321,12 +325,22 @@ cad step ranges arm.step --step 0.5 --json
   narrows a range, stopping each joint where its parts first come that near (`--clearance 1`:
   within a millimetre). Every gap is measured to within 0.6 mm over the true one, never under it.
 - **Touching or near as built.** Every pair is read against the as-built pose. Parts touching (a
-  horn on its servo), or under 0.3 mm apart, meet only where their contact grows by about 15 mm^2,
-  not where one slides along the other. Parts a little farther apart (a jaw 0.5 mm from a
+  horn on its servo), or under 0.3 mm apart, meet only where their contact grows by about 15 mm^2
+  on a surface that stops the motion, not where one slides along the other: contact on a face or a
+  cylinder about a turn's axis (along a slide) stops nothing. Parts a little farther apart (a jaw 0.5 mm from a
   servo's cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.1 mm
   for a 0.5 mm gap), not where it narrows a hair. At a larger clearance the finding lists the
   pairs within it as built, `near as built:`, with the gap as built and at each stop, and a stop
   one of them makes says `closed to 0.2 from 0.5 mm as built`.
+- **Turning on an output.** A vendor often draws a motor or a servo as one solid, its case and its
+  output (flange, horn) together, and bolts the next link to that output: the link turns against a
+  face of the solid it is bolted to. A pair touching as built on a surface about the joint's axis is
+  read as an output and what turns on it: neither that face nor what of the solid lies within the
+  reach of their contact about the axis (a locating boss, a pin, a bolt's seat through the face)
+  stops the joint, and the finding lists the pair, `turns on: plate (link2) on motor (link1)`. The
+  case beyond that reach, and every other part, still stops it. Split the solid, or `exclude()` the
+  pair, only where a stop a few degrees out still names that pair `touching as built`: the output
+  carries something that reaches past its face (an arm, a cam) and that the hardware turns with it.
 - **Overlapping as drawn.** A vendor's simplified parts are often drawn sunk into each other (a link
   a little too wide for its clevis, a carriage drawn inside its rail). Such a pair meets only where
   one is pushed deeper into the other than drawn, by 0.6 mm more, wherever that is: its overlap
@@ -354,7 +368,9 @@ cad step ranges arm.step --step 0.5 --json
   internals) is left out either way.
 - **One joint.** `--joint NAME` sweeps that joint alone (repeat it for several); a name the
   model has no such joint by is refused, naming its joints.
-- **Not swept.** A turn is swept a full turn each way, a slide the document's extent. A cylindrical
+- **Not swept.** A turn is swept a full turn each way, a slide the document's extent: one clear
+  that far has no stop (`why`: `clear all the way round`), and a stop past a half turn (-239 deg) is
+  the parts' own, its two stops spanning a turn at most. A cylindrical
   or spherical joint is not swept, nor is a joint of a closed loop (it moves only with its loop), and
   its warning says so. A document with no joint fails with
   `no_joints`.
@@ -364,15 +380,17 @@ cad step ranges arm.step --step 0.5 --json
   laptop, and one of a few large freeform shells (an industrial arm's covers) minutes. A larger
   `--clearance` costs a little more; a finer `--step` costs in proportion, and `--joint` only the
   joints it names. Answer a narrower question (do the jaws close?) with `--joint jaw` or a posed
-  snapshot. A long sweep says each joint on stderr as it starts, with either geometry; `--verbose`
+  snapshot. A long sweep says each joint on stderr as it starts (and once it runs long, and again
+where its first poses show the estimate low) and as it ends, with either geometry; `--verbose`
   says each step as it starts: reading the model, sampling its surfaces, each joint.
 
 `--json` carries every number in `measurements.joints`, each joint under `joint`: `lower`, `upper`,
 `range` (the joint's own values), the `*_contact` and `*_clash` parts (each with its `gap` there in mm, and a pair within the
 clearance as built with its `near`, that gap as built; a pair drawn overlapping with its `overlap` in mm^3
 and `depth` in mm, and no `gap`), the pairs touching as built (`resting`), the
-pairs near as built (`near`: `rest`, and the gap at the `lower` and `upper` stop) and the pairs drawn
-overlapping (`overlapping`: `volume` and `depth`).
+pairs near as built (`near`: `rest`, and the gap at the `lower` and `upper` stop), the pairs drawn
+overlapping (`overlapping`: `volume` and `depth`), the pairs that turn on an output (`riding`) and, for
+a joint with no stop, `why`.
 
 ### Check scripts
 

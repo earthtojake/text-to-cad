@@ -148,6 +148,44 @@ def overlap():
 """
 
 
+# A motor drawn as one solid, its case and its output flange together, with six bolt holes through the flange and a
+# key standing on its face; a plate bolted flat on the flange's face at every other hole, covering the rest, the key
+# in a slot of it, turning on the output's axis; and a stop block on the motor's link further round. The plate turning
+# on the flange's face passes over the flange's holes (its contact there grows over the holes' area) and meets the
+# key a few degrees round, which turns with it in the hardware; the block is what stops it.
+MOTOR = """
+import math
+
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/motor.xbf")
+def motor():
+    holes = [bd.Pos(9 * math.cos(math.radians(at)), 9 * math.sin(math.radians(at)), 29)
+             * bd.Cylinder(2.5, 8, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)) for at in range(0, 360, 60)]
+    case = bd.Cylinder(20, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    flange = bd.Pos(0, 0, 30) * bd.Cylinder(12, 3, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    key = bd.Pos(0, 7, 33) * bd.Box(2, 8, 4, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    body = case + flange + key
+    for hole in holes:
+        body -= hole
+    body.label = "motor"
+    block = bd.Pos(0, 40, 34.5) * bd.Box(8, 8, 10)
+    block.label = "block"
+    base = bd.Compound(children=[body, block], label="base")
+    plate = bd.Pos(20, 0, 33) * bd.Box(64, 24, 5, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    for hole in holes[::2]:  # bolted at every other hole: the plate covers the rest
+        plate -= hole
+    plate -= bd.Pos(0, 7, 32) * bd.Box(3.3, 9.6, 7, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))  # the key's
+    plate.label = "plate"
+    output = bd.RevoluteJoint("output", base, axis=bd.Axis((0, 0, 33), (0, 0, 1)), angular_range=(-360, 360))
+    bd.RigidJoint("output", plate, output.location)
+    output.connect_to(plate.joints["output"], angle=0)
+    return bd.Compound(children=[base, plate], label="motor")
+"""
+
+
 class Ranges(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="cad-ranges-")).resolve()
@@ -199,6 +237,7 @@ class Ranges(unittest.TestCase):
                                                     slide["upper_clash"]), "each stop is its own: nothing else first")
         self.assertEqual({"joint_stops"}, {finding.code for finding in result.findings})
         self.assertEqual(before, document.read_bytes(), "the document is not changed")
+        self.assertEqual(("", ""), (elbow["why"], slide["why"]), "each has a stop: no reason it has none")
 
     def test_a_smaller_clearance_never_narrows_a_range(self) -> None:
         from cad import xbf
@@ -301,6 +340,29 @@ class Ranges(unittest.TestCase):
             self.assertGreaterEqual(math.inf if narrow["upper"] is None else narrow["upper"],
                                     math.inf if wide["upper"] is None else wide["upper"], name)
 
+    def test_a_plate_on_an_output_drawn_with_its_motor_turns_on_it_to_the_real_stop(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "motor.py"
+        script.write_text(textwrap.dedent(MOTOR), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["motor"], cwd=self.folder)[0]["ok"])
+        result = xbf.ranges(self.folder / "XBF/motor.xbf", step=2.0)
+        [output] = result.measurements["joints"]
+        # The plate turning on the flange's face stops nothing there, its holes passing over the flange's: it turns
+        # until its side meets the block, about 67 degrees one way and 248 the other.
+        self.assertEqual(("block", "block"), (output["lower_contact"]["still"], output["upper_contact"]["still"]),
+                         output)
+        self.assertTrue(55.0 <= output["upper"] <= 70.0, output)
+        self.assertTrue(-260.0 <= output["lower"] <= -235.0, output)
+        # The pair is said: the plate turns on a surface about the joint's axis, touching as built.
+        self.assertEqual([("plate", "plate", "motor", "base")],
+                         [(pair["moving"], pair["moving_link"], pair["still"], pair["still_link"])
+                          for pair in output["riding"]])
+        self.assertIn(["plate", "motor"], [list(pair) for pair in output["resting"]])
+        [line] = [line for line in result.human_lines() if line.startswith("output: ")]
+        self.assertIn("turns on: plate (plate) on motor (base), touching as built on a surface about its axis", line)
+
     def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
         import contextlib
         import io
@@ -319,16 +381,34 @@ class Ranges(unittest.TestCase):
         self.assertTrue(lines[3].startswith("elbow: lower -30 deg: arm (arm) meets wall"), lines)
         self.assertFalse([line for line in lines if line.startswith("info:")], lines)
         # Each joint said as it starts, about how long it may take, and as it ends, though not verbose.
-        heard = said.getvalue().splitlines()
+        heard = [line for line in said.getvalue().splitlines() if "re-estimated" not in line]
         self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 2): up to about "), heard)
         self.assertTrue(heard[1].startswith("ranges: elbow swept in "), heard)
-        # A sweep running long says each joint as it starts, though each is short (on the collision geometry too).
+        # A sweep running long says each joint as it starts, though each is short (on the collision geometry too), and
+        # each joint it said as it ends: none goes unsaid, and none said starting goes unsaid ending.
         said = io.StringIO()
         with mock.patch("cad.engine.ranges.LONG", 1e9), mock.patch("cad.engine.ranges.QUIET", 0.0), \
                 contextlib.redirect_stderr(said):
             xbf.ranges(document, geometry="collision")
-        self.assertEqual(["ranges: sweeping elbow (1 of 2)", "ranges: sweeping slide (2 of 2)"],
-                         said.getvalue().splitlines())
+        heard = said.getvalue().splitlines()
+        self.assertEqual(["ranges: sweeping elbow (1 of 2)", "ranges: elbow swept in", "ranges: sweeping slide (2 of 2)",
+                          "ranges: slide swept in"], [line.rsplit(" ", 2)[0] if " swept in " in line else line
+                                                      for line in heard])
+        # A joint that runs long after its start is said then, and as it ends; an estimate found low is said again.
+        calls = iter(range(10 ** 6))  # a clock still until the joint's first pose is timed, then an hour a call
+
+        def clock() -> float:
+            return max(0.0, next(calls) - 6.0) * 3600.0
+
+        said = io.StringIO()
+        with mock.patch("cad.engine.ranges.LONG", 100.0), mock.patch("cad.engine.ranges.QUIET", 1e9), \
+                mock.patch("cad.engine.ranges.time.perf_counter", clock), contextlib.redirect_stderr(said):
+            xbf.ranges(document, joint=("elbow",))
+        heard = said.getvalue().splitlines()
+        self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 1): up to about ") and
+                        heard[0].endswith(" more"), heard)
+        self.assertTrue(heard[-1].startswith("ranges: elbow swept in "), heard)
+        self.assertEqual(2, len(heard), heard)
         # Verbose, each step is said as it starts, the reading and the sampling before any joint: a fine sweep's
         # minutes of sampling are not minutes of silence.
         said = io.StringIO()
@@ -378,6 +458,7 @@ class Ranges(unittest.TestCase):
         elbow = swept["collision"]["elbow"]
         self.assertEqual((None, None, None, None), (elbow["lower"], elbow["upper"], elbow["lower_clash"],
                                                     elbow["upper_clash"]), elbow)
+        self.assertEqual("clear all the way round", elbow["why"])
         # The shoulder's parent is the world's, which MuJoCo does collide: the base stops it either way, alike.
         shoulder = [(swept[geometry]["shoulder"]["lower"], swept[geometry]["shoulder"]["upper"])
                     for geometry in ("parts", "collision")]

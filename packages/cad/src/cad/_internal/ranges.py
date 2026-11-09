@@ -76,10 +76,14 @@ def ranges_for(document_type: str) -> Any:
         fixed to it): a stop whatever the other joints do, what its range declares. Where anything it moves
         meets another link first, in the pose the others stand in, that clash is said beside the stop. Two parts
         meet where they come within the clearance and within half their gap as built (less the 0.3 mm the
-        surfaces are sampled to), or where their contact grows by about 15 mm^2: parts touching already as built
-        (a horn on its servo) meet only when their contact grows, parts near as built (apart, within the
-        clearance) only where their gap halves, and each joint's finding names them with their gap as built and
-        at each stop. Parts drawn one inside the other (overlapping as built, a vendor's simplified parts sunk
+        surfaces are sampled to), or where their contact grows by about 15 mm^2 on a surface that stops the motion:
+        parts touching already as built (a horn on its servo) meet only when their contact grows there, parts near
+        as built (apart, within the clearance) only where their gap halves, and each joint's finding names them with
+        their gap as built and at each stop. A pair touching as built on a surface about the joint's axis (a plate
+        bolted to a motor's output, the output drawn as one solid with the motor's case) turns on it: neither that
+        face nor what of the output lies within its reach (a boss, a pin, a bolt's seat) stops the joint, and the
+        finding says the pair (turns on). A clash (anything the joint moves meeting another link, the other joints as
+        built) belongs to the drawn pose, which a simulator's contacts hold: the range is the stop. Parts drawn one inside the other (overlapping as built, a vendor's simplified parts sunk
         into each other) meet only where one is pushed deeper into the other than drawn, by 0.6 mm more: each
         joint's finding names them with the volume they share and how deep, and a stop they make lies past the
         true one by up to about that depth. A larger clearance only narrows a range. Each joint's finding says its stops in degrees
@@ -217,7 +221,8 @@ def _words(found: Any) -> str:
         if clash is not None:
             said += (f", {'and before it' if contact is not None else 'but'}, at {clash.at:+g} with the other joints "
                      f"as built, {clash.moving} ({clash.moving_link}) meets {clash.still} ({clash.still_link})"
-                     f"{closing(clash)}")
+                     f"{closing(clash)} (a clash of the drawn pose, which the simulator's contacts hold: the range is "
+                     "the stop)")
         return said
 
     def gap(value: float | None, way: str) -> str | None:
@@ -245,6 +250,16 @@ def _words(found: Any) -> str:
                 f"{pair.depth:.1f} mm deep" for pair in overlapping[:NEAR_SAID]]
         more = f" and {len(overlapping) - NEAR_SAID} more (--json)" if len(overlapping) > NEAR_SAID else ""
         said += (f"; overlapping as drawn, stopping only where that deepens: {'; '.join(rows)}{more}")
+    riding = list(getattr(found, "riding", None) or ())
+    if riding:
+        # Pairs touching on a surface the joint moves along: an output drawn as one solid with its case turns on
+        # the face the next link is bolted to, which stops nothing.
+        turning = found.unit == "deg"
+        rows = [f"{pair.moving} ({pair.moving_link}) on {pair.still} ({pair.still_link})" for pair in riding[:NEAR_SAID]]
+        more = f" and {len(riding) - NEAR_SAID} more (--json)" if len(riding) > NEAR_SAID else ""
+        said += (f"; {'turns' if turning else 'slides'} on: {'; '.join(rows)}{more}, touching as built on a surface "
+                 + ("about its axis (an output, a horn or a bearing, drawn as one solid with its case or apart)"
+                    if turning else "along it (a rail, a guide)") + ": contact there stops nothing")
     return said
 
 

@@ -58,6 +58,20 @@ depth drawn: said with it. Its volume shared as built, measured on a grid (``_Sw
 reported (``JointStops.overlapping``; ``Contact.overlap`` and ``Contact.depth`` where it stops a joint). None of it
 reads the clearance, so the rule below holds.
 
+**Surfaces it moves along.** A turn moves each point on a circle about the axis, a slide on a line along it: a
+still surface whose normal lies across that motion (within ``RIDING``) -- a face or a cylinder about the axis for a
+turn, a rail's faces for a slide -- is one a moving point slides over, never one that stops it (``_riding``). So a
+moving sample in contact counts towards a contact grown only where no still sample within ``RESOLUTION`` of it lies
+on such a surface: a plate bolted to a motor's output, the output drawn as one solid with the motor's case, turns on
+that face as its holes and bosses pass over the face's holes and bosses, and stops nothing there; it stops where its
+contact grows on a surface that does stop it (a stop block, a boss's side, a pin in its hole). Such a pair, touching
+as built mostly (``RIDES``) on a surface the joint moves along, is reported (``JointStops.riding``). For a turn,
+such a pair is an output and what it is bolted to: whatever of the still part lies within the reach of its contact
+as built about the axis (and ``2 * RESOLUTION``) is the output's own -- a locating boss, a pin, a bolt's seat
+through the face, drawn into the same solid as the case and locked into the other part as the hardware's output is
+-- and its contact counts for that pair no more than the face's; the case beyond that reach, and every other part,
+still stops the turn. Neither the normals, the share nor the reach read the clearance, so the rule below holds.
+
 Two parts meet where either holds at a pose and the next (a graze past a corner, at one pose alone, is no
 contact). The stop reported each way is the last clear pose and the two parts that met one step past it,
 with their gap there (``Contact.gap``) and, for a pair within the clearance as built, that gap too
@@ -79,6 +93,17 @@ mask of the still side says it may be that near (``_Occupied``); each sample lef
 each still part it may be near, only as far as its pair's bound or ``RESOLUTION`` (``_Cells``, at halves
 of the clearance).
 
+**Progress.** A joint whose sweep may take more than ``LONG`` seconds (its first pose's time times its poses, a full
+turn each way at most) is said as it starts, with about how long; once the sweep has run ``QUIET`` seconds, every
+joint is said as it starts; a joint not said at its start is said once its own sweep passes ``LONG`` or the whole one
+``QUIET``; an estimate said is said again, once, where its first ``RECALIBRATED`` poses say it was low by half or more
+(the first pose, before anything comes near, is the quickest); and every joint said is said again as it ends, with
+how long it took.
+
+**Clear and past a half turn.** A turning joint is swept a full turn each way from as built, no further: one clear
+that far has no stop either way (``why``: clear all the way round), and a stop past a half turn (-239 degrees) is the
+parts' own, within that turn. Its two stops span at most a turn, the parts between them.
+
 Units are the document's: degrees and millimetres, values around the as-built pose (zero), with the
 joint's own values beside (``as_built`` plus them), which is what its range declares. Nothing here
 reads or writes a file, and nothing changes the document.
@@ -93,7 +118,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "sweep", "unknown"]
+__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "Riding", "sweep",
+           "unknown"]
 
 #: Every point of a tested surface is within this many millimetres of one of its samples, at any clearance: a gap
 #: is measured to within twice it, and a clearance under it is refused.
@@ -118,6 +144,12 @@ LEVELS = 4
 #: coarse mask a cluster's reach spans: a pose places only the clusters that mask passes (``_Clusters``).
 CLUSTER = 3.0
 GROWN = 3
+#: How far from across the motion a still surface's normal may lie and the surface still be one the joint moves along
+#: (the sine of the angle: 20 degrees, past the half of the 28.5 degrees a curved face's facets may span, so a
+#: cylinder about the axis drawn in facets is one), and the share of a pair's contact as built on such surfaces that
+#: says it turns (or slides) on them (``JointStops.riding``).
+RIDING = math.sin(math.radians(20.0))
+RIDES = 0.9
 #: A full turn, in degrees: a turning joint clear this far each way has no stop.
 TURN = 360.0
 SWEPT = ("revolute", "continuous", "prismatic")
@@ -177,6 +209,18 @@ class Overlap:
     depth: float
 
 
+@dataclass(frozen=True)
+class Riding:
+    """A pair touching as built on a surface the joint moves along (the module's **Surfaces it moves along**): the
+    moving part and the still one, as a ``Contact`` names them. The joint turns (or slides) on it, and its contact
+    there stops nothing."""
+
+    moving: str
+    moving_link: str
+    still: str
+    still_link: str
+
+
 @dataclass
 class JointStops:
     """One joint's stops each way, in its unit (``deg`` or ``mm``) around the as-built pose: ``lower`` and
@@ -203,6 +247,9 @@ class JointStops:
     resting: list[tuple[str, str]] = field(default_factory=list)  # part pairs under RESOLUTION as built (moving, still)
     near: list[Near] = field(default_factory=list)  # the other part pairs within the clearance as built, with gaps
     overlapping: list[Overlap] = field(default_factory=list)  # the resting pairs drawn one inside the other
+    # The resting pairs touching on a surface the joint moves along (the module's **Surfaces it moves along**): an
+    # output drawn as one solid with its case, a bearing, a rail.
+    riding: list[Riding] = field(default_factory=list)
 
 
 #: Sample points past which the sampling is said as it starts whatever ``told`` hears: tens of seconds and gigabytes.
@@ -213,6 +260,8 @@ LONG = 15.0
 #: Seconds into a sweep past which every joint is said as it starts, however short its own sweep: many joints of
 #: some seconds each are minutes too.
 QUIET = 15.0
+#: Poses after which a joint's estimate said at its start is checked against the time they took (``_Sweep.joint``).
+RECALIBRATED = 10
 
 
 def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION, geometry: str = "parts",
@@ -221,10 +270,8 @@ def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION,
     """Each controlled joint's stops (see the module docstring), or only those ``joints`` names, in the
     description's order: ``step`` degrees for a turning joint and millimetres for a sliding one,
     ``clearance`` millimetres (at least ``RESOLUTION``, and that by default), ``geometry`` what is tested
-    (``GEOMETRY``); ``told`` hears a line per joint as it is done. ``progress`` hears, of a joint whose sweep
-    may take more than ``LONG`` seconds (its first pose's time times its poses, a full turn each way at most),
-    a line as it starts saying about how long, and one as it ends; once the sweep has run ``QUIET`` seconds, every
-    joint's start. A name in ``joints`` that is no control
+    (``GEOMETRY``); ``told`` hears a line per joint as it is done. ``progress`` hears each joint said as it
+    starts or runs long, and as it ends (the module's **Progress**). A name in ``joints`` that is no control
     (``Description.controls``) is refused, naming the controls."""
     if geometry not in GEOMETRY:
         raise ValueError(f"geometry {geometry!r} is none of {', '.join(GEOMETRY)}")
@@ -327,7 +374,20 @@ def _count(number: int) -> str:
     return f"{number / 1e6:.2g} million" if number >= 1_000_000 else f"{number:,}"
 
 
-def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float) -> np.ndarray:
+def _sampled(vertices: np.ndarray, faces: np.ndarray, resolution: float) -> tuple[np.ndarray, np.ndarray]:
+    """A surface's samples (``_samples``) and the unit normal of the triangle each lies on, as ``float16`` (a sample
+    on no triangle, of a surface of none, a zero one): which way the surface faces there, either way round."""
+    points, triangle = _samples(vertices, faces, resolution, triangles=True)
+    if not len(faces):
+        return points, np.zeros((len(points), 3), dtype=np.float16)
+    corners = vertices[faces]
+    normals = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
+    length = np.linalg.norm(normals, axis=1, keepdims=True)
+    normals = np.divide(normals, length, out=np.zeros_like(normals), where=length > 0)
+    return points, normals[triangle].astype(np.float16)
+
+
+def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float, triangles: bool = False) -> Any:
     """A surface as points such that every point of it is within ``resolution`` of one: each triangle in rows
     parallel to its longest edge AB, ``across = resolution / sqrt(2)`` apart from AB to its apex C, each row's
     points ``along = resolution * sqrt(2)`` apart at most, both its ends among them.
@@ -335,9 +395,10 @@ def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float) -> np.n
     The bound: with AB the longest edge, the angles at A and B are acute, so the triangle's cross-section parallel
     to AB only shrinks towards C; a point P of it lies between two rows, and its foot on the row below (at most
     ``across`` away) lies on that row, within ``along / 2`` of one of its points: ``sqrt(across^2 + (along/2)^2)``,
-    which is ``resolution``. A triangle smaller than the spacing is its three corners."""
+    which is ``resolution``. A triangle smaller than the spacing is its three corners. ``triangles``: the points and
+    the index of the triangle each lies on."""
     if not len(faces):
-        return vertices.copy()
+        return (vertices.copy(), np.zeros(len(vertices), dtype=np.int64)) if triangles else vertices.copy()
     along, across = resolution * math.sqrt(2.0), resolution / math.sqrt(2.0)
     corners = vertices[faces]  # (faces, 3, 3)
     edges = np.stack([np.linalg.norm(corners[:, (at + 1) % 3] - corners[:, at], axis=1) for at in range(3)], axis=1)
@@ -358,7 +419,8 @@ def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float) -> np.n
         / np.maximum(spans[point_row], 1)
     at, up = triangle[point_row], share[point_row][:, None]
     start, end = a[at] + up * (c[at] - a[at]), b[at] + up * (c[at] - b[at])
-    return start + on_row[:, None] * (end - start)
+    points = start + on_row[:, None] * (end - start)
+    return (points, at) if triangles else points
 
 
 #: Where a ray of ``_inside`` starts, off each point, in metres: a hair off the round numbers surfaces are drawn on,
@@ -664,7 +726,8 @@ class _Sweep:
         self.progress = progress
         self.clearance = float(clearance)
         self.place = ""  # which joint of how many is swept, as ``progress`` says it
-        self.long = False  # whether the joint swept now was said to be long
+        self.long = False  # whether the joint swept now was said as it started (or once it ran long)
+        self.said_most = 0.0  # the most it was said to take, seconds: none said where 0
         self.began = time.perf_counter()  # when the sweep started (``run``), for ``QUIET``
         self.step = float(step)
         self.pitch = float(clearance) * 1e-3  # metres
@@ -678,6 +741,7 @@ class _Sweep:
         self.parts: list[tuple[str, str]] = []  # (part, link) by part index
         paths: list[str] = []
         self.points: dict[str, np.ndarray] = {}
+        self.normals: dict[str, np.ndarray] = {}  # each sample's surface normal, in its link's frame (``_sampled``)
         self.owners: dict[str, np.ndarray] = {}
         surfaces = []
         for link in description.links:
@@ -705,19 +769,21 @@ class _Sweep:
         # Each part's triangles in its link's frame, by part index: what a point inside it is told by (``_inside``).
         self.meshes: list[tuple[np.ndarray, np.ndarray]] = []
         for link in description.links:
-            found, owners = [], []
+            found, facing, owners = [], [], []
             for name, path, vertices, faces in by_link.get(link.name, ()):
                 index = len(self.parts)
                 self.parts.append((name, link.name))
                 self.meshes.append((vertices, faces))
                 paths.append(path)
-                sampled = _samples(vertices, faces, self.resolution)
+                sampled, normals = _sampled(vertices, faces, self.resolution)
                 found.append(sampled)
+                facing.append(normals)
                 owners.append(np.full(len(sampled), index, dtype=np.int64))
             if found:
                 points, owners = np.vstack(found), np.concatenate(owners)
                 keep = _outside(points, owners, self.resolution * math.sqrt(2.0))
                 self.points[link.name], self.owners[link.name] = points[keep], owners[keep]
+                self.normals[link.name] = np.vstack(facing)[keep]
         self.hashed: dict[tuple[int, float], _Cells] = {}  # each part's samples as built, by cell size (``_hashed``)
         self.as_built: dict[int, np.ndarray] | None = None
         # Of a moving part's samples, which lie inside a still part as built, by (moving, still) (``_buried``); and
@@ -768,6 +834,24 @@ class _Sweep:
                 for index in np.unique(owners):
                     self.as_built[int(index)] = placed[owners == index]
         return self.as_built
+
+    def _riding(self, part: int, axis: np.ndarray, turning: bool) -> np.ndarray:
+        """Which of a still part's samples as built (``_rest``, in order) lie on a surface the joint moves along: its
+        normal there across the motion, within ``RIDING`` (a turn's tangent about the axis, a slide's direction along
+        it), so that a point moving on it slides over it and is never stopped by it -- a face about the axis (an
+        output's, a bearing's, a horn's) for a turn, a rail's for a slide (the module's **Surfaces it moves
+        along**). ``axis`` is the joint's frame as built, its Z the axis."""
+        frame = self.frames({})[self.parts[part][1]]
+        link, owners = self.parts[part][1], self.owners[self.parts[part][1]]
+        normals = self.normals[link][owners == part].astype(np.float64) @ frame[:3, :3].T
+        direction, origin = axis[:3, 2], axis[:3, 3]
+        if turning:
+            offset = self._rest()[part] - origin
+            tangent = np.cross(direction, offset)
+            length = np.linalg.norm(tangent, axis=1)
+            along = np.abs(np.einsum("ij,ij->i", normals, tangent))
+            return along <= RIDING * np.maximum(length, 1e-12)  # on the axis (no tangent) it rides too
+        return np.abs(normals @ direction) <= RIDING
 
     def _rest_mesh(self, part: int) -> tuple[np.ndarray, np.ndarray]:
         """A part's triangles where it stands as built."""
@@ -985,7 +1069,7 @@ class _Sweep:
         self.began = time.perf_counter()
         for at, joint in enumerate(controls, 1):
             started = time.perf_counter()
-            self.place, self.long = f"{at} of {len(controls)}", False
+            self.place, self.long, self.said_most = f"{at} of {len(controls)}", False, 0.0
             stops = self.joint(joint)
             found.append(stops)
             seconds = time.perf_counter() - started
@@ -1030,10 +1114,28 @@ class _Sweep:
         whole = [points for points in local]
         whole_movers = np.concatenate(movers)
         kept_index = np.arange(len(whole_movers))  # each sample a pose places, by its index among ``whole``
+        axis = rest[joint.parent] @ np.asarray(joint.origin, dtype=float)
+        # Each still part's samples on a surface the joint moves along (``_riding``), and their distance from a turn's
+        # axis, in metres, made where first asked.
+        riding: dict[int, np.ndarray] = {}
+        radii: dict[int, np.ndarray] = {}
+
+        def rides(part: int) -> np.ndarray:
+            found = riding.get(part)
+            if found is None:
+                found = riding[part] = self._riding(part, axis, turning)
+            return found
+
+        def radius(part: int) -> np.ndarray:
+            found = radii.get(part)
+            if found is None:
+                offset = self._rest()[part] - axis[:3, 3]
+                found = radii[part] = np.linalg.norm(np.cross(axis[:3, 2], offset), axis=1)
+            return found
+
         if not any(other.follows is not None and self._leads(joint.name, other) for other in self.description.joints):
             # Alone, the joint moves its points on circles about its axis (or lines along it): one whose circle
             # passes no still point's within the clearance never comes within it, and is left out of every pose.
-            axis = rest[joint.parent] @ np.asarray(joint.origin, dtype=float)
             inverse = np.linalg.inv(axis)
             still_axial = still_points @ inverse[:3, :3].T + inverse[:3, 3]
             reachable = _Reach(still_axial, clearance, turning)
@@ -1088,6 +1190,23 @@ class _Sweep:
                 self.points[link_name][self.owners[link_name] == moving_part],
                 *self._deep(still_part, depth + 2 * RESOLUTION)))
             overlapped[moving_part, still_part] = True
+        # The pairs touching as built (not drawn overlapping) whose contact lies on a surface the joint moves along,
+        # each with its output's reach about a turn's axis, in metres (the module's **Surfaces it moves along**).
+        outputs: dict[tuple[int, int], float] = {}
+        for (moving_part, still_part), gap in close.items():
+            if gap >= RESOLUTION or overlapped[moving_part, still_part]:
+                continue
+            asked, held, _apart = self._hashed(still_part, 2 * self.resolution).pairs(
+                resting_points[whole_movers == moving_part])
+            # Each of its samples in contact as built, on such a surface where one within reach of it is.
+            on = np.unique(asked[rides(still_part)[held]])
+            if len(asked) and len(on) >= RIDES * len(np.unique(asked)):
+                outputs[(moving_part, still_part)] = (float(radius(still_part)[held].max()) + 2 * self.resolution
+                                                      if turning else -1.0)
+        # Each still part's reach by moving part, for the lookups (-1: none).
+        reaches: dict[int, np.ndarray] = {}
+        for (moving_part, still_part), reach_of in outputs.items():
+            reaches.setdefault(still_part, np.full(width, -1.0))[moving_part] = reach_of
         occupied = _Occupied(still_points, still_owners, clearance)
         # Each still part's samples, hashed at the clearance, at halves of it and at ``RESOLUTION`` (``_hashed``):
         # a sample is looked up against a part only where it may close on it, and only as far as its bound.
@@ -1152,19 +1271,33 @@ class _Sweep:
                 sample, where, of, reach, stood = (sample[looking], where[looking], of[looking], reach[looking],
                                                    stood[looking])
                 levels = np.searchsorted(sizes, reach * (1 - 1e-12))  # the smallest size at or over each reach
-                asked_parts, apart_parts = [], []
+                asked_parts, held_parts, apart_parts = [], [], []
                 for level in np.unique(levels):
                     at_level = np.flatnonzero(levels == level)
-                    asked, _held, apart = self._hashed(part, float(sizes[level])).pairs(where[at_level])
+                    asked, held, apart = self._hashed(part, float(sizes[level])).pairs(where[at_level])
                     asked_parts.append(at_level[asked])
+                    held_parts.append(held)
                     apart_parts.append(apart)
-                asked, apart = np.concatenate(asked_parts), np.concatenate(apart_parts)
+                asked, held, apart = (np.concatenate(asked_parts), np.concatenate(held_parts),
+                                      np.concatenate(apart_parts))
                 if not len(asked):
                     continue
                 each, least = _least(asked, apart)  # each sample's gap to the part
                 of_each = of[each]
                 closes = least < bound[of_each, part]
-                touches = np.bincount(of_each[(least < self.resolution) & ~stood[each]], minlength=width)
+                # A sample in contact counts towards a contact grown only where the still part's surface within
+                # ``RESOLUTION`` of it stops the motion: on a surface the joint moves along it slides (the module's
+                # **Surfaces it moves along**).
+                touching = apart < self.resolution
+                on = rides(part)[held]
+                if part in reaches:
+                    # A pair that turns on an output: what of the still part lies within the output's reach is the
+                    # output's own (a boss, a pin, a bolt's seat through its face), fused with the case it turns in.
+                    on = on | (radius(part)[held] <= reaches[part][of[asked]])
+                sliding = np.zeros(len(sample), dtype=bool)
+                sliding[asked[touching & on]] = True
+                touches = np.bincount(of_each[(least < self.resolution) & ~stood[each] & ~sliding[each]],
+                                      minlength=width)
                 grown = np.flatnonzero(touches > STOP)
                 met = set(np.unique(of_each[closes]).tolist()) | set(grown.tolist())
                 if not met:
@@ -1187,6 +1320,7 @@ class _Sweep:
 
         stops.resting = sorted({(self.parts[a][0], self.parts[b][0]) for (a, b), gap in close.items()
                                 if gap < RESOLUTION})
+        stops.riding = [Riding(*self.parts[a], *self.parts[b]) for a, b in sorted(outputs)]
         near = sorted(((pair, gap) for pair, gap in close.items() if gap >= RESOLUTION), key=lambda item: item[1])
         step = self.step / scale  # radians or metres
         if turning:
@@ -1196,19 +1330,40 @@ class _Sweep:
                                     for name, points in self.points.items()])
             reach = float(np.linalg.norm(everything.max(axis=0) - everything.min(axis=0))) + step
         count = int(math.ceil(reach / step - 1e-9))
-        timed = time.perf_counter()
+        started = timed = time.perf_counter()
         met_at(step)
         posed = time.perf_counter() - timed
         most = posed * 2 * count  # a full turn (or the document's extent) each way: a stop ends it sooner
         if most > LONG:
             self.long = True
+            self.said_most = most
             self.progress(f"sweeping {joint.name} ({self.place}): up to about {_duration(most)} at {self.step:g} "
                           f"{unit} a step and {self.clearance:g} mm clearance (a coarser --step is faster)")
         elif time.perf_counter() - self.began > QUIET:
             # A sweep running long says each joint as it starts, however short each is: no minutes of silence.
+            self.long = True
             self.progress(f"sweeping {joint.name} ({self.place})")
         else:
             self.told(f"sweeping {joint.name} ({self.place})")
+        posed_count = 0
+        recalibrated = False
+
+        def tick() -> None:
+            """After each pose (the module's **Progress**): a joint not said yet is said once it runs past ``LONG``
+            or the sweep past ``QUIET``; an estimate said is said again, once, where the poses so far say it is
+            low by half or more -- the first pose, where nothing meets, is the quickest."""
+            nonlocal posed_count, recalibrated
+            posed_count += 1
+            now = time.perf_counter()
+            left = (now - started) / posed_count * max(0, 2 * count - posed_count)
+            if not self.long and (now - started > LONG or now - self.began > QUIET):
+                self.long = True
+                self.progress(f"sweeping {joint.name} ({self.place}): up to about {_duration(left)} more")
+            elif (self.long and not recalibrated and self.said_most and posed_count >= RECALIBRATED
+                  and left > LONG and (now - started) + left > 1.5 * self.said_most):
+                recalibrated = True
+                self.progress(f"sweeping {joint.name} ({self.place}): up to about {_duration(left)} more, "
+                              "re-estimated from its poses so far")
 
         def contact_at(pair: tuple[int, int], value: float, gap: float) -> Contact:
             moving_part, still_part = self.parts[pair[0]], self.parts[pair[1]]
@@ -1228,6 +1383,7 @@ class _Sweep:
             for k in range(1, count + 1):
                 value = sign * k * step
                 now = met_at(value, own=clash is not None)
+                tick()
                 # A contact is a pair met at a pose and the next: a graze at one pose alone is none.
                 met = sorted((pair for pair in now if pair in before), key=lambda pair: (before[pair], pair))
                 own = [pair for pair in met if self.parts[pair[0]][1] in child_side
@@ -1246,6 +1402,9 @@ class _Sweep:
             else:
                 stops.upper, stops.upper_contact = stop if stop is not None else (None, None)
                 stops.upper_clash = clash
+
+        if stops.lower_contact is None and stops.upper_contact is None:
+            stops.why = "clear all the way round" if turning else "clear over the document's extent each way"
 
         def rounded(gap: float | None) -> float | None:
             return None if gap is None else round(gap, 4)
