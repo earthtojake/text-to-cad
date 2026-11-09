@@ -261,8 +261,12 @@ def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray
 NEEDLE = 1e-3
 
 
+#: Two triangles bound a ball alike within this share of its radius (``_exact_balls``' tie).
+TIE = 1e-7
+
+
 def _exact_balls(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray, c_t: np.ndarray,
-                 allowed: np.ndarray, floor: float) -> tuple[np.ndarray, np.ndarray]:
+                 allowed: np.ndarray, floor: float, rank: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
     """For each point ``p[k]`` (outward normal ``n[k]``): the least radius at which the ball tangent there
     (centre p - r n) meets one of the triangles it is ``allowed`` (corners ``a_t``, ``b_t``, ``c_t``), and that
     triangle's index (-1 for none)."""
@@ -331,6 +335,12 @@ def _exact_balls(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray,
         return np.full(len(p), np.inf), np.full(len(p), -1)
     pick = np.argmin(best, axis=1)
     least = best[np.arange(len(p)), pick]
+    if rank is not None and best.shape[1] > 1:
+        # a ball two triangles bound alike (touching both where their faces meet) is bound by the lower-ranked
+        # face's, whatever order the triangles came in: the order is the part's turn's, the faces' ordinals not
+        tied = best <= (least * (1.0 + TIE))[:, None]
+        pick = np.argmin(np.where(tied, np.asarray(rank, dtype=float)[None, :], np.inf), axis=1)
+        least = best[np.arange(len(p)), pick]
     return least, np.where(np.isfinite(least), pick, -1)
 
 
@@ -435,7 +445,7 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         if not len(columns):
             continue
         least, pick = _exact_balls(p_all[index], n_all[index], a_t[columns], b_t[columns], c_t[columns],
-                                   near, floor)
+                                   near, floor, tri_face[columns] if tri_face is not None else None)
         tighter = least < radius[index]
         radius[index[tighter]] = least[tighter]
         bound[index[tighter]] = columns[pick[tighter]]
@@ -487,15 +497,18 @@ def nearest_broad_all(faces: list[int], neighbours: Callable[[int], Any], broad:
 
 
 def weighted_quantile(values: np.ndarray, weights: np.ndarray, quantile: float) -> float | None:
-    """The finite value at ``quantile`` of the weight, lowest first; None for none."""
+    """The finite value at ``quantile`` of the weight, lowest first; None for none. A quantile falling on the
+    boundary between two values (eight of sixteen equal weights below it) is the lower's, the running sum
+    compared within a billionth of the whole: summed in another order, as a turned part's samples are, the
+    same weights land a rounding either side of it."""
     v = np.asarray(values, dtype=float)
     w = np.asarray(weights, dtype=float)
     keep = np.isfinite(v) & (w > 0)
     if not keep.any():
         return None
-    order = np.argsort(v[keep])
+    order = np.argsort(v[keep], kind="stable")
     share = np.cumsum(w[keep][order])
-    index = min(int(np.searchsorted(share, quantile * share[-1])), int(keep.sum()) - 1)
+    index = min(int(np.searchsorted(share, quantile * share[-1] * (1.0 - 1e-9))), int(keep.sum()) - 1)
     return float(v[keep][order][index])
 
 

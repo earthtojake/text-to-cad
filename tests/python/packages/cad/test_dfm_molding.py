@@ -685,6 +685,15 @@ class OneFaceTest(unittest.TestCase):
                 self.assertAlmostEqual(report["thickness"]["max_mm"], wall, delta=0.05 * wall)
                 self.assertLessEqual(report["thickness"]["nominal_mm"], wall * 1.01)
 
+    def test_a_median_on_the_half_is_the_lower_value_whatever_the_order(self) -> None:
+        # a boss face of 16 equal samples, eight at 3.5: summed in any order the half falls on 3.5 -- a turned
+        # part's samples came in another order and read 4.64, its corner bosses a wall_max of their own
+        values = np.array([3.5] * 8 + [4.64, 4.65, 6.07, 4.64, 4.65, 6.07, 4.64, 4.65])
+        weights = np.full(16, 14.46404682274)
+        for seed in range(8):
+            order = np.random.default_rng(seed).permutation(16)
+            self.assertEqual(ops.weighted_median(values[order], weights[order] * (1 + 1e-15 * seed)), 3.5, seed)
+
     def test_the_shared_geometry_takes_empty_input(self) -> None:
         none = np.zeros((0, 3))
         values, bound = ops.ball_thickness(np.array([[0, 0, 1.0]]), np.array([[0, 0, 1.0]]), np.array([2.0]),
