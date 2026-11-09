@@ -646,6 +646,8 @@ class Daemon:
         from cad_server.engine import cache as _cache
 
         _cache.DROPPED.append(self.checks.dropped)
+        # Told after each cache file written: a cache folder the kept checks found unwritable is tried again.
+        _cache.WRITTEN.append(self.checks.writable)
         # The whole documents a worker of an older release gave for a check (``_whole``), by id: each at its
         # version, the most recent last.
         self.wholes: dict[str, tuple[str, bytes]] = {}
@@ -693,10 +695,12 @@ class Daemon:
 
     def made_base(self) -> None:
         """The base made here (``base.Making``): each service's standby, when standbys are enabled,
-        stands in it now; and the checks processes of a base made before it retired -- an idle one now, a busy
-        one as its check ends -- so a fresh one, of the base as it is now, says what measures in it."""
+        stands in it now; the checks processes of a base made before it retired -- an idle one now, a busy
+        one as its check ends -- so a fresh one, of the base as it is now, says what measures in it; and a cache
+        folder the kept checks found unwritable tried again by the next result kept (``Checks.writable``)."""
         if self.stopping.is_set():
             return
+        self.checks.writable()  # a cache folder the kept checks found unwritable: tried again by the next one kept
         with self.asked_lock:
             self.base_since, self.base_measures = time.time(), None
         for process in self.supervisor.processes(CHECKS):
@@ -2189,6 +2193,8 @@ class Daemon:
 
         if self.checks.dropped in _cache.DROPPED:
             _cache.DROPPED.remove(self.checks.dropped)
+        if self.checks.writable in _cache.WRITTEN:
+            _cache.WRITTEN.remove(self.checks.writable)
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine

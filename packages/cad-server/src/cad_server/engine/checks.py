@@ -36,7 +36,9 @@ version's (a result of another version is removed as one of the new is written),
 to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least recently used (by its time on disk, set again by each
 read) going first. One that does not read -- not JSON, not the shape written, another version's or check's under
 its name -- is removed, never served, and a document's ``checks/`` folder left empty goes with its last. A cache
-folder that cannot be written keeps nothing on disk, and is not tried again until the cache folder is another.
+folder that cannot be written keeps nothing on disk, and is not walked again: its mark is tried again by the next
+result kept once the engine has written anything else there since (``cache.WRITTEN``, ``Checks.writable``), once
+the base is made again (``Daemon.made_base``), or once the cache folder is another -- never on a timer.
 A document's cache file found unreadable takes its folder, and the results in it, with it (``cache.Cache.remove``,
 which tells ``Checks.dropped``). A result is
 written under the registry's lock of its document (``Registry.lock``), which its deletion holds, and a document
@@ -98,8 +100,10 @@ class Disk:
         self.place: bytes | None = None
         self.bytes = 0
         # The cache folder whose mark could not be written (its root): nothing is kept there, nor indexed, until
-        # the cache folder is another.
+        # the cache folder is another; ``retry``: a write there succeeded since (``writable``), so the next result
+        # kept tries its mark again.
         self.unwritable: Any = None
+        self.retry = False
 
     def _held(self) -> tuple[Any, Any]:
         """The cache folder and the lock of a document's writes there (``Registry.lock``; none for a folder
@@ -140,10 +144,11 @@ class Disk:
             try:
                 held.write(MARK, place)
             except OSError:
-                # A folder that takes no mark keeps nothing: remembered, so no later use walks it again.
-                self.unwritable, self.index, self.bytes, self.place = _root(held), {}, 0, None
+                # A folder that takes no mark keeps nothing: remembered, so no later use walks it again until it
+                # takes a write (``writable``).
+                self.unwritable, self.index, self.bytes, self.place, self.retry = _root(held), {}, 0, None, False
                 return self.index
-        self.unwritable = None
+        self.unwritable, self.retry = None, False
         self.index, self.bytes, self.place = {}, 0, place
         for ident in held.names(DOCUMENTS):
             if not is_id(ident):
@@ -220,9 +225,10 @@ class Disk:
         """``result`` written as ``check``'s of document ``ident`` at ``version``, measured ``by``, whole, under
         the registry's lock of the document -- unless ``still()``, asked under it, says the document was deleted
         meanwhile; the document's results of any other version removed, the store held to its bounds. A folder
-        that cannot be written keeps nothing, and is not tried again (``unwritable``)."""
+        that cannot be written keeps nothing, and is not tried again until it has taken another write
+        (``unwritable``, ``writable``)."""
         held, locks = self._held()
-        if held is None or (self.unwritable is not None and self.unwritable == _root(held)):
+        if held is None or (self.unwritable is not None and not self.retry and self.unwritable == _root(held)):
             return
         prefix, name = self._name(version, check)
         data = json.dumps({"format": FORMAT, "version": version, "check": check, "result": result,
@@ -248,6 +254,12 @@ class Disk:
             self.bytes += len(data)
             while index and (len(index) > self.limit or self.bytes > self.budget):
                 self._remove(held, min(index, key=lambda place: index[place][1]))
+
+    def writable(self) -> None:
+        """The cache folder taken a write since its mark could not be (the engine's own, or the base made again):
+        its mark is tried again by the next result kept, and the folder indexed then."""
+        with self.lock:
+            self.retry = self.unwritable is not None
 
     def deleted(self, ident: str) -> None:
         """Document ``ident``'s entries dropped from the index: its folder went with it (``Registry.delete``)."""
@@ -394,6 +406,12 @@ class Checks:
                 self.bytes -= len(self.kept.pop(held)[1])
         if self.disk is not None:
             self.disk.deleted(ident)
+
+    def writable(self) -> None:
+        """The engine wrote into its cache folder (``cache.WRITTEN``), or made the base again: a folder whose mark
+        could not be written is tried again by the next result kept (``Disk.writable``)."""
+        if self.disk is not None:
+            self.disk.writable()
 
     def dropped(self, ident: str) -> None:
         """Document id ``ident``'s folder in the cache gone with its cache file, which did not read

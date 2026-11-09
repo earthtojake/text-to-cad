@@ -1150,7 +1150,9 @@ inputs is the same document there. Each is written whole, a document keeps one v
 results and 256 MB at most, least recently used (by its time on disk, set again by a read) first, and an entry that
 does not read -- not the JSON written, another version's or check's under its name -- is removed, never served,
 and a document's `checks/` folder left empty goes with its last; a cache folder that cannot be written keeps
-nothing there and is not tried again until the cache folder is another; a document's cache file found unreadable
+nothing there and is not walked again -- its mark is tried by the next result kept once the engine has written a
+cache file there since (`cache.WRITTEN`), once the base is made again, or once the cache folder is another, never
+on a timer; a document's cache file found unreadable
 takes its folder's results with it (`Cache.remove`, `cache.DROPPED`). Each is written under the registry's lock of its
 document, which its deletion holds (`Registry.lock`, `FORGOTTEN`): a deleted document's results leave memory and
 the index, and a check of it that began before keeps nothing; a cache folder wiped (the mark the index was made

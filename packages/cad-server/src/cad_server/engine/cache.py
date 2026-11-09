@@ -67,7 +67,7 @@ from typing import Any, Callable
 
 from cad.engine.records import FILE
 
-__all__ = ["CACHE_IDLE_SECONDS", "DROPPED", "FILE", "SHUTDOWN_SECONDS", "Cache", "idle"]
+__all__ = ["CACHE_IDLE_SECONDS", "DROPPED", "FILE", "SHUTDOWN_SECONDS", "WRITTEN", "Cache", "idle"]
 
 # How long a document sits with no build and no read before it is saved: past the gap between a
 # script's calls and between an edit loop's runs (each run a new revision, saved for nothing), and
@@ -80,6 +80,9 @@ FAILURES_KEPT = 12
 # Told of each document whose folder in the cache went with its cache file (``Cache.remove``): what is kept
 # in that folder beside it goes too (``checks.Checks.dropped``).
 DROPPED: list[Callable[[str], None]] = []
+# Told after each cache file written whole (``Cache._write``): the cache folder takes writes, so what found it
+# unwritable tries it again (``checks.Checks.writable``).
+WRITTEN: list[Callable[[], None]] = []
 
 
 def idle() -> float:
@@ -329,6 +332,11 @@ class Cache:
             return  # a build since recorded a newer revision: its own save follows
         meta = {"revision": revision, "bytes": len(data)}
         held.cache.write(self.inside(ident), data)
+        for written in list(WRITTEN):
+            try:
+                written()
+            except Exception:  # noqa: BLE001 - what is told of a write never fails the save
+                pass
         held.update(ident, lambda found: {**found, "cache": meta}
                     if found is not None and found.get("revision") == revision else None)
         with self.lock:

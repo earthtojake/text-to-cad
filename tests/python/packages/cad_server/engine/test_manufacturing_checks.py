@@ -587,10 +587,12 @@ class KeptResultTest(unittest.TestCase):
             self.assertIn("checked", said[-1]["done"])
         self.assertEqual((read, fake.checks.status()["reused"]), (["id"], 2), "read once, by the one check measured")
 
-    def test_an_unwritable_cache_folder_is_tried_once_and_a_cache_files_removal_takes_its_checks(self) -> None:
-        """A cache folder that takes no mark keeps nothing and is not tried, nor walked, again until the cache
-        folder is another; a document's cache file found unreadable takes its folder, and the results the disk
-        index held there, with it (``cache.Cache.remove``)."""
+    def test_an_unwritable_cache_folder_is_tried_again_after_a_write_there_and_a_cache_files_removal_takes_its_checks(
+            self) -> None:
+        """A cache folder that takes no mark keeps nothing and is not tried, nor walked, again until it has taken a
+        write since (the engine's cache file written, ``cache.WRITTEN``; the base made again) or the cache folder is
+        another -- tried by the next result kept, never by a read; a document's cache file found unreadable takes its
+        folder, and the results the disk index held there, with it (``cache.Cache.remove``)."""
         from cad_server.engine import cache
         from cad_server.engine.checks import Checks, Disk
         from cad_server.engine.registry import Folder, Registry
@@ -598,10 +600,13 @@ class KeptResultTest(unittest.TestCase):
         root = Path(tempfile.mkdtemp(prefix="engine-dfm-sealed-"))
         self.addCleanup(shutil.rmtree, root, True)
         read: list[str] = []
+        sealed = {"on": True}
 
         class Sealed(Folder):
             def write(self, inside: str, data: bytes, mode: int | None = None) -> Path:
-                raise PermissionError(inside)
+                if sealed["on"]:
+                    raise PermissionError(inside)
+                return super().write(inside, data, mode)
 
             def read(self, inside: str) -> bytes | None:
                 read.append(inside)
@@ -613,9 +618,32 @@ class KeptResultTest(unittest.TestCase):
         for _ in range(3):
             store.keep(a, "r", "cnc", {"x": 1})
         self.assertEqual((read, store.status().get("unwritable")), (["documents/.checks-index"], True))
+        store.writable()  # a write there succeeded: the next result kept tries the mark again, still refused
+        self.assertIsNone(store.get(a, "r", "cnc"), "a read tries nothing")
+        for _ in range(2):
+            store.keep(a, "r", "cnc", {"x": 1})
+        self.assertEqual((read, store.status().get("unwritable")), (["documents/.checks-index"] * 2, True))
+        sealed["on"] = False
+        store.keep(a, "r", "cnc", {"x": 1})
+        self.assertEqual(len(read), 2, "writable now, but no write there since: not tried")
+        store.writable()
+        store.keep(a, "r", "cnc", {"x": 1})
+        self.assertEqual((store.get(a, "r", "cnc"), "unwritable" in store.status()), (({"x": 1}, {}), False))
+        sealed["on"] = True
+        held["folder"] = Sealed(root / "other")
+        store.keep(a, "r", "cnc", {"x": 1})
+        self.assertTrue(store.status().get("unwritable"))
         held["folder"] = Folder(root / "open")  # another cache folder: tried again
         store.keep(a, "r", "cnc", {"x": 1})
         self.assertEqual((store.get(a, "r", "cnc"), "unwritable" in store.status()), (({"x": 1}, {}), False))
+        # The engine's cache file written tells the store (``cache.WRITTEN``), as a daemon registers it.
+        told: list[bool] = []
+        cache.WRITTEN.append(lambda: told.append(True))
+        self.addCleanup(cache.WRITTEN.pop)
+        written = Registry(root / "state-w", cache=root / "cache-w")
+        written.put({"id": a, "kind": "model", "root": str(root), "home": "m.py", "entry": "m", "revision": "r1"})
+        cache.Cache(SimpleNamespace(registry=lambda: written))._write(a, "r1", b"xbf")
+        self.assertEqual(told, [True])
 
         registry = Registry(root / "state", cache=root / "cache")
         checks = Checks(folder=lambda: registry)
@@ -1035,8 +1063,10 @@ class ReleaseTest(unittest.TestCase):
         supervisor = SimpleNamespace(retire=lambda process, why: retired.append((process.key, why)),
                                      processes=lambda _service: list(checking), stand=lambda *_args: None,
                                      live=lambda _service, key, _python_key: workers.get(key))
+        writable: list[bool] = []
         fake = SimpleNamespace(asked_lock=threading.Lock(), base_since=100.0, base_measures=None,
-                               supervisor=supervisor, stopping=threading.Event(), environment=lambda: {})
+                               supervisor=supervisor, stopping=threading.Event(), environment=lambda: {},
+                               checks=SimpleNamespace(writable=lambda: writable.append(True)))
         fake._base_measures = Daemon._base_measures.__get__(fake)
 
         def answer(measures: dict[str, Any]) -> dict[str, Any]:
@@ -1061,6 +1091,7 @@ class ReleaseTest(unittest.TestCase):
             checking.append(fresh)
             Daemon.made_base(fake)
             self.assertEqual((retired[-1], fake.base_measures), (("checks", "base"), None), "made again: unknown")
+            self.assertEqual(writable, [True], "and an unwritable cache folder tried again by the next result kept")
         with mock.patch.object(daemon._places, "kernel", return_value={"own": True}):
             from cad.engine.contract import measure
 
