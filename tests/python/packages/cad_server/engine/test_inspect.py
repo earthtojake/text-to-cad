@@ -178,6 +178,22 @@ class CouplingsTest(unittest.TestCase):
                       "rack": {"range": [None, None], "terms": [["ja", 0, 1.0], ["slide", 0, 0.5]]},
                       "screw": {"range": [None, None], "terms": [["lead", 0, 1.0], ["lead", 1, 0.004]]}}}
 
+    def test_a_material_s_parts_past_a_few_are_counted_in_text_and_every_one_named_in_data(self) -> None:
+        from cad_server.engine.cli import summary_text
+
+        screws = [f"arm/screw{at}" for at in range(120)]
+        summary = {"name": "arm", "id": "x", "state": {"state": "file", "path": "/m/a.xbf"},
+                   "parts": {"occurrences": 124, "distinct": 2, "root": "arm"}, "bounds": None, "volume": 0.0,
+                   "materials": [{"name": "Steel", "density": 7850.0, "mass": 0.5, "parts": screws},
+                                 {"name": "PLA", "density": 1240.0, "mass": 0.1, "parts": ["arm/a", "arm/b"]}],
+                   "unweighed": ["arm/c", "arm/d", "arm/e", "arm/f", "arm/g"], "mass": 0.6, "joints": [],
+                   "couplings": [], "states": [], "sequences": [], "animations": [], "files": []}
+        lines = summary_text(summary).splitlines()
+        at = lines.index("materials   0.6 kg in all")
+        self.assertEqual(lines[at + 1:at + 4], ["  Steel: 0.5 kg, 120 parts: arm/screw0, arm/screw1, arm/screw2 and 117 more",
+                                                "  PLA: 0.1 kg, arm/a, arm/b",
+                                                "  no material: 5 parts: arm/c, arm/d, arm/e and 2 more"])
+
     def test_each_coupling_is_its_name_kind_joints_and_ratio_in_data_and_text(self) -> None:
         from cad.engine.api import couplings_of
         from cad_server.engine.cli import summary_text

@@ -574,9 +574,23 @@ def _joint_value(value: Any) -> str:
     return "0" if text in ("-0", "") else text
 
 
+#: The most parts a line of the summary names before it counts the rest (``--json`` names every one).
+_PARTS_SHOWN = 4
+
+
+def _parts(paths: list[str]) -> str:
+    """Parts named on a summary's line: each, up to ``_PARTS_SHOWN``; past it, how many, the first few and how
+    many more -- a vendor STEP's hundreds of screws would bury the screen."""
+    if len(paths) <= _PARTS_SHOWN:
+        return ", ".join(paths)
+    shown = _PARTS_SHOWN - 1
+    return f"{len(paths)} parts: {', '.join(paths[:shown])} and {len(paths) - shown} more"
+
+
 def summary_text(summary: dict[str, Any]) -> str:
     """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
-    holds, its lists one item per line under it; a fact it has none of says so. A structure
+    holds, its lists one item per line under it; a fact it has none of says so. A line naming parts
+    names a few and counts the rest (``_parts``; the JSON names every one). A structure
     (``--query structure``) has no measured line: no bounds, volume or masses."""
     import time
 
@@ -612,14 +626,14 @@ def summary_text(summary: dict[str, Any]) -> str:
         lines.append("materials" + (f"   {_said.number(mass)} kg in all" if mass is not None else ""))
         for row in summary["materials"]:
             if not measured:
-                lines.append(f"  {row['name']}: {', '.join(row['parts'])}")
+                lines.append(f"  {row['name']}: {_parts(row['parts'])}")
                 continue
             weight = f"{_said.number(row['mass'])} kg" if row["mass"] is not None else "no density"
-            lines.append(f"  {row['name']}: {weight}, {', '.join(row['parts'])}")
+            lines.append(f"  {row['name']}: {weight}, {_parts(row['parts'])}")
         assigned = {part for row in summary["materials"] for part in row["parts"]}
         missing = [part for part in summary["unweighed"] if part not in assigned]
         if missing:
-            lines.append(f"  no material: {', '.join(missing)}")
+            lines.append(f"  no material: {_parts(missing)}")
     else:
         lines.append("materials   none set")
     declared = summary.get("declared")
@@ -634,7 +648,7 @@ def summary_text(summary: dict[str, Any]) -> str:
         for row in declared.get("pointMasses") or []:
             lines.append(f"  point mass {row['name']} on {row['part']}: {_said.number(row['grams'])} g")
         if declared.get("scaled"):
-            lines.append(f"  scaled to a declared mass: {', '.join(declared['scaled'])}")
+            lines.append(f"  scaled to a declared mass: {_parts(declared['scaled'])}")
 
     def listed(title: str, rows: list[str]) -> None:
         if not rows:
