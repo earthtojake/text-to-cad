@@ -28,6 +28,15 @@ cad adds two things:
   integration declares runs through the library's module for it (``cad.kicad._command``), in that
   environment's Python, headless in private homes, its arguments, stdio and exit code the tool's.
 
+A program that imports an integration whose environment holds no library (the registry's ``library`` false:
+``import bpy``, the blender integration's) runs in that integration's environment instead (``extras.alone``): its
+own pins on its own Python (3.13, a managed one uv fetches), no cad. That Python runs the program itself,
+``python SCRIPT.py ARGS`` as ``uv run`` does, the script's folder first on its path, so a helper beside it
+imports; the tool's settings folders (``BLENDER_USER_CONFIG`` and the rest, the registry's ``homes``) are
+private folders in the cache folder unless the caller set them. A program that names cad too, or another
+integration, a header's ``requires-python`` or a ``--python`` no release of that Python meets, and a platform
+the tool has no build for are refused in one line, before anything is made.
+
 The ``cad`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
 """
 
@@ -269,6 +278,7 @@ class Prepared:
     script: str | None
     declared: list[str]
     wanted: str | None
+    alone: object = None  # the integration of an environment without cad (``extras.alone``), or None
 
 
 def prepare(plan: Plan, release: str) -> Prepared:
@@ -343,29 +353,43 @@ def prepare(plan: Plan, release: str) -> Prepared:
     # folder, else the run's.
     folder = project.root if project is not None else here
 
-    def scanned() -> set[str]:
-        # The import roots beside the program's own: its project's, and what ``PYTHONPATH`` names (as the
-        # program's run reads it, against the working folder).
+    used: list[tuple[set[str], bool]] = []
+
+    def uses() -> tuple[set[str], bool]:
+        # The program's integrations and whether it imports cad, scanned once. The import roots beside the
+        # program's own: its project's, and what ``PYTHONPATH`` names (as the program's run reads it, against the
+        # working folder).
+        if used:
+            return used[0]
         roots = [project.root, str(Path(project.root) / "src")] if project is not None else []
         roots += [extras.absolute(item, here) for item in os.environ.get("PYTHONPATH", "").split(os.pathsep) if item]
         if plan.kind == "script":
-            return scan.scan(script=script, roots=roots)
-        if plan.kind == "module":
-            return scan.scan(module=plan.target, cwd=here, roots=roots)
-        if plan.kind == "code":
-            return scan.scan(code=plan.target, cwd=here, roots=roots)
-        declared = for_command(plan.target)  # a command an integration declares: ``kicad-cli``
-        return {declared} if declared is not None else set()
+            used.append(scan.uses(script=script, roots=roots))
+        elif plan.kind == "module":
+            used.append(scan.uses(module=plan.target, cwd=here, roots=roots))
+        elif plan.kind == "code":
+            used.append(scan.uses(code=plan.target, cwd=here, roots=roots))
+        else:
+            declared = for_command(plan.target)  # a command an integration declares: ``kicad-cli``
+            used.append(({declared} if declared is not None else set(), False))
+        return used[0]
 
+    chosen = extras.integrations(header_cad=header_cad, given_cad=given_cad, project_cad=project_cad,
+                                 scanned=lambda: uses()[0],
+                                 requirements=[*with_, *declared, *(project.dependencies if project else ())])
+    python = (extras.absolute(plan.python, here) if plan.python and ("/" in plan.python or os.sep in plan.python)
+              else plan.python)
+    python_options = tuple(plan.python_options)
+    own = _alone(plan, named, chosen, uses, header_cad=header_cad, given_cad=given_cad, project_cad=project_cad,
+                 wanted=found.get("requires-python"))
+    if own is not None:
+        chosen = (own.name,)
+        python, python_options = extras.alone_python(own, python, python_options)
     spec = extras.Spec(
-        integrations=extras.integrations(header_cad=header_cad, given_cad=given_cad, project_cad=project_cad,
-                                         scanned=scanned, requirements=[*with_, *declared,
-                                                                        *(project.dependencies if project else ())]),
+        integrations=chosen,
         requirements=tuple(sorted(set(with_ + declared))), editable=tuple(dict.fromkeys(editable)),
-        files=tuple(dict.fromkeys(files)), options=tuple(options),
-        python=(extras.absolute(plan.python, here) if plan.python and ("/" in plan.python or os.sep in plan.python)
-                else plan.python),
-        python_options=tuple(plan.python_options), environment=extras.uv_settings(),
+        files=tuple(dict.fromkeys(files)), options=tuple(options), python=python,
+        python_options=python_options, environment=extras.uv_settings(),
         config=extras.uv_config(folder), lock=lock, lock_options=tuple(lock_options),
         transient=_words(plan.transient, here), folder=folder)
     # What builds a document of its run again, from any folder: its command line's options, one word each, and
@@ -379,7 +403,61 @@ def prepare(plan: Plan, release: str) -> Prepared:
              *(project_options if lock else []),
              *([f"--python={spec.python}"] if spec.python else []), *plan.python_options, *options,
              *([f"cad[{','.join(sorted(given_cad))}]"] if given_cad else []), *sorted(set(with_))]
-    return Prepared(spec, again, str(script) if declared else None, sorted(set(declared)), found.get("requires-python"))
+    return Prepared(spec, again, str(script) if declared else None, sorted(set(declared)), found.get("requires-python"),
+                    own)
+
+
+def _alone(plan: Plan, named: str, chosen: tuple[str, ...], uses, *, header_cad: tuple[str, ...] | None,
+           given_cad: set[str], project_cad: set[str], wanted: str | None):
+    """The integration of an environment without cad the program uses (``extras.alone``: ``import bpy``, the
+    blender integration's), found by its imports even where a header names cad's integrations; None for none.
+    ``extras.Refused`` in one line for a program that names cad too or another integration (each needs cad), a
+    header's ``requires-python`` or a ``--python`` no release of the integration's Python meets."""
+    from cad._internal.integrations import ALONE
+
+    from cad_server._internal import extras
+
+    found = {name for name in chosen if name in ALONE}
+    if header_cad is not None and plan.kind != "command":
+        found |= {name for name in uses()[0] if name in ALONE}
+    if not found:
+        return None
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    own = REGISTERED[sorted(found)[0]]
+    modules = " and ".join(own.modules)
+    why = []
+    if plan.kind != "command" and uses()[1]:
+        why.append("imports cad too")
+    if header_cad is not None:
+        why.append("its header names cad")
+    if given_cad:
+        why.append("--with names cad")
+    if project_cad:
+        why.append("its project names cad (--no-project runs it without the project)")
+    others = sorted(set(chosen) - found) + sorted(found - {own.name})
+    if others:
+        why.append(f"uses {' and '.join(others)}, {'an integration' if len(others) == 1 else 'integrations'} of "
+                   "cad's")
+    if why:
+        raise extras.Refused(f"{named} uses {modules}, which the {own.name} integration runs on Python {own.python} "
+                             f"without cad, and {'; '.join(why)}: a program that uses {modules} uses nothing of "
+                             f"cad's -- write what it reads first (cad model export ID scene.glb), then run each "
+                             "with cad run on its own")
+    if wanted:
+        admitted = extras.admits_line(wanted, own.python)
+        if admitted is None:
+            raise extras.Refused(f"{named}'s requires-python, {wanted!r}, is no version specifier")
+        if not admitted:
+            raise extras.Refused(f"{named} requires Python {wanted}, and the {own.name} integration's is "
+                                 f"{own.python}: {own.tool} is built for it alone")
+    given = (plan.python or "").strip()
+    line = re.match(r"(?:c?python)?-?(\d+\.\d+)(?:\.\d+)?(?:$|[-+])", given.lower())
+    if given and (line is not None and line[1] != own.python
+                  or line is None and given[0] in "<>=!~" and extras.admits_line(given, own.python) is False):
+        raise extras.Refused(f"{named} uses {modules}, which the {own.name} integration runs on Python "
+                             f"{own.python}: --python {given} is another; drop --python")
+    return own
 
 
 def _admitted(wanted: str | None, version: str, script: str, whose: str) -> None:
@@ -415,6 +493,38 @@ def _command(plan: Plan, python: str) -> list[str] | None:
     return [str(found), *plan.args] if found is not None else None
 
 
+def _alone_command(plan: Plan, python: str) -> list[str] | None:
+    """What runs a plan in an environment without cad: its Python running the program itself, as ``uv run``
+    does -- a script's folder first on its path, a module's and code's the working folder."""
+    flag = {"module": ["-m"], "code": ["-c"], "script": []}.get(plan.kind)
+    return None if flag is None else [python, *flag, plan.target, *plan.args]
+
+
+def _homes(integration, environ: dict[str, str]) -> dict[str, str]:
+    """The environment a program of an integration without cad runs in: the caller's, its tool's settings
+    folders (``homes``: ``BLENDER_USER_CONFIG`` and the rest) private ones in the cache folder (``homes/<name>``,
+    else the system's temporary folder where the cache cannot be written: an agent's sandbox) unless the caller
+    set them, and no ``PYTHONSAFEPATH``, so the script's folder comes first on its path."""
+    import tempfile
+
+    from cad.engine.places import cache_dir
+
+    found = dict(environ)
+    found.pop("PYTHONSAFEPATH", None)
+    prefix = f"{integration.name.upper()}_"
+    for root in (cache_dir() / "homes" / integration.name, Path(tempfile.gettempdir()) / f"cad-homes-{integration.name}"):
+        folders = {variable: root / variable.removeprefix(prefix).lower() for variable in integration.homes
+                   if not environ.get(variable)}
+        try:
+            for folder in folders.values():
+                folder.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        break
+    found.update({variable: str(folder) for variable, folder in folders.items()})
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
@@ -422,8 +532,9 @@ def main(argv: list[str] | None = None) -> int:
                                  "script's `# /// script` header names its own packages, and cad's integrations "
                                  "are worked out from its imports (a header naming `cad[...]` decides them); a "
                                  "command an integration declares (`kicad-cli`) gets that integration and runs "
-                                 "headless. The environment is made once, by the device's engine, and used again. "
-                                 "uv run's options are taken as uv takes them.\n")
+                                 "headless. A script that imports bpy runs on Python 3.13 in the blender "
+                                 "integration's environment, without cad. The environment is made once, by the "
+                                 "device's engine, and used again. uv run's options are taken as uv takes them.\n")
         return 0
     from cad_server._internal import base, extras
 
@@ -453,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
         spec = prepared.spec
         script = Path(plan.target).name if plan.kind == "script" else "the program"
         assert isinstance(spec, extras.Spec)
+        own = prepared.alone
         if spec.python is None:
             _admitted(prepared.wanted, installation.python or platform.python_version(), script, "the server's")
         if spec.default():
@@ -462,13 +574,22 @@ def main(argv: list[str] | None = None) -> int:
         assert env is not None  # made, or refused
         if spec.python is not None:
             version = str(extras.marker(env).get("python_version") or "")
+            whose = (f"the {own.name} integration's" if own is not None and not plan.python
+                     else f"the environment's (--python {spec.python})")
             if version:
-                _admitted(prepared.wanted, version, script, f"the environment's (--python {spec.python})")
+                _admitted(prepared.wanted, version, script, whose)
+                if own is not None and not extras.admits(f"=={own.python}.*", version):
+                    raise base.Refused(f"{own.tool} runs on Python {own.python}, and {whose} is {version}")
     except (base.Refused, OSError) as refused:
         said(str(refused) if isinstance(refused, base.Refused) else f"{refused.strerror or refused}")
         return 1
-    extras.tell(prepared.given, prepared.script, prepared.declared)  # what builds a document of it again
-    command = _command(plan, env.python)
+    environ = None
+    if own is not None:  # its own Python runs the program: nothing of cad's there
+        command = _alone_command(plan, env.python)
+        environ = _homes(own, dict(os.environ))
+    else:
+        extras.tell(prepared.given, prepared.script, prepared.declared)  # what builds a document of it again
+        command = _command(plan, env.python)
     if command is None:
         said(f"{plan.target} is no command of its environment: run a script, -m MODULE or -c CODE")
         return 2
@@ -476,8 +597,10 @@ def main(argv: list[str] | None = None) -> int:
     if os.name == "nt":  # no exec on Windows: a child, and its exit code
         import subprocess
 
-        return subprocess.call(command)
+        return subprocess.call(command, env=environ)
     try:
+        if environ is not None:
+            os.execve(command[0], command, environ)
         os.execv(command[0], command)
     except OSError as error:
         print(f"{PROG}: cannot run {command[0]}: {error.strerror or error}", file=sys.stderr, flush=True)

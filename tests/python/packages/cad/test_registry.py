@@ -53,12 +53,26 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertIn(integration.process, registry.PROCESS_KINDS)
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
-                if integration.extra is None:
+                if not integration.library:
+                    # Its own Python and its own exact pins, in an environment without cad: no extra holds them.
+                    self.assertIsNone(integration.extra)
+                    self.assertRegex(integration.python or "", r"^3\.\d+$")
+                    self.assertTrue(integration.modules and integration.distributions and integration.requires)
+                    for requirement in integration.requires:
+                        self.assertRegex(requirement, r"^[a-z0-9-]+==[0-9][0-9a-z.]*$", "each exactly pinned")
+                    names = [requirement.split("==")[0] for requirement in integration.requires]
+                    self.assertEqual(len(names), len(set(names)))
+                    self.assertTrue(set(integration.distributions) <= set(names))
+                    self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
+                    self.assertTrue(integration.holds and integration.download_mb)
+                elif integration.extra is None:
                     # A program the person installs, which ships no package: found by its probe alone.
                     self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
                     self.assertFalse(integration.modules or integration.distributions)
                 else:
                     self.assertTrue(integration.modules and integration.distributions)
+                    self.assertFalse(integration.python or integration.requires or integration.platforms,
+                                     "an extra's pins are the library's, on its Python")
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
@@ -86,6 +100,19 @@ class TheTableIsTheSource(unittest.TestCase):
             self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
+        # Blender's bpy is no extra: an integration on Python 3.13 without cad, which a program's imports find.
+        blender = registry.INTEGRATIONS["blender"]
+        self.assertEqual((blender.library, blender.python, blender.requires[0], blender.tool),
+                         (False, "3.13", "bpy==5.2.3", "bpy 5.2.3"))
+        self.assertEqual(("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"), blender.platforms)
+        self.assertEqual(sorted(integrations.ALONE), ["blender"])
+        self.assertEqual(("blender", "blender"), (integrations.for_module("bpy.ops"), integrations.for_distribution("bpy")))
+        self.assertIsNone(integrations.for_command("bpy"))
+        self.assertRegex(integrations.missing(ModuleNotFoundError("no bpy", name="bpy")),
+                         r"^bpy comes with the blender integration, on Python 3\.13 without cad: ")
+        self.assertEqual(["macOS x86-64", "Linux arm64", "Windows x86-64", "macOS arm64"],
+                         [registry.platform_of(*given) for given in (("darwin", "x86_64"), ("linux", "aarch64"),
+                                                                     ("win32", "AMD64"), ("darwin", "arm64"))])
 
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone

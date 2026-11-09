@@ -5,6 +5,9 @@ extra are listed, and its document types say which of their functions need which
 view of it the server's ``cad run`` reads to work out a script's integrations from its imports (a static
 scan, no code run), and a command's from its name (``kicad-cli`` is the kicad integration's), to add one a
 resolution pulled in through another package, and to give a requirement its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
+An integration whose environment holds no library (the registry's ``library`` false: blender's bpy, on a Python of
+its own) is no extra: it is ``ALONE``'s, by its name, and the lookups by module and by distribution find it
+there too, so a program that imports bpy, or names it, is known for it.
 
 The standard library alone: the server's command and a model's process both read it, and neither loads
 any integration to do so.
@@ -14,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "alongside", "for_command", "for_distribution", "for_module", "for_name",
+__all__ = ["ALONE", "INTEGRATIONS", "Integration", "alongside", "for_command", "for_distribution", "for_module", "for_name",
            "missing", "needs"]
 
 
@@ -34,6 +37,10 @@ class Integration:
     find_links: tuple[str, ...] = ()
     commands: tuple[str, ...] = ()
     runner: str | None = None
+    #: Whether its environment holds the library; one that does not (``ALONE``'s) is keyed by its name, which
+    #: ``extra`` holds, and runs on its own Python (``python``).
+    library: bool = True
+    python: str | None = None
 
 
 def _normal(name: str) -> str:
@@ -62,6 +69,24 @@ def _from_registry() -> dict[str, Integration]:
 INTEGRATIONS: dict[str, Integration] = _from_registry()
 
 
+def _alone() -> dict[str, Integration]:
+    """Every integration whose environment holds no library, from the registry, by its name."""
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    return {name: Integration(name, integration.modules,
+                              tuple(dict.fromkeys(_normal(item) for item in integration.identity)), integration.indexes,
+                              integration.find_links, library=False, python=integration.python)
+            for name, integration in REGISTERED.items() if not integration.library}
+
+
+# Every integration whose environment holds no library (blender's), by its name.
+ALONE: dict[str, Integration] = _alone()
+
+
+def _every() -> dict[str, Integration]:
+    return {**INTEGRATIONS, **ALONE}
+
+
 # The library's own names (``cad``, ``cadgen``): ``cad.<integration>`` is that integration's namespace.
 _LIBRARY = ("cad", "cadgen")
 
@@ -79,7 +104,7 @@ def for_module(name: str) -> str | None:
     parts = name.split(".")
     if parts[0] in _LIBRARY:
         return for_name(name)
-    return next((key for key, found in INTEGRATIONS.items() if parts[0] in found.modules), None)
+    return next((key for key, found in _every().items() if parts[0] in found.modules), None)
 
 
 def for_name(name: str) -> str | None:
@@ -152,7 +177,7 @@ def needs(name: str) -> tuple[str, ...]:
 def for_distribution(name: str) -> str | None:
     """The integration a distribution (any spelling of its name) is part of, or None."""
     normal = _normal(name)
-    return next((key for key, found in INTEGRATIONS.items() if normal in found.distributions), None)
+    return next((key for key, found in _every().items() if normal in found.distributions), None)
 
 
 def for_command(name: str) -> str | None:
@@ -174,4 +199,7 @@ def missing(error: BaseException) -> str | None:
     if key is None:
         return None
     top = error.name.split(".", 1)[0]
+    if key in ALONE:  # never beside cad: a script of its own
+        return (f"{top} comes with the {key} integration, on Python {ALONE[key].python} without cad: import it in a "
+                "script of its own, which imports nothing of cad's, and run that with cad run")
     return f"{top} comes with cad's {key} integration: add `cad[{key}]` to the script's header"

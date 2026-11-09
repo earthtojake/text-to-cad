@@ -55,6 +55,8 @@ def carries(integration: Integrations) -> bool:
 
     from cad.registry import INTEGRATIONS
 
+    if any(not INTEGRATIONS[name].library for name in _names(integration)):
+        return False  # its own Python, never this process's
     modules = tuple(module for name in _names(integration) for module in INTEGRATIONS[name].modules)
     try:
         return bool(modules) and all(importlib.util.find_spec(name) is not None for name in modules)
@@ -66,13 +68,14 @@ def found(integration: Integrations) -> tuple[str, str, str]:
     """Where ``integration``'s operations run, read and nothing made or marked used (``cad doctor``):
     ``(state, folder, release)`` -- ``carried`` (this process's environment holds it; no folder), ``made`` or
     ``not made`` (made on first need, by the first command that needs it), the folder of its environment
-    either way, and the release of ``cad[<integration>]`` there."""
+    either way, and the release of ``cad[<integration>]`` there (one with no library is no release's: its
+    environment's, made on its own Python, outlives an update)."""
     from cad_server._internal import base, extras
 
     installation = base.Installation.here()
     if carries(integration):
         return "carried", "", installation.release
-    spec = extras.Spec(integrations=_names(integration))
+    spec = extras.integration_spec(_names(integration))
     folder = extras.where(installation, spec)
     return ("made" if extras._complete(folder, spec) is not None else "not made"), str(folder), installation.release
 
@@ -84,7 +87,7 @@ def environment(integration: Integrations, told: Callable[[str], None], *, engin
     from cad_server._internal import base, extras
 
     try:
-        found = extras.ensure(base.Installation.here(), extras.Spec(integrations=_names(integration)),
+        found = extras.ensure(base.Installation.here(), extras.integration_spec(_names(integration)),
                               told=told, engine=engine)
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None

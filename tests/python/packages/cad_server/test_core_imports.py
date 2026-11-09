@@ -186,17 +186,23 @@ class IntegrationsTest(unittest.TestCase):
             with self.subTest(integration=integration.name):
                 named = {re.split(r"[\s<>=!~;\[]", requirement, maxsplit=1)[0].lower().replace("_", "-")
                          for requirement in extras.get(integration.extra or "", [])}
+                if not integration.library:  # its own pins, no extra's: its distributions are among them
+                    self.assertNotIn(integration.name, extras)
+                    self.assertTrue(set(integration.distributions) <= {item.split("==")[0] for item in integration.requires})
+                    continue
                 self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
                                  "an integration's distributions are its extra's")
                 self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
-        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))
+        # An integration with no library in its environment (blender's bpy) has no code of ours in it: no package.
+        hosted = {name for name, integration in INTEGRATIONS.items() if integration.library}
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *hosted}))
         self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
         import cad
 
         self.assertEqual(sorted(cad._TYPES), sorted(DOCUMENT_TYPES))
-        self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
+        self.assertEqual(sorted(cad._INTEGRATIONS), sorted(hosted))
 
     def test_each_integration_imports_its_own_extras_dependencies_alone(self) -> None:
         from cad.registry import INTEGRATIONS

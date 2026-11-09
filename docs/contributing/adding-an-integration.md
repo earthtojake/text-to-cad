@@ -28,6 +28,18 @@ where it is, is usually better than asking a person to install it (`earthtojake/
 kernel's own line), whether this installation carries it or where its environment is and whether it is
 made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
 
+**An integration on its own Python, without the library.** A tool that cannot be installed beside `cad`
+(Blender's `bpy`: cp313 wheels alone, and `cad` needs 3.14) has no extra. Its registry entry says so
+(`library=False`) and carries what an extra would: its Python (`python="3.13"`, a managed one uv fetches),
+its exact pins (`requires`, the tool and everything it needs, each `==`, resolved for every platform it has),
+the platforms it is built for (`platforms`, `cad.registry.PLATFORMS`' words) and the variables naming its
+own settings folders (`homes`, pointed at private folders in the cache). `cad run` gives a program that
+imports it (`modules`) that environment and no `cad`, runs it with that Python itself (`python SCRIPT.py`,
+its folder first), and refuses in one line a program that imports `cad` or another integration too, a
+`requires-python` or `--python` its Python cannot meet, and a platform without a build. Its key holds no
+release, so an update keeps it; `cad doctor` gives it a row and `--prune` takes it unused. It has no
+`cad/<name>/` package and no `_command`: nothing of ours runs there (`blender` is the example).
+
 ## Is it really an integration?
 
 cad supports a tool only where cad's own code calls it. A **dependency** -- one package or binary --
@@ -52,7 +64,8 @@ an integration.
       (`fea`, `pcb`, `cam`).
 - [ ] **The extra and its pins**, in `packages/cad/pyproject.toml` (`[project.optional-dependencies]`):
       exactly the packages our code for it imports, each bounded as the `build123d` extra's are, with a
-      comment saying why. An external program needs no extra until it ships as a package.
+      comment saying why. An external program needs no extra until it ships as a package; a tool that
+      cannot be installed beside the library has none either, its pins in its registry entry (above).
 - [ ] **The registry entry**, `INTEGRATIONS` in `packages/cad/src/cad/registry.py`: name, summary,
       extra, process kind (`in-process`, `separate`, `both`) and, for an external program, its `Probe`
       (the program, its minimum version, its install hint, the variable that names it outright); and

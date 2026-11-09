@@ -538,6 +538,22 @@ sets stay, one per set a program named: `cad doctor` reports those unused for a 
 its marker), `cad doctor --prune` removes them (`leftovers.package_environments`). After an update,
 a new release's environments are made as its runs ask for them, from uv's cache.
 
+**An environment without cad** (`extras.alone`). A program that imports an integration the registry
+marks `library=False` -- `import bpy`, blender's, the scan finding it through local imports, a header or
+`--with bpy` too -- gets that integration's environment instead: its exact pins (`requires`) and the
+program's packages, on its Python (`--python 3.13 --managed-python`: uv fetches a managed one, never `uv
+python install`, which writes `~/.local/bin/python3.13`), nothing resolved again and no cad. Its key and
+marker hold the architecture and the spec, no release and no installation, so an update keeps it and no
+release's sweep removes it; `cad doctor` gives it a row, and the week-unused prune takes it. Its Python
+runs the program itself (`python SCRIPT.py ARGS`, the script's folder first, as `uv run` runs it), the
+tool's settings folders (`homes`: `BLENDER_USER_CONFIG` and the rest) private ones in the cache folder
+(`homes/<name>`, the system's temporary folder where the cache cannot be written) unless the caller named
+them. Refused in one line, before anything is made: a program that imports cad too or uses another
+integration (`render.py uses bpy, which the blender integration runs on Python 3.13 without cad, and imports
+cad too: ...`), a header's `requires-python` or a `--python` no release of 3.13 meets, and a platform the
+tool has no build for (`bpy 5.2.3 has no build for macOS x86-64: the blender integration runs on macOS
+arm64, Linux x86-64, Windows x86-64 and Windows arm64`).
+
 **What cannot be done is said in one line** (`base.failure`): requirements uv cannot resolve beside
 cad's pins, with its reason -- `build123d<0.1 cannot be resolved beside cad[build123d] 0.10.0:
 Because ...` -- and a package its cache lacks where the network cannot be reached, by name -- `the
@@ -668,7 +684,8 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              explicitly calls (and python SCRIPT.py in an environment
                                              of the library's, with its kernel); a command an
                                              integration declares (kicad-cli) with that integration,
-                                             headless
+                                             headless; a script that imports bpy, on Python 3.13
+                                             in the blender integration's environment, without cad
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
 cad model export ID DST [DST ...] [--tolerance MM] [--angle DEG] [--json]

@@ -515,7 +515,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     add, or to run the script with `cad run`. A command line an integration's extra installs
     (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
     and the integration's `_command` module runs the environment's own command there, headless in
-    private homes, never one on PATH.
+    private homes, never one on PATH. A tool that cannot be installed beside the library (blender's
+    bpy, built for Python 3.13 alone) has no extra: its registry entry names its Python and its exact
+    pins (`library=False`), and a program that imports it runs in that environment without the library,
+    importing nothing of cad's.
 
 30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
     <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's

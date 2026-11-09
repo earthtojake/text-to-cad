@@ -15,7 +15,9 @@ says it does -- an integration's namespace that integration, a document type's r
 calculix, with build123d and netgen; ``needs``). A type alone (``from cad import step``) needs
 nothing. Nothing is imported, and a module of no local file is passed over.
 An import made by name at run time (``importlib.import_module``) is not seen: the program's run says which
-extra it lacks, in one line, and its header names it.
+extra it lacks, in one line, and its header names it. ``uses`` says too whether the program imports the
+library itself (``import cad``, ``from cad import model``): a program of an integration whose environment
+holds no library (bpy's) may not.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ import ast
 import os
 from pathlib import Path
 
-__all__ = ["LIMIT", "scan"]
+__all__ = ["LIMIT", "scan", "uses"]
 
 # The most local files one scan reads: a project's own tree, never a vendored world.
 LIMIT = 2000
@@ -78,11 +80,14 @@ class _Reader:
         self.seen: set[Path] = set()
         self.queue: list[Path] = []
         self.found: set[str] = set()
+        self.library = False  # whether it imports the library itself
 
     def module(self, dotted: str) -> None:
         """An absolute import: its integration, and each local file of it and of its parents."""
         from cad._internal.integrations import needs
 
+        if dotted.split(".")[0] in LIBRARY:
+            self.library = True
         keys = needs(dotted)
         if keys:
             self.found.update(keys)
@@ -164,6 +169,12 @@ def scan(*, script: str | os.PathLike | None = None, module: str | None = None, 
     the local modules it imports (see the module): a ``script``'s file, a ``module`` found under the working
     folder ``cwd``, or ``code`` run there. ``roots``: more folders absolute imports resolve in (a project's,
     its ``src``)."""
+    return uses(script=script, module=module, code=code, cwd=cwd, roots=roots)[0]
+
+
+def uses(*, script: str | os.PathLike | None = None, module: str | None = None, code: str | None = None,
+         cwd: str | os.PathLike | None = None, roots: list[str | os.PathLike] | tuple = ()) -> tuple[set[str], bool]:
+    """``scan``'s integrations, and whether the program (or a local module it imports) imports the library."""
     here = Path(cwd or os.getcwd()).resolve()
     if script is not None:
         path = Path(script).resolve()
@@ -180,4 +191,4 @@ def scan(*, script: str | os.PathLike | None = None, module: str | None = None, 
     elif code is not None:
         reader.read(code, here / "<string>")
     reader.drain()
-    return reader.found
+    return reader.found, reader.library
