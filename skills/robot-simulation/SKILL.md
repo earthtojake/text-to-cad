@@ -165,8 +165,8 @@ mechanism):
   floating base's frame stands at its link's centre of mass, its axes the model's: a humanoid's at its
   torso, not on the floor between its feet, so a key's first three values and the simulator's base
   position read where the base is (a URDF fixes it to an empty root at the model's origin, `base_link`,
-  or `base_footprint` where the base is named `base_link`). Mount an IMU or a camera on a `frame()` of the torso's part, not on the base frame. Bolted
-  is the default, an arm on a bench. On a part or a sub-assembly of a model with no joints, that
+  or `base_footprint` where the base is named `base_link`). Mount an IMU or a camera on a `frame()` of
+  the torso's part, not on the base frame. Bolted is the default, an arm on a bench. On a part or a sub-assembly of a model with no joints, that
   node's body alone floats.
 - **`link(part_or_assembly, name)`** names the link its parts make (`base_link`, `upper_arm_link`)
   where the first part's label is not the name a consumer wants. A link otherwise takes its jointed

@@ -82,7 +82,10 @@ A normal snapshot uses Solid mode, and every snapshot is light, whatever the vie
 ...), `exploded=AMOUNT`, or the display object: `camera` (projection and focal length) and `clip`
 (`{"clip": {"axis": "x", "at": 0.05}}`, `at` in metres, the file's own unit, as the viewer draws
 it). `--grid` draws the measuring grid, and `--camera`, `--size-profile`, `--width` and `--height`
-frame and size it. A Quick Edit packet from the viewer (inline JSON, saved to a temporary
+frame and size it. The `--camera` presets look along the file's axes as a CAD view does: `front`
+from -Y, `back` from +Y, `right` from +X, `left` from -X, `top` from +Z, `bottom` from -Z, `iso` from
+above at a corner. A robot facing +X, as ROS lays one out (REP 103: X forward, Y left), shows its face
+to `--camera right` and its right side to `--camera front`. A Quick Edit packet from the viewer (inline JSON, saved to a temporary
 `.snapshot.json`, or its path) replays with `--annotation <packet> --camera authored`, its job's
 `jointValues` given as `--pose`. Inspect supplied annotations before editing. Without annotations,
 the captured view is optional context; render it when useful to the request.
