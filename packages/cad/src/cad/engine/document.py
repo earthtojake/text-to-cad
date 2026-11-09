@@ -1782,6 +1782,7 @@ def _read(path: Path) -> Any:
             if not reader.Transfer(doc):
                 raise ValueError(f"cannot read {path}")
             correct_step_densities(doc, path)
+            forget_step_attributes(doc, path)
             from cad.engine.step_style import read_visual_styles
 
             read_visual_styles(reader, doc)
@@ -1863,6 +1864,48 @@ def correct_step_densities(doc: Any, path: Any) -> int:
                     corrected += 1
         children.Next()
     return corrected
+
+
+def forget_step_attributes(doc: Any, path: Any) -> int:
+    """A read STEP's user-defined attributes that OCCT's reader took for materials, made no material: returns how
+    many it forgot or named.
+
+    A CAD tool writes a part's parameters as user-defined attributes (``GENERAL_PROPERTY('', 'QTY', 'user defined
+    attribute')`` and a ``DESCRIPTIVE_REPRESENTATION_ITEM`` holding its value): a sheet-metal default, a quantity, the
+    file the part came from. OCCT's reader reads a property's descriptive item as a material's name and description,
+    so each arrived a material named for the parameter (``QTY``, ``PTC_COMMON_NAME``) with no density, and every part
+    carrying one was listed under it. Such a material -- its name an attribute's, no density -- is made nameless
+    here, which ``_label_material`` reads as none; one whose attribute names a material (``PTC_MATERIAL_NAME``) and
+    holds a value is named for that value instead. A material the file declares (a density, a material
+    designation) is left as it is."""
+    import re
+
+    from OCP.TCollection import TCollection_HAsciiString
+    from OCP.TDF import TDF_ChildIterator
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
+
+    data = Path(path).read_bytes()
+    if b"user defined attribute" not in data:
+        return 0
+    attributes = set(re.findall(r"GENERAL_PROPERTY\s*\(\s*'[^']*'\s*,\s*'([^']*)'\s*,\s*'user defined attribute'",
+                                data.decode("latin-1"), re.IGNORECASE))
+    forgotten = 0
+    tool = XCAFDoc_DocumentTool.MaterialTool_s(doc.Main())
+    children = TDF_ChildIterator(tool.Label())
+    while children.More():
+        material = XCAFDoc_Material()
+        if children.Value().FindAttribute(XCAFDoc_Material.GetID_s(), material):
+            name = material.GetName().ToCString() if material.GetName() is not None else ""
+            value = material.GetDescription().ToCString() if material.GetDescription() is not None else ""
+            if name in attributes and not material.GetDensity() > 0:
+                named = value if "MATERIAL" in name.upper() and value.strip() else ""
+                # On the label: ``FindAttribute`` fills a copy, and setting the copy changes nothing.
+                XCAFDoc_Material.Set_s(children.Value(), TCollection_HAsciiString(named),
+                                       TCollection_HAsciiString(named), 0.0, TCollection_HAsciiString(""),
+                                       TCollection_HAsciiString(""))
+                forgotten += 1
+        children.Next()
+    return forgotten
 
 
 def refuse_external_files(reader: Any, path: Any) -> None:

@@ -137,6 +137,43 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual([product["material"]["material"]["density"] for product in header["products"]
                           if product.get("material")], [2700.0])
 
+    def test_a_step_s_user_defined_attributes_are_no_materials(self):
+        """A CAD tool writes a part's parameters as user-defined attributes, which OCCT's reader takes for materials
+        named for the parameter: no material is read of one, by the document loader or the reader process's parse;
+        one naming a material is read as the material it names."""
+        import re
+
+        def written(attributes: tuple[tuple[str, str], ...]) -> Path:
+            path = self.folder / f"{attributes[-1][0].lower()}.step"
+            box = bd.Box(10, 10, 10)
+            box.label = "block"
+            bd.export_step(box, str(path))
+            text = path.read_text(encoding="latin-1")
+            definition = re.search(r"#(\d+)\s*=\s*PRODUCT_DEFINITION\s*\(", text).group(1)
+            context = re.search(r"#(\d+)\s*=\s*\(\s*GEOMETRIC_REPRESENTATION_CONTEXT", text).group(1)
+            at, rows = 9000, []
+            for name, value in attributes:  # as a CAD tool writes a parameter
+                rows += [f"#{at}=PROPERTY_DEFINITION('{name}','user defined attribute',#{definition});",
+                         f"#{at + 1}=GENERAL_PROPERTY('','{name}','user defined attribute');",
+                         f"#{at + 2}=GENERAL_PROPERTY_ASSOCIATION('user defined attribute','',#{at + 1},#{at});",
+                         f"#{at + 3}=DESCRIPTIVE_REPRESENTATION_ITEM('{name}','{value}');",
+                         f"#{at + 4}=REPRESENTATION('',(#{at + 3}),#{context});",
+                         f"#{at + 5}=PROPERTY_DEFINITION_REPRESENTATION(#{at},#{at + 4});"]
+                at += 10
+            path.write_text(re.sub(r"ENDSEC;\s*END-ISO", lambda end: "\n".join(rows) + "\n" + end.group(0), text,
+                                   count=1), encoding="latin-1")
+            return path
+
+        def materials(path: Path) -> tuple[list, list]:
+            loaded = [(prototype.get("material") or {}).get("material")
+                      for prototype in export.Source.read(path).structure["prototypes"]]
+            header, _packed = reader._parse(str(path))
+            parsed = [(product.get("material") or {}).get("material") for product in header["products"]]
+            return [found and found["name"] for found in loaded], [found and found["name"] for found in parsed]
+
+        self.assertEqual(materials(written((("QTY", ""), ("PTC_COMMON_NAME", "block.prt")))), ([None], [None]))
+        self.assertEqual(materials(written((("PTC_MATERIAL_NAME", "STEEL"),))), (["STEEL"], ["STEEL"]))
+
     def test_inherited_material_and_equal_placements_share_a_prototype(self):
         left = bd.Box(2, 3, 4)
         right = left.moved(bd.Location((10, 0, 0)))
