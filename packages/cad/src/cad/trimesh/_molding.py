@@ -640,7 +640,8 @@ def _probe_mesh(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, float, str | No
         edge = coarser
     if edge <= 0 or not np.isfinite(edge):
         return mesh, 0.0, None
-    probe = mesh.subdivide_to_size(edge)
+    probe, parent = mesh.subdivide_to_size(edge, return_index=True)
+    probe.metadata["parent"] = np.asarray(parent, dtype=int)  # each probe face's face of ``mesh``
     note = None
     if edge > target * 1.5:
         note = (f"faces were split to {round(edge, 3)} mm, not the {round(target, 3)} mm this "
@@ -666,6 +667,30 @@ def _smoothed(mesh: trimesh.Trimesh, diag: float) -> np.ndarray:
         np.add.at(total, pairs[:, 1], normals[pairs[:, 0]] * mesh.area_faces[pairs[:, 0], None])
     size = np.linalg.norm(total, axis=1)
     return total / np.where(size > 0, size, 1.0)[:, None]
+
+
+def _leans_both_ways(body: trimesh.Trimesh, pull: np.ndarray, noise_deg: float, cone_deg: float = 30.0) -> np.ndarray:
+    """Per facet of ``body``: do the facets sharing a corner with it (itself among them) whose normals lie
+    within ``cone_deg`` of its own lean past ``noise_deg`` toward the pull and away from it both?"""
+    import scipy.sparse as sparse
+
+    faces = np.asarray(body.faces)
+    count = len(faces)
+    if not count:
+        return np.zeros(0, dtype=bool)
+    normals = body.face_normals
+    incidence = sparse.csr_matrix((np.ones(3 * count), (np.repeat(np.arange(count), 3), faces.ravel())),
+                                  shape=(count, len(body.vertices)))
+    pairs = (incidence @ incidence.T).tocoo()
+    near = np.einsum("ij,ij->i", normals[pairs.row], normals[pairs.col]) > np.cos(np.radians(cone_deg))
+    rows, cols = pairs.row[near], pairs.col[near]
+    lean = normals @ pull
+    tol = np.sin(np.radians(noise_deg))
+    up = np.zeros(count, dtype=bool)
+    down = np.zeros(count, dtype=bool)
+    np.logical_or.at(up, rows, lean[cols] > tol)
+    np.logical_or.at(down, rows, lean[cols] < -tol)
+    return up & down
 
 
 def _air_ahead(body: trimesh.Trimesh, centers: np.ndarray, normals: np.ndarray, step: float) -> np.ndarray:
@@ -738,9 +763,16 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         # A facet leaning under half a degree is taken as zero draft (both ways tried): a mesh's vertex noise
         # tilts a straight bore's facets about that much, and a bore is not trapped by its own floor.
         zero = lean_deg < max(zero_tol, _NOISE_DEG)
+        # A facet where the surface about it leans both ways is square to the pull too: a straight wall's chords
+        # tilt each way by the tessellation's angle (9 deg on a coarse 3MF's hub), a parting line crosses a
+        # curved face there.
+        parent = probe.metadata.get("parent") if probe is not body else None
+        parent = np.arange(len(probe.faces)) if parent is None else parent
+        both = _leans_both_ways(body, pull, max(zero_tol, _NOISE_DEG))[parent]
+        zero |= both
         size = max(float(np.linalg.norm(body.extents)), 1.0)
         # A ray starts a thousandth of the part's size off its facet (``_CAST_STEP``: clear of a mesh's vertex
-        # noise), or a third of the way across the air in front of it where that is nearer (``_offsets``): a
+        # noise), or a third of the way across the air in front of it where that is nearer (``_air_ahead``): a
         # ray started past a groove's far wall starts in the material and is blocked whatever the groove.
         eps = _CAST_STEP * size
         offset = np.full(len(centers), eps)
@@ -761,6 +793,16 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         blocked_plus = blocked(np.ones(len(centers)), zero)
         blocked_minus = blocked(-np.ones(len(centers)), zero)
         trapped = zero & blocked_plus & blocked_minus
+        if (trapped & both).any():
+            # Such a facet's chord leans over its own centre: a ray along the pull crosses it into the material.
+            # Its rays run along its own plane instead, the way nearest the pull each way.
+            idx = np.nonzero(trapped & both)[0]
+            along_plane = pull - normals[idx] * (normals[idx] @ pull)[:, None]
+            along_plane /= np.maximum(np.linalg.norm(along_plane, axis=1), 1e-12)[:, None]
+            trapped[idx] = np.logical_and.reduce([
+                body.ray.intersects_any(ray_origins=centers[idx] + (normals[idx] + way * along_plane) * offset[idx, None],
+                                        ray_directions=way * along_plane)
+                for way in (1.0, -1.0)])
         candidates = blocked_lean | trapped
         idx = np.nonzero(candidates)[0]
         ahead = _air_ahead(body, centers[idx], normals[idx], _FOLD_STEP * size) if len(idx) else np.zeros(0)

@@ -564,6 +564,42 @@ class NarrowGrooveTest(unittest.TestCase):
                 self.assertLessEqual(formed, mesh.measurements["undercuts"]["candidate_area_mm2"] * 1.01, label)
 
 
+class ChordedWallTest(unittest.TestCase):
+    """A straight hub on a flange tessellated with its rows half a step apart (a coarse 3MF's): its chords lean
+    2.2 deg each way, the ones leaning down over the flange. A wall whose facets lean both ways is square to the
+    pull, and its rays run along each facet's own plane: the hub is no undercut (a 160 mm2 one before)."""
+
+    @staticmethod
+    def _hub(segments: int = 16):
+        import trimesh
+
+        turn = np.linspace(0.0, 2 * np.pi, segments, endpoint=False)
+
+        def ring(radius, z, offset=0.0):
+            return np.c_[radius * np.cos(turn + offset), radius * np.sin(turn + offset), np.full(segments, z)]
+
+        vertices = np.vstack([ring(20, 0), ring(20, 2), ring(10, 2), ring(10, 7, np.pi / segments),
+                              [[0, 0, 0], [0, 0, 7]]])
+
+        def at(row, k):
+            return row * segments + k % segments
+
+        faces = []
+        for k in range(segments):
+            faces += [[at(0, k), at(0, k + 1), at(1, k + 1)], [at(0, k), at(1, k + 1), at(1, k)],
+                      [at(1, k), at(1, k + 1), at(2, k + 1)], [at(1, k), at(2, k + 1), at(2, k)],
+                      [at(2, k), at(2, k + 1), at(3, k)], [at(3, k), at(2, k + 1), at(3, k + 1)],
+                      [4 * segments + 1, at(3, k), at(3, k + 1)], [4 * segments, at(0, k + 1), at(0, k)]]
+        return trimesh.Trimesh(vertices, np.array(faces), process=False)
+
+    def test_a_chorded_straight_wall_is_no_undercut(self) -> None:
+        mesh = mold_tool._prepared(self._hub())
+        self.assertTrue(mesh.is_watertight and mesh.volume > 0)
+        facts = mold_tool._undercut_facts(mesh, np.array([0.0, 0.0, 1.0]), 0.05)
+        self.assertEqual(facts["undercut_count"], 0)
+        self.assertLess(facts["candidate_area_mm2"], 10.0)
+
+
 class OrientationTest(unittest.TestCase):
     def test_a_turn_about_the_pull_keeps_the_verdict_and_the_figures(self) -> None:
         import trimesh

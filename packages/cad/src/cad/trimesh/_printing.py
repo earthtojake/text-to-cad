@@ -106,21 +106,40 @@ def _load(path: str, units: str = "mm") -> trimesh.Trimesh:
 def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
     """The mesh's bodies, each solid with the sealed voids inside it, and how many voids there are.
 
+    A body is a connected piece of the surface, split with no repair: an opening stays open, as ``_mesh.closure``
+    judges it (an edge used an odd number of times). Two bodies sharing a face use its edges four times, so the
+    split leaves each without it and the face's copies over as pieces of their own: a piece no edge of which
+    is a boundary is closed, so its holes are faces another body shares, and are filled; a piece that fills to
+    no volume is such a face's copy, no body. A piece of next to no area (``_mesh.SLIVER_AREA``) is never a body.
     A shell's normals point away from its material, so a sealed void's signed volume is negative and a
     solid's positive (``_molding._shells`` reads them so too): a cavity a part encloses -- a groove that
     does not reach the surface -- is that part's, and its walls are measured with it, never as a body
     of its own. A void goes with the solid that holds its centre, else with the largest. An open sliver of no
     area worth a thousandth of the whole (an exporter's stray facets) is no body: a ray from one measured
-    a wall the part has not. Nor is the face two bodies share: the split closes each body with its own copy
-    of it and leaves the face over as an open piece of its own, every triangle of it a closed body's."""
-    parts = list(mesh.split(only_watertight=False))  # repair: two bodies sharing a face are closed again
-    if len(parts) <= 1:
+    a wall the part has not."""
+    faces = np.asarray(mesh.faces)
+    pieces = trimesh.graph.connected_components(mesh.face_adjacency, nodes=np.arange(len(faces)), min_len=1)
+    if len(pieces) <= 1:
         return [mesh], 0
-    closed = [part for part in parts if part.is_watertight]
-    tolerance = 1e-6 * max(1.0, float(np.linalg.norm(mesh.extents)))
-    parts = [part for part in parts if part.is_watertight or not _mesh.lies_on(part, closed, tolerance)] or parts
+    edges = np.sort(np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]), axis=1)
+    _unique, inverse, counts = np.unique(edges, axis=0, return_inverse=True, return_counts=True)
+    odd = (counts[inverse.ravel()] % 2 == 1).reshape(3, -1).T.any(axis=1)
+    diagonal = max(1.0, float(np.linalg.norm(mesh.extents)))
+    areas = np.asarray(mesh.area_faces)
+    parts = []
+    for piece in pieces:
+        piece = np.asarray(piece, dtype=int)
+        if float(areas[piece].sum()) <= _mesh.SLIVER_AREA * diagonal ** 2:
+            continue
+        part = trimesh.Trimesh(mesh.vertices, faces[piece], process=False)
+        part.remove_unreferenced_vertices()
+        if not odd[piece].any() and not part.is_watertight:
+            trimesh.repair.fill_holes(part)
+            if part.is_watertight and abs(float(part.volume)) <= 1e-9 * diagonal ** 3:
+                continue  # a shared face's copy
+        parts.append(part)
     if len(parts) <= 1:
-        return parts, 0
+        return parts or [mesh], 0
     total = float(mesh.area) or 1.0
     solids, voids = [], []
     for part in parts:
@@ -161,19 +180,6 @@ def _mesh_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] 
     facts["body_count"] = len(bodies)
     if voids:
         facts["internal_void_count"] = voids
-    if not facts["watertight"] and len(bodies) > 1:
-        # Judged per body as the walls split them: two bodies sharing a face (a two-material print) are each
-        # closed once split, though the face they share leaves the whole's edges used four times.
-        opened = [body for body in bodies if not body.is_watertight]
-        closed = [body for body in bodies if body.is_watertight]
-        facts.pop("open_body_count", None)
-        facts.pop("open_bodies", None)
-        facts["watertight"] = not opened
-        facts["volume_mm3"] = round(abs(sum(float(body.volume) for body in closed)), 1) if closed else None
-        if opened:
-            listed = [entry for body in opened for entry in _mesh.closure(body)["open_bodies"]]
-            facts.update(open_body_count=len(opened),
-                         open_bodies=sorted(listed, key=lambda entry: -entry["area_mm2"])[:8])
     return facts
 
 

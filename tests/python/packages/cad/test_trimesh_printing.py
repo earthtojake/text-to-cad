@@ -108,6 +108,41 @@ class MeshCleanTest(unittest.TestCase):
         facts = _mesh.facts(_mesh.prepared(touching))
         self.assertEqual((facts["watertight"], facts["volume_mm3"]), (True, 2000.0))
 
+    def test_an_opening_in_one_of_two_touching_bodies_is_not_repaired_shut_for_printing(self) -> None:
+        import numpy as np
+
+        far = trimesh.creation.box((10, 10, 10)).apply_translation((10, 0, 0))
+        side = np.nonzero(far.face_normals[:, 0] > 0.5)[0][0]
+        far.update_faces(np.arange(len(far.faces)) != side)  # one triangle of the far side gone
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "open.stl"
+            trimesh.util.concatenate([trimesh.creation.box((10, 10, 10)), far]).export(str(path))
+            for process in ("printing", "molding"):
+                result = cad.stl.dfm(path, process=process, material="pla" if process == "printing" else "abs")
+                self.assertIn("not_watertight", {finding.code for finding in result.findings}, process)
+                self.assertEqual(result.measurements["mesh"]["open_body_count"], 1, process)
+
+    def test_slivers_doubled_on_an_edge_are_dropped_and_none_that_closes_the_shell(self) -> None:
+        """An exporter's collapsed chord left as slivers on an edge (a gear's 3MF: 95 of them, the mesh open
+        and split into 25 bodies): a pair wound against each other is dropped; of three on a T-junction, the
+        one that closes it, wound as its neighbours, stays."""
+        import numpy as np
+
+        from cad.trimesh import _mesh
+
+        box = trimesh.creation.box((10, 10, 10))
+        vertices, faces = np.asarray(box.vertices, dtype=float), np.asarray(box.faces)
+        a, b, c = (int(v) for v in faces[0])
+        middle = len(vertices)
+        vertices = np.vstack([vertices, (vertices[a] + vertices[b]) / 2])
+        doubled = np.vstack([faces, [[a, middle, b], [b, middle, a]]])
+        split = np.vstack([[[a, middle, c], [middle, b, c]], faces[1:], [[a, b, middle]] * 2, [[middle, b, a]]])
+        for faces_given in (doubled, split):
+            mesh = _mesh.prepared(trimesh.Trimesh(vertices.copy(), faces_given, process=False))
+            self.assertTrue(mesh.is_watertight and mesh.is_winding_consistent)
+            self.assertEqual((mesh.body_count, mesh.metadata["degenerate_faces_dropped"]), (1, 2))
+            self.assertAlmostEqual(float(mesh.volume), 1000.0, places=6)
+
 
 class OverhangTest(unittest.TestCase):
     def test_a_round_on_the_plates_edge_is_no_overhang_as_on_exact_geometry(self) -> None:
@@ -432,9 +467,10 @@ class MultiBodyWallTest(unittest.TestCase):
 
     def test_a_body_resting_on_another_is_closed_and_measured(self) -> None:
         """A two-material print: a 10 mm baffle standing on a 2 mm diffuser shares the diffuser's top, so the
-        whole's edges there are used four times. Each body is closed again as the bodies are split (trimesh's
-        repair, which needs networkx: the trimesh extra carries it), judged watertight per body, and measured
-        against itself: the diffuser's 2 mm wall too."""
+        whole's edges there are used four times. Each body is closed again as the bodies are split (no edge of
+        it a boundary, the hole the face it shares is filled: trimesh's ``fill_holes``, which needs networkx,
+        the trimesh extra carries it), judged watertight per body, and measured against itself: the diffuser's
+        2 mm wall too."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "two.stl"
             diffuser = trimesh.creation.box((20, 20, 2))

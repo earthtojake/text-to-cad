@@ -10,6 +10,10 @@ unknown and its cracks gaps. Cleaned:
 - **collapsed triangles dropped**: a triangle two of whose corners became one vertex has no area and no
   edge of its own -- each of its edges is a neighbour's -- so dropping it never opens the shell (dropping a
   zero-area triangle of three distinct corners would: its edges are its neighbours' only partners);
+- **slivers dropped**: a triangle of next to no area (``SLIVER_AREA`` of the diagonal squared) on an edge more
+  than two triangles use -- an exporter's collapsed chord left doubled or fanned over an edge, its copies
+  wound against each other -- is dropped where the edges it uses stay used twice (or not at all): never
+  one that would leave an edge used once, which would open the shell;
 - **zero-area pieces dropped**: a connected piece whose triangles hold no area is an exporter's debris,
   never a body;
 - **cracks closed**: a hole in the surface whose boundary lies within ``CRACK_FRACTION`` of the part's
@@ -27,7 +31,7 @@ from typing import Any
 import numpy as np
 import trimesh
 
-__all__ = ["CRACK_FRACTION", "clean", "closure", "facts", "lies_on", "load", "prepared"]
+__all__ = ["CRACK_FRACTION", "SLIVER_AREA", "clean", "closure", "facts", "load", "prepared"]
 
 #: A boundary loop whose corners all lie within this fraction of the part's diagonal of the line through its
 #: two farthest corners is a crack of the tessellation, not an opening: a chord tolerance's width (a 117 mm
@@ -35,6 +39,11 @@ __all__ = ["CRACK_FRACTION", "clean", "closure", "facts", "lies_on", "load", "pr
 CRACK_FRACTION = 2e-3
 #: A loop of more corners than this is no sliver crack.
 CRACK_MAX_CORNERS = 64
+#: A triangle under this share of the diagonal squared is a sliver (a 111 mm gear's 3MF: 1.7e-9 to 8.5e-9,
+#: its smallest real triangle 3.2e-6).
+SLIVER_AREA = 1e-8
+#: Slivers joined by their edges are settled together while there are at most this many of them.
+SLIVER_GROUP = 12
 
 
 def load(path: str, units: str = "mm") -> trimesh.Trimesh:
@@ -69,6 +78,7 @@ def clean(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     collapsed = (faces[:, 0] == faces[:, 1]) | (faces[:, 1] == faces[:, 2]) | (faces[:, 0] == faces[:, 2])
     if collapsed.any():
         mesh.update_faces(~collapsed)
+    slivers = _drop_slivers(mesh)
     debris = 0
     if len(mesh.faces):
         areas = np.asarray(mesh.area_faces)
@@ -85,11 +95,79 @@ def clean(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
             mesh.update_faces(~drop)
     mesh.remove_unreferenced_vertices()
     cracks = _close_cracks(mesh)
-    mesh.metadata["degenerate_faces_dropped"] = int(collapsed.sum())
+    mesh.metadata["degenerate_faces_dropped"] = int(collapsed.sum()) + slivers
     mesh.metadata["debris_faces_dropped"] = debris
     mesh.metadata["cracks_closed"] = cracks
     mesh.metadata["faces_read"] = before
     return mesh
+
+
+def _drop_slivers(mesh: trimesh.Trimesh) -> int:
+    """Drop the slivers (``SLIVER_AREA``) on edges more than two triangles use, in place, where the drop leaves
+    each edge they use run once each way or not at all; the number dropped. One at a time first, smallest
+    first: a sliver each of whose edges more than two triangles use, another of them running it the sliver's
+    way (recounted after each). Then each group of the rest joined by their edges, at most ``SLIVER_GROUP``:
+    the most of it whose drop leaves every edge it uses run once each way or not at all."""
+    faces = np.asarray(mesh.faces)
+    if not len(faces):
+        return 0
+    diagonal = float(np.linalg.norm(mesh.extents)) or 1.0
+    areas = np.asarray(mesh.area_faces)
+    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+    _unique, inverse = np.unique(np.sort(directed, axis=1), axis=0, return_inverse=True)
+    edges = inverse.ravel().reshape(3, -1).T  # per face, its three edges' indices
+    ways = (directed[:, 0] < directed[:, 1]).reshape(3, -1).T  # per face, which way it runs each
+    runs = np.zeros((int(edges.max()) + 1, 2), dtype=int)  # per edge, its uses each way
+    np.add.at(runs, (edges.ravel(), ways.ravel().astype(int)), 1)
+    total = runs.sum(axis=1)
+    slivers = [int(i) for i in np.argsort(areas) if areas[i] < SLIVER_AREA * diagonal ** 2 and (total[edges[i]] > 2).any()]
+    if not slivers:
+        return 0
+    keep = np.ones(len(faces), dtype=bool)
+
+    def drop(face: int) -> None:
+        keep[face] = False
+        np.subtract.at(runs, (edges[face], ways[face].astype(int)), 1)
+
+    changed = True
+    while changed:
+        changed = False
+        for face in slivers:
+            if keep[face] and (runs[edges[face]].sum(axis=1) > 2).all() and \
+                    (runs[edges[face], ways[face].astype(int)] > 1).all():
+                drop(face)
+                changed = True
+    left = [face for face in slivers if keep[face] and (runs[edges[face]].sum(axis=1) > 2).any()]
+    if left:
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+
+        rows = np.repeat(np.arange(len(left)), 3)
+        graph = coo_matrix((np.ones(len(rows)), (rows, len(left) + edges[left].ravel())),
+                           shape=(len(left) + len(runs),) * 2)
+        _n, labels = connected_components(graph, directed=False)
+        for label in np.unique(labels[:len(left)]):
+            group = [left[at] for at in np.flatnonzero(labels[:len(left)] == label)]
+            if len(group) > SLIVER_GROUP:
+                continue
+            touched = np.unique(edges[group])
+            best, most = 0, 0
+            for chosen in range(1, 1 << len(group)):
+                after = runs.copy()
+                for at, face in enumerate(group):
+                    if chosen >> at & 1:
+                        np.subtract.at(after, (edges[face], ways[face].astype(int)), 1)
+                left_runs = after[touched]
+                if (left_runs[:, 0] == left_runs[:, 1]).all() and (left_runs[:, 0] <= 1).all() and \
+                        bin(chosen).count("1") > most:
+                    best, most = chosen, bin(chosen).count("1")
+            for at, face in enumerate(group):
+                if best >> at & 1:
+                    drop(face)
+    dropped = int((~keep).sum())
+    if dropped:
+        mesh.update_faces(keep)
+    return dropped
 
 
 def _close_cracks(mesh: trimesh.Trimesh) -> int:
@@ -147,18 +225,6 @@ def _width(points: np.ndarray) -> float:
         return 0.0
     offsets = points - points[i]
     return float(np.max(np.linalg.norm(np.cross(offsets, span / length), axis=1)))
-
-
-def lies_on(piece: trimesh.Trimesh, closed: list[trimesh.Trimesh], tolerance: float) -> bool:
-    """Whether every triangle of the open ``piece`` lies on a face of the ``closed`` bodies: its centre and its
-    edges' middles within ``tolerance`` of their surface (the face two bodies share, left over by a split)."""
-    if not closed or not len(piece.faces):
-        return False
-    triangles = np.asarray(piece.triangles, dtype=float)
-    points = np.concatenate([triangles.mean(axis=1), (triangles + np.roll(triangles, 1, axis=1)).reshape(-1, 3) / 2.0])
-    whole = closed[0] if len(closed) == 1 else trimesh.util.concatenate(closed)
-    _closest, distance, _triangle = trimesh.proximity.closest_point(whole, points)
-    return bool(np.all(distance <= tolerance))
 
 
 def closure(mesh: trimesh.Trimesh) -> dict[str, Any]:
