@@ -617,7 +617,8 @@ src/cad/
                          #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
                          #   a board or a schematic through its headless api-server and KiPy
                          #   (_session), DRC (_check), its exports (_export), a schematic's ERC
-                         #   and exports (_schematic)
+                         #   and exports (_schematic), and route, copper for the connections a
+                         #   plan names, inside an edit (_route; its search, _routing: numpy)
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
@@ -710,6 +711,26 @@ checked for the nets KiCad moved: KiCad gives copper the net of a pad it overlap
 and commits, so each track, via, copper shape and zone saved on another net than the block gave it (else the
 file had) is a warning on stderr naming it (`#via:<uuid>`), both nets and the pad it overlaps, and is on the
 board after the block, `board.net_changes` (`cad.kicad._drift`).
+
+Inside a board's edit, `cad.kicad.route(board, plan)` writes copper for the connections a plan names, in its
+order: each a net or a pair of pads, with the copper layers it may use (required; there is no default plan),
+its width and clearance (the net's netclass's by default, never under the board's rules), its via limit (for
+the whole entry) and via cost. The plan is checked whole before anything is routed; a mistake in it is a
+`ValueError` naming what to give, and so is a board it cannot route by: an outline that does not close, a pad
+drawn with a primitive it cannot read, a net KiCad pairs by name with another (a differential pair, which it
+does not route), a region past its memory (route the plan in parts). It reads the open board (`get_as_string`)
+and KiCad's rules for it: each net's netclass, the board's minimums, and the custom rules, of which each
+clearance one names is kept everywhere (the largest), a `disallow` or an `assertion` is refused by name, every
+other constraint is left to DRC, and a `.kicad_dru` its KiCad cannot read, or cannot give over the API,
+refuses the board. It searches each connection on a grid whose free nodes are worked out from the exact shapes
+(a move between two free nodes is clear along its whole length), pulls each path tight in continuous geometry,
+checks every segment and via once more, exactly, and writes the tracks and vias in one commit: nothing on the
+board is moved or deleted, nothing else is written, and the block's save writes the file. Octolinear and
+deterministic: the same board and plan give the same copper, in another process too. The answer, a `Routed`,
+holds every connection's outcome (`.ok`, `.failed`, `.human_lines()`): one it cannot route is answered by name
+with what walls it in, on stderr too, and the rest go on. A copper pour is neither an obstacle nor a
+connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the block refills the
+pours round the new copper. It runs in the script's process.
 
 ## Manufacturing checks
 
