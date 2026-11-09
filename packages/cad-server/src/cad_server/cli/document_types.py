@@ -453,7 +453,9 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
         parser.add_argument("--sheet", metavar="PATH",
                             help="the sheet to draw, by its path: / (the root, the default), /Power/; the same as "
                                  "--display '{\"sheet\": PATH}'")
-        parser.add_argument("--border", action="store_true", help="draw the page's edge (off by default)")
+        parser.add_argument("--border", action="store_true",
+                            help="draw KiCad's page as printed: the page's edge and the drawing sheet's frame (off by "
+                                 "default; the title block is drawn unless --display '{\"title\": false}')")
         return parser
     descriptions = {
         "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of "
@@ -531,7 +533,7 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
         except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
             return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
         if not isinstance(display, dict):
-            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border}",
+            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border, title}",
                            "invalid_argument")
         display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
         args.display = json.dumps(display)

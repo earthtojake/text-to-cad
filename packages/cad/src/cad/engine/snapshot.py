@@ -19,7 +19,8 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
   strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1).
 - ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
   painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
-  ``{sheet, border}`` (the root sheet, ``/``, unless it names another: ``/Power/``).
+  ``{sheet, border, title}`` (the root sheet, ``/``, unless it names another: ``/Power/``; KiCad's title
+  block drawn unless ``title`` is false, the page's edge and frame with ``border``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one

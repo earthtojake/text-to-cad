@@ -1963,10 +1963,11 @@ Viewing a board needs no KiCad installed: its first plot fetches kicode, the `ki
 refill (`_internal/boards.refills`: `CAD_KICAD_REFILL=0` plots the pours as saved, fetching nothing), and
 KiCad's own CLI (kicode's) performs DRC and exports.
 A `.kicad_sch` is drawn the same way, one sheet a picture: `formats/kicad/schematic_plot.py` rereads
-the hierarchy from its project's root and builds the page the display names (`{sheet, border}`: the
-root, `/`, unless it names another; the page's edge off unless asked), and `render/schematic.py`
+the hierarchy from its project's root and builds the page the display names (`{sheet, border, title}`: the
+root, `/`, unless it names another; KiCad's default title block on unless `title` is false; the page's
+edge and the drawing sheet's frame off unless `border`), and `render/schematic.py`
 paints it in KiCad's light schematic colours, framed on what the page draws
-(the whole page with its border on) or through a plan camera. Its handle watches every sheet file of
+(the title block with the rest, the whole page with its border on) or through a plan camera. Its handle watches every sheet file of
 the hierarchy, so an edit to any sheet draws anew. It refuses Preview, pose, transparent output and
 references; KiCad's own CLI (kicode's) performs ERC and the exports.
 

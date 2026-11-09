@@ -212,6 +212,68 @@ class ThePayload(SchematicFixture):
         with self.assertRaisesRegex(ValueError, "no sheet /Power/; its sheets are /, /Load/"):
             build_schematic_plot(self.root, sheets=["/Power/"])
 
+    def test_kicads_drawing_sheet_is_a_layer_only_when_asked(self) -> None:
+        from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
+
+        def drawing_sheet(payload: dict) -> list[dict]:
+            return [item for layer in payload["sheets"][0]["layers"] if layer["id"] == "drawing_sheet" for item in layer["items"]]
+
+        self.assertEqual(drawing_sheet(build_schematic_plot(self.root, sheets=["/"], index=False)), [])
+        payload = build_schematic_plot(self.root, sheets=["/"], index=False, drawing_sheet=True)
+        items = drawing_sheet(payload)
+        texts = [item["text"] for item in items if item["t"] == "text" and not item.get("frame")]
+        # The title block, its variables the sheet's: "${COMPANY}" and the comments are empty, so not drawn.
+        self.assertEqual(texts, ["Date: ", "KiCad E.D.A. 9.0", "Rev: 1", "Size: A4", "Id: 1/2", "Title: Divider",
+                                 "File: divider.kicad_sch", "Sheet: /"])
+        # Its box, 110 by 32 mm from the 10 mm margin's bottom-right corner, 2 mm in.
+        self.assertEqual(next(item for item in items if item["t"] == "path" and not item.get("frame"))["pts"],
+                         [[177.0, 166.0], [285.0, 166.0], [285.0, 198.0], [177.0, 198.0], [177.0, 166.0]])
+        # The frame: an A4 page's columns 1 to 6 along the top and bottom, rows A to D down both sides.
+        frame = [item["text"] for item in items if item["t"] == "text" and item.get("frame")]
+        self.assertEqual(frame, [*"123456", *"123456", *"ABCD", *"ABCD"])
+        self.assertEqual(payload["warnings"], [])
+        project = self.root.with_suffix(".kicad_pro")
+        saved = project.read_text(encoding="utf-8")
+        self.addCleanup(project.write_text, saved, encoding="utf-8")
+        named = json.loads(saved)
+        named.setdefault("schematic", {})["page_layout_descr_file"] = "house.kicad_wks"
+        project.write_text(json.dumps(named), encoding="utf-8")
+        warned = build_schematic_plot(self.root, sheets=["/"], index=False, drawing_sheet=True)["warnings"]
+        self.assertEqual(len(warned), 1)
+        self.assertIn("house.kicad_wks", warned[0])
+        self.assertEqual(build_schematic_plot(self.root, sheets=["/"], index=False)["warnings"], [])
+
+    def test_kicads_text_markup_is_drawn_not_spelled(self) -> None:
+        from cad.engine.formats.kicad.stroke_font import text_strokes
+
+        def box(strokes) -> tuple[float, float, float, float]:
+            xs, ys = [p[0] for s in strokes for p in s], [p[1] for s in strokes for p in s]
+            return min(xs), min(ys), max(xs), max(ys)
+
+        size = (1.27, 1.27)
+        plain = text_strokes("RESET", size=size, justify=["left"])
+        barred = text_strokes("~{RESET}", size=size, justify=["left"], markup=True)
+        # The letters where RESET's are (the same advance: no tilde or brace drawn), and one bar over them.
+        def rounded(strokes) -> list:
+            return [[(round(x, 9), round(y, 9)) for x, y in stroke] for stroke in strokes]
+
+        self.assertEqual(rounded(barred[:-1]), rounded(plain))
+        [(x0, y0), (x1, y1)] = barred[-1]
+        self.assertEqual(y0, y1)
+        self.assertLess(y0, box(plain)[1])
+        self.assertTrue(box(plain)[0] - 0.2 < x0 < x1 < box(plain)[2] + 0.2)
+        self.assertEqual(text_strokes("RESET", size=size, markup=True), text_strokes("RESET", size=size))
+        self.assertGreater(len(text_strokes("~{RESET}", size=size)), len(barred))  # spelled out without markup
+        # A subscript and a superscript: smaller, below the baseline and above the capitals.
+        three = box(text_strokes("3", size=size, justify=["left"]))
+        sub = box(text_strokes("IO_{3}", size=size, justify=["left"], markup=True)[-1:])
+        sup = box(text_strokes("IO^{3}", size=size, justify=["left"], markup=True)[-1:])
+        self.assertLess(sub[3] - sub[1], three[3] - three[1])
+        self.assertGreater(sub[3], three[3])
+        self.assertLess(sup[1], three[1])
+        # Unbalanced markup stays literal.
+        self.assertEqual(text_strokes("~{RESET", size=size, markup=True), text_strokes("~{RESET", size=size))
+
     def test_the_javascript_fixture_is_this_schematics_payload(self) -> None:
         from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
 
@@ -230,7 +292,7 @@ class TheStill(SchematicFixture):
         super().setUpClass()
         isolate(cls.addClassCleanup)
 
-    def draw(self, name: str, display: dict | None = None, center=(114.3, 64.77)):
+    def draw(self, name: str, display: dict | None = None, center=(114.3, 64.77)):  # 10 px per mm about center
         from PIL import Image
 
         from cad.engine.api import snapshot
@@ -257,12 +319,25 @@ class TheStill(SchematicFixture):
         # R3's VOUT wire, y = 38.1 mm, from x = 50.8 to 58.42, the centre at x = 54.61: 2 mm right of it.
         self.assertTrue(any(self.near(image.getpixel((220, row)), (0, 150, 0)) for row in (199, 200, 201)))
 
+    def test_the_title_block_is_drawn_unless_left_out_and_the_frame_with_the_border(self) -> None:
+        center = (231.0, 182.0)  # the A4 title block, 177 to 285 mm across and 166 to 198 mm down
+
+        def ink(image, row: int) -> bool:
+            return any(self.near(image.getpixel((column, row)), (132, 0, 0), 60) for column in range(40, 360))
+
+        shown = self.draw("title", center=center)
+        self.assertTrue(ink(shown, 255))  # the title row's top line, 187.5 mm down
+        self.assertFalse(ink(shown, 380))  # no frame at the margin, 200 mm, without the border
+        self.assertFalse(ink(self.draw("untitled", {"title": False}, center=center), 255))
+        self.assertTrue(ink(self.draw("framed", {"border": True}, center=center), 380))
+
     def test_what_a_schematic_does_not_draw_is_refused(self) -> None:
         from cad.engine.snapshot import SnapshotRefused
 
         for display, words in (({"sheet": "/Power/"}, "no sheet /Power/"), ({"mode": "copper"}, "takes border, sheet"),
-                               ({"appearance": "dark"}, "^a schematic's display takes border, sheet:"),
-                               ("dark", "^--display is not JSON"), ({"border": "yes"}, "border is true or false")):
+                               ({"appearance": "dark"}, "^a schematic's display takes border, sheet, title:"),
+                               ("dark", "^--display is not JSON"), ({"border": "yes"}, "border is true or false"),
+                               ({"title": "no"}, "title is true or false")):
             with self.subTest(display=display), self.assertRaisesRegex(SnapshotRefused, words):
                 self.draw("refused", display)
 

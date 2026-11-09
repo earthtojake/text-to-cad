@@ -235,7 +235,8 @@ schematic's frame is KiCad's own: millimetres, y down, the page's top-left corne
 point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the
 sheet's, `/` the root, `/Power/`), `number` (its page number), `file` and `title` (its title block's
-fields, as data: the drawing sheet itself is not drawn).
+fields, as data). The drawing sheet is a layer only when asked: `cad kicad_sch snapshot` asks, the
+route never does, so the viewer's pages have none.
 
 ```jsonc
 {
@@ -253,7 +254,13 @@ fields, as data: the drawing sheet itself is not drawn).
 ```
 
 The layers, bottom to top, each present only where it draws something but `page`: `page` (kind
-`sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked), `notes`
+`sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked),
+`drawing_sheet` (`drawing_sheet`, only when asked: KiCad's default drawing sheet, its built-in
+`.kicad_wks`, at its positions -- the frame, two rectangles at the 10 mm margin and 2 mm inside it with
+the column numbers and row letters every 50 mm, each item flagged `frame`, and the title block in the
+bottom-right corner, its box, rows and texts with their `${...}` filled from the sheet's own title
+block, path, file, paper, page and page count; a project that names a drawing sheet of its own gets the
+default and a warning), `notes`
 (`notes`: free text, text boxes and graphics), `sheets` (`sheet_box`: the hierarchical sheets' boxes,
 their names, files and pins, `role` `name`, `file`, `field` or `pin`), `symbols` (`symbol`: each body
 from the drawing the file embeds, its fills first), `pins` (`pin`), `wires` (`wire`), `buses` (`bus`,
@@ -266,7 +273,9 @@ pin, `#sheet:/Load/` a sheet's box), `net`, `id` (the uuid KiCad saved it with) 
 schematic's own: `fill: "background"` on a symbol body KiCad fills with its device background, and
 `color` (`#rrggbb`, with `opacity`) where the file gives an item a colour of its own. What colour a
 layer is drawn in is the renderer's, KiCad's default schematic theme (`render/schematic.py` on the
-server's side). Text is Hershey Simplex at KiCad's positions, a field centred in the box KiCad gives
+server's side). Text is Hershey Simplex at KiCad's positions, its markup drawn as KiCad draws it
+(`~{RESET}` overbarred, `IO_{3}` a subscript, `^{...}` a superscript, the markers never drawn and
+the width measured on what is), a field centred in the box KiCad gives
 it and read horizontally or vertically as KiCad turns it; a pin's name and number sit as the
 symbol's `pin_names` offset places them.
 
@@ -278,5 +287,5 @@ net, id), `junctions`, `labels` (kind, text, sheet, `at`, angle, shape, net, id;
 as kind `power`), `no_connects`, `bus_entries` and `nets` (name, pins as `R1.2`, the sheets it reaches),
 every net named as KiCad names it, the board's names.
 
-Not drawn: images, tables, KiCad's drawing sheet (frame and title block), and line styles (a dashed
+Not drawn: images, tables, a project's own drawing sheet (KiCad's default stands in), and line styles (a dashed
 stroke is drawn solid).

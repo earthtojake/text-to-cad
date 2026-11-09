@@ -154,12 +154,13 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(status, 200, body)
         packet = json.loads((self.files / "divider-1.snapshot.json").read_text(encoding="utf-8"))
         [source, _out, prepared] = job_pictures(packet)[0]
-        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, display))
+        # The still draws KiCad's title block where the window reaches it (``title``, on unless the view says false).
+        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, {**display, "title": True}))
         self.assertNotIn("output", packet["jobs"][0])
         dark = {**request, "views": [{**request["views"][0], "display": {**display, "appearance": "dark"}}]}
         status, body, _ = self.call("POST", "/api/v1/local/prompt-files", dark)
         self.assertEqual(status, 400, body)
-        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet:")
+        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet, title:")
 
     def test_a_boards_prompt_names_its_references_for_the_snapshot_to_light(self) -> None:
         """What a board's prompt names in it goes in its packet, canonical; a job takes them, and only a board's."""

@@ -686,7 +686,8 @@ resolves them -- the names `kicad-cli sch export netlist` gives, which are the b
 references in the board's grammar where they mean the same (`#U3`, `#U3.7`, `#net:VBUS`) and its own
 (`#sheet:/Power/`, `#wire:<uuid>`). Its plot payload (`engine/formats/kicad/schematic_plot.py`) is the
 board's shape, every sheet a page, drawn from the symbols' own drawings the file embeds, its text in
-the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
+the same stroke font with KiCad's text markup; `cad kicad_sch snapshot --sheet /Power/` draws one page on KiCad's
+default title block. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
 kicad_sch erc`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
 pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
 

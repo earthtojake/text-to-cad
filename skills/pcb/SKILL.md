@@ -288,12 +288,14 @@ junction or no-connect, as its Selection Filter ticks them, and a drag picks wha
 with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
 `#wire:<uuid>`; [schematic](references/schematic.md) says what each names). The schematic follows the
-app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
-drawing sheet or title block is drawn. ERC findings are not drawn: run `cad kicad_sch erc`. The file
+app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. The
+viewer draws no drawing sheet or title block. ERC findings are not drawn: run `cad kicad_sch erc`. The file
 menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
 a Quick Edit packet carries the sheet the view showed. A still is always on KiCad's light paper,
-whatever the viewer's theme:
+whatever the viewer's theme, with KiCad's default title block (`"title": false` leaves it out; `border`
+adds the page's edge and frame) and text markup (`~{RESET}`, `IO_{3}`) drawn as KiCad draws it:
 
 ```bash
 cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","border":true}'
+cad kicad_sch snapshot board.kicad_sch tmp/power-plain.png --sheet /Power/ --display '{"title":false}'
 ```
