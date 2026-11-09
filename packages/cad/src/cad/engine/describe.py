@@ -48,7 +48,9 @@ qualifier's path, for a label two pairs share). A declaration no pair's joint ta
 node that holds it, and left out. A declared exclusion (``declarations.exclude``) is
 each link holding the part that declares it, with each link holding a part at or below a node of
 the label it names (a part's own label names it); a label that names no node is refused by name,
-and two links' pair is kept once.
+and two links' pair is kept once. The part pairs themselves are kept too (``part_excludes``, by
+occurrence path): a joint stop sweep sets aside those two parts alone, where a simulator filters
+their links.
 
 **Frames** (``description.py``'s **Units and frames**). For a pair from link 1 (the part holding the
 moving joint) to link 2 (the rigid joint's), with ``W1``/``W2`` the links as built, ``item_1``/``item_2``
@@ -229,7 +231,7 @@ class _Describer:
                                    "to take the zero at")
         self._bodies(links, joints)
         self._free(links, joints)
-        excludes = self._excludes(links)
+        excludes, part_excludes = self._excludes(links)
         self.masses = self._masses()
         meshes = self._meshes()
         self.hulls = self._decompositions(links, meshes) if self.decompose else {}
@@ -238,7 +240,7 @@ class _Describer:
         if self.zero is not None:
             poses = self._zeroed(kinematics, links, joints, poses)
         found = Description(self.structure["name"], links, joints, meshes, poses, closures, excludes=excludes,
-                            zero=self.zero)
+                            part_excludes=part_excludes, zero=self.zero)
         found.check()
         found.warnings = tuple(self.warnings)
         return found
@@ -395,23 +397,31 @@ class _Describer:
                 links.insert(at, child)
                 joints.append(self._fixed(child.name, link, child))
 
-    def _excludes(self, links: list[Link]) -> tuple[tuple[str, str], ...]:
-        """The link pairs the parts' declarations say never collide (the module's **Drives and exclusions**)."""
+    def _excludes(self, links: list[Link]) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
+        """The link pairs the parts' declarations say never collide (the module's **Drives and exclusions**), and
+        the part pairs they name, each by its two occurrence paths, sorted: what a joint stop sweep sets aside
+        (``ranges``), where a simulator filters the links."""
         owner = {index: at for at, link in enumerate(links) for index in link.parts}
         found: set[tuple[int, int]] = set()
+        parts: set[tuple[str, str]] = set()
         for index, at in sorted(owner.items()):
             for label in self._declared(index).get("exclude") or ():
-                others = {owner[other] for other in owner if label in self.instances[other]["path"].split("/")}
-                if not others:
+                named = [other for other in owner if label in self.instances[other]["path"].split("/")]
+                if not named:
                     raise DescriptionError(f"part {self._name(index)!r} excludes {label!r}, which names no part or "
                                            "assembly of the document")
-                for other in sorted(others):
+                for other in sorted({owner[other] for other in named}):
                     if other == at:
                         self.warn(f"part {self._name(index)!r} excludes {label!r}, which link {links[at].name!r} "
                                   "holds too: a body never collides with itself")
                         continue
                     found.add((min(at, other), max(at, other)))
-        return tuple((links[a].name, links[b].name) for a, b in sorted(found))
+                mine = str(self.instances[index]["path"])
+                for other in named:
+                    if owner[other] != at:
+                        first, second = sorted((mine, str(self.instances[other]["path"])))
+                        parts.add((first, second))
+        return tuple((links[a].name, links[b].name) for a, b in sorted(found)), tuple(sorted(parts))
 
     def _drives(self, kinematics: dict[str, Any]) -> None:
         """Each pair's joint given the drive limits declared on the node holding its moving joint -- a part, or an

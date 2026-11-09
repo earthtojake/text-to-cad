@@ -82,6 +82,8 @@ at zero; a writer that can close it does (MJCF), one that cannot leaves it open 
 
 **Contacts.** ``excludes`` are the link pairs a model says never collide (``cad.build123d.exclude``),
 each pair once, in link order; what a writer finds touching at rest is its own (``export/contact.py``).
+``part_excludes`` are the part pairs the same declarations name, by occurrence path: a joint stop sweep
+(``ranges``) sets aside those two parts, not the rest of their links.
 
 **Poses.** The mechanism's named states, each as ``{joint: value}`` around zero, in radians or
 metres (a cylindrical or spherical joint's value is a tuple); taken at a ``zero`` state, every other
@@ -301,6 +303,9 @@ class Description:
     closures: list[Closure] = field(default_factory=list)
     warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
     excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)
+    #: The part pairs those declarations name, each by its two occurrence paths (``Visual.path``): what a joint stop
+    #: sweep sets aside (``ranges``), two parts alone where a simulator filters their links.
+    part_excludes: tuple[tuple[str, str], ...] = ()
     zero: str | None = None  # the mechanism state every joint's zero is at; None for the as-built state
 
     @property

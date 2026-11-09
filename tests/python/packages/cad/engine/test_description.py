@@ -547,6 +547,8 @@ class BodiesTest(_Folder):
         self.assertEqual((elbow.effort, elbow.velocity, elbow.armature, elbow.damping, elbow.friction),
                          (27.0, 6.28, 0.012, 0.5, 0.0))
         self.assertEqual(description.excludes, (("base", "camera"),))
+        # And the two parts it names, by occurrence path: what a joint stop sweep sets aside, those two alone.
+        self.assertEqual(description.part_excludes, (("bodies/base", "bodies/cam"),))
         self.assertEqual(description.warnings, ())
         # The structure carries them, the same from the file as from the build's tree, and a shape rebuilt from
         # the document carries them as the model gave them.
