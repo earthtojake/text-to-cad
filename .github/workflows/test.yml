@@ -79,6 +79,7 @@ jobs:
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
+      routing: ${{ steps.select.outputs.routing }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -241,6 +242,38 @@ jobs:
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
+
+  # The router's copper is the same bits on every OS, or it is not deterministic: its unit files hold one
+  # board's copper to a digest (test_kicad_routing_determinism.py). The cadgen jobs run them on Linux (glibc)
+  # and Windows (the MSVC runtime); this job runs them on macOS, the third C library, on a change to the
+  # router, the board readers it reads through, its tests or the library's numpy pin. The library alone
+  # (numpy; no kernel, no KiCad): about a minute, most of it the runner and Python starting; the tests take
+  # two seconds.
+  routing-macos:
+    name: routing (macOS)
+    needs: changes
+    if: needs.changes.outputs.routing == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the library alone
+        run: python -m pip install --editable ./packages/cad
+
+      - name: Run the router's unit files
+        env:
+          PYTHON_BIN: python
+        run: scripts/test/test-routing.sh
 
   # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
   # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.

@@ -134,8 +134,9 @@ class SchematicAnswers:
         with entry["lock"]:
             body = entry["pages"].get(key)
             if body is None:
+                # Each page on KiCad's drawing sheet, as KiCad's schematic editor shows it: its frame and title block.
                 body = schematic_payload_bytes(candidate, sheets=None if sheet is None else [sheet], index=index,
-                                               read=entry["read"])
+                                               read=entry["read"], drawing_sheet=True)
                 entry["pages"][key] = body
                 # A schematic's every page, with and without the index, is a few megabytes at most.
                 while len(entry["pages"]) > 64:

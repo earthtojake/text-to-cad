@@ -23,6 +23,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
+    routing                       routing (macOS): the router's unit files, on the third C library
     core_js                       core-js
     web  web_ui  web_client
     mcp
@@ -61,7 +62,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea", "routing")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -247,6 +248,15 @@ FEA_SHARED = (f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.p
               f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/programs.py",
               f"{SERVER_SRC}/_internal/cli_from_function.py")
 FEA_SUITE = "tests/python/packages/fea"
+# The router (cad.kicad.route) and what it reads a board's numbers through: the board readers, their geometry
+# and the parser, and the numpy the library pins. Its copper must be the same
+# bits on every OS: the cadgen jobs run its unit files on Linux and Windows, and the routing job on macOS, whose
+# C library is the third (test-routing.sh). Each also reaches what its package reaches.
+ROUTING_CODE = (f"{LIBRARY_SRC}/kicad/_route.py", f"{LIBRARY_SRC}/kicad/_routing/**",
+                f"{LIBRARY_SRC}/engine/formats/kicad/geometry.py", f"{LIBRARY_SRC}/engine/formats/kicad/board_index.py",
+                f"{LIBRARY_SRC}/engine/formats/kicad/sexpr.py",
+                "packages/cad/pyproject.toml")
+ROUTING_TESTS = "tests/python/packages/cad/test_kicad_routing*.py"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
 PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 ALIAS_PROJECTS = ("packages/aliases/cadgen",)
@@ -307,6 +317,7 @@ RULES: tuple[Rule, ...] = (
     # app's server and the shim reach only what names them (above). KiCad's code reaches the KiCad
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
+    Rule(ROUTING_CODE, select(flags=["routing"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
@@ -347,6 +358,8 @@ RULES: tuple[Rule, ...] = (
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
     Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
          final=True),
+    # The router's unit files run themselves in the cadgen jobs (below) and all of them in the routing job.
+    Rule((ROUTING_TESTS, "scripts/test/test-routing.sh"), select(flags=["routing"])),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),

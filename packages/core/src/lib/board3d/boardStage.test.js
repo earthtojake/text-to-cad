@@ -103,3 +103,27 @@ test("a fit frames the slab and what stands on it as it is now: a tall part once
   body.geometry.dispose();
   stage.dispose();
 });
+
+test("a board whose stack-up names its colours is made in them in Board mode, its edge the substrate's; other modes draw its layers", () => {
+  const made = [];
+  // Each canvas's context knows its canvas: the made board's layers are drawn on a scratch canvas of its size.
+  const contextOf = canvas => new Proxy({}, { get: (_target, key) => (key === "canvas" ? canvas : key === "measureText" ? () => ({ width: 1 }) : () => {}) });
+  const createCanvas = () => { const canvas = { width: 0, height: 0 }; canvas.getContext = () => contextOf(canvas); made.push(canvas); return canvas; };
+  const renderer = { capabilities: { maxTextureSize: 4096 }, initTexture: () => {} };
+  const stackup = { layers: [{ name: "F.Mask", color: "Black" }, { name: "F.SilkS", color: "White" }, { name: "dielectric 1", color: "FR4 natural" }], finish: "ENIG" };
+  const layout = { ...LAYOUT, extent: [0, 0, 40, 30], board: { ...BOARD, stackup } };
+  const stage = createBoardStage(THREE, { layout, outline: BOARD.outline, theme: "light", createCanvas });
+  const slab = stage.object3D.children[0];
+  stage.setRenderer(renderer);
+  stage.setLook({ display: { mode: "board", side: "top", poured: true, others: "shown" }, theme: "light" });
+  assert.equal(slab.material.color.getHexString(), new THREE.Color("rgb(109, 116, 75)").getHexString());
+  assert.equal(made.length, 2, "the picture's canvas and the one its mask and silkscreen are laid on from");
+  stage.setLook({ display: { mode: "copper", side: "top", poured: true, others: "shown" }, theme: "light" });
+  assert.equal(slab.material.color.getHexString(), new THREE.Color(0xb9a66a).getHexString(), "Copper mode: the editor's look, FR4's tan edge");
+  stage.dispose();
+  // Without a stack-up, Board mode keeps the editor's look.
+  const plain = createBoardStage(THREE, { layout: LAYOUT, outline: BOARD.outline, theme: "light", createCanvas });
+  plain.setLook({ display: { mode: "board", side: "top", poured: true, others: "shown" }, theme: "light" });
+  assert.equal(plain.object3D.children[0].material.color.getHexString(), new THREE.Color(0xb9a66a).getHexString());
+  plain.dispose();
+});
