@@ -39,6 +39,8 @@ server found itself; nothing of a request is ever a command. Blender opens only 
 files from its command line, so it is started with the package's import script (``BLENDER_SCRIPT``,
 ``--python``) and the file as the one argument after ``--``, data the script reads, never code; on macOS
 as a new instance (``open -n``), since a running Blender would be brought forward without its arguments.
+The opening has answered by the time the script runs and Blender's output is discarded, so a file the
+script cannot open is said where the person is looking: in Blender itself, its scene left as it started.
 """
 from __future__ import annotations
 
@@ -81,7 +83,7 @@ KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
 # at their click. The file manager still reveals such a file's folder.
 NEVER_OPENED = (".kicad_",)
 
-# The script Blender is started with on a file (``--python``): it imports the file into an emptied startup scene.
+# The script Blender is started with on a file (``--python``): it imports the file, then removes the startup scene's objects.
 BLENDER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "open_in_blender.py")
 
 REFRESH_SECONDS = 300.0
