@@ -248,6 +248,19 @@ class WallThicknessTest(unittest.TestCase):
 
         self.assertAlmostEqual(facts["median_mm"], 2.0, delta=0.4)
 
+    def test_a_wall_is_measured_from_the_surface_not_from_the_ray_s_nudge(self) -> None:
+        # each ray starts 1e-4 off its triangle: its length is the surface's, so a 2 mm wall reads 2, not 1.9999,
+        # and SLA's 0.5 mm shell passes its 0.5 mm minimum on the mesh as on the B-rep
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            facts = dfam_tool._wall_facts(dfam_tool._load(_stl(_hollow_box(2.0), tmp, "wall2")), samples=600)
+            shell = Box(40, 40, 30, align=(Align.CENTER, Align.CENTER, Align.MIN)) - \
+                Pos(0, 0, 0.5) * Box(39, 39, 30, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            result = cad.stl.dfm(_stl(shell, tmp, "shell"), process="printing", technology="sla")
+        self.assertEqual(facts["min_mm"], 2.0)
+        self.assertNotIn("printing.wall", {f.code for f in result.findings})
+        self.assertEqual(result.measurements["wall_thickness"]["min_mm"], 0.5)
+
     def test_thinner_wall_measures_thinner(self) -> None:
         """Ordering must hold even where absolute sampling error does not."""
         with tempfile.TemporaryDirectory() as td:

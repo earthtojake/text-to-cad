@@ -665,20 +665,84 @@ def _connections(ctx: Context, part: int, ordinal: int) -> int:
     return count
 
 
-def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, float, frozenset[int]]]:
-    """Each knife edge of ``part`` as segments (starts, ends), its thin depth and its two faces (the flanks): the
-    sliver the knife family reports, which the walls leave to it."""
+#: Points along an edge its material's angle is read at first (``brep.edge_angles``): where any is under the
+#: zone's limit, the edge is laid out again every quarter of its thin depth, at most ``KNIFE_POINTS`` points.
+KNIFE_PROFILE = 17
+KNIFE_POINTS = 400
+#: A curved edge's tip is a zone up to this angle: past the knife's 45 deg its sliver is no knife, but where its
+#: faces curve a ray from one flank can land on the other looking back at it (an edge of a cone and a sphere at
+#: 45.1 deg read a 0.44 mm "wall" 0.43 mm from it), and a tip's own sliver is never a wall, as a 46-degree
+#: wedge's between two planes reads none. Beyond 90 deg the thin depth is under half the minimum wall.
+ZONE_DEG = 90.0
+
+
+def _knife_runs(ctx: Context, part: int, upto: float) -> list[dict[str, Any]]:
+    """Each convex edge of ``part`` whose material's angle along it reaches ``upto`` or under: its segments
+    there (starts, ends), each segment's angle (the lesser of its two ends') and thin depth, and its two faces.
+    The angle is read along the edge, not at its middle alone: an edge where a cone meets a sphere runs from 63
+    to 42 degrees, a knife over its 42-degree stretch."""
     minimum = rules.wall_minimum(ctx.options)
     edges = ctx.parts[part].edges()
-    zones = []
+    found = []
     for edge in ctx.edges(part):
-        if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG - mo.ANGLE_EPS:
+        if edge.concave or edge.smooth:
             continue
-        depth = mo.thin_depth(minimum, edge.angle_deg)
-        if depth:
-            points = _edge_points(edges[edge.ordinal - 1], max(0.05, depth / 4.0))
-            zones.append((points[:-1], points[1:], float(depth), frozenset(edge.faces)))
-    return zones
+        coarse = np.linspace(0.0, 1.0, KNIFE_PROFILE)
+        if all(ctx.info(part, ordinal).surface.kind == "plane" for ordinal in edge.faces):
+            if edge.angle_deg > min(upto, mo.KNIFE_DEG + mo.ANGLE_EPS):
+                continue  # two planes over the limit: no ray from one lands on the other looking back at it
+            angles = np.full(len(coarse), float(edge.angle_deg))  # two planes meet at one angle all along
+        else:
+            checkpoint()
+            _, angles = brep.edge_angles(ctx.parts[part], edge, coarse)
+        if not np.isfinite(angles).any() or not float(np.nanmin(angles)) <= upto:
+            continue
+        valid = np.isfinite(angles)
+        deepest = mo.thin_depth(minimum, max(float(np.nanmin(angles)), mo.FOLD_DEG)) or 1.0
+        count = max(2, int(math.ceil(float(edge.length) / max(0.05, deepest / 4.0))) + 1)
+        fine = np.linspace(0.0, 1.0, min(count, KNIFE_POINTS))
+        points = _edge_points_at(edges[edge.ordinal - 1], fine)
+        along = np.interp(fine, coarse[valid], angles[valid])
+        segment = np.minimum(along[:-1], along[1:])
+        under = segment <= upto
+        if not under.any():
+            continue
+        depths = np.array([mo.thin_depth(minimum, float(a)) or 0.0 for a in segment])
+        found.append({"edge": edge, "starts": points[:-1][under], "ends": points[1:][under],
+                      "angles": segment[under], "depths": depths[under], "faces": frozenset(edge.faces),
+                      "length": float(np.linalg.norm(points[1:][under] - points[:-1][under], axis=1).sum()),
+                      "middle": points[len(points) // 2]})
+    return found
+
+
+def _edge_points_at(edge: Any, fractions: np.ndarray) -> np.ndarray:
+    return np.array([[p.X, p.Y, p.Z] for p in (edge.position_at(float(t)) for t in fractions)])
+
+
+def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, frozenset[int], bool]]:
+    """Each convex edge's tip of ``part`` as segments (starts, ends), their thin depths and its two faces (the
+    flanks): its sliver, which the walls leave to it -- the knife family's where the stretch is under 45 deg. A
+    stretch at the knife's limit (45 deg, within ``ANGLE_EPS``) or over it is a zone too, though no knife: a
+    44-degree tip is a knife, a 45- or a 46-degree one nothing, never a thin wall; and a curved edge's stretch
+    over the limit up to ``ZONE_DEG`` (two planes past the limit never face each other across their tip)."""
+    if not hasattr(ctx, "_zones"):
+        ctx._zones = {}  # type: ignore[attr-defined]
+    if part not in ctx._zones:  # type: ignore[attr-defined]
+        runs = _knife_runs(ctx, part, ZONE_DEG)
+        zones = []
+        for run in runs:
+            knife = run["angles"] <= mo.KNIFE_DEG + mo.ANGLE_EPS
+            # a knife's (or a tip at its limit's) sliver is every ray in its depth from or onto a flank; past
+            # the limit, a ray from one flank onto the other alone
+            for stretch, both in ((knife, False), (~knife, True)):
+                stretch = stretch & (run["depths"] > 0)
+                if stretch.any():
+                    zones.append((run["starts"][stretch], run["ends"][stretch], run["depths"][stretch], run["faces"],
+                                  both))
+        ctx._zones[part] = zones  # type: ignore[attr-defined]
+        ctx._runs = getattr(ctx, "_runs", {})  # type: ignore[attr-defined]
+        ctx._runs[part] = runs  # type: ignore[attr-defined]
+    return ctx._zones[part]  # type: ignore[attr-defined]
 
 
 def _walls(ctx: Context) -> dict[str, Any]:
@@ -701,9 +765,10 @@ def _walls(ctx: Context) -> dict[str, Any]:
                 points = np.array([info.samples[k].point for _, k, _ in thickness])
                 landed = np.array([other for _, _, other in thickness])
                 keep = np.ones(len(points), dtype=bool)
-                for starts, ends, depth, faces in flanked:
-                    on = np.isin(landed, list(faces)) | (info.ordinal in faces)
-                    keep &= ~on | (mo.near_segments(points, starts, ends) > depth + ctx.tol)
+                for starts, ends, depths, faces, both in flanked:
+                    on = np.isin(landed, list(faces)) & (info.ordinal in faces) if both else \
+                        np.isin(landed, list(faces)) | (info.ordinal in faces)
+                    keep &= ~on | (mo.past_segments(points, starts, ends, depths) > ctx.tol)
                 thickness = [row for row, kept in zip(thickness, keep) if kept]
                 if not thickness:
                     continue
@@ -1319,24 +1384,34 @@ def _stairs(ctx: Context) -> dict[str, Any]:
 
 
 def _knife_edges(ctx: Context) -> dict[str, Any]:
-    """Every convex edge whose material angle (at its middle) is under ``KNIFE_DEG``: its length, angle, and how
-    deep from it the material is thinner than the technology's unsupported-wall minimum."""
+    """Every convex edge whose material angle along it falls under ``KNIFE_DEG``: its stretch there, its least
+    angle, and how deep from it the material is thinner than the technology's unsupported-wall minimum."""
     minimum = rules.wall_minimum(ctx.options)
     items = []
     for part in range(len(ctx.parts)):
-        for edge in ctx.edges(part):
-            if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG - mo.ANGLE_EPS:
-                continue
-            depth = mo.thin_depth(minimum, edge.angle_deg)
-            items.append({"location": ctx.parts[part].ref("edge", edge.ordinal), "xyz": _xyz(edge.midpoint),
+        _knife_zones(ctx, part)
+        for run in ctx._runs[part]:  # type: ignore[attr-defined]
+            under = run["angles"] < mo.KNIFE_DEG - mo.ANGLE_EPS
+            if not under.any():
+                continue  # at the limit, no knife (its sliver is no wall either: ``_knife_zones``)
+            edge = run["edge"]
+            least = float(run["angles"][under].min())
+            depth = mo.thin_depth(minimum, least)
+            lengths = np.linalg.norm(run["ends"][under] - run["starts"][under], axis=1)
+            stretch = float(lengths.sum())
+            middle = (run["starts"][under][len(lengths) // 2] + run["ends"][under][len(lengths) // 2]) / 2.0
+            area = float((run["depths"][under] * lengths).sum()) if depth else None
+            items.append({"location": ctx.parts[part].ref("edge", edge.ordinal), "xyz": _xyz(middle),
                           "faces": [ctx.ref(part, ordinal) for ordinal in edge.faces],
-                          "angle_deg": _r(edge.angle_deg, 3), "length_mm": _r(edge.length, 4), "thickness_mm": 0.0,
-                          "thin_depth_mm": _r(depth, 4), "thin_area_mm2": _r(depth * edge.length if depth else None, 4)})
+                          "angle_deg": _r(least, 3), "length_mm": _r(stretch, 4),
+                          "edge_length_mm": _r(edge.length, 4), "thickness_mm": 0.0,
+                          "thin_depth_mm": _r(depth, 4), "thin_area_mm2": _r(area, 4)})
     items, count = _capped(items, lambda item: item["angle_deg"])
     return {"items": items, "count": count, "knife_below_deg": mo.KNIFE_DEG, "min_wall_mm": minimum,
             "length_mm": _r(sum(item["length_mm"] for item in items), 4),
-            "method": "convex edges whose material angle at the middle is under knife_below_deg; the material at d "
-                      "from such an edge is 2 d tan(angle / 2) thick: thin_depth_mm is where it reaches min_wall_mm"}
+            "method": "convex edges whose material angle, read along the edge, falls under knife_below_deg: "
+                      "angle_deg the least, length_mm the stretch under it; the material at d from such an "
+                      "edge is 2 d tan(angle / 2) thick: thin_depth_mm is where it reaches min_wall_mm"}
 
 
 def _pitch(ctx: Context) -> float:

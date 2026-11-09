@@ -349,6 +349,9 @@ def _bridge_facts(overhangs: dict) -> dict:
                       "their edge descends (a wall below); span from the region's points to those edges"}
 
 
+#: How far along its ray a ray's origin is nudged off its own triangle, so it does not hit it: every length is
+#: measured from the surface, the nudge added back (a 2 mm wall reads 2, not 1.9999).
+NUDGE = 1e-4
 #: Triangles a mesh has, at most, for every one to get a ray of its own (a small feature's few triangles
 #: would otherwise draw no sample of an area-weighted budget): the gaps' rays.
 COVER = 20000
@@ -408,7 +411,9 @@ def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
         order = np.argsort(angle[mine])
         weight = np.cumsum(lengths[mine][order])
         typical = float(angle[mine][order][min(int(np.searchsorted(weight, weight[-1] / 2.0)), len(order) - 1)])
-        if not typical < mo.KNIFE_DEG - mo.ANGLE_EPS:
+        # at the limit (45 deg within ANGLE_EPS) a chain is a zone the walls leave alone, though no knife: a
+        # 45-degree tip reads as neither a knife nor a thin wall, as 44 is a knife and 46 nothing
+        if not typical <= mo.KNIFE_DEG + mo.ANGLE_EPS:
             continue
         depth = mo.thin_depth(minimum, typical)
         if depth is not None and length < depth:
@@ -471,12 +476,13 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
         faces = np.arange(count)
     normals = mesh.face_normals[faces]
     directions = -normals if inward else normals
-    origins = mesh.triangles_center[faces] + directions * 1e-4
+    origins = mesh.triangles_center[faces] + directions * NUDGE
     locations, rays, hit = mesh.ray.intersects_location(ray_origins=origins, ray_directions=directions,
                                                         multiple_hits=False)
     if not len(rays):
         return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
-    length = np.linalg.norm(np.asarray(locations).reshape(-1, 3) - origins[rays], axis=1)
+    # measured from the surface: the origin was nudged 1e-4 along the ray off its own triangle
+    length = np.linalg.norm(np.asarray(locations).reshape(-1, 3) - origins[rays], axis=1) + NUDGE
     # a wall's far face looks away from the ray; one square to it (a corner) does not, one under KNIFE_DEG
     # off parallel (a knife edge's other face) does, as the exact path counts it
     square = _FACING
@@ -666,7 +672,7 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
 
     origins, face_idx = trimesh.sample.sample_surface(mesh, n, seed=seed)
     directions = -mesh.face_normals[face_idx]
-    origins = origins + directions * 1e-4
+    origins = origins + directions * NUDGE
 
     locations, ray_ids, hit_tri = mesh.ray.intersects_location(
         ray_origins=origins, ray_directions=directions, multiple_hits=False)
@@ -674,7 +680,7 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
     if len(ray_ids) == 0:
         return {"error": "ray casting produced no hits", "samples_requested": n}
 
-    thickness = np.linalg.norm(locations - origins[ray_ids], axis=1)
+    thickness = np.linalg.norm(locations - origins[ray_ids], axis=1) + NUDGE  # from the surface, not the nudge
     diag = float(np.linalg.norm(mesh.extents))
     # a wall's two faces look away from each other; a ray that lands on a face meeting its own at a corner
     # (KNIFE_DEG or more between them) measures the corner, not a wall -- a knife edge's sliver is counted,
@@ -937,6 +943,8 @@ def _knife_facts(mesh: trimesh.Trimesh, options: dict, zones: list[_Knife] | Non
     minimum = rules.wall_minimum(options)
     items = []
     for knife in zones if zones is not None else _knife_chains(mesh, minimum):
+        if not knife.angle < mo.KNIFE_DEG - mo.ANGLE_EPS:
+            continue  # at the limit: the walls' zone, no knife
         middle = np.vstack([knife.starts, knife.ends]).mean(axis=0)
         items.append({"xyz": _p(middle), "angle_deg": _r(knife.angle, 3), "length_mm": _r(knife.length, 4),
                       "thickness_mm": 0.0, "thin_depth_mm": _r(knife.depth, 4),

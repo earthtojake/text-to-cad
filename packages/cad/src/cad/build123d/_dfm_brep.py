@@ -644,6 +644,61 @@ def edges(part: Part) -> list[Edge]:
     return found
 
 
+def edge_angles(part: Part, edge: Edge, fractions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The material's angle along ``edge`` (as ``Edge.angle_deg`` reads it at its middle) at each of
+    ``fractions`` of its length: the points, and the angle there (NaN where a face has no normal: a cone's
+    apex). An edge between two planes keeps one angle along its length; one of a curved face turns (an edge
+    where a cone meets a sphere runs from 63 to 42 degrees)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Curve2d, BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_Plane
+    from OCP.GCPnts import GCPnts_AbscissaPoint
+    from OCP.TopAbs import TopAbs_REVERSED
+    from OCP.gp import gp_Pnt, gp_Vec
+
+    shape = part.edges()[edge.ordinal - 1]
+    a, b = (part.faces()[ordinal - 1] for ordinal in edge.faces)
+    curve = BRepAdaptor_Curve(shape.wrapped)
+    first, last = curve.FirstParameter(), curve.LastParameter()
+    length = float(edge.length)
+    params = []
+    for fraction in np.asarray(fractions, dtype=float):
+        try:
+            at = GCPnts_AbscissaPoint(curve, float(fraction) * length, first)
+            params.append(at.Parameter() if at.IsDone() else first + float(fraction) * (last - first))
+        except Exception:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
+            params.append(first + float(fraction) * (last - first))
+    points = np.zeros((len(params), 3))
+    planar = all(BRepAdaptor_Surface(f.wrapped).GetType() == GeomAbs_Plane for f in (a, b))
+    for k, t in enumerate(params):
+        point = gp_Pnt()
+        curve.D0(t, point)
+        points[k] = _xyz(point)
+    if planar:
+        return points, np.full(len(params), float(edge.angle_deg))
+    orientation = _in_face_orientation(a, shape)
+    angles = np.full(len(params), np.nan)
+    on_a, on_b = BRepAdaptor_Curve2d(shape.wrapped, a.wrapped), BRepAdaptor_Curve2d(shape.wrapped, b.wrapped)
+    from OCP.BRepGProp import BRepGProp_Face
+    props = (BRepGProp_Face(a.wrapped), BRepGProp_Face(b.wrapped))
+    for k, t in enumerate(params):
+        point, tangent = gp_Pnt(), gp_Vec()
+        curve.D1(t, point, tangent)
+        size = tangent.Magnitude()
+        normals = []
+        for adaptor, prop in zip((on_a, on_b), props):
+            uv = adaptor.Value(t)
+            normals.append(point_normal(None, uv.X(), uv.Y(), prop)[1])
+        na, nb = normals
+        if size < 1e-300 or not np.linalg.norm(na) > 0.5 or not np.linalg.norm(nb) > 0.5:
+            continue
+        along = np.array(_xyz(tangent)) / size
+        along = -along if orientation == TopAbs_REVERSED else along
+        between = math.degrees(math.acos(max(-1.0, min(1.0, float(na @ nb)))))
+        concave = between >= SMOOTH_DEG and float(nb @ np.cross(na, along)) > 0.0
+        angles[k] = 180.0 + between if concave else 180.0 - between
+    return points, angles
+
+
 # --- rays and points -------------------------------------------------------------------------------------
 
 

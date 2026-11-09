@@ -26,7 +26,9 @@ technology is named; a machine datasheet moves them):
 - **No knife edges.** A chamfer or a draft that meets a face under 45 degrees thins to nothing over
   its last millimetres: blunt it to the wall minimum (`printing.knife_edge`, a warning: the tip prints
   rounded). Two surfaces meeting at a glancing angle (a sphere emerging from a cone) leave a feather of
-  material the wall rule fails: blend them, or cut the feather back.
+  material along their edge, a knife over the stretch where their angle falls under 45 degrees (read along
+  the edge, not at its middle): blend them, or cut the feather back. A tip at 45 degrees or more is
+  neither a knife nor a thin wall.
 - **Hollow parts.** SLS, MJF and PBF need an escape hole of 3.5 mm or more per cavity for the powder;
   SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill.
 - **Fits.** Mating parts 0.3 mm apart for FDM in practice (the general rule warns under 0.76), SLS 0.3,
@@ -82,8 +84,9 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   refined to the exact least distance (`refined`). On a mesh a place smaller than the rays' spacing can be
   missed, and more rays find false thin places as well as true ones, so a mesh's thin reading is confirmed
   on the STEP or the model before the design changes.
-- `printing.knife_edge` is a convex edge under 45 degrees of material, which thins to nothing:
-  `thin_depth_mm` says how far in it stays under the minimum wall. A warning (text-to-cad's own rule;
+- `printing.knife_edge` is a convex edge under 45 degrees of material somewhere along it, which thins
+  to nothing: `angle_deg` is its least, `length_mm` the stretch under 45, `thin_depth_mm` how far in it
+  stays under the minimum wall. A warning (text-to-cad's own rule;
   no guide defines a knife edge, and the tip prints rounded): blunt it, chamfer it at 45 degrees or
   more, or move the cut that made it.
 - The powder processes (SLS, MJF) need no support: their overhangs are facts, not verdicts, and

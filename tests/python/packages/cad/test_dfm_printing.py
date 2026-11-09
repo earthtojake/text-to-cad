@@ -214,6 +214,32 @@ class KnifeZoneTest(unittest.TestCase):
         self.assertEqual((self.wall_failures(brep_result), self.wall_failures(mesh_result)), ([], []))
 
 
+    def test_a_tip_at_45_deg_is_neither_a_knife_nor_a_thin_wall_on_both_paths(self) -> None:
+        # a block's top meeting a slope at 44, 45 and 46 degrees: 44 is a knife, 45 the limit and 46 over it --
+        # neither a knife nor a wall its tip's sliver thins, whatever the technology's minimum
+        for angle, knife in ((44.0, True), (45.0, False), (46.0, False)):
+            run = 20 / math.tan(math.radians(angle))
+            tip = bd.extrude(bd.Plane.XZ * bd.Polygon((0, 0), (10, 0), (10 + run, 20), (0, 20), align=None), -10)
+            brep_result, mesh_result = self.both(tip, "tip")
+            for result in (brep_result, mesh_result, check(tip, "tip", technology="sla")):
+                with self.subTest(angle=angle, measured_as=result.measurements["source"]["measured_as"],
+                                  technology=result.measurements.get("technology")):
+                    self.assertEqual("printing.knife_edge" in codes(result), knife)
+                    self.assertEqual(self.wall_failures(result), [])
+
+    def test_a_curved_edge_is_a_knife_over_its_stretch_under_45_deg(self) -> None:
+        # a 10 mm rod cut by a plane 60 deg from its axis: the edge's angle runs from 30 deg at the low side to 150
+        # at the high side, a knife where it is under 45 deg alone, its sliver no wall
+        rod = bd.Cylinder(5, 30, align=A)
+        cut = rod - bd.Pos(0, 0, 20) * bd.Rotation(0, 60, 0) * bd.Box(80, 80, 40, align=A)
+        result = check(cut, "rod")
+        [knife] = items(result, "knife_edges")
+        self.assertAlmostEqual(knife["angle_deg"], 30.0, delta=0.5)
+        self.assertLess(knife["length_mm"], 0.5 * knife["edge_length_mm"])
+        self.assertEqual(self.wall_failures(result), [])
+        self.assertIn("printing.knife_edge", codes(result))
+
+
 class WallTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

@@ -29,7 +29,7 @@ import numpy as np
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS",
            "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
-           "frame", "near_segments", "nearest_segments", "orientation_rows", "ranked", "rotation", "span", "support",
+           "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
            "voxels"]
 
 # Lines of a raster are offset by these irrational fractions of the pitch, so no line runs exactly
@@ -475,6 +475,16 @@ def near_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray, chun
     """Each point's distance to the nearest of the segments ``starts[k] -> ends[k]``, ``chunk`` points at a
     time (the points-by-segments table is never larger than that)."""
     return nearest_segments(points, starts, ends, chunk)[0]
+
+
+def past_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray, margins: np.ndarray,
+                  chunk: int = 2048) -> np.ndarray:
+    """Each point's least distance past a segment's own margin: ``min_k |p - segment k| - margins[k]`` (a point
+    within some segment's margin reads 0 or less), ``chunk`` points at a time."""
+    found = np.empty(len(points))
+    for at in range(0, len(points), chunk):
+        found[at:at + chunk] = (_nearest(points[at:at + chunk], starts, ends)[0] - margins[None, :]).min(axis=1)
+    return found
 
 
 def nearest_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray,
