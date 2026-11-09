@@ -301,6 +301,18 @@ class SharpEdgesTest(unittest.TestCase):
         setup = _check(self._valley(140.0)).measurements["setups"]["items"][0]
         self.assertFalse([d for d in setup["directions"] if d.get("sharp_edges")])
 
+    def test_a_slot_s_floor_chamfers_are_an_end_mill_s_corner_and_a_chamfer_mill_s_tip(self) -> None:
+        # a through slot 10 wide whose floor roots are 1.5 mm 45-degree chamfers: each wall's root over its
+        # chamfer is the corner of the end mill side-milling the wall, each chamfer's root on the floor a 90-degree
+        # chamfer mill's tip -- no slot cutter, nothing to say, at any turn
+        profile = bd.Polyline((-5, 12.01), (-5, 9.5), (-3.5, 8), (3.5, 8), (5, 9.5), (5, 12.01), close=True)
+        slot = bd.Box(80, 40, 12, align=(A.CENTER, A.CENTER, A.MIN)) - bd.extrude(
+            bd.Plane.YZ.offset(-41) * bd.make_face(profile), 82)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(0, 0, 25) * bd.Pos(1, 2, 0)):
+            result = cnc(_part(turn * slot), material="aluminum")
+            self.assertEqual(result.measurements["sharp_edges"]["by_tool"], {"end_mill": 2, "chamfer_mill": 2}, turn)
+            self.assertEqual([f for f in result.findings if f.severity != "info"], [], turn)
+
     def test_an_obtuse_root_beside_a_counted_setup_s_floor_is_one_more_setup(self) -> None:
         # a through channel's floor meets its 10-degree leaning walls at 100 degrees: the floor is faced in the
         # top setup the count has, each wall wants its own -- one more setup, said; the same turned

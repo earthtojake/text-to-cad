@@ -361,7 +361,11 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   along its bisector (a special cutter, its angle named), or on five axes a 60 degree mill tilted to each
   flank in turn, its cone's side on the flank (each flank an orientation); and a chamfer mill's shoulder (a 150/135/120 degree void: one face
   along the mill's axis, the other the cone's, its normal's cosine to the axis the half angle's sine within
-  0.01 -- a face along the axis, 1e-16 off square in a turned part, is none); a ball end mill where the void
+  0.01 -- a face along the axis, 1e-16 off square in a turned part, is none), or its pointed tip along a floor's
+  root under a face its cone lies on (a floor under a 45 degree chamfer, the 90 degree mill's); an end mill's
+  corner, tried before any disc cutter, where one face lies along the tool's axis and the other looks along it
+  (a wall's root over a chamfer or a slope falling away below the tool's end: side-milling the wall down to the
+  root leaves it sharp, made in its faces' setups, nothing said); a ball end mill where the void
   angle is >= 150 degrees
   (`BALL_VOID_DEG`, the owner's to confirm: the ball's round departs from the drawn crease by
   R (1 / sin(void / 2) - 1), 0.035 R at 150) along a direction both faces look along whose ray from the crease

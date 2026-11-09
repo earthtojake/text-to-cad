@@ -1516,15 +1516,27 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
         # a curved V's turns along it: on five axes the mill follows it, leaning as it goes
         return path_reach(s, bis)
 
-    def made(way: str, needs: Needs | None = None) -> str:
+    def cone_tip() -> bool:
+        # a chamfer mill's pointed tip along a root between a plane square to its axis and a face its cone
+        # lies on: a floor's root under a 45-degree chamfer, made as drawn by a 90-degree mill
+        for a in (0, 1):
+            na, other = mid_normals[a], mid_normals[1 - a]
+            if planes[a] and ok(na) and any(abs(float(other @ na) - math.sin(math.radians(angle / 2.0)))
+                                            < CONE_TOLERANCE for angle in V_MILLS) \
+                    and bool(model.escape_all(st.points, bisectors, na).all()):
+                return True
+        return False
+
+    def made(way: str, needs: Needs | None = None, corner: bool = False) -> str:
         # an obtuse edge needs no direction of its own: it is made in the setups that make its two faces, which
         # the setups' cover counts; a square corner (an end mill's end and flank) or a V's chamfer mill does
         if directions is not None and needs and void <= OBTUSE_DEG:
             directions[edge.ordinal] = needs
-        if void > OBTUSE_DEG and all(planes) and way == "end_mill" and _end_on(model, state, edge):
-            if v_mill and straight_v and chamfer_fn(st).all():
-                # a V of a standard angle: a chamfer mill along its bisector forms it as drawn, its cone the V,
-                # in one setup -- no radius left, nothing to say (as a chamfer mill's V or shoulder never is)
+        if void > OBTUSE_DEG and all(planes) and way == "end_mill" and not corner and _end_on(model, state, edge):
+            if (v_mill and straight_v and chamfer_fn(st).all()) or cone_tip():
+                # a V of a standard angle, or a floor's root under a face a chamfer mill's cone lies on: the mill
+                # forms it as drawn, in one setup -- no radius left, nothing to say (as a chamfer mill's V or
+                # shoulder never is)
                 return "chamfer_mill"
             note["obtuse_root"] = True
         return way
@@ -1565,6 +1577,16 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
             tried.append(("end_mill", [[(na, machine)]], reached, fn))
         if full:
             return made("end_mill", [full])
+        if void > 90.1:
+            # an end mill's corner, its flank on one face along its axis and its end over the other, which looks
+            # along the axis and falls away below the end (a wall's root over a chamfer or a slope): side-milling
+            # the wall down to the root leaves it sharp -- made in the setups that make its faces
+            for a in (0, 1):
+                other = mid_normals[1 - a]
+                for d in WORLD:
+                    if ok(d) and float(other @ d) > LOOKS_ALONG and model.along(faces[a], d) \
+                            and bool(model.escape_all(st.points, bisectors, d).all()):
+                        return made("end_mill", corner=True)
         # a keyseat cutter: the recess has a floor and a ceiling square to an approach direction, its way in a
         # bore beside it (a concave cylinder along the direction it meets by a convex edge) seen along it
         recess = cavity(faces)
