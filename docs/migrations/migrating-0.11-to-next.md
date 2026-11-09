@@ -72,10 +72,11 @@ engine's cache, so a check run again is immediate, after a restart too (not afte
 measures again, and so does another build of the library at the same release, or a kernel environment made
 again with other versions of the libraries a check measures with). A check outlives its caller, as a build does:
 cut off by a shell's time limit it runs on, and the same command again answers with its result, waiting for it if
-it still runs -- unless another check is waiting for its process meanwhile, which it then gives way to, keeping
-nothing. `cad status` lists the checks running, for which document, since when and whether their caller still
+it still runs -- unless another check is waiting for its process meanwhile, which it then gives way to at once,
+keeping nothing. `cad status` lists the checks running, for which document, since when and whether their caller still
 waits. A `cad run` of a model's script cancels a check of it still running, which says so: run the check again.
-So does a check of a file the engine was measuring when it stopped: an update does not wait for it.
+So does any check the engine was measuring when `cad stop` stopped it, and a check of a file when an update did:
+an update does not wait for it.
 
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. A model or an xbf given no `--process` is checked for
