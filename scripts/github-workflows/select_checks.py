@@ -23,7 +23,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
-    blender                       blender (the render skill's helper in bpy's environment, made by cad run)
+    blender                       blender (the render skill's helper and Open in's Blender script in bpy's environment)
     core_js                       core-js
     web  web_ui  web_client
     mcp
@@ -239,11 +239,12 @@ FEA_SUITE = "tests/python/packages/fea"
 # the environment's making in the server's extras and base, `cad run` and the import scan that chooses it), on a GLB
 # the engine writes (the GLB writer and the clips it bakes: motions, animations and their keys). Each also reaches what
 # its package reaches; the blender job, which makes bpy's environment from PyPI, runs on these, the skill, its own
-# suite and runner, and a full run.
+# suite and runner, and a full run. Open in's Blender script runs in bpy there too, found by the opener.
 BLENDER_CODE = (f"{LIBRARY_SRC}/registry.py", f"{LIBRARY_SRC}/_internal/integrations.py",
                 f"{SERVER_SRC}/_internal/extras.py", f"{SERVER_SRC}/_internal/base.py",
                 f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/scan.py",
-                f"{SERVER_SRC}/cli/run.py")
+                f"{SERVER_SRC}/cli/run.py", f"{SERVER_SRC}/_internal/apps.py",
+                f"{SERVER_SRC}/_internal/open_in_blender.py")
 BLENDER_GLB = (f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/export/motion.py",
                f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py")
 BLENDER_SUITE = "tests/python/packages/blender"

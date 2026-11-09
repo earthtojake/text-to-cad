@@ -35,7 +35,10 @@ Where KiCads are, each platform's way:
 
 ``open_file`` starts the app on the file, or the operating system's own handler for it: detached,
 never waited on, never through a shell, its output discarded. It is given a path and an app the
-server found itself; nothing of a request is ever a command.
+server found itself; nothing of a request is ever a command. Blender opens only its own ``.blend``
+files from its command line, so it is started with the package's import script (``BLENDER_SCRIPT``,
+``--python``) and the file as the one argument after ``--``, data the script reads, never code; on macOS
+as a new instance (``open -n``), since a running Blender would be brought forward without its arguments.
 """
 from __future__ import annotations
 
@@ -54,8 +57,8 @@ from typing import NamedTuple
 
 from cad.engine import executables
 
-__all__ = ["APPS", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad", "NEVER_OPENED", "apps_for", "detect",
-           "file_manager", "kicad_label", "kicad_reads", "linux", "mac", "open_file", "opens", "windows"]
+__all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad", "NEVER_OPENED",
+           "apps_for", "detect", "file_manager", "kicad_label", "kicad_reads", "linux", "mac", "open_file", "opens", "windows"]
 
 # Every app Open in offers: its id and the name the menu shows.
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
@@ -64,10 +67,12 @@ APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycha
         "kicad-nightly": "KiCad nightly"}
 # The apps that take each kind of file, in the menu's order. A kind not here takes none: the file
 # manager and the default app alone.
-_MESHES = ("bambu", "orca", "prusa", "freecad", "blender")
+# Blender takes what its import script does (``BLENDER_SCRIPT``): a GLB and an STL, never a 3MF, which no
+# Blender reads without an add-on.
+_MESHES = ("bambu", "orca", "prusa", "freecad")
 KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
          "step": ("fusion", "freecad", "bambu", "orca", "prusa"),
-         "stl": _MESHES, "3mf": _MESHES, "glb": ("blender",),
+         "stl": (*_MESHES, "blender"), "3mf": _MESHES, "glb": ("blender",),
          "kicad_pcb": ("kicad", "kicad-nightly"), "kicad_sch": ("kicad", "kicad-nightly")}
 
 # Files no app but a KiCad record is started on, the operating system's default handler included (we cannot
@@ -75,6 +80,9 @@ KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
 # runs KiCad's command line alone, headless: ``cad.kicad``, kicode's); Open in hands a person's own KiCad a file
 # at their click. The file manager still reveals such a file's folder.
 NEVER_OPENED = (".kicad_",)
+
+# The script Blender is started with on a file (``--python``): it imports the file into an emptied startup scene.
+BLENDER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "open_in_blender.py")
 
 REFRESH_SECONDS = 300.0
 SPOTLIGHT_SECONDS = 2.0
@@ -633,30 +641,37 @@ def opens(path: str | None) -> bool:
     return not os.path.splitext(str(path or ""))[1].lower().startswith(NEVER_OPENED)
 
 
-def open_file(path: str, app: str | KiCad | None = None, *, platform: str = sys.platform,
+def open_file(path: str, app: str | KiCad | None = None, *, app_id: str | None = None, platform: str = sys.platform,
               spawn: Callable[..., object] = subprocess.Popen, startfile: Callable[[str], None] | None = None) -> None:
-    """Start ``app`` (a path ``detect`` found, or a KiCad, by its editor for the file's extension) on the
-    file at ``path``, or, with none, the operating system's own handler for it. Detached and never waited
-    on; never through a shell. Raises ``FileNotFoundError`` when Linux has no ``xdg-open`` for the default,
-    and ``PermissionError`` for a file no app is started on (``opens``), a KiCad alone being started on one
-    of its editors' files."""
+    """Start ``app`` (a path ``detect`` found for the app ``app_id`` of ``APPS``, or a KiCad, by its editor
+    for the file's extension) on the file at ``path``, or, with none, the operating system's own handler for
+    it; a Blender with its import script (``BLENDER_SCRIPT``) and the file after ``--``. Detached and never
+    waited on; never through a shell. Raises ``FileNotFoundError`` when Linux has no ``xdg-open`` for the
+    default, and ``PermissionError`` for a file no app is started on (``opens``), a KiCad alone being started
+    on one of its editors' files."""
     editor = _KICAD_EDITORS.get(os.path.splitext(path)[1].lower())
     if isinstance(app, KiCad) and editor is not None:
         app = getattr(app, editor)
     elif isinstance(app, KiCad) or not opens(path):
         raise PermissionError(f"{os.path.basename(path)} is never opened in that app from here")
     quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
+    # Blender is handed its import script, and the file as the one argument after `--`: never inside code.
+    blender = app is not None and app_id == "blender"
+    given = ["--python", BLENDER_SCRIPT, "--", path] if blender else [path]
     if platform == "darwin":
-        spawn(["/usr/bin/open", *(["-a", app] if app else []), path], start_new_session=True, **quiet)
+        if blender:
+            spawn(["/usr/bin/open", "-n", "-a", app, "--args", *given], start_new_session=True, **quiet)
+        else:
+            spawn(["/usr/bin/open", *(["-a", app] if app else []), path], start_new_session=True, **quiet)
     elif platform == "win32":
         if app is None:
             (startfile or os.startfile)(path)  # type: ignore[attr-defined]
             return
-        spawn([app, path], creationflags=_DETACHED_PROCESS | _CREATE_NEW_PROCESS_GROUP, **quiet)
+        spawn([app, *given], creationflags=_DETACHED_PROCESS | _CREATE_NEW_PROCESS_GROUP, **quiet)
     else:
         if app is None:
             app = executables.find("xdg-open")
             if app is None:
                 raise FileNotFoundError("xdg-open is not installed")
-        spawn([app, path], start_new_session=True, **quiet)
+        spawn([app, *given], start_new_session=True, **quiet)
 

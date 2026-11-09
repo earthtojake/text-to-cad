@@ -312,7 +312,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         for package in ("libx11-6", "libxkbcommon0", "libgl1", "libegl1", "libgl1-mesa-dri"):
             self.assertIn(package, JOBS["blender"])
         # The suite and its runner are that job's alone: no package job collects them.
-        for path in ("tests/python/packages/blender/test_render_helper.py", "scripts/test/test-blender.sh"):
+        for path in ("tests/python/packages/blender/test_render_helper.py",
+                     "tests/python/packages/blender/test_open_in_blender.py", "scripts/test/test-blender.sh"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path), {"blender", "skills"})
         # The skill's helper and pages reach it, and nothing else but the light contracts.
@@ -324,6 +325,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/_internal/extras.py",
                      "packages/cad-server/src/cad_server/_internal/scan.py",
                      "packages/cad-server/src/cad_server/cli/run.py",
+                     "packages/cad-server/src/cad_server/_internal/apps.py",
+                     "packages/cad-server/src/cad_server/_internal/open_in_blender.py",
                      "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/engine/export/motion.py",
                      "packages/cad/src/cad/engine/export/animation.py"):
             with self.subTest(path=path):

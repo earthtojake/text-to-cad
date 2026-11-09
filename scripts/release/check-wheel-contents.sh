@@ -86,6 +86,8 @@ SERVER_REQUIRED=(
   "cad_server/engine/daemon.py"
   "cad_server/engine/cli.py"
   "cad_server/_internal/engine_daemon.py"
+  # The script Open in starts a person's Blender with on a GLB or an STL (apps.BLENDER_SCRIPT).
+  "cad_server/_internal/open_in_blender.py"
   # Its README: the mechanisms the package's laws name.
   "cad_server/engine/README.md"
   "cad_server/_runtime/viewer/index.html"

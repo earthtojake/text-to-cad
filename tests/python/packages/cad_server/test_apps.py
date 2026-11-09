@@ -4,6 +4,7 @@ request reads and never fills, and the opening's commands. Nothing here starts a
 computer's own index."""
 from __future__ import annotations
 
+import ast
 import calendar
 import os
 import plistlib
@@ -466,7 +467,7 @@ class KindsTest(unittest.TestCase):
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
                                "step": ["fusion", "freecad", "bambu", "orca", "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
-                               "3mf": ["bambu", "orca", "prusa", "freecad", "blender"],
+                               "3mf": ["bambu", "orca", "prusa", "freecad"],
                                "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
                                "kicad_pcb": ["kicad", "kicad-nightly"], "kicad_sch": ["kicad", "kicad-nightly"]})
         self.assertEqual(apps.apps_for("step", {"bambu": "/b", "vscode": "/v"}), [{"id": "bambu", "name": "Bambu Studio"}])
@@ -600,6 +601,48 @@ class OpenTest(unittest.TestCase):
         with mock.patch.object(apps.executables, "find", return_value=None), \
                 self.assertRaisesRegex(FileNotFoundError, "xdg-open"):
             self.opened("linux", None)
+
+    def test_blender_is_started_with_its_import_script_and_the_file_after_the_double_dash(self) -> None:
+        # Blender opens only a .blend from its command line: it runs the package's script, which reads the file's
+        # path after `--` as data. No code is made of the path, whatever it holds.
+        quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
+        script = apps.BLENDER_SCRIPT
+        for file in ("/m/part.glb", "/m/it's \"odd\"; import os.glb", "/m/part.stl"):
+            for platform, app, command, options in (
+                    ("darwin", "/Applications/Blender.app",
+                     ["/usr/bin/open", "-n", "-a", "/Applications/Blender.app", "--args"], {"start_new_session": True}),
+                    ("win32", "C:/Blender/blender.exe", ["C:/Blender/blender.exe"],
+                     {"creationflags": 0x00000008 | 0x00000200}),
+                    ("linux", "/usr/bin/blender", ["/usr/bin/blender"], {"start_new_session": True})):
+                with self.subTest(platform=platform, file=file):
+                    spawn = mock.Mock()
+                    apps.open_file(file, app, app_id="blender", platform=platform, spawn=spawn)
+                    spawn.assert_called_once_with([*command, "--python", script, "--", file], **options, **quiet)
+                    argv = spawn.call_args.args[0]
+                    self.assertNotIn("--python-expr", argv)
+                    self.assertEqual([part for part in argv if file in part], [file])
+        # Another app's id, or the default handler, is the file alone.
+        self.opened("linux", "/usr/bin/freecad", app_id="freecad").assert_called_once_with(
+            ["/usr/bin/freecad", "/m/part.step"], start_new_session=True, **quiet)
+        with mock.patch.object(apps.executables, "find", return_value="/usr/bin/xdg-open"):
+            self.opened("linux", None, app_id="blender").assert_called_once_with(
+                ["/usr/bin/xdg-open", "/m/part.step"], start_new_session=True, **quiet)
+
+    def test_the_blender_script_ships_beside_the_opener_and_reads_its_file_from_after_the_double_dash(self) -> None:
+        script = Path(apps.BLENDER_SCRIPT)
+        self.assertTrue(script.is_absolute())
+        self.assertEqual(script.parent, Path(apps.__file__).resolve().parent)
+        text = script.read_text(encoding="utf-8")
+        self.assertIn("import_scene.gltf", text)
+        self.assertNotIn("cad_glb", text)  # the render skill's GPL helper is never what the server runs
+        # Its argument parsing alone, without bpy (which the script imports): the one argument after `--`.
+        [function] = [node for node in ast.parse(text).body if isinstance(node, ast.FunctionDef) and node.name == "requested"]
+        scope: dict = {}
+        exec(compile(ast.Module([function], []), str(script), "exec"), scope)  # noqa: S102 - the package's own function
+        requested = scope["requested"]
+        self.assertEqual(requested(["blender", "--python", "s.py", "--", "/m/a b.glb"]), "/m/a b.glb")
+        for argv in (["blender", "--python", "s.py"], ["blender", "--"], ["blender", "--", "/a.glb", "/b.glb"]):
+            self.assertIsNone(requested(argv), argv)
 
     def test_a_kicad_opens_its_editor_for_the_files_extension_and_nothing_else_opens_such_a_file(self) -> None:
         quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
