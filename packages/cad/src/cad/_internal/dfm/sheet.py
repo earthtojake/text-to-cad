@@ -147,8 +147,13 @@ def _holes(source: Source, *, diameter: float | None, diameter_severity: str = "
                         source, scale_by="thickness", severity="warning", note=edge_note,
                         fix="move the hole in to at least {limit:.3g} mm from the edge", **_SCALED))
     if spacing is not None:
+        # a recommendation, a warning: one of Hubs's "Design best practices for laser cutting", "Space holes at
+        # least 2 times the sheet thickness apart", its risk in the forming -- "Holes that are too close to each
+        # other can lead to deformation or breakage during forming or bending." -- no cutting limit
         rules.append(_r("hole_spacing", "hole_spacing", "distance_mm", "min", spacing, "mm",
-                        "hole-to-hole distance (edge to edge)", source, scale_by="thickness",
+                        "hole-to-hole distance (edge to edge)", source, scale_by="thickness", severity="warning",
+                        note="holes closer than this can deform or break during forming or bending (a best "
+                             "practice for laser cutting, a recommendation)",
                         fix="space the holes at least {limit:.3g} mm apart, edge to edge", **_SCALED))
     return tuple(rules)
 

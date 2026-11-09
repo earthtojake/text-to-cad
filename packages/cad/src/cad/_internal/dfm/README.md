@@ -661,7 +661,8 @@ the outside mold line, the page does not say); `sheet.bend_relief_width` reliefs
 reliefs, not corner); `sheet.hole_to_bend` hole_to_bend.distance_tangent_mm min 2 t ("from the start of the
 bend radius"); `sheet.hole_diameter` holes.size_mm min 1 t (warning); `sheet.hole_to_edge` min 1 t (warning:
 "Holes should be at least the sheet's thickness from the edge");
-`sheet.hole_spacing` min 2 t; `sheet.web_width` webs.width_mm min 1 t (warning; Hubs's hole-to-edge applied
+`sheet.hole_spacing` min 2 t (warning: a laser-cutting best practice, its risk the forming's -- "Holes that are
+too close to each other can lead to deformation or breakage during forming or bending."); `sheet.web_width` webs.width_mm min 1 t (warning; Hubs's hole-to-edge applied
 to any web); `sheet.notch_width` min max(t, 1.016), `sheet.notch_length` length_to_width max 5,
 `sheet.tab_width` min max(2t, 3.2), `sheet.tab_length` max 5 (warnings: notches and tabs "should" be),
 `sheet.hem_diameter` min 1 t,

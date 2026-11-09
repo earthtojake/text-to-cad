@@ -309,6 +309,16 @@ class HoleTest(unittest.TestCase):
         self.assertEqual(items(report, "not_sheet"), [])
 
 
+    def test_close_holes_in_a_flat_plate_are_a_recommendation(self) -> None:
+        # 2 mm apart edge to edge in a 2 mm plate, under Hubs's 2 t: a best practice for laser cutting whose
+        # risk is the forming's -- a warning, never an error, however the plate is turned
+        plate = bd.Box(60, 40, 2) - bd.Pos(-3, 0, 0) * bd.Cylinder(1.5, 4) - bd.Pos(2, 0, 0) * bd.Cylinder(1.5, 4)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(30, 0, 45) * bd.Pos(5, 1, 2)):
+            result = checked(turn * plate, material="aluminum")
+            self.assertEqual({f.severity for f in result.findings if f.code == "sheet.hole_spacing"}, {"warning"})
+            self.assertAlmostEqual(failed(result, "sheet.hole_spacing")[0]["value"], 2.0, places=3)
+
+
 class ReliefTest(unittest.TestCase):
     def test_a_missing_relief_and_one_present(self) -> None:
         bare = measured(tabbed(label="bare"))
