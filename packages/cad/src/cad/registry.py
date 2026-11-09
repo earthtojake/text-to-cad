@@ -315,7 +315,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
     "build123d": Integration(
         "build123d", "build123d and the OCCT kernel under it (OCP): model code builds with it, and the engine "
                      "makes, reads, writes and draws documents with it", extra="build123d", process="in-process",
-        modules=("build123d", "OCP"),
+        # bd_materials too: the materials a model gives its parts, which a script may import before build123d.
+        modules=("build123d", "OCP", "bd_materials"),
         distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
                        "ezdxf", "pillow", "scipy"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
