@@ -134,8 +134,11 @@ def _colliding(model: Any, geom: int) -> bool:
 
 
 def _contacts_at_rest(mujoco: Any, model: Any, poses: list, findings: FindingsReport, where: str) -> None:
+    """Each pair of bodies whose geoms intersect at a pose, once: its deepest geom pair, and how many contacts the two
+    bodies make there (two meshes intersecting make several, one a contact point)."""
     for label, _qpos, data in poses:
-        pairs: list[tuple[float, str]] = []
+        deepest: dict[tuple[int, int], tuple[float, int, int]] = {}  # by body pair: (depth, geom, geom)
+        counts: dict[tuple[int, int], int] = {}
         for index in range(data.ncon):
             contact = data.contact[index]
             first, second = int(contact.geom1), int(contact.geom2)
@@ -147,12 +150,19 @@ def _contacts_at_rest(mujoco: Any, model: Any, poses: list, findings: FindingsRe
                                   or (not _moving(model, body2) and _floating(mujoco, model, body1)))
             if depth <= (RESTING if static_vs_floating else INTERSECTING):
                 continue
-            pairs.append((depth, f"{_geom(model, first)} and {_geom(model, second)} by {depth * 1000:.3g} mm"))
-        if not pairs:
+            bodies = (min(body1, body2), max(body1, body2))
+            counts[bodies] = counts.get(bodies, 0) + 1
+            if bodies not in deepest or depth > deepest[bodies][0]:
+                deepest[bodies] = (depth, first, second)
+        if not deepest:
             continue
+        pairs: list[tuple[float, str]] = []
+        for bodies, (depth, first, second) in deepest.items():
+            many = f", {counts[bodies]} contacts" if counts[bodies] > 1 else ""
+            pairs.append((depth, f"{_geom(model, first)} and {_geom(model, second)} by {depth * 1000:.3g} mm{many}"))
         pairs.sort(key=lambda pair: -pair[0])
         findings.add("warning", "contacts_at_rest",
-                     f"{len(pairs)} geom pair(s) intersect {label}, deepest first: "
+                     f"{len(pairs)} body pair(s) intersect {label}, deepest first: "
                      f"{_listed([text for _depth, text in pairs])}", path=where,
                      hint="move the geoms apart, exclude the pair (<contact><exclude>), or give the visual geom "
                           "contype=\"0\" conaffinity=\"0\"; stiffening contacts to hide an intersection makes "

@@ -128,6 +128,10 @@ class Health(unittest.TestCase):
         self.assertIn("'right_box'", finding.message)
         self.assertIn("50 mm", finding.message)
         self.assertIn("at qpos0", finding.message)
+        # Two boxes intersecting make several contacts: the pair is said once, with how many.
+        self.assertTrue(finding.message.startswith("1 body pair(s) intersect at qpos0"), finding.message)
+        self.assertEqual(1, finding.message.count("'left_box' and geom 'right_box'"), finding.message)
+        self.assertRegex(finding.message, r"by 50 mm, \d+ contacts")
 
     def test_a_free_body_resting_on_the_floor_is_not_intersecting(self) -> None:
         resting = self.findings(RESTING.format(z=0.0495))

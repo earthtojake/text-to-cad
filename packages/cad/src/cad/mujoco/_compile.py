@@ -20,7 +20,8 @@ Then the model-health checks of MuJoCo's modelling guide ("Model tuning"), on th
 ``qpos0`` and at the key named ``home`` (``cad.mujoco._health``, which keeps the thresholds):
 
 - ``contacts_at_rest`` (warning): geoms of two bodies intersect at rest, deeper than 0.1 mm (1 mm for a
-  free-floating tree resting on a static geom); the deepest pairs by name and depth.
+  free-floating tree resting on a static geom); each pair of bodies once, deepest first, by its deepest geom
+  pair and depth and how many contacts the two make.
 - ``visual_geoms_collide`` (warning): a geom in groups 0-2 collides on a body that has group-3 collision geoms.
 - ``inertia_from_visuals`` (warning): a body with no ``<inertial>`` takes mass from visual and collision geoms both.
 - ``scale_suspect`` (warning): the moving geometry spans over 50 m or under 5 mm, or a mesh over 100 units.
