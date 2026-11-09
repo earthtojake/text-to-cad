@@ -429,10 +429,9 @@ class _Animation:
         if link is not None:
             found = self.pose.deltas(t)[link] @ found
         for item in reversed(of):
-            key = id(item)
-            moved = held.get(key)
+            moved = held.get(id(item))
             if moved is None:
-                moved = held[key] = item.matrix(t)
+                moved = held[id(item)] = item.matrix(t)
             found = moved @ found
         return found
 
@@ -454,7 +453,9 @@ def _distance(path: str, got: np.ndarray, truth: np.ndarray) -> float:
 
 
 def _channel(motion: _Animation, index: int, path: str, kinds: set[str], breaks: set[float],
-             tolerance: dict[str, float]) -> tuple[Channel, float]:
+             tolerance: dict[str, float], name: str) -> tuple[Channel, float]:
+    """The channel of ``path`` on node ``index`` (``name``, its path below the root, what a refusal
+    names it by), and the worst it strays from the animation between its keys."""
     from cad.engine import mechanism
     from cad.engine.export import ExportRefused
 
@@ -527,7 +528,7 @@ def _channel(motion: _Animation, index: int, path: str, kinds: set[str], breaks:
         # apart): the key count then never reaches MOST_KEYS and the loop would not end, so a pass
         # that does not grow the keys is refused, as too many keys already is.
         if len(grown) == len(times) or len(grown) > mechanism.MOST_KEYS:
-            raise ExportRefused(f"the {path} of node {index} does not settle within the tolerance in "
+            raise ExportRefused(f"the {path} of {name!r} does not settle within the tolerance in "
                                 f"{mechanism.MOST_KEYS} keys")
         times = grown
     rows = np.array([key(t) for t in times])
@@ -561,7 +562,7 @@ def bake(view: Any, held: dict[int, Any], shown: list[Any], targets: list[Target
         for target in chosen(targets, motion.signature):
             motion.aim(target)
             for path, (eases, breaks) in sorted(motion.paths(target.node).items()):
-                channel, deviation = _channel(motion, target.node, path, eases, breaks, tolerance)
+                channel, deviation = _channel(motion, target.node, path, eases, breaks, tolerance, target.name)
                 matrix = np.asarray(target.matrix, dtype=float)
                 rest = {"translation": matrix[:3, 3], "rotation": quaternion(matrix), "scale": np.ones(3)}[path]
                 if not _moves(channel, rest):

@@ -7,7 +7,7 @@ its STEP keys the bake's own.
 
 A GLB holds the assembly's tree as nested nodes (``NESTED``): every part where the document places it,
 a sub-assembly that moves as one keyed on its own node, every other moving part on its own, in its
-parent's frame.
+parent's frame, a turned parent's too (``TURNED``).
 
 The three GLBs the core suite plays and validates (``packages/core/src/lib/render/fixtures``:
 ``animation.glb``, ``motion.glb``, ``nested.glb``) are this module's ``CHANNELS``, ``MOTION`` and
@@ -170,6 +170,42 @@ def nested():
     show.translation("arm/head", by=(0, 0, 10))
     show.translation("arm/head/pin_2", by=(0, 0, 5), start=1, end=2)
     return configuration_sequence(model, "sweep", [(0, {"swing": 0}), (1, "out"), (2, {"swing": 0})])
+'''
+
+
+# A sub-assembly under a turned one: ``outer`` (a post and ``inner``) turned 40 degrees about X, and
+# ``inner`` (two blades) turned 25 more on the post, about which it spins. Its motion spins ``inner``
+# as one; its animation turns and lifts ``inner`` and then turns one blade on, so the blades move apart.
+TURNED = '''
+import build123d as bd
+from cad import glb, xbf
+from cad.build123d import animation, configuration_sequence, mechanism_state
+
+
+@xbf("XBF/turned.xbf")
+@glb("turned.glb")
+def turned():
+    base = bd.Box(80, 40, 10)
+    base.label = "base"
+    post = bd.Box(10, 10, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    post.label = "post"
+    blade = bd.Box(30, 4, 2, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    blades = [blade.moved(bd.Location((0, 0, 0), (0, 0, 1), angle)) for angle in (0, 180)]
+    blades[0].label, blades[1].label = "blade_1", "blade_2"
+    inner = bd.Compound(children=blades, label="inner").moved(bd.Location((0, 0, 30), (0, 1, 0), 25))
+    outer = bd.Compound(children=[post, inner], label="outer")
+    outer.location = bd.Location((15, 5, 5), (1, 0, 0), 40)
+    post, inner = outer.children
+    spin = bd.Axis((0, 0, 30), (0, 0, 1))
+    bd.RevoluteJoint("spin", post, axis=spin, angular_range=(-180, 180))
+    bd.RigidJoint("spin", inner, bd.Plane(origin=spin.position, z_dir=spin.direction).location)
+    model = bd.Compound(children=[base, outer], label="turned")
+    mechanism_state(model, "turned", spin=120)
+    show = animation(model, "show", duration=2)
+    show.rotation("outer/inner", axis=(1, 0, 0), by=70)
+    show.translation("outer/inner", by=(3, 4, 5))
+    show.rotation("outer/inner/blade_2", axis=(0, 1, 0), by=30, start=1, end=2)
+    return configuration_sequence(model, "sweep", [(0, {"spin": 0}), (1, "turned"), (2, {"spin": 0})])
 '''
 
 
@@ -399,8 +435,9 @@ class RefinementLoopTest(unittest.TestCase):
                 return np.array([0.0, 0.0, 0.0]) if t <= edge else np.array([30.0, 0.0, 0.0])
 
         start = time.monotonic()
-        with self.assertRaises(ExportRefused):
-            _channel(StubMotion(), 0, 'translation', {'LINEAR'}, {edge, nxt}, {'translation': 0.03})
+        with self.assertRaises(ExportRefused) as refused:
+            _channel(StubMotion(), 0, 'translation', {'LINEAR'}, {edge, nxt}, {'translation': 0.03}, 'arm/head')
+        self.assertIn("the translation of 'arm/head' does not settle", str(refused.exception), 'named by its path')
         self.assertLess(time.monotonic() - start, 10.0, 'the loop must end quickly, not spin')
 
 
@@ -805,6 +842,97 @@ class NestedTest(_Folder):
                 np.testing.assert_allclose(worlds[self.node[at]][:3, 3], want[:3, 3],
                                            atol=mechanism.LINEAR_TOLERANCE * size + keys.KEY_MM, err_msg=f"{path} at {t}")
                 np.testing.assert_allclose(worlds[self.node[at]][:3, :3], want[:3, :3], atol=1e-6, err_msg=f"{path} at {t}")
+
+
+class TurnedParentTest(_Folder):
+    """A clip keys a node in its parent's frame however the parent is turned: ``TURNED``'s ``inner``,
+    keyed by its motion under ``outer`` (turned 40 degrees), and its blades, keyed by its animation
+    under ``inner`` (turned again), stand at every time where the document's frame puts them."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.build(TURNED, "turned", stem="turned")
+        self.gltf, self.read = _glb(self.folder / "turned.glb")
+        self.structure = document.Loaded(self.folder / "XBF/turned.xbf").structure()
+        self.names = [node["name"] for node in self.gltf["nodes"]]
+        self.node = {at: self.names.index(instance["path"].split("/", 1)[1])
+                     for at, instance in enumerate(self.structure["instances"])}
+        self.clips = {clip["name"]: clip for clip in self.gltf["animations"]}
+
+    def keyed(self, clip: str) -> list[str]:
+        """The nodes ``clip`` keys, each checked to stand under a turned parent: what this test is for."""
+        keyed = sorted({self.names[channel["target"]["node"]] for channel in self.clips[clip]["channels"]})
+        rest, parents = _worlds(self.gltf), {child: at for at, node in enumerate(self.gltf["nodes"])
+                                            for child in node.get("children") or ()}
+        for name in keyed:
+            turn = rest[parents[self.names.index(name)]][:3, :3]
+            self.assertGreater(float(np.abs(turn - np.eye(3)).max()), 0.5, f"{name}'s parent is turned")
+        return keyed
+
+    def test_a_motion_keys_a_sub_assembly_under_a_turned_parent_where_forward_kinematics_puts_it(self) -> None:
+        from cad.engine.export import Source
+        from cad.engine.export.glb import _size
+        from cad.engine.export.mesh import meshes
+
+        self.assertEqual(self.keyed("sweep"), ["outer/inner"], "the link is a sub-assembly: its node moves")
+        view = Source.read(self.folder / "XBF/turned.xbf").view()
+        size = _size(meshes(view), view.placements)
+        between = mechanism.LINEAR_TOLERANCE * size * 1.5 + keys.KEY_MM
+        turning = mechanism.ANGULAR_TOLERANCE * 1.5 + math.radians(keys.KEY_DEGREES)
+        timeline = mechanism.Timeline(self.structure["kinematics"], "sweep")
+        for t in np.linspace(0.0, 2.0, 81):
+            worlds = _worlds(self.gltf, _posed(self.gltf, self.read, self.clips["sweep"], float(t)))
+            truth = mechanism.posed_instances(self.structure, timeline.values(float(t)))
+            for at, instance in enumerate(self.structure["instances"]):
+                want, got = np.array(truth[at]).reshape(4, 4).T, worlds[self.node[at]]
+                self.assertLess(float(np.linalg.norm(got[:3, 3] - want[:3, 3])), between, (instance["path"], t))
+                self.assertLess(_angle(got[:3, :3], want[:3, :3]), turning, (instance["path"], t))
+
+    def test_an_animation_keys_parts_under_a_turned_parent_where_a_bake_in_the_documents_frame_puts_them(self) -> None:
+        """The same animation baked with every part its own node under the root (``within`` the
+        identity, so no frame is changed), sampled as glTF does, is where the GLB's tree puts each
+        part, within the keys' own tenth of a millimetre and of a degree."""
+        from cad.engine.export import Source
+        from cad.engine.export.animation import bake
+        from cad.engine.export.glb import _size
+        from cad.engine.export.mesh import meshes
+        from cad.engine.export.motion import Target
+
+        self.assertEqual(self.keyed("show"), ["outer/inner/blade_1", "outer/inner/blade_2"],
+                         "the blades move apart: each its own node")
+        view = Source.read(self.folder / "XBF/turned.xbf").view()
+        held = meshes(view)
+        shown = [placed for placed in view.placements if held[placed.prototype].triangles]
+        flat = [Target(placed.instance, None, (placed.instance,), placed.instance, np.asarray(placed.matrix, dtype=float),
+                       np.eye(4), "/".join(placed.path[1:])) for placed in shown]
+        [baked] = bake(view, held, shown, flat, _size(held, shown))
+        tracks: dict[int, dict[str, Any]] = {}
+        for channel in baked.channels:
+            tracks.setdefault(channel.instance, {})[channel.path] = channel
+        self.assertEqual(sorted(tracks), sorted(at for at, node in self.node.items()
+                                                if self.names[node].startswith("outer/inner/")))
+        # The float32 the GLB stores its keys in, at the model's reach.
+        rounding = float(np.finfo(np.float32).eps) * _size(held, shown)
+        for t in np.linspace(0.0, 2.0, 81):
+            worlds = _worlds(self.gltf, _posed(self.gltf, self.read, self.clips["show"], float(t)))
+            for placed in shown:
+                want = np.asarray(placed.matrix, dtype=float).copy()
+                for path, channel in tracks.get(placed.instance, {}).items():
+                    value = _sample(channel.times, channel.values, channel.interpolation, float(t), path == "rotation")
+                    if path == "rotation":
+                        want[:3, :3] = _rotation(value)
+                    else:
+                        want[:3, 3] = value
+                got = worlds[self.node[placed.instance]]
+                self.assertLessEqual(float(np.linalg.norm(got[:3, 3] - want[:3, 3])), keys.KEY_MM + rounding,
+                                     (placed.path, t))
+                self.assertLessEqual(_angle(got[:3, :3], want[:3, :3]),
+                                     math.radians(keys.KEY_DEGREES) + float(np.finfo(np.float32).eps), (placed.path, t))
+
+
+def _angle(a: np.ndarray, b: np.ndarray) -> float:
+    """The angle between two rotation matrices, in radians."""
+    return math.acos(max(-1.0, min(1.0, (float(np.trace(a.T @ b)) - 1) / 2)))
 
 
 class FixturesTest(_Folder):

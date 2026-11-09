@@ -7,7 +7,9 @@ document's assembly tree as nodes, under one root node named by the document: a 
 sub-assembly, its components under it, and a node per placement, each placed in its parent's frame
 (a node at its parent's place has no matrix), so a part stands where the document places it.
 Every node is named by its path below the root (``board/D44/housing``, its sub-assemblies
-``board`` and ``board/D44``): unique, and a part's name is the one a flat file gave it. A
+``board`` and ``board/D44``), unique where the document's own paths are (two sub-assemblies both
+labelled ``leg``, each holding a ``foot``, give ``leg``, ``leg/foot``, ``leg``, ``leg/foot``), and a
+part's name is the one a flat file gave it. A
 sub-assembly with no part the file draws has no node. A material per look: PBR metallic-roughness, its base colour the part's (or
 the paint's), metallic, roughness and emissive from the part's material, ``BLEND`` where
 the colour is not opaque (a transmissive look's fade is its PBR ``opacity`` alone: ``_alpha``), and
@@ -260,7 +262,8 @@ def _tree(view: Any, drawn: dict[int, int]) -> tuple[list[dict], list[Target]]:
     each node but the root as a ``motion.Target``: what a clip may key. ``drawn`` is each placement the
     file draws, by instance, its mesh. A sub-assembly stands at its placement in its parent's
     (``Source.locals``, the identity where the document has none: a mesh file's), a part where the
-    document places it; a node at its parent's place has no matrix."""
+    document places it; a node at its parent's place has no matrix. Each node is named by its path
+    below the root, as unique as the document's paths: two siblings of one label share a name."""
     locals_ = view.source.locals()
     placed_at = {placed.instance: placed for placed in view.placements}
     nodes: list[dict] = [{"name": view.name, "rotation": list(ROTATION), "scale": list(SCALE), "children": []}]
@@ -297,7 +300,7 @@ def _tree(view: Any, drawn: dict[int, int]) -> tuple[list[dict], list[Target]]:
         index = len(nodes) - 1
         nodes[parent].setdefault("children", []).append(index)
         targets.append(Target(index, None if parent == 0 else parent, under,
-                              None if "children" in tree else tree["instance"], world, within))
+                              None if "children" in tree else tree["instance"], world, within, name))
         for at, child in enumerate(tree.get("children") or ()):
             visit(child, path + (at,), names + [child["name"]], index, world)
 

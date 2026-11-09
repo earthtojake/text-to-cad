@@ -597,8 +597,12 @@ class GlbTest(_Folder):
         self.arm()
         view = Source.read(self.xbf).view()
         kinematics = view.source.structure["kinematics"]
+        # Each part its own node, the root's child, its node index its instance's.
+        targets = [motion.Target(placed.instance, None, (placed.instance,), placed.instance,
+                                 np.asarray(placed.matrix, dtype=float), np.eye(4), "/".join(placed.path[1:]))
+                   for placed in view.placements]
         for name in kinematics["motions"]:
-            moving = motion._Motion(view, name, [placed.instance for placed in view.placements])
+            moving = motion._Motion(view, name, targets)
             for t in np.linspace(0.0, moving.timeline.duration, 7):
                 values = moving.timeline.values(float(t))
                 with mock.patch.object(mechanism, "_from_column", side_effect=AssertionError("a frame read again")):
