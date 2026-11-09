@@ -101,7 +101,8 @@ class Graphic:
 @dataclass(frozen=True)
 class Keepout:
     """A rule area (KiCad's keep-out zone), the board's or a footprint's: no track on ``layers`` where
-    ``tracks``, no via where ``vias``."""
+    ``tracks``, no via where ``vias``; ``shape`` its outline, an arc in it as chords within ``CHORD_TOLERANCE``
+    grown by that, so that it covers the true arc."""
 
     layers: tuple[str, ...]
     tracks: bool
@@ -420,11 +421,14 @@ def _keepout(node: list, copper: Sequence[str], frame: FootprintFrame | None) ->
     def banned(name: str) -> bool:
         return str(sexpr.value(rules, name, "allowed")) == "not_allowed"
 
-    outline = zone_outline(node, frame if frame is not None and frame.zones_placed else None)
+    # An arc in the outline as chords within CHORD_TOLERANCE of it, the keep-out grown by that so that it covers
+    # the true arc where it bulges past them (a plain outline is exact as written).
+    outline = zone_outline(node, frame if frame is not None and frame.zones_placed else None, CHORD_TOLERANCE)
+    arcs = sexpr.find(sexpr.find(sexpr.find(node, "polygon") or [], "pts") or [], "arc") is not None
     layers = tuple(expand_copper(item_layers(node), copper))
     if len(outline) < 3 or not layers or not (banned("tracks") or banned("vias")):
         return None
-    return Keepout(layers, banned("tracks"), banned("vias"), Shape.polygon(outline))
+    return Keepout(layers, banned("tracks"), banned("vias"), Shape.polygon(outline, CHORD_TOLERANCE if arcs else 0.0))
 
 
 def _drawn(points: Sequence[XY], closed: bool, filled: bool, reach: float) -> tuple[Shape, ...]:

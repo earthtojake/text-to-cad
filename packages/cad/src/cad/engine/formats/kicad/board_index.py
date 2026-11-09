@@ -1506,10 +1506,11 @@ def _outline(items: list[tuple[list[XY], bool]]) -> list[XY]:
     return hull(point for points, _closed_ in items for point in points)
 
 
-def zone_outline(node: list, frame: FootprintFrame | None = None) -> list[XY]:
+def zone_outline(node: list, frame: FootprintFrame | None = None, tolerance: float | None = None) -> list[XY]:
     """A zone's outline on the board: as written, or placed through ``frame``, its footprint's, when the
-    footprint holds it in its own frame (``FootprintFrame.zones_placed``)."""
-    outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"))
+    footprint holds it in its own frame (``FootprintFrame.zones_placed``); an arc in it sampled as
+    :func:`points_of` samples it (within ``tolerance`` of it, given one)."""
+    outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"), tolerance)
     return [frame.place(point) for point in outline] if frame is not None else outline
 
 

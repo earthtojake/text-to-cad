@@ -69,5 +69,23 @@ class Padstacks(unittest.TestCase):
         self.assertIn("give its layers' shapes a common point", said)
 
 
+class Keepouts(unittest.TestCase):
+    def test_a_keepouts_arc_is_kept_out_to_the_true_arc_not_its_chords(self) -> None:
+        """A rule area's outline arc (radius 50.5 mm, its chord 20 mm) is read as chords inside it and the
+        keep-out grown past them: every point a micron inside the true arc (and inside the area) is in the
+        router's keep-out, where the arc passes its chords by up to 0.11 mm sampled every 10 degrees."""
+        zone = (f'(zone (net 0) (net_name "") (layers "F.Cu") (uuid "{_uuid()}") (hatch edge 0.5) (keepout (tracks '
+                'not_allowed) (vias not_allowed) (pads allowed) (copperpour allowed) (footprints allowed)) (polygon (pts '
+                '(xy 0 10) (xy 20 10) (arc (start 20 10) (mid 10 9) (end 0 10)))))')
+        keepout, = read_copper(board(zone)).keepouts
+        cx, cy, r = 10.0, 59.5, 50.5
+        first, last = math.atan2(10 - cy, 0 - cx), math.atan2(10 - cy, 20 - cx)
+        for k in range(201):
+            angle = first + (last - first) * k / 200
+            x, y = cx + (r - 1e-3) * math.cos(angle), cy + (r - 1e-3) * math.sin(angle)
+            if y < 10 - 1e-3:
+                self.assertTrue(keepout.shape.contains(x, y), (x, y))
+
+
 if __name__ == "__main__":
     unittest.main()
