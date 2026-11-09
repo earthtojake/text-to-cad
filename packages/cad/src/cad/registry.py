@@ -348,6 +348,15 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),
+    "xcaf_pmi": Integration(
+        "xcaf_pmi", "xcaf-pmi, Paul Fremantle's AP242 writer: writes an .xbf's PMI to a STEP with haecceity instead "
+                    "of the kernel's writer, with callouts drawn as text and notes in the file",
+        extra="xcaf_pmi", process="separate",
+        modules=("xcaf_pmi",), distributions=("xcaf-pmi", "quiddity"), identity=("xcaf-pmi",),
+        commands=("xcaf-pmi",),
+        # xcaf-pmi's OCP is the kernel's, so its environment is resolved with build123d and the OCP wheel counts
+        # there: this is quiddity's wheel and xcaf-pmi's.
+        holds="xcaf-pmi and quiddity", download_mb=10),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

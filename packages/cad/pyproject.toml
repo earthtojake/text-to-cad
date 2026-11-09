@@ -115,6 +115,14 @@ trimesh = [
   "scipy>=1.14,<2",
   "networkx>=3.2,<4",
 ]
+# The xcaf_pmi integration's extra: xcaf-pmi, Paul Fremantle's AP242 writer (Apache-2.0), and quiddity, his
+# STEP reader and PMI writer under it (Apache-2.0, abi3 wheels for macOS, Linux and Windows). Bounded above
+# as build123d's are: cad drives xcaf-pmi's command line and both are 0.x. Their OCP pin (>=8.0,<8.1) is the
+# kernel's.
+xcaf_pmi = [
+  "xcaf-pmi>=0.1.0,<0.2",
+  "quiddity>=0.4.9,<0.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

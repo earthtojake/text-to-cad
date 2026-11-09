@@ -155,7 +155,8 @@ EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_mate
                  "kicad": {"kicode"},
                  "netgen": {"netgen"},
                  "calculix": {"cad_ccx"},
-                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
+                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
+                 "xcaf_pmi": {"xcaf_pmi", "quiddity"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.
