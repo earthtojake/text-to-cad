@@ -11,8 +11,9 @@ it poses an animated node at its first clip's pose (so a still shows the wrong p
 only that first clip is live, and clearing it leaves its last pose; and keys start at frame 0. So
 every action and NLA track the import made is cleared, every node is put back where the GLB's own
 JSON places it, and a clip is played by assigning its action and slot to each object it moves,
-the scene's frames 0 to its duration. Nothing of cad's is imported: bpy, mathutils and the
-standard library alone.
+the scene's frames 0 to its duration. It opens any GLB: another tool's (KiCad's board) imports with
+its parts where that file places them and no clips. Nothing of cad's is imported: bpy, mathutils and
+the standard library alone.
 """
 
 from __future__ import annotations
@@ -47,8 +48,9 @@ class Clip:
 @dataclass
 class Model:
     """The imported model: ``root`` is the document's root empty, ``objects`` each glTF node's object
-    by its name (the node's path below the root, ``arm/head/pin_1``), ``clips`` by name, ``box`` the
-    world box (low, high corners in metres) of the pose cad wrote, and ``clip`` the one playing."""
+    by its name (the node's path below the root, ``arm/head/pin_1``; a node with no name by the one
+    Blender gives it, ``Node_0``; a name given twice, the last), ``clips`` by name, ``box`` the world
+    box (low, high corners in metres) of the pose cad wrote, and ``clip`` the one playing."""
 
     root: bpy.types.Object
     objects: dict
@@ -72,10 +74,10 @@ class Model:
         frame 0. The scene's range is the clip's, frames 0 to its duration at the model's fps."""
         if name is not None and name not in self.clips:
             raise KeyError(f"{name!r} is not a clip of this GLB: it has {sorted(self.clips) or 'none'}")
-        for item in self.objects.values():
+        for item, placed in self._placed.items():
             if item.animation_data:
                 item.animation_data.action = None
-            item.matrix_basis = self._placed[item.name]
+            item.matrix_basis = placed
         scene = bpy.context.scene
         if name is not None:
             action = self._actions[name]
@@ -89,7 +91,7 @@ class Model:
 
     def bounds(self) -> tuple:
         """The world box (low, high corners in metres) of every mesh at the scene's current frame."""
-        return _box(self.objects.values())
+        return _box(self._placed)
 
 
 def load(path: str | Path, clip: str | None = None, fps: int = 24) -> Model:
@@ -107,21 +109,20 @@ def load(path: str | Path, clip: str | None = None, fps: int = 24) -> Model:
     nodes = gltf["nodes"]
     (top,) = gltf["scenes"][gltf.get("scene", 0)]["nodes"][:1]
     roots = [item for item in made if item.parent is None]
-    root = _named(roots, nodes[top]["name"])
-    objects, placed = {}, {}
+    root = _named(roots, _name(nodes, top))
+    objects, placed = {}, {}  # placed: every node's object, a name given twice included
 
     def walk(index: int, item: bpy.types.Object) -> None:
-        node = nodes[index]
-        objects[node["name"]] = item
-        placed[item.name] = _C @ _local(node) @ _C.inverted()
-        for child in node.get("children", ()):
-            walk(child, _named(list(item.children), nodes[child]["name"]))
+        objects[_name(nodes, index)] = item
+        placed[item] = _C @ _local(nodes[index]) @ _C.inverted()
+        for child in nodes[index].get("children", ()):
+            walk(child, _named(list(item.children), _name(nodes, child)))
 
     walk(top, root)
 
     # Who each clip moves, read before anything is cleared: the live action and every NLA strip.
     moved: dict = {}
-    for item in objects.values():
+    for item in placed:
         data = item.animation_data
         if data is None:
             continue
@@ -159,6 +160,11 @@ def _json(path: Path) -> dict:
     if magic != b"glTF" or kind != b"JSON":
         raise ValueError(f"{path} is not a GLB")
     return json.loads(raw[20:20 + length])
+
+
+def _name(nodes: list, index: int) -> str:
+    """A node's name, or the one Blender's importer gives a node with none (KiCad's root)."""
+    return nodes[index].get("name") or f"Node_{index}"
 
 
 def _local(node: dict) -> Matrix:

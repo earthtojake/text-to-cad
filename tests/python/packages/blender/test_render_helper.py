@@ -7,7 +7,9 @@ integration's environment (bpy 5.2.3 on Python 3.13, without cad, made from PyPI
 and says what it found as one JSON line. It holds the three import traps the helper exists for: a part the first clip
 moves stands where cad placed it (the importer alone poses it at that clip's start), a clip played after another
 leaves nothing of the other's pose, in either order, and a clip's frames run from 0 to its duration at the fps given.
-Then a 64x64 Cycles still on the CPU, and an EEVEE one: EEVEE needs an OpenGL context, which a Linux machine with no
+The same GLB rewritten as KiCad writes a board (its root with no name, a part named by itself rather than its path, two
+parts of one name, no clips) opens too, and a glow on one pin, as the skill's recipe keys it, leaves the other, whose mesh
+it shares, as it was. Then a 64x64 Cycles still on the CPU, and an EEVEE one: EEVEE needs an OpenGL context, which a Linux machine with no
 GPU may not give, so there alone a failure skips with Blender's reason. The suite is the blender job's alone
 (``scripts/test/test-blender.sh``). Never reads ``models/``."""
 
@@ -131,6 +133,27 @@ said["orders"] = orders
 model.play(None)
 said["still"] = {"arm": place(model, "arm", 30), "pin_2": place(model, "arm/head/pin_2", 30)}
 
+# The glow recipe (references/shots.md) on pin_1: the pins share one mesh, so the look goes on the object's slot.
+pins = [model.objects["arm/head/pin_1"], model.objects["arm/head/pin_2"]]
+looks = [pin.active_material for pin in pins]
+material = pins[0].active_material.copy()
+pins[0].material_slots[0].link = "OBJECT"
+pins[0].material_slots[0].material = material
+bsdf = next(node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED")
+bsdf.inputs["Emission Strength"].default_value = 20.0
+said["glow"] = {"shared": pins[0].data == pins[1].data, "lit": pins[0].active_material == material,
+                "other": pins[1].active_material == looks[1] != material}
+
+# KiCad's way: a root with no name, a part named by itself, two of one name, no clips.
+bpy.ops.wm.read_factory_settings(use_empty=True)
+scene = bpy.context.scene
+nameless = cad_glb.load(HERE / "nameless.glb")
+said["nameless"] = {"root": [nameless.root.name, nameless.root.parent is None,
+                             nameless.objects.get(nameless.root.name) == nameless.root],
+                    "objects": sorted(nameless.objects), "clips": sorted(nameless.clips),
+                    "box": [list(nameless.box[0]), list(nameless.box[1])],
+                    "arm": place(nameless, "arm", 10)}
+
 # Another rate: the keys and the range at 30 fps.
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -176,6 +199,23 @@ def _built_here() -> bool:
     return True
 
 
+def _nameless(source: Path, target: Path) -> None:
+    """``source`` as KiCad writes a board's GLB: the root with no name, each part named by itself (``pin_1``, not
+    ``arm/head/pin_1``), the bar named ``base`` as the base is (KiCad names 72 lenses ``lens``), and no clips."""
+    raw = source.read_bytes()
+    (length,) = struct.unpack_from("<I", raw, 12)
+    gltf = json.loads(raw[20:20 + length])
+    gltf.pop("animations", None)
+    for node in gltf["nodes"]:
+        node["name"] = "base" if node["name"] == "arm/bar" else node["name"].rsplit("/", 1)[-1]
+    del gltf["nodes"][gltf["scenes"][gltf.get("scene", 0)]["nodes"][0]]["name"]
+    text = json.dumps(gltf).encode()
+    text += b" " * (-len(text) % 4)
+    rest = raw[20 + length:]
+    target.write_bytes(struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(text) + len(rest))
+                       + struct.pack("<I4s", len(text), b"JSON") + text + rest)
+
+
 def _png_size(path: Path) -> tuple[int, int]:
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", path
@@ -198,6 +238,7 @@ class RenderHelperTest(unittest.TestCase):
         exported = cls.cad("model", "export", ids[0], "scene.glb", "--tolerance", "0.05", "--angle", "10")
         if exported.returncode != 0:
             raise AssertionError(f"the GLB was not exported:\n{exported.stdout}\n{exported.stderr}")
+        _nameless(cls.project / "scene.glb", cls.project / "nameless.glb")
         shutil.copy(HELPER, cls.project / "cad_glb.py")
         (cls.project / "probe.py").write_text(textwrap.dedent(PROBE), encoding="utf-8")
         cls.cycles = cls.cad("run", "probe.py", "CYCLES")
@@ -273,6 +314,19 @@ class RenderHelperTest(unittest.TestCase):
         self.assertEqual(self.said["at_30"]["range"], [0, 60])
         self.assertEqual(self.said["at_30"]["fps"], 30)
         self.assertNear([self.said["at_30"]["pin_2"][2]], [0.019], 2e-4, "the clip's end is its last frame")
+
+    def test_a_glb_whose_root_has_no_name_opens_its_parts_where_it_places_them(self) -> None:
+        said = self.said["nameless"]
+        name, top, found = said["root"]
+        self.assertTrue(top and found, f"the root {name!r} is the model's and the top object")
+        self.assertEqual(said["objects"], sorted(["arm", "base", "head", "pin_1", "pin_2", name]))
+        self.assertEqual(said["clips"], [])
+        # Both parts named base are in the box: it is the named GLB's.
+        self.assertNear(said["box"][0] + said["box"][1], self.said["box"][0] + self.said["box"][1], 1e-6, "the box")
+        self.assertPlaced(said["arm"], [-0.02, 0.0, 0.0, 30.0], "the arm")
+
+    def test_a_glow_on_one_part_leaves_another_of_its_mesh_as_it_was(self) -> None:
+        self.assertEqual(self.said["glow"], {"shared": True, "lit": True, "other": True})
 
     def test_a_cycles_still_on_the_cpu(self) -> None:
         self.assertEqual(_png_size(self.project / "cycles.png"), (64, 64))

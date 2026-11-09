@@ -112,7 +112,8 @@ each look a Principled BSDF:
 ```python
 led = model.objects["board/D1/lens"]
 material = led.active_material.copy()  # this part alone; parts that share a look share a material
-led.active_material = material
+led.material_slots[0].link = "OBJECT"  # the look on the object, not on the mesh it shares
+led.material_slots[0].material = material
 bsdf = next(node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED")
 bsdf.inputs["Emission Color"].default_value = (1.0, 0.25, 0.05, 1.0)  # linear RGB
 strength = bsdf.inputs["Emission Strength"]
@@ -121,7 +122,9 @@ for frame, value in ((0, 0.0), (12, 20.0), (24, 0.0)):  # off, on, off
     strength.keyframe_insert("default_value", frame=frame)
 ```
 
-A steady glow needs no keys: set the strength once. The halo around a bright part is the
+cad's GLB gives every instance of a part one mesh (72 LEDs, one lens), and a mesh's material is
+every instance's, so `led.active_material = material` would light all 72: the slot is linked to the
+object first. A steady glow needs no keys: set the strength once. The halo around a bright part is the
 compositor's glare:
 
 ```python
@@ -143,4 +146,5 @@ bpy.ops.wm.save_as_mainfile(filepath=str(HERE / "scene.blend"))
 ```
 
 It holds the imported model, its clips (the playing one assigned), the camera, the lights and the
-render settings; the GLB is not needed beside it.
+render settings; the GLB is not needed beside it. The script stays the source: the `.blend`, like a
+render, is an output that running it makes again, and is never committed.
