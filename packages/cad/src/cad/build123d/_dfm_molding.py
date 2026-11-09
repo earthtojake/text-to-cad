@@ -1092,32 +1092,49 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
     return _Thickness(values, held, nominal, per_face)
 
 
-#: Faces whose thickest sampled ball reaches this share of the nominal wall have that thickest refined.
+#: Faces whose thickest sampled ball reaches this share of the nominal wall, and is still under the thick-section
+#: limit (``molding.thick_section``'s ratio), have that thickest refined: past the limit, or under the share, the
+#: verdict cannot change.
 _THICK_REFINED_SHARE = 1.2
-#: At most this many faces are refined, thickest first, each in at most this many rounds of eight trials.
+#: At most this many faces are refined, thickest first; each search runs at most this many rounds of eight trials
+#: from each of its starts, a gain under ``_THICK_GAIN`` of the nominal wall counting as none.
 _THICK_REFINED_FACES = 32
-_THICK_ROUNDS = 24
+_THICK_ROUNDS = 16
 _THICK_STARTS = 4
+_THICK_GAIN = 0.01
+
+
+def _thick_limit() -> float:
+    """``molding.thick_section``'s ratio to the nominal wall (the rules' own, read once)."""
+    from cad._internal.dfm import molding as rules_side
+
+    return float(next(rule.limit for rule in rules_side.RULES.rules if rule.id == "molding.thick_section"))
 
 
 def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: float, cap: np.ndarray,
                   convex: dict[int, set[int]], values: np.ndarray) -> None:
-    """The thickest faces' greatest ball found exactly over each face, not at its samples alone: a pattern
-    search over the face's own (u, v) from each of its ``_THICK_STARTS`` thickest samples, eight neighbours a
-    round, the step halved where none is thicker, each trial inside the face (its trimmed boundary; on it a convex edge's other face passes
-    through the point) and solved as the samples are (``ops.ball_thickness``), a ball held across a convex edge
-    of its face no wall's, as a sample's is not. Four alike blind holes' floors, sampled where each part's
-    placement put the points, read 2.6 to 3.1 mm against a true 4.0; refined, each reads it in every placement."""
+    """The greatest ball over each face whose thickest sample lies where the thick-section verdict could turn
+    (between ``_THICK_REFINED_SHARE`` and the rule's limit times the nominal wall), not at its samples alone: a
+    pattern search over the face's own (u, v) from each of its ``_THICK_STARTS`` thickest samples, every start's
+    eight neighbours solved together a round (``ops.ball_thickness``, as the samples are), the step halved where
+    none gains ``_THICK_GAIN`` of the nominal wall, each trial inside the face (on its boundary a convex edge's
+    other face passes through the point) and no ball held across a convex edge of it. Only the triangles and
+    samples within the limit's diameter of the face are tried: a ball under it is bound there, so the figure is
+    exact below the limit, and the search stops once a ball reaches it (the face is thick, whatever more). Four
+    alike blind holes' floors, sampled where each placement put the points, read 2.6 to 3.1 mm against a true
+    4.0; refined, they read thick alike in every placement."""
+    from OCP.BRep import BRep_Tool
     from OCP.BRepClass import BRepClass_FaceClassifier
     from OCP.BRepTools import BRepTools
-    from OCP.BRep import BRep_Tool
     from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
     from OCP.TopAbs import TopAbs_IN
     from OCP.gp import gp_Pnt, gp_Pnt2d
 
+    limit = _thick_limit() * nominal
+    gain = _THICK_GAIN * nominal
     vertices, triangles, owners = geo.mesh
     order = sorted(((face["max"], ordinal) for ordinal, face in per_face.items()
-                    if face["max"] >= _THICK_REFINED_SHARE * nominal), reverse=True)
+                    if _THICK_REFINED_SHARE * nominal <= face["max"] < limit), reverse=True)
     for _, ordinal in order[:_THICK_REFINED_FACES]:
         checkpoint()
         face = per_face[ordinal]
@@ -1125,7 +1142,17 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
         surface = BRep_Tool.Surface_s(shape.wrapped)
         umin, umax, vmin, vmax = BRepTools.UVBounds_s(shape.wrapped)
         mine = np.flatnonzero((geo.owner == ordinal) & np.isfinite(values))
-        starts = [geo.points[k] for k in mine[np.argsort(-values[mine])][:_THICK_STARTS]] or [np.asarray(face["at"])]
+        if not len(mine):
+            continue
+        # the neighbourhood a ball under the limit lies in
+        box = shape.bounding_box()
+        lo = np.array([box.min.X, box.min.Y, box.min.Z]) - limit * 1.05
+        hi = np.array([box.max.X, box.max.Y, box.max.Z]) + limit * 1.05
+        corners = vertices[triangles]
+        near = np.flatnonzero(np.all((corners.max(axis=1) >= lo) & (corners.min(axis=1) <= hi), axis=1))
+        local_tris, local_owner = triangles[near], owners[near]
+        around = np.flatnonzero(np.all((geo.points >= lo) & (geo.points <= hi), axis=1))
+        bend = cap[mine[0]]
         classifier = BRepClass_FaceClassifier()
 
         def on_face(u: float, v: float) -> bool:
@@ -1134,40 +1161,47 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
 
         def thickness(uv: list[tuple[float, float]]) -> np.ndarray:
             rows = [_dfm_brep.point_normal(shape, u, v) for u, v in uv]
-            pts = np.array([p for p, _ in rows])
-            nrm = np.array([n for _, n in rows])
+            pts = np.array([p for p, _ in rows]).reshape(-1, 3)
+            nrm = np.array([n for _, n in rows]).reshape(-1, 3)
             ray = geo.cast(pts - nrm * geo.eps, -nrm) + geo.eps
-            read, held_by = ops.ball_thickness(pts, nrm, ray, vertices, triangles, others=geo.points,
-                                         point_face=np.full(len(pts), ordinal), triangle_face=owners,
-                                         others_face=geo.owner, cap=np.full(len(pts), cap[geo.owner == ordinal][0]
-                                                                            if (geo.owner == ordinal).any() else np.inf))
-            held = np.array([b >= 0 and int(owners[b]) in convex.get(ordinal, set()) for b in held_by], dtype=bool)
+            read, held_by = ops.ball_thickness(pts, nrm, ray, vertices, local_tris, others=geo.points[around],
+                                               point_face=np.full(len(pts), ordinal), triangle_face=local_owner,
+                                               others_face=geo.owner[around], cap=np.full(len(pts), bend))
+            held = np.array([b >= 0 and int(local_owner[b]) in convex.get(ordinal, set()) for b in held_by],
+                            dtype=bool)
             return np.where(np.isfinite(read) & ~held, read, -np.inf)
 
-        overall, overall_uv = -math.inf, None
-        for start in starts:
-            projected = GeomAPI_ProjectPointOnSurf(gp_Pnt(*np.asarray(start, dtype=float)), surface)
-            if projected.NbPoints() == 0:
-                continue
-            best_uv = projected.LowerDistanceParameters()
-            best = float(thickness([best_uv])[0])
-            du, dv = (umax - umin) / 4.0, (vmax - vmin) / 4.0
-            for _ in range(_THICK_ROUNDS):
-                if du < 1e-4 * max(umax - umin, 1e-12) and dv < 1e-4 * max(vmax - vmin, 1e-12):
-                    break
-                trials = [(best_uv[0] + a * du, best_uv[1] + b * dv) for a in (-1, 0, 1) for b in (-1, 0, 1) if a or b]
-                trials = [(u, v) for u, v in trials if on_face(u, v)]
-                read = thickness(trials) if trials else np.zeros(0)
-                if len(read) and float(read.max()) > best + 1e-9:
-                    k = int(np.argmax(read))
-                    best_uv, best = trials[k], float(read[k])
+        searches = []
+        for k in mine[np.argsort(-values[mine])][:_THICK_STARTS]:
+            projected = GeomAPI_ProjectPointOnSurf(gp_Pnt(*geo.points[k]), surface)
+            if projected.NbPoints():
+                searches.append({"uv": projected.LowerDistanceParameters(), "best": float(values[k]),
+                                 "du": (umax - umin) / 4.0, "dv": (vmax - vmin) / 4.0})
+        for _ in range(_THICK_ROUNDS):
+            live = [search for search in searches
+                    if search["du"] > 1e-3 * max(umax - umin, 1e-12) or search["dv"] > 1e-3 * max(vmax - vmin, 1e-12)]
+            if not live or max(search["best"] for search in searches) >= limit:
+                break  # each search settled, or the face is thick whatever more it holds
+            trials, owner_of = [], []
+            for n, search in enumerate(live):
+                u0, v0 = search["uv"]
+                for a in (-1, 0, 1):
+                    for b in (-1, 0, 1):
+                        if (a or b) and on_face(u0 + a * search["du"], v0 + b * search["dv"]):
+                            trials.append((u0 + a * search["du"], v0 + b * search["dv"]))
+                            owner_of.append(n)
+            read = thickness(trials) if trials else np.zeros(0)
+            for n, search in enumerate(live):
+                mine_trials = [k for k, o in enumerate(owner_of) if o == n]
+                k = max(mine_trials, key=lambda j: read[j]) if mine_trials else None
+                if k is not None and float(read[k]) > search["best"] + gain:
+                    search["uv"], search["best"] = trials[k], float(read[k])
                 else:
-                    du, dv = du / 2.0, dv / 2.0
-            if best > overall:
-                overall, overall_uv = best, best_uv
-        if overall_uv is not None and overall > face["max"]:
-            face["max"] = overall
-            face["at"] = _dfm_brep.point_normal(shape, *overall_uv)[0]
+                    search["du"], search["dv"] = search["du"] / 2.0, search["dv"] / 2.0
+        best = max(searches, key=lambda search: search["best"], default=None)
+        if best is not None and best["best"] > face["max"]:
+            face["max"] = best["best"]
+            face["at"] = _dfm_brep.point_normal(shape, *best["uv"])[0]
 
 
 #: The thinnest faces (by their least sampled wall) refined to the exact least distance to a face across.
