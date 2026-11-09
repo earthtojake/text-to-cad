@@ -290,8 +290,7 @@ def _samples(face: Any, count: int) -> list[brep.Sample]:
     from OCP.gp import gp_Pnt, gp_Vec
     from OCP.TopLoc import TopLoc_Location
 
-    box = face.bounding_box(optimal=False)  # a mesh tolerance: the optimal box costs seconds on a large part
-    brep._triangulated(face, max(1e-3, 0.02 * max(box.size.X, box.size.Y, box.size.Z)))
+    brep._triangulated(face, brep.deflection_for(face))  # the face's own size: the same however it is turned
     location = TopLoc_Location()
     triangulation = BRep_Tool.Triangulation_s(face.wrapped, location)
     if triangulation is None or triangulation.NbTriangles() == 0:

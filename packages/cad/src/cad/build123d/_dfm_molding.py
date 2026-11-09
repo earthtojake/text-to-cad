@@ -108,8 +108,7 @@ def _samples(face: Any, count: int) -> list[tuple[np.ndarray, np.ndarray, float]
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.TopLoc import TopLoc_Location
 
-    box = face.bounding_box()
-    deflection = max(1e-3, 0.02 * max(box.size.X, box.size.Y, box.size.Z))
+    deflection = _dfm_brep.deflection_for(face)  # the face's own size: the same however the part is turned
     BRepMesh_IncrementalMesh(face.wrapped, deflection, False, 0.5, True)
     location = TopLoc_Location()
     triangulation = BRep_Tool.Triangulation_s(face.wrapped, location)

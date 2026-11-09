@@ -96,6 +96,23 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(len(by_rule["e"]["failures"]), 2)
         self.assertEqual(len(by_rule["w"]["failures"]), 3)
 
+    def test_of_two_recommendations_one_figure_fails_the_one_further_off_is_said(self) -> None:
+        # a 0 deg wall fails draft_min's 0.5 and draft's 2: one cause, one finding; the record keeps both
+        low = Rule("low", "f", "v", "min", 0.5, "deg", "v", "s", severity="warning")
+        high = Rule("high", "f", "v", "min", 2.0, "deg", "v", "s", severity="warning")
+        report = {"f": {"items": [{"v": 0.0, "location": "p/face 1"}, {"v": 1.0, "location": "p/face 2"}]}}
+        found, record = evaluate(report, _set(high, low), {})
+        self.assertEqual(sorted((f.code, f.location) for f in found), [("high", "p/face 2"), ("low", "p/face 1")])
+        self.assertEqual(len(next(o for o in record["outcomes"] if o["rule"] == "high")["failures"]), 2)
+
+    def test_a_figure_is_judged_unrounded(self) -> None:
+        # exactly at the limit passes, a ten-thousandth past it fails: nothing is rounded before the test
+        rule = Rule("r", "f", "v", "max", 1 / 0.6, "ratio", "v", "s", severity="warning")
+        found, _ = evaluate({"f": {"items": [{"v": 30 / 18, "location": "a"}]}}, _set(rule), {})
+        self.assertEqual(found, [])
+        found, _ = evaluate({"f": {"items": [{"v": 30 / 18 + 1e-4, "location": "a"}]}}, _set(rule), {})
+        self.assertEqual([f.code for f in found], ["r"])
+
     def test_nothing_to_judge_passes_and_figures_a_source_lacks_are_not_applicable(self) -> None:
         holes = Rule("hole", "holes", "d", "min", 1.0, "mm", "hole", "s")
         supported = Rule("wall", "walls", "t", "min", 1.0, "mm", "supported wall", "s", item_when={"supported": True})
@@ -415,6 +432,47 @@ class RefsTest(unittest.TestCase):
         self.assertFalse(result.measurements["partial"])
 
 
+class IntegrityTest(unittest.TestCase):
+    def test_no_closed_solid_is_refused_in_every_process_and_says_what_to_fix(self) -> None:
+        from cad.build123d import cnc, molding, printing, sheet_metal
+
+        shell = bd.Shell(bd.Box(10, 10, 10).faces()[:5])
+        face = bd.Rectangle(10, 10).face()
+        for shape in (shell, face):
+            for check in (cnc, sheet_metal, molding, printing):
+                result = check(shape)
+                self.assertFalse(result.ok)
+                self.assertEqual([f.code for f in result.findings], ["not_solid"], check.__name__)
+                self.assertIn("Close the shell into a solid", result.findings[0].message)
+
+    def test_faces_beside_a_solid_are_an_error_said_first(self) -> None:
+        from cad.build123d import cnc, molding
+
+        part = bd.Compound([bd.Box(10, 10, 10), bd.Pos(30, 0, 0) * bd.Rectangle(5, 5).face()])
+        for check in (cnc, molding):
+            result = check(part)
+            self.assertFalse(result.ok)
+            self.assertEqual((result.findings[0].severity, result.findings[0].code), ("error", "not_watertight"))
+
+    def test_a_part_drawn_in_metres_is_said_first(self) -> None:
+        from cad.build123d import cnc, sheet_metal
+
+        plate = bd.Box(0.1, 0.05, 0.002)  # a 100 x 50 x 2 mm plate drawn in metres
+        for check in (cnc, sheet_metal):
+            first = check(plate).findings[0]
+            self.assertEqual((first.severity, first.code), ("warning", "units_suspect"))
+            self.assertIn("metres (111.8 mm if so)", first.message)
+        self.assertFalse(any(f.code == "units_suspect" for f in cnc(bd.Box(100, 50, 2)).findings))
+
+    def test_a_faces_sampling_tolerance_turns_with_it(self) -> None:
+        face = bd.Box(36, 20, 5).faces().sort_by(bd.Axis.Z)[-1]
+        turned = (bd.Rot(17, 23, 41) * bd.Box(36, 20, 5)).faces().sort_by(bd.Axis.Z)[-1]
+        self.assertAlmostEqual(brep.deflection_for(face), 0.72, places=6)
+        for other in (bd.Rot(0, 0, 30) * face, bd.Rot(17, 23, 41) * face):
+            self.assertAlmostEqual(brep.deflection_for(other), brep.deflection_for(face), places=6)
+        self.assertGreater(brep.deflection_for(turned), 0.0)
+
+
 class DeclaredMaterialTest(unittest.TestCase):
     """A check given no material judges by the one the parts declare, when they agree."""
 
@@ -595,14 +653,18 @@ class SelectorTest(unittest.TestCase):
 
 class SummaryTest(unittest.TestCase):
     def test_a_failed_check_digests_what_failed_in_one_line(self) -> None:
-        from cad.build123d import molding
+        from cad.build123d import cnc
 
-        box = bd.Box(30, 20, 10); box.label = "box"
-        result = molding(box, pull="z", material="abs")
+        # four 0.8 mm holes, under the 1 mm drill a mill makes (an error: draft_min, a molding recommendation,
+        # no longer fails a check)
+        box = bd.Box(30, 20, 10) - bd.Pos(0, 0, 0) * bd.Compound([bd.Pos(x, y, 0) * bd.Cylinder(0.4, 10)
+                                                                     for x in (-8, 8) for y in (-5, 5)])
+        box.label = "box"
+        result = cnc(box, material="aluminum")
         self.assertFalse(result.ok)
-        self.assertIn("failed: molding.draft_min x4", result.summary)  # every failure, not the findings shown
+        self.assertIn("failed: cnc.hole_diameter x4", result.summary)  # every failure, not the findings shown
         self.assertTrue(result.human_lines()[-1].startswith("FAILED box: "))
-        self.assertIn("molding.draft_min x4", result.human_lines()[-1])
+        self.assertIn("cnc.hole_diameter x4", result.human_lines()[-1])
         # errors come first, then warnings, then the facts
         order = [{"error": 0, "warning": 1, "info": 2}[f.severity] for f in result.findings]
         self.assertEqual(order, sorted(order))

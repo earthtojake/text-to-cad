@@ -331,7 +331,9 @@ class Surface:
     """A face's surface. ``kind``: plane, cylinder, cone, sphere, torus, bspline, revolution, extrusion,
     offset or other. A plane's ``normal`` is the outward one (the face's orientation applied); a
     cylinder's, cone's, sphere's or torus's ``axis`` (a unit vector) and ``origin``, ``radius`` (a cone's
-    at ``origin``), ``half_angle_deg`` (a cone's), ``minor_radius`` (a torus's) and ``concave``: True where
+    at ``origin``), ``half_angle_deg`` (a cone's semi-angle as the kernel signs it: the radius at a height h
+    along the axis is ``radius + h tan(half_angle_deg)``, so a cone narrowing along its axis reads negative --
+    a reported angle takes its magnitude), ``minor_radius`` (a torus's) and ``concave``: True where
     the material lies outside the surface -- a hole, an internal fillet -- False where it lies inside -- a
     boss, an outside round -- None where it cannot be told."""
 
@@ -782,9 +784,36 @@ def _triangulated(shape: Any, deflection: float, angular: float = 0.5) -> None:
     BRepMesh_IncrementalMesh(shape.wrapped, deflection, False, angular, True)
 
 
+def face_size(face: Any) -> float:
+    """The face's largest extent in its own frame (its oriented box's longest side, ``Bnd_OBB``): a size that
+    turns with the face, so a mesh tolerance taken from it -- and every sample laid on that mesh -- is the same
+    however the part is turned (a world box's longest side grows by up to 1.7 times as a face turns off the
+    axes). The world box's where the oriented box cannot be made."""
+    from OCP.Bnd import Bnd_OBB
+    from OCP.BRepBndLib import BRepBndLib
+
+    try:
+        box = Bnd_OBB()
+        BRepBndLib.AddOBB_s(face.wrapped, box, False, False, False)
+        size = 2.0 * max(box.XHSize(), box.YHSize(), box.ZHSize())
+        if math.isfinite(size) and size > 0.0:
+            return float(size)
+    except Exception:  # noqa: BLE001 - a face the oriented box fails on takes the world box
+        pass
+    world = face.bounding_box(optimal=False)
+    return float(max(world.size.X, world.size.Y, world.size.Z))
+
+
+def deflection_for(face: Any) -> float:
+    """The mesh tolerance a face's samples are laid on: a fiftieth of its size (``face_size``), 1e-3 mm at
+    least."""
+    return max(1e-3, 0.02 * face_size(face))
+
+
 def samples(face: Any, count: int = 64, deflection: float | None = None) -> list[Sample]:
     """About ``count`` points spread evenly over ``face`` by area, each on the surface itself: the face's
-    triangulation (made with ``deflection``, a fiftieth of the face's size by default) cut into triangles
+    triangulation (made with ``deflection``, ``deflection_for``'s by default: a fiftieth of the face's own size,
+    the same however the part is turned) cut into triangles
     of about equal area, each sample the surface at one's middle, with its outward normal and its share
     of the face's area."""
     checkpoint()
@@ -792,8 +821,7 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
     from OCP.TopLoc import TopLoc_Location
 
     if deflection is None:
-        box = face.bounding_box(optimal=False)
-        deflection = max(1e-3, 0.02 * max(box.size.X, box.size.Y, box.size.Z))
+        deflection = deflection_for(face)
     _triangulated(face, deflection)
     location = TopLoc_Location()
     triangulation = BRep_Tool.Triangulation_s(face.wrapped, location)

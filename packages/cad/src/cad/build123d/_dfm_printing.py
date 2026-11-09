@@ -167,12 +167,11 @@ class Context:
         for index, part in enumerate(self.parts):
             infos = []
             for ordinal, face in enumerate(part.faces(), start=1):
-                # the kernel's quick box (an optimal one costs seconds on a spline): a first for the
-                # sampling's deflection, then again on the triangulation the sampling made, which is tight
-                rough = face.bounding_box(optimal=False)
+                # the face's own size (its oriented box: the same however the part is turned) for the
+                # sampling's deflection; its world box is read again on the triangulation the sampling made
                 area = float(face.area)
                 count = int(min(400, max(floor, round(budget * area / total))))
-                deflection = max(1e-3, 0.02 * max(rough.size.X, rough.size.Y, rough.size.Z))
+                deflection = brep.deflection_for(face)
                 samples = brep.samples(face, count, deflection) if area > 0 else []
                 if len(samples) > count:
                     # a face of many triangles gives a sample per triangle: keep ``count``, spread over them

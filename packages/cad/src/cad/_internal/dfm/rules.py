@@ -227,9 +227,14 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     limit and place).
 
     The record holds every failure. The findings are what a reader acts on, so they are fewer: failures of
-    one rule at one ref are one finding (``and N more at this ref``), and a warning on a figure that
-    already fails an error -- the same family, field and direction at the same place, a recommendation
-    beside the feasibility limit it exceeds -- is left to the record."""
+    one rule at one ref are one finding (``and N more at this ref``), and a failure on a figure that already
+    fails a rule of higher severity, or of the same severity with a limit further off -- the same family,
+    field and direction at the same place: a recommendation beside the feasibility limit it exceeds, the
+    looser of two recommendations -- is left to the record.
+
+    Every figure is compared as measured, never rounded first (a report keeps the figures its rules read to
+    1e-9): the slack here, a billionth of the limit, absorbs only floating-point noise, so a value exactly at
+    its limit (30 / 18 against 1 / 0.6) passes and one a ten-thousandth past it fails."""
     findings: list[CheckFinding] = []
     outcomes: list[dict[str, Any]] = []
     shown: list[tuple[Rule, float, list[dict[str, Any]], dict[int, Mapping[str, Any]]]] = []
@@ -287,15 +292,32 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         outcomes.append(outcome)
         if failures:
             shown.append((rule, limit, failures, failing))
-    # Where an error names a figure of an item, a warning on the same figure of the same item is implied: keyed
-    # by the item as well as its place, as items with no ref share one (a family's name, an xyz).
-    failed_as_error = {(rule.family, rule.field, rule.op, failure["location"], id(failing.get(id(failure))))
-                       for rule, _limit, failures, failing in shown if rule.severity == "error" for failure in failures}
+    # A failure is implied by another rule's on the same figure of the same item in the same direction whose
+    # severity is higher, or the same with a limit further off: a recommendation beside the feasibility limit it
+    # exceeds (a warning beside an error), the looser of two recommendations (``draft``'s 2 deg beside
+    # ``draft_min``'s 0.5). Keyed by the item as well as its place, as items with no ref share one.
+    rank = {"error": 0, "warning": 1}
+    failing_rules: dict[tuple[Any, ...], list[tuple[Rule, float]]] = {}
+    for rule, limit, failures, failing in shown:
+        for failure in failures:
+            key = (rule.family, rule.field, rule.op, failure["location"], id(failing.get(id(failure))))
+            failing_rules.setdefault(key, []).append((rule, limit))
+
+    def implied(rule: Rule, limit: float, key: tuple[Any, ...]) -> bool:
+        for other, other_limit in failing_rules.get(key, ()):
+            if other.id == rule.id:
+                continue
+            if rank[other.severity] < rank[rule.severity] or (
+                    rank[other.severity] == rank[rule.severity]
+                    and (other_limit < limit if rule.op == "min" else other_limit > limit)):
+                return True
+        return False
+
     for rule, limit, failures, failing in shown:
         places: dict[str, list[dict[str, Any]]] = {}
         for failure in failures:
             key = (rule.family, rule.field, rule.op, failure["location"], id(failing.get(id(failure))))
-            if rule.severity == "warning" and key in failed_as_error:
+            if implied(rule, limit, key):
                 continue
             places.setdefault(failure["location"], []).append(failure)
         for location, here in list(places.items())[:SHOWN_PER_RULE]:

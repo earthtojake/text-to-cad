@@ -17,10 +17,112 @@ import importlib
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from cad._internal.dfm import Cancelled, checkpoint, stop  # what the engine's worker stops a check by
 from cad.build123d import _dfm_brep
 
 __all__ = ["Cancelled", "checked", "checkpoint", "held", "measure", "measure_declared", "stop"]
+
+
+#: A solid of less volume than this fraction of its box's diagonal cubed holds no material: zero volume.
+_ZERO_VOLUME = 1e-9
+#: A document whose box's diagonal is under this many millimetres is implausibly small for a made part:
+#: drawn in metres or inches as millimetres (build123d has no unit; a model's millimetre is its unit).
+_PLAUSIBLE_DIAGONAL_MM = 1.0
+
+
+def _closed_solids(part: _dfm_brep.Part) -> tuple[list[Any], list[Any], int]:
+    """The part's solids whose every shell is closed and whose volume is not zero, its other solids, and the
+    faces it holds outside any solid (a free face or shell beside them)."""
+    from OCP.BRep import BRep_Tool
+    from OCP.TopAbs import TopAbs_SHELL
+    from OCP.TopExp import TopExp_Explorer
+
+    closed, opened = [], []
+    in_solids = 0
+    for solid in part.solids():
+        shells = shut = 0
+        explorer = TopExp_Explorer(solid.wrapped, TopAbs_SHELL)
+        while explorer.More():
+            shells += 1
+            shut += int(BRep_Tool.IsClosed_s(explorer.Current()))
+            explorer.Next()
+        box = solid.bounding_box(optimal=False)
+        diagonal = float((box.size.X ** 2 + box.size.Y ** 2 + box.size.Z ** 2) ** 0.5)
+        solid_ok = shells and shut == shells and abs(float(solid.volume)) > _ZERO_VOLUME * diagonal ** 3
+        (closed if solid_ok else opened).append(solid)
+        in_solids += len(solid.faces())
+    return closed, opened, max(0, len(part.faces()) - in_solids)
+
+
+def _integrity(document: _dfm_brep.Document, process: str) -> list[dict[str, Any]]:
+    """``Unmeasured("not_solid")`` where a part holds no closed solid of any volume -- an open shell, a face, a
+    solid of zero volume: no process makes a part of no material, and every figure of one would be of a
+    surface. Else the findings that put every figure in doubt, errors in every process: ``not_watertight``
+    (a solid with an open shell, or faces beside the solids that no solid holds) and ``not_sound`` (the
+    kernel's topology check fails). Printing's own ``solid`` family judges its solids' shells and soundness
+    (with the boolean check), so for printing only the faces beside the solids are said here."""
+    from cad._internal.dfm import Unmeasured, checkpoint
+    from cad.build123d import _geometry
+
+    found: list[dict[str, Any]] = []
+    refused: list[str] = []
+    for part in document.parts:
+        checkpoint()
+        name = part.owner or part.name or "the part"
+        closed, opened, loose = _closed_solids(part)
+        if not closed:
+            what = (f"{len(opened)} solid(s) open or of no volume" if opened else
+                    f"{len(part.faces())} face(s) and no solid")
+            refused.append(f"{name} ({what}, {abs(float(part.shape.volume)):g} mm3)")
+            continue
+        where = part.ref("face", 1)
+        if opened or loose:
+            said = ", ".join(([f"{len(opened)} solid(s) with an open shell or no volume"] if opened else [])
+                             + ([f"{loose} face(s) outside any solid"] if loose else []))
+            if loose or process != "printing":
+                found.append({"severity": "error", "code": "not_watertight", "location": where,
+                              "message": f"{name} is not one closed solid ({said}): its inside cannot be told, "
+                                         "so every figure of it is of a surface -- read every figure below with that",
+                              "hint": "close the open shell, fuse or delete the loose faces, and check again"})
+        if process == "printing":
+            continue
+        try:
+            issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)})
+        except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
+            continue
+        if issues:
+            found.append({"severity": "error", "code": "not_sound", "location": where,
+                          "message": f"{name} fails the kernel's validity check ({', '.join(issues)}): its faces "
+                                     "and edges do not meet as a solid's must, so its figures are in doubt",
+                          "hint": "rebuild the faulty feature (a fillet or boolean that failed), then check again"})
+    if refused:
+        raise Unmeasured("not_solid", f"{'; '.join(refused)}: a check measures closed solids, and this holds "
+                         "none -- an open shell, a face or a solid of no volume is no part a process makes. Close "
+                         "the shell into a solid (every edge shared by two faces), thicken or extrude the face, or "
+                         "check the solid the model means")
+    return found
+
+
+def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, Any]) -> None:
+    """``report["scale"]`` says the units look wrong (``units_suspect``, a warning said first) where the
+    whole document is under ``_PLAUSIBLE_DIAGONAL_MM`` across, unless the process's own scale already does."""
+    scale = report.get("scale") if isinstance(report.get("scale"), dict) else {}
+    if scale.get("units_suspect"):
+        return
+    boxes = [part.shape.bounding_box(optimal=False) for part in document.parts]
+    lo = np.min([[box.min.X, box.min.Y, box.min.Z] for box in boxes], axis=0)
+    hi = np.max([[box.max.X, box.max.Y, box.max.Z] for box in boxes], axis=0)
+    diagonal = float(np.linalg.norm(hi - lo))
+    if diagonal >= _PLAUSIBLE_DIAGONAL_MM:
+        return
+    declared = ("the STEP declares its unit and it reads" if document_type == "step"
+                else "build123d has no unit and a model's is the millimetre: it reads")
+    report["scale"] = {**scale, "bbox_diagonal_mm": round(diagonal, 6), "units_suspect": True,
+                       "note": f"{declared} {diagonal:.4g} mm across, implausibly small for a made part: it is "
+                               f"probably drawn in metres ({diagonal * 1000:.4g} mm if so) or inches "
+                               f"({diagonal * 25.4:.4g} mm) -- scale the model to millimetres, then check again"}
 
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
@@ -30,9 +132,11 @@ def _measured(document: _dfm_brep.Document, document_type: str, process: str, op
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
     checkpoint()
+    doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     report = module.measure(document, options, candidates)
-    found = list(report.pop("findings", None) or ())
+    _scale(document, document_type, report)
+    found = [*doubt, *(report.pop("findings", None) or ())]
     if document.empty:
         shown = ", ".join(document.empty[:8]) + (f" and {len(document.empty) - 8} more" if len(document.empty) > 8 else "")
         found.append({"severity": "info", "code": "empty_parts", "location": document.empty[0],
@@ -134,8 +238,12 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
     resolved = manufacturing.options("step", process, given, candidates=candidates)
     assert resolved is not None
     document = _dfm_brep.parts_of(shape, name=name)
-    report = {"process": process, **_measured(document, "shape", process, resolved, candidates)}
-    return manufacturing.finish(Path(document.name or "shape"), report, process, resolved, candidates)
+    label = Path(document.name or "shape")
+    try:
+        report = {"process": process, **_measured(document, "shape", process, resolved, candidates)}
+    except Unmeasured as failure:
+        return manufacturing._failed(label, failure.message, failure.code)
+    return manufacturing.finish(label, report, process, resolved, candidates)
 
 
 def cnc(shape: Any, *, material: str | None = None, axes: int | None = None,

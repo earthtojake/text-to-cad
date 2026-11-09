@@ -99,6 +99,17 @@ class HolesTest(unittest.TestCase):
         self.assertEqual(_dfm_cnc_holes.standard_drill(3.33)[0], None)
 
 
+class CountersinkAngleTest(unittest.TestCase):
+    def test_a_countersinks_included_angle_reads_as_drawn(self) -> None:
+        # the kernel signs a cone's semi-angle by its axis's way (-41 deg here): the angle reported is 82
+        with bd.BuildPart() as made:
+            bd.Box(40, 40, 10)
+            with bd.Locations((0, 0, 5)):
+                bd.CounterSinkHole(radius=2.5, counter_sink_radius=5, counter_sink_angle=82)
+        holes = cnc(made.part, material="aluminum").measurements["holes"]["items"]
+        self.assertEqual([sink["angle_deg"] for hole in holes for sink in hole["countersinks"]], [82.0])
+
+
 class PocketsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

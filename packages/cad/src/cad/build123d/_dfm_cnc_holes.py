@@ -214,7 +214,7 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         fs = model.surface(floor)
         if fs.kind == "cone":
             bottom = "drill_point"
-            point_angle = 2.0 * float(fs.half_angle_deg)
+            point_angle = 2.0 * abs(float(fs.half_angle_deg))  # the kernel signs it by the axis's way
         elif fs.kind == "plane":
             bottom = "flat"
         else:
@@ -236,7 +236,7 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         points = model.outline(i)
         radial = points - o - np.outer((points - o) @ a, a)
         countersinks.append({"diameter_mm": round(2 * float(np.linalg.norm(radial, axis=1).max()), 4),
-                             "angle_deg": round(2 * float(cs.half_angle_deg), 4), "face": model.ref(i)})
+                             "angle_deg": round(2 * abs(float(cs.half_angle_deg)), 4), "face": model.ref(i)})
     diameter = 2 * radius
     # the drilled length: the narrowest cylinder's run along the axis, below any counterbore (a counterbore
     # is its own feature, listed in ``counterbores`` with its own depth); ``overall_depth_mm`` is the whole

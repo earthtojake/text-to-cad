@@ -194,6 +194,27 @@ class BendTest(unittest.TestCase):
         self.assertEqual((hem["kind"], hem["bend_deduction_mm"]), ("hem", None))
 
 
+class TurnedTest(unittest.TestCase):
+    def test_a_part_turned_in_its_model_reads_the_same(self) -> None:
+        part = bent([("line", 40), ("bend", 90, 1.0), ("line", 30)], 2.0, 50, "L")
+        part = part - bd.Pos(20, -25, 0) * bd.Cylinder(3, 10)
+
+        def read(shape: bd.Shape) -> tuple:
+            result = checked(shape)
+            (body,) = result.measurements["parts"]["items"]
+            (bend,) = result.measurements["bends"]["items"]
+            return (result.ok, sorted({f.code for f in result.findings if f.severity != "info"}),
+                    body["thickness_mm"], body["flat_length_mm"], body["flat_width_mm"], bend["angle_deg"],
+                    bend["inside_radius_mm"], len(result.measurements["holes"]["items"]))
+
+        drawn = read(part)
+        for turn in (bd.Rot(0, 0, 30), bd.Rot(17, 23, 41)):
+            turned = read(turn * part)
+            self.assertEqual(turned[:2] + turned[-1:], drawn[:2] + drawn[-1:])
+            for a, b in zip(turned[2:-1], drawn[2:-1]):
+                self.assertAlmostEqual(a, b, delta=1e-3 * max(1.0, abs(b)))
+
+
 class UnfoldTest(unittest.TestCase):
     """The flat pattern against lengths computed by hand: flanges from their tangent lines plus each bend's
     allowance, BA = angle * (r + K t)."""
