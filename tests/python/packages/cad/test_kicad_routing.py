@@ -623,7 +623,8 @@ class CustomRules(unittest.TestCase):
         self.assertEqual({}, dict(found.sizes), "a rule DRC ignores holds nothing")
         self.assertEqual(2, len(warnings), warnings)
         rules.append(kipy_rule("min", ("CRCT_TRACK_WIDTH", {"min": 300_000, "opt": 350_000})))
-        with self.assertRaises(ValueError) as caught, kicode_enums(), mock.patch.object(_route, "_write"):
+        with (self.assertRaises(ValueError) as caught, kicode_enums(), mock.patch.object(_route, "_write"),
+              contextlib.redirect_stderr(io.StringIO())):
             route(OpenBoard("", rules, board_text), ["A"], layers=["F.Cu"])
         self.assertIn("is under the 0.3 mm the custom rule 'min' holds every track to", str(caught.exception))
         rules.pop()
