@@ -615,6 +615,19 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append(f"  no material: {', '.join(missing)}")
     else:
         lines.append("materials   none set")
+    declared = summary.get("declared")
+    if declared:  # what the model declares a part or an assembly to weigh, as the robot description weighs it
+        if declared.get("refused"):
+            lines.append(f"declared    refused: {declared['refused']}")
+        elif declared.get("mass") is not None:
+            lines.append(f"declared    {_said.number(declared['declared'])} kg of {_said.number(declared['mass'])} kg "
+                         f"in all; {_said.number(declared['computed'])} kg computed at the materials' densities")
+        for row in declared.get("masses") or []:
+            lines.append(f"  mass {row['path'] or row['name']}: {_said.number(row['grams'])} g")
+        for row in declared.get("pointMasses") or []:
+            lines.append(f"  point mass {row['name']} on {row['part']}: {_said.number(row['grams'])} g")
+        if declared.get("scaled"):
+            lines.append(f"  scaled to a declared mass: {', '.join(declared['scaled'])}")
 
     def listed(title: str, rows: list[str]) -> None:
         if not rows:

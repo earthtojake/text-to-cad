@@ -229,8 +229,10 @@ def weighed(structure: dict[str, Any], hit: Any, volumes: dict[str, float]) -> d
     """What the occurrence a ref names (``refs.Hit``, from ``refs.resolve_structure``) weighs: each
     part below it, its instance's volume (its prototype's, mm^3, by key in ``volumes``) times its
     material's density, in kg, summed; ``mass`` None when no part of it has a material with a
-    density, and the parts that have none listed by their occurrence paths."""
+    density, and the parts that have none listed by their occurrence paths. Where the model declares a mass or
+    point masses, they weigh as the robot description weighs them (``weights``), said in ``declared``."""
     from cad.engine.refs import path_text
+    from cad.engine.weights import declares, weigh
 
     prototypes = structure["prototypes"]
     total_volume = 0.0
@@ -248,8 +250,19 @@ def weighed(structure: dict[str, Any], hit: Any, volumes: dict[str, float]) -> d
             continue
         mass += volume * 1e-9 * density
         weighed_any = True
+    declared = None
+    if declares(structure):
+        # A part or an assembly declared to weigh grams, and its point masses, weigh as the robot description
+        # weighs them (``weights``): ``volumes`` holds every part's, since a declared mass scales them together.
+        weights = weigh(structure, volumes)
+        indices = [node.payload["instance"] for node in hit.node.parts()]
+        declared = weights.said(indices)
+        mass, weighed_any = declared["mass"] or 0.0, declared["mass"] is not None
+        if weights.refused is None:
+            unweighed = [path for at, (_instance, path) in zip(indices, held) if not weights.weighs(at)]
     found: dict[str, Any] = {"ref": hit.ref, "parts": len(held), "volume": total_volume,
-                             "mass": mass if weighed_any else None, "unweighed": unweighed}
+                             "mass": mass if weighed_any else None, "unweighed": unweighed,
+                             **({"declared": declared} if declared is not None else {})}
     if len(held) == 1:
         instance, path = held[0]
         material = (prototypes[instance["prototype"]].get("material") or {}).get("material")

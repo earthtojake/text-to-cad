@@ -836,6 +836,7 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
 
     from cad.engine import refs
     from cad.engine.said import weighed
+    from cad.engine.weights import declares
 
     from cad.engine.addresses import key, parts, split
 
@@ -906,6 +907,8 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     # Every part a part's or an assembly's ref weighs, measured in one read (its facts by key).
     weighs = sorted({structure["prototypes"][node.payload["prototype"]]["key"]
                      for hit in hits if hit.kind is None for node in hit.node.parts()})
+    if weighs and declares(structure):  # a declared mass scales the parts beside the ref's too: every part measured
+        weighs = sorted({prototype["key"] for prototype in structure["prototypes"]})
     measured = get("/volumes?keys=" + ",".join(quote(key, safe="") for key in weighs)) if weighs else {}
     volumes = {key: facts["volume"] for key, facts in measured.items()}
     boxes = {key: facts.get("box") for key, facts in measured.items()}
@@ -1022,11 +1025,14 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
-    materials and their masses, where any part has one; its joints,
+    materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
+    and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); its
+    joints,
     mechanism states, configuration sequences and animations; and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
+    from cad.engine.weights import declares, weigh
 
     model = None
     if not isinstance(path, Path):
@@ -1085,13 +1091,31 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     joints = [{"name": pair.get("label"), "type": pair.get("type"), "range": pair.get("limits"),
                "units": pair.get("units"), "asBuilt": built.get(pair.get("label"))}
               for pair in kinematics.get("pairs") or []]
+    declared = None
+    if measured and declares(structure):
+        # A part or an assembly declared to weigh grams, and the point masses a part declares, weigh as the robot
+        # description weighs them (``weights``): the materials' masses, the total and the parts that weigh nothing.
+        weights = weigh(structure, {key: facts.get("volume") for key, facts in each.items()})
+        declared = weights.said()
+        for row in materials.values():
+            row["mass"] = None
+        for at, instance in enumerate(instances):
+            material = (prototypes[instance["prototype"]].get("material") or {}).get("material")
+            if material and weights.parts.get(at) is not None:
+                row = materials[material["name"]]
+                row["mass"] = (row["mass"] or 0.0) + weights.parts[at]
+        if weights.refused is None:
+            unweighed = [instance["path"] for at, instance in enumerate(instances) if not weights.weighs(at)]
     weighed = [row["mass"] for row in materials.values() if row["mass"] is not None]
+    if declared is not None:
+        weighed = [] if declared["mass"] is None else [declared["mass"]]
     found = {
         "name": structure.get("name"), "id": ident, "state": state,
         "parts": {"occurrences": len(instances), "distinct": len(prototypes), "root": (structure.get("tree") or {}).get("name")},
         "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
-        "unweighed": unweighed if materials else [],
+        "unweighed": unweighed if materials or declared else [],
+        **({"declared": declared} if declared is not None else {}),
         "joints": joints,
         "couplings": couplings_of(kinematics),
         "states": [{"name": name, "values": values} for name, values in (kinematics.get("configurations") or {}).items()],

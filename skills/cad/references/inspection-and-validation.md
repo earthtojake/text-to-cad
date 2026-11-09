@@ -254,7 +254,11 @@ closure
 The state is the server's: `live` (a worker holds it), `held` (the server holds it, no
 worker), whether its cache has it on disk, and when it was built. `--json` prints the same as `{"summary", "closure"}`, and `--query closure` the
 closure alone. For the names alone, `--query structure` prints the same lists without the
-bounds, volume and masses, and measures nothing. Nothing is built or meshed, and each part is
+bounds, volume and masses, and measures nothing. Where the model declares what a part or an assembly
+weighs (`mass`, `point_mass`), the masses are the robot description's -- the declared total, the solids
+scaled to it -- and a `declared` line says how much is declared and how much computed at the
+materials' densities, each declared mass and point mass under it (`--json`: `declared`); a mass the
+description cannot carry is `declared    refused:` in its words. Nothing is built or meshed, and each part is
 measured once: an inspection after an edit measures only the parts it changed. A part with a solid
 inside out (its faces pointing inward, a negative volume a boolean can leave, which a run and a
 snapshot do not show) is named under `volume` as `inside out` (`--json`: `inverted`, its occurrences):

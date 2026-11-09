@@ -653,6 +653,7 @@ failure: the next asker makes it again.
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
+| `weights.py` | what a document weighs as its robot description weighs it, for `inspect`: the description's **Mass** rule over the engine's volumes, with no kernel -- each part's mass, its point masses, which is declared and which computed (`Weights.said`), and the description's refusal in its words |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
@@ -2957,13 +2958,20 @@ an element answers its facts and, of a model's document, `made_by`, with its can
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it
 weighs: each part's volume, measured on its solids (its facts, below), times its material's
 density, summed -- `{ref, parts, volume (mm³), mass (kg, null when no part has a material),
-unweighed (the parts without one, by path)}`, and for one part its path, material and density.
+unweighed (the parts without one, by path)}`, and for one part its path, material and density. Where
+the model declares a mass or point masses (`mass`, `point_mass`), they weigh as its robot description
+weighs them (`weights.py`, the description's **Mass** over the engine's volumes, every part measured,
+since a declared mass scales its solids together), and `declared` says which is which: `{mass, declared,
+computed (kg: the solids below no declared mass, at their densities), masses (each declared node's name,
+path and grams), pointMasses (each part's, by name, in grams), scaled (the parts scaled to a declared
+mass)}`, or `{mass: null, refused}` in the description's words.
 A ref of several selectors answers a list. A ref that names nothing, or several things where
 it names one, is refused by name (exit 2). Without a REF it serves the document the same way and
 summarises it before its closure (`api._summary`, `query="summary"`): its state (`model_info`'s, with
 `cached` when the engine's cache holds it at its revision; `file` for a file's document), its parts,
 its bounds (each part's box beside its volume placed where its occurrences stand), its
-volume, its materials and their masses, its joints, mechanism states, configuration sequences and
+volume, its materials and their masses (`declared`, as a ref's: as the robot description weighs a
+declared mass and point masses), its joints, mechanism states, configuration sequences and
 animations (the structure's `animations`: each name and duration), and a model's declared files.
 `query="structure"` (`--query structure`) is the same without its bounds, volume and masses, and
 measures nothing: the lists alone.
