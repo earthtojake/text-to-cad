@@ -46,6 +46,18 @@ for path, part in leaves(xbf.read(STEP_XBF), paths=True):
     part = TO_WORLD * part        # keeps its label, colour and material
 ```
 
+Where the vendor's axes are not one turn from the world's (X the robot's left, Y up, Z forward,
+say), build the rotation from where two of its axes go: `bd.Plane`'s `x_dir` is where the vendor's
+X goes, its `z_dir` where the vendor's Z goes, and their cross product, Z x X, is where the
+vendor's Y goes. Check that it is the up you mean; a pair that would need a mirror cannot be built,
+and a Plane is always a rotation:
+
+```python
+# vendor X (the robot's left) to world +Y, vendor Z (forward) to world +X: vendor Y (up) lands on +Z
+TO_WORLD = bd.Pos(0, 0, LIFT) * bd.Location(bd.Plane(origin=(0, 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0)))
+point = (TO_WORLD * bd.Location(vendor_point)).position   # a point: a Location times a Vector is refused
+```
+
 One rigid placement for every part keeps each part where it stands on its hinges, so measure the
 axes (step 3) on the re-placed parts, or move each measured axis by the same placement. A snapshot
 of the re-placed parts shows the base on the ground.
@@ -60,7 +72,12 @@ the rules here are for an assembly with its internals:
 - **Printed or machined parts by function.** A bracket that carries a servo and the arm segment
   that servo turns are two links.
 - **A servo's case goes with the link it is screwed to.** Its horns (the drive horn on the output
-  shaft and the idle horn opposite it, where it has one) go with the link they turn. Vendors label
+  shaft and the idle horn opposite it, where it has one) go with the link they turn. A motor or a
+  servo drawn as one solid, its case and its output (flange, horn) together, cannot be split by
+  parts: the whole solid goes with the link its case is screwed to, and the next link's plate,
+  bolted to its output face, goes with the next link. Where the output is bolted to the parent's
+  bracket (a servo mounted the other way round), the case is the child's. `ranges` reads such a
+  pair as an output and what turns on it (step 6), so the sweep needs no split. Vendors label
   parts in their own language, so a horn's label may not say which it is; the geometry does. The
   drive horn is splined onto the shaft, so it has many more cylindrical faces than the idle horn,
   which turns on a plain bore: count `part.faces().filter_by(bd.GeomType.CYLINDER)` on each and
@@ -73,10 +90,26 @@ the rules here are for an assembly with its internals:
   a millimetre of it) is the horn's centre screw: it threads into the parent's output shaft but
   turns with the child, so it goes with the child. A fastener through two parts goes with the link
   of the two it clamps together, even where a part of another link is nearer to its centre (a horn
-  beside the screw that holds a bracket to its servo).
+  beside the screw that holds a bracket to its servo). At a joint the screws that clamp a plate to an
+  output have boxes inside parts of both links, so the nearest part is ambiguous there: they go with
+  the plate's link, and the screws that hold the case with the case's.
+- **A vendor's own sub-assemblies.** Where the STEP holds a sub-assembly per link (`LINK-2_ASM`,
+  `Forearm_ASM`), take each as a link, and its membership for the fasteners too: a vendor puts the
+  screws that hold a plate to an output in the plate's sub-assembly and those that hold a case in
+  the case's. Check its boundary at each joint (the motor's case in one, the plate on its output in
+  the next) and place any loose top-level part by the rules above.
+- **A branched or free-floating robot** (a humanoid, a legged robot) is a base with a chain per limb.
+  The base is the torso or pelvis: declare `free()` on the top assembly (its frame then stands at the
+  base link's centre of mass), and put the soles, not a mounting face, on z = 0. One component (a
+  servo, a bracket) repeats in every limb and several times along one, so a table of component name
+  to link cannot place it: key the table by component and position, the leaf's centre in bands along
+  the limb (its height down a leg, its distance out along an arm) and its side (the sign of its
+  coordinate across the body), and raise on a leaf that falls in no band. Left and right limbs are
+  mirror images, so one joint's measured axis points the other way on the other side: give each side
+  the sign that makes a positive angle the motion you mean (step 7 for the controller's).
 
-Write the grouping as a table of component name to link, and raise on any component the table does
-not name, so that a new revision of the STEP fails loudly instead of dropping a part. A vendor often
+Write the grouping as a table of component name to link (by name and position where names repeat
+across links, above), and raise on any component the table does not name, so that a new revision of the STEP fails loudly instead of dropping a part. A vendor often
 labels its bodies `SOLID` or `Body1`. `ranges` names such a part by its component
 (`Forearm v4/SOLID`), but `inspect` and the exported files show the label, so relabel each one as
 you take it: `if part.label in ("SOLID", "Body1"): part.label = path[-2]`. A vendor's STEP can also
@@ -261,6 +294,23 @@ the cover of the servo that drives it): such a pair stops a joint only where its
 gap closes to half, and the stop says so (`touching as built`). Check such a stop with a posed
 snapshot at it.
 
+A motor or a servo drawn as one solid, its case and output together, with the next link bolted to
+that output: the sweep reads the pair as an output and what turns on it, and lists it under the
+joint (`turns on: plate (link2) on motor (link1)`). Neither the output's face nor what of the solid
+lies within the reach of their contact about the axis (a locating boss, a pin, a bolt's seat
+through the face) stops the joint, so it sweeps on to its real stop, and no `exclude()` is needed.
+The case beyond that reach still stops it, as it does the hardware. Where a stop a few degrees out
+still names such a pair `touching as built`, the output carries something past that reach which
+the hardware turns with it: `exclude()` the pair, or split the output from the case in the model.
+
+**A clash and a stop.** A stop is where the child meets its parent, whatever the other joints do;
+a clash, said beside it, is what the joint moves meeting another link in the drawn pose of the
+others (a wrist resting on the shoulder of an arm drawn folded, a thigh meeting the torso while the
+hip's other joints stand as drawn). Write the stop, not the clash: the clash moves with the other
+joints, and the simulator's contacts hold it, since those links collide. A stop past a half turn
+(-239 degrees) is the parts' own, within the full turn swept each way; where the actuator's own
+travel is narrower (a servo's position range), write that.
+
 Simplified parts are often drawn sunk into each other: a link a little too wide for its clevis, a
 forearm resting a millimetre into the upper arm it folds onto, a gripper's carriage drawn inside its
 rail. `ranges` finds these and lists them under the joint (`overlapping as drawn ... by 180 mm^3,
@@ -326,6 +376,10 @@ stops found around the drawn pose:
   signs: usually only one puts the range inside the stops, and that is the controller's sign.
 - Where neither sign fits (the range runs through a stop either way), the drawn pose is not that
   joint's zero.
+- Mirrored limbs: a vendor's controller often counts the left and right joints mirrored (both
+  knees bend at positive angles) or the same way about one axis (one knee positive, the other
+  negative). Its published ranges say which: a lopsided range that fits one side's stops with one
+  sign fits the other side's with the opposite sign where it is mirrored.
 
 Where the ranges fit, keep the drawn pose as the zero and say so in the model's docstring, with the
 evidence (each range against its stops). The limits you write are then the datasheet's numbers.

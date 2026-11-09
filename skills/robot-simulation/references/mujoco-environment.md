@@ -443,7 +443,10 @@ What to try, in the order MuJoCo's modelling guide gives:
      industrial or collaborative arm's joint is another class: a brushless motor through a harmonic
      or cycloidal drive, ratios of about 50 to 160, rotors of about 1e-5 to 1e-4 kg*m^2, so its
      reflected inertia is of the order of 0.03 to 2 kg*m^2 (the larger at the shoulder, the smaller
-     at the wrist). That is an order of magnitude to start from, not a value: tune it. Raise it
+     at the wrist). A quasi-direct-drive actuator (a large flat brushless motor through a
+     planetary of about 6:1 to 10:1, a legged robot's joint) is a third: its rotor dominates, about
+     1e-5 to 1e-4 kg*m^2 for a motor 50 to 100 mm across, and the low ratio reflects little of it,
+     about 4e-4 to 1e-2 kg*m^2. That is an order of magnitude to start from, not a value: tune it. Raise it
      while a joint rings or chatters under its position actuator; lower it while the joint lags a
      command the hardware follows.
 - **Actuators**: gains from the robot's data sheet (`kp`, and `kv` or `dampratio` for a position
