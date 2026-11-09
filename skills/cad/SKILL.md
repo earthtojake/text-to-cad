@@ -239,9 +239,9 @@ ref resolves in the document as the latest run left it; one that names nothing, 
 several things where it names one, is refused with what it could mean. The grammar is
 in [references](references/inspection-and-validation.md#references).
 
-A Quick Edit prompt names its document under `File:` (a path or an id), selected
-entities under `References:`, and a snapshot packet as inline JSON or a `.snapshot.json`
-path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
+A Quick Edit prompt names its document under `File:` (a model's id, or a file's path:
+relative to your workspace, else from `~/`), selected entities under `References:`, and a
+snapshot packet as inline JSON or a `.snapshot.json` path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
 drew their ink in, ink included:
 
 ```bash
