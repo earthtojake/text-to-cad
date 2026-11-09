@@ -163,6 +163,15 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
         from cad_server._internal import integration_env
 
         argv = pull_value(argv)
+        refused = _exact_only(document_type, argv)
+        if refused is not None:
+            # Molding, CNC and sheet on a mesh: refused with the reason and the check to run instead, whatever else
+            # is given -- another process's flags (``--pull``, ``--axes``) are not this mistake's to name.
+            from cad._internal.manufacturing import options
+            from cad_server._internal.cli_from_function import emit
+
+            return emit(lambda: options(document_type, refused, {}), prog=prog, as_json="--json" in argv,
+                        verbose_hint=False)
         target = (f"cad.{document_type}", "dfm")
         integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
         if integration_env.carries(integration):
@@ -170,6 +179,22 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
         return _checked_elsewhere(document_type, target, integration, argv, prog)
 
     return run
+
+
+def _exact_only(document_type: str, argv: list[str]) -> str | None:
+    """The process ``--process`` names (its last, as argparse reads it) where it is one a mesh type is never checked
+    for (molding, CNC and sheet are judged on exact geometry), else None -- a B-rep's, a DXF's, a help asked for."""
+    from cad._internal.manufacturing import BREP_TYPES, CUT_TYPES, PROCESSES, processes_for
+
+    if document_type in (*BREP_TYPES, *CUT_TYPES) or "-h" in argv or "--help" in argv:
+        return None
+    named = None
+    for index, token in enumerate(argv):
+        if token == "--process" and index + 1 < len(argv):
+            named = argv[index + 1]
+        elif token.startswith("--process="):
+            named = token.partition("=")[2]
+    return named if named in PROCESSES and named not in processes_for(document_type) else None
 
 
 def _checked_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str],

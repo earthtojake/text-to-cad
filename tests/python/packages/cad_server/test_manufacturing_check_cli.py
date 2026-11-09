@@ -79,8 +79,9 @@ class ManufacturingCheckCommand(unittest.TestCase):
         trimesh.creation.box(extents=(20, 20, 15)).export(self.box)
 
     def test_a_mesh_refuses_molding_with_the_reason_and_the_fix(self) -> None:
-        """Molding is judged on exact geometry: each mesh type refuses it before anything is read, the command
-        line's mistake (exit 2, ``invalid_argument``), naming the check to run instead."""
+        """Molding, CNC and sheet are judged on exact geometry: each mesh type refuses them before anything is read,
+        the command line's mistake (exit 2, ``invalid_argument``), naming the check to run instead -- whatever else
+        is given, that process's own flags (``--pull``, ``--axes``) included."""
         for document_type, name in (("stl", "box.stl"), ("threemf", "box.3mf"), ("glb", "box.glb")):
             with self.subTest(document_type=document_type):
                 path = self.folder / name
@@ -92,6 +93,21 @@ class ManufacturingCheckCommand(unittest.TestCase):
                 self.assertIn("a molding check is judged on exact geometry", found["error"])
                 self.assertIn("check the part's STEP or model instead (cad step dfm part.step --process molding",
                               found["error"])
+        for argv, words in (
+                (("--process", "molding", "--pull", "z"), "a molding check is judged on exact geometry"),
+                (("--pull", "-z", "--process=molding", "--candidates"), "a molding check is judged on exact geometry"),
+                (("--axes", "5", "--process", "cnc"), "a cnc check measures exact geometry"),
+                (("--process", "sheet", "--thickness", "2", "--k-factor", "0.4"), "a sheet check measures exact geometry")):
+            with self.subTest(argv=argv):
+                code, out, _ = _run("stl", str(self.box), *argv, "--json")
+                found = json.loads(out)
+                self.assertEqual((code, found["reason"]), (2, "invalid_argument"))
+                self.assertIn(words, found["error"])
+                self.assertIn("check the part's STEP or model instead", found["error"])
+        code, _out, err = _run("stl", str(self.box), "--process", "cnc", "--axes", "5")
+        self.assertEqual(code, 2)
+        self.assertIn("a cnc check measures exact geometry", err)
+        self.assertNotIn("unrecognized arguments", err)
         self.assertEqual(pull_value(["p.step", "--pull", "-z"]), ["p.step", "--pull=-z"])
 
     def test_a_part_that_fails_its_rules_exits_one_with_its_json_line(self) -> None:
