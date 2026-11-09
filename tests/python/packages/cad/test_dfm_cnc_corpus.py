@@ -410,7 +410,10 @@ CASES = [
     Case("shaft", shaft, {"material": "steel", "turning": True},
          expect=[("cnc.hole_depth", None, box(-5, -5, -10, 5, 5, 80)),                 # d10, 90 deep: 9 D
                  ("cnc.hole_depth", None, box(-15, -0.75, 99.25, 15, 0.75, 100.75)),   # d1.5 across d30: 20 D
-                 ("cnc.hole_depth", None, box(6, -15, 70, 10, 15, 110))]),             # d4 at 45 deg
+                 ("cnc.hole_depth", None, box(6, -15, 70, 10, 15, 110)),               # d4 at 45 deg
+                 # the 45-degree hole's lips on the d30 surface run down to 35 deg: real knives, a stretch
+                 # each, which an edge read at its middle (88 deg) missed
+                 ("cnc.knife_edge", None, box(0, -16, 70, 16, 16, 110))]),
     # the d3 cross hole runs 18.3 mm through the d20 shaft: 6 D
     Case("cross_shaft", cross_shaft, {"material": "steel", "turning": True},
          expect=[("cnc.hole_depth", None, box(2.5, -10, 28.5, 5.5, 10, 31.5))]),
@@ -418,7 +421,10 @@ CASES = [
     Case("clean_shaft", clean_shaft, {"material": "aluminum", "turning": True},
          expect=[("cnc.hole_depth", None, box(-3, -3, 0, 3, 3, 30))]),
     Case("filleted", filleted, {"material": "aluminum"}),
-    Case("freeform", freeform, {"material": "aluminum"}),
+    # the loft leaves its rectangle's corners at 43 deg to the base: a knife over each corner's stretch, its
+    # base edges 103 deg at their middles
+    Case("freeform", freeform, {"material": "aluminum"},
+         expect=[("cnc.knife_edge", None, box(-31, -21, -1, 31, 21, 17))]),
     Case("kit", kit, {"material": "aluminum"},
          expect=[("cnc.internal_corner_sharp", "bracket", box(55, -5, 2, 65, 5, 10))]),
     Case("inch_plate", inch_plate, {"material": "aluminum"}, unit=bd.Unit.IN,
