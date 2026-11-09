@@ -1422,20 +1422,19 @@ ACROSS_POINTS = 12
 
 def _open_across(model: Model, group: set[int], d: np.ndarray) -> bool:
     """Whether the cavity the faces bound is open to a side across ``d`` -- a valley, a groove, a T-slot or a
-    dovetail open at its neck -- rather than closed around the axis as a window or a through slot is. Closed
-    where every edge of its faces that runs along the axis joins two of them (their section is a loop).
-    Else rays across the axis from inside the cavity tell: from each face's samples along its normal (one that
-    meets nothing leaves the part), and from the middle of each such ray in every direction square to the axis
-    (``ACROSS_RAYS``, and toward the middle of each pair of the edges along the axis that lead out of the
-    group, its mouth's sides): one that leaves the part opens it. Directions the normals take are no proof: a
-    dovetail's flanks and floor look every way and its neck is open."""
-    rims = []
+    dovetail open at its neck -- rather than closed around the axis as a window or a through slot is: rays
+    across the axis from inside the cavity tell, from each face's samples along its normal (one that meets
+    nothing leaves the part), and from the middle of each such ray in every direction square to the axis
+    (``ACROSS_RAYS``) and toward the middle of each pair of the edges that lead out of the group (its mouth's
+    sides, those along the axis first): one that leaves the part opens it. Directions the normals take are no
+    proof: a dovetail's flanks and floor look every way and its neck is open."""
+    along, other = [], []
     for face in group:
-        for edge, other in model.neighbours(face):
-            if other not in group and abs(float(np.asarray(edge.tangent) @ d)) > SAME:
-                rims.append(np.asarray(edge.midpoint, dtype=float))
-    if not rims:
-        return False
+        for edge, beyond in model.neighbours(face):
+            if beyond not in group:
+                (along if abs(float(np.asarray(edge.tangent) @ d)) > SAME else other).append(
+                    np.asarray(edge.midpoint, dtype=float))
+    rims = along + other
     seed = np.array([1.0, 0.0, 0.0]) if abs(d[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
     u = unit(np.cross(d, seed))
     v = np.cross(d, u)

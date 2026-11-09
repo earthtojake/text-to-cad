@@ -279,11 +279,11 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   floor). An open step that reads both ways (floor+wall or wall+floor seen from the side) keeps the shallower
   reading. **Through** cavities (`kind` `through`: windows, through slots, cut-outs, no floor) are faces along
   a world axis joined by concave or tangent edges along it, none a floor pocket's, none meeting a plane square
-  to the axis by a concave edge, closed around the axis -- every edge of theirs along the axis joins two of
-  them, else no ray across the axis from inside the cavity (from each face along its normal, then from the
-  middle of that ray every 10 degrees and toward the middle of each pair of the edges leading out of it)
-  leaves the part: an open valley, or a T-slot or a dovetail open at its neck, is no window, whatever way its
-  faces look --, with a corner -- a concave cylinder along
+  to the axis by a concave edge, closed around the axis -- no ray across the axis from inside the cavity
+  (from each face along its normal, then from the middle of that ray every 10 degrees and toward the middle
+  of each pair of the edges leading out of it) leaves the part: an open valley, a quilted pad's grooves, a
+  T-slot or a dovetail open at its neck is no window, whatever way its faces look; a keyway open only into
+  its bore is closed --, with a corner -- a concave cylinder along
   it that is no floor's root fillet (no tangent plane neighbour seen end-on), or a sharp concave edge along
   it; `depth_mm` is the walls' extent along the axis, `depth_from_top_mm` the shallower side's reach,
   `width_mm` / `depth_to_width` as for a pocket, `floor` null.
