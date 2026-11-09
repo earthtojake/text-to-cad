@@ -480,7 +480,7 @@ class _Describer:
                       "as nothing")
         if not wanted:
             return {}
-        from cad.engine.hulls import EXTRA, Failed, Unavailable, hulls
+        from cad.engine.hulls import Failed, Unavailable, hulls
 
         keys = list(wanted)
         try:
@@ -489,9 +489,7 @@ class _Describer:
         except Unavailable as error:
             names = ", ".join(repr(wanted[key]["name"]) for key in keys)
             raise DescriptionError(f"part {names} collides as convex hulls (collision 'decomposed'), which CoACD "
-                                   f"makes: {error}. Add `cad[build123d,coacd]` to the model's header (cad run makes "
-                                   f"its environment with it), or install {EXTRA}; or declare it another "
-                                   "collision") from None
+                                   f"makes: {error}; or declare it another collision") from None
         except Failed as error:
             named = repr(wanted[keys[error.index]]["name"]) if error.index is not None else ", ".join(
                 repr(wanted[key]["name"]) for key in keys)

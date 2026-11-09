@@ -128,9 +128,14 @@ class DeclarationTest(_Folder):
         for wrong in (0.001, 2, "fine"):
             with self.assertRaisesRegex(ValueError, "threshold is CoACD's concavity threshold, 0.01 to 1"):
                 collision(part, "decomposed", threshold=wrong)
-        # A later declaration replaces the earlier one, its options with it.
+        # A later declaration replaces the earlier one, its options with it: at most 16 hulls by default, None
+        # for CoACD's no limit; another kind is given no default.
         collision(part, "decomposed", max_hulls=2)
         collision(part, "decomposed")
+        self.assertEqual(part.__dict__["_decomposition"], {"maxHulls": 16})
+        collision(part, "decomposed", max_hulls=None)
+        self.assertNotIn("_decomposition", part.__dict__)
+        collision(part, "box")
         self.assertNotIn("_decomposition", part.__dict__)
 
 
@@ -168,7 +173,7 @@ class WritersTest(_Folder):
         path = self.build('collision(arm, "decomposed")')
         first = self.described(path)
         again = self.described(path)
-        self.assertEqual(self.calls, [[{}]], "the second description decomposed nothing")
+        self.assertEqual(self.calls, [[{"maxHulls": 16}]], "the second description decomposed nothing")
         self.assertEqual([c.geometry.mesh for c in again.link("bracket").collisions],
                          [c.geometry.mesh for c in first.link("bracket").collisions])
         held = sorted((self.folder / "cache" / "hulls").glob("*.npz"))
@@ -178,7 +183,7 @@ class WritersTest(_Folder):
         with mock.patch("importlib.util.find_spec", return_value=None):
             describe(Source.read(path).view())
         self.described(self.build('collision(arm, "decomposed", max_hulls=2)'))
-        self.assertEqual(self.calls, [[{}], [{"maxHulls": 2}]])
+        self.assertEqual(self.calls, [[{"maxHulls": 16}], [{"maxHulls": 2}]])
         self.assertEqual(len(list((self.folder / "cache" / "hulls").glob("*.npz"))), 2)
 
     def test_a_decomposition_where_coacd_is_not_installed_is_refused_naming_the_part_and_the_extra(self) -> None:

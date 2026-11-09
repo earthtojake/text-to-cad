@@ -5,7 +5,7 @@ it grips.
 ``collision(part, kind)`` says what a simulator collides the part as (``description.COLLISIONS``):
 the mesh itself (the default a description is made with), a ``box``, a ``sphere``, a ``cylinder``
 or a ``capsule`` the kernel fits to the part, ``decomposed`` (convex hulls CoACD cuts the part's mesh
-into, the coacd integration's, its visual whole: ``max_hulls`` and ``threshold`` bound it), or
+into, the coacd integration's, its visual whole: ``max_hulls``, 16 by default, and ``threshold`` bound it), or
 ``none``. On an assembly it is every part's below it that declares none, as a material is, its
 options with it. ``frame(part, name, location)`` names a frame on a part --
 a tool tip, a camera mount, a sensor -- for a writer's sites or fixed frames.
@@ -94,23 +94,29 @@ def _shape(part: Any, said: str) -> Any:
     return part
 
 
+#: The most hulls a decomposed collision is cut into where it gives no ``max_hulls``: onshape-to-robot's default,
+#: which keeps a simulator's collision checks cheap (MuJoCo tests each hull as a geom of its own).
+MAX_HULLS = 16
 #: The concavity threshold CoACD takes: its own range (its default, 0.05, where none is given).
 THRESHOLD = (0.01, 1.0)
 
 
-def collision(part: Any, kind: str, *, max_hulls: int | None = None, threshold: float | None = None) -> Any:
+def collision(part: Any, kind: str, *, max_hulls: int | None = MAX_HULLS, threshold: float | None = None) -> Any:
     """Say what a simulator collides ``part`` as: one of ``mesh``, ``box``, ``sphere``,
     ``cylinder``, ``capsule``, ``decomposed`` or ``none`` (the primitives fitted by the kernel to the
     part's oriented bounding box, a cylinder's and a capsule's axis its longest side). ``decomposed``
     is a set of convex hulls cut from the part's mesh by CoACD (the coacd integration, ``cad[coacd]``,
     where the robot is described), its visual left whole: ``max_hulls`` at most that many (CoACD's
-    ``max_convex_hull``; no limit where None), ``threshold`` its concavity threshold, 0.01 to 1, a
-    smaller one cutting finer (CoACD's 0.05 where None); no other kind takes either. On an assembly,
-    every part below it that declares none. Returns ``part``."""
+    ``max_convex_hull``; ``MAX_HULLS``, 16, by default, None for no limit), ``threshold`` its concavity
+    threshold, 0.01 to 1, a smaller one cutting finer (CoACD's 0.05 where None); no other kind takes
+    either (``max_hulls`` left at its default is none given). On an assembly, every part below it that
+    declares none. Returns ``part``."""
     _shape(part, "collision")
     if kind not in COLLISIONS:
         raise ValueError(f"collision {kind!r} is none of {', '.join(COLLISIONS)}")
     options: dict[str, Any] = {}
+    if max_hulls == MAX_HULLS and kind != "decomposed" and not isinstance(max_hulls, bool):
+        max_hulls = None  # the default bounds a decomposed collision alone: another kind is given none
     if max_hulls is not None:
         if isinstance(max_hulls, bool) or not isinstance(max_hulls, int) or max_hulls < 1:
             raise ValueError(f"max_hulls is a whole number of hulls, at least 1, not {max_hulls!r}")
