@@ -147,7 +147,7 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   (`_dfm_brep.moved`). A row of 46 copies among 107 parts costs 61 parts' measurement, its report the same.
   Molding and printing read a part against the world's pull and plate, so they measure every part.
 - **Exact rays** (`_dfm_brep.Rays`, each process's casts) cost what a crossing costs. On a heavy face -- free-form
-  and of 48 edges or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
+  and of 48 edges or more, or a B-spline of 4000 control points or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
   crossing of the surface beyond the face's trim against every edge again, with a classifier made anew each call:
   6 ms a ray on a 526-edge face, against microseconds on any other. So a heavy face's candidates are screened by its
   triangulation (`Screen`: chunks of 16 triangles, each box widened by three deflections and the face's
