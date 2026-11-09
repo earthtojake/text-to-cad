@@ -517,6 +517,16 @@ class CheckTest(unittest.TestCase):
         self.assertTrue(thinnest["at_limit"])
         self.assertGreater(thinnest["chord_mm"], 0.5 - thinnest["thickness_mm"])
         self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in fdm.findings})
+        # a 0.75 mm tube on FDM (0.8), coarsely meshed: its two rows of chords lie alike and cancel, so the
+        # reading's own error is small and the wall is under its limit -- an error, not "at the limit"
+        thin = Cylinder(5, 20) - Cylinder(4.25, 21)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "thin.stl"
+            export_stl(thin, str(path), tolerance=0.1, angular_tolerance=0.5)
+            coarse = cad.stl.dfm(str(path), process="printing", technology="fdm")
+        least = min(coarse.measurements["wall_thickness"]["items"], key=lambda item: item["thickness_mm"])
+        self.assertLess(least["chord_mm"], 0.8 - least["thickness_mm"])
+        self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in coarse.findings})
         # a box's flat walls have no chords to depart: none is at a limit
         with tempfile.TemporaryDirectory() as td:
             flat = cad.stl.dfm(_stl(_hollow_box(0.45), Path(td), "box"), process="printing", technology="sla")

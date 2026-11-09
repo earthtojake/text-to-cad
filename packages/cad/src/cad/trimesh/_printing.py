@@ -32,6 +32,7 @@ whose part has no thin walls.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
@@ -543,48 +544,65 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
 
 
 #: Two triangles meeting at under this many degrees are one curved surface's chords (a sharper crease is the
-#: part's own edge): what a chord's departure from the surface is read across (``_chord_sag``).
+#: part's own edge): where a surface's offset from its chords is read (``_surface_offset``).
 CHORD_DEG = 30.0
 
 
-def _chord_sag(mesh: trimesh.Trimesh) -> np.ndarray:
-    """Per triangle, how far its chords may depart from the curved surface they stand for: across each smooth
-    edge with a neighbour (turning under ``CHORD_DEG``), a chord of width ``c`` turned by ``theta`` from the
-    next stands ``c theta / 8`` off its arc (``c`` read as 1.5 times the triangles' centres' spacing across the
-    edge, an over-estimate where they are not a strip's); its greatest. A plane's triangles read 0."""
-    sag = np.zeros(len(mesh.faces))
-    if not len(mesh.face_adjacency):
-        return sag
-    theta = np.asarray(mesh.face_adjacency_angles, dtype=float)
-    smooth = theta < np.radians(CHORD_DEG)
-    if not smooth.any():
-        return sag
-    pairs = mesh.face_adjacency[smooth]
-    edges = mesh.vertices[mesh.face_adjacency_edges[smooth]]
-    along = edges[:, 1] - edges[:, 0]
-    along /= np.maximum(np.linalg.norm(along, axis=1, keepdims=True), 1e-300)
-    apart = mesh.triangles_center[pairs[:, 1]] - mesh.triangles_center[pairs[:, 0]]
-    across = np.linalg.norm(apart - along * np.einsum("ij,ij->i", apart, along)[:, None], axis=1)
-    value = 1.5 * across * theta[smooth] / 8.0
-    np.maximum.at(sag, pairs[:, 0], value)
-    np.maximum.at(sag, pairs[:, 1], value)
-    return sag
+def _surface_offset(mesh: trimesh.Trimesh, triangles: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """How far the curved surface a mesh stands for lies off each point of its triangle, along the triangle's
+    outward normal (signed: outward of the chord positive, a convex surface's): the point's Phong projection onto
+    its triangle's corners' tangent planes (by their vertex normals), halved -- exact to second order at a chord's
+    middle (a chord turned theta on radius R stands R theta^2 / 8 off its arc). Each corner's normal is that of
+    the faces about it that turn from the triangle's own by under ``CHORD_DEG`` (its surface's, not an edge's
+    other side: a tube's side strips reach both its rims)."""
+    if not len(triangles):
+        return np.zeros(0)
+    corners = mesh.faces[triangles]
+    v = mesh.vertices[corners]
+    face = mesh.face_normals[triangles]
+    around = mesh.vertex_faces[corners]  # (n, 3, k), -1 padded
+    present = around >= 0
+    their = mesh.face_normals[np.where(present, around, 0)] * (mesh.area_faces[np.where(present, around, 0)])[..., None]
+    alike = present & (np.einsum("ikmj,ij->ikm", mesh.face_normals[np.where(present, around, 0)], face)
+                       > math.cos(math.radians(CHORD_DEG)))
+    n = (their * alike[..., None]).sum(axis=2)
+    n = n / np.maximum(np.linalg.norm(n, axis=2, keepdims=True), 1e-300)
+    smooth = np.ones(len(triangles), dtype=bool)
+    # barycentric coordinates of each point in its triangle's plane
+    e0, e1 = v[:, 1] - v[:, 0], v[:, 2] - v[:, 0]
+    rel = points - v[:, 0]
+    d00, d01, d11 = (np.einsum("ij,ij->i", e0, e0), np.einsum("ij,ij->i", e0, e1), np.einsum("ij,ij->i", e1, e1))
+    d20, d21 = np.einsum("ij,ij->i", rel, e0), np.einsum("ij,ij->i", rel, e1)
+    den = np.where(np.abs(d00 * d11 - d01 * d01) > 1e-300, d00 * d11 - d01 * d01, 1.0)
+    b1 = (d11 * d20 - d01 * d21) / den
+    b2 = (d00 * d21 - d01 * d20) / den
+    weights = np.stack([1.0 - b1 - b2, b1, b2], axis=1)
+    projected = points[:, None, :] - np.einsum("ikj,ikj->ik", points[:, None, :] - v, n)[:, :, None] * n
+    phong = np.einsum("ik,ikj->ij", weights, projected)
+    return np.where(smooth, 0.5 * np.einsum("ij,ij->i", phong - points, face), 0.0)
 
 
 def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, hits: np.ndarray,
-                labels: np.ndarray, sag: np.ndarray | None = None) -> list[dict]:
+                labels: np.ndarray, mesh: trimesh.Trimesh | None = None) -> list[dict]:
     """The thickness field as items: each face's thinnest sample (``_regions``: ``labels``, per triangle), a face
     and the face its thinnest ray lands on one item -- a wall is read from both its sides, and is one wall --,
     as the exact path lists them (whether a mesh's wall is joined on two sides is not known: ``supported``
-    None), each with how far the mesh's chords may depart from the surfaces either side of its thinnest ray
-    (``chord_mm``: ``_chord_sag``'s at the two triangles, added). Unsorted and uncapped: ``_wall_ranked`` ranks
-    every body's together."""
+    None), each with how far its thinnest ray's length may be off the wall the mesh stands for (``chord_mm``):
+    the surfaces' offsets from the chords at its two ends (``_surface_offset``), each along its ray, summed with
+    their signs -- a tube's two rows of chords, one convex and one concave, cancel where they lie alike.
+    Unsorted and uncapped: ``_wall_ranked`` ranks every body's together."""
     if not len(thickness):
         return []
     own, across = labels[faces], labels[hits]
     order = np.lexsort((thickness, own))
+    if mesh is not None:
+        inward = -mesh.face_normals[faces]
+        landing = origins + inward * thickness[:, None]
+        error = _surface_offset(mesh, faces, origins) + _surface_offset(mesh, hits, landing)
+        chords = np.abs(error)[order]
+    else:
+        chords = np.zeros(len(order))
     own, across, values, points = own[order], across[order], thickness[order], origins[order]
-    chords = (sag[faces] + sag[hits])[order] if sag is not None else np.zeros(len(order))
     first = np.ones(len(own), dtype=bool)
     first[1:] = own[1:] != own[:-1]
     starts = np.flatnonzero(first)
@@ -666,7 +684,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             found["_hits"] = np.concatenate([found["_hits"], extra[4]])
         if "_thickness" in found:
             found["_items"] = _wall_items(found["_thickness"], found["_origins"], found["_faces"], found["_hits"],
-                                          _regions(body)[0], _chord_sag(body))
+                                          _regions(body)[0], body)
         return found
 
     if len(bodies) <= 1:
