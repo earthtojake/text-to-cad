@@ -38,7 +38,9 @@ holds both lists. Three have the CAD built around the board in the cad skill's l
 the board file, and the scripts that make the board (`scripts/`): [`macropad`](electronics/macropad/README.md),
 [`eurorack_lfo`](electronics/eurorack_lfo/README.md) and [`orbit_clock`](electronics/orbit_clock/README.md). The
 fourth, [`pinball`](electronics/pinball/README.md), runs the other way: the design model (`src/`) is the source of
-the board's outline, holes and art, and the board's scripts, build and checks live in `board/`.
+the board's outline, holes and art, and the board's scripts, build and checks live in `board/`. The PCB
+benchmark builds all four in copies of its own, beside upstream KiCad projects, and never here
+([`scripts/bench/README.md`](../scripts/bench/README.md#the-pcb-corpus-and-its-tasks)).
 
 Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, the KiCad files no script writes, docs); never
 what a run, a build or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
