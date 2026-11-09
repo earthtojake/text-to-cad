@@ -37,7 +37,8 @@ class Target:
     """A node of the GLB's tree a clip may key: its index (``node``), its parent's (None for one the
     root holds), the instances it carries (``members``: a part's own, or every part under a
     sub-assembly the GLB draws), the instance it is (a part's; None for a sub-assembly), its place in
-    the document's frame (``matrix``, 4x4, numpy) and its parent's (``within``)."""
+    the document's frame (``matrix``, 4x4, numpy), its parent's (``within``) and its name, its path
+    below the root (what a refusal names it by)."""
 
     node: int
     parent: int | None
@@ -45,6 +46,7 @@ class Target:
     instance: int | None
     matrix: Any
     within: Any
+    name: str
 
 
 def chosen(targets: list[Target], signature: Any) -> list[Target]:
@@ -67,16 +69,6 @@ def chosen(targets: list[Target], signature: Any) -> list[Target]:
         found.append(target)
         covered.add(target.node)
     return found
-
-
-def _targets(view: Any, candidates: list[Any]) -> list[Target]:
-    """``candidates`` as targets: instance indices each its own (its node the index), or targets."""
-    if all(isinstance(item, Target) for item in candidates):
-        return list(candidates)
-    instances = view.source.structure["instances"]
-    return [Target(index, None, (index,), index,
-                   np.array(instances[index]["matrix"], dtype=float).reshape(4, 4).T, np.eye(4))
-            for index in candidates]
 
 
 @dataclass
@@ -143,10 +135,9 @@ def _owners(kinematics: dict[str, Any]) -> dict[int, int]:
 
 class _Motion:
     """One motion's true placements over its clip: every moving node's world matrix in the
-    document's frame at ``t``. ``candidates`` are the targets a clip keys (``chosen``), or instance
-    indices, each its own node."""
+    document's frame at ``t``. ``targets`` are the nodes a clip keys (``chosen``)."""
 
-    def __init__(self, view: Any, name: str, candidates: list[Any]) -> None:
+    def __init__(self, view: Any, name: str, targets: list[Target]) -> None:
         from cad.engine import mechanism
 
         structure = view.source.structure
@@ -158,7 +149,6 @@ class _Motion:
         self.unrest = [np.linalg.inv(matrix) for matrix in rest]
         links = _owners(kinematics)
         # A node's link is its members' one link (``chosen`` keys no node whose members differ).
-        targets = _targets(view, candidates)
         owner = {}
         for target in targets:
             found = {links.get(index) for index in target.members}
@@ -166,7 +156,7 @@ class _Motion:
                 owner[target.node] = found.pop()
         self.base = {target.node: np.asarray(target.matrix, dtype=float) for target in targets if target.node in owner}
         self.owner = owner
-        candidates = [target.node for target in targets]
+        nodes = [target.node for target in targets]
         # The instances whose link stands anywhere else than as built, at a key or between keys.
         moved_links: set[int] = set()
         breaks = self.timeline.breaks
@@ -176,7 +166,7 @@ class _Motion:
             for link, (now, unrest) in enumerate(zip(worlds, self.unrest)):
                 if link not in moved_links and not np.allclose(now @ unrest, np.eye(4), rtol=0, atol=1e-9):
                     moved_links.add(link)
-        self.instances = [index for index in candidates if self.owner.get(index) in moved_links]
+        self.instances = [index for index in nodes if self.owner.get(index) in moved_links]
         self._links = sorted({owner[index] for index in self.instances})
         self._bases = np.array([self.base[index] for index in self.instances]).reshape(-1, 4, 4)
 
@@ -255,22 +245,21 @@ def _deviation(keys: _Keys, a: float, b: float) -> tuple[float, float]:
     return worst[0], worst[1]
 
 
-def clips(view: Any, candidates: list[Any], size: float) -> list[Clip]:
-    """Every motion of the view's document baked (see the module docstring): ``candidates`` the
-    GLB's nodes (``Target``, in its tree's order; a clip keys those ``chosen`` by their link) or
-    instance indices, each its own node; ``size`` the model's (mm)."""
+def clips(view: Any, targets: list[Target], size: float) -> list[Clip]:
+    """Every motion of the view's document baked (see the module docstring): ``targets`` the GLB's
+    nodes, in its tree's order (a clip keys those ``chosen`` by their link); ``size`` the model's (mm)."""
     from cad.engine import mechanism
     from cad.engine.export import ExportRefused
 
     kinematics = view.source.structure.get("kinematics") or {}
-    if kinematics.get("motions") and candidates and all(isinstance(item, Target) for item in candidates):
+    if kinematics.get("motions") and targets:
         links = _owners(kinematics)
-        candidates = chosen(candidates, lambda index: (links[index], True) if index in links else None)
+        targets = chosen(targets, lambda index: (links[index], True) if index in links else None)
     found = []
     linear, angular = mechanism.LINEAR_TOLERANCE * max(1.0, size), mechanism.ANGULAR_TOLERANCE
     for name in kinematics.get("motions") or {}:
         try:
-            motion = _Motion(view, name, candidates)
+            motion = _Motion(view, name, targets)
         except mechanism.KinematicsError as error:
             raise ExportRefused(f"motion {name!r}: {error}") from None
         keys = _Keys(motion)

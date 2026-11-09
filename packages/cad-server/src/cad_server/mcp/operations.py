@@ -11,7 +11,13 @@ import json
 import re
 from pathlib import Path
 
+from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 from cad_server.jobs import TERMINAL, Jobs, JobError
+
+
+def _number(value: float) -> int | float:
+    """A limit as JSON says it: a whole number without its point (``1``, not ``1.0``)."""
+    return int(value) if float(value).is_integer() else value
 
 
 def obj(properties, required=()):
@@ -78,15 +84,15 @@ def _snapshot_arguments():
 SNAPSHOT = _snapshot_arguments()
 START = {
     "cad_export": obj({"source": STRING, "destinations": {"type": "array", "minItems": 1, "maxItems": 32, "items": STRING},
-                       "tolerance": {"type": "number", "minimum": 0.001,
+                       "tolerance": {"type": "number", "minimum": _number(MIN_TOLERANCE),
                                      "description": "Mesh the .glb/.stl/.3mf destinations to within this absolute "
                                                     "tolerance in mm, where it is finer than the viewer's (a quarter per "
                                                     "cent of each part): for a print whose fits are finer, or a picture "
                                                     "whose curves are. Every destination is then .glb, .stl or .3mf."},
-                       "angle": {"type": "number", "minimum": 1, "maximum": 28.5,
+                       "angle": {"type": "number", "minimum": _number(MIN_ANGLE), "maximum": _number(MAX_ANGLE),
                                  "description": "Mesh the .glb/.stl/.3mf destinations to within this angular deflection "
-                                                "in degrees, finer than the viewer's 28.5: small radii drawn in more "
-                                                "segments. Every destination is then .glb, .stl or .3mf."}},
+                                                f"in degrees, finer than the viewer's {_number(MAX_ANGLE)}: small radii "
+                                                "drawn in more segments. Every destination is then .glb, .stl or .3mf."}},
                       ("source", "destinations")),
     "cad_snapshot": obj(SNAPSHOT),
     "cad_inspect": obj({"source": STRING, "ref": STRING,

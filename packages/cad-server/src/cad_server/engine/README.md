@@ -2179,8 +2179,11 @@ changed or new one fails in one line naming the folder and its mode.
   into glTF's Y-up metres: a node per sub-assembly, its components under it, each placed in its
   parent's frame (a node at its parent's place has no matrix), so Blender and any glTF reader show
   the sub-assemblies and every part stands where the document places it; every node named by its
-  path below the root (`board/D44/housing`, its sub-assemblies `board` and `board/D44`), unique,
-  and a part's name the one a flat file of an earlier release gave it; a PBR material per
+  path below the root (`board/D44/housing`, its sub-assemblies `board` and `board/D44`), unique
+  where the document's own paths are (two sub-assemblies both labelled `leg` give two `leg` nodes),
+  and a part's name the one a flat file of an earlier release gave it (that file placed every part
+  in the world under the root; a reader now walks the tree for a part's place, which is the same); a
+  PBR material per
   look (a paint is a primitive of its own) with an extension for each part of the look past
   metallic-roughness (`KHR_materials_ior`, `_transmission`, `_volume`, `_clearcoat`,
   `_anisotropy`, `_emissive_strength`; a transmissive look `OPAQUE` at alpha 1 unless its PBR
