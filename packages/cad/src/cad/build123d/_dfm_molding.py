@@ -2050,17 +2050,34 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
                   for face in item.get("trapped_faces") or ()}
         for item in (report["draft"].get("items") or []) if isinstance(report["draft"], dict) else []:
             item["feature"] = sides.get(item.get("location"), "undercut" if item.get("location") in formed else "wall")
-    projected = _safe(lambda: [_projection_part(geo, pull) for geo in geos])
+    # Each part's projection, and its parting read off it at once: a part's raster (millions of cells on a
+    # detailed part) is dropped as soon as its parting is read, never every part's held together (phalanx's 107
+    # parts: 1 GB). A parting that fails is the family's error, as a projection that fails is both's.
+    partings: list[dict[str, Any]] | dict[str, Any] = []
+
+    def projections() -> list[dict[str, Any]]:
+        nonlocal partings
+        items = []
+        for geo, d, t in zip(geos, drafts, trapped):
+            item, projection, vertices = _projection_part(geo, pull)
+            items.append(item)
+            if isinstance(partings, list):
+                found = _safe(_parting_part, geo, d, projection, vertices, pull, wall_limit, t)
+                if isinstance(found, dict) and set(found) == {"error"}:
+                    partings = found
+                else:
+                    partings.append(found)
+            del projection, vertices
+        return items
+
+    projected = _safe(projections)
     if isinstance(projected, dict):
         report["projection"] = projected
         report["parting"] = dict(projected)
     else:
-        report["projection"] = _safe(_projection, [item for item, _p, _v in projected], pull)
-        partings = _safe(lambda: [_parting_part(geo, d, p, v, pull, wall_limit, t)
-                                  for geo, d, (_i, p, v), t in zip(geos, drafts, projected, trapped)])
+        report["projection"] = _safe(_projection, projected, pull)
         report["parting"] = partings if isinstance(partings, dict) else _safe(_parting, partings, pull)
-        report["envelope"] = _safe(_envelope, [item for item, _p, _v in projected],
-                                   None if isinstance(partings, dict) else partings)
+        report["envelope"] = _safe(_envelope, projected, None if isinstance(partings, dict) else partings)
     for name, refs in lost.items():
         family = report.get(name)
         if isinstance(family, dict) and "error" not in family:

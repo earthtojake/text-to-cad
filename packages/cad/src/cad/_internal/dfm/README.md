@@ -855,7 +855,9 @@ read at a fixed number of points whatever the face count (a small face of a part
 neighbours' wall); rays along one direction look up a grid of the faces' box shadows. The undercut release search
 spends at most 200000 rays a part, largest features first; a feature left over reads release `unknown`, is counted
 in `unsearched_count` and is still judged by `molding.undercut`. Between world-axis slides freeing about as many
-points (within a fiftieth), the first in the candidates' order is taken, +x before +y.
+points (within a fiftieth), the first in the candidates' order is taken, +x before +y. Each part's projection
+raster is read for its parting line as soon as it is made and dropped: an assembly's rasters held together were
+half of a 107-part check's 1.9 GB.
 
 ## 3D printing
 
