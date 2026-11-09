@@ -102,6 +102,11 @@ class MeshCleanTest(unittest.TestCase):
         self.assertEqual(facts["open_body_count"], 1)
         self.assertEqual(facts["open_bodies"][0]["boundary_edges"], 4)
         self.assertIsNone(facts["volume_mm3"])
+        # two bodies sharing a face are each closed, and the face's two copies cancel in the volume
+        touching = trimesh.util.concatenate([trimesh.creation.box((10, 10, 10)),
+                                             trimesh.creation.box((10, 10, 10)).apply_translation((10, 0, 0))])
+        facts = _mesh.facts(_mesh.prepared(touching))
+        self.assertEqual((facts["watertight"], facts["volume_mm3"]), (True, 2000.0))
 
 
 class OverhangTest(unittest.TestCase):

@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import trimesh
 
-__all__ = ["CRACK_FRACTION", "clean", "closure", "facts", "load", "prepared"]
+__all__ = ["CRACK_FRACTION", "clean", "closure", "facts", "lies_on", "load", "prepared"]
 
 #: A boundary loop whose corners all lie within this fraction of the part's diagonal of the line through its
 #: two farthest corners is a crack of the tessellation, not an opening: a chord tolerance's width (a 117 mm
@@ -149,28 +149,55 @@ def _width(points: np.ndarray) -> float:
     return float(np.max(np.linalg.norm(np.cross(offsets, span / length), axis=1)))
 
 
+def lies_on(piece: trimesh.Trimesh, closed: list[trimesh.Trimesh], tolerance: float) -> bool:
+    """Whether every triangle of the open ``piece`` lies on a face of the ``closed`` bodies: its centre and its
+    edges' middles within ``tolerance`` of their surface (the face two bodies share, left over by a split)."""
+    if not closed or not len(piece.faces):
+        return False
+    triangles = np.asarray(piece.triangles, dtype=float)
+    points = np.concatenate([triangles.mean(axis=1), (triangles + np.roll(triangles, 1, axis=1)).reshape(-1, 3) / 2.0])
+    whole = closed[0] if len(closed) == 1 else trimesh.util.concatenate(closed)
+    _closest, distance, _triangle = trimesh.proximity.closest_point(whole, points)
+    return bool(np.all(distance <= tolerance))
+
+
 def closure(mesh: trimesh.Trimesh) -> dict[str, Any]:
     """Watertightness judged per body: ``watertight`` (every body closed), ``open_body_count``,
-    ``open_bodies`` (each open body's ``xyz``, its box's centre, and ``boundary_edges``, at most 8) and
-    ``closed_volume_mm3`` (the closed bodies' volume, None where none is closed)."""
-    try:
-        bodies = list(mesh.split(only_watertight=False, repair=False)) if mesh.body_count > 1 else [mesh]
-    except Exception:  # noqa: BLE001 - a mesh that does not split is judged whole
-        bodies = [mesh]
-    opened, volume, any_closed = [], 0.0, False
-    for body in bodies:
-        if body.is_watertight:
-            any_closed = True
-            volume += float(body.volume)
+    ``open_bodies`` (each open body's ``xyz``, its box's centre, ``boundary_edges`` and ``area_mm2``, at most
+    8) and ``closed_volume_mm3`` (the closed bodies' volume, None where none is closed).
+
+    A body is open where one of its edges is used an odd number of times in the whole mesh: a boundary. Two
+    bodies sharing a face (a two-material print, two solids touching) use that face's edges four times, so
+    each is closed, and the face's two copies, wound against each other, cancel in the volume. No repair:
+    trimesh's would close an opening and hide it."""
+    if mesh.is_watertight:
+        return {"watertight": True, "open_body_count": 0, "open_bodies": [],
+                "closed_volume_mm3": round(abs(float(mesh.volume)), 1)}
+    faces = np.asarray(mesh.faces)
+    if not len(faces):
+        return {"watertight": False, "open_body_count": 0, "open_bodies": [], "closed_volume_mm3": None}
+    edges = np.sort(np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]), axis=1)
+    _unique, inverse, counts = np.unique(edges, axis=0, return_inverse=True, return_counts=True)
+    odd = (counts[inverse.ravel()] % 2 == 1).reshape(3, -1).T  # per face, per edge
+    pieces = trimesh.graph.connected_components(mesh.face_adjacency, nodes=np.arange(len(faces)), min_len=1)
+    triangles = np.asarray(mesh.triangles, dtype=float)
+    opened, closed_faces = [], []
+    for piece in pieces:
+        piece = np.asarray(piece, dtype=int)
+        boundary = int(odd[piece].sum())
+        if not boundary:
+            closed_faces.append(piece)
             continue
-        edges = np.sort(np.asarray(body.edges), axis=1)
-        _unique, counts = np.unique(edges, axis=0, return_counts=True)
-        opened.append({"xyz": [round(float(v), 4) for v in body.bounds.mean(axis=0)],
-                       "boundary_edges": int((counts != 2).sum()),
-                       "area_mm2": round(float(body.area), 3)})
+        corners = triangles[piece].reshape(-1, 3)
+        opened.append({"xyz": [round(float(v), 4) for v in (corners.min(axis=0) + corners.max(axis=0)) / 2],
+                       "boundary_edges": boundary, "area_mm2": round(float(mesh.area_faces[piece].sum()), 3)})
     opened.sort(key=lambda item: -item["area_mm2"])
+    volume = None
+    if closed_faces:
+        shut = triangles[np.concatenate(closed_faces)]
+        volume = round(abs(float(np.einsum("ij,ij->i", shut[:, 0], np.cross(shut[:, 1], shut[:, 2])).sum()) / 6.0), 1)
     return {"watertight": not opened, "open_body_count": len(opened), "open_bodies": opened[:8],
-            "closed_volume_mm3": round(abs(volume), 1) if any_closed else None}
+            "closed_volume_mm3": volume}
 
 
 def facts(mesh: trimesh.Trimesh) -> dict[str, Any]:

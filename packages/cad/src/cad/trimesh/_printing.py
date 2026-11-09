@@ -103,18 +103,6 @@ def _load(path: str, units: str = "mm") -> trimesh.Trimesh:
     return _mesh.load(path, units)
 
 
-def _lies_on(piece: trimesh.Trimesh, closed: list[trimesh.Trimesh], tolerance: float) -> bool:
-    """Whether every triangle of the open ``piece`` lies on a face of the ``closed`` bodies: its centre and its
-    edges' middles within ``tolerance`` of their surface (the face two bodies share, left over by the split)."""
-    if not closed:
-        return False
-    triangles = np.asarray(piece.triangles, dtype=float)
-    points = np.concatenate([triangles.mean(axis=1), (triangles + np.roll(triangles, 1, axis=1)).reshape(-1, 3) / 2.0])
-    whole = closed[0] if len(closed) == 1 else trimesh.util.concatenate(closed)
-    _closest, distance, _triangle = trimesh.proximity.closest_point(whole, points)
-    return bool(np.all(distance <= tolerance))
-
-
 def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
     """The mesh's bodies, each solid with the sealed voids inside it, and how many voids there are.
 
@@ -130,7 +118,7 @@ def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
         return [mesh], 0
     closed = [part for part in parts if part.is_watertight]
     tolerance = 1e-6 * max(1.0, float(np.linalg.norm(mesh.extents)))
-    parts = [part for part in parts if part.is_watertight or not _lies_on(part, closed, tolerance)] or parts
+    parts = [part for part in parts if part.is_watertight or not _mesh.lies_on(part, closed, tolerance)] or parts
     if len(parts) <= 1:
         return parts, 0
     total = float(mesh.area) or 1.0
