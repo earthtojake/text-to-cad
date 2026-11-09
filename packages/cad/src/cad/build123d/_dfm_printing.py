@@ -566,6 +566,7 @@ def _solid(ctx: Context) -> dict[str, Any]:
     items = []
     checked = 0
     for index, part in enumerate(ctx.parts):
+        checkpoint()
         solids = part.solids()
         inner = closed = 0
         shells = 0
@@ -627,7 +628,9 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
     plate_band = max(1.0, 5 * ctx.layer)
     items, histogram, below_total = [], np.zeros(9), 0.0
     for infos in ctx.faces:
+        checkpoint()
         for info in infos:
+            checkpoint()
             down = [s for s in info.samples if s.normal[2] < -1e-9 and not ctx.on_plate(float(s.point[2]))]
             if not down:
                 continue
@@ -702,8 +705,10 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
              and info.surface.normal[2] < -cos_flat and not ctx.on_plate(info.zmin)]
     refined = {id(info) for info in sorted(flats, key=lambda info: -info.area)[:REFINED_CEILINGS]}
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         edges = ctx.parts[part].edges()
         for info in infos:
+            checkpoint()
             n = info.surface.normal
             if info.surface.kind != "plane" or n is None or not n[2] < -cos_flat or ctx.on_plate(info.zmin):
                 continue
@@ -869,8 +874,10 @@ def _walls(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items, every, where = [], [], []
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         zones = _knife_zones(ctx, part)
         for info in infos:
+            checkpoint()
             pin = info.group is not None and not ctx.rounds[info.group].concave and \
                 ctx.rounds[info.group].coverage_deg >= ROUND_DEG
             if not info.thickness or pin:  # a pin's thickness is its diameter: the pins' rules judge it
@@ -937,7 +944,9 @@ def _gaps(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items = []
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         for info in infos:
+            checkpoint()
             if not info.gap:
                 continue
             width, k, other = min(info.gap)
@@ -1054,6 +1063,7 @@ def _details(ctx: Context) -> dict[str, Any]:
     # floor ("engrave")
     sides: dict[tuple[int, int, str], set[int]] = {}
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         for side in infos:
             # a side is any face standing between a top and a bottom, of any surface: a plane square to them, a
             # round corner's cylinder, a dot's, a letter's spline
@@ -1199,6 +1209,7 @@ def _clearances(ctx: Context) -> dict[str, Any]:
     part_of = O >> 20
     clouds = []
     for part in range(len(ctx.parts)):
+        checkpoint()
         mine = part_of == part
         tri = V[F[mine]]
         points = np.vstack([tri.reshape(-1, 3), tri.mean(axis=1)])
@@ -1373,6 +1384,7 @@ def _trapped(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items, pitches, balls = [], [], []
     for part in range(len(ctx.parts)):
+        checkpoint()
         made = _grid(ctx, part)
         exact = _inner_shells(ctx, part)
         if made is None:
@@ -1469,7 +1481,9 @@ def _bed(ctx: Context) -> dict[str, Any]:
     items, contact, xs, ys = [], 0.0, [], []
     sharp = 0.0
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         for info in infos:
+            checkpoint()
             n = info.surface.normal
             if info.surface.kind != "plane" or n is None or n[2] > -0.9999 or not ctx.on_plate(info.zmax):
                 continue
@@ -1497,7 +1511,9 @@ def _stairs(ctx: Context) -> dict[str, Any]:
     items, bins = [], np.zeros(4)
     edges = [0.5, 5.0, 10.0, 15.0, SHALLOW_DEG]
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         for info in infos:
+            checkpoint()
             if not info.samples:
                 continue
             tilt = np.degrees(np.arccos(np.clip([abs(float(s.normal[2])) for s in info.samples], 0.0, 1.0)))
@@ -1527,6 +1543,7 @@ def _knife_edges(ctx: Context) -> dict[str, Any]:
     minimum = rules.wall_minimum(ctx.options)
     items = []
     for part in range(len(ctx.parts)):
+        checkpoint()
         _knife_zones(ctx, part)
         for run in ctx._runs[part]:  # type: ignore[attr-defined]
             under = run["angles"] < mo.KNIFE_DEG - mo.ANGLE_EPS
@@ -1560,8 +1577,10 @@ def _cosmetic(ctx: Context) -> set[int]:
     """The faces a support mark spoils, as owners: each part's faces of 5% of its area or more, holes aside."""
     chosen = set()
     for part, infos in enumerate(ctx.faces):
+        checkpoint()
         total = sum(info.area for info in infos) or 1.0
         for info in infos:
+            checkpoint()
             hole = info.group is not None and ctx.rounds[info.group].concave
             if info.area >= 0.05 * total and not hole:
                 chosen.add((part << 20) | info.ordinal)
@@ -1601,6 +1620,7 @@ def _sections(ctx: Context) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     best: dict[str, Any] = {}
     for part in range(len(ctx.parts)):
+        checkpoint()
         reading = _section(ctx, part)
         if reading is None:
             continue
