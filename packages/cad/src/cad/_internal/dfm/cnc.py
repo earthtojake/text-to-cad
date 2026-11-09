@@ -57,8 +57,9 @@ _MICRO_NOTE = ('derived from Hubs\' minimum hole diameter: "Feasible: 0.05 mm (0
                'states the feature, not this figure); "Anything below this limit [2.5 mm] is considered '
                'micro-machining."')
 #: What a failing item says of itself, appended to the message (``Rule.detail``).
-_CORNER_DETAIL = "{edge}, {height_mm:g} mm tall, {depth_mm:g} mm below the top"
-_EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at {xyz}"
+#: ``{unreached}`` is empty, or where some tool reaches part of the edge, the stretch none reaches and its place
+_CORNER_DETAIL = "{edge}, {height_mm:g} mm tall, {depth_mm:g} mm below the top{unreached}"
+_EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at {xyz}{unreached}"
 _ACROSS_DETAIL = {"walls": "to {opposite} at {xyz}", "gaps": "to {opposite} at {xyz}"}
 
 

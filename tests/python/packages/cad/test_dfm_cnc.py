@@ -286,15 +286,14 @@ class SharpEdgesTest(unittest.TestCase):
             self.assertEqual((crease["made_by"], crease["radius_mm"]), ("ball_mill", 1.25))
             self.assertAlmostEqual(crease["deviation_mm"], 1.25 * (1 / math.sin(math.radians(void / 2)) - 1), places=4)
             self.assertIn("cnc.ball_creases", _codes(result))
-        # under BALL_VOID_DEG: a tool tilted square to one face makes it sharp, a direction three axes lack
-        sharp = _check(self._valley(140.0))
-        edge = sharp.measurements["sharp_edges"]["items"][0]
-        self.assertEqual((edge["reason"], edge["made_by"]), ("other_axes", None))
-        finding = next(f for f in sharp.findings if f.code == "cnc.sharp_internal_edge")
-        self.assertEqual(finding.severity, "warning")
-        self.assertIn(f"{edge['edge']} between {edge['between']}, a 140-degree void, at", finding.message)
-        self.assertIn("an angled setup or more axes", finding.hint)
-        self.assertEqual(_check(self._valley(140.0), axes=5).measurements["sharp_edges"]["items"], [])
+        # under BALL_VOID_DEG: each flank faced from its own direction makes it sharp, each one more setup
+        for axes in (3, 5):
+            sharp = _check(self._valley(140.0), axes=axes)
+            self.assertEqual(sharp.measurements["sharp_edges"]["items"], [], axes)
+            self.assertEqual(sharp.measurements["sharp_edges"]["by_tool"], {"end_mill": 1}, axes)
+        setup = _check(self._valley(140.0)).measurements["setups"]["items"][0]
+        tilted = [d for d in setup["directions"] if d.get("sharp_edges")]
+        self.assertEqual(sorted(round(abs(d["direction"][0]), 4) for d in tilted), [0.3420, 0.3420])
 
     def test_a_crease_says_why_no_tool_makes_it(self) -> None:
         # a closed trough's ends: no 3-axis tool makes them; a chamfer mill tilted to their bisector would
@@ -559,16 +558,17 @@ class OpenRecessTest(unittest.TestCase):
 
     def test_a_profile_s_root_reads_as_any_crease_whatever_the_part_s_thinnest(self) -> None:
         # a 10 mm plate's outline with a 110-degree notch turned off the axes: no square end mill's end and flank
-        # make it, a tool tilted square to a flank would -- an angled setup's, as a valley's crease of that angle
+        # make it; each flank faced from its own direction does -- two setups, as a valley's crease of that angle
         # reads, whichever way the part is thinnest
         notch = bd.Pos(20, 0, 0) * bd.Rot(0, 0, 17) * bd.extrude(bd.make_face(bd.Polyline(
             (0, 0), (30 * math.cos(math.radians(55)), 30 * math.sin(math.radians(55))),
             (30 * math.cos(math.radians(55)), -30 * math.sin(math.radians(55))), close=True)), 20, both=True)
-        result = cnc(_part(bd.Box(60, 60, 10) - notch), material="aluminum")
-        [root] = [i for i in result.measurements["sharp_edges"]["items"] if abs(i["void_angle_deg"] - 110) < 1e-3]
-        self.assertEqual(root["reason"], "other_axes")
-        finding = next(f for f in result.findings if f.code == "cnc.sharp_internal_edge" and root["edge"] in f.message)
-        self.assertEqual(finding.severity, "warning")
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            result = cnc(_part(turn * (bd.Box(60, 60, 10) - notch)), material="aluminum")
+            self.assertFalse([i for i in result.measurements["sharp_edges"]["items"]
+                              if abs(i["void_angle_deg"] - 110) < 1e-3], turn)
+            setup = result.measurements["setups"]["items"][0]
+            self.assertEqual(sum(d.get("sharp_edges") or 0 for d in setup["directions"]), 2)
 
 
 class SideMillTest(unittest.TestCase):
@@ -610,6 +610,55 @@ class SideMillTest(unittest.TestCase):
             corners = cnc(_part(turn * pocket), material="aluminum")
             self.assertEqual(sum(c["sharp"] for c in corners.measurements["internal_corners"]["items"]), 4)
             self.assertIn("cnc.internal_corner_sharp", _codes(corners))
+
+    def test_an_opening_beside_a_cavity_makes_no_corner_of_it(self) -> None:
+        # an 8 mm port through a wall is no way in for a disc cutter's shank along the 25 mm corners
+        box = bd.Box(80, 60, 30) - bd.Pos(0, 0, 2.5) * bd.Box(70, 50, 25.001)
+        port = box - bd.Pos(-37.5, 0, 0) * bd.Rot(0, 90, 0) * bd.Cylinder(4, 10)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            result = cnc(_part(turn * port), material="aluminum")
+            self.assertEqual(sum(c["sharp"] for c in result.measurements["internal_corners"]["items"]), 4, turn)
+            self.assertNotIn("cnc.special_cutter", _codes(result))
+            self.assertFalse(result.ok)
+
+    def test_an_edge_is_made_only_where_every_station_along_it_is_reached(self) -> None:
+        block = bd.Box(60, 40, 20) - bd.Pos(0, 0, 5) * bd.Box(30, 20, 10.001)  # pocket floor at z = 0
+        # a 0.5 mm window at the corner's mid-height is no way to side-mill its 10 mm
+        window = block - bd.Pos(14.75, -15, 5) * bd.Box(0.5, 10.2, 0.5)
+        # a front wall cut down to a 2 mm lip: the back corners side-mill above it, not its bottom 2 mm
+        tray = block - bd.Pos(-22.5, 0, 6.5) * bd.Box(15, 40.01, 9.001)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(0, 0, 30)):
+            self.assertIn("cnc.internal_corner_sharp", _codes(cnc(_part(turn * window), material="aluminum")))
+            result = cnc(_part(turn * tray), material="aluminum")
+            back = [c for c in result.measurements["internal_corners"]["items"] if c["height_mm"] > 9]
+            self.assertEqual(len(back), 2, turn)
+            for corner in back:
+                # the stretch none reaches is the corner's place, its length said
+                self.assertLess(corner["xyz"][2], 2.0)
+                self.assertTrue(1.5 < corner["unreached_mm"] < 3.0, corner)
+                self.assertIn("reached by no tool", corner["unreached"])
+
+    def test_v_notches_and_obtuse_roots_are_made_at_any_turn_each_direction_a_setup(self) -> None:
+        plate = bd.Box(100, 60, 8)
+        for angle in (60.0, 120.0):
+            w = 60 * math.tan(math.radians(angle / 2))
+            v = bd.extrude(bd.make_face(bd.Polyline((0, 0), (-w, 60), (w, 60), close=True)), 20, both=True)
+            for turn in (0.0, 20.0):
+                result = cnc(_part(plate - bd.Pos(0, 18, 0) * bd.Rot(0, 0, turn) * v), material="aluminum")
+                self.assertEqual(_judged(result), set(), (angle, turn))
+                self.assertEqual(result.measurements["sharp_edges"]["by_tool"], {"chamfer_mill": 1})
+                # the chamfer mill's bisector is a setup of its own, counted even along a machine axis
+                setup = result.measurements["setups"]["items"][0]
+                self.assertEqual([d.get("sharp_edges") for d in setup["directions"]], [1], (angle, turn))
+        wedge = bd.extrude(bd.make_face(bd.Polyline((0, 0), (80, 0), (80 * math.cos(math.radians(100)),
+                                                                     80 * math.sin(math.radians(100))), close=True)),
+                           20, both=True)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            result = cnc(_part(turn * (plate - bd.Pos(0, 5, 0) * bd.Rot(0, 0, 20) * wedge)), material="aluminum")
+            self.assertNotIn("cnc.sharp_internal_edge", _codes(result), turn)
+            # an obtuse root between two flanks: each faced from its own direction, two setups
+            setup = result.measurements["setups"]["items"][0]
+            self.assertEqual(sum(d.get("sharp_edges") or 0 for d in setup["directions"]), 2, turn)
 
 
 class FrameTest(unittest.TestCase):

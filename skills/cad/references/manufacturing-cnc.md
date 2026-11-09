@@ -75,13 +75,17 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
   machine lacks would make it, a warning) and the hint follows it. A square corner a square end mill
   forms from some side -- its end on one face, its flank on the other, seen from outside (a plate's
-  notch, however it is turned) -- is made, that side one more setup (`setups`); a gear's curved tooth
-  root or a closed pocket's corner no tool forms from any side: an error. The fix is a radius or a relief
+  notch, however it is turned) -- is made, that side one more setup (`setups`); so is a V a chamfer
+  mill cuts along its bisector, and an obtuse root between two flats each faced from its own side (two
+  setups). A tool makes an edge only where it reaches its whole length: a window or a low lip that
+  opens part of a corner leaves the rest unmade, and the finding says how much and where. A gear's
+  curved tooth root or a closed pocket's corner no tool forms from any side: an error. The fix is a radius or a relief
   where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A
   crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
   `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot, dovetail or
-  keyseat cutter makes.
+  keyseat cutter makes -- only where its shank finds a way out beside the whole edge and its disc
+  clears the part (a small port in a cavity's wall is no way in for one).
 - `setups.setup_count` estimates clampings from the reachable directions and the sides square corners
   are side-milled from (a direction's `sharp_edges`).
 - `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a

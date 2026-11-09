@@ -149,7 +149,7 @@ def grooves() -> Any:
                      (-20 - half + inset, over)], 90)
     part -= v(-4, 9, 45, 45)    # a symmetric 90-degree V (control: a chamfer mill's)
     part -= v(6, 9, 15, 15)     # a 30-degree V: no rotating tool (planted)
-    part -= v(14, 9, 40, 60)    # a lopsided 100-degree V: five axes tilt to a face, three do not (planted)
+    part -= v(14, 9, 40, 60)    # a lopsided 100-degree V (control: each flank faced from its own setup)
     return _labelled(part, "grooves")
 
 
@@ -375,11 +375,13 @@ CASES = [
          expect=[("cnc.internal_corner_sharp", None, box(-25, 5, 3, 25, 25, 15)),
                  ("cnc.special_cutter", None, box(-45, -25, 3, 45, -5, 15)),
                  ("cnc.special_cutter", None, box(-25, 5, 3, 25, 25, 15))],
-         allow=[("cnc.undercut", None, box(-25, 5, 3, 25, 25, 15))]),
+         # the closed T's square ends: the cutter's disc leaves them round, so the edges across them, which its
+         # shank cannot travel along, are unmade too (the planted corners' consequence)
+         allow=[("cnc.undercut", None, box(-25, 5, 3, 25, 25, 15)),
+                ("cnc.sharp_internal_edge", None, box(-25, 5, 3, 25, 25, 15))]),
     # the dovetail through along x is a dovetail cutter's: an undercut
     Case("grooves", grooves, {"material": "aluminum"},
          expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15)),
-                 ("cnc.sharp_internal_edge", None, box(-40, 8.5, 9, 40, 25.4, 15)),
                  ("cnc.special_cutter", None, box(-40, -29.7, 7, 40, -10.3, 15))],
          # the 30-degree groove narrows to nothing at its root: a gap no tool enters; the dovetail's foot
          # (y = -29.62) stands 0.38 mm from the part's side (y = -30): a real wall the exact distance finds
@@ -457,9 +459,8 @@ CASES = [
     Case("knife", knife, {"material": "aluminum"}, expect=[("cnc.knife_edge", None, box(-0.1, -7.5, -0.1, 0.1, 7.5, 0.1))]),
     Case("valley", valley(), {"material": "aluminum"}),
     Case("valley-160", valley(160.0), {"material": "aluminum"}),
-    # under BALL_VOID_DEG: a tool tilted square to a face makes it, a direction three axes lack (a warning)
-    Case("valley-140", valley(140.0), {"material": "aluminum"},
-         expect=[("cnc.sharp_internal_edge", None, box(-30, -20, 9.9, 30, 20, 10.1))]),
+    # under BALL_VOID_DEG: an obtuse crease whose flanks each face out is made facing each from its own setup
+    Case("valley-140", valley(140.0), {"material": "aluminum"}),
     # its floor's edges are a square end mill's along the pocket's own direction: the inclined setup makes them,
     # judged once, as that setup (one cause, one finding)
     Case("inclined_pocket", inclined_pocket, {"material": "aluminum"},

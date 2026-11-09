@@ -19,8 +19,8 @@ import numpy as np
 from cad._internal.dfm import checkpoint
 from cad.build123d import _dfm_brep as brep
 
-__all__ = ["Hit", "Model", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "framed", "machine_frame",
-           "unit"]
+__all__ = ["Hit", "Model", "Stations", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "framed",
+           "machine_frame", "stations", "unit"]
 
 #: The six directions a three-axis machine approaches from.
 WORLD = tuple(np.array(axis, dtype=float) for axis in
@@ -308,6 +308,8 @@ class Model:
         self._projected: OrderedDict[tuple[float, ...], _Projected] = OrderedDict()
         self._extents: dict[tuple[float, ...], tuple[float, float]] = {}
         self._sweeps: dict[int, np.ndarray] = {}
+        self._stations: dict[tuple[int, int], Stations] = {}
+        self._classifier: Any = None
 
     # --- faces -------------------------------------------------------------------------------------------
 
@@ -706,9 +708,75 @@ class Model:
                 found.append(Hit(distance, face + 1, normal))
         return found
 
+    def solid(self, points: np.ndarray) -> np.ndarray:
+        """Whether each point lies in the part's material (on its boundary is not), by one classifier kept."""
+        if self._classifier is None:
+            from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+
+            self._classifier = BRepClass3d_SolidClassifier(self.part.shape.wrapped)
+        from OCP.gp import gp_Pnt
+        from OCP.TopAbs import TopAbs_IN
+
+        found = np.zeros(len(points), dtype=bool)
+        for k, point in enumerate(points):
+            self._classifier.Perform(gp_Pnt(*(float(v) for v in point)), 1e-6)
+            found[k] = self._classifier.State() == TopAbs_IN
+        return found
+
     def escapes(self, point: np.ndarray, normal: np.ndarray, direction: np.ndarray) -> bool:
         """Whether a straight line from the point (just off its face) along ``direction`` leaves the part."""
         return not self.blocked(point + normal * LIFT, direction)
+
+
+@dataclass(frozen=True)
+class Stations:
+    """Places along an edge, its ends just inside it: the points, the edge's tangent there and the outward
+    normals of its two faces (``Edge.faces`` order) there, each an array of one row a station."""
+    points: np.ndarray
+    tangents: np.ndarray
+    normals_a: np.ndarray
+    normals_b: np.ndarray
+    spacing: float  # the length of edge a station stands for
+
+
+def stations(model: Model, edge: brep.Edge, count: int) -> Stations:
+    """``count`` stations evenly along ``edge`` by its length, the end ones inset from its vertices by a
+    twentieth of a millimetre (a tenth of the edge where it is shorter), where a ray from the end itself would
+    graze the face the edge's end meets; each computed once."""
+    key = (edge.ordinal, count)
+    found = model._stations.get(key)
+    if found is not None:
+        return found
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Curve2d
+    from OCP.GCPnts import GCPnts_AbscissaPoint
+    from OCP.gp import gp_Pnt, gp_Vec
+
+    shape = model.part.edges()[edge.ordinal - 1]
+    curve = BRepAdaptor_Curve(shape.wrapped)
+    first, last = curve.FirstParameter(), curve.LastParameter()
+    length = float(edge.length)
+    inset = min(0.05, 0.1 * length)
+    faces = [model.face(ordinal) for ordinal in edge.faces]
+    on = [BRepAdaptor_Curve2d(shape.wrapped, face.wrapped) for face in faces]
+    rows: list[list[np.ndarray]] = [[], [], [], []]
+    for fraction in np.linspace(0.0, 1.0, count):
+        along = inset + float(fraction) * (length - 2 * inset)
+        try:
+            at = GCPnts_AbscissaPoint(curve, along, first)
+            t = at.Parameter() if at.IsDone() else first + along / length * (last - first)
+        except Exception:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
+            t = first + along / length * (last - first)
+        point, tangent = gp_Pnt(), gp_Vec()
+        curve.D1(t, point, tangent)
+        size = tangent.Magnitude()
+        rows[0].append(np.array(_xyz(point)))
+        rows[1].append(np.array(_xyz(tangent)) / size if size > 1e-300 else np.asarray(edge.tangent, dtype=float))
+        for k, (face, adaptor) in enumerate(zip(faces, on)):
+            uv = adaptor.Value(t)
+            rows[2 + k].append(brep.point_normal(face, uv.X(), uv.Y())[1])
+    found = Stations(*(np.array(row) for row in rows), length / max(1, count - 1))  # type: ignore[arg-type]
+    model._stations[key] = found
+    return found
 
 
 def edge_normals(model: Model, edge: brep.Edge) -> tuple[np.ndarray, np.ndarray]:

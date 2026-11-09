@@ -311,24 +311,39 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   rule is the part's, whatever its turn: a notch in a plate turned 30 degrees reads as one along the plate's
   axes. A crease a ball end mill makes is an item too: `made_by`
   `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`
-  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Made by: an
+  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Each way is tried at 9 stations
+  along the edge (its ends 0.05 mm inside, and between) and makes it only where it reaches every one: a
+  0.5 mm window at a corner's mid-height, or a front wall cut down to a 2 mm lip, side-mills no 10 mm corner.
+  Where some way reaches part of an edge, the stretch none reaches is unmade: the item (or the corner) sits
+  there, `unreached_mm` its length by the stations' share, and its message says so. Made by: an
   end mill where one face is a plane square to an approach direction (a floor or a ceiling), the void angle
   >= 90 and a ray from that face along the direction escapes; a square end mill along any direction a setup
   presents (the part clamped to present it, 3 axes' re-fixturing) where one face is a plane square to it (the
   end), the other lies along it (the flank) and a ray from the end along it escapes -- a profile's corner
   side-milled, that direction one setup (`setups`); an end mill is tried from both faces before any cutter;
-  a T-slot cutter where a face of the cavity
-  the edge bounds is seen along that direction; a 45/60 degree dovetail cutter likewise (its face a plane);
   a keyseat cutter where the recess has a floor and a ceiling square to that direction and its way in is a
-  face it meets by a convex edge seen along it (a groove inside a bore: the bore's wall);
-  a 60/90/120 degree chamfer mill along the bisector, and its shoulder (a 150/135/120 degree void: one face
+  bore it meets by a convex edge seen along it (a groove inside a bore), else a T-slot cutter, where beside
+  every station the cutter's shank (0.5 mm about its axis) leaves the part along the direction from some
+  place across the void and the disc that reaches the station from there touches no material short of the
+  edge's own ends (the shank travels along the edge: an 8 mm port in a wall is no way to a 25 mm corner),
+  through an opening at least as wide as the recess is tall (the disc's thickness); a 45/60 degree dovetail
+  cutter likewise (its face a plane, no width asked: a dovetail's neck is narrower than it is deep); a
+  60/90/120 degree chamfer mill along a V's bisector where the bisector keeps to one axis along the edge
+  (five axes tilt it along a curved one), and its shoulder (a 150/135/120 degree void: one face
   along the mill's axis, the other the cone's, its normal's cosine to the axis the half angle's sine within
   0.01 -- a face along the axis, 1e-16 off square in a turned part, is none); a ball end mill where the void
   angle is >= 150 degrees
   (`BALL_VOID_DEG`, the owner's to confirm: the ball's round departs from the drawn crease by
   R (1 / sin(void / 2) - 1), 0.035 R at 150) along a direction both faces look along whose ray from the crease
-  escapes (each face's normal more than half a degree's sine along it); a drill or tap for a hole's own edges. `by_tool` counts every concave edge by the tool. Evaluated at
-  each edge's midpoint. An edge sharing a vertex with a reported corner and a face with it (or with a round
+  escapes (each face's normal more than half a degree's sine along it); a drill or tap for a hole's own edges.
+  Last, along directions a setup presents, each one setup: a chamfer mill along the bisector of a V between
+  two planes, whatever the turn (the V's bisector a setup even along a machine axis), and an obtuse edge
+  (void over 90) between two planes each seen from outside along its own normal, each side faced from its
+  own direction (the tool's corner forms the edge, the other face leaning away: two setups, a 140 degree
+  valley's or a 100 degree profile root's). A gear's curved roots and a closed pocket's corners stay
+  unmade. `by_tool` counts every concave edge by the tool. A recess a special cutter makes takes in the
+  faces across its edges no tool makes (its square ends, which the disc leaves round): what no straight line
+  reaches there is the recess's. An edge sharing a vertex with a reported corner and a face with it (or with a round
   tangent to its faces) is folded into that corner.
 - **knife_edges** — convex edges whose material angle, read along the edge (a curved one at 17 points: an
   edge where a cone meets a sphere runs from 63 to 42 degrees), falls under 45 degrees (`KNIFE_DEG`,
@@ -450,8 +465,8 @@ for CNC machining".
 ### What it cannot measure
 
 Tool holder and spindle collisions (access is a line of sight, a tool of zero diameter; width and corner
-radius cover the diameter separately); a T-slot or dovetail cutter's actual entry path (its edges are said,
-not its clearance); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
+radius cover the diameter separately); a T-slot or dovetail cutter's way into its recess (its shank's way out and its disc's
+clearance at each station are, not how the disc got there); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
 workholding; tolerances, surface finish, cycle time or cost; thread callouts on a drawing (only modelled
 threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); pockets whose
 floor is not planar (a 3D-contoured cavity is reported through access and walls, not as a pocket); sharp
