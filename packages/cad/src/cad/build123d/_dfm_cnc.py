@@ -318,6 +318,9 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     holes, hole_faces = found if found else ([], set())
     state["hole_faces"] = hole_faces
     families.setdefault("holes", []).extend(holes)
+    families.setdefault("counterbores", []).extend(bore for hole in holes for bore in hole["_counterbores"])
+    if "holes" in failed:
+        failed.setdefault("counterbores", failed["holes"])
     found_threads = run("threads", lambda: find_threads(model, holes))
     threads, thread_faces = found_threads if found_threads else ([], set())
     families.setdefault("threads", []).extend(threads)
@@ -1475,10 +1478,11 @@ def _small(model: Model) -> dict[str, Any]:
                                         "fine_faces": fine}}
 
 
-_FAMILIES = ("holes", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",
+_FAMILIES = ("holes", "counterbores", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",
              "access", "setups", "voids", "stock", "small_features")
 _ORDER: dict[str, Callable[[dict[str, Any]], Any]] = {
     "holes": lambda item: -(item["depth_to_diameter"] or 0),
+    "counterbores": lambda item: -(item["depth_to_diameter"] or 0),
     "pockets": lambda item: -(item["depth_to_width"] or 0),
     "internal_corners": lambda item: item["radius_mm"],
     "sharp_edges": lambda item: item["void_angle_deg"],

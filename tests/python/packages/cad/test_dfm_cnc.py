@@ -88,6 +88,24 @@ class HolesTest(unittest.TestCase):
         self.assertAlmostEqual(sunk["countersinks"][0]["angle_deg"], 90.0, places=6)
         self.assertAlmostEqual(sunk["countersinks"][0]["diameter_mm"], 9.0, places=4)
 
+    def test_a_counterbore_is_judged_by_the_hole_depth_rule_as_a_hole_of_its_own(self) -> None:
+        """A 6.6 mm hole under an 11 mm counterbore 55 deep (5 diameters), and a 20 mm bore 80 deep (4) over a 6
+        mm hole 5 deep: each counterbore is an item of its own, its depth over its own diameter judged."""
+        deep = bd.Box(40, 40, 70) - bd.Pos(0, 0, 0) * bd.Cylinder(3.3, 70) \
+            - bd.Pos(0, 0, 35) * bd.Cylinder(5.5, 55, align=(A.CENTER, A.CENTER, A.MAX))
+        stepped = bd.Box(40, 40, 85) - bd.Cylinder(3.0, 85) \
+            - bd.Pos(0, 0, 42.5) * bd.Cylinder(10.0, 80, align=(A.CENTER, A.CENTER, A.MAX))
+        for shape, bore, failed in ((deep, (11.0, 5.0), True), (stepped, (20.0, 4.0), False)):
+            result = _check(_part(shape), material="aluminum")
+            [item] = result.measurements["counterbores"]["items"]
+            self.assertEqual((item["diameter_mm"], item["depth_to_diameter"]), bore)
+            [outcome] = [o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "cnc.hole_depth"]
+            self.assertEqual(outcome["evaluated"], 2, "the hole and its counterbore")
+            self.assertEqual(outcome["status"] == "failed", failed)
+            self.assertEqual("cnc.hole_depth" in _codes(result), failed)
+            if failed:
+                self.assertEqual(outcome["failures"][0]["location"], item["location"])
+
     def test_drill_sizes_are_named_from_every_series(self) -> None:
         self.assertEqual(self.holes[10]["bottom"], "flat")
         self.assertIsNone(self.holes[10]["standard_drill"])

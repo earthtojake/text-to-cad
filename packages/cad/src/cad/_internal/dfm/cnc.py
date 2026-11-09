@@ -193,6 +193,14 @@ _RULES: tuple[Rule, ...] = (
     Rule("cnc.hole_depth_limit", "holes", "depth_to_diameter", "max", 40.0, "ratio", "hole depth to diameter",
          "hubs-cnc", fix="no drill reaches {value:.3g} diameters: shorten or widen the hole",
          note="feasible maximum hole depth: 40x the diameter"),
+    # a counterbore (a stepped bore's larger step) is cut as a hole of its own diameter, to its own depth
+    Rule("cnc.hole_depth", "counterbores", "depth_to_diameter", "max", 4.0, "ratio", "counterbore depth to diameter",
+         "hubs-cnc", severity="warning", fix="limit the counterbore's depth to {limit:g} diameters, or widen it",
+         note="recommended hole depth: 4x the nominal diameter", detail="the counterbore of the hole at {hole}"),
+    Rule("cnc.hole_depth_limit", "counterbores", "depth_to_diameter", "max", 40.0, "ratio",
+         "counterbore depth to diameter", "hubs-cnc", fix="no tool reaches {value:.3g} diameters: shorten or widen "
+         "the counterbore", note="feasible maximum hole depth: 40x the diameter", detail="the counterbore of the "
+         "hole at {hole}"),
     Rule("cnc.drill_size", "holes", "drill_deviation_mm", "max", 0.005, "mm",
          "distance from the nearest standard drill", "hubs-cnc", severity="warning", item_when={"drilled": True},
          fix="use a standard drill diameter (metric, fractional, number or letter), or the hole is milled",

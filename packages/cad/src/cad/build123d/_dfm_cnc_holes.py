@@ -222,12 +222,18 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         if len(blind) == 2:
             bottom = "closed"
     counterbores = []
+    bores = []  # each counterbore (a stepped bore's larger step) as an item of its own, judged as a hole is
     for other in sorted({round(float(model.surface(i).radius), 6) for i in cylinders} - {radius}):
         faces = [i for i in cylinders if abs(float(model.surface(i).radius) - other) < 1e-6]
         el, eh = zip(*(model.extent(i, a) for i in faces))
         bore_depth = max(eh) - min(el)
+        ratio = round(bore_depth / (2 * other), 9) if other > 0 else None
         counterbores.append({"diameter_mm": round(2 * other, 4), "depth_mm": round(bore_depth, 4),
-                             "depth_to_diameter": round(bore_depth / (2 * other), 9) if other > 0 else None})
+                             "depth_to_diameter": ratio})
+        middle_bore = (max(eh) + min(el)) / 2.0
+        bores.append({"diameter_mm": round(2 * other, 9), "depth_mm": round(bore_depth, 4), "depth_to_diameter": ratio,
+                      "location": model.ref(faces[0]), "faces": [model.ref(i) for i in sorted(faces)],
+                      "xyz": brep.rounded(o + a * (middle_bore - float(o @ a)))})
     countersinks = []
     for i in group:
         cs = model.surface(i)
@@ -261,6 +267,9 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         "location": model.ref(narrow[0]), "faces": [model.ref(i) for i in sorted(group)],
         "xyz": brep.rounded(centre),
     }
+    for bore in bores:
+        bore["hole"] = hole["location"]
+    hole["_counterbores"] = bores
     hole["_faces"] = sorted(group)
     hole["_axis"] = a
     hole["_origin"] = o
