@@ -5,7 +5,8 @@ A document is saved at the block's end when the block changed it, not when it ch
 stays byte for byte as it was) and not when the block raises, whose exception goes on; a file not there yet
 is made by KiCad and saved. The api-server is ready when KiPy's connection answers, never when a file
 appears (the fake server never makes one, as Windows' named pipe does not); a kicad-cli without api-server
-is refused before one starts; the server is stopped and its private folder removed either way, and its
+is refused before one starts, and so is a shell whose sandbox refuses the server's socket; a slow start says once what
+it waits for; the server is stopped and its private folder removed either way, and its
 KiCad homes are that folder, never the person's. A schematic's project symbol libraries are loaded before
 the block runs, and a placement from a library the project does not list is refused in one line naming it
 and the row that adds it. A board and a schematic of one project edited in one block share one server.
@@ -307,6 +308,39 @@ class TheServer(EditTest):
             with mock.patch.object(_program.subprocess, "run", answering("Usage: api-server [--socket PATH] board\n", 0)):
                 self.edit(self.board)
         self.assertEqual(1, len(_Server.started))
+
+    def test_a_sandbox_that_refuses_sockets_is_one_line_before_a_server_starts(self) -> None:
+        """KiCad's api-server, refused its socket by a sandbox (an agent app's shell), says nothing and never
+        answers: the edit asks first and refuses at once, saying to run the script outside the sandbox."""
+        if sys.platform.startswith("win"):
+            self.skipTest("Windows serves a named pipe")
+        refusing = mock.Mock(side_effect=PermissionError(1, "Operation not permitted"))
+        with mock.patch("socket.socket.bind", refusing), self.assertRaises(_program.KicadRunError) as said:
+            self.edit(self.board)
+        message = str(said.exception)
+        self.assertNotIn("\n", message)
+        for words in ("kicad_pcb.edit", "sandbox", "Operation not permitted", "outside the sandbox"):
+            self.assertIn(words, message)
+        self.assertEqual([], _Server.started, "no server is started")
+        self.assertEqual([], list(self.folder.glob("*.sock")))
+
+    def test_a_shell_that_may_listen_is_not_refused(self) -> None:
+        """The probe binds a real socket where the server's goes, and leaves nothing there."""
+        if sys.platform.startswith("win"):
+            self.skipTest("Windows serves a named pipe")
+        with _session._socket(self.folder) as socket:
+            self.assertIsNone(_session._refused(socket))
+            self.assertFalse(socket.with_name("try.sock").exists())
+
+    def test_a_slow_start_says_once_what_it_waits_for(self) -> None:
+        self.kicad.dialing = 4
+        with mock.patch.object(_session, "NOTICE_SECONDS", 0.0), mock.patch.object(_session, "_POLL", 0.0):
+            said = self.edit(self.board)
+        self.assertEqual(1, said.count("waiting for KiCad's edit server to start"), said)
+        self.kicad.dialing, self.kicad.loading = 0, 4
+        with mock.patch.object(_session, "NOTICE_SECONDS", 0.0), mock.patch.object(_session, "_POLL", 0.0):
+            said = self.edit(self.board)
+        self.assertEqual(1, said.count("KiCad is loading design.kicad_pcb"), said)
 
     def test_no_kicode_is_refused_before_a_server_starts(self) -> None:
         with mock.patch.dict(sys.modules, {"kicode": None}), self.assertRaisesRegex(ImportError, "cad\\[kicad\\]"):

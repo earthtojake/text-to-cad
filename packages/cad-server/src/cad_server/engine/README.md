@@ -983,7 +983,8 @@ build123d `Shape` for every type with a decorator, and the engine's writers -- t
 schematic:`, run in the caller's process, never in a worker or the daemon (`cad.kicad._session.edit`): a
 private headless `kicad-cli api-server` on the file (kicode's, in private KiCad homes), KiPy connected to
 it and the open document handed to the block -- a schematic's project symbol libraries loaded first; a file
-not there yet made by KiCad (`CreateDocument`) -- and saved at the block's end when the block changed it
+not there yet made by KiCad (`CreateDocument`); a shell whose sandbox refuses the server's socket refused in one
+line before it starts (`_refused`), and a slow start said once while it waits -- and saved at the block's end when the block changed it
 or KiCad made it, never when it raises. One server serves a project: an edit of the project's other file
 inside the block joins it (`OpenDocument`), each document saved at its own block's end. Nothing is
 declared, and nothing is written from the edited file but what explicit calls after the block write

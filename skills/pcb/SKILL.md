@@ -63,7 +63,11 @@ saying why. A board not there yet is made by KiCad, with its project,
 and saved. `kicad_sch.edit` does the same for a schematic ([schematic](references/schematic.md#edit-it));
 the two of one project, one inside the other, share one KiCad. Run the script with `cad run board.py`,
 which gives it the `kicad` extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a
-`kicad-cli` that `CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import
+`kicad-cli` that `CAD_KICAD_CLI` names without one is refused up front, before any server starts. That
+server listens on a local socket, which a shell sandbox that refuses sockets (an agent app's default, Codex's
+among them) does not allow: the edit then stops at once, saying so, and the script must run outside the
+sandbox (ask for the unsandboxed or escalated run); inspecting, DRC, exports and snapshots run inside it.
+KiCad's first start from a new environment can take a minute, which the edit says while it waits. Import
 KiPy's names from `kicode` (`from kicode.proto.common.types import KIID`, `from kicode.util.units import
 from_mm`), never from `kipy`: the two cannot share a process. Saving writes the file in the nightly's
 format: one from an older KiCad is upgraded, which the run says, and that older KiCad can no longer open
