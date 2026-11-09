@@ -1,4 +1,0 @@
-(fp_lib_table
-  (version 7)
-  (lib (name "pinball")(type "KiCad")(uri "${KIPRJMOD}/pinball.pretty")(options "")(descr "SHORT CIRCUIT's footprints"))
-)

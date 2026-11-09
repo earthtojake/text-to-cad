@@ -1,5 +1,10 @@
 # SHORT CIRCUIT: a miniature pinball machine whose playfield is its circuit board
 
+**Build the board first.** The playfield board's KiCad files are generated from the design model, not committed:
+`cad run build.py` in `board/` makes them in about eight minutes (KiCad 10.99 comes with the `cad` command; KiCad's
+stock libraries from macOS's KiCad.app or `KICAD_STOCK`). Opening the board or its schematic in the CAD Viewer or in
+KiCad, and `board/check_fit.py`, need that build first; the design model (`src/`) does not.
+
 An 8 mm chrome steel ball on a 112 x 236 mm four-layer board: the playfield IS the PCB, its gold art the machine's
 switches ("the ball is the switch": a comb of two nets the ball shorts), its flippers driven by two 16 ohm coils from
 USB-C PD at 9 V. The board is routed, ERC clean and DRC clean (0 errors, 14 warnings, listed in its README). Two parts
@@ -8,7 +13,7 @@ of the project live here:
 | Folder | What |
 | --- | --- |
 | `src/` | the design model: `layout.py` (every place and size), `playfield.py` (the art, as 2D geometry the board scripts read too), `dotfont.py` (the one typeface), `parts.py`, `looks.py` (the finishes), `machine.py` (the assembly), `physics.py`, `check_fit.py` |
-| `board/` | the playfield's KiCad project (a root sheet and 6 sub-sheets), its libraries, the scripts that write it and its checks: [`board/README.md`](board/README.md) |
+| `board/` | the scripts that write the playfield's KiCad project (a root sheet and 6 sub-sheets, its libraries and the board), its build (`build.py`) and its checks: [`board/README.md`](board/README.md) |
 
 ## Build
 

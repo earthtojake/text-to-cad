@@ -1,5 +1,12 @@
 # SHORT CIRCUIT: the playfield board
 
+**Build the board first.** Its KiCad files (the board, the seven schematic sheets, the project file and its custom
+rules, the project libraries and their tables) are generated from the design model by `scripts/`, not committed:
+`cad run build.py`, from this folder, makes them in about eight minutes, most of it the routes' plan. It needs the
+`cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock libraries (macOS's KiCad.app, or
+`KICAD_STOCK`). Opening the board or the schematic in the CAD Viewer or in KiCad, `check_board.py` and
+`check_fit.py` all read what it writes, so run it before any of them.
+
 The playfield of the SHORT CIRCUIT pinball machine is this circuit board: its gold art is the machine's switches (the
 steel ball shorts a comb of two nets), its parts live on the underside, and its outline, holes and art come from the
 design model's numbers (`../src/layout.py`, `../src/playfield.py`) through `scripts/geometry.py`.
@@ -11,7 +18,7 @@ design model's numbers (`../src/layout.py`, `../src/playfield.py`) through `scri
 | Nets | 125 |
 | Routing | every net: 2055 track segments, 6.80 m of copper, 514 vias (369 the wiring's, 145 the art's stitching) |
 | ERC | clean: 0 errors, 0 warnings (`cad kicad_sch erc`) |
-| DRC | clean: 0 errors, 14 warnings (`cad kicad_pcb drc` on the refilled board, the project's rules; the warnings are listed below) |
+| DRC | clean: 0 errors, 14 warnings (`cad kicad_pcb drc` on the built board, the project's rules; the warnings are listed below) |
 | Fit | `check_fit.py` passes, 0 failures: outline, flipper bores, every fixing hole under its part, every insert's LED under its window, the combs against `playfield.py`, every top part hidden under furniture, the underside clear of the flipper mechanisms |
 | Own checks | `check_board.py` clean: 630 pins, 0 differ from the schematic; 0 segments off 45 degrees; each rail's width for its peak current (IPC-2221, 10 C rise); each supply pin's capacitor distance; In1 under the whole USB pair (D+ 42.7 mm, D- 44.8 mm) |
 | Rules | JLCPCB standard 4-layer from the pcb skill's table (read 2026-11-04): 0.15 mm clearance (fab 0.09), 0.2 mm signal, 0.3/0.6 mm vias, 0.3 mm copper to edge, 0.25 mm hole clearance; a custom rule each for the combs' chevrons (0.1 mm, `pinball.kicad_dru`), the stock SK6812MINI-E's own cut-out (0.2 mm to its edge) and the RP2040's fan-out (0.15 mm tracks under the package) |
@@ -78,52 +85,42 @@ pads (J5) and to the backbox link (J4, JST SH: +5V, I2C, speaker, GND).
 
 | Path | What |
 | --- | --- |
-| `pinball.kicad_pro`, `.kicad_pcb`, `.kicad_dru`, `pinball.kicad_sch` (+ `power`, `mcu`, `inputs`, `lighting`, `flippers`, `audio` `.kicad_sch`) | the KiCad project (KiCad 10.99 format), the source; the board kept without its zones' fills (below) |
-| `pinball.kicad_sym`, `power.kicad_sym`, `pinball.pretty/`, `sym-lib-table`, `fp-lib-table` | the project's libraries |
+| `build.py` | the one command that makes the KiCad project: every script below, in order |
 | `scripts/geometry.py` | every place, from the design model: holes, combs, LEDs, the art clipped for the fab, the GPIO map, part places |
 | `scripts/build_libraries.py` | the libraries from KiCad's stock ones, the combs' footprints from `playfield.py` |
 | `scripts/schlib.py`, `scripts/schematic.py` | the schematic, as text |
-| `scripts/board.py` | the board: setup, place, art, route, zones, silk, finish, each stage a `kicad_pcb.edit`; `refill` and `unfill` for the pours |
+| `scripts/board.py` | the board: setup (with the project's netclasses and custom rules), place, art, route, zones, silk, finish, each stage a `kicad_pcb.edit` |
 | `scripts/routes.py` | every track and via, planned from the placed board (`tmp/routes.json`) |
 | `scripts/part_models.py` | the 3D models KiCad's library lacks (WS2812B-2020, HRO USB-C) |
 | `check_fit.py`, `check_board.py` | the board against the CAD model; the board's own properties and against its schematic |
 
-## The pours are not saved
-
-`pinball.kicad_pcb` is kept without its zones' fills: with them it is 6.5 MB, past the 5 MiB a file in this
-repository may be (4.8 MB without). The zones themselves are there; KiCad refills them when it opens the board,
-and the CAD Viewer and `cad kicad_pcb snapshot` refill a copy before they draw it. `cad kicad_pcb drc` and
-`check_board.py` read the fills as saved, so refill the board first, and take the fills out again before
-committing it:
-
-```bash
-cad run scripts/board.py refill                # every zone filled, saved: 6.5 MB
-cad run scripts/board.py unfill                # the fills out again, the form Git keeps
-```
+Nothing generated is committed: the KiCad project `build.py` writes (`pinball.kicad_pro`, `.kicad_pcb`, `.kicad_dru`,
+`pinball.kicad_sch` and its `power`, `mcu`, `inputs`, `lighting`, `flippers` and `audio` sheets, all in KiCad 10.99's
+format, and the libraries `pinball.kicad_sym`, `power.kicad_sym`, `pinball.pretty/`, `sym-lib-table` and
+`fp-lib-table`), the routes' plan (`tmp/routes.json`), the part models (`pinball.3dshapes/`) and the fabrication
+files are written by the commands below, and `.gitignore` keeps them out of Git. The board is saved with its zones'
+fills (about 6.5 MB), which DRC and `check_board.py` read.
 
 ## Rebuild
 
 From this folder, with the `cad` command:
 
 ```bash
+# the board and its schematic, from the design model (the board made afresh each time)
+cad run build.py                               # about eight minutes: the steps below, in order
+#   scripts/build_libraries.py                 the project libraries, the combs' footprints from playfield.py
+#   scripts/schematic.py                       the seven sheets, as text
+#   scripts/board.py setup place art           the board, its project and rules, its parts, its art
+#   scripts/routes.py                          tmp/routes.json: the plan (most of the build)
+#   scripts/board.py route zones silk finish   the tracks and vias, the pours (filled), the legends, the stackup
+
 cad run scripts/part_models.py                 # pinball.3dshapes/: before opening the board in 3D
 
-# check the board as it is
-cad run scripts/board.py refill                # the pours, which DRC and check_board.py read
+# check the board
 cad kicad_sch erc pinball.kicad_sch
 cad kicad_pcb drc pinball.kicad_pcb
 cad run check_board.py                         # pin by pin against the schematic, angles, widths, decoupling, USB
 cd .. && cad run board/check_fit.py && cd board   # against the CAD model
-cad run scripts/board.py unfill                # before committing the board
-
-# make it again from the design model (each stage states the board it wants)
-cad run scripts/build_libraries.py
-cad run scripts/schematic.py
-rm pinball.kicad_pcb
-cad run scripts/board.py setup place art       # the board, its parts, its art
-cad run scripts/routes.py                      # tmp/routes.json: the plan (about ten minutes)
-cad run scripts/board.py route zones silk finish
-cad run scripts/board.py unfill
 ```
 
 ## See it

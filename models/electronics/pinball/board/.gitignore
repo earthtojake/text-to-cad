@@ -10,3 +10,19 @@ __pycache__/
 # KiCad's local settings beside a board it opened.
 *.kicad_prl
 fp-info-cache
+# The KiCad project build.py writes (cad run build.py): build output, made again from scripts/ and the design model.
+/pinball.kicad_pcb
+/pinball.kicad_pro
+/pinball.kicad_dru
+/pinball.kicad_sch
+/power.kicad_sch
+/mcu.kicad_sch
+/inputs.kicad_sch
+/lighting.kicad_sch
+/flippers.kicad_sch
+/audio.kicad_sch
+/pinball.kicad_sym
+/power.kicad_sym
+/pinball.pretty/
+/fp-lib-table
+/sym-lib-table

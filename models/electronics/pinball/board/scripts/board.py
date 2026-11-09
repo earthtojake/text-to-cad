@@ -11,12 +11,8 @@
     cad run scripts/board.py silk      # the underside's legends
     cad run scripts/board.py all       # the six in order, then finish (title block, stackup)
 
-    cad run scripts/board.py refill    # the saved zones refilled: what DRC and check_board.py read
-    cad run scripts/board.py unfill    # the fills taken out of the file again: the form Git keeps
-
-The board is kept in Git without its zones' fills: with them the file is 6.5 MB, past the repository's 5 MiB
-limit on a file. The CAD Viewer and `cad kicad_pcb snapshot` refill a copy themselves; `cad kicad_pcb drc` and
-`check_board.py` read the saved fills, so `refill` first.
+`route` reads tmp/routes.json, which `cad run scripts/routes.py` plans from the placed board; `build.py` runs every
+step in order. The board is build output, saved with its zones' fills (what DRC and check_board.py read).
 """
 from __future__ import annotations
 
@@ -355,32 +351,6 @@ def silk(b):
 STAGES = {"setup": setup, "place": place, "art": art, "route": route, "zones": zones, "silk": silk}
 
 
-def refill(b):
-    """KiCad's fill of every zone as it stands, saved: the pours DRC and check_board.py read."""
-    b.refill_zones()
-    print(f"refill: {len(b.get_zones())} zones refilled")
-
-
-def unfill():
-    """Every zone's fill out of the saved file, as text (KiCad keeps a zone without one, unfilled): the board as
-    Git holds it, under the 5 MiB a file may be."""
-    text = BOARD.read_text()
-    out, i, n = [], 0, 0
-    while (j := text.find("(filled_polygon", i)) >= 0:
-        start = text.rfind("\n", 0, j) + 1
-        out.append(text[i:start])
-        depth, k = 0, j
-        while True:
-            depth += {"(": 1, ")": -1}.get(text[k], 0)
-            if depth == 0:
-                break
-            k += 1
-        i, n = text.find("\n", k) + 1, n + 1
-    out.append(text[i:])
-    BOARD.write_text("".join(out))
-    print(f"unfill: {n} fills taken out, {BOARD.stat().st_size / 1e6:.1f} MB")
-
-
 def finish():
     """What the API does not reach, in the saved file as text: the title block and the stackup (black mask, ENIG)."""
     text = BOARD.read_text()
@@ -464,13 +434,6 @@ def main(stages):
         if stage == "finish":
             finish()
             print("finish: title block and stackup written")
-            continue
-        if stage == "unfill":
-            unfill()
-            continue
-        if stage == "refill":
-            with kicad_pcb.edit(str(BOARD)) as b:
-                refill(b)
             continue
         with kicad_pcb.edit(str(BOARD)) as b:
             STAGES[stage](b)

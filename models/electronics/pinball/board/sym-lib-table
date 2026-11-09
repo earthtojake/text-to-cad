@@ -1,5 +1,0 @@
-(sym_lib_table
-  (version 7)
-  (lib (name "pinball")(type "KiCad")(uri "${KIPRJMOD}/pinball.kicad_sym")(options "")(descr "SHORT CIRCUIT's parts"))
-  (lib (name "power")(type "KiCad")(uri "${KIPRJMOD}/power.kicad_sym")(options "")(descr "power symbols"))
-)
