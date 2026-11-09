@@ -87,5 +87,94 @@ class Keepouts(unittest.TestCase):
                 self.assertTrue(keepout.shape.contains(x, y), (x, y))
 
 
+def stroke(text: str, x: float, y: float, extra: str = "", font: str = "(size 2 2) (thickness 0.3)",
+           layer: str = '"F.Cu"') -> str:
+    return f'(gr_text "{text}" (at {x} {y} 0) (layer {layer}) (uuid "{_uuid()}") (effects (font {font}){extra}))'
+
+
+class DrawnCopper(unittest.TestCase):
+    """Every text, text box, table, barcode and dimension on a copper layer is copper the router keeps its clearance
+    from, to where KiCad draws it (each place below is KiCad 10.99's, measured with its own outline of the item,
+    its bounding box or its DRC); a hidden text is none."""
+
+    ITEMS = (
+        # A stroke-font text: KiCad's letters reach x = 18.674 (wider than a Hershey box, which ends at 18.1).
+        stroke("Wg|x", 15, 6),
+        # A knockout: KiCad fills its letters' box grown by max(stroke / 2, height / 9) = 0.222 mm.
+        stroke("H", 30, 6, layer='"F.Cu" knockout'),
+        # A TrueType text: the outline KiCad saved with it.
+        f'(gr_text "AB" (at 42 6 0) (layer "F.Cu") (uuid "{_uuid()}") (effects (font (face "Arial") (size 2 2) '
+        '(thickness 0.3))) (render_cache "AB" 0 (polygon (pts (xy 40 5) (xy 44 5) (xy 44 7) (xy 40 7)))))',
+        # A hidden text draws nothing.
+        f'(gr_text "HIDDEN" (at 60 6 0) (layer "F.Cu") (hide yes) (uuid "{_uuid()}") (effects (font (size 2 2) '
+        '(thickness 0.3))))',
+        # A text box: its box, its border's stroke round it.
+        f'(gr_text_box "AB" (start 5 15) (end 15 20) (margins 1 1 1 1) (layer "F.Cu") (uuid "{_uuid()}") (effects '
+        '(font (size 1 1) (thickness 0.15)) (justify left top)) (border yes) (stroke (width 0.4) (type solid)))',
+        # A table: each cell's box, its borders' stroke round it.
+        f'(table (column_count 2) (uuid "{_uuid()}") (layer "F.Cu") (border (external yes) (header yes) (stroke (width '
+        '0.3) (type solid))) (separators (rows yes) (cols yes) (stroke (width 0.2) (type solid))) (column_widths 5 5) '
+        '(row_heights 3) (cells '
+        + " ".join(f'(table_cell "C{n}" (start {25 + 5 * n} 15) (end {30 + 5 * n} 18) (margins 0.5 0.5 0.5 0.5) '
+                   f'(span 1 1) (layer "F.Cu") (uuid "{_uuid()}") (effects (font (size 1 1) (thickness 0.15)) '
+                   '(justify left top)))' for n in range(2)) + '))',
+        # A barcode: its symbol round its anchor, its text's foot 1 + 1.125 text heights below it, and DRC keeps
+        # other copper 1 mm from it.
+        f'(barcode (at 50 17 0) (layer "F.Cu") (size 6 4) (text "HELLO") (text_height 1) (type qr) (ecc_level L) '
+        f'(hide no) (knockout no) (uuid "{_uuid()}"))',
+        # A dimension, its arrows drawn inward: they stand 2 x 1.27 mm past its crossbar's ends.
+        f'(dimension (type orthogonal) (layer "F.Cu") (uuid "{_uuid()}") (pts (xy 70 15) (xy 80 20)) (height 3) '
+        f'(orientation 0) (gr_text "10 mm" (at 75 21.5 0) (layer "F.Cu") (uuid "{_uuid()}") (effects (font (size 1 1) '
+        '(thickness 0.15)))) (format (prefix "") (suffix "") (units 3) (units_format 1) (precision 4)) (style '
+        '(thickness 0.2) (arrow_length 1.27) (text_position_mode 0) (arrow_direction inward) (extension_height 0.58642) '
+        '(extension_offset 0.5) (keep_text_aligned yes)))',
+        # A footprint's text box, the footprint turned a quarter round: placed through its frame.
+        f'(footprint "F" (layer "F.Cu") (uuid "{_uuid()}") (transform (translate 100 15) (rotate 90) (scale 1 1)) '
+        f'(fp_text_box "FP" (start 0 0) (end 4 2) (margins 0.3 0.3 0.3 0.3) (angle 90) (layer "F.Cu") '
+        f'(uuid "{_uuid()}") (effects (font (size 0.8 0.8) (thickness 0.12)) (justify left top)) (border yes) '
+        '(stroke (width 0.2) (type solid))))',
+    )
+
+    def setUp(self) -> None:
+        pads = (resistor("R1", 10, 40, 0, "A", "B"), resistor("R2", 100, 40, 0, "A", "C"))
+        self.copper = read_copper(board(*pads, *self.ITEMS, width=120, height=50))
+        self.router = Router(self.copper, RULES, [want("A")])
+        self.clear = self.router._clear(want("A"), self.router._net("A"), self.router.layer_of["F.Cu"], None, None)
+
+    def near(self, point, direction, keep=0.2) -> bool:
+        """Whether a track of A may pass a hair inside its clearance (and half width) of ``point``, off it along
+        ``direction``: False where ``point`` is copper the router sees."""
+        gap = keep + 0.125 - 0.01
+        x, y = point[0] + direction[0] * gap, point[1] + direction[1] * gap
+        return self.clear((round(x * 1e6), round(y * 1e6)), (round(x * 1e6) + 2, round(y * 1e6)))
+
+    def test_each_is_copper_to_where_kicad_draws_it(self) -> None:
+        cases = {
+            "a stroke-font text's last letter": ((18.674, 6.0), (1, 0), 0.2),
+            "a knockout's margin": ((30.0, 6.0 + 1.0 + 0.222), (0, 1), 0.2),
+            "a TrueType text's outline": ((44.0, 7.0), (1, 1), 0.2),
+            "a text box's border": ((10.0, 20.2), (0, 1), 0.2),
+            "a table's border": ((32.5, 18.15), (0, 1), 0.2),
+            "a barcode's symbol, kept 1 mm from": ((53.0, 15.0), (1, -1), 1.0),
+            "a barcode's text": ((50.0, 19.0 + 2.125), (0, 1), 1.0),
+            "a dimension's inward arrow": ((70.0 - 2.54, 18.0), (-1, 0), 0.2),
+            "a footprint's text box, turned with it": ((102.1, 13.0), (1, 0), 0.2),
+        }
+        for name, (point, (dx, dy), keep) in cases.items():
+            norm = math.hypot(dx, dy)
+            with self.subTest(name):
+                self.assertFalse(self.near(point, (dx / norm, dy / norm), keep), name)
+        self.assertTrue(self.near((60.0, 6.0), (0, 0)), "a hidden text is no copper")
+        self.assertTrue(self.near((60.0, 30.0), (0, 0)), "nor is the board's bare middle")
+
+    def test_a_truetype_text_with_no_outline_saved_is_refused_by_name(self) -> None:
+        text = (f'(gr_text "AB" (at 42 6 0) (layer "F.Cu") (uuid "{_uuid()}") (effects (font (face "Arial") (size 2 2) '
+                '(thickness 0.3))))')
+        with self.assertRaises(ValueError) as caught:
+            read_copper(board(text))
+        self.assertIn("text 'AB' on F.Cu: its font is 'Arial'", str(caught.exception))
+        self.assertIn("open and save the board in KiCad", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

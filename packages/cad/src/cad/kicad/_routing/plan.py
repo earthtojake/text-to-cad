@@ -312,6 +312,12 @@ class Router:
     def _read_obstacles(self) -> None:
         board, rules, fields, obstacles = self.board, self.rules, self.fields, self.obstacles
         every = list(range(len(self.copper)))
+        # Copper DRC holds to more than its net's clearance (a barcode's visual separation): the fields and the
+        # exact check reach as far as that needs, before anything is read into them.
+        widest = max([w.width / 2 for w in self.wants] + [w.via_diameter / 2 for w in self.wants] + [0.0])
+        reach = max([graphic.clearance or 0.0 for graphic in board.graphics] + [0.0]) + widest + 0.2
+        if reach > self.reach:
+            self.reach = fields.reach = obstacles.reach = reach
         for pad in board.pads:
             keep, net, layers = rules.clearance(pad.net, pad.clearance), self._net(pad.net), self._ids(pad.layers)
             fields.add_copper(pad.copper, layers, net, keep)
@@ -338,6 +344,7 @@ class Router:
             self._item(via.net, _Item("via", via.layers, (disc,), (via.at,), via=via))
         for graphic in board.graphics:
             keep, net, layers = rules.clearance(graphic.net), self._net(graphic.net), self._ids([graphic.layer])
+            keep = max(keep, graphic.clearance or 0.0)
             fields.add_copper(graphic.shapes, layers, net, keep)
             for shape in graphic.shapes:
                 obstacles.add("copper", shape, layers, net, keep)

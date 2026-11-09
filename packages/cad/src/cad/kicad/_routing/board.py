@@ -8,9 +8,12 @@ corner radius, offset and turn; a track as a segment or an arc of its width; a v
 spans. A pad whose padstack draws other shapes on other layers is all of them on every layer (more copper,
 never less), each at its own offset, and a track ends in it inside a disc that lies in its copper on every
 layer; a chamfered corner is the square corner (likewise). A copper pour is not read: KiCad refills it round
-the new copper, so it is neither an obstacle nor a connection to the router. The outline and the copper graphics and texts
+the new copper, so it is neither an obstacle nor a connection to the router. The outline and the copper graphics
 (rare; a footprint's as well as the board's) come from the board index (``read_index``), their arcs as chords
-within ``CHORD_TOLERANCE`` and their curves as chords within ``curve_reach``, which the router grows them by.
+within ``CHORD_TOLERANCE`` and their curves as chords within ``curve_reach``, which the router grows them by. The
+texts, text boxes, tables, barcodes and dimensions on a copper layer (a footprint's too) are read here, each as
+large as what KiCad draws or larger (see their section): a stroke-font text by KiCad's own font's measured
+advances, not the plot's font, a TrueType one by the outline KiCad saved with it.
 
 Millimetres, KiCad's frame (y down), as the file holds them.
 """
@@ -27,7 +30,10 @@ from cad.engine.formats.kicad.board_index import (
     FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, item_id, item_layers, layer_of,
     net_of, net_table, points_of, read_index, zone_outline,
 )
-from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, bezier_points, rotate
+from cad.engine.formats.kicad.board_index import (  # the board readers' own: a text as KiCad shows it
+    _footprint_text, _hidden, _read_dimension, _stroke_width, _text_effects,
+)
+from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, bezier_points, hull, rotate
 
 from .shapes import Shape, segment_point_distance
 
@@ -90,12 +96,15 @@ class Via:
 
 @dataclass(frozen=True)
 class Graphic:
-    """Copper that is neither a pad, a track nor a via: a graphic or a text on a copper layer (``net`` when the
-    file gives it one), its arcs' chords grown by ``CHORD_TOLERANCE`` so that it covers what it draws."""
+    """Copper that is neither a pad, a track nor a via: a graphic, a text, a text box, a table, a barcode or a
+    dimension on a copper layer (``net`` when the file gives it one), as large as what KiCad draws or larger (its
+    arcs' chords grown by ``CHORD_TOLERANCE``, a text by its font's measured reach); ``clearance`` what other copper
+    keeps from it where DRC holds it to more than its net's (a barcode's visual separation)."""
 
     net: str | None
     layer: str
     shapes: tuple[Shape, ...]
+    clearance: float | None = None
 
 
 @dataclass(frozen=True)
@@ -438,6 +447,368 @@ def _drawn(points: Sequence[XY], closed: bool, filled: bool, reach: float) -> tu
     return tuple(Shape.segment(a, b, reach) for a, b in zip(ring, ring[1:]))
 
 
+# --- texts, text boxes, tables, barcodes and dimensions on a copper layer ------------------------------------
+#
+# Each is an obstacle as large as what KiCad draws or larger, never smaller: a stroke-font text a box its letters
+# lie in (``_letters``), a TrueType one the hull of the outline KiCad saved with it (its render cache), a knockout
+# the box KiCad fills round its letters, a text box or a table's cell its box (its border's stroke round it) and
+# its text where that may spill past the box, a barcode its symbol and its text, a dimension its lines, its
+# arrows and its text.
+
+#: KiCad's stroke font (newstroke), measured with kicode 10.99 (KiCad's own outline of each text,
+#: ``get_text_as_shapes``): each character's advance, space to ``~``, in 21sts of the text's width (a whole number
+#: each); any other character takes 34, past the widest measured (``Ж`` 32, CJK 31, Latin-1, Greek, kana 26 or
+#: less). Its letters lie within a tenth of the width before the pen's start and a quarter after its end (0.05 and
+#: 0.19 measured), within 0.45 of the height below the baseline (0.41 measured: a bracket's foot) and above the
+#: capitals (0.41: an accented capital, an overbar 0.30), 0.25 for ASCII with no overbar (0.19: a bracket's head).
+#: Lines are 1.62 heights apart (1.61 measured); the capitals of
+#: one line stand 0.04 heights below a top-justified anchor, centre 0.04 above a centred one and their baseline 0.13
+#: above a bottom-justified one; an italic letter leans an eighth of its height above the baseline.
+_ADVANCE = (16, 10, 16, 21, 20, 24, 26, 10, 14, 14, 16, 26, 10, 26, 10, 22, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+            10, 10, 26, 26, 26, 18, 27, 18, 21, 21, 21, 19, 18, 21, 22, 10, 16, 21, 17, 24, 22, 22, 21, 22, 21, 20, 16,
+            22, 18, 24, 20, 18, 20, 14, 14, 14, 12, 16, 8, 19, 19, 18, 19, 18, 12, 19, 19, 10, 10, 17, 11, 28, 19, 19,
+            19, 19, 13, 17, 12, 19, 16, 22, 17, 16, 17, 14, 20, 14, 15)
+_ADVANCE_OTHER = 34
+_BEFORE, _AFTER, _OVER, _OVER_ASCII, _PITCH, _LEAN = 0.1, 0.25, 0.45, 0.25, 1.62, 0.2
+
+
+def _advance(line: str) -> float:
+    """A line's width in KiCad's stroke font, in widths of its text: each character's advance, its markup's
+    characters as glyphs too (more, never less)."""
+    return sum(_ADVANCE[ord(c) - 32] if 32 <= ord(c) <= 126 else _ADVANCE_OTHER for c in line) / 21
+
+
+def _font(node: list) -> list:
+    effects = sexpr.find(node, "effects")
+    return (sexpr.find(effects, "font") if effects is not None else None) or []
+
+
+def _flag(node: list, name: str) -> bool:
+    """``(name yes)``, or the bare atom ``name`` (an older board's)."""
+    found = sexpr.find(node, name)
+    if found is not None:
+        return len(found) < 2 or str(found[1]) in ("yes", "true")
+    return any(isinstance(atom, sexpr.Sym) and str(atom) == name for atom in node[1:])
+
+
+def _knockout(node: list) -> bool:
+    """A knockout: KiCad fills a box round the letters and cuts them out of it (``(layer "F.Cu" knockout)`` for a
+    text, ``(knockout yes)`` for a text box or a barcode)."""
+    layer = sexpr.find(node, "layer")
+    return _flag(node, "knockout") or (layer is not None and any(str(atom) == "knockout" for atom in layer[2:]))
+
+
+def _effects(node: list) -> tuple[tuple[float, float], float, list[str], bool]:
+    """A text's size (height, width), stroke, justification and slant, as KiCad draws it: a bold stroke-font text
+    with no stroke of its own is a fifth of its width."""
+    size, thickness, justify = _text_effects(node)
+    font = _font(node)
+    if _flag(font, "bold") and sexpr.value(font, "thickness") is None:
+        thickness = size[1] / 5
+    return size, thickness, justify, _flag(font, "italic")
+
+
+def _letters(text: str, node: list) -> list[XY]:
+    """A box ``text``'s letters lie in, in KiCad's stroke font as ``node``'s effects lay it out, in the text's frame
+    (unturned about its anchor): its widest line by the font's advances, its lines by their pitch, each justified as
+    KiCad justifies them, with the margins the font's letters keep within (the table's note), its stroke round it."""
+    (height, width), thickness, justify, italic = _effects(node)
+    lines = text.split("\n")
+    wide = max(_advance(line) for line in lines) * width
+    tall = height + (len(lines) - 1) * _PITCH * height
+    if "left" in justify:
+        x0, x1 = -_BEFORE * width, wide + _AFTER * width
+    elif "right" in justify:
+        x0, x1 = -wide - _BEFORE * width, _AFTER * width
+    else:
+        x0, x1 = -wide / 2 - _BEFORE * width, wide / 2 + _AFTER * width
+    if "mirror" in justify:
+        x0, x1 = -x1, -x0
+    if "top" in justify:
+        y0, y1 = 0.0, tall + 0.05 * height
+    elif "bottom" in justify:
+        y0, y1 = -tall - 0.15 * height, -0.1 * height
+    else:
+        y0, y1 = -tall / 2 - 0.05 * height, tall / 2
+    lean = _LEAN * height if italic else 0.0
+    grow = thickness / 2
+    over = (_OVER_ASCII if text.isascii() and "~{" not in text else _OVER) * height
+    return _box_of([(x0 - lean - grow, y0 - over - grow), (x1 + lean + grow, y1 + _OVER * height + grow)])
+
+
+def _turned(points: Sequence[XY], at: XY, angle: float) -> list[XY]:
+    """``points``, in a text's frame (unturned about its anchor), on the board: turned as KiCad turns text."""
+    radians = math.radians(angle)
+    cos, sin = math.cos(radians), math.sin(radians)
+    return [(at[0] + x * cos + y * sin, at[1] - x * sin + y * cos) for x, y in points]
+
+
+def _unturned(points: Sequence[XY], at: XY, angle: float) -> list[XY]:
+    radians = math.radians(angle)
+    cos, sin = math.cos(radians), math.sin(radians)
+    return [((x - at[0]) * cos - (y - at[1]) * sin, (x - at[0]) * sin + (y - at[1]) * cos) for x, y in points]
+
+
+def _box_of(points: Sequence[XY], grow: float = 0.0) -> list[XY]:
+    x0, y0 = min(x for x, _ in points) - grow, min(y for _, y in points) - grow
+    x1, y1 = max(x for x, _ in points) + grow, max(y for _, y in points) + grow
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
+def _cached(node: list) -> list[XY] | None:
+    """The points of the outline KiCad saved with a TrueType text (its ``render_cache``, on the board), or None."""
+    cache = sexpr.find(node, "render_cache")
+    if cache is None:
+        return None
+    return [point for polygon in sexpr.find_all(cache, "polygon") for pts in sexpr.find_all(polygon, "pts")
+            for point in points_of(pts)]
+
+
+def _truetype(node: list, text: str, layer: str) -> list[XY]:
+    """A TrueType text's outline as KiCad drew it; a ``ValueError`` where the board holds none."""
+    points = _cached(node)
+    if not points:
+        face = sexpr.value(_font(node), "face")
+        raise ValueError(f"route cannot see the copper of the text {text!r} on {layer}: its font is {face!r}, a "
+                         "TrueType face, and the board holds no outline of it (KiCad saves one with the text, its "
+                         "render cache); open and save the board in KiCad, or give the text KiCad's own font")
+    return points
+
+
+def _text_copper(node: list, text: str, at: XY, angle: float, layer: str, upright: bool = False) -> tuple[Shape, ...]:
+    """A text's copper on ``layer``, the text ``text`` anchored ``at`` and turned ``angle`` as KiCad places it; an
+    ``upright`` one (a footprint's, which KiCad turns half round where it would read upside down, about its
+    anchor, measured) at both angles."""
+    if upright and sexpr.value(_font(node), "face") is None and math.cos(math.radians(angle)) < 1e-9:
+        return (*_text_copper(node, text, at, angle, layer), *_text_copper(node, text, at, angle - 180, layer))
+    size, thickness, _, _ = _effects(node)
+    if sexpr.value(_font(node), "face") is not None:  # TrueType: the outline KiCad drew, on the board
+        drawn = _truetype(node, text, layer)
+        cache = sexpr.find(node, "render_cache")
+        if len(cache) > 2 and isinstance(cache[2], (int, float)):
+            angle = float(cache[2])
+        letters = _unturned(drawn, at, angle)
+    else:
+        letters = _letters(text, node)
+    if not letters:
+        return ()
+    if _knockout(node):
+        # KiCad's knockout: the letters' box in their frame grown by max(stroke / 2, height / 9)
+        # (GetKnockoutTextMargin), filled, square cornered.
+        return (Shape.polygon(_turned(_box_of(letters, max(thickness / 2, size[0] / 9)), at, angle)),)
+    if sexpr.value(_font(node), "face") is not None:
+        return (Shape.polygon(hull(_turned(letters, at, angle))),)
+    return (Shape.polygon(_turned(letters, at, angle)),)
+
+
+def _text_box_copper(node: list, frame: FootprintFrame | None, stroke: float, layer: str) -> tuple[Shape, ...]:
+    """A text box's (or a table cell's) copper: its box, filled, grown by half of ``stroke`` (its border's, drawn
+    or not), and its text where that may lie past the box. A TrueType text is the outline KiCad saved. A
+    stroke-font text is laid out as KiCad lays out a text box's (``GetDrawPos``: from the margin of the side it is
+    justified to, or the middle, in the box's own frame, along its text); one whose every line is no wider than the
+    box inside its margins is not wrapped, and is the box and its letters' box (``_letters``) there. One wider
+    KiCad wraps, and it may spill past the box however it is wrapped: the box is grown along and across its text by
+    the most its letters can reach from their anchor (the widest and tallest of the text unwrapped and of one word
+    a line), the anchor in the box (or as far past it as a margin is wider than the box)."""
+    pts = sexpr.find(node, "pts")
+    if pts is not None:
+        corners = points_of(pts)[:4]
+    else:
+        start, end = sexpr.pair(sexpr.find(node, "start")), sexpr.pair(sexpr.find(node, "end"))
+        if start is None or end is None:
+            return ()
+        (x0, x1), (y0, y1) = sorted((start[0], end[0])), sorted((start[1], end[1]))
+        corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    if len(corners) < 4:
+        return ()
+    if frame is not None:
+        corners = [frame.place(point) for point in corners]
+    box = Shape.polygon(corners, stroke / 2)
+    text = node[1] if len(node) > 1 and isinstance(node[1], str) else ""
+    if not text.strip():
+        return (box,)
+    if sexpr.value(_font(node), "face") is not None:
+        return (box, Shape.polygon(hull(_truetype(node, text, layer))))
+    # The text's frame: x along it, y down across it, from where the box's corners are least on both. The text
+    # is turned by the box's own angle (in a footprint as well: KiCad's is absolute, as a footprint text's is,
+    # measured), so a box a turned footprint holds may not be square to it: then the box is its bounding box in
+    # the text's frame, and the text may lie anywhere in it.
+    angle = sexpr.number(sexpr.value(node, "angle"), 0.0)
+    u, v = rotate(1.0, 0.0, angle), rotate(0.0, 1.0, angle)
+    along = [c[0] * u[0] + c[1] * u[1] for c in corners]
+    down_ = [c[0] * v[0] + c[1] * v[1] for c in corners]
+    u0, v0 = min(along), min(down_)
+    across, down = max(along) - u0, max(down_) - v0
+
+    def board_point(x: float, y: float) -> XY:
+        return (u0 + x) * u[0] + (v0 + y) * v[0], (u0 + x) * u[1] + (v0 + y) * v[1]
+
+    square = all(min(abs(a - u0), abs(a - u0 - across)) < 1e-6 and min(abs(b - v0), abs(b - v0 - down)) < 1e-6
+                 for a, b in zip(along, down_))
+    if not square:
+        box = Shape.polygon([board_point(x, y) for x, y in ((0, 0), (across, 0), (across, down), (0, down))], stroke / 2)
+
+    margins = [abs(float(value)) for value in (sexpr.find(node, "margins") or [])[1:] if isinstance(value, (int, float))]
+    left, top, right, bottom = (margins + [0.0] * 4)[:4]
+    (_, wide), _, justify, _ = _effects(node)
+    ax = left if "left" in justify else across - right if "right" in justify else across / 2
+    ay = top if "top" in justify else down - bottom if "bottom" in justify else down / 2
+    letters = [(ax + x, ay + y) for x, y in _letters(text, node)]
+    if square and max(_advance(line) for line in text.split("\n")) * wide <= across - left - right:  # not wrapped
+        (x0, y0), (x1, y1) = letters[0], letters[2]
+        if 0 <= x0 and x1 <= across and 0 <= y0 and y1 <= down:
+            return (box,)
+        return (box, Shape.polygon([board_point(x, y) for x, y in letters]))
+    words = _letters("\n".join(text.split()), node)
+    reach = (max(letters[1][0] - letters[0][0], letters[2][1] - letters[0][1], words[1][0] - words[0][0],
+                 words[2][1] - words[0][1]) + max([0.0] + [margin - min(across, down) for margin in margins]))
+    grown = [(-reach, -reach), (across + reach, -reach), (across + reach, down + reach), (-reach, down + reach)]
+    return (Shape.polygon([board_point(x, y) for x, y in grown], stroke / 2),)
+
+
+def _table_copper(node: list, frame: FootprintFrame | None, copper: Sequence[str]) -> list[Graphic]:
+    """A table's cells, each a text box grown by half its widest border or separator stroke."""
+    strokes = [sexpr.number(sexpr.value(sexpr.find(part, "stroke") or [], "width"), 0.0)
+               for part in (sexpr.find(node, "border"), sexpr.find(node, "separators")) if part is not None]
+    stroke = max(strokes + [0.0])
+    own = layer_of(node)
+    found = []
+    for cell in sexpr.find_all(sexpr.find(node, "cells") or [], "table_cell"):
+        layer = layer_of(cell) or own
+        if layer in copper:
+            found.append(Graphic(None, layer, _text_box_copper(cell, frame, stroke, layer)))
+    return found
+
+
+#: A barcode's text, below its symbol (KiCad 10.99, measured with its bounding box): of the text height, centred,
+#: its foot 1 mm + 1.125 text heights below the symbol; the router takes 1 mm + 1.25 text heights, and the text's
+#: advance a quarter of a text height wider. A knockout fills a box 0.4 mm round both.
+_BARCODE_GAP, _BARCODE_TEXT, _BARCODE_KNOCKOUT = 1.0, 1.25, 0.4
+#: What KiCad's DRC holds other copper to from a barcode, whatever its net's clearance ("barcode visual
+#: separation", a default constraint of 1 mm, measured).
+_BARCODE_SEPARATION = 1.0
+
+
+def _barcode_copper(node: list, frame: FootprintFrame | None) -> tuple[Shape, ...]:
+    """A barcode's copper: its symbol fills ``size`` round its anchor, its text (unless hidden) below it, turned
+    by its angle; in a footprint, the disc round its anchor that holds that box however it is turned."""
+    at = sexpr.find(node, "at")
+    width, height = sexpr.pair(sexpr.find(node, "size"), (0.0, 0.0))
+    if at is None or width <= 0 or height <= 0:
+        return ()
+    center, angle = sexpr.pair(at, (0.0, 0.0)), sexpr.number(at[3]) if len(at) > 3 else 0.0
+    half, top, foot = width / 2, -height / 2, height / 2
+    text = sexpr.value(node, "text")
+    size = sexpr.number(sexpr.value(node, "text_height"), 0.0)
+    if isinstance(text, str) and text.strip() and size > 0 and not _flag(node, "hide"):
+        half = max(half, _advance(text) * size / 2 + size / 4)
+        foot = height / 2 + _BARCODE_GAP + _BARCODE_TEXT * size
+    grow = _BARCODE_KNOCKOUT if _flag(node, "knockout") else 0.0
+    box = [(-half - grow, top - grow), (half + grow, top - grow), (half + grow, foot + grow), (-half - grow, foot + grow)]
+    if frame is not None:  # KiCad 10.99's DRC takes its position as the board's, not the footprint's (measured): both
+        reach = max(math.hypot(x, y) for x, y in box)
+        return tuple(Shape.point(x, y, reach) for x, y in (frame.place(center), center))
+    return (Shape.polygon([(center[0] + x, center[1] + y) for x, y in (rotate(px, py, angle) for px, py in box)]),)
+
+
+def _dimension_copper(node: list, layer: str) -> tuple[Shape, ...]:
+    """A dimension's copper (on the board's frame, a footprint's too): its lines at its stroke, a disc of twice its
+    arrow's length (or its extension line's overshoot) round each line's end, a leader on to its text, and
+    its text, in a frame (a box or a circle) where it has one."""
+    found = _read_dimension(node, None)
+    if found is None:
+        return ()
+    style = sexpr.find(node, "style") or []
+    stroke = sexpr.number(sexpr.value(style, "thickness"), 0.0)
+    # An arrow drawn inward stands outside the crossbar's end, twice its length past it (measured).
+    tip = max(2 * sexpr.number(sexpr.value(style, "arrow_length"), 0.0),
+              sexpr.number(sexpr.value(style, "extension_height"), 0.0))
+    lines = list(found.lines)
+    shown = sexpr.find(node, "gr_text")
+    at = sexpr.pair(sexpr.find(shown, "at")) if shown is not None else None
+    if lines and at is not None and found.type in ("leader", "radial"):
+        (sx, sy), (ex, ey) = lines[0]
+        if found.type == "radial":  # the leader stands out from the arrow's point, then turns to the text
+            length, run = sexpr.number(sexpr.value(node, "leader_length"), 0.0), math.hypot(ex - sx, ey - sy)
+            if run > 0 and length > 0:
+                knee = (ex + (ex - sx) / run * length, ey + (ey - sy) / run * length)
+                lines.append(((ex, ey), knee))
+                ex, ey = knee
+        lines.append(((ex, ey), at))
+    shapes: list[Shape] = [Shape.segment(a, b, stroke / 2) for a, b in lines]
+    shapes += [Shape.point(x, y, tip + stroke / 2) for line in lines for x, y in line]
+    if shown is not None and at is not None and len(shown) > 1 and isinstance(shown[1], str) and shown[1].strip():
+        angle = sexpr.number(sexpr.find(shown, "at")[3]) if len(sexpr.find(shown, "at")) > 3 else 0.0
+        text = _text_copper(shown, shown[1], at, angle, layer)
+        shapes += text
+        frame = sexpr.number(sexpr.value(style, "text_frame"), 0.0)
+        if frame and text:
+            size, thickness, _, _ = _effects(shown)
+            margin = max(size) + stroke + thickness
+            corners = [point for shape in text for point in (shape.points if shape.kind == "polygon" else [])]
+            box = _box_of(_unturned(corners, at, angle), margin)
+            if frame == 2:  # a circle
+                shapes.append(Shape.point(at[0], at[1], max(math.hypot(x, y) for x, y in box) + stroke / 2))
+            else:
+                shapes.append(Shape.polygon(_turned(box, at, angle), stroke / 2))
+    return tuple(shapes)
+
+
+def _drawn_copper(tree: list, copper: Sequence[str]) -> list[Graphic]:
+    """Every text, text box, table, barcode and dimension on a copper layer, the board's and the footprints'
+    (their fields and texts with ``${REFERENCE}`` and its kin substituted, as KiCad shows them); a hidden text
+    draws none."""
+    found: list[Graphic] = []
+
+    def drawn(node: list, frame: FootprintFrame | None, text: Any = None) -> None:
+        head = sexpr.head(node) or ""
+        layer = layer_of(node)
+        if head == "table":
+            found.extend(_table_copper(node, frame, copper))
+            return
+        if layer not in copper:
+            return
+        shapes: tuple[Shape, ...] = ()
+        if text is not None:
+            shapes = _text_copper(node, text.text, text.at, text.angle, layer, upright=True)
+        elif head == "gr_text":
+            at = sexpr.find(node, "at")
+            if len(node) > 1 and isinstance(node[1], str) and node[1].strip() and not _hidden(node) and at is not None:
+                shapes = _text_copper(node, node[1], sexpr.pair(at, (0.0, 0.0)), sexpr.number(at[3]) if len(at) > 3 else 0.0,
+                                      layer)
+        elif head in ("gr_text_box", "fp_text_box"):
+            if not _hidden(node):
+                shapes = _text_box_copper(node, frame, _stroke_width(node), layer)
+        elif head == "barcode":
+            shapes = _barcode_copper(node, frame)
+            if shapes:
+                found.append(Graphic(None, layer, shapes, _BARCODE_SEPARATION))
+            return
+        elif head in ("dimension", "gr_dimension"):
+            shapes = _dimension_copper(node, layer)
+        if shapes:
+            found.append(Graphic(None, layer, shapes))
+
+    for node in tree[1:]:
+        head = sexpr.head(node)
+        if head not in ("footprint", "module"):
+            drawn(node, None)
+            continue
+        frame = FootprintFrame(node)
+        ref, value = footprint_property(node, "Reference") or "", footprint_property(node, "Value") or ""
+        shown = {str(item[1]): str(item[2]) for item in sexpr.find_all(node, "property") if len(item) >= 3}
+        for child in node[2:]:
+            if not isinstance(child, list):
+                continue
+            if sexpr.head(child) in ("property", "fp_text"):
+                text = _footprint_text(child, frame, ref, value, shown)
+                if text is not None:
+                    drawn(child, frame, text)
+            elif sexpr.head(child) in ("fp_text_box", "table", "barcode", "dimension", "gr_dimension"):
+                drawn(child, frame)
+    return found
+
+
 def read_copper(text: str | list) -> BoardCopper:
     """The board ``text`` (a ``.kicad_pcb``'s, or its parsed tree), as the router sees it."""
     tree = sexpr.parse(text) if isinstance(text, str) else text
@@ -491,8 +862,7 @@ def read_copper(text: str | list) -> BoardCopper:
                         curve_reach(shape.points) if shape.shape == "curve"
                         else CHORD_TOLERANCE if shape.shape in ("arc", "circle", "poly") else 0.0)))
                 for shape in index.shapes if shape.layer in copper]
-    graphics += [Graphic(None, text.layer, (Shape.polygon(text.polygon),))
-                 for text in index.texts if text.layer in copper and len(text.polygon) >= 3]
+    graphics += _drawn_copper(tree, copper)
     rings = tuple(tuple(line) for line in index.outline
                   if len(line) > 3 and math.dist(line[0], line[-1]) <= CHAIN)
     open_ = tuple(tuple(line) for line in index.outline if tuple(line) not in rings)
