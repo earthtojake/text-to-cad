@@ -49,9 +49,12 @@ the child a `RigidJoint` at the frame that joint places it at: a revolute's own 
 `hinge.location` (the parent's placement times the joint's axis in it), or, for a
 `LinearJoint`, the axis's position with no rotation (below). Connected at 0, the child stays
 where it was built; connected at another value, it moves there, and that value is as
-built. The server enforces it: a child whose `RigidJoint` stood at its joint's origin and that
-`connect_to` turned at 0 fails the run, naming the joint, the turn and the frame to use
-instead. A `RigidJoint` on `bd.Plane(origin=axis.position, z_dir=axis.direction)` takes its X
+built. The server enforces it where angle 0 cannot be as built: a child whose `RigidJoint` stood
+at its joint's origin with its Z on the joint's axis, and that `connect_to` turned about that axis
+at 0, fails the run, naming the joint, the turn and the frame to use instead. A `RigidJoint`
+elsewhere, or one whose Z is not the joint's axis, is a placement: `connect_to` puts the child on
+the joint (a wheel built at the origin with `bd.RigidJoint("axle", wheel, bd.Location())`, put on
+its axle), and nothing is checked. A `RigidJoint` on `bd.Plane(origin=axis.position, z_dir=axis.direction)` takes its X
 from its Z, and a part read turned (a STEP's leaf) or an axis read from geometry, whose
 direction carries `1e-17` of noise, gives the hinge another X, so the child turns at 0. Snap a
 direction read from geometry before making an `Axis` of it (a component within `1e-9` of 0 is

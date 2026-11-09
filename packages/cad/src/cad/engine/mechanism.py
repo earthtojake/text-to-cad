@@ -61,11 +61,13 @@ built tree. The pairs make a mechanism in ISO 10303-105's terms, the kinematics 
 A link's frame is its first member occurrence's placement as built (the ground's, the
 world's when it has none). A pair the built tree contradicts -- its two joints on one rigid
 link, or its rigid joint's frame not one motion of the pair from its moving joint's -- is
-refused at document time, by name. So is a child ``connect_to`` turned at its joint's zero though it was
-built where it stands: where a ``RigidJoint`` stood at its joint's own origin before the connection, the
-child at the pair's zero must be where it was built, turned by no more than 1e-9 radian times the model's
-size in millimetres (``watch`` records each connection, ``_turned_at_zero`` checks it); a RigidJoint
-elsewhere is a placement, which ``connect_to`` makes as build123d's joints do. A loop's pairs are kept
+refused at document time, by name. So is a child ``connect_to`` turned about its joint's own axis at its
+zero though it was built where it stands: where a ``RigidJoint`` stood at its joint's origin with its Z on
+the joint's axis before the connection (the first, where a joint is connected again), the child at the
+pair's zero must be where it was built, turned by no more than 1e-9 radian times the model's size in
+millimetres (``watch`` records each connection, ``_turned_at_zero`` checks it); a RigidJoint elsewhere, or
+one whose Z the connection turns onto the axis, is a placement, which ``connect_to`` makes as build123d's
+joints do (a wheel built at the origin, put on its axle). A loop's pairs are kept
 and not posed (no solver; a robot description closes them, ``describe``), and a
 non-linear relation (a function coupling, a cam) is no part of the mechanism: a configuration
 sequence says it.
@@ -932,7 +934,9 @@ def unwatch() -> bool:
 def _record(stays: Any, moved: Any, before: np.ndarray) -> None:
     """What ``stays.connect_to(moved)`` did to ``moved``'s part, kept on ``moved`` (``CONNECTED``): where the
     part stood (``before``), where the pair's zero puts it -- the two joints' frames coinciding
-    (``_local_frames``), the motion ``M(0)`` -- and how far apart the joints' origins stood before."""
+    (``_local_frames``), the motion ``M(0)`` -- how far apart the joints' origins stood before, and the Z
+    (the joint's axis) of the moved part's frame before and of the frame it is put on. A joint connected
+    again to the same place (another value) keeps its first record: where its part was built."""
     kinds = (_joint_kind(stays), _joint_kind(moved))
     if None in kinds or "rigid" not in kinds or kinds == ("rigid", "rigid"):
         return
@@ -940,24 +944,33 @@ def _record(stays: Any, moved: Any, before: np.ndarray) -> None:
     if kinds[1] == "rigid":  # the moving joint's part stays; the RigidJoint's moves onto it
         item_1, item_2, _held = _local_frames(str(kinds[0]), stays, moved)
         zero = placed @ item_1 @ np.linalg.inv(item_2)
-        apart = (placed @ item_1)[:3, 3] - (before @ item_2)[:3, 3]
+        source, target = before @ item_2, placed @ item_1
     else:  # the RigidJoint's part stays; the moving joint's moves
         item_1, item_2, _held = _local_frames(str(kinds[1]), moved, stays)
         zero = placed @ item_2 @ np.linalg.inv(item_1)
-        apart = (before @ item_1)[:3, 3] - (placed @ item_2)[:3, 3]
-    moved.__dict__[CONNECTED] = (before, zero, float(np.linalg.norm(apart)))
+        source, target = before @ item_1, placed @ item_2
+    first = moved.__dict__.get(CONNECTED)
+    if first is not None and np.allclose(first[1], zero, rtol=0, atol=1e-9):
+        return
+    moved.__dict__[CONNECTED] = (before, zero, float(np.linalg.norm(target[:3, 3] - source[:3, 3])),
+                                 source[:3, 2].copy(), target[:3, 2].copy())
 
 
 def _turned_at_zero(label: str, kind: str, record: tuple, sphere: tuple[np.ndarray, float] | None, moved: str,
                     holder: str, raw: str, scale: float) -> None:
-    """Refuses a pair whose ``connect_to`` turned its child at the joint's zero, by name (``watch``'s record).
-    The check holds where the RigidJoint stood at the joint's own origin before the connection -- the child
-    built where it stands, as the joint recipe has it -- and there the child at the pair's zero must be where
-    it was built: turned by more than 1e-9 radian times the model's size in millimetres (at least 1), it is
-    refused, with the turn and how far its parts move. A RigidJoint elsewhere is a placement: ``connect_to``
-    puts the child on the joint, as build123d's joints do, and nothing is checked."""
-    before, zero, apart = record
+    """Refuses a pair whose ``connect_to`` turned its child about the joint's own axis at its zero, by name
+    (``watch``'s record): the child built where it stands, its RigidJoint at the joint's origin with its Z on
+    the joint's axis, and only the two frames' reference directions apart (a Plane of an axis takes its X
+    from its Z, which a turned part or an axis direction's rounding changes), so angle 0 is not as built.
+    Turned by more than 1e-9 radian times the model's size in millimetres (at least 1), it is refused, with
+    the turn and how far its parts move. For a slide the same: its child spun about the slide's axis. A
+    RigidJoint elsewhere, or one whose Z is not the joint's axis, is a placement -- ``connect_to`` puts the
+    child on the joint, as build123d's joints do (a wheel built at the origin onto its axle, a carriage moved
+    to its slide) -- and nothing is checked."""
+    before, zero, apart, source_z, target_z = record
     if apart > 1e-6 * max(1.0, scale):
+        return
+    if float(np.linalg.norm(np.cross(source_z, target_z))) > 1e-6 or float(np.dot(source_z, target_z)) < 0:
         return
     moved_by = zero @ np.linalg.inv(before)
     rotation = moved_by[:3, :3]
@@ -979,9 +992,9 @@ def _turned_at_zero(label: str, kind: str, record: tuple, sphere: tuple[np.ndarr
         frame = f"{holder}.joints[{raw!r}].location"
     raise KinematicsError(
         f"joint {label!r} turns {moved} by {math.degrees(angle):.6g} deg at its zero{far}: its RigidJoint stood at "
-        f"the joint's origin, so {moved} was built where it stands, but the two frames' axes differ and connect_to "
-        "turned it onto the joint's (a Plane of an axis takes its X from its Z, which a turned part or an axis "
-        f"direction's rounding changes). Build the RigidJoint at the frame the joint places it at, {frame}, and "
+        f"the joint's origin on its axis, so {moved} was built where it stands, but the two frames' reference "
+        "directions differ and connect_to turned it about the axis onto the joint's (a Plane of an axis takes its "
+        f"X from its Z, which a turned part or an axis direction's rounding changes). Build the RigidJoint at the frame the joint places it at, {frame}, and "
         "snap an axis direction read from geometry (a component within 1e-9 of 0 is 0)")
 
 

@@ -2368,13 +2368,15 @@ joint matching two rigid joints alike, a linear joint connected to a revolute on
 slot, which no AP242 lower pair is) and a mechanism state's value a pair cannot take (another
 count of numbers than the joint's, a coupling's value outside the coupling's range) are left
 out and warned; pairs that close a loop are kept and not posed (a robot description closes them:
-below). A child `connect_to` turned at its joint's zero though it was built where it stands fails the
-build too: where a `RigidJoint` stood at its joint's own origin before the connection, the child at
-the pair's zero must stand where it was built, turned by no more than 1e-9 radian times the model's
+below). A child `connect_to` turned about its joint's own axis at its zero though it was built where
+it stands fails the build too: where a `RigidJoint` stood at its joint's origin with its Z on the
+joint's axis before the connection (a joint connected again: before its first), the child at the
+pair's zero must stand where it was built, turned by no more than 1e-9 radian times the model's
 size in millimetres (at least 1), and the refusal names the joint, the turn, how far the parts moved
 and the frame to build the `RigidJoint` at (a revolute's `joint.location`, a slide's position in its
 part's orientation). The engine records each `connect_to` as a model's body runs it
-(`mechanism.watch`, installed with the kernel's patches); a `RigidJoint` elsewhere is a placement,
+(`mechanism.watch`, installed with the kernel's patches); a `RigidJoint` elsewhere, or one whose Z
+the connection turns onto the axis (a wheel built at the origin, put on its axle), is a placement,
 which `connect_to` makes as build123d's joints do. The warnings are the build's
 report (`kinematics.warnings`), never the document's. The harvest's errors are a mechanism state,
 a configuration sequence or a coupling naming a joint its assembly does not hold, a mechanism
