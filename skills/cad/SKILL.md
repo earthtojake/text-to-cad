@@ -316,6 +316,11 @@ cad step ranges arm.step --step 0.5 --json
   The command writes nothing.
 - **What touches.** Two surfaces within `--clearance` (1 mm) count as touching. Parts already
   touching as built (a horn on its servo) meet only when their contact grows.
+- **Near as built.** Two parts apart but within the clearance as built (a jaw 0.4 mm from its
+  servo's cover) meet only where their gap closes to half of what it was as built. The finding
+  lists them, `near as built:`, with the gap as built and at each stop, and a stop one of them
+  makes says `closed to 0.18 from 0.42 mm as built`. Read such a stop against the geometry before
+  you adopt it. A lower `--clearance` does not remove a near pair's stop; the pair's gap decides it.
 - **What is tested.** `--geometry parts` (the default) tests each part's own surface; `collision`
   tests what each part declares a simulator collides it as. A part declared
   `collision(part, "none")` (a fastener in its hole, a servo's internals) is left out either way.
@@ -326,9 +331,13 @@ cad step ranges arm.step --step 0.5 --json
 - **Cost.** The sweep runs on one core, and its time grows with finer settings: a 270-part
   six-joint arm took 19 s at the defaults and 7 minutes at `--clearance 0.2 --step 0.5`. Start at
   the defaults, and answer a narrower question (do the jaws close?) with a posed snapshot.
+  `--verbose` says each step on stderr as it starts: reading the model, sampling its surfaces (minutes
+  at a fine clearance), each joint.
 
-`--json` carries every number in `measurements.joints`: `lower`, `upper`, `range` (the joint's own
-values), the `*_contact` and `*_clash` parts, and the pairs touching as built (`resting`).
+`--json` carries every number in `measurements.joints`, each joint under `joint`: `lower`, `upper`,
+`range` (the joint's own values), the `*_contact` and `*_clash` parts (a near pair's with its `near`
+and `gap` in mm), the pairs touching as built (`resting`) and the pairs near as built (`near`: `rest`,
+and the gap at the `lower` and `upper` stop).
 
 ### Check scripts
 

@@ -6,7 +6,8 @@ stop the other (touching the base all along, as built, which stops nothing), eac
 distance says the parts come within the clearance; the document is not changed. A STEP with no joint has
 nothing to sweep: an error, said by code. An option out of range is refused by name. A part declared decomposed
 is cut into hulls for the collision geometry alone. The stops are said as a table, and a long sweep says each joint as
-it starts and ends."""
+it starts and ends; a verbose one says each step as it starts. A pair near as built, its gap narrowing a hair as the
+joint turns, stops nothing until it truly closes, and is reported with its gaps."""
 
 from __future__ import annotations
 
@@ -48,6 +49,37 @@ def rig():
     base.joints["slide"].connect_to(carriage.joints["seat"], position=40)
     {declare}
     return bd.Compound(children=[base, wall, end, arm, carriage], label="rig")
+"""
+
+
+# An arm on a hinge about Z, 0.4 mm over a plate tilted so that the gap narrows to 0.35 mm as the arm turns, and a
+# wall it truly meets at about +58 degrees. The marker sets the grid's cells so that a cell boundary lies at -0.38 mm:
+# the plate's top falls in the arm's cells only past y = 17 mm, which a count of points within the clearance read as
+# contact growing.
+NEAR = """
+import math
+
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/near.xbf")
+def near():
+    tilt = math.degrees(math.atan(0.05 / 43))
+    plate = bd.Pos(0, 0, -0.4) * bd.Rot(X=tilt) * bd.Pos(0, 0, -2.5) * bd.Box(120, 120, 5)
+    plate.label = "plate"
+    wall = bd.Pos(30, 49, 4.5) * bd.Box(60, 10, 11)
+    wall.label = "wall"
+    marker = bd.Pos(-55, -55, -9.88) * bd.Box(4, 4, 1)
+    marker.label = "marker"
+    base = bd.Compound(children=[plate, wall, marker], label="base")
+    arm = bd.Box(45, 4, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    arm = bd.Pos(5, 0, 0) * arm
+    arm.label = "arm"
+    hinge = bd.RevoluteJoint("hinge", base, axis=bd.Axis((0, 0, 0), (0, 0, 1)), angular_range=(-360, 360))
+    bd.RigidJoint("hinge", arm, hinge.location)
+    hinge.connect_to(arm.joints["hinge"], angle=0)
+    return bd.Compound(children=[base, arm], label="near")
 """
 
 
@@ -96,6 +128,29 @@ class Ranges(unittest.TestCase):
         self.assertEqual({"joint_stops"}, {finding.code for finding in result.findings})
         self.assertEqual(before, document.read_bytes(), "the document is not changed")
 
+    def test_a_pair_near_as_built_stops_only_where_its_gap_closes(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "near.py"
+        script.write_text(textwrap.dedent(NEAR), encoding="utf-8")
+        report = engine_build.build(script, ["near"], cwd=self.folder)[0]
+        self.assertTrue(report["ok"], report)
+        result = xbf.ranges(self.folder / "XBF/near.xbf")
+        [hinge] = result.measurements["joints"]
+        # The plate narrowing from 0.4 to 0.35 mm stops nothing: the arm turns on until it meets the wall, its corner
+        # there at +58 degrees (a stop a few degrees on: the count wants about 15 mm^2 of the narrow arm in contact).
+        self.assertEqual(("wall", "wall"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
+        self.assertTrue(56.0 <= hinge["upper"] <= 66.0, hinge)
+        self.assertIsNone(hinge["upper_contact"]["near"])
+        [near] = hinge["near"]
+        self.assertEqual(("arm", "plate"), (near["moving"], near["still"]))
+        self.assertTrue(0.39 <= near["rest"] <= 0.45, near)
+        self.assertTrue(0.33 <= near["upper"] < near["rest"], near)
+        self.assertNotIn(["arm", "plate"], [list(pair) for pair in hinge["resting"]])
+        [line] = [line for line in result.human_lines() if line.startswith("hinge: ")]
+        self.assertIn("near as built: arm (arm) and plate (base)", line)
+
     def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
         import contextlib
         import io
@@ -117,6 +172,14 @@ class Ranges(unittest.TestCase):
         heard = said.getvalue().splitlines()
         self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 2): up to about "), heard)
         self.assertTrue(heard[1].startswith("ranges: elbow swept in "), heard)
+        # Verbose, each step is said as it starts, the reading and the sampling before any joint: a fine sweep's
+        # minutes of sampling are not minutes of silence.
+        said = io.StringIO()
+        with mock.patch("cad.engine.ranges.LONG", 1e9), contextlib.redirect_stderr(said):
+            xbf.ranges(document, verbose=True)
+        heard = [line.split(":")[1].strip().split(" ")[0] for line in said.getvalue().splitlines()]
+        self.assertEqual(["reading", "sampling", "sweeping", "elbow", "sweeping", "slide"], heard, said.getvalue())
+        self.assertIn("ranges: sampling 5 part surfaces every 0.6 mm: about ", said.getvalue())
 
     def test_a_decomposed_part_is_cut_for_the_collision_geometry_alone(self) -> None:
         from cad import xbf

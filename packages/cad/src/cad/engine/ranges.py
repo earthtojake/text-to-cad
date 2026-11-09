@@ -20,13 +20,23 @@ its mesh), with a part declared
 ``collision(part, "none")`` taking no part either way (a fastener seated in the hole it holds, a servo's
 internals), is sampled to points ``0.6 * clearance`` apart; the still side's points mark a grid of
 ``clearance`` cells; the moving side's points, moved, are looked up in it. So two surfaces within about
-``clearance`` count as touching: the margin a part's tolerance takes anyway. A pair of parts already
-touching at zero (a horn on its servo, a part on the bearing it turns on) keeps its count as it turns
-about the shared axis, so two parts meet where their pair's count rises ``STOP`` points over its count at
-zero, at that pose and the next (a graze past a corner, over it at one pose alone, is no contact); a pair
-of links the model says never collide (``Description.excludes``) never meets. The stop reported each way
-is the last clear pose and the two parts that met one step past it. Where two parts of one link meet (a
-part split in two on its cut, a screw in its hole), that surface is inside the link and is not tested.
+``clearance`` count as touching: the margin a part's tolerance takes anyway. Two parts meet where their
+pair's count rises ``STOP`` points over its count at zero, at that pose and the next (a graze past a
+corner, over it at one pose alone, is no contact); a pair of links the model says never collide
+(``Description.excludes``) never meets. The stop reported each way is the last clear pose and the two
+parts that met one step past it. Where two parts of one link meet (a part split in two on its cut, a screw
+in its hole), that surface is inside the link and is not tested.
+
+**A pair near at zero** is measured, not counted: each pair's gap at zero is the least distance between
+its two sides' samples (a KD-tree's, out to the grid's reach, ``REACH`` clearances). A pair under
+``TOUCHING`` of the clearance apart touches (a horn on its servo, a part on the bearing it turns on): it
+keeps its count as it turns about the shared axis, and the count rule holds for it. A pair farther apart
+but within the reach is near: a count of its points within the clearance changes with every hundredth of
+a millimetre its gap changes by and with how the grid's cells fall, so it would stop wherever the gap
+narrows a hair (0.42 to 0.35 mm), and a finer clearance only moves that stop. Its gap is tracked
+instead, and it meets where the gap falls under ``CLOSED`` of its gap at zero, at that pose and the next:
+it has closed half the way to touching. Each joint's near pairs are reported with their gap at zero and at
+each stop (``JointStops.near``), and a stop one of them makes says so (``Contact.near``).
 
 Units are the document's: degrees and millimetres, values around the as-built pose (zero), with the
 joint's own values beside (``as_built`` plus them), which is what its range declares. Nothing here
@@ -42,13 +52,19 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["GEOMETRY", "Contact", "JointStops", "STOP", "sweep"]
+__all__ = ["CLOSED", "GEOMETRY", "Contact", "JointStops", "Near", "REACH", "STOP", "TOUCHING", "sweep"]
 
 #: Sample points of new contact over a pair's count at zero that make a stop: about 15 mm^2 of surface at
 #: the default clearance (a sample per 0.36 mm^2), more than a turn's aliasing on the grid.
 STOP = 40
 #: Sample spacing, as a share of the clearance.
 SPACING = 0.6
+#: A pair whose gap at zero is under this share of the clearance touches as built: the count rule holds for it.
+TOUCHING = 0.2
+#: How far, in clearances, a pair at zero is measured: two points in one grid cell are at most this far apart.
+REACH = math.sqrt(3)
+#: A pair near at zero meets where its gap falls under this share of its gap at zero.
+CLOSED = 0.5
 #: A full turn, in degrees: a turning joint clear this far each way has no stop.
 TURN = 360.0
 SWEPT = ("revolute", "continuous", "prismatic")
@@ -59,14 +75,34 @@ GEOMETRY = ("parts", "collision")
 
 @dataclass(frozen=True)
 class Contact:
-    """Two parts that met: the moving one (on the swept side) and the still one, each by its part's name and
-    its link's, and the pose, in the joint's unit around zero, where they did."""
+    """Two parts that met: the moving one (on the swept side) and the still one, each by its part's name (an
+    anonymous one by its path from its nearest named ancestor, ``shown``) and its link's, and the pose, in the
+    joint's unit around zero, where they did. ``near`` is the pair's gap at zero, in mm, where they were near
+    then (the module's **A pair near at zero**), and ``gap`` theirs where they met; both None for any other
+    pair."""
 
     moving: str
     moving_link: str
     still: str
     still_link: str
     at: float
+    near: float | None = None
+    gap: float | None = None
+
+
+@dataclass(frozen=True)
+class Near:
+    """A pair near at zero (the module's **A pair near at zero**): the moving part and the still one, as a
+    ``Contact`` names them, ``rest`` their gap at zero in mm, and ``lower`` and ``upper`` their gap at each
+    stop (the last clear pose); None where that way has no stop or they are over the reach apart there."""
+
+    moving: str
+    moving_link: str
+    still: str
+    still_link: str
+    rest: float
+    lower: float | None = None
+    upper: float | None = None
 
 
 @dataclass
@@ -93,8 +129,11 @@ class JointStops:
     swept: bool = True
     why: str = ""
     resting: list[tuple[str, str]] = field(default_factory=list)  # part pairs touching at zero (moving, still)
+    near: list[Near] = field(default_factory=list)  # part pairs near at zero, with their gaps
 
 
+#: Sample points past which the sampling is said as it starts whatever ``told`` hears: tens of seconds and gigabytes.
+SAMPLED_LONG = 20_000_000
 #: Seconds past which a joint's sweep is said as it starts and as it ends (``sweep``'s ``progress``): a fine step or
 #: clearance on a vendor STEP's thousands of faces takes minutes a joint.
 LONG = 15.0
@@ -176,6 +215,18 @@ def _primitive(kind: str, size: tuple[float, ...]) -> tuple[np.ndarray, np.ndarr
     bottom = [(radius * math.sin(t), -length / 2 - radius * math.cos(t)) for t in np.linspace(0, math.pi / 2, 9)]
     top = [(radius * math.cos(t), length / 2 + radius * math.sin(t)) for t in np.linspace(0, math.pi / 2, 9)]
     return _revolved(bottom + top)
+
+
+def _area(vertices: np.ndarray, faces: np.ndarray) -> float:
+    if not len(faces):
+        return 0.0
+    a, b, c = (vertices[faces[:, i]] for i in range(3))
+    return float(0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1).sum())
+
+
+def _count(number: int) -> str:
+    """A count as a person reads it: 8,200, 3.1 million."""
+    return f"{number / 1e6:.2g} million" if number >= 1_000_000 else f"{number:,}"
 
 
 def _samples(vertices: np.ndarray, faces: np.ndarray, spacing: float, seed: int) -> np.ndarray:
@@ -315,8 +366,8 @@ class _Sweep:
         self.points: dict[str, np.ndarray] = {}
         self.owners: dict[str, np.ndarray] = {}
         spacing = SPACING * self.pitch
+        surfaces = []
         for link in description.links:
-            found, owners = [], []
             for name, geometry in _tested(link, geometry_of):
                 if geometry.kind == "mesh":
                     mesh = description.meshes[geometry.mesh]
@@ -325,7 +376,21 @@ class _Sweep:
                 else:
                     vertices, faces = _primitive(geometry.kind, tuple(geometry.size))
                 placement = np.asarray(geometry.placement, dtype=float)
-                vertices = vertices @ placement[:3, :3].T + placement[:3, 3]
+                surfaces.append((link.name, name, vertices @ placement[:3, :3].T + placement[:3, 3], faces))
+        # Said before it starts: at a fine clearance the sampling alone takes minutes, before any joint is swept.
+        estimate = int(sum(_area(vertices, faces) for _link, _name, vertices, faces in surfaces) / spacing ** 2)
+        said = (f"sampling {len(surfaces)} part surface{'s' if len(surfaces) != 1 else ''} every "
+                f"{spacing * 1000:.2g} mm: about {_count(estimate)} points")
+        if estimate > SAMPLED_LONG:
+            self.progress(said + " (a coarser --clearance is faster)")
+        else:
+            self.told(said)
+        by_link: dict[str, list[tuple[str, np.ndarray, np.ndarray]]] = {}
+        for link_name, name, vertices, faces in surfaces:
+            by_link.setdefault(link_name, []).append((name, vertices, faces))
+        for link in description.links:
+            found, owners = [], []
+            for name, vertices, faces in by_link.get(link.name, ()):
                 index = len(self.parts)
                 self.parts.append((name, link.name))
                 sampled = _samples(vertices, faces, spacing, seed=index)
@@ -456,11 +521,16 @@ class _Sweep:
             movers = [owners[keep] for owners, keep in zip(movers, kept)]
         movers = np.concatenate(movers)
         link_of = {index: link for index, (_part, link) in enumerate(self.parts)}
+        still_points = np.vstack(still) if still else np.zeros((0, 3))
+        still_owners = (np.concatenate([self.owners[name] for name in still_links]) if still
+                        else np.zeros(0, np.int64))
 
-        def pairs(value: float) -> dict[tuple[int, int], int]:
+        def placed_at(value: float) -> np.ndarray:
             frames = self.frames({joint.name: value})
-            placed = np.vstack([points @ frames[name][:3, :3].T + frames[name][:3, 3]
-                                for name, points in zip(mover_links, local)])
+            return np.vstack([points @ frames[name][:3, :3].T + frames[name][:3, 3]
+                              for name, points in zip(mover_links, local)])
+
+        def counted(placed: np.ndarray) -> dict[tuple[int, int], int]:
             at, owners = grid.hits(placed)
             if not len(at):
                 return {}
@@ -472,9 +542,21 @@ class _Sweep:
                     not in self.excluded}
 
         started = time.perf_counter()
-        zero = pairs(0.0)
+        resting_points = placed_at(0.0)
+        zero = counted(resting_points)
+        rest_gaps = _gaps_at_rest(resting_points, movers, still_points, still_owners, REACH * self.pitch,
+                                  lambda pair: frozenset((link_of[pair[0]], link_of[pair[1]])) in self.excluded)
         posed = time.perf_counter() - started
-        stops.resting = sorted({(self.parts[a][0], self.parts[b][0]) for a, b in zero})
+        # The module's **A pair near at zero**: a pair touching keeps the count rule; a near one is measured.
+        near = {pair: gap for pair, gap in rest_gaps.items() if gap >= TOUCHING * self.clearance}
+        trees = _Trees(still_points, still_owners)
+        moved_by_part = {part: np.flatnonzero(movers == part) for part in {pair[0] for pair in near}}
+
+        def gaps(placed: np.ndarray) -> dict[tuple[int, int], float | None]:
+            """Each near pair's gap at a pose, in mm: None where it is over the reach apart."""
+            return {pair: trees.gap(pair[1], placed[moved_by_part[pair[0]]], REACH * self.pitch) for pair in near}
+
+        stops.resting = sorted({(self.parts[a][0], self.parts[b][0]) for a, b in zero if (a, b) not in near})
         step = self.step / scale  # radians or metres
         if turning:
             reach = math.radians(TURN)
@@ -489,29 +571,44 @@ class _Sweep:
             self.progress(f"sweeping {joint.name} ({self.place}): up to about {_duration(most)} at {self.step:g} "
                           f"{unit} a step and {self.clearance:g} mm clearance (a coarser --step or --clearance is "
                           "faster)")
+        else:
+            self.told(f"sweeping {joint.name} ({self.place})")
         child_side, parent_side = self.rigid(joint.child) & moving, self.rigid(joint.parent) - moving
 
-        def contact_at(pair: tuple[int, int], value: float) -> Contact:
+        def contact_at(pair: tuple[int, int], value: float, gap: float | None) -> Contact:
             moving_part, still_part = self.parts[pair[0]], self.parts[pair[1]]
-            return Contact(moving_part[0], moving_part[1], still_part[0], still_part[1], round(value * scale, 6))
+            return Contact(moving_part[0], moving_part[1], still_part[0], still_part[1], round(value * scale, 6),
+                           near=None if pair not in near else round(near[pair], 4),
+                           gap=None if pair not in near or gap is None else round(gap, 4))
 
+        at_stop: dict[int, dict[tuple[int, int], float | None]] = {}
         for sign in (-1, 1):
             if sign == 1 and turning and stops.lower_contact is None and stops.lower_clash is None:
                 break  # nothing met a full turn one way: nothing meets the other way either
             before: dict[tuple[int, int], int] = {}
+            history: list[dict[tuple[int, int], float | None]] = [dict(near)]  # each near pair's gap by pose
             stop: tuple[float, Contact] | None = None
             clash: Contact | None = None
             for k in range(1, count + 1):
                 value = sign * k * step
-                over = {pair: number - zero.get(pair, 0) for pair, number in pairs(value).items()}
-                # A contact is a pair over STOP at a pose and the next: a graze over it at one pose alone is none.
+                placed = placed_at(value)
+                over = {pair: number - zero.get(pair, 0) for pair, number in counted(placed).items()
+                        if pair not in near}
+                gapped = gaps(placed)
+                history.append(gapped)
+                # A contact is a pair over STOP (a near pair: closed under CLOSED of its gap at zero) at a pose and
+                # the next: a graze over it at one pose alone is none.
                 met = sorted((pair for pair, number in over.items() if number > STOP and before.get(pair, 0) > STOP),
                              key=lambda pair: -before[pair])
+                met += [pair for pair, rest_gap in near.items() if _closed(gapped[pair], rest_gap)
+                        and _closed(history[-2][pair], rest_gap)]
                 own = [pair for pair in met if link_of[pair[0]] in child_side and link_of[pair[1]] in parent_side]
                 if met and clash is None and not own:
-                    clash = contact_at(met[0], value - sign * step)
+                    clash = contact_at(met[0], value - sign * step, history[-2].get(met[0]))
                 if own:
-                    stop = (round((value - 2 * sign * step) * scale, 6), contact_at(own[0], value - sign * step))
+                    stop = (round((value - 2 * sign * step) * scale, 6),
+                            contact_at(own[0], value - sign * step, history[-2].get(own[0])))
+                    at_stop[sign] = history[-3]
                     break
                 before = over
             if sign < 0:
@@ -520,7 +617,65 @@ class _Sweep:
             else:
                 stops.upper, stops.upper_contact = stop if stop is not None else (None, None)
                 stops.upper_clash = clash
+
+        def rounded(gap: float | None) -> float | None:
+            return None if gap is None else round(gap, 4)
+
+        stops.near = [Near(self.parts[a][0], self.parts[a][1], self.parts[b][0], self.parts[b][1], round(gap, 4),
+                           rounded(at_stop[-1][(a, b)]) if -1 in at_stop else None,
+                           rounded(at_stop[1][(a, b)]) if 1 in at_stop else None)
+                      for (a, b), gap in sorted(near.items(), key=lambda item: item[1])]
         return stops
+
+
+def _closed(gap: float | None, rest: float) -> bool:
+    """Whether a near pair's gap at a pose has closed under ``CLOSED`` of its gap at zero."""
+    return gap is not None and gap < CLOSED * rest
+
+
+def _gaps_at_rest(points: np.ndarray, owners: np.ndarray, still: np.ndarray, still_owners: np.ndarray, reach: float,
+                  excluded: Callable[[tuple[int, int]], bool]) -> dict[tuple[int, int], float]:
+    """Each (moving part, still part) pair's least distance at zero, in mm, between their samples, for the pairs
+    within ``reach`` metres: the four nearest still samples of each moving one, so a part behind a nearer one is
+    found too."""
+    if not len(points) or not len(still):
+        return {}
+    from scipy.spatial import cKDTree
+
+    distances, indices = cKDTree(still).query(points, k=min(4, len(still)), distance_upper_bound=reach)
+    distances, indices = distances.reshape(len(points), -1), indices.reshape(len(points), -1)
+    rows, columns = np.nonzero(np.isfinite(distances))
+    if not len(rows):
+        return {}
+    width = int(still_owners.max()) + 1
+    codes = owners[rows].astype(np.int64) * width + still_owners[indices[rows, columns]]
+    order = np.argsort(codes, kind="stable")
+    codes, least = codes[order], distances[rows, columns][order]
+    unique, first = np.unique(codes, return_index=True)
+    smallest = np.minimum.reduceat(least, first)
+    found = {(int(code) // width, int(code) % width): float(gap) * 1000.0 for code, gap in zip(unique, smallest)}
+    return {pair: gap for pair, gap in found.items() if not excluded(pair)}
+
+
+class _Trees:
+    """A KD-tree of each still part's samples, made as a near pair first asks for it."""
+
+    def __init__(self, points: np.ndarray, owners: np.ndarray) -> None:
+        self.points, self.owners = points, owners
+        self.trees: dict[int, Any] = {}
+
+    def gap(self, part: int, points: np.ndarray, reach: float) -> float | None:
+        """The least distance from ``points`` to the still ``part``'s samples, in mm; None over ``reach`` metres."""
+        tree = self.trees.get(part)
+        if tree is None:
+            from scipy.spatial import cKDTree
+
+            tree = self.trees[part] = cKDTree(self.points[self.owners == part])
+        if not len(points):
+            return None
+        distances, _ = tree.query(points, k=1, distance_upper_bound=reach)
+        least = float(np.min(distances))
+        return None if not math.isfinite(least) else least * 1000.0
 
 
 def _duration(seconds: float) -> str:
@@ -529,12 +684,14 @@ def _duration(seconds: float) -> str:
 
 
 def _said(stops: JointStops) -> str:
+    from cad._internal.ranges import closing
+
     if not stops.swept:
         return f"not swept: {stops.why}"
 
     def end(value: float | None, contact: Contact | None, clash: Contact | None) -> str:
         said = "clear" if contact is None else \
-            f"{value:+g} {stops.unit} ({contact.moving} meets {contact.still} at {contact.at:+g})"
+            f"{value:+g} {stops.unit} ({contact.moving} meets {contact.still} at {contact.at:+g}{closing(contact)})"
         if clash is not None:
             said += f", {clash.moving} meeting {clash.still} at {clash.at:+g} as the others stand"
         return said

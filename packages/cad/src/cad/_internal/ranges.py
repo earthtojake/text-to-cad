@@ -62,7 +62,9 @@ def ranges_for(document_type: str) -> Any:
         document's extent. Its stop each way is where its child link meets its parent link (each with what is
         fixed to it): a stop whatever the other joints do, what its range declares. Where anything it moves
         meets another link first, in the pose the others stand in, that clash is said beside the stop. Parts
-        touching already as built (a horn on its servo) meet only when their contact grows. Each joint's finding
+        touching already as built (a horn on its servo) meet only when their contact grows; parts near as built
+        (within the clearance, apart) meet only where their gap closes to half its as-built width, and each
+        joint's finding names them with their gap as built and at each stop. Each joint's finding
         says its stops in degrees or millimetres around the as-built pose (and in its own values where that is
         not zero) and which two parts meet past each; a part declared collision none takes no part. The model
         is not changed: adopt the numbers into its joints' ranges. --json carries every number.
@@ -74,8 +76,8 @@ def ranges_for(document_type: str) -> Any:
         geometry: what meets: parts, each part's own surface (the default: the physical stops), or collision, what
           each part declares a simulator collides it as (a fitted box where it declares one: the simulator's
           stops). A part declared collision none takes no part either way.
-        verbose: say each joint's stops on stderr as it is swept (a joint that takes long is said as it starts and
-          ends either way).
+        verbose: say on stderr each step as it starts (reading the document, sampling its surfaces, each joint)
+          and each joint's stops as it ends (a joint or a sampling that takes long is said either way).
         """
         options(step=step, clearance=clearance, geometry=geometry)
         from cad._internal.document_type import refuse_other
@@ -88,13 +90,15 @@ def ranges_for(document_type: str) -> Any:
         except ModuleNotFoundError as error:
             _missing(error)
             raise
-        started = time.perf_counter()
-        with _readable(document_type, source) as (target, label):
-            # A part's hulls are tested on the collision geometry alone: on the parts, a decomposed one is whole.
-            description = describe(Source.read(target).view(), decompose=geometry == "collision")
         def say(line: str) -> None:
             print(f"ranges: {line}", file=sys.stderr, flush=True)
 
+        started = time.perf_counter()
+        if verbose:
+            say(f"reading {source} and meshing its parts")
+        with _readable(document_type, source) as (target, label):
+            # A part's hulls are tested on the collision geometry alone: on the parts, a decomposed one is whole.
+            description = describe(Source.read(target).view(), decompose=geometry == "collision")
         # A long joint is said as it starts and ends whatever ``verbose`` says: a fine sweep takes minutes.
         stops = sweep(description, step=float(step), clearance=float(clearance), geometry=geometry,
                       told=say if verbose else None, progress=say)
@@ -167,6 +171,20 @@ def _own(found: Any) -> list[float | None]:
     return [None if value is None else round(found.as_built + value, 6) for value in (found.lower, found.upper)]
 
 
+#: Near pairs a joint's finding names; the rest are counted, and every one is in ``--json``.
+NEAR_SAID = 3
+
+
+def closing(contact: Any) -> str:
+    """A pair near as built that met, said by its gap closing (``Contact.near``): ``, closed to 0.18 from 0.42 mm
+    as built``; nothing for any other pair."""
+    if contact.near is None:
+        return ""
+    if contact.gap is None:
+        return f", closed from {contact.near:.2f} mm as built"
+    return f", closed to {contact.gap:.2f} from {contact.near:.2f} mm as built"
+
+
 def _words(found: Any) -> str:
     def end(name: str, value: float | None, own: float | None, contact: Any, clash: Any) -> str:
         if contact is None:
@@ -174,15 +192,30 @@ def _words(found: Any) -> str:
         else:
             own_words = f" ({own:g} in the joint's own values)" if found.as_built else ""
             said = (f"{name} {value:+g} {found.unit}{own_words}: {contact.moving} ({contact.moving_link}) meets "
-                    f"{contact.still} ({contact.still_link}) at {contact.at:+g}")
+                    f"{contact.still} ({contact.still_link}) at {contact.at:+g}{closing(contact)}")
         if clash is not None:
             said += (f", and before it, at {clash.at:+g} with the other joints as built, {clash.moving} "
-                     f"({clash.moving_link}) meets {clash.still} ({clash.still_link})")
+                     f"({clash.moving_link}) meets {clash.still} ({clash.still_link}){closing(clash)}")
         return said
 
+    def gap(value: float | None, way: str) -> str | None:
+        return None if value is None else f"{value:.2f} at the {way} stop"
+
     lower, upper = _own(found)
-    return "; ".join([end("lower", found.lower, lower, found.lower_contact, found.lower_clash),
+    said = "; ".join([end("lower", found.lower, lower, found.lower_contact, found.lower_clash),
                       end("upper", found.upper, upper, found.upper_contact, found.upper_clash)])
+    near = list(getattr(found, "near", None) or ())
+    if near:
+        # Pairs within the clearance as built stop the joint only where their gap halves: said, so that a stop
+        # near one of them reads against its gap.
+        rows = []
+        for pair in near[:NEAR_SAID]:
+            ends = [said_ for said_ in (gap(pair.lower, "lower"), gap(pair.upper, "upper")) if said_]
+            rows.append(f"{pair.moving} ({pair.moving_link}) and {pair.still} ({pair.still_link}) {pair.rest:.2f} mm"
+                        + (f" ({', '.join(ends)})" if ends else ""))
+        more = f" and {len(near) - NEAR_SAID} more (--json)" if len(near) > NEAR_SAID else ""
+        said += f"; near as built: {'; '.join(rows)}{more}"
+    return said
 
 
 class _readable:
