@@ -528,6 +528,42 @@ class FoldedTessellationTest(unittest.TestCase):
             self.assertEqual(facts.get("folded_area_mm2", 0.0), 20.0 if folded else 0.0)
 
 
+class NarrowGrooveTest(unittest.TestCase):
+    """A snap groove round a tray's outside, narrower than a thousandth of the tray's diagonal, is an undercut on
+    the mesh as on the B-rep: the rays and the fold test step off a facet far less than a groove's width, so the
+    wall across is never read as the facet's material. Its trapped area is the construction's (the groove's
+    ceiling and floor rings and its back wall), and the draft leaves to the undercut no face it does not judge."""
+
+    @staticmethod
+    def _tray(length, width, height, gap, depth, wall):
+        tray = Box(length, width, height, align=(Align.CENTER, Align.CENTER, Align.MIN)) - Pos(0, 0, wall) * Box(
+            length - 2 * wall, width - 2 * wall, height, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        ring = Pos(0, 0, height - 10) * (
+            Box(length + 2, width + 2, gap, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            - Box(length - 2 * depth, width - 2 * depth, gap, align=(Align.CENTER, Align.CENTER, Align.MIN)))
+        return tray - ring
+
+    def test_a_narrow_groove_reads_as_on_exact_geometry(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            for length, width, height, gap, depth, wall in ((60, 40, 15, 0.3, 1, 2), (60, 40, 15, 0.6, 1, 2),
+                                                            (60, 40, 15, 1.0, 1, 2), (500, 300, 40, 0.6, 2, 3)):
+                part = self._tray(length, width, height, gap, depth, wall)
+                trapped = (2 * (length * width - (length - 2 * depth) * (width - 2 * depth))
+                           + 2 * (length + width - 4 * depth) * gap)
+                exact = cad.build123d.molding(part, material="abs")
+                mesh = cad.stl.dfm(_stl(part, Path(folder), "tray"), process="molding", material="abs")
+                label = f"{length} mm tray, {gap} mm groove"
+                for result in (exact, mesh):
+                    undercuts = result.measurements["undercuts"]
+                    self.assertAlmostEqual(undercuts["candidate_area_mm2"], trapped, delta=0.01 * trapped, msg=label)
+                    self.assertEqual(undercuts["unreleasable_count"], 0, label)
+                    self.assertIn("molding.undercut", {f.code for f in result.findings}, label)
+                self.assertNotIn("mesh_folds", {f.code for f in mesh.findings}, label)
+                formed = sum(item["area_mm2"] for item in mesh.measurements["draft"]["items"]
+                             if item.get("feature") == "undercut")
+                self.assertLessEqual(formed, mesh.measurements["undercuts"]["candidate_area_mm2"] * 1.01, label)
+
+
 class OrientationTest(unittest.TestCase):
     def test_a_turn_about_the_pull_keeps_the_verdict_and_the_figures(self) -> None:
         import trimesh

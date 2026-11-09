@@ -668,21 +668,27 @@ def _smoothed(mesh: trimesh.Trimesh, diag: float) -> np.ndarray:
     return total / np.where(size > 0, size, 1.0)[:, None]
 
 
-def _starts_inside(body: trimesh.Trimesh, origins: np.ndarray) -> np.ndarray:
-    """Per point: does it lie in the body's material (``contains``: the surface's crossings counted along a
-    slanted ray, again the other way where that one is doubtful)?
+def _air_ahead(body: trimesh.Trimesh, centers: np.ndarray, normals: np.ndarray, step: float) -> np.ndarray:
+    """Per facet: how far the air runs in front of it along its normal to the surface across (inf: open)."""
+    return _cast(body)(centers + normals * step, normals) + step
 
-    A fold of the tessellation (a planar face's fan crossing its own boundary) turns triangles over onto the
-    surface they lie in: their normals face into the material, and a ray cast from one along its normal crosses
-    the part, a through hole's plate read as trapped. Its turned triangles lie over as many the right way
-    round, so a crossing count along a slanted ray, which meets them nowhere coplanar, reads the surface
-    whatever the folds. Only a closed body has an inside: an open one answers no point inside."""
-    if not len(origins) or not body.is_watertight:
-        return np.zeros(len(origins), dtype=bool)
+
+def _folded(body: trimesh.Trimesh, centers: np.ndarray, normals: np.ndarray, step: float) -> np.ndarray:
+    """Per facet: is it turned over (a fold of the tessellation: a planar face's fan crossing its own boundary)?
+
+    A facet is folded where the material lies on its normal's side: a point a tiny step behind it (``step``,
+    a millionth of the part's size, far under any gap a part has) is in the air and one a step in front of it
+    in the material (``contains``: the surface's crossings counted along a slanted ray, which meets the
+    turned triangles nowhere coplanar). The test reads the facet's own orientation alone, so a wall a groove's
+    width across is never taken for its material. Only a closed body has an inside: an open one has no fold."""
+    if not len(centers) or not body.is_watertight:
+        return np.zeros(len(centers), dtype=bool)
     try:
-        return np.asarray(body.contains(origins), dtype=bool)
+        behind = np.asarray(body.contains(centers - normals * step), dtype=bool)
+        ahead = np.asarray(body.contains(centers + normals * step), dtype=bool)
     except Exception:  # noqa: BLE001 - a body the test cannot read keeps every candidate
-        return np.zeros(len(origins), dtype=bool)
+        return np.zeros(len(centers), dtype=bool)
+    return ~behind & ahead
 
 
 def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) -> dict:
@@ -713,6 +719,7 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
     total_area = 0.0
     total_faces = 0
     total_folded = 0.0
+    trapped_at: list = []
     pooled: list = []
     features: list = []
     probe_edge = 0.0
@@ -731,7 +738,12 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         # A facet leaning under half a degree is taken as zero draft (both ways tried): a mesh's vertex noise
         # tilts a straight bore's facets about that much, and a bore is not trapped by its own floor.
         zero = lean_deg < max(zero_tol, _NOISE_DEG)
-        eps = 1e-3 * max(float(np.linalg.norm(body.extents)), 1.0)
+        size = max(float(np.linalg.norm(body.extents)), 1.0)
+        # A ray starts a thousandth of the part's size off its facet (``_CAST_STEP``: clear of a mesh's vertex
+        # noise), or a third of the way across the air in front of it where that is nearer (``_offsets``): a
+        # ray started past a groove's far wall starts in the material and is blocked whatever the groove.
+        eps = _CAST_STEP * size
+        offset = np.full(len(centers), eps)
 
         def blocked(direction_sign: np.ndarray, sel: np.ndarray) -> np.ndarray:
             out = np.zeros(len(centers), dtype=bool)
@@ -739,7 +751,7 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
                 return out
             idx = np.where(sel)[0]
             dirs = np.outer(direction_sign[idx], pull)
-            origins = centers[idx] + normals[idx] * eps + dirs * eps
+            origins = centers[idx] + (normals[idx] + dirs) * offset[idx, None]
             out[idx] = body.ray.intersects_any(ray_origins=origins, ray_directions=dirs)
             return out
 
@@ -750,11 +762,23 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         blocked_minus = blocked(-np.ones(len(centers)), zero)
         trapped = zero & blocked_plus & blocked_minus
         candidates = blocked_lean | trapped
-        # A blocked ray that starts in the material (a fold's: ``_starts_inside``) crossed the part, not a void.
+        idx = np.nonzero(candidates)[0]
+        ahead = _air_ahead(body, centers[idx], normals[idx], _FOLD_STEP * size) if len(idx) else np.zeros(0)
+        narrow = idx[ahead < 3.0 * eps]
+        if len(narrow):
+            # Cast again where the air in front is narrow, a third of the way across it.
+            offset[narrow] = ahead[ahead < 3.0 * eps] / 3.0
+            again = np.zeros(len(centers), dtype=bool)
+            again[narrow] = True
+            blocked_lean = np.where(again, blocked(sign, leaning & again), blocked_lean)
+            plus = blocked(np.ones(len(centers)), zero & again)
+            minus = blocked(-np.ones(len(centers)), zero & again)
+            trapped = np.where(again, zero & plus & minus, trapped)
+            candidates = blocked_lean | trapped
+        # A blocked ray cast from a turned-over facet (a fold's: ``_folded``) crossed the part, not a void.
         if candidates.any():
             idx = np.nonzero(candidates)[0]
-            dirs = np.outer(sign[idx], pull)
-            folded = idx[_starts_inside(body, centers[idx] + normals[idx] * eps + dirs * eps)]
+            folded = idx[_folded(body, centers[idx], normals[idx], _FOLD_STEP * size)]
             candidates[folded] = blocked_lean[folded] = trapped[folded] = False
             total_folded += float(areas[folded].sum())
         body_area = float(areas.sum())
@@ -764,7 +788,10 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         total_trapped += float(areas[trapped].sum())
         total_faces += int(candidates.sum())
         pooled += _pooled_faces(probe, candidates, pull, along, zero_tol=zero_tol)
-        features += _undercut_features(body, probe, candidates, pull, zero_tol, eps, max(probe_edge, eps))
+        found = _undercut_features(body, probe, candidates, pull, zero_tol, offset, max(probe_edge, eps), eps)
+        for item in found:
+            trapped_at.append(item.pop("_triangles"))
+        features += found
         per_body.append({
             "body": index,
             "candidate_area_mm2": round(float(areas[candidates].sum()), 2),
@@ -805,6 +832,9 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
     })
     if probe_notes:
         result["probe_resolution_note"] = " ".join(probe_notes)
+    # The reported features' triangles (centre, area), for the families that leave an undercut's faces to it.
+    result["_trapped"] = (np.vstack([c for c, _ in trapped_at]) if trapped_at else np.zeros((0, 3)),
+                          np.concatenate([a for _, a in trapped_at]) if trapped_at else np.zeros(0))
     if len(bodies) > 1:
         result["body_count"] = len(bodies)
         result["per_body"] = per_body
@@ -985,12 +1015,13 @@ def measure(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol
         "undercuts": _safe(_undercut_facts, mesh, pull, zero_tol),
         "projection": _safe(_projection_facts, mesh, pull),
     }
+    trapped_at = report["undercuts"].pop("_trapped", None)
     draft, undercuts, facts = report["draft"], report["undercuts"], report["mesh"]
     if "error" not in draft and "error" not in undercuts and (facts.get("body_count") or 1) == 1 and \
             any(pull_doubtful(draft, undercuts)):
         # One body whose pull looks wrong: the pulls ranked, so the hint names the one --candidates puts first.
         report["pull_check"] = _safe(_pull_facts, mesh, wall_limit, zero_tol)
-    _shared_families(mesh, pull, wall_limit, zero_tol, report)
+    _shared_families(mesh, pull, wall_limit, zero_tol, report, trapped_at)
     report["notes"] = list(_MESH_NOTES)
     _mark_partial(report)
     return report
@@ -1035,6 +1066,12 @@ _SLIVER = 2e-4
 #: A facet leaning less than this either way is taken as square to the pull where a lean's sign matters
 #: (a split face, a silhouette): a mesh's own noise tilts facets by about this much.
 _NOISE_DEG = 0.5
+#: An undercut ray starts this share of the part's size off its facet (clear of a mesh's vertex noise), or a
+#: third of the way across the air in front of it where that is nearer; a slide's travel under twice it frees
+#: nothing (the ray was blocked only by the surface it was cast from).
+_CAST_STEP = 1e-3
+#: A facet is tested for a fold, and the air in front of it measured from, this share of the part's size off it.
+_FOLD_STEP = 1e-6
 #: Two facets meeting at less than this are chords of one curved face (a crease turns more): the parting's
 #: silhouette between them is read to their chord band.
 _CHORD_DEG = 45.0
@@ -1078,9 +1115,11 @@ def _clusters(points: np.ndarray, reach: float) -> list[np.ndarray]:
 
 
 def _undercut_features(body: trimesh.Trimesh, probe: trimesh.Trimesh, candidates: np.ndarray, pull: np.ndarray,
-                       zero_tol: float, eps: float, edge: float) -> list:
+                       zero_tol: float, offset: np.ndarray, edge: float, noise: float) -> list:
     """The candidate triangles grouped into features (within 1.5 probe edges of one another), each with
-    what releases it (``meshops_molding.classify_undercut`` against the body's own rays)."""
+    what releases it (``meshops_molding.classify_undercut`` against the body's own rays) and, under the private
+    ``_triangles``, its triangles' centres and areas. ``offset`` is each probe triangle's rays' step off the
+    surface, ``noise`` the travel no slide is (a thousandth of the part)."""
     index = np.nonzero(candidates)[0]
     if not len(index):
         return []
@@ -1100,14 +1139,14 @@ def _undercut_features(body: trimesh.Trimesh, probe: trimesh.Trimesh, candidates
         corners = probe.triangles[index[group]]
         spread = [centers[group]] + [(4.0 * corners[:, k] + corners[:, (k + 1) % 3] + corners[:, (k + 2) % 3]) / 6.0
                                      for k in range(3)]
-        points = np.vstack(spread) + np.tile(normals[group], (4, 1)) * eps
+        points = np.vstack(spread) + np.tile(normals[group] * offset[index[group], None], (4, 1))
         release = ops.classify_undercut(points, np.tile(normals[group], (4, 1)), pull, cast, scale=diag,
                                         zero_tol_deg=zero_tol)
         side = np.asarray(release["vectors"][0]) if release["vectors"] else ops.basis(pull)[0]
         across = np.cross(pull, side)
         across /= np.linalg.norm(across) or 1.0
         heights, widths = centers[group] @ pull, centers[group] @ across
-        if release["release"] == "side_action" and (release["stroke_mm"] or 0.0) <= 2.0 * eps:
+        if release["release"] == "side_action" and (release["stroke_mm"] or 0.0) <= 2.0 * noise:
             continue  # freed by no travel at all: blocked only by the surface it was cast from
         found.append({
             "trapped_area_mm2": round(area, _JUDGED), "xyz": _xyz((centers[group] * areas[group, None]).sum(0) / area),
@@ -1116,7 +1155,7 @@ def _undercut_features(body: trimesh.Trimesh, probe: trimesh.Trimesh, candidates
             "angled": any(release["angled"]),
             "stroke_mm": round(release["stroke_mm"], 3) if release["stroke_mm"] is not None else None,
             "height_mm": round(float(np.ptp(heights)), 3), "width_mm": round(float(np.ptp(widths)), 3),
-            "triangle_count": int(len(group))})
+            "triangle_count": int(len(group)), "_triangles": (centers[group], areas[group])})
     return found
 
 
@@ -1663,8 +1702,9 @@ def _parting_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, ze
 
 
 def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol: float,
-                     report: dict) -> None:
-    """thickness, ribs, bosses, corners, parting and envelope on a mesh, into ``report``."""
+                     report: dict, trapped_at: tuple | None = None) -> None:
+    """thickness, ribs, bosses, corners, parting and envelope on a mesh, into ``report``; ``trapped_at`` the
+    reported undercuts' triangles (``_undercut_facts``' ``_trapped``)."""
     regions = _safe(_Regions, mesh)
     if isinstance(regions, dict):
         for name in ("thickness", "transitions", "ribs", "bosses", "corners", "parting", "envelope"):
@@ -1693,7 +1733,7 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
     kinds = {region: "rib" for region in used}
     # A rib's sides are judged by its draft rule (molding.rib_draft), not a wall's (``feature``); a region an
     # undercut traps is formed by what releases it, not along the pull: the undercut's rule is its one finding.
-    trapped = _trapped_regions(mesh, regions, pull, zero_tol)
+    trapped = _trapped_regions(mesh, regions, trapped_at)
     formed = set(np.unique(regions.label[trapped]).tolist()) if trapped.any() else set()
     for item in (report["draft"].get("items") or []) if isinstance(report.get("draft"), dict) else []:
         region = item.pop("_region", None)
@@ -1771,20 +1811,16 @@ def _draft_items(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wal
     return items[:300]
 
 
-def _trapped_regions(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, zero_tol: float) -> np.ndarray:
-    """Per triangle: does it lie in a region mostly blocked along the way it opens (an undercut's: a slide
-    forms it, and the parting line runs round it)?"""
-    along = regions.facet_normal @ pull
-    tol = np.sin(np.radians(max(zero_tol, _NOISE_DEG)))
-    eps = 1e-3 * max(float(np.linalg.norm(mesh.extents)), 1.0)
-    origins = mesh.triangles_center + mesh.face_normals * eps
-    sign = np.where(along >= 0, 1.0, -1.0)
-    blocked = mesh.ray.intersects_any(ray_origins=origins, ray_directions=np.outer(sign, pull))
-    zero = np.abs(along) <= tol
-    if zero.any():
-        index = np.nonzero(zero & blocked)[0]
-        blocked[index] = mesh.ray.intersects_any(ray_origins=origins[index], ray_directions=np.outer(-sign[index], pull))
-    share = np.bincount(regions.label, weights=mesh.area_faces * blocked, minlength=regions.count)
+def _trapped_regions(mesh: trimesh.Trimesh, regions: _Regions, trapped_at: tuple | None) -> np.ndarray:
+    """Per triangle: does it lie in a region an undercut the report names mostly traps (a slide forms it, and
+    the parting line runs round it)? Read from the reported features' own triangles, each placed on the mesh
+    triangle it lies on: a face the undercut rules do not judge (a fold, a cluster too small to be a feature)
+    is still a wall's, so no face is left out of both."""
+    if trapped_at is None or not len(trapped_at[0]) or not regions.count:
+        return np.zeros(len(mesh.faces), dtype=bool)
+    points, areas = trapped_at
+    _closest, _distance, triangle = mesh.nearest.on_surface(points)
+    share = np.bincount(regions.label[np.asarray(triangle, dtype=int)], weights=areas, minlength=regions.count)
     trapped = share > 0.3 * np.maximum(regions.areas, 1e-12)
     return trapped[regions.label]
 
