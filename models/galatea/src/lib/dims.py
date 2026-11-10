@@ -25,6 +25,7 @@ KNEE_ROD = KNEE_ACT[2] - KNEE[2]                  # 300, pushrod length
 KNEE_CRANK_R = 55.0
 KNEE_CRANK_PSI = -62.5                            # deg from +Y (back) at knee = 0; flexion adds
 KNEE_RANGE = (0.0, 125.0)                         # transmission angle 27.5 deg at both ends
+KNEE_ROD_R = 6.0                                  # a solid titanium rod: it pushes when the knee holds the body up
 
 # Ankle pitch drive: a double-ended actuator between the shin rails turns the ankle gimbal
 # through twin parallel pushrods (again a parallelogram: crank angle == ankle pitch).
@@ -32,6 +33,7 @@ ANKLE_ACT = (HIP_X, 0.0, 345.0)
 ANKLE_ROD = ANKLE_ACT[2] - ANKLE[2]               # 255
 ANKLE_CRANK_R = 45.0                              # crank and gimbal arm point straight back (+Y)
 ANKLE_ROD_X = 34.0                                # pushrods sit this far either side of the leg's centre plane
+ANKLE_ROD_R = 3.5                                 # steel, behind the ankle like a tendon: push-off pulls them
 
 SHIN_RAIL_X = (40.0, 48.0)                        # shin rails: inner and outer face, from the centre plane
 FEMUR_PLATE_X = (18.0, 26.0)                      # femur plates: inner and outer face
@@ -95,6 +97,20 @@ ACTUATORS = {
     "A52": dict(R=26.0, L=36.0, r_out=15.0, bore=4.0, ring=6.5, screw="M3", n=8, nm=16),
     "A52L": dict(R=26.0, L=54.0, r_out=15.0, bore=4.0, ring=6.5, screw="M3", n=8, nm=27),   # long stack: ankle roll
     "A40": dict(R=20.0, L=28.0, r_out=11.5, bore=3.0, ring=6.0, screw="M3", n=6, nm=7),
+}
+CALF_DRIVE_NM = 60.0   # the ankle's pitch drive, a double-ended unit of its own between the shin rails:
+                       # 72 mm across and 48 long, between an A70 and an A86, and rated between them
+
+# Which drive turns which joint: control -> (frame size, how many share the joint). The builders
+# place them by these names (`Hardware.actuator` checks the size), and `checks/loads.py` reads
+# the peak torques (`nm`) from here.
+DRIVES = {
+    "hip_yaw": ("A86", 1), "hip_roll": ("A86", 1), "hip_pitch": ("A110", 1), "knee": ("A110", 1),
+    "ankle_pitch": ("calf", 1), "ankle_roll": ("A52L", 1),
+    "waist_yaw": ("A86", 1), "waist_roll": ("A86", 1), "waist_pitch": ("A70", 2),
+    "shoulder_pitch": ("A86", 1), "shoulder_roll": ("A70", 1), "shoulder_yaw": ("A52", 1), "elbow": ("A70", 1),
+    "wrist_roll": ("A52", 1), "wrist_pitch": ("A40", 1), "wrist_yaw": ("A40", 1),
+    "neck_yaw": ("A70", 1), "neck_roll": ("A40", 1), "neck_pitch": ("A52", 1),
 }
 PLATE_T = 8.0          # the parent's mounting plate an actuator's output passes through
 ROTOR_PROUD = 9.0      # the output flange stands this far past the mounting face (plate + 1)

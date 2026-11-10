@@ -53,6 +53,11 @@ def galatea_present():
 
 
 @model
+def galatea_poise():
+    return standing("poise")
+
+
+@model
 def galatea_crouch():
     return standing("crouch", foot="l_foot")
 
@@ -69,5 +74,6 @@ if __name__ == "__main__":
     galatea_reach()
     galatea_wave()
     galatea_present()
+    galatea_poise()
     galatea_crouch()
     galatea_bow()

@@ -20,8 +20,8 @@ round opening, and each is carried on pads that grow from the frame to its inner
 
 from . import geo
 from .dims import (
-    ANKLE, ANKLE_ACT, ANKLE_ARM_PIN, ANKLE_CRANK_PIN, ANKLE_ROD_X, CRADLE_CHEEK_X, FEMUR_PLATE_X, HIP, KNEE,
-    KNEE_ACT, KNEE_CRANK_PIN, KNEE_HORN_PIN, PELVIS_Z, PLATE_T, SHIN_RAIL_X, TOE,
+    ANKLE, ANKLE_ACT, ANKLE_ARM_PIN, ANKLE_CRANK_PIN, ANKLE_ROD_R, ANKLE_ROD_X, CRADLE_CHEEK_X, FEMUR_PLATE_X, HIP,
+    KNEE, KNEE_ACT, KNEE_CRANK_PIN, KNEE_HORN_PIN, KNEE_ROD_R, PELVIS_Z, PLATE_T, SHIN_RAIL_X, TOE,
 )
 from .hardware import pin, pushrod, rotor_counterbores
 from .kit import frame, part
@@ -123,7 +123,8 @@ def _thigh(hw, links):
     window = geo.slot(-2, 705, -2, 585, 9)
     outer = geo.plate_yz(geo.bones(circles, chain, holes=[(0, HZ, 10), (0, KAZ, 35), (0, KZ, 10)], cuts=[window]),
                          xr(P0), xr(P1))
-    inner = geo.plate_yz(geo.bones(circles, chain, holes=[(0, KAZ, 12), (0, KZ, 10)], cuts=[window]), xr(-P1), xr(-P0))
+    slim = [(0, KAZ, 40) if k == 1 else c for k, c in enumerate(circles)]       # no drive to carry on the inside
+    inner = geo.plate_yz(geo.bones(slim, chain, holes=[(0, KAZ, 12), (0, KZ, 10)], cuts=[window]), xr(-P1), xr(-P0))
     web_low = geo.box(2 * P0 + 2, 6, 190, (HX, -26, 640))
     web_high = geo.box(2 * P0 + 2, 6, 42, (HX, -26, 864))
     spacer = geo.tube(22, 10, 2 * P0 + 2, (xr(-P0 - 1), 0, HZ), (1, 0, 0))
@@ -151,7 +152,7 @@ def _knee_drive(hw, links):
     links["knee_crank"] += [part(crank, "knee_crank", "slate"),
                             pin((xr(-17), B[1], B[2]), (1, 0, 0), 5.0, 34.0, label="crank_pin"),
                             *hw.rotor_screws("A110", knee_at, (-1, 0, 0), 9.0, x_dir=(0, -1, 0), sunk=5.0)]
-    links["knee_rod"] += [pushrod(B, C, 6.0, 10.0, 13.0, 5.0, label="knee_pushrod")]
+    links["knee_rod"] += [pushrod(B, C, KNEE_ROD_R, 10.0, 13.0, 5.0, label="knee_pushrod")]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -217,8 +218,8 @@ def _shin(hw, links):
     links["ankle_crank"] += [part(crank, "calf_crankshaft", "steel")]
     for s, name in ((1, "outer"), (-1, "inner")):
         x = xr(s * ANKLE_ROD_X)
-        links["ankle_rods"].append(pushrod((x, P[1], P[2]), (x, Q[1], Q[2]), 3.5, 8.0, 7.0, 4.0,
-                                           label=f"achilles_rod_{name}", nut_af=6.3))
+        links["ankle_rods"].append(pushrod((x, P[1], P[2]), (x, Q[1], Q[2]), ANKLE_ROD_R, 8.0, 7.0, 4.0,
+                                           label=f"achilles_rod_{name}", finish="steel", nut_af=6.3))
 
 
 # ---------------------------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 """Galatea: a 1.75 m ivory-and-bronze humanoid. The whole robot, its mechanism and its poses."""
 
 from cad import model
+from cad.build123d import memo
 
 from lib.arm import ARM_LINKS, build_arm
 from lib.hand import HAND_LINKS, build_hand
@@ -12,9 +13,11 @@ from lib.rig import animate, articulate, couple
 from lib.torso import TRUNK_LINKS, build_trunk
 
 
+@memo
 def links():
     """Every link of the robot as a labelled group, by name: the centre links, then each
-    left-hand link (l_...) and its mirror image (r_...)."""
+    left-hand link (l_...) and its mirror image (r_...). A stage: the robot and the standing
+    models of `stances.py` are all made of it, and a run builds it once."""
     hw = Hardware()
     leg = build_leg(hw)
     trunk = build_trunk(hw, leg["pelvis"])

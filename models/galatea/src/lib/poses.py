@@ -53,7 +53,7 @@ POSES = {
     "contrapposto": {
         **READY,
         **leg("r", forward=-18, drop=8, yaw=10, roll=-5), **leg("l", forward=74, drop=8, yaw=22, roll=5),
-        **side("l", shoulder_pitch=14, shoulder_roll=12, shoulder_yaw=20, elbow=38, wrist_roll=20),
+        **side("l", shoulder_pitch=0, shoulder_roll=12, shoulder_yaw=8, elbow=24, wrist_roll=12),
         **side("r", shoulder_pitch=-8, shoulder_roll=7, shoulder_yaw=6, elbow=14),
         "waist_yaw": -12, "waist_roll": -5, "waist_pitch": 1, "neck_yaw": 24, "neck_roll": 6, "neck_pitch": 3,
     },
@@ -68,7 +68,7 @@ POSES = {
     # A greeting: the right forearm raised, the palm turned out.
     "wave": {
         **READY,
-        **side("r", shoulder_pitch=20, shoulder_roll=72, shoulder_yaw=-78, elbow=96, wrist_roll=-70, wrist_pitch=-8, wrist_yaw=0),
+        **side("r", shoulder_pitch=20, shoulder_roll=72, shoulder_yaw=-78, elbow=96, wrist_roll=-5, wrist_pitch=-8, wrist_yaw=0),
         **hand("r", curl=0.04, thumb=0.0, opp=10),
         "waist_yaw": -4, "neck_yaw": -14, "neck_roll": -7, "neck_pitch": -2,
     },
@@ -92,6 +92,14 @@ POSES = {
         **both(hip_yaw=0, hip_roll=0, hip_pitch=32, knee=3, ankle_pitch=-5, ankle_roll=0, toe=0),
         **both(shoulder_pitch=34, shoulder_roll=7, shoulder_yaw=10, elbow=10),
         "waist_pitch": 34, "neck_pitch": 16,
+    },
+    # Balanced on the left leg: its hip adducts until the weight stands over the foot, the right knee lifted.
+    "poise": {
+        **READY,
+        **leg("l", forward=20, drop=14, yaw=4, roll=-7),
+        **side("r", hip_yaw=4, hip_roll=4, hip_pitch=60, knee=100, ankle_pitch=-22, ankle_roll=0, toe=0),
+        **side("l", shoulder_pitch=6, shoulder_roll=24, shoulder_yaw=6, elbow=24, wrist_roll=10),
+        **side("r", shoulder_pitch=-4, shoulder_roll=20, shoulder_yaw=6, elbow=30, wrist_roll=10),
     },
     # Both hands closed.
     "fists": {**READY, **hands(curl=1.0, thumb=0.85, opp=62)},
@@ -155,6 +163,7 @@ MOTIONS = [
     ("bow", [(0.0, "ready"), (1.6, "bow"), (2.6, "bow"), (4.2, "ready")], "cubic"),
     ("crouch", [(0.0, "ready"), (2.0, "crouch"), (3.0, "crouch"), (5.0, "ready")], "cubic"),
     ("reach", [(0.0, "ready"), (1.5, "reach"), (2.4, "reach"), (3.9, "ready")], "cubic"),
+    ("poise", [(0.0, "ready"), (2.2, "poise"), (3.4, "poise"), (5.6, "ready")], "cubic"),
     ("look", [(0.0, "ready"), (1.0, _with("ready", neck_yaw=58, neck_pitch=-8)),
               (2.3, _with("ready", neck_yaw=-58, neck_pitch=10, neck_roll=-12)),
               (3.3, _with("ready", neck_yaw=0, neck_pitch=22, neck_roll=18)), (4.3, "ready")], "cubic"),

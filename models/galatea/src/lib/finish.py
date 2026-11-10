@@ -47,11 +47,12 @@ _FINISHES = {
                             "bronze_anodise", color="#b9773f", metalness=1.0, roughness=0.36),
     # Bronze-anodised machined trim that is plain aluminium all the way through.
     "bronze_trim": lambda: _look(metals.aluminum(), "bronze_trim", color="#b9773f", metalness=1.0, roughness=0.36),
-    # Output flanges, axles, pins: stainless, satin.
-    "steel": lambda: _look(metals.stainless(), "steel_satin", color="#c4c5c4", metalness=1.0, roughness=0.28),
+    # Output flanges, axles, pins, the Achilles rods: 4340 steel, quenched and tempered, ground satin.
+    "steel": lambda: _look(metals.alloy_steel(metals.AlloySteel.G4340_QUENCHED_TEMPERED), "steel_satin", color="#c4c5c4",
+                           metalness=1.0, roughness=0.28),
     # Fasteners: alloy steel, black oxide.
     "black_oxide": lambda: _look(metals.alloy_steel(), "black_oxide", color="#22252a", metalness=0.9, roughness=0.5),
-    # Pushrods and linkage tubes: titanium, satin.
+    # The knee pushrods: titanium, satin.
     "titanium": lambda: _look(metals.titanium(), "titanium_satin", color="#a9a59d", metalness=1.0, roughness=0.3),
     # Structural tubes: gloss carbon.
     "carbon": lambda: _look(plastics.cfrp(), "carbon_gloss", color="#17191c", metalness=0.0, roughness=0.3,
@@ -62,8 +63,8 @@ _FINISHES = {
     "visor": lambda: _look(plastics.pc(), "visor_smoke", color="#0d1014", metalness=0.0, roughness=0.06,
                            clearcoat=1.0, clearcoat_roughness=0.03),
     # Light guides: status bar, eye rings.
-    "glow": lambda: _look(plastics.pc(), "glow_amber", color="#ffd9a6", metalness=0.0, roughness=0.4,
-                          emissive="#ffb04a", emissive_intensity=1.6),
+    "glow": lambda: _look(plastics.pc(), "glow_amber", color="#ff9d3c", metalness=0.0, roughness=0.4,
+                          emissive="#ff7a10", emissive_intensity=0.6),
     # Camera and depth-sensor windows.
     "lens": lambda: _look(glass.borosilicate(), "lens_glass", color="#0a0c10", metalness=0.2, roughness=0.02,
                           clearcoat=1.0, clearcoat_roughness=0.0),

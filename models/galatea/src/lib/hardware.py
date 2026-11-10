@@ -15,7 +15,7 @@ import math
 import build123d as bd
 
 from . import geo
-from .dims import ACTUATORS, PLATE_T, ROTOR_PROUD, SCREWS
+from .dims import ACTUATORS, DRIVES, PLATE_T, ROTOR_PROUD, SCREWS
 from .kit import frame, inst, part, proto
 
 
@@ -127,6 +127,8 @@ class Hardware:
         Returns (stator_parts, rotor_parts): the stator's go in the parent link, the
         output flange in the child link. `cover` adds the ivory dress cover.
         """
+        if name in DRIVES and DRIVES[name][0] != size:
+            raise ValueError(f"{name} is an {DRIVES[name][0]} in dims.DRIVES, not an {size}")
         spec, protos = ACTUATORS[size], self.act[size]
         loc = frame(origin, axis, x_dir)
         tag = name or size.lower()
