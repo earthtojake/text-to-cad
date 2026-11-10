@@ -51,6 +51,11 @@ evidence that this host shows none.
 
 ``CAD_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
 Apps without advertising them (the reference host, ``basic-host``, is one).
+
+A session Claude Code started -- its terminal, or the desktop app's Code tab running it -- lists no
+tools at all (``host.claude_code``): there CAD is the cad skill and the ``cad`` command, and the Code
+tab's card comes from Claude Desktop's own config, whose server Claude Code does not start.
+``CAD_MCP_CARDS=1`` in the transport's environment keeps the tools, for testing.
 """
 
 from __future__ import annotations
@@ -133,10 +138,18 @@ FOLLOWS = ("The page follows the model: rebuilds for a document, saves for a fil
            "not after every rebuild.")
 
 TEXT_INSTRUCTIONS = (
-    f"CAD opens models and local CAD files ({FORMATS}) in the CAD Viewer in the user's browser: "
+    f"CAD opens models and local CAD files ({FORMATS}) in the user's browser: "
     "this app cannot show CAD views itself. Call cad_show with source set to a model's document id (running its "
     "script prints it) or a file's absolute path: it opens the page in the user's browser, or says it is open "
     "already, and answers with its URL; give the user that URL. " + FOLLOWS
+)
+
+# A session Claude Code started (``host.claude_code``): CAD lists no tools there and says how to use CAD instead.
+CLAUDE_CODE_INSTRUCTIONS = (
+    "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. In the Claude desktop "
+    "app's Code tab, CAD's inline card comes from Claude Desktop's own config: show models with its cad_show where "
+    "it is listed; where it is not, run `cad setup` and ask the user to quit and reopen Claude Desktop. Elsewhere, "
+    "and meanwhile, give the user the `cad viewer` link, which opens in the app's browser pane or their browser."
 )
 
 _ICON_SVG = (
@@ -171,9 +184,12 @@ class ToolFailed(Exception):
     """A tool call that fails the way its caller should read: as the tool's result. ``reason`` is why, in
     telemetry's words (``cad_server.analytics.FAILURES``), named where it is raised: never read from the message."""
 
-    def __init__(self, message: str, reason: str) -> None:
+    def __init__(self, message: str, reason: str, *, refused: str | None = None) -> None:
         super().__init__(message)
         self.reason = reason
+        # A page's call refused for its capability (``_app_only``): ``capability`` where it carried none or
+        # another's, ``stale`` where it carried a past session's. The page reads it, never the words.
+        self.refused = refused
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -194,12 +210,17 @@ _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to 
 _WATCH = _object({"file": {"type": ["string", "null"]}})
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
-# The capability a page's launch delivers it, in UI-only result metadata (``_call``). Every one of the
-# page's tools refuses a call without it: a host is asked to keep app-only tools from the model, and the
-# server does not rely on it. ``cad_http`` takes it as a header, the others as an argument.
+# The capability a page's launch delivers it, in UI-only result metadata (``_call``); in Cursor, which drops
+# that before its card sees it, in the launching tool's own metadata, which Cursor hands the card at
+# ``ui/initialize`` (``host.carries_capability``). Every one of the page's tools refuses a call without it: a
+# host is asked to keep app-only tools from the model, and the server does not rely on it (Cursor lists them
+# to its agent). ``cad_http`` takes it as a header, the others as an argument.
 _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cad-app"
 _APP_TOKEN_ARGUMENT = "app"
+# Where an operation's answer carries why it failed (``analytics.FAILURES``) to ``_call``, which takes it
+# out before the host sees the answer.
+_FAILED_FOR = "_failedFor"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Browser (its file menu's Open in): this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
@@ -228,6 +249,20 @@ def _text(text: str, structured: dict[str, Any] | None = None, *, error: bool = 
     if error:
         result["isError"] = True
     return result
+
+
+def _unreached(page: str | None) -> str:
+    """What ``cad_view`` and ``cad_screenshot`` say of an inline view that never reached this server: the chat
+    has not drawn it yet, or drew it and carries none of its calls back (the Claude app's Code tab draws cards
+    and refuses their calls; its card says so, and links ``page``), and CAD can neither read nor capture it.
+    What the person can open instead, and the picture the agent can draw itself."""
+    instead = (f"give them the model's page to open in their browser instead: {page}" if page
+               else "open the model in their browser instead (`cad viewer` prints its page)")
+    return ("That viewer has not reached CAD's server. Either the chat has not drawn it yet (it may be waiting for the "
+            "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
+            "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
+            f"whether they see the model; if the card says this chat can't connect, {instead}. To see the model yourself, "
+            "use cad_snapshot.")
 
 
 def _unavailable(error: BaseException) -> str:
@@ -283,9 +318,14 @@ class Server:
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
         from .operations import Operations
-        self.operations = Operations()
+        # A mistake in cadgen's code an operation failed for is a crash of the tool's, counted as ``_call``
+        # counts one a handler raised.
+        self.operations = Operations(crashed=lambda error, tool: self.analytics.crashed(error, "tool", tool=tool))
         self.tabs = False  # decided at initialize: see the module docstring
         self.text = False
+        # A session Claude Code started (``host.claude_code``), decided at initialize: it lists no tools.
+        self.inert = False
+        self._capability_in_catalog = False  # Cursor's: the launching tool carries the capability (``host.carries_capability``)
         # Whether this host shows CAD cards (``host.presentation``): True, False, or None while nothing
         # says; ``_declared`` where the host said so itself, which nothing after overrules; and
         # ``_contacted`` once a view reached this server, which only a host that draws them does.
@@ -314,7 +354,7 @@ class Server:
         self._update_told = False
         # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab,
         # and a model cad_show sent it before it opened, shown once it does.
-        self._mounting: dict[str, None] = {}
+        self._mounting: dict[str, str | None] = {}  # the inline views launched and not yet seen, each its page
         self._opened: float | None = None
         self._pending: str | None = None
 
@@ -444,9 +484,12 @@ class Server:
         if presentation == "inline":
             self.page = self.page.presenting("inline")
         self._tools = None
+        self.inert = host.claude_code(transport)
+        self._capability_in_catalog = host.carries_capability(client, presentation)
         extensions = sorted(offered["extensions"]) if isinstance(offered.get("extensions"), dict) else []
-        LOG.info("client %s %s: %s views, %s (extensions: %s)", client.get("name"), client.get("version"), presentation,
-                 why, ", ".join(extensions) or "none")
+        LOG.info("client %s %s: %s views, %s (extensions: %s)%s", client.get("name"), client.get("version"), presentation,
+                 why, ", ".join(extensions) or "none",
+                 f"; started by Claude Code ({transport.get('claudeCode')}): no tools" if self.inert else "")
         self.analytics.started(client=client, presentation=presentation)
         capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
         requested = params.get("protocolVersion")
@@ -454,12 +497,15 @@ class Server:
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
             "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": INSTRUCTIONS if self.tabs else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS,
+            "instructions": (CLAUDE_CODE_INSTRUCTIONS if self.inert else INSTRUCTIONS if self.tabs
+                             else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS),
         }
 
     # -- the catalog -----------------------------------------------------------
 
     def tools(self) -> list[dict[str, Any]]:
+        if self.inert:
+            return []  # Claude Code's session: CAD is its skill and the `cad` command there (``host.claude_code``)
         if self._tools is None:
             self._tools = self._tab_catalog() if self.tabs else self._text_catalog() if self.text else self._inline_catalog()
             from .operations import catalog
@@ -508,7 +554,10 @@ class Server:
         ]
 
     def _inline_catalog(self) -> list[dict[str, Any]]:
-        shows = {"ui": {"resourceUri": self.page.uri}}
+        shows: dict[str, Any] = {"ui": {"resourceUri": self.page.uri}}
+        if self._capability_in_catalog:
+            # Cursor's card gets the tool that launched it, never the launch's ``_meta`` (``host.carries_capability``).
+            shows[_APP_TOKEN_META] = self._app_token
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY, "_meta": shows,
              "description": (f"Show a local CAD model ({FORMATS}) in an interactive viewer in the "
@@ -530,7 +579,7 @@ class Server:
         """No page to open or read: cad_show hands over a link to the model in the CAD Viewer."""
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY,
-             "description": ("Open a model in the CAD Viewer in the user's browser, unless its page is open there "
+             "description": ("Open a model's page in the user's browser, unless its page is open there "
                              "already; this app cannot show CAD views itself. source is a model's document id (running "
                              f"its script prints it) or a local CAD file's absolute path ({FORMATS}). Answers with the "
                              "page's URL: give it to the user. " + FOLLOWS),
@@ -587,15 +636,18 @@ class Server:
             if name in _AGENT_TOOLS:
                 self._arguments(name, arguments)
             result = handler(arguments, context)
+            # An operation's answer that says it failed says why too (``_operation``), never to the host.
+            failed_for = result.pop(_FAILED_FOR, None) if isinstance(result, dict) else None
             if not self.text and isinstance(result.get("structuredContent", {}).get("launch"), dict):
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
                 self._reach(result["structuredContent"]["launch"])
             ok = not (isinstance(result, dict) and result.get("isError"))
+            reason = failed_for or reason
             return result
         except ToolFailed as failure:
             reason = failure.reason
-            return _text(str(failure), error=True)
+            return _text(str(failure), {"refused": failure.refused} if failure.refused else None, error=True)
         except Exception as error:
             from cad.engine.serve import KernelProcessesUnavailable
 
@@ -648,8 +700,14 @@ class Server:
         raise ToolFailed(said, "bad_request")
 
     def _operation(self, name, arguments):
-        result = self.operations.call(name, arguments)
-        return _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
+        """An operation's start, status or cancel (``operations.Operations``): its answer, and -- where it
+        says the operation failed or the start was refused -- why, for the call's telemetry (``_call``):
+        the engine refusing what the call asked is the caller's, never cadgen's bug."""
+        result, reason = self.operations.answered(name, arguments)
+        answer = _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
+        if reason is not None:
+            answer[_FAILED_FOR] = reason
+        return answer
 
     # launches -----------------------------------------------------------------
 
@@ -708,6 +766,8 @@ class Server:
             LOG.info("the launch carries no page: %s", failure)
             return
         launch["browser"] = link
+        if launch.get("view") in self._mounting:
+            self._mounting[launch["view"]] = link  # the page a view that never reaches this server is told to offer
         if not self.tabs:
             parts = urlparse(link)
             launch["engine"] = f"{parts.scheme}://{parts.netloc}"
@@ -945,7 +1005,7 @@ class Server:
         try:
             link = self._browser_url(model)
         except ViewerUnavailable as failure:
-            raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
+            raise ToolFailed(f"This app cannot show CAD views, and CAD's server gave no browser page ({failure}). Run "
                              f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
         self.warm()  # the browser page's first document meshes on a pool already starting
@@ -999,8 +1059,7 @@ class Server:
         if view is None and view_id in self._mounting:
             view = self.views.wait(found, timeout=OPENING_SECONDS)
             if view is None:
-                raise ToolFailed("That viewer has not opened yet: the chat has not drawn it (it may be waiting for the person "
-                                 "to allow it, or be collapsed or scrolled away). Ask the person to look at it, then try again.", "no_view")
+                raise ToolFailed(_unreached(self._mounting.get(view_id)), "no_view")
         if view is None:
             raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again "
                              "with cad_show.", "no_view")
@@ -1064,8 +1123,10 @@ class Server:
         page, which the launch's metadata delivered it to, reports a view or answers a capture."""
         token = arguments.get(_APP_TOKEN_ARGUMENT)
         if not isinstance(token, str) or not secrets.compare_digest(token.encode("utf-8"), self._app_token.encode("utf-8")):
+            stale = isinstance(token, str) and bool(token)
             raise ToolFailed("This CAD view was opened before CAD restarted: close it and open CAD again."
-                             if isinstance(token, str) and token else "Only a CAD view calls this tool.", "bad_request")
+                             if stale else "Only a CAD view calls this tool.", "bad_request",
+                             refused="stale" if stale else "capability")
 
     def _register(self, arguments: dict[str, Any], context: RequestContext) -> str:
         self._app_only(arguments)

@@ -47,9 +47,9 @@ current installation's
    this release's, written atomically with a ``.bak`` beside it; every second copy goes, an earlier
    release's from the repository on GitHub among them, and a plugin directory's, which this run replaces
    with ours, unless no command here removes it (``providers``). The agents with no plugin that
-   the Skills CLI knows get the skills, copied from the folder into their own skills folders by one ``npx
-   skills add`` (Node needed); an app with a plugin never does. A command that fails is said with its output, and
-   the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
+   the Skills CLI knows get the skills, copied from the folder into the skills folder that CLI keeps for each
+   (``~/.agents/skills`` for most) by one ``npx skills add`` (Node needed); an app with a plugin never does.
+   A command that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
    would point at it.
 7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take
    back; and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from
@@ -63,7 +63,8 @@ current installation's
 9. **Report.** Each app's copy as it is now, the Skills CLI agents' among them, the engine, the telemetry notice
    (``--no-telemetry`` turns it off, as ``cad telemetry off`` does), and the apps to restart to
    load what this run installed or updated; ``already up to date`` when a run found nothing to do
-   and changed nothing.
+   and changed nothing. An agent whose folder lacks a skill the receipt says it got is a failure of
+   the run, said on its line: the exit status is then 1.
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
 steps 2, 4, 6 and 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
@@ -97,8 +98,8 @@ finds it, and the first install is the one that may make uv install its Python t
 installation current already -- its Python installed outside --, runs there as anywhere. ``--dry-run``
 says it before the plan.
 
-Exit status: 0 done, or nothing to do; 1 a step failed, or nothing was installed inside an app package; 2 bad
-arguments.
+Exit status: 0 done, or nothing to do; 1 a step failed, an agent lacks its skills, or nothing was installed
+inside an app package; 2 bad arguments.
 """
 
 from __future__ import annotations
@@ -738,18 +739,23 @@ class Installer:
         return {"apps": verdicts, "engine": engine}
 
     def _verify_skills(self) -> dict[str, Any]:
-        """The Skills CLI agents the receipt says got the skills, each read again: its folder holds them, or
-        the line says which it lost, in the words of ``cad doctor`` (``providers.skills_words``)."""
+        """The Skills CLI agents the receipt says got the skills, each read again: its folder holds them, in
+        the words of ``cad doctor`` (``providers.skills_words``), or the line says it failed and which it
+        lacks: verdict ``missing``, which fails the run."""
         providers = self.providers
         verdicts: dict[str, Any] = {}
         for agent, got in ((self._receipt() or {}).get("skills") or {}).items():
             if agent not in providers.SKILLS_AGENTS or not isinstance(got, dict) or (self.only and agent not in self.only):
                 continue
-            have = {path.name for path in providers.ours_in(providers.skills_folder(agent, self.machine))}
-            missing = [name for name in got.get("skills") or () if name not in have]
-            verdicts[agent] = {"verdict": "missing" if missing else "ok", "release": got.get("release")}
-            self.say(f"verify   {providers.label(agent)}: {providers.skills_words(got, self.machine)}"
-                     + (f", without {', '.join(missing)}" if missing else ""))
+            missing = providers.skills_lost(agent, got, self.machine)
+            verdicts[agent] = {"verdict": "missing" if missing else "ok", "release": got.get("release"),
+                               **({"missing": missing} if missing else {})}
+            if missing:
+                where = providers.shown(providers.skills_folder(agent, self.machine), self.machine)
+                self.say(f"verify   {providers.label(agent)}: failed: {', '.join(missing)} not in {where}, where the "
+                         f"Skills CLI was to copy the skills of text-to-cad {got.get('release') or '?'}")
+            else:
+                self.say(f"verify   {providers.label(agent)}: {providers.skills_words(agent, got, self.machine)}")
         return verdicts
 
     def _telemetry(self) -> str:
@@ -770,7 +776,7 @@ class Installer:
         self.say(f"telemetry {said}" + ("; turn it off with `cad telemetry off`" if said.startswith("on") else ""))
         return said
 
-    def _restart(self, apps: dict[str, Any], changed: set[str], heading: str = "Restart to load it:") -> list[str]:
+    def _restart(self, apps: dict[str, Any], changed: set[str], heading: str = "Next, restart to load it:") -> list[str]:
         """What to restart for what this run did to take hold (``changed``: the apps it installed or updated
         the plugin in, a config it edited, and the agents that got the skills, or lost them to an uninstall),
         under ``heading``."""
@@ -778,7 +784,7 @@ class Installer:
         names = [name for name in providers.APPS if name in changed]
         if "claude" in changed:  # Cursor and Grok Build load the Claude Code plugin
             names += [name for name in providers.FED_BY if self.fed and apps[name].present and name not in names]
-        lines = [providers.RESTART[name] for name in names]
+        lines = [providers.restart(name, self.machine) for name in names]
         agents = [providers.label(name) for name in providers.SKILLS_AGENTS if name in changed]
         if agents:
             lines.append(f"{', '.join(agents)}: start a new session for the skills")
@@ -882,9 +888,9 @@ class Installer:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
                 receipt["actions"] = list(receipt.get("actions") or []) + self.actions
                 self._keep(receipt)
-        if steps:
-            told("Restart to load it: " + "; ".join(providers.RESTART[step.app] for step in steps
-                                                     if step.app in providers.RESTART))
+        due = list(dict.fromkeys(step.app for step in steps if providers.needs_restart(step)))
+        if due:
+            told("Next, restart to load it: " + "; ".join(providers.restart(app, self.machine) for app in due))
         return not failed, [step.data() for step in steps]
 
     def install(self) -> int:
@@ -970,7 +976,7 @@ class Installer:
                 self.actions += records
                 failed = failed or not ok
                 # A plugin installed or updated loads in the app's next session; a config, as the app opens.
-                if ok and records and step.action in ("install", "update") and step.app in providers.APPS:
+                if ok and records and providers.needs_restart(step):
                     changed.add(step.app)
                 if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
                     self._record_skills(receipt, step, steps, records, changed)
@@ -987,7 +993,9 @@ class Installer:
             if not self.engine_update:
                 switch_failed, switched = self._switch()
                 failed = failed or switch_failed
-            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or switched):
+            # An agent left without the skills for want of Node is not up to date, though nothing was done.
+            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or switched
+                    or any(step.subject == providers.NEED_NODE for step in steps)):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
         if switched is not None and switched.get("restored"):
             # The release before runs again: its plugin folder, and the apps' copies of it, come back with
@@ -1000,6 +1008,8 @@ class Installer:
         verified = self._verify()
         self._telemetry_into(verified)
         restart = self._restart(apps, changed)
+        # An agent whose folder lacks a skill the Skills CLI said it copied has not got them: the run failed.
+        failed = failed or any(found.get("verdict") == "missing" for found in verified["apps"].values())
         if failed:
             from cad_server.updates import command
 
@@ -1111,7 +1121,7 @@ class Installer:
                     self._keep(receipt)
         if self.args.purge:
             self._purge(state, cache)
-        restart = self._restart(apps, changed, "Restart to unload it:")
+        restart = self._restart(apps, changed, "Next, restart to unload it:")
         return self._result(steps, extra, None, restart, 1 if failed else 0)
 
     def _remove_command(self, proxy: str) -> bool:

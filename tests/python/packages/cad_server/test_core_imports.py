@@ -151,9 +151,16 @@ class SidesTest(unittest.TestCase):
 
 # Each extra's distributions, as their modules are named (``packages/cad/pyproject.toml``).
 EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
-                               "PIL"},
+                               "PIL", "scipy"},
                  "kicad": {"kicode"},
-                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
+                 "netgen": {"netgen"},
+                 "calculix": {"cad_ccx"},
+                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
+                 "blender": {"bpy", "mathutils"}}  # mathutils is Blender's own, in bpy's wheel
+# A platform an integration is built for (``cad.registry.PLATFORMS``' words), as its extra's marker says it.
+MARKED = {"macOS arm64": "(sys_platform == 'darwin' and platform_machine == 'arm64')",
+          "Linux x86-64": "(sys_platform == 'linux' and platform_machine == 'x86_64')",
+          "Windows x86-64": " or sys_platform == 'win32')", "Windows arm64": " or sys_platform == 'win32')"}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.
@@ -186,7 +193,15 @@ class IntegrationsTest(unittest.TestCase):
                          for requirement in extras.get(integration.extra or "", [])}
                 self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
                                  "an integration's distributions are its extra's")
-                self.assertTrue(set(integration.modules) <= EXTRA_MODULES[integration.extra or ""])
+                self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
+                # The one Python and the platforms the registry says its tool is built for are its extra's markers:
+                # anywhere else the extra installs nothing, and a run is refused by name.
+                for requirement in extras.get(integration.extra or "", []) if integration.python else ():
+                    marker = requirement.partition(";")[2]
+                    self.assertIn(f"python_version == '{integration.python}'", marker)
+                    self.assertEqual({platform for platform, said in MARKED.items() if said in marker},
+                                     set(integration.platforms))
+                    self.assertEqual(marker.count("sys_platform == "), 3, "macOS, Linux and Windows, each once")
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
         self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))

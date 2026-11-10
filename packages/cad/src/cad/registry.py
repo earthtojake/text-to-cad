@@ -11,8 +11,9 @@ objects, producers and operations), and a process kind. A **producer** is code t
 type from some input; many integrations may produce one type, each stating which parts of the type's
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
-``dfm`` a 3D type's manufacturing check, ``drc`` a board's design rule check, ``erc`` a schematic's electrical
-rules check, ``validate`` a robot description's conformance check.
+``dfm`` a 3D type's manufacturing check, ``solve`` a B-rep type's stress study,
+``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
+description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
@@ -33,19 +34,30 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integrations_of",
-           "producer_for", "producers_for",
+           "platform_of", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "solve", "drc", "erc", "validate")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
 #: Where an integration's code runs: inside the Python process that calls it, as a separate program, or both.
 PROCESS_KINDS = ("in-process", "separate", "both")
+#: The platforms the server runs on, in the words an integration's ``platforms`` names them by (``platform_of``).
+PLATFORMS = ("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64", "Windows x86-64", "Windows arm64")
+
+
+def platform_of(system: str, machine: str) -> str:
+    """A platform in ``PLATFORMS``' words, from ``sys.platform`` and the machine as ``platform.machine()`` (or, on
+    Windows, ``PROCESSOR_ARCHITECTURE``) says it: ``("darwin", "x86_64")`` is ``macOS x86-64``. Another is said as
+    given."""
+    named = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}.get(system, system)
+    arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "x86-64", "amd64": "x86-64"}.get(machine.lower(), machine)
+    return f"{named} {arch}"
 
 
 @dataclass(frozen=True)
@@ -100,6 +112,18 @@ class Integration:
     #: download's size, never the installed environment's, which is two to three times that.
     holds: str = ""
     download_mb: int = 0
+    #: The integrations its operations need in the same environment (netgen's: a stress study reads the B-rep with
+    #: the kernel, build123d's, beside the mesher), so the environment the ``cad`` command makes for it holds them too.
+    alongside: tuple[str, ...] = ()
+    #: What only its tool decides of the environment its extra is installed in, each empty for a tool that decides
+    #: none: the one Python line its tool is built for (``python``: ``3.13``; an environment ``cad run`` makes with
+    #: it is made on that line, a Python uv manages, where the engine's own is another), the platforms it is built
+    #: for (``platforms``, ``PLATFORMS``' words: its extra installs nothing anywhere else, and a run there is
+    #: refused by name), and the variables that name its tool's own settings folders (``homes``: a run's are
+    #: private folders of the engine's, so nothing of a person's own copy of the tool loads into it).
+    python: str | None = None
+    platforms: tuple[str, ...] = ()
+    homes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -169,6 +193,7 @@ class DocumentTypeEntry:
                 raise ValueError(f"{self.id}: {operation.name!r} is not an operation ({', '.join(OPERATIONS)})")
         if self.reader_integration is not None and not self.reader:
             raise ValueError(f"{self.id}: a reader_integration with no reader")
+
         if not self.wire:
             object.__setattr__(self, "wire", self.id)
 
@@ -195,8 +220,8 @@ class DocumentTypeEntry:
 _KERNEL = "build123d"
 
 _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
-                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance meshes an .stl or a "
-                                       ".3mf finer", _KERNEL, engine=True)
+                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance and --angle mesh a "
+                                       ".glb, an .stl or a .3mf finer", _KERNEL, engine=True)
 _EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
 _SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
@@ -207,6 +232,14 @@ _DFM = Operation("dfm", "measure it for manufacturing: injection molding (--proc
                         "projected area) or 3D printing (--process printing: walls, overhangs, support); "
                         "--candidates ranks the pulls or orientations", "trimesh")
 
+# The stress study a B-rep type shares (``cad._internal.fea``): the kernel reads the part, netgen meshes it, CalculiX
+# solves it. A mesh type has no faces a study can hold or load by, so it has none.
+_SOLVE = Operation("solve", "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, "
+                            "the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, "
+                            "displacement.png), each part's peak stress and safety factor, and a part that yields "
+                            "failing it; with no --study, the parts, the pairs that touch and a part's faces a study "
+                            "names", "calculix")
+
 _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
                      "configuration sequences")
 
@@ -215,17 +248,17 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
@@ -290,7 +323,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                      "makes, reads, writes and draws documents with it", extra="build123d", process="in-process",
         modules=("build123d", "OCP"),
         distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
-                       "ezdxf", "pillow"),
+                       "ezdxf", "pillow", "scipy"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
         holds="the CAD kernel", download_mb=240),
     "kicad": Integration(
@@ -315,6 +348,40 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                    "and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
+    "netgen": Integration(
+        "netgen", "netgen, the tetrahedral mesher: a stress study (solve) meshes a part's own faces with it, curved "
+                  "second-order elements, every face kept under its ref, always in a process of its own (its "
+                  "OpenCascade and the kernel's cannot share one)",
+        extra="netgen", process="separate",
+        modules=("netgen",), distributions=("netgen-mesher",), identity=("netgen-mesher",),
+        holds="the netgen mesher", download_mb=11),
+    "calculix": Integration(
+        "calculix", "CalculiX's solver, ccx, as the cad-ccx package carries it: a stress study (solve) writes its input, "
+                    "runs it headless on one thread in a private folder, and reads its answer",
+        extra="calculix", process="separate",
+        # ccx is the cad-ccx package's (the extra's), or the one CAD_CCX names; a person's own CalculiX is never run.
+        probe=Probe("ccx", "2.20", "ccx comes with cad's calculix integration, cad[calculix] (the cad-ccx package), which "
+                                   "the cad command installs on first need (a script run with cad run: name "
+                                   "cad[calculix] in its header); or set CAD_CCX to a ccx of CalculiX 2.20 or newer",
+                    "CAD_CCX"),
+        modules=("cad_ccx",), distributions=("cad-ccx",), identity=("cad-ccx",), commands=("ccx",),
+        # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
+        alongside=("build123d", "netgen"),
+        holds="CalculiX's ccx solver", download_mb=13),
+    "blender": Integration(
+        "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad "
+                   "exports into Blender's scene, every part where the file places it and each clip playable alone "
+                   "(cad.blender.load), then frames, lights and renders it with bpy itself",
+        extra="blender", process="in-process", modules=("bpy",), distributions=("bpy",), identity=("bpy",),
+        # bpy 5.2.3 is ``Requires-Python ==3.13.*``, cp313 wheels alone, and none for Intel Macs or Linux arm64: the
+        # extra's markers say the same (packages/cad/pyproject.toml), and a test holds the two together.
+        python="3.13", platforms=("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"),
+        # Blender's own folders for a person's preferences, add-ons, extensions and data, which bpy reads as the app
+        # does: a run's are private, so a person's Blender settings and add-ons never load into it.
+        homes=("BLENDER_USER_RESOURCES", "BLENDER_USER_CONFIG", "BLENDER_USER_SCRIPTS", "BLENDER_USER_DATAFILES",
+               "BLENDER_USER_EXTENSIONS"),
+        # PyPI's wheels with what they need: 262 MB on macOS arm64, 356 on Windows x86-64, 429 on Linux x86-64.
+        holds="Blender as a Python module", download_mb=430),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

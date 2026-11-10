@@ -40,8 +40,8 @@ it('a host that refuses every call before any comes back gets one plain notice, 
   const fetchImpl = vi.fn(async () => { throw new TypeError('Refused to connect because it violates the document\'s Content Security Policy.'); });
   const { container } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
   const notice = await screen.findByRole('alert');
-  expect(notice.textContent).toContain('This chat can\'t connect the CAD viewer to its engine. Open the model in the CAD Viewer instead.');
-  const link = screen.getByRole('link', { name: 'Open in CAD Viewer' });
+  expect(notice.textContent).toContain('This chat can\'t connect to CAD\'s engine. Open the model in your browser instead.');
+  const link = screen.getByRole('link', { name: 'Open in browser' });
   expect([link.getAttribute('href'), link.getAttribute('target')]).toEqual([PAGE, '_blank']);
   // No home, no library, and never the host's own words or the sandbox's.
   expect(viewer.props).toBeNull();
@@ -62,9 +62,27 @@ it('a host that declared it carries calls, and refused them anyway, ends on the 
   const { container } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={{ ...launch, browser: undefined, engine: undefined }}
     presentation="inline" fetchImpl={fetchImpl as any} />);
   await waitFor(() => expect(container.querySelector('[data-cad-unreachable]')).not.toBeNull());
-  expect(container.textContent).toBe('This chat can\'t connect the CAD viewer to its engine. Ask your agent to open the model in the CAD Viewer instead.');
+  expect(container.textContent).toBe('This chat can\'t connect to CAD\'s engine. Ask your agent to open the model in your browser instead.');
   expect(screen.queryByRole('link')).toBeNull();
   expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+it('a call CAD\'s server refuses for the card\'s capability ends on the notice and its button, never the server\'s words (Cursor)', async () => {
+  // Cursor carried every call, and CAD's server refused each: the card had no capability (0.10.0 to 0.11.5).
+  const said = { capability: 'Only a CAD view calls this tool.', stale: 'This CAD view was opened before CAD restarted: close it and open CAD again.' };
+  for (const refused of ['capability', 'stale'] as const) {
+    const { bridge, server, channel } = host({ serverTools: {}, openLinks: {} }, async () => ({
+      isError: true, content: [{ type: 'text', text: said[refused] }], structuredContent: { refused } }));
+    const { container, unmount } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" />);
+    await waitFor(() => expect(container.querySelector('[data-cad-unreachable]')).not.toBeNull());
+    expect(container.textContent).toContain(refused === 'stale'
+      ? 'This view was opened before CAD restarted, so it can\'t connect. Ask your agent to show the model again, or open it in your browser.'
+      : 'This chat can\'t connect to CAD\'s engine. Open the model in your browser instead.');
+    expect(container.textContent).not.toContain(said[refused]);
+    expect(screen.getByRole('link', { name: 'Open in browser' }).getAttribute('href')).toBe(PAGE);
+    expect(channel.refusal).toBe(refused);
+    unmount();
+  }
 });
 
 it('an engine the probe reaches runs the whole card over direct HTTP: the link as its credential, no host call and no sync', async () => {

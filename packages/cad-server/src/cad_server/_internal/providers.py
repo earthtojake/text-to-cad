@@ -8,18 +8,26 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
 ``text-to-cad``), each the way that app keeps a local plugin. Six apps:
 
 - **Claude Code**: the folder added as a local-directory marketplace and its plugin installed,
-  ``text-to-cad@text-to-cad``, through ``claude plugin``. Its sessions read the folder in place, so a
+  ``text-to-cad@text-to-cad``, through ``claude plugin``: the skills alone, since Claude's manifest names
+  no server (a server Claude Code starts gets no card it can use: its terminal draws none, and the
+  desktop app's Code tab refuses their calls). Its sessions read the folder in place, so a
   folder written again is what the next session reads, with no command; its cached copy, which
   ``claude plugin list`` reports and Cursor and Grok Build may read, is brought along by ``claude
   plugin update``. Cursor and Grok Build load the plugins Claude Code installed as well as their own
-  (``FED_BY``), so where Claude Code has the plugin they need none of their own, and a copy of
-  theirs is a second copy.
-- **Claude Desktop** (its chat): CAD's server alone, ``mcpServers.cad`` in its config file, run by
+  (``FED_BY``), each reading its own manifest first (``.cursor-plugin``, ``.grok-plugin``), which names
+  CAD's server: so where Claude Code has the plugin they need none of their own and keep the server,
+  and a copy of theirs is a second copy. Every CAD server Claude Code would start itself goes: one
+  added by ``claude mcp add`` for the user or for a project (``~/.claude.json``), removed by
+  ``claude mcp remove`` (a project's in its folder). A store's copy keeps its server, which lists no
+  tools when Claude Code starts it (``cad_server.mcp.host.claude_code``).
+- **Claude Desktop** (its chat, and the Code tab, which offers the app's own servers to Claude Code's
+  sessions and draws their cards): CAD's server alone, ``mcpServers.cad`` in its config file, run by
   ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH: the person's uvx
   (on PATH, else where uv's installer or Homebrew puts it), never one uv keeps in its cache or a release
   folder holds (``transient``), which go from under it.
   A switch of the engine moves it to the release it leaves current, back as much as forward
-  (``refresh_plan``).
+  (``refresh_plan``). The app reads the file only as it starts, so it is quit and reopened after a
+  change (``RESTART``); no developer mode is needed.
 - **Codex**: the same local marketplace through its own ``plugin`` command (the app bundles a CLI of
   its own). Codex copies a local marketplace's plugin when it is added and never again by itself, so
   every update adds it again; a running session keeps the copy it started with.
@@ -37,11 +45,12 @@ The copies an earlier release's installer made from the repository's ``latest`` 
 taken out, the catalog with them.
 
 Every other agent the Skills CLI (``npx skills``) knows and that is installed here gets the skills
-alone, copied from the folder's ``skills/`` into that agent's own skills folder by one ``npx skills
-add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that CLI reads
-them). The CLI keeps no versions, so the receipt says which agents got which skills (those its
-``--json`` says it installed) from which release; a later run adds them again for an agent when that
-release is not this one or one of those skills is missing from its folder.
+alone, copied from the folder's ``skills/`` into the skills folder the CLI keeps for that agent by one
+``npx skills add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that
+CLI reads them; for most, ``~/.agents/skills``). The CLI keeps no versions, so the receipt says which
+agents got which skills (those its ``--json`` says it installed) from which release; a later run adds
+them again for an agent when that release is not this one or one of those skills is missing from its
+folder, and the report after a run fails it for an agent whose folder lacks one.
 An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
@@ -52,9 +61,10 @@ out of the Skills CLI's record where it installed them from GitHub (``unlock_ski
 put them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
 (``SKILLS``) and this repository (``PROVENANCE``: its front matter's ``metadata.repository``, an
 earlier release's body). The one folder two kinds of agent share,
-``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
-agent's while one that uses it is here: Codex and Gemini CLI then list those skills beside their
-plugin's, which the plan says.
+``~/.agents/skills`` (Codex and Gemini CLI read it; the Skills CLI copies the skills of GitHub Copilot,
+Amp, Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed there), is the Skills CLI agents' while one
+that uses it is here: Codex and Gemini CLI then list those skills beside their plugin's, which the plan
+says.
 
 A store's copy (claude.ai's directory, the app directory of Codex's maker, the Cursor Marketplace) is a
 second copy too: the install command, and ``cad setup`` with it, is the person's ask for this release,
@@ -119,7 +129,7 @@ COPY_MARK = ".text-to-cad-copy"
 # release's said so in its body); a loose skill naming it, under one of this repository's skill names
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
-SKILLS = ("cad", "engineering-drawing", "pcb", "print3d", "robot-simulation", "sendcutsend")
+SKILLS = ("cad", "engineering-drawing", "fea", "pcb", "print3d", "render", "robot-simulation", "sendcutsend")
 # The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
@@ -149,12 +159,33 @@ INVENTORIED = frozenset({"claude", "claude-desktop", "codex", "cursor", "gemini"
 # What a person does for an app to pick up a changed plugin: never done for them.
 RESTART = {
     "claude": "Claude Code: start a new session (a running one keeps the plugin it started with)",
-    "claude-desktop": "Claude Desktop: quit and reopen it",
+    "claude-desktop": "Claude Desktop: quit and reopen it to load CAD's server (it reads its config only as it starts)",
     "codex": "Codex: restart the app, and any terminal or IDE session (a running one keeps the copy it started with)",
     "cursor": "Cursor: reload the window",
     "grok": "Grok Build: start a new session",
     "gemini": "Gemini CLI: start a new session",
 }
+
+
+def needs_restart(step: "Step") -> bool:
+    """Whether ``step`` done takes the app's restart to work (``RESTART``): a plugin installed or updated,
+    whose skills load in the app's next session, and Claude Desktop gaining CAD's server. A new pin of Claude
+    Desktop's server is not one: the server it runs keeps working with the newer engine, and the app takes
+    the pin at its next start."""
+    if step.app not in APPS or step.action not in ("install", "update"):
+        return False
+    return step.app != "claude-desktop" or step.action == "install"
+
+
+def restart(name: str, machine: Optional["Machine"] = None) -> str:
+    """What a person does for ``name`` to pick up a changed plugin or config (``RESTART``), as on this
+    platform: on Windows, Claude Desktop keeps running in the system tray when its window closes."""
+    if name == "claude-desktop" and _machine(machine).windows:
+        return ("Claude Desktop: quit it from its icon in the system tray (closing its window leaves it running), "
+                "then reopen it to load CAD's server")
+    return RESTART[name]
+
+
 # The CLIs an app bundles, for an app whose terminal command may be missing or older.
 BUNDLED = {"codex": ("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",)}
 # Where Homebrew puts the commands it installs (Apple silicon's, Intel macOS's, Linux's): never on the PATH of
@@ -198,10 +229,10 @@ def _text(value: Any) -> str:
     return value or ""
 
 
-def _subprocess(argv: List[str], environ: Dict[str, str], timeout: float) -> Ran:
+def _subprocess(argv: List[str], environ: Dict[str, str], timeout: float, cwd: Optional[str] = None) -> Ran:
     try:
         done = subprocess.run(argv, env=environ, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, timeout=timeout)
+                              stderr=subprocess.PIPE, timeout=timeout, cwd=cwd)
     except subprocess.TimeoutExpired as expired:
         return Ran(argv, 124, _text(expired.stdout), _text(expired.stderr) + f"\nno answer in {int(timeout)} s")
     except OSError as error:
@@ -237,8 +268,10 @@ class Machine:
         return shutil.which(name, path=self.environ.get("PATH", os.defpath))
 
     def run(self, argv: Sequence[str], timeout: float = COMMAND_SECONDS,
-            environ: Optional[Mapping[str, str]] = None) -> Ran:
-        return self._runner([str(part) for part in argv], {**self.environ, **(environ or {})}, timeout)
+            environ: Optional[Mapping[str, str]] = None, cwd: Optional[str] = None) -> Ran:
+        """``argv`` run, in ``cwd`` where one is given (Claude Code removes a project's server from there)."""
+        place = {"cwd": cwd} if cwd else {}
+        return self._runner([str(part) for part in argv], {**self.environ, **(environ or {})}, timeout, **place)
 
     def listing(self, argv: Sequence[str]) -> str:
         """What a listing command prints; ``CommandFailed`` when it fails."""
@@ -389,28 +422,30 @@ def _zed(machine: Machine) -> List[Path]:
 
 
 # The agents the Skills CLI knows that have no plugin of ours, as its agent table has them (skills
-# 1.7.4, dist/cli.mjs): its id, its display name, its global skills folder (``globalSkillsDir``),
-# and the paths any one of which, existing, is the agent installed (``detectInstalled``). Never
-# Claude Code, Cursor, Codex, Gemini CLI or Grok Build: they have the plugin.
+# 1.7.6, dist/cli.mjs): its id, its display name, the folder ``npx skills add -g`` copies its skills
+# into, and the paths any one of which, existing, is the agent installed (``detectInstalled``). That
+# folder is where the CLI writes (``getAgentBaseDir``), not the agent's ``globalSkillsDir``: an agent
+# whose project folder is ``.agents/skills`` (the CLI's universal agents) gets ``~/.agents/skills``
+# whatever its own global folder, so GitHub Copilot, Amp, Antigravity, Droid, Kilo Code and OpenCode
+# share it with Cline and Zed (each reads it, but Antigravity, whose documentation names only its own
+# folders). Never Claude Code, Cursor, Codex, Gemini CLI or Grok Build: they have the plugin.
 SKILLS_AGENTS: Dict[str, Tuple[str, Callable[[Machine], Path], Callable[[Machine], List[Path]]]] = {
-    # VS Code's agent is GitHub Copilot: it reads ~/.copilot/skills as well.
-    "github-copilot": ("GitHub Copilot", lambda m: m.home / ".copilot" / "skills", lambda m: [m.home / ".copilot"]),
+    # VS Code's agent is GitHub Copilot.
+    "github-copilot": ("GitHub Copilot", shared_skills, lambda m: [m.home / ".copilot"]),
     "windsurf": ("Windsurf", lambda m: m.home / ".codeium" / "windsurf" / "skills",
                  lambda m: [m.home / ".codeium" / "windsurf"]),
     "cline": ("Cline", shared_skills, lambda m: [m.home / ".cline"]),
-    "amp": ("Amp", lambda m: _config_home(m) / "agents" / "skills", lambda m: [_config_home(m) / "amp"]),
-    "antigravity": ("Antigravity", lambda m: m.home / ".gemini" / "antigravity" / "skills",
-                    lambda m: [m.home / ".gemini" / "antigravity"]),
-    "antigravity-cli": ("Antigravity CLI", lambda m: m.home / ".gemini" / "antigravity-cli" / "skills",
-                        lambda m: [m.home / ".gemini" / "antigravity-cli"]),
+    "amp": ("Amp", shared_skills, lambda m: [_config_home(m) / "amp"]),
+    "antigravity": ("Antigravity", shared_skills, lambda m: [m.home / ".gemini" / "antigravity"]),
+    "antigravity-cli": ("Antigravity CLI", shared_skills, lambda m: [m.home / ".gemini" / "antigravity-cli"]),
     "openclaw": ("OpenClaw", lambda m: _openclaw(m) / "skills",
                  lambda m: [m.home / name for name in (".openclaw", ".clawdbot", ".moltbot")]),
-    "droid": ("Droid", lambda m: m.home / ".factory" / "skills", lambda m: [m.home / ".factory"]),
+    "droid": ("Droid", shared_skills, lambda m: [m.home / ".factory"]),
     "goose": ("Goose", lambda m: _config_home(m) / "goose" / "skills", lambda m: [_config_home(m) / "goose"]),
-    "kilo": ("Kilo Code", lambda m: m.home / ".kilo" / "skills", lambda m: [m.home / ".kilo", m.home / ".kilocode"]),
+    "kilo": ("Kilo Code", shared_skills, lambda m: [m.home / ".kilo", m.home / ".kilocode"]),
     "kiro-cli": ("Kiro CLI", lambda m: m.home / ".kiro" / "skills", lambda m: [m.home / ".kiro"]),
     "hermes-agent": ("Hermes Agent", lambda m: _hermes_home(m) / "skills", lambda m: [_hermes_home(m)]),
-    "opencode": ("OpenCode", lambda m: _config_home(m) / "opencode" / "skills", lambda m: [_config_home(m) / "opencode"]),
+    "opencode": ("OpenCode", shared_skills, lambda m: [_config_home(m) / "opencode"]),
     "roo": ("Roo Code", lambda m: m.home / ".roo" / "skills", lambda m: [m.home / ".roo"]),
     "trae": ("Trae", lambda m: m.home / ".trae" / "skills", lambda m: [m.home / ".trae"]),
     "zed": ("Zed", shared_skills, _zed),
@@ -444,11 +479,19 @@ def ours_in(folder: Path) -> List[Path]:
     return [path for path in (Path(folder) / name for name in SKILLS) if path in found]
 
 
-def skills_words(got: Mapping[str, Any], machine: Optional[Machine] = None) -> str:
-    """An agent's copy of the skills as the receipt records it (``got``), as a person reads it."""
+def skills_words(agent: str, got: Mapping[str, Any], machine: Optional[Machine] = None) -> str:
+    """An agent's copy of the skills as the receipt records it (``got``), as a person reads it: in the
+    folder the Skills CLI copies the agent's skills into (``skills_folder``), which an earlier release's
+    receipt may name otherwise."""
     at = f" ({str(got['at']).replace('T', ' ').rstrip('Z')[:16]})" if got.get("at") else ""
     return (f"the skills of text-to-cad {got.get('release') or '?'}, copied into "
-            f"{shown(got.get('folder') or '?', machine)} by the Skills CLI{at}")
+            f"{shown(skills_folder(agent, machine), machine)} by the Skills CLI{at}")
+
+
+def skills_lost(agent: str, got: Mapping[str, Any], machine: Optional[Machine] = None) -> List[str]:
+    """The skills the receipt says the Skills CLI installed for ``agent`` (``got``) that its folder lacks."""
+    have = {path.name for path in ours_in(skills_folder(agent, machine))}
+    return [name for name in got.get("skills") or () if name not in have]
 
 
 def skills_installed(printed: str) -> Optional[List[str]]:
@@ -758,6 +801,7 @@ class Copy:
     held_by: str = ""  # a store's copy no command here removes: who holds it ("an administrator manages it")
     removable: bool = True  # False: another scope's (a project's), reported and left
     entry: Optional[Dict[str, Any]] = None  # a server's entry, as its config holds it
+    project: Optional[str] = None  # a server Claude Code keeps for one project (``~/.claude.json``'s ``projects``)
     # Ours, from the plugin folder: the folder it reads or was copied from, how the app keeps it ("in
     # place", "linked" or "copied"), when a copy was made, and the release the app recorded at its
     # install where it reads the folder itself (Claude Code's cached copy).
@@ -826,6 +870,7 @@ class Step:
     commands: List[List[str]] = field(default_factory=list)
     edit: Optional[Dict[str, Any]] = None
     note: str = ""  # how it is done, when not by a command of its own ("in the same edit")
+    cwd: Optional[str] = None  # where its commands run, when that matters (a project's server)
     agents: List[str] = field(default_factory=list)  # the Skills CLI agents its command adds the skills for
     store: str = ""  # the store's copy it removes, as a person reads it: the receipt records it
 
@@ -959,6 +1004,16 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None, listed: bool
     servers, _problem = _json(claude_json(machine))
     if isinstance(servers, dict):
         _servers(app, servers.get("mcpServers"), claude_json(machine))
+        # `claude mcp add` in a project (its default, local scope): kept per project in the same file.
+        projects = servers.get("projects")
+        for project, entry in sorted(projects.items()) if isinstance(projects, dict) else ():
+            entries = entry.get("mcpServers") if isinstance(entry, dict) else None
+            for key, server in sorted(entries.items()) if isinstance(entries, dict) else ():
+                if runs_cadgen(server):
+                    app.copies.append(Copy(app.id, "server", str(key), version=server_pin(server),
+                                           path=str(claude_json(machine)), entry=server, project=str(project),
+                                           detail=f"in {shown(claude_json(machine), machine)}, for "
+                                                  f"{shown(project, machine)}"))
     _loose(app, machine)
     return app
 
@@ -1251,9 +1306,23 @@ def _removal(app: App, copy: Copy, machine: Machine, action: str = "remove dupli
         return Step(app.id, action, words, edit={"op": "remove", "path": copy.path})
     if copy.kind == "server" and app.id in ("claude-desktop", "cursor"):
         return Step(app.id, action, words, edit={"op": "servers", "path": copy.path, "remove": [copy.name]})
+    if copy.kind == "server" and app.id == "claude":
+        # Claude Code gets CAD from its plugin's skills, and the desktop app's Code tab its server from Claude
+        # Desktop's config: a server Claude Code starts itself gets no card it can use there.
+        if action == "remove duplicate":
+            action, words = "remove server", (f"{words}: Claude Code takes CAD from the plugin's skills, and its "
+                                              "Code tab the server from Claude Desktop's config")
+        if not app.command:
+            return _leave(app, f"{words}: no claude command here to remove it with; remove it in {app.label}")
+        if copy.project is None:
+            return Step(app.id, action, words, commands=[[app.command, "mcp", "remove", "--scope", "user", copy.name]])
+        if not Path(copy.project).is_dir():
+            return _leave(app, f"{copy.words(machine)}: its folder is gone, so Claude Code never starts it; left alone")
+        # A project's (local) server is removed from inside that project.
+        return Step(app.id, action, words, commands=[[app.command, "mcp", "remove", "--scope", "local", copy.name]],
+                    cwd=copy.project)
     commands = {
         ("claude", "plugin"): [["plugin", "uninstall", copy.name]],
-        ("claude", "server"): [["mcp", "remove", "--scope", "user", copy.name]],
         ("codex", "plugin"): [["plugin", "remove", copy.name]],
         ("codex", "server"): [["mcp", "remove", copy.name]],
         ("gemini", "extension"): [["extensions", "uninstall", PLUGIN]],
@@ -1593,15 +1662,15 @@ def _shared_note(apps: Mapping[str, App], steps: List[Step], machine: Machine) -
     """A line for Codex and Gemini CLI, which read ``~/.agents/skills``, when a Skills CLI agent here
     keeps the skills there and the app has the plugin or is getting it: both copies show in it."""
     shared = shared_skills(machine)
-    owners = [step.app for step in steps if step.app in SKILLS_AGENTS and skills_folder(step.app, machine) == shared
-              and step.subject != NEED_NODE]
+    owners = list(dict.fromkeys(label(step.app) for step in steps if step.app in SKILLS_AGENTS
+                                and skills_folder(step.app, machine) == shared and step.subject != NEED_NODE))
+    whose = " and ".join([", ".join(owners[:-1]), owners[-1]] if len(owners) > 1 else owners)
     notes = []
     for name, kind in (("codex", "plugin"), ("gemini", "extension")):
         app = apps.get(name)
         getting = any(step.app == name and step.action in ("install", "update") for step in steps)
         if owners and app is not None and app.present and (app.ours() is not None or getting):
-            notes.append(Step(name, "leave", f"the skills in {shown(shared, machine)}, "
-                                             f"{' and '.join(label(owner) for owner in owners)}'s folder: "
+            notes.append(Step(name, "leave", f"the skills in {shown(shared, machine)}, {whose}'s folder: "
                                              f"{app.label} lists them beside its {kind}'s"))
     return notes
 
@@ -2031,8 +2100,8 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
     records: List[Dict[str, Any]] = []
     base = {"app": step.app, "action": step.action, **({"store": step.store} if step.store else {})}
     for argv in step.commands:
-        say(f"$ {command_text(argv, machine)}")
-        ran = machine.run(argv)
+        say(f"$ {command_text(argv, machine)}" + (f"   (in {shown(step.cwd, machine)})" if step.cwd else ""))
+        ran = machine.run(argv, cwd=step.cwd)
         record = {**base, "kind": "command", "command": list(argv), "code": ran.code, "ok": ran.ok, "at": stamp()}
         found = done(step) if not ran.ok and done is not None else None
         if found:

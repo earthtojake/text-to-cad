@@ -147,19 +147,21 @@ class PromptFilesRouteTest(unittest.TestCase):
         schematic = self.tmp / "divider.kicad_sch"
         schematic.write_text("(kicad_sch (version 20260901))\n", encoding="utf-8")
         plan = {"position": [114, -65, 60], "target": [114, -65, 0], "up": [0, 1, 0], "orthographicHalfHeight": 20}
-        display = {"sheet": "/Load/", "border": False}
+        display = {"sheet": "/Load/", "border": True}  # the viewer's: the whole drawing sheet it shows
         request = {"name": "divider.kicad_sch", "input": str(schematic), "annotation": ANNOTATION,
                    "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]}
         status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
         self.assertEqual(status, 200, body)
         packet = json.loads((self.files / "divider-1.snapshot.json").read_text(encoding="utf-8"))
         [source, _out, prepared] = job_pictures(packet)[0]
-        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, display))
+        # The still draws KiCad's drawing sheet where the window reaches it: the frame with ``border``, the title
+        # block (``title``, on unless the view says false).
+        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, {**display, "title": True}))
         self.assertNotIn("output", packet["jobs"][0])
         dark = {**request, "views": [{**request["views"][0], "display": {**display, "appearance": "dark"}}]}
         status, body, _ = self.call("POST", "/api/v1/local/prompt-files", dark)
         self.assertEqual(status, 400, body)
-        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet:")
+        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet, title:")
 
     def test_a_boards_prompt_names_its_references_for_the_snapshot_to_light(self) -> None:
         """What a board's prompt names in it goes in its packet, canonical; a job takes them, and only a board's."""
@@ -253,7 +255,7 @@ class PromptFilesRouteTest(unittest.TestCase):
             (self.request(views=[{"label": "a", "camera": "iso", "width": 0}]), "views[0].width"),
             (self.request(annotation={"marks": {}}), "annotation is null or an object"),
             # snapshot's own parsers: a camera key it does not take, a display it does not draw
-            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera has no projection"),
+            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera projection belongs to display.camera"),
             (self.request(views=[{"label": "a", "camera": "iso", "display": {"mode": "sketch"}}]), "no display mode"),
             (self.request(views=[{"label": "a", "camera": "iso", "display": {"hidden": "lid"}}]), "display.hidden is a list of part refs"),
             (self.request(views=[{"label": "a", "camera": "authored"}]), "the view's own camera"),
@@ -286,6 +288,37 @@ class PromptFilesRouteTest(unittest.TestCase):
             self.assertEqual(self.call("GET", f"/api/v1/local/prompt-files/{name}")[0], 404, name)
         self.assertEqual(self.call("GET", "/api/v1/local/prompt-files/part-1-current.png", guard=False)[0], 403)
         self.assertEqual(self.call("GET", "/api/v1/local/prompt-files?id=old", guard=False)[0], 405)
+
+
+class ScratchDirectoryTest(unittest.TestCase):
+    """A message names the packet by its path: on POSIX a folder of this process's in /tmp, never the per-user
+    temporary folder (macOS's /var/folders/<hash>/T) or a home; elsewhere, or where /tmp refuses one, the
+    system's temporary folder."""
+
+    def made(self, files: PromptFiles) -> Path:
+        directory = files.directory
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        return directory
+
+    def test_on_posix_it_is_this_processs_own_folder_in_tmp(self) -> None:
+        import os
+        import stat
+
+        if os.name != "posix":
+            self.skipTest("POSIX only")
+        directory = self.made(PromptFiles())
+        self.assertEqual(Path("/tmp"), directory.parent)
+        self.assertTrue(directory.name.startswith("cad-quick-edit-"))
+        self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode), "this user's alone")
+
+    def test_a_tmp_that_refuses_one_falls_back_to_the_systems_temporary_folder(self) -> None:
+        from unittest import mock
+
+        from cad_server.viewer import prompt_files
+
+        with mock.patch.object(prompt_files, "SHORT_TEMP", str(self.made(PromptFiles(directory=tempfile.mkdtemp())) / "missing")):
+            directory = self.made(PromptFiles())
+        self.assertEqual(Path(tempfile.gettempdir()).resolve(), directory.parent.resolve())
 
 
 if __name__ == "__main__":

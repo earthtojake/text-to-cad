@@ -144,12 +144,12 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertIn('requirement="cad-server==$version"', installer)
             self.assertIn('\n    $CadVersion = "9.9.9"\n', (root / "scripts/install/install.ps1").read_text(encoding="utf-8"))
             self.assertEqual(skill.read_text(encoding="utf-8"), "Run `cad run model.py`. An older release used cadgen==0.1.0.\n")
-            # So does the turn-off command the privacy policy prints.
-            self.assertIn("--from cad-server==9.9.9 cad telemetry off",
-                          (root / "apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
-            # The README and the docs site's homepage are prose and no pin target: a pin there would
-            # never be stamped.
-            for page in ("README.md", "apps/docs/src/lib/content.ts"):
+            # The README, the docs site's homepage and its policy pages are prose and no pin target: a
+            # pin there would never be stamped. The privacy policy's telemetry commands run `cad`.
+            self.assertIn("<code>cad telemetry off</code>",
+                          repo_path("apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
+            for page in ("README.md", "apps/docs/src/lib/content.ts", "apps/docs/src/app/privacy-policy/page.tsx",
+                         "apps/docs/src/app/terms-of-service/page.tsx"):
                 self.assertNotRegex(repo_path(page).read_text(encoding="utf-8"), r"(?<![\w.-])(cadgen|cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?)==", page)
             # And the install page's Claude Desktop config and the installer it says the command runs.
             page = (root / "docs/install.md").read_text(encoding="utf-8")

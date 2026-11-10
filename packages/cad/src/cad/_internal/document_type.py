@@ -9,7 +9,8 @@ step`` is one object that is
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
-  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a board's ``.drc``, a
+  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.solve``,
+  the stress study, ``cad._internal.fea.operation``; a board's ``.drc``, a
   schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
   the type implements it;
 * the vocabulary its own standard defines, where that takes no third-party objects.
@@ -47,7 +48,8 @@ class DocumentType(types.ModuleType):
 
         return DOCUMENT_TYPES[self.__name__.rpartition(".")[2]]
 
-    def __call__(self, out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
+    def __call__(self, out: Any, *, name: str | None = None, tolerance: float | None = None,
+                 angle: float | None = None) -> Any:
         """``@<type>("out.<ext>", name=...)`` (or ``@<type>(out="out.<ext>")``, the decorator's 0.10 signature):
         declare the file a model writes, of this type."""
         entry = self.entry
@@ -58,8 +60,10 @@ class DocumentType(types.ModuleType):
                             f"{how} (its operations: {', '.join(entry.operation_names)})")
         from cad.engine import model
 
-        # An STL's or a 3MF's own mesh tolerance goes to the engine's decorator, which alone takes it.
-        return getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}))
+        # A GLB's, an STL's or a 3MF's own mesh tolerance and angle go to the engine's decorator, which alone
+        # takes them.
+        return getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}),
+                                        **({} if angle is None else {"angle": angle}))
 
     def __getattr__(self, name: str) -> Any:
         entry = self.entry
@@ -76,6 +80,13 @@ class DocumentType(types.ModuleType):
             from cad._internal.manufacturing import dfm_for
 
             value = dfm_for(entry.id)
+            self.__dict__[name] = value
+            return value
+        if name == "solve" and (entry.operation("solve") or _NONE).integration == "calculix":
+            # The stress study every B-rep type shares (``cad._internal.fea.operation``).
+            from cad._internal.fea.operation import solve_for
+
+            value = solve_for(entry.id)
             self.__dict__[name] = value
             return value
         if name.startswith("__"):
@@ -115,13 +126,15 @@ def refuse_other(document_type: str, source: Any) -> None:
     entry = DOCUMENT_TYPES[document_type]
     if isinstance(source, (str, os.PathLike)):
         text = os.fspath(source)
+        from cad.engine.addresses import parts
         from cad.engine.ids import is_id
 
-        if is_id(str(text).partition("#")[0]):
+        named = parts(text)[0]  # a FILE#REF's file, a path that holds a '#' itself whole
+        if is_id(named):
             if entry.has_file:
                 raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.model")
             return
-        found = type_of(str(text).partition("#")[0])
+        found = type_of(named)
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and not entry.has_file:
@@ -151,7 +164,7 @@ class ModelType(DocumentType):
 
 def _operation(owner: DocumentType, name: str) -> Any:
     """``owner.<name>``: the engine's operation of that name (``cad.engine.api``), for a source of this type.
-    An export of a mesh to the other mesh kinds takes no ``tolerance``: only a document is meshed by it."""
+    An export of a mesh to the other mesh kinds takes no ``tolerance`` or ``angle``: only a document is meshed by it."""
     from cad.engine import api
 
     verb = getattr(api, name)
@@ -159,8 +172,9 @@ def _operation(owner: DocumentType, name: str) -> Any:
 
     if name == "export" and not meshed:
         def operation(source: Any, *destinations: Any, **options: Any) -> Any:
-            if "tolerance" in options:
-                raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument 'tolerance'")
+            for option in ("tolerance", "angle"):
+                if option in options:
+                    raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument '{option}'")
             owner._own(source)
             return verb(source, *destinations, **options)
     else:

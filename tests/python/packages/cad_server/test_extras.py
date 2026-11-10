@@ -215,6 +215,8 @@ class NamingTest(unittest.TestCase):
             return env
 
         old = made("old", "0.8.0", ["pandas"])
+        dead = made("dead", "0.10.0", ["bpy"])
+        base.interpreter(dead).unlink()  # its Python, one uv managed, since uninstalled: no run can use it again
         superseded = made("edited", "0.10.0", ["/w/gears"], {"/w/gears": "before"})
         now = made("now", "0.10.0", ["/w/gears"], {"/w/gears": "after"})
         for name, release, given in (("held", "0.8.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
@@ -227,10 +229,12 @@ class NamingTest(unittest.TestCase):
             self.assertEqual(extras.kept(folder, "0.10.0"), {"0.10.0", "0.8.0"}, "the release the update came from")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
             self.assertEqual(sorted(extras._collect(folder, keep, made=now, spec=extras.Spec(requirements=("/w/gears",)),
-                                                    inputs={"release": "0.10.0"})), sorted([str(superseded), str(old)]))
+                                                    inputs={"release": "0.10.0"})),
+                             sorted([str(superseded), str(old), str(dead)]))
         self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "before", "held", "now", "same"],
                          "the release before's stay; a base is its release's to remove; one a process runs from "
-                         "goes at a later making; the environments of other packages stay")
+                         "goes at a later making; the environments of other packages stay; one whose Python is "
+                         "gone goes, of whatever release")
         self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, extras.Spec(requirements=("/w/gears",)),
                                          {"/w/gears": "later"}),
                          ["/w/gears"], "the line that makes it again names the local package edited")
@@ -307,6 +311,13 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad import memo\n", {"build123d"}),
                 ("from cad.ap242 import posed\n", {"build123d"}),
                 ("from cad import step\nstep.dfm('p.step')\n", {"trimesh"}),
+                # A stress study is calculix's operation, and needs what its operations do beside it: the kernel
+                # that reads the part and netgen that meshes it (the registry's alongside). The tool alone is
+                # calculix's, as is its command.
+                ("import cad\ncad.step.solve('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
+                ("from cad.model import solve\n", {"build123d", "calculix", "netgen"}),
+                ("import cad_ccx\ncad_ccx.run('job.inp')\n", {"calculix"}),
+                ("from cad.calculix import _program\n", {"calculix"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
@@ -322,6 +333,7 @@ class ChoosingTest(unittest.TestCase):
 
         self.assertEqual(self.spec("kicad-cli", "version").integrations, ("kicad",), "kicad-cli is the kicad integration's")
         self.assertEqual(self.spec("kicad-cli.exe", "version").integrations, ("kicad",), "as Windows spells it")
+        self.assertEqual(self.spec("ccx", "-i", "job").integrations, ("calculix",), "ccx alone: no mesher, no kernel")
         self.assertEqual(self.spec("--with", "cad[kicad]", "kicad-cli", "version").integrations, ("kicad",),
                          "an explicit --with still works")
         self.assertEqual(self.spec("--with", "cad[trimesh]", "kicad-cli").integrations, ("kicad", "trimesh"))

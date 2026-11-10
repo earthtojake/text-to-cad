@@ -66,9 +66,13 @@ ALLOWED_CADGEN = {
     "cad.registry",  # the document types and integrations: stdlib only
     "cad._internal.document_type",  # cad.<type> as one object, every name loaded on first use
     "cad.engine.ids",  # what a document id is: re and os alone
+    "cad.engine.addresses",  # a FILE#REF's file and ref, and a document's key: os, pathlib and cad.engine.ids alone
     # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
     # is imported in the function that measures.
     "cad._internal.manufacturing",
+    # A B-rep type's stress study (no robot type's): its signature and options, stdlib only; the kernel, netgen
+    # and CalculiX are imported in the function that studies.
+    "cad._internal.fea.operation",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,

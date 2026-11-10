@@ -1,12 +1,13 @@
-import type { PromptContext, PromptPart, PromptReference, PromptMessageOptions, PromptContextPort, PromptDeliveryResult } from './types.js';
+import type { PromptContext, PromptFolders, PromptPart, PromptReference, PromptMessageOptions, PromptContextPort, PromptDeliveryResult } from './types.js';
 export type * from './types.js';
 export declare function validatePromptReference(reference: unknown): PromptReference;
 export declare function validatePromptContext(context: unknown): PromptContext;
-export declare function createPromptContext(parts: readonly PromptPart[], operationId?: string): PromptContext;
+export declare function createPromptContext(parts: readonly PromptPart[], operationId?: string, options?: { folders?: PromptContext['folders'] }): PromptContext;
+export declare function displayPath(path: string, folders?: PromptFolders | null): string;
 export declare function referencePart(reference: PromptReference, id?: string): Extract<PromptPart, { kind: 'reference' }>;
 export declare function textPart(text: string, id?: string): Extract<PromptPart, { kind: 'text' }>;
 export declare function promptReferenceIds(reference: PromptReference): string[];
-export declare function formatPromptReference(reference: PromptReference): string;
+export declare function formatPromptReference(reference: PromptReference, folders?: PromptFolders | null): string;
 export declare function parsePromptReference(text: string): PromptReference | null;
 export declare function formatPromptContextText(context: PromptContext): string;
 export declare function formatPromptMessage(context: PromptContext, options?: PromptMessageOptions): string;

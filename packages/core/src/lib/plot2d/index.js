@@ -3,7 +3,8 @@
  * snapshot bundle. Payload in (`GET /api/v1/documents/kicad_pcb/<id>/plot`, schema 4: geometry per layer), Canvas 2D out in
  * the viewer's two themes (`theme.js`: KiCad's default colours on the dark canvas, the same hues
  * darkened on the light one), the view maths drawing2d's; and the board's Display contract
- * (`boardDisplay.js`), which both read the same way.
+ * (`boardDisplay.js`), which both read the same way; and what a board is made in (`stackup.js`: its
+ * stack-up's colours, which a 3D face draws it in).
  */
 export {
   OPTIONAL_LAYER_KINDS,
@@ -27,7 +28,8 @@ export {
 } from "./plot.js";
 export { BOARD_PALETTES, HOLE_COLORS, NAME_COLORS, DIM_OPACITY, SCHEMATIC_COLORS, SCHEMATIC_DARK_COLORS, ZONE_OPACITY, boardPalette, itemColor, layerColor,
   netnameColor, schematicColors, schematicItemColor } from "./theme.js";
-export { GLYPHS, glyphStrokes, textStrokes } from "./strokeFont.js";
+export { GLYPHS, glyphStrokes, parseMarkup, textStrokes } from "./strokeFont.js";
+export { MASK_OPACITY, boardFinish, finishColor } from "./stackup.js";
 export { boardMirrorX, boardPlanProjection, marksInPlan, planToSheet, sheetToPlan } from "./boardView.js";
 export {
   BOARD_DISPLAY_DEFAULTS,
@@ -38,6 +40,7 @@ export {
   BOARD_THROUGH_LAYER_LABELS,
   boardActiveLayer,
   boardDisplayAirwires,
+  boardDisplayAsMade,
   boardDisplayDrawsCopper,
   boardDisplayIsCustom,
   boardDisplayLayers,

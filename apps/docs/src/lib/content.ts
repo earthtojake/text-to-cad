@@ -19,7 +19,7 @@ export const installCommands = [
 // What the command does, and that running it again is the update, under the commands. The command
 // name is in backticks, which the page sets as code.
 export const installSummary =
-  "It installs uv if it is missing, then sets up text-to-cad in every agent app on your computer with each app's own commands (the plugin, which brings the skills and CAD's MCP server, or for an agent without a plugin the skills alone), registers the `cad` command, and moves CAD's server to the new release. Run it again to update everything, or click CAD's update button when it shows one; it lists the apps to restart.";
+  "It installs uv if it is missing, then sets up text-to-cad in every agent app on your computer with each app's own commands (the plugin, which brings the skills and CAD's MCP server, or for an agent without a plugin the skills alone; Claude Code gets the skills, and Claude Desktop the server, for its Chat and Code tabs), registers the `cad` command, and moves CAD's server to the new release. Run it again to update everything, or click CAD's update button when it shows one; it lists the apps to restart.";
 // Installing by hand, each app's own commands, and updates: a page in the repository (the README's
 // Quickstart links it too), which the site does not repeat.
 export const manualInstall = { label: "Installing by hand, app by app, and updates", path: "docs/install.md" };
@@ -107,11 +107,25 @@ export const features = [
     file: "housing.step",
   },
   {
+    id: "stress",
+    name: "Stress checks",
+    path: "skills/fea/SKILL.md",
+    summary: "Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.",
+    file: "bracket.step",
+  },
+  {
     id: "drawings",
     name: "Engineering drawings",
     path: "skills/engineering-drawing/SKILL.md",
     summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
     file: "bracket.pdf",
+  },
+  {
+    id: "renders",
+    name: "Renders",
+    path: "skills/render/SKILL.md",
+    summary: "Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.",
+    file: "hero.png, turntable.mp4",
   },
   {
     id: "fabrication",

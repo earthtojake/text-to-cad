@@ -2,7 +2,8 @@
 # dependencies = ["shapely"]
 # ///
 """Step 5: every piece of the B.Cu GND pour that holds no stitching via gets one (inside it, clear of its edge),
-and a stitching via that joins nothing is removed; then the pours refill. Run after board_04_pour.py."""
+and a stitching via that joins nothing is removed (a GND tie's via, where a GND track ends, stays); then the
+pours refill. Run after board_04_pour.py."""
 import sys
 from pathlib import Path
 
@@ -36,8 +37,9 @@ for z in board.zones:
         p = polylabel(piece, 0.01) if piece.geom_type == "Polygon" else piece.representative_point()
         adds.append((p.x, p.y))
 dangling = []
+ends = {end for t in board.tracks if t.net == "GND" for end in (t.points[0], t.points[-1])}  # a tie's vias stay
 for v in board.vias:
-    if v.net == "GND" and not any(inside(v.at, f) for z in board.zones if z.name == "GND_B" for f in z.fills):
+    if v.net == "GND" and v.at not in ends and not any(inside(v.at, f) for z in board.zones if z.name == "GND_B" for f in z.fills):
         dangling.append(v.at)
 with kicad_pcb.edit(BOARD) as b:
     gnd = next(n for n in b.get_nets() if n.name == "GND")

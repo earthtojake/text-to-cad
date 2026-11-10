@@ -62,6 +62,10 @@ jobs:
     outputs:
       cadgen: ${{ steps.select.outputs.cadgen }}
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
+      fea: ${{ steps.select.outputs.fea }}
+      blender: ${{ steps.select.outputs.blender }}
+      bpy: ${{ steps.select.outputs.bpy }}
+      floor: ${{ steps.select.outputs.floor }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -78,6 +82,7 @@ jobs:
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
+      routing: ${{ steps.select.outputs.routing }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -240,6 +245,149 @@ jobs:
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
+
+  # The router's copper is the same bits on every OS, or it is not deterministic: its unit files hold one
+  # board's copper to a digest (test_kicad_routing_determinism.py). The cadgen jobs run them on Linux (glibc)
+  # and Windows (the MSVC runtime); this job runs them on macOS, the third C library, on a change to the
+  # router, the board readers it reads through, its tests or the library's numpy pin. The library alone
+  # (numpy; no kernel, no KiCad): about a minute, most of it the runner and Python starting; the tests take
+  # two seconds.
+  routing-macos:
+    name: routing (macOS)
+    needs: changes
+    if: needs.changes.outputs.routing == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the library alone
+        run: python -m pip install --editable ./packages/cad
+
+      - name: Run the router's unit files
+        env:
+          PYTHON_BIN: python
+        run: scripts/test/test-routing.sh
+
+  # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
+  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
+  # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
+  # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
+  # Xvfb), and the command through the library's runner of one operation. Only the study's code, its suite and runner, and the modules it reads
+  # through select it (and a full run). Linux only: the stack is the same wheels everywhere, and the solves are
+  # CPU-bound. About 2 minutes: 230 tests in 76 s locally, beside netgen (~10 MB) and ccx (~8 MB).
+  fea:
+    name: fea
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      # The netgen and calculix integrations' extras, with netgen pinned to the version the accuracy tests'
+      # margins were measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the
+      # floor. The calculix extra pins cad-ccx (conda-forge's CalculiX, repackaged: earthtojake/ccx), the wheel
+      # PyPI has for this runner. A ccx that does not run fails here by name rather than as every solve failing.
+      - name: Install the netgen and calculix integrations
+        run: |
+          uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen,calculix]" \
+            "netgen-mesher==6.2.2608"
+          python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
+
+      # A solve draws a picture of each field with the engine's stills, OCCT in an OpenGL context: on a runner with no
+      # screen, Xvfb's, as the cadgen job draws them.
+      - name: Install the display the engine's stills draw on
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
+
+      - name: Run the fea suite
+        run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
+        shell: bash
+
+  # The one job on Python 3.13: bpy's only line (Blender as a Python module), and so the packages' floor. Two
+  # halves, each on the changes that reach it (and both on a full run).
+  #
+  # bpy: the server, on its own Python as everywhere, runs one script that imports cad, build123d and bpy:
+  # `cad run` makes the environment of cad[blender,build123d] for it on a Python 3.13 uv manages (bpy 5.2.3: about
+  # 430 MB from PyPI for Linux, some 20 s, not cached, as the KiCad job fetches kicode), a worker of that Python
+  # builds its model for the engine, and cad.blender.load loads the GLBs this checkout's cad exports, plays their
+  # clips in both orders and renders a 64x64 still with Cycles on the CPU, then one with EEVEE through Mesa's
+  # software OpenGL. Nothing in it may skip here: its runner fails a run in which a test did. The suite
+  # (tests/python/packages/blender, test-blender.sh) is this job's alone. cad.blender, bpy's environment and how
+  # cad run chooses it, the GLB's export, the daemon and supervisor that start its worker, the suite and its runner
+  # select it. Linux only: bpy's wheel is one build per platform and no runner has a GPU. About 2 minutes: the X and OpenGL libraries, the environment, a
+  # model's build and export, two bpy runs (16 tests in 47 s locally, warm).
+  #
+  # floor: the library's, the server's and the shim's suites on Python 3.13 (test-floor.sh), in an environment made
+  # here with requirements-dev.txt: a call Python 3.13 lacks parses there and fails only when it runs (one reached
+  # the server once: argparse's suggest_on_error), so only the suites hold the floor. The three packages' sources
+  # and suites select it, beside the cadgen jobs on the Python the server's installations run on. About 10 minutes:
+  # the environment (the kernel's wheels for 3.13, no cache of them), then about 2450 tests (7.7 minutes locally, on
+  # four cores: the library's 3.3, the server's 4.3, the shim's seconds).
+  blender:
+    name: Blender renders
+    needs: changes
+    if: needs.changes.outputs.blender == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      # What bpy's Linux wheel loads from the system and does not carry: X11's client libraries, the keyboard map,
+      # and OpenGL and EGL with Mesa's software drivers (EEVEE draws through them; Cycles on the CPU needs none).
+      # And what the library's suite draws its stills on: Xvfb, and the font their text is set in.
+      - name: Install the display, and the X and OpenGL libraries bpy loads
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-6 libxfixes3 libxi6 libxrender1 libxxf86vm1 libxkbcommon0 libsm6 libice6 \
+            libgl1 libegl1 libglx-mesa0 libegl-mesa0 libgl1-mesa-dri xvfb fonts-dejavu-core
+
+      - name: Run the blender suite
+        if: needs.changes.outputs.bpy == 'true'
+        run: scripts/test/test-blender.sh
+
+      - name: Make an environment on Python 3.13, the packages' floor
+        if: ${{ !cancelled() && needs.changes.outputs.floor == 'true' }}
+        run: |
+          uv venv --python 3.13 "$RUNNER_TEMP/floor"
+          uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
+
+      - name: Run the library's, the server's and the shim's suites on the floor
+        if: ${{ !cancelled() && needs.changes.outputs.floor == 'true' }}
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/floor/bin/python
+        run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
 
   core-js:
     name: core-js

@@ -73,6 +73,8 @@ function readAuthored(material) {
   return {
     color: material.color.clone(),
     opacity: material.opacity,
+    // What it wears in a look that draws no transmission, where its file says (a GLB's: `markGlbMaterials`).
+    previewOpacity: material.userData?.cadPreviewOpacity,
     transparent: material.transparent,
     depthWrite: material.depthWrite,
     // The step it was made with, which it keeps while it writes depth (`surfaceOffset`).
@@ -176,7 +178,10 @@ export function createSurfaceLook(THREE, root) {
       if (power !== 1 && (filled || !finishes || lit.userData?.cadAuthoredFinish !== true)) {
         color = new THREE.Color(color.r ** power, color.g ** power, color.b ** power);
       }
-      const opacity = clamp01(authored.opacity * opacityScale, 1);
+      const finish = lit.userData?.cadAuthoredFinish === true;
+      const preserveFinish = finish && finishes && !forceFill && opacityScale >= 0.999;
+      const drawsTransmission = !flat && (authoredLook || preserveFinish);
+      const opacity = clamp01((drawsTransmission ? authored.opacity : authored.previewOpacity ?? authored.opacity) * opacityScale, 1);
       const depthWrite = authored.transparent ? authored.depthWrite : opacity >= 0.999;
       const next = {
         map: forceFill ? null : authored.map,
@@ -193,8 +198,6 @@ export function createSurfaceLook(THREE, root) {
         target = entry.unlit ||= new THREE.MeshBasicMaterial({ name: lit.name });
       } else if (!authoredLook) {
         target = entry.inspect ||= inspectStandIn(THREE, lit);
-        const finish = lit.userData?.cadAuthoredFinish === true;
-        const preserveFinish = finish && finishes && !forceFill && opacityScale >= 0.999;
         if (preserveFinish) {
           // Standard materials have no Physical-only channels. Keep their authored
           // fields and use neutral Physical defaults for the stand-in's other fields.

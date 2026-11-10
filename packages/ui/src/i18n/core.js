@@ -1,5 +1,6 @@
 /**
- * The viewer's i18n core: the locales it speaks and the lookup. It is deliberately plain — no
+ * The viewer's i18n core: the locales it speaks and the lookup (which locale a person reads in is
+ * `./locale.js`'s, which this re-exports). It is deliberately plain — no
  * React, no `navigator`, no storage, no `document`, and no locale of its own: which language a
  * view reads in is the host's to say (`environment.locale`, as it says `colorScheme`), and a
  * view hands the translator for it down (`../react.js`). So a pure module (`entry-menu.js`) and a
@@ -11,10 +12,9 @@ import ja from "./locales/ja.js";
 import ko from "./locales/ko.js";
 import zhCN from "./locales/zh-CN.js";
 import zhTW from "./locales/zh-TW.js";
+import { DEFAULT_LOCALE, LOCALES, localeForTag, resolveLocale } from "./locale.js";
 
-/** The locales the viewer ships, in a picker's list order. */
-export const LOCALES = Object.freeze(["en", "zh-CN", "zh-TW", "ja", "ko"]);
-export const DEFAULT_LOCALE = "en";
+export { DEFAULT_LOCALE, LOCALES, localeForTag, resolveLocale };
 
 const TABLES = { "en": en, "zh-CN": zhCN, "zh-TW": zhTW, "ja": ja, "ko": ko };
 
@@ -23,33 +23,6 @@ export function normalizeLocale(locale) {
   const wanted = String(locale || "").trim();
   return TABLES[wanted] ? wanted
     : LOCALES.find(supported => supported.toLowerCase() === wanted.toLowerCase());
-}
-
-/**
- * The locale a language tag (BCP 47, or a platform's `zh_TW`) reads in, or undefined. Chinese goes
- * by script, else region: Traditional (`zh-Hant`, Taiwan, Hong Kong, Macau) is `zh-TW`, and
- * Simplified (`zh-Hans`, mainland China, Singapore, or plain `zh`) is `zh-CN`; any `ja` is `ja`,
- * any `ko` is `ko`, any `en` is `en`.
- * @param {unknown} tag
- */
-export function localeForTag(tag) {
-  const subtags = String(tag || "").trim().replaceAll("_", "-").toLowerCase().split("-").filter(Boolean);
-  const [language, ...rest] = subtags;
-  if (language === "zh") return rest.includes("hant") || (!rest.includes("hans") && rest.some(part => ["tw", "hk", "mo"].includes(part))) ? "zh-TW" : "zh-CN";
-  return ["en", "ja", "ko"].includes(language) ? language : undefined;
-}
-
-/**
- * The locale to run in, from the context's language tags, best first (the browser's languages,
- * the host's locale before them): the first one this viewer speaks wins (`localeForTag`), and
- * nothing understood is English.
- */
-export function resolveLocale(preferences) {
-  for (const preference of preferences || []) {
-    const locale = localeForTag(preference);
-    if (locale) return locale;
-  }
-  return DEFAULT_LOCALE;
 }
 
 /** A dictionary's answer, falling back to English, falling back to the key itself. */

@@ -16,3 +16,8 @@ It holds no tool, view or document: the server does. What it does on its own:
 - **Opens the person's browser** where a text-only app's `cad_show` asks, in the app's own environment,
   never in the server's, and tells the server whether it opened.
 - **Says which app started it**, read from its parent processes, which only it can see.
+- **Says when Claude Code started it**: `CLAUDE_CODE_ENTRYPOINT`, which Claude Code sets for every server
+  it starts, in its terminal and in the Claude desktop app's Code tab, goes to the server with the host's
+  `initialize`, and that session lists no tools: there CAD is the cad skill and the `cad` command, and the
+  Code tab's card comes from Claude Desktop's own config, whose server Claude Code does not start and which
+  never sees the variable. `CAD_MCP_CARDS=1` in this process's environment keeps the tools, for testing.

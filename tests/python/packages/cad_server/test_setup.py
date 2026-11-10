@@ -115,23 +115,30 @@ def plugin_source(root: Path) -> Path:
     return root
 
 
-# The Skills CLI, for Windsurf: `add` copies every skill into its folder and prints the CLI's JSON,
+# The Skills CLI, for Windsurf and GitHub Copilot: `add` copies every skill into the folder it keeps for
+# each agent named, as the real one does -- Windsurf's own, and for GitHub Copilot, whose project folder is
+# `.agents/skills`, `~/.agents/skills` and never its `~/.copilot/skills` -- and prints the CLI's JSON;
 # `remove` takes the named ones out.
 NPX = f"SKILLS = {providers.SKILLS!r}\n" + """
 import os, shutil
 from pathlib import Path
-folder = Path(os.environ["HOME"]) / ".codeium" / "windsurf" / "skills"
-assert args[:3] == ["--prefer-offline", "-y", "skills@latest"] and args[args.index("-a") + 1] == "windsurf", args
+home = Path(os.environ["HOME"])
+FOLDERS = {"windsurf": home / ".codeium" / "windsurf" / "skills", "github-copilot": home / ".agents" / "skills"}
+assert args[:3] == ["--prefer-offline", "-y", "skills@latest"], args
 args = args[1:]
+agents = [args[index + 1] for index, arg in enumerate(args) if arg == "-a"]
+assert agents and set(agents) <= set(FOLDERS), agents
 if args[2] == "add":
     assert os.path.isfile(os.path.join(args[3], "cad", "SKILL.md")), "the skills come from the plugin folder"
-    for name in SKILLS:
-        (folder / name).mkdir(parents=True, exist_ok=True)
-        (folder / name / "SKILL.md").write_text(f"---\\nname: {name}\\n---\\nMaintained at earthtojake/text-to-cad.\\n")
+    for folder in {FOLDERS[agent] for agent in agents}:
+        for name in SKILLS:
+            (folder / name).mkdir(parents=True, exist_ok=True)
+            (folder / name / "SKILL.md").write_text(f"---\\nname: {name}\\n---\\nMaintained at earthtojake/text-to-cad.\\n")
     print(json.dumps([{"name": name, "status": "installed"} for name in SKILLS]))
 elif args[2] == "remove":
-    for name in args[args.index("-s") + 1:args.index("-y")]:
-        shutil.rmtree(folder / name)
+    for folder in {FOLDERS[agent] for agent in agents}:
+        for name in args[args.index("-s") + 1:args.index("-y")]:
+            shutil.rmtree(folder / name)
 """
 
 
@@ -459,6 +466,26 @@ class TheCommand(Fixture):
         self.assertEqual(call.args[0]["cad"], record["cad"])
         self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
 
+    def test_claude_desktop_gaining_cad_s_server_ends_the_run_telling_the_person_to_reopen_it(self) -> None:
+        # Claude Desktop reads its config only as it starts, its Code tab's card included: the run that gave it
+        # CAD's server says so last. A run that changed nothing says nothing, and nor does one that only moved
+        # the server's pin: the server it runs keeps working with the newer engine.
+        self.desktop_with({})
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.rstrip("\n").endswith(f"Next, restart to load it:\n  {providers.restart('claude-desktop')}"), out)
+        self.assertIn("quit and reopen it to load CAD's server", providers.RESTART["claude-desktop"])
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("restart to load it", out)
+        self.desktop_with({"cad": self.entry("0.0.1")})
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"], self.entry())
+        self.assertNotIn("restart to load it", out)
+        # On Windows, closing its window leaves it running in the tray: the line says to quit it there.
+        self.assertIn("system tray", providers.restart("claude-desktop", providers.Machine(self.home, {}, platform="win32")))
+
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
         code, out, err = self.run_setup("--dry-run", "--json")
@@ -477,7 +504,7 @@ class TheCommand(Fixture):
                          [("plugin", "plugin", True), ("claude-desktop", "edit", True)])
         self.assertEqual(document["verified"]["apps"]["claude-desktop"], {"verdict": "ok", "release": RELEASE})
         self.assertEqual(document["verified"]["telemetry"], "off: your choice")
-        self.assertEqual(document["restart"], [providers.RESTART["claude-desktop"]])
+        self.assertEqual(document["restart"], [providers.restart("claude-desktop")])
 
 
 class InstallUpdateAndUninstall(Fixture):
@@ -511,7 +538,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(receipt["launcher"]["path"], str(proxy))
         self.assertIn("verify   Claude Desktop: text-to-cad " + RELEASE, out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
-        self.assertIn(providers.RESTART["claude-desktop"], out)
+        self.assertIn(providers.restart("claude-desktop"), out)
         # Run again: nothing to do and nothing written; 0.8's own stop runs again, and stops nothing.
         setup.stop_earlier.side_effect = None
         before = self.snapshot()
@@ -536,7 +563,8 @@ class InstallUpdateAndUninstall(Fixture):
         # The pin is what uvx runs: it moves to this release, and the environment someone added stays.
         cad = json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"]
         self.assertEqual(cad, {**self.entry(), "env": older["env"]})
-        self.assertIn(providers.RESTART["claude-desktop"], out)
+        # A new pin takes no restart: the server the app runs keeps working with the newer engine.
+        self.assertNotIn(providers.restart("claude-desktop"), out)
         written = self.desktop_with({"cad": self.entry("99.0.0")})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
@@ -907,12 +935,20 @@ sys.exit(0)
                               rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
         document = json.loads(self.run_setup("--json", "--only", "windsurf")[1])
         self.assertEqual(document["verified"]["apps"], {"windsurf": {"verdict": "ok", "release": RELEASE}})
-        # The report reads the folder again: a skill gone since, which nothing here can add back, is said.
+        # The report reads the folder again: a skill gone since, which nothing here can add back (no Node), fails
+        # the run, said as a failure, never a footnote to a line that reads as done.
         shutil.rmtree(folder / providers.SKILLS[0])
         (self.bin / ("npx.cmd" if os.name == "nt" else "npx")).unlink()
         code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertRegex(out, rf"verify   Windsurf: the skills .+, without {providers.SKILLS[0]}\n")
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"verify   Windsurf: failed: {providers.SKILLS[0]} not in {where}, where the Skills CLI was to "
+                      f"copy the skills of text-to-cad {RELEASE}\n", out)
+        self.assertIn("Some steps failed (said above)", out)
+        self.assertNotIn("is already up to date here", out)
+        code, printed, _err = self.run_setup("--json", "--only", "windsurf")
+        self.assertEqual(code, 1, printed)
+        self.assertEqual(json.loads(printed)["verified"]["apps"],
+                         {"windsurf": {"verdict": "missing", "release": RELEASE, "missing": [providers.SKILLS[0]]}})
         command(self.bin, "npx", NPX)
         code, out, _err = self.run_setup()
         self.assertIn(f": {providers.SKILLS[0]} missing", out)
@@ -929,8 +965,30 @@ sys.exit(0)
         self.assertEqual(last, ["npx", "--prefer-offline", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
                                 *sorted(providers.SKILLS), "-y"])
         self.assertEqual(providers.ours_in(folder), [])
-        self.assertIn("Restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
-        self.assertNotIn("Restart to load it", out)
+        self.assertIn("Next, restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
+        self.assertNotIn("restart to load it", out)
+
+    def test_an_agent_whose_skills_the_cli_keeps_in_the_shared_folder_is_read_there(self) -> None:
+        """GitHub Copilot's project folder is `.agents/skills`, so `npx skills add -g` copies its skills into
+        `~/.agents/skills`, never its `~/.copilot/skills` (which Copilot reads beside it): the plan, the receipt
+        and the report name that folder, and find the skills in it. Read in `~/.copilot/skills`, as 0.11.1 did,
+        they were missing after every run."""
+        command(self.bin, "npx", NPX)
+        own = self.home / ".copilot" / "skills"
+        (own / "theirs").mkdir(parents=True)
+        shared = providers.shared_skills(self.machine)
+        where = providers.shown(shared, self.machine)
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"GitHub Copilot  install  the skills, copied into {where} by the Skills CLI", out)
+        self.assertEqual(providers.ours_in(shared), [shared / name for name in providers.SKILLS])
+        self.assertEqual([path.name for path in own.iterdir()], ["theirs"])
+        self.assertEqual(self.receipt()["skills"]["github-copilot"]["folder"], str(shared))
+        self.assertRegex(out, rf"verify   GitHub Copilot: the skills of text-to-cad {re.escape(RELEASE)}, copied into "
+                              rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"the skills in {where}, from text-to-cad {RELEASE}: up to date", out)
 
     def test_only_takes_a_skills_cli_agent(self) -> None:
         command(self.bin, "npx", NPX)

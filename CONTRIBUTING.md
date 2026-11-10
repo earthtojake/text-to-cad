@@ -34,8 +34,10 @@ Push the branch to `origin` and open the pull request against
 
 ### Development environment
 
-Choose the setup for the environment where the tools and tests will run. Every
-environment needs Python 3.14 or newer, the packages' floor. Install Node.js 22 for the
+Choose the setup for the environment where the tools and tests will run. Use
+Python 3.14, the Python the server's installations run on; the packages' floor is 3.13
+(`requires-python`), which CI holds with the library's, the server's and the shim's suites on
+it ([CI](#ci), Blender renders). Install Node.js 22 for the
 packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
@@ -60,11 +62,14 @@ scripts/bundle/bundle.sh
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
-snapshot is painted with Pillow and needs no display. On Linux with no
-screen (a server, a container, CI) that context is an X server's: install Xvfb,
-Mesa's software GL and the font the stills set their text in, and run the package
-suites or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
-snapshot fails, saying so.
+snapshot is painted with Pillow and needs no display. On Linux that context is an X
+server's: the OCP wheels we pin draw through GLX alone (no EGL, no OSMesa), so there is no
+off-screen context without one. A snapshot draws on the request's `DISPLAY`, else on the
+engine's: the daemon's own, else an Xvfb the daemon starts itself where `Xvfb` is on PATH
+(`cad_server/engine/display.py`). With no screen (a server, a container, CI) install Xvfb,
+Mesa's software GL and the font the stills set their text in; the package suites draw in the
+test process too, so run them under `xvfb-run`, as CI's Linux job does. With neither a
+display nor Xvfb a snapshot fails, naming what to install.
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
@@ -192,9 +197,10 @@ opened file (`documents/<uuid>/document.json`: the script and function that buil
 the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's:
 `~/.cache/cad`) it keeps each model document's bytes as last built,
 `documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
-every document without a build, and under `pycache/` the bytecode the daemon and its
-workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`); it touches nothing else in
-that folder. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
+every document without a build, under `pycache/` the bytecode the daemon and its
+workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`), and under `homes/` the private
+settings folders `cad run` hands Blender's module in place of a person's own; it touches nothing else in
+that folder but the environments it makes (`base/`). Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cad`
@@ -375,11 +381,14 @@ diff content: a comment in a module selects what the module's code would.
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
-| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the print3d and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`) |
+| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the print3d, render and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
-| KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
+| KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip, the board's and schematic's edits and a plan routed in a board's edit (viewing and drawing a board need no KiCad and are the package suites') |
+| fea | The stress study's code (the library's `_internal/fea`, `calculix/` and `netgen/`, `results.py`, the type's binding and the runner of one operation; the server's `cli/document_types.py` and `_internal/integration_env.py`), the library's `pyproject.toml`, the engine and shared modules a study reads a document, finds CalculiX and writes its result through (`engine/document.py`, `refs.py`, `kernel/bounds.py`, `executables.py`, `export/glb.py`, `build.py`, the stills of a GLB its pictures are (`formats/glb.py`, `snapshot.py`), `_internal/atomic_replace.py`, `programs.py`, the server's `cli_from_function.py`), `tests/python/packages/fea`, `test-fea.sh` | `tests/python/packages/fea` (`test-fea.sh`), Linux only, with the netgen and calculix integrations installed (`cad[netgen,calculix]`, netgen pinned to 6.2.2608, the version the accuracy margins were measured with, and cad-ccx 2.23.0 from PyPI): the study's parse, checks and materials, the solves against hand calculations, assemblies, the results folder and its pictures (under Xvfb), and the command through the runner of one operation; about 2 minutes (230 tests in 76 s locally), under a 15-minute timeout. No package job collects the suite |
+| Blender renders | Two halves, each on its own changes. **bpy**: `cad.blender` and the GLB reader it reads through (the library's `blender/`, `engine/formats/gltf.py`), bpy's environment and how `cad run` chooses it (the library's `registry.py`, `_internal/integrations.py` and `pyproject.toml`; the server's `_internal/extras.py`, `base.py`, `scan.py` and `cli/run.py`), the GLB, how it is exported and meshed finer, and the clips it bakes (`engine/export/__init__.py`, `mesh.py`, `glb.py`, `motion.py`, `animation.py`, `keys.py`; the server's `engine/cli.py`), the daemon and the supervisor that start a worker on bpy's Python (the server's `engine/daemon.py`, `engine/supervisor.py`), Open in's Blender script (`_internal/open_in_blender.py`), `tests/python/packages/blender`, `test-blender.sh`. **floor**: the three packages' sources and suites (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `tests/python/packages/cad`, `cad_server`, `cad_mcp`), `test-floor.sh` | The one job on Python 3.13, bpy's only line and so the packages' floor; Linux only, with Xvfb, X11's client libraries and Mesa's OpenGL and EGL from apt. **bpy**, `test-blender.sh`: the server on its own Python runs one script that imports cad, build123d and bpy -- `cad run` makes the environment of `cad[blender,build123d]` on a Python 3.13 uv manages (bpy 5.2.3, about 430 MB from PyPI), a worker of that Python builds its model, and `cad.blender.load` loads the GLBs the checkout's `cad` exports and ones made by hand, plays their clips in both orders and renders a 64x64 Cycles still on the CPU, then an EEVEE one; a test that skips there fails the run; about 2 minutes (16 tests in 47 s locally, warm). **floor**, `test-floor.sh`: an environment of `requirements-dev.txt` on Python 3.13, then the library's, the server's and the shim's suites on it (about 2450 tests in 7.7 minutes locally on four cores: the library's 3.3, the server's 4.3), about 10 minutes; the cadgen jobs run the same suites on the Python the server's installations run on. Under a 30-minute timeout. No package job collects the bpy suite |
+| routing (macOS) | the router (the library's `kicad/_route.py` and `kicad/_routing`), what it reads a board's numbers through (`engine/formats/kicad/geometry.py`, `board_index.py`, `sexpr.py`), the library's `pyproject.toml` (its numpy pin), the router's unit files (`test_kicad_routing*.py`), `test-routing.sh` | `test-routing.sh` on macOS with the library alone installed (numpy): the router's unit files, among them `test_kicad_routing_determinism.py`, which holds one board's copper to a committed digest. The cadgen jobs run the same files on Linux and Windows, so the digest is held on glibc, Apple's libm and the MSVC runtime: the router decides nothing through the C library's sin, cos, atan2 or hypot. About a minute, most of it the runner and Python starting (the tests take two seconds), under a 10-minute timeout; not a required check |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
@@ -1349,7 +1358,11 @@ never CAD or mesh assets: a test makes the STEP, GLB or mesh it needs in a tempo
 folder, a sample exports on request into its project's gitignored `STEP/`, `STL/`,
 `GLB/`, `3MF/`, `DXF/` or `XBF/`, and `tests/python/global/test_no_cad_assets_tracked.py`
 fails on any tracked CAD or mesh file but the few tiny fixtures it lists, each with the
-reason no test can make it.
+reason no test can make it. The KiCad files an electronics sample's scripts write (its board,
+schematic, project and libraries) are build output in the same way: gitignored, made again by
+the sample's `cad run build.py`, and held untracked by
+`tests/python/global/test_generated_kicad_files_untracked.py`, which lists what each build writes
+and the few KiCad files beside it that no script makes. A board no script makes is source.
 
 A security problem is reported privately, as [SECURITY.md](SECURITY.md) says, never as an
 issue or a pull request.

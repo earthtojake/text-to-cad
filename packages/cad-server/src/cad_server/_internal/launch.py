@@ -23,7 +23,9 @@ from __future__ import annotations
 
 # The one Python line the server runs on: the installation uvx makes runs it, so the engine does, and the
 # environment every model and kernel process runs in (``base``) is made with the engine's own
-# interpreter. The plugin's server configs and the install scripts carry the same line as text.
+# interpreter. The plugin's server configs and the install scripts carry the same line as text. It is not
+# the packages' floor (``requires-python``), which is older: an environment with an integration whose tool is
+# built for another line alone is made on that line (``extras.on``: blender's bpy, 3.13), the library in it.
 PYTHON = "3.14"
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--from")
 # The server's distribution and its command; the CAD app's transport (the shim's) and its command.

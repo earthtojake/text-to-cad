@@ -457,9 +457,11 @@ class DoctorTests(unittest.TestCase):
         (self.state / "install-receipt.json").write_text(json.dumps({"schema": 1, "actions": [replaced], "skills": {"windsurf": {
             "release": "1.1.0", "folder": "/h/.codeium/windsurf/skills", "skills": ["cad"], "at": "2026-10-31T02:40:00Z"}}}),
             encoding="utf-8")
-        with mock.patch.object(providers.Machine, "here"), \
+        machine = providers.Machine(Path(self.state) / "h", {}, bundled={}, homebrew=())
+        with mock.patch.object(providers.Machine, "here", return_value=machine), \
                 mock.patch.object(providers, "detect", return_value=found) as detect:
             lines = self.apps()
+        windsurf = providers.shown(providers.skills_folder("windsurf", machine), machine)
         self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
         self.assertEqual(lines, [
             f"app      Claude Code: text-to-cad@text-to-cad 1.1.0, reads {folder} in place",
@@ -469,8 +471,9 @@ class DoctorTests(unittest.TestCase):
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
             "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by cad setup "
             "(2026-10-31 02:39)",
-            "app      Windsurf: the skills of text-to-cad 1.1.0, copied into /h/.codeium/windsurf/skills by the Skills CLI "
-            "(2026-10-31 02:40)"])
+            # The folder the Skills CLI keeps for it, read again: the skill gone since is said.
+            f"app      Windsurf: the skills of text-to-cad 1.1.0, copied into {windsurf} by the Skills CLI "
+            "(2026-10-31 02:40); cad not there now: run the install command again"])
         with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):
             self.assertEqual(self.apps(), ["apps     unknown (OSError: no home)"])
 
@@ -584,6 +587,8 @@ class LeftoversTest(PrivateFolders):
 
         unused = environment("unusedunused0000", ["pandas"], True)
         used, kernel = environment("usedusedused0000", ["scipy"], False), environment("basebasebase0000", None, True)
+        dead = environment("deaddeaddead0000", ["bpy"], True)
+        base.interpreter(dead).unlink()  # its Python, one uv managed, since uninstalled: it is still one to collect
         before = self.tree()
 
         with mock.patch.object(installations, "targets", return_value=None):
@@ -591,7 +596,7 @@ class LeftoversTest(PrivateFolders):
         self.assertEqual(code, 0)
         self.assertIn("  leftover 2 engine records of an older format, 1 bytecode folder of installations no longer "
                       "registered (2.0 KB), 1 cache folder with no record (4.0 KB), 1 file an earlier 0.8 build kept "
-                      "(telemetry-sender), 1 environment of a model's packages unused for 7 days: cad doctor --prune "
+                      "(telemetry-sender), 2 environments of models' packages unused for 7 days: cad doctor --prune "
                       "removes them\n", out)
         self.assertEqual(self.tree(), before, "nothing is removed without --prune")
         self.assertIn(f"  cache    {self.cache}: 1 document · 1 B, kept until deleted\n", out,
@@ -611,8 +616,8 @@ class LeftoversTest(PrivateFolders):
                               "removed 1 bytecode folder of installations no longer registered (2.0 KB)\n"
                               "removed 1 cache folder with no record (4.0 KB)\n"
                               f"removed {stamp}, a file an earlier 0.8 build kept\n"
-                              "removed 1 environment of a model's packages unused for 7 days\n")
-        self.assertEqual((unused.exists(), used.exists(), kernel.exists()), (False, True, True))
+                              "removed 2 environments of models' packages unused for 7 days\n")
+        self.assertEqual((unused.exists(), dead.exists(), used.exists(), kernel.exists()), (False, False, True, True))
         self.assertFalse((self.state / "engines" / "aaaaaaaa.json").exists())
         self.assertEqual(json.loads(trimmed.read_text(encoding="utf-8")), {"port": 3246, "schema": 3})
         for kept in (current, recent_record, token, registered, live, recent_bytecode,

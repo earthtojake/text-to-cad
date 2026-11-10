@@ -2,7 +2,7 @@
 ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
-    cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
+    cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--json]   (the options: a model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
@@ -55,7 +55,7 @@ def _source_help(document_type: str | None, generic: str) -> str:
 
 
 def _meshes(document_type: str | None) -> bool:
-    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance: nothing is meshed)."""
+    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance or angle: nothing is meshed)."""
     if document_type is None:
         return False
     from cad.registry import DOCUMENT_TYPES
@@ -75,12 +75,15 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf or .dxf (of a planar document): the "
                              "document as its code built it")
-    from cad.engine.export import MIN_TOLERANCE
+    from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
-                        help=f"mesh an .stl or a .3mf to within this absolute tolerance, in mm (at least "
+                        help=f"mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least "
                              f"{MIN_TOLERANCE:g}), where it is finer than the viewer's quarter per cent of a part: "
-                             "for a print whose fits are finer")
+                             "for a print whose fits are finer, or a picture whose curves are")
+    export.add_argument("--angle", type=float, metavar="DEG",
+                        help=f"mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees ("
+                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments")
     export.add_argument("--json", action="store_true", help="print what was written as JSON")
 
 
@@ -168,8 +171,10 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                                           "the display JSON object (mode, grid, camera, clip, exploded, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
-                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks}; "
-                                          "a KiCad schematic {sheet, border}. Every snapshot is drawn light")
+                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
+                                          "window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; "
+                                          "a KiCad schematic {sheet, border, title} (title: KiCad's title block, on unless "
+                                          "false; border: the page's edge and frame). Every snapshot is drawn light")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
     parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
                                          "a camera JSON object (its position, target and orthographicHalfHeight in "
@@ -297,7 +302,7 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
 def parser_for(verb: str, prog: str | None = None, *, document_type: str | None = None) -> argparse.ArgumentParser:
     """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...): for
     ``document_type``, its source said as that type's (a model's id, or a file of its kind), and a mesh's
-    export without ``--tolerance``."""
+    export without ``--tolerance`` or ``--angle``."""
     help_text, arguments, _runner = VERBS[verb]
     if document_type is not None and verb in ("export", "snapshot", "inspect"):
         from cad.registry import DOCUMENT_TYPES
@@ -413,7 +418,7 @@ def _export(args: argparse.Namespace, prog: str) -> int:
 
     try:
         written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
-                             log=lambda text: print(text, file=sys.stderr))
+                             angle=getattr(args, "angle", None), log=lambda text: print(text, file=sys.stderr))
     except (ExportRefused, ValueError) as error:
         raise _refusal(error) from None
     except api.EngineError as error:
@@ -454,8 +459,10 @@ def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect"
 
 def _inspect(args: argparse.Namespace, prog: str) -> int:
     from cad.engine import api
+    from cad.engine.addresses import parts
 
-    query = args.query or (None if args.ref is not None or "#" in str(args.document) else "summary")
+    referred = args.ref is not None or parts(str(args.document))[1] is not None  # REF, or a FILE#REF's
+    query = args.query or (None if referred else "summary")
     try:
         found = api.inspect(args.document, args.ref, query=query)
     except ValueError as error:
@@ -556,6 +563,11 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append(f"  no material: {', '.join(missing)}")
     else:
         lines.append("materials   none set")
+    if summary.get("untextured"):  # texture maps on a mesh with no UVs: drawn as the scalar look
+        from cad.engine.document import untextured_maps
+
+        lines.append("textures    not drawn yet: these parts wear their material's scalar look")
+        lines.extend(f"  {row['part']}: {untextured_maps(row['materials'])}" for row in summary["untextured"])
 
     def listed(title: str, rows: list[str]) -> None:
         if not rows:

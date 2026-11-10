@@ -46,7 +46,11 @@ __all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Wri
            "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
-    """A request the engine refused or could not run: its words."""
+    """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
+    (``module.Name``), where its answer said (``type``: a failure, never a refusal), which the verb's facts
+    tell its observers (``_error``)."""
+
+    raised: str | None = None
 
 
 def _files(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -195,11 +199,12 @@ class Document:
             raise TypeError(f"{verb} of {self.name}: the body that calls it is building it; {verb} the "
                             "document the model call returns, once the build is done")
 
-    def export(self, *destinations: Any, tolerance: float | None = None) -> list[Written]:
-        """``export(handle, *destinations)``: the document written to each destination; an STL or a
-        3MF meshed to within ``tolerance`` (mm) when one is given, as ``export`` does."""
+    def export(self, *destinations: Any, tolerance: float | None = None, angle: float | None = None) -> list[Written]:
+        """``export(handle, *destinations)``: the document written to each destination; a GLB, an STL or a
+        3MF meshed to within ``tolerance`` (mm) and ``angle`` (degrees) when either is given, as ``export``
+        does."""
         self._outside("export")
-        return _said(_exporting(self, destinations, tolerance=tolerance), destinations)
+        return _said(_exporting(self, destinations, tolerance=tolerance, angle=angle), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
                  pose: Any = None, width: int | None = None, height: int | None = None,
@@ -316,12 +321,18 @@ def _failed(answer: dict[str, Any]) -> Exception:
         except ImportError:
             kind = None
     if not (isinstance(kind, type) and issubclass(kind, ValueError)):
-        return EngineError(text) if not module else ValueError(text)
+        if module:
+            return ValueError(text)
+        failed = EngineError(text)
+        if isinstance(answer.get("type"), str):
+            failed.raised = answer["type"]  # what the engine failed with: the facts' type (``_error``)
+        return failed
     try:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    for key in ("state", "rebuild"):  # a document not held: what it is, and what builds it again
+    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused.
+    for key in ("state", "rebuild", "part"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
@@ -443,7 +454,9 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 if not streamed or WORKER_STDERR not in str(error):
                     raise
                 # A dead worker's stderr tail is what this log just showed: said once.
-                raise EngineError(str(error).partition(WORKER_STDERR)[0]) from None
+                again = EngineError(str(error).partition(WORKER_STDERR)[0])
+                again.raised = error.raised
+                raise again from None
             reports, fresh = answer["done"], answer.get("worker", {}).get("fresh")
             if named:
                 _heard_release(answer.get("release"))
@@ -495,7 +508,7 @@ def _source(source: Any) -> dict[str, Any]:
     return {"path": str(path)}
 
 
-def export(source: Any, *destinations: Any, tolerance: float | None = None,
+def export(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
@@ -506,11 +519,13 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
     with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP or DXF is made from one). Several
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
-    carries every configuration sequence the document defines, as a clip. An STL and a 3MF are
-    meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part), unless
-    ``tolerance`` gives an absolute ceiling in millimetres (at least ``export.MIN_TOLERANCE``), for a
-    print whose fits are finer: each part is then meshed again at the finer of the two for these
-    files, and each file says it; every destination is then an STL or a 3MF. A call the program's own
+    carries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are
+    meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part and 28.5
+    degrees), unless ``tolerance`` gives an absolute ceiling in millimetres (at least
+    ``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or
+    ``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then
+    meshed again at the finer of each for these files, and each file says it; every destination is
+    then a GLB, an STL or a 3MF. A call the program's own
     code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
@@ -521,7 +536,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
     if bar is not None:
         log = bar.around(log or (lambda _text: None))  # a line of the log goes above the bar
     try:
-        return _said(_exporting(source, destinations, log, daemon, frames, tolerance), destinations)
+        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, angle), destinations)
     finally:
         if bar is not None:
             bar.close()
@@ -542,15 +557,16 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 
 
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
-               progress: Callable[[dict], None] | None = None, tolerance: float | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, kind_of, tolerance_of
+               progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
+               angle: float | None = None) -> list[Written]:
+    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
     resolved = [Path(os.fspath(destination)).resolve() for destination in destinations]
     for destination in resolved:
         kind_of(destination)
-    tolerance = tolerance_of(tolerance, resolved)
+    tolerance, angle = tolerance_of(tolerance, resolved), angle_of(angle, resolved)
     source = _called(source, daemon)
     spec = _source(source)
     if "path" in spec:
@@ -563,12 +579,16 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
     shown = log or (lambda _text: None)
     order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd,
-             **({"tolerance": tolerance} if tolerance is not None else {})}
+             **({"tolerance": tolerance} if tolerance is not None else {}),
+             **({"angle": angle} if angle is not None else {})}
     done = _exported(order, spec, shown, daemon, progress)
-    if tolerance is not None and any(row.get("tolerance") != tolerance for row in done["files"]):
-        # A server of a release before the tolerance writes the files at its own, and says no tolerance.
+    unmet = [option for option, asked in (("tolerance", tolerance), ("angle", angle))
+             if asked is not None and any(row.get(option) != asked for row in done["files"])]
+    if unmet:
+        # A server of a release before the option writes the files at its own, and says none.
         raise EngineError(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
-                          "own tolerance: it is older than this library. Update it (cad update) and export again")
+                          f"own {' and '.join(unmet)}: it is older than this library. Update it (cad update) and "
+                          "export again")
     return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True))
             for row in done["files"]]
 
@@ -676,7 +696,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
 
     if isinstance(source, (Model, Document)) or is_id(os.fspath(source)):
         if out.suffix.lower() != ".png":
-            raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
+            raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one", part="out")
         drawing.options(display, camera, grid, width, height, size_profile)  # refused here, before any build
         drawing.parse_annotation(annotation)  # refused here, before any build
         source = _called(source, daemon)
@@ -693,6 +713,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
+    _whole(source)
     shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
                                           board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
                                           schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
@@ -703,6 +724,24 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
                              measurements=drawing.parse_measurements(measurements), annotation_source=annotation,
                              progress=progress)
     return Drawn(out, found["width"], found["height"], found)
+
+
+_ELEMENT = re.compile(r"(?:^|/)\s*(?:(?:face|edge|vertex)\s+\d+|[fev]:.*)\s*$")
+
+
+def _whole(source: Any) -> None:
+    """A snapshot draws a whole document: a source that names something inside one (``ID#bracket``,
+    ``arm.step#arm/face 3``, a ``FILE#REF`` that is no file) is refused, saying what to draw instead."""
+    from cad.engine.addresses import parts
+    from cad.engine.snapshot import SnapshotRefused
+
+    named, ref = parts(os.fspath(source))
+    if ref is None:
+        return
+    owner = _ELEMENT.sub("", ref).strip(" /")  # the part an element ref is on, or the part itself
+    alone = f'--display \'{{"isolated": {json.dumps([owner or "PART"])}}}\' draws {owner or "a part"} alone'
+    raise SnapshotRefused(f"a snapshot draws a whole document, so its source names no #{ref}: give {named}; {alone}",
+                          part="source")
 
 
 def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
@@ -789,9 +828,9 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     from cad.engine import refs
     from cad.engine.said import weighed
 
-    from cad.engine.addresses import key, split
+    from cad.engine.addresses import key, parts, split
 
-    named = os.fspath(source).partition("#")[0]
+    named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
         raise EngineError("source reference and ref disagree")
@@ -974,7 +1013,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
-    materials and their masses, where any part has one; its joints,
+    materials and their masses, where any part has one, and the parts whose texture maps are not drawn
+    (``untextured``); its joints,
     mechanism states, configuration sequences and animations; and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
@@ -1044,6 +1084,9 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
         "unweighed": unweighed if materials else [],
+        # Each part whose materials' texture maps are drawn as their scalar look (``untextured``).
+        "untextured": [{"part": prototype.get("name") or prototype["key"], "materials": prototype["untextured"]}
+                       for prototype in prototypes if prototype.get("untextured")],
         "joints": joints,
         "couplings": couplings_of(kinematics),
         "states": [{"name": name, "values": values} for name, values in (kinematics.get("configurations") or {}).items()],
@@ -1094,7 +1137,8 @@ def stop() -> bool:
 #     error     why it failed, or None: {type (the error's class, ``module.Name`` or a builtin's name; None
 #               when no error says), frames ([{file, line, function}], innermost last), engine (raised in
 #               the engine's own code, or its worker's), refused (the engine refused the request by name),
-#               here (raised in this process, as against told by the daemon or a report)}
+#               here (raised in this process, as against told by the daemon or a report), part (a snapshot's
+#               refusal: the part of the request it named, ``SnapshotRefused.part``; where it named one)}
 #     source    export, snapshot: what it read -- "xbf", "step", "glb", "stl", "threemf", "dxf", "urdf",
 #               "sdf", "srdf", "model" (a script's model) or "other"
 #     found     snapshot: the source file is there (a model's always is)
@@ -1194,7 +1238,9 @@ def _facts(verb: str, args: tuple, kwargs: dict[str, Any], heard: dict[str, Any]
             found["outputs"] = [{"kind": _SUFFIXES.get(Path(os.fspath(path)).suffix.lower(), "other"),
                                  "seconds": None} for path in args[1:]]
     if verb == "snapshot":
-        found["found"] = found["source"] == "model" or Path(os.fspath(source)).is_file()
+        from cad.engine.addresses import parts
+
+        found["found"] = found["source"] == "model" or Path(parts(os.fspath(source))[0]).is_file()
     return found
 
 
@@ -1203,9 +1249,10 @@ def _kind(source: Any) -> str:
 
     if isinstance(source, (Model, Document)):
         return "model"
+    from cad.engine.addresses import parts
     from cad.engine.ids import is_id
 
-    text = os.fspath(source)
+    text = parts(os.fspath(source))[0]  # the document a FILE#REF or an ID#REF names
     if is_id(text):
         return "model"  # a document by its id
     return _SUFFIXES.get(Path(text).suffix.lower(), "other")
@@ -1238,11 +1285,14 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:
             return {**_read(text), **told}
+        if error.raised:  # a failure the engine named by its type: what it is, a refusal only where that says so
+            refused = any(error.raised == f"{module}.{name}" for module, name in _REFUSALS)
+            return {"type": error.raised, "frames": [], **told, "refused": refused}
         return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)
         return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
-                "frames": [], **told, "refused": True}
+                "frames": [], **told, "refused": True, **_part(error)}
     refusals = tuple(kind for kind in (getattr(sys.modules.get(module), name, None) for module, name in _REFUSALS)
                      if isinstance(kind, type))
     frames = [{"file": frame.f_code.co_filename, "line": int(line or 0), "function": frame.f_code.co_name}
@@ -1250,7 +1300,13 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     kind = type(error)
     return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
             "frames": frames, "engine": bool(frames) and os.path.abspath(frames[-1]["file"]).startswith(_ENGINE),
-            "refused": isinstance(error, refusals), "here": True}
+            "refused": isinstance(error, refusals), "here": True, **_part(error)}
+
+
+def _part(error: BaseException) -> dict[str, str]:
+    """The part of a snapshot's request a refusal named (``SnapshotRefused.part``), where it named one."""
+    part = getattr(error, "part", None)
+    return {"part": part} if isinstance(part, str) else {}
 
 
 def told_error(report: dict[str, Any]) -> dict[str, Any]:

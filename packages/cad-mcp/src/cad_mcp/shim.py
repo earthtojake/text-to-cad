@@ -36,7 +36,10 @@ def initialize_params(params, launcher=None, holder=None, app=None):
     for (``browser.deliver``), and whether it can here, ``release``: the release this process is, which
     the server's update button offers when it is newer than the server's own, and ``channel`` and
     ``autoUpdated``: where its plugin came from, as its startup config says (``CAD_INSTALL_CHANNEL``,
-    ``CAD_AUTO_UPDATED``), which the server reports and writes down for its installation."""
+    ``CAD_AUTO_UPDATED``), which the server reports and writes down for its installation, ``claudeCode``:
+    the ``CLAUDE_CODE_ENTRYPOINT`` Claude Code put in this process's environment, where it started it, and
+    ``cards``: ``CAD_MCP_CARDS=1``, which keeps CAD's tools in such a session (the server's
+    ``host.claude_code``)."""
     from cad_mcp import __version__
 
     params = copy.deepcopy(params)
@@ -50,11 +53,14 @@ def initialize_params(params, launcher=None, holder=None, app=None):
         extensions.pop(TABS_EXTENSION, None)
         launcher = {"host": "CAD_MCP_PRESENTATION=text", "renders": False}
     channel = str(os.environ.get("CAD_INSTALL_CHANNEL") or "").strip()
+    claude_code = str(os.environ.get("CLAUDE_CODE_ENTRYPOINT") or "").strip()
     params.setdefault("_meta", {})["dev.texttocad/transport"] = {
         "appDir": os.environ.get("CAD_MCP_APP_DIR", ""), "cwd": os.getcwd(), "launcher": launcher,
         "browser": transport_browser(), "release": __version__,
         **({"channel": channel} if channel else {}),
         **({"autoUpdated": True} if str(os.environ.get("CAD_AUTO_UPDATED") or "").strip() == "1" else {}),
+        **({"claudeCode": claude_code} if claude_code else {}),
+        **({"cards": True} if str(os.environ.get("CAD_MCP_CARDS") or "").strip() == "1" else {}),
         **({"holder": holder} if holder else {}), **({"app": app} if app else {}),
     }
     return params

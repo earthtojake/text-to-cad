@@ -2,34 +2,47 @@
 
 One mesh per prototype -- its positions and normals one accessor pair, its triangles a
 primitive per look (a painted face's colour or material is a primitive of its own), indexed in
-16 bits where the mesh has at most 65,535 vertices and in 32 where it has more -- and
-a node per placement, named by the placement's path, under one root node named by the
-document. A material per look: PBR metallic-roughness, its base colour the part's (or
+16 bits where the mesh has at most 65,535 vertices and in 32 where it has more -- and the
+document's assembly tree as nodes, under one root node named by the document: a node per
+sub-assembly, its components under it, and a node per placement, each placed in its parent's frame
+(a node at its parent's place has no matrix), so a part stands where the document places it.
+Every node is named by its path below the root (``board/D44/housing``, its sub-assemblies
+``board`` and ``board/D44``), unique where the document's own paths are (two sub-assemblies both
+labelled ``leg``, each holding a ``foot``, give ``leg``, ``leg/foot``, ``leg``, ``leg/foot``), and a
+part's name is the one a flat file gave it. A
+sub-assembly with no part the file draws has no node. A material per look: PBR metallic-roughness, its base colour the part's (or
 the paint's), metallic, roughness and emissive from the part's material, ``BLEND`` where
-the colour is not opaque, and the rest of the material's look through glTF's material
+the colour is not opaque (a transmissive look's fade is its PBR ``opacity`` alone: ``_alpha``), and
+the rest of the material's look through glTF's material
 extensions: ``KHR_materials_ior``, ``_transmission`` with ``_volume`` (its thickness the part's,
 the smallest extent of its box; its attenuation the material's transmission colour and depth),
 ``_clearcoat``, ``_anisotropy`` (along a tangent the mesh carries for it: ``tangents``) and
 ``_emissive_strength``, each where the look is not glTF's default; a part without a material
 is a matte one of its colour. A
 placement whose own colour is not its part's is drawn by a second mesh of the same
-accessors in that colour. The placements are in the document's millimetres, Z up; the
-root node shows them in glTF's frame, Y up and metres, as cadgen's other GLBs do. A mesh of a
-format that carries no normals (an STL's, a 3MF's) is given the viewer's (``mesh.shaded``).
+accessors in that colour. The nodes are in the document's millimetres, Z up; the
+root node shows them in glTF's frame, Y up and metres. A mesh of a
+format that carries no normals (an STL's, a 3MF's) is given the viewer's (``mesh.shaded``). An
+export's own tolerance and angle are said in ``asset.extras.cad`` (``meshedWithin`` in millimetres,
+``angle`` in degrees), each only where the export gave it.
 
 Every configuration sequence of the document is an animation of the same name (``export/motion.py``):
-translation and rotation channels for each placement it moves, its duration in the animation's
-``extras`` (``{"cadgen": {"duration": seconds}}``). A clip is the sequence once; a player repeats
-it. After them, the source's animations (``animation()``, ``export/animation.py``), each one glTF
-animation of its name: translation, rotation and scale channels on the nodes its references
-place, their duration in ``extras`` as a configuration sequence's: a build's, or the record of them an
-xbf carries (``animations.record``). Every channel is written LINEAR -- the fewest keys within a
+translation and rotation channels for each placement it moves, its duration and its kind in the
+animation's ``extras`` (``{"cad": {"duration": seconds, "kind": "motion"}}``). A clip is the sequence
+once; a player repeats it. After them, the source's animations (``animation()``, ``export/animation.py``),
+each one glTF animation of its name: translation, rotation and scale channels on the nodes its
+references place, ``extras`` as a configuration sequence's (``"kind": "animation"``): a build's, or the
+record of them an xbf carries (``animations.record``). A clip keys a sub-assembly that moves as one
+(every part under it one link's, or moved by the same references, none scaled) on its own node, and
+every other moving part on its own (``motion.chosen``); its keys are in its parent's frame, worked out
+from the bake's place in the document's frame (``_local_rows``), the parent standing still in that
+clip, so every part is where the bake puts it. Every channel is written LINEAR -- the fewest keys within a
 tenth of a millimetre and of a degree of its bake (``export/keys.py``) -- but a STEP one (a hide),
-which is written as baked. A placement anything moves stands by translation and
+which is written as baked. A node anything moves stands by translation and
 rotation, as glTF asks of an animated node; every other one by its matrix. Channels whose keys
 are the same bytes (the parts of one link, or of one reference, that stand where their motion
 puts them) point at one sampler, and samplers with the same keys at one accessor: each motion is
-written once however many parts it carries, and every part keeps its own node and name.
+written once however many nodes it carries.
 """
 
 from __future__ import annotations
@@ -43,6 +56,7 @@ from typing import Any
 import numpy as np
 
 from cad.engine.export.mesh import groups, meshes, placed_points, shaded
+from cad.engine.export.motion import Target, quaternion
 
 __all__ = ["write"]
 
@@ -137,23 +151,21 @@ def write(view: Any, path: Path) -> None:
         found = mesh_at[key] = len(gltf_meshes) - 1
         return found
 
-    nodes: list[dict] = [{"name": view.name, "rotation": list(ROTATION), "scale": list(SCALE), "children": []}]
-    node_of: dict[int, int] = {}  # instance index -> node
-    shown: list[Any] = []
+    drawn: dict[int, int] = {}  # instance index -> its mesh, for each placement the file draws
     for placed in view.placements:
         own = held[placed.prototype]
         color = placed.color if placed.color is not None and placed.color != _tuple(
             view.prototypes[placed.prototype].get("color")) else None
         index = mesh_of(placed.prototype, color) if own.triangles else None
-        if index is None:
-            continue
-        nodes.append({"name": "/".join(placed.path[1:]) or placed.path[-1], "mesh": index,
-                      "matrix": [float(value) for value in placed.matrix.T.ravel()]})
-        nodes[0]["children"].append(len(nodes) - 1)
-        node_of[placed.instance] = len(nodes) - 1
-        shown.append(placed)
-    animations = _animations(view, held, shown, node_of, nodes, add, accessors)
-    document = {"asset": {"version": "2.0", "generator": "cadgen engine"}, "scene": 0,
+        if index is not None:
+            drawn[placed.instance] = index
+    nodes, targets = _tree(view, drawn)
+    shown = [placed for placed in view.placements if placed.instance in drawn]
+    animations = _animations(view, held, shown, targets, nodes, add, accessors)
+    asked = {**({} if view.tolerance is None else {"meshedWithin": view.tolerance}),
+             **({} if view.angle is None else {"angle": view.angle})}
+    document = {"asset": {"version": "2.0", "generator": "cad", **({"extras": {"cad": asked}} if asked else {})},
+                "scene": 0,
                 "scenes": [{"name": view.name, "nodes": [0]}], "nodes": nodes, "meshes": gltf_meshes,
                 "materials": materials, "accessors": accessors, "bufferViews": views,
                 "buffers": [{"byteLength": len(blob)}]}
@@ -175,26 +187,40 @@ def write(view: Any, path: Path) -> None:
 
 def _material(rgba: tuple, given: dict[str, Any] | None, thickness: float) -> dict[str, Any]:
     """A look as a glTF material: PBR metallic-roughness and an extension for each part of the
-    look past it (``materials``' table), each written only where it is not glTF's default."""
+    look past it (``materials``' table), each written only where it is not glTF's default. Its
+    scalar look alone: a texture map needs UVs the mesh has none of, so the file has no image and the
+    export names what it left out (``untextured``, ``export.translate``)."""
     if given is None:
         return {"pbrMetallicRoughness": {"baseColorFactor": list(rgba), "metallicFactor": 0.0,
                                          "roughnessFactor": 0.6},
                 "doubleSided": False, "alphaMode": "BLEND" if rgba[3] < 1.0 else "OPAQUE"}
-    from cad.engine.document import pbr_from_json
+    from cad.engine.document import pbr_from_json, scalar_pbr
 
-    pbr = pbr_from_json(given["pbr"])
-    if pbr.maps.to_dict():
-        raise ValueError("GLB export of native material texture maps requires UV mapping; use a scalar PBR look")
+    pbr = pbr_from_json(scalar_pbr(given["pbr"]))
     pbr = pbr.override(metalness=0.0 if pbr.values.metalness is None else pbr.values.metalness,
                        roughness=0.5 if pbr.values.roughness is None else pbr.values.roughness)
     entry = json.loads(pbr.to_gltf().to_json())["materials"][0]
     entry["name"] = given["material"]["name"]
-    entry["pbrMetallicRoughness"]["baseColorFactor"] = list(rgba)
-    entry["alphaMode"] = "BLEND" if rgba[3] < 1.0 else "OPAQUE"
+    alpha = _alpha(rgba, pbr.values)
+    entry["pbrMetallicRoughness"]["baseColorFactor"] = [*rgba[:3], alpha]
+    entry["alphaMode"] = "BLEND" if alpha < 1.0 else "OPAQUE"
     if pbr.values.transmission:
         volume = entry.setdefault("extensions", {}).setdefault("KHR_materials_volume", {})
         volume["thicknessFactor"] = thickness
     return entry
+
+
+def _alpha(rgba: tuple, values: Any) -> float:
+    """A look's alpha: its colour's, but for a transmissive look, which is see-through by its transmission
+    and fades only by its PBR ``opacity``. Its colour's alpha there says nothing the file should repeat:
+    build123d's material setter infers a preview from the transmission when the material is assigned
+    (``PbrProperties.interpolate_color``: ``transmission=1`` gives 0.3), a renderer applying both would draw
+    the part refractive and most of it absent, and nothing tells that value from a colour set by hand. What
+draws no transmission draws this alpha's preview (``formats/gltf.py``'s ``preview_alpha``, ``drawn_alpha``):
+``packages/core``'s ``previewOpacity.parity.json`` holds the two, and the viewer's and the 3MF's, to one set of cases."""
+    if not values.transmission:
+        return float(rgba[3])
+    return 1.0 if values.opacity is None else min(float(values.opacity), 1.0)
 
 
 def _thickness(mesh: Any) -> float:
@@ -233,30 +259,111 @@ def _size(held: dict[int, Any], shown: list[Any]) -> float:
     return float(np.linalg.norm(high - low)) if np.all(np.isfinite(low)) else 1.0
 
 
-def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict[int, int], nodes: list[dict],
+def _tree(view: Any, drawn: dict[int, int]) -> tuple[list[dict], list[Target]]:
+    """The document's tree as glTF nodes, the root first and every node before those under it, and
+    each node but the root as a ``motion.Target``: what a clip may key. ``drawn`` is each placement the
+    file draws, by instance, its mesh. A sub-assembly stands at its placement in its parent's
+    (``Source.locals``, the identity where the document has none: a mesh file's), a part where the
+    document places it; a node at its parent's place has no matrix. Each node is named by its path
+    below the root, as unique as the document's paths: two siblings of one label share a name."""
+    locals_ = view.source.locals()
+    placed_at = {placed.instance: placed for placed in view.placements}
+    nodes: list[dict] = [{"name": view.name, "rotation": list(ROTATION), "scale": list(SCALE), "children": []}]
+    targets: list[Target] = []
+
+    def members(tree: dict[str, Any]) -> tuple[int, ...]:
+        if "children" not in tree:
+            return (tree["instance"],) if tree["instance"] in drawn else ()
+        return tuple(index for child in tree["children"] for index in members(child))
+
+    def visit(tree: dict[str, Any], path: tuple[int, ...], names: list[str], parent: int, within: np.ndarray) -> None:
+        under = members(tree)
+        if not under:
+            return
+        given = locals_.get(path)
+        local = np.eye(4) if given is None else np.array(given, dtype=float).reshape(4, 4).T
+        if "children" in tree:
+            name = "/".join(names[1:])
+            world = within @ local
+        else:
+            placed = placed_at[tree["instance"]]
+            name = "/".join(placed.path[1:]) or placed.path[-1]
+            world = np.asarray(placed.matrix, dtype=float)
+            # A part stands where the document places it: at its own placement in its assembly where that
+            # puts it there, else (a posed structure) where its instance stands, in its assembly's frame.
+            if given is None or not np.allclose(within @ local, world, rtol=0.0, atol=1e-9):
+                local = world if np.array_equal(within, np.eye(4)) else np.linalg.inv(within) @ world
+        node: dict[str, Any] = {"name": name}
+        if "children" not in tree:
+            node["mesh"] = drawn[tree["instance"]]
+        if not np.array_equal(local, np.eye(4)):
+            node["matrix"] = [float(value) for value in local.T.ravel()]
+        nodes.append(node)
+        index = len(nodes) - 1
+        nodes[parent].setdefault("children", []).append(index)
+        targets.append(Target(index, None if parent == 0 else parent, under,
+                              None if "children" in tree else tree["instance"], world, within, name))
+        for at, child in enumerate(tree.get("children") or ()):
+            visit(child, path + (at,), names + [child["name"]], index, world)
+
+    tree = view.tree
+    if "children" in tree:
+        for at, child in enumerate(tree["children"]):
+            visit(child, (at,), [tree["name"], child["name"]], 0, np.eye(4))
+    else:
+        visit(tree, (), [tree["name"]], 0, np.eye(4))
+    return nodes, targets
+
+
+def _conjugate_left(q: np.ndarray) -> np.ndarray:
+    """The 4x4 that multiplies a quaternion (x, y, z, w) on the left by ``q``'s conjugate."""
+    x, y, z, w = -q[0], -q[1], -q[2], q[3]
+    return np.array([[w, -z, y, x], [z, w, -x, y], [-y, x, w, z], [-x, -y, -z, w]])
+
+
+def _local_rows(path: str, interpolation: str, rows: np.ndarray, within: np.ndarray) -> np.ndarray:
+    """A track's rows, the bake's place in the document's frame, made its node's parent's (``within``,
+    which stands still while the clip plays): a translation ``R^T (v - t)`` (a CUBICSPLINE tangent
+    ``R^T v``), a rotation the parent's conjugate times it (values and tangents alike: the product is
+    linear, so the curve between two keys is the parent's of the bake's curve), a scale as it is."""
+    if path == "scale" or np.array_equal(within, np.eye(4)):
+        return rows
+    rows = np.asarray(rows, dtype=float)
+    if path == "translation":
+        turned = rows @ within[:3, :3]
+        offset = within[:3, 3] @ within[:3, :3]
+        if interpolation == "CUBICSPLINE":
+            turned = turned.copy()
+            turned[:, 1] -= offset
+            return turned
+        return turned - offset
+    return rows @ _conjugate_left(quaternion(within)).T
+
+
+def _animations(view: Any, held: dict[int, Any], shown: list[Any], targets: list[Target], nodes: list[dict],
                 add: Any, accessors: list[dict]) -> list[dict]:
     """Every configuration sequence baked into an animation, then every ``animation()`` of a built source (see the
     module docstring); the nodes they move are given translation and rotation in place of their
     matrices."""
     motions = bool((view.source.structure.get("kinematics") or {}).get("motions"))
-    if not node_of or not (motions or getattr(view.source, "animations", None)):
+    if not targets or not (motions or getattr(view.source, "animations", None)):
         return []
     from cad.engine.export.animation import bake
     from cad.engine.export.keys import linear
-    from cad.engine.export.motion import clips, quaternion
+    from cad.engine.export.motion import clips
 
     size = _size(held, shown)
-    baked = clips(view, list(node_of), size) if motions else []
-    animations = bake(view, held, shown, node_of, size) if getattr(view.source, "animations", None) else []
+    baked = clips(view, targets, size) if motions else []
+    animations = bake(view, held, shown, targets, size) if getattr(view.source, "animations", None) else []
     animated = sorted({index for clip in baked for index in clip.instances}
                       | {channel.instance for animation in animations for channel in animation.channels})
-    rest = {placed.instance: placed.matrix for placed in shown}
+    target_of = {target.node: target for target in targets}
     for index in animated:
-        node = nodes[node_of[index]]
-        matrix = np.asarray(rest[index], dtype=float)
-        node.pop("matrix")
-        node["translation"] = [float(value) for value in matrix[:3, 3]]
-        node["rotation"] = [float(value) for value in quaternion(matrix)]
+        node = nodes[index]
+        target = target_of[index]
+        local = np.asarray(node.pop("matrix", None) or np.eye(4).ravel(), dtype=float).reshape(4, 4).T
+        node["translation"] = [float(value) for value in local[:3, 3]]
+        node["rotation"] = [float(value) for value in quaternion(local)]
     # A part's motion is every part's that moves with it: the parts of one link, or of one reference, each
     # its own node, stand where their motion puts them, so their channels' keys are the same bytes. Those
     # channels share one sampler, and every sampler with the same keys one key accessor, so each motion is
@@ -282,7 +389,8 @@ def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict
     written: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 
     def reach(index: int) -> float:
-        prototype = placed_at[index].prototype
+        # A scale keys a part's own node alone (``motion.chosen``): its reach is its part's.
+        prototype = placed_at[target_of[index].members[0]].prototype
         if prototype not in reaches:
             points = np.asarray(held[prototype].positions, dtype=float).reshape(-1, 3)
             reaches[prototype] = float(np.max(np.linalg.norm(points, axis=1))) if len(points) else 0.0
@@ -290,6 +398,7 @@ def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict
 
     def keyed(index: int, path: str, interpolation: str, times: np.ndarray, rows: np.ndarray,
               duration: float) -> tuple[str, np.ndarray, np.ndarray]:
+        rows = _local_rows(path, interpolation, rows, target_of[index].within)
         if interpolation == "STEP":
             return interpolation, times, rows
         far = reach(index) if path == "scale" else 0.0
@@ -301,7 +410,8 @@ def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict
 
     found = []
 
-    def animation(name: str, duration: float, tracks: list[tuple[int, str, str, np.ndarray, np.ndarray]]) -> None:
+    def animation(name: str, duration: float, clip_kind: str,
+                  tracks: list[tuple[int, str, str, np.ndarray, np.ndarray]]) -> None:
         samplers: list[dict] = []
         channels: list[dict] = []
         shared: dict[tuple, int] = {}
@@ -314,19 +424,19 @@ def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict
             if key not in shared:
                 shared[key] = len(samplers)
                 samplers.append(entry)
-            channels.append({"sampler": shared[key], "target": {"node": node_of[index], "path": path}})
+            channels.append({"sampler": shared[key], "target": {"node": index, "path": path}})
         found.append({"name": name, "channels": channels, "samplers": samplers,
-                      "extras": {"cadgen": {"duration": duration}}})
+                      "extras": {"cad": {"duration": duration, "kind": clip_kind}}})
 
     for clip in baked:
         if clip.instances:
-            animation(clip.name, clip.duration, [
+            animation(clip.name, clip.duration, "motion", [
                 (index, path, "CUBICSPLINE", clip.times, rows)
                 for index, translations, rotations in zip(clip.instances, clip.translations, clip.rotations)
                 for path, rows in (("translation", translations), ("rotation", rotations))])
     for baked_animation in animations:
         if baked_animation.channels:
-            animation(baked_animation.name, baked_animation.duration, [
+            animation(baked_animation.name, baked_animation.duration, "animation", [
                 (channel.instance, channel.path, channel.interpolation, channel.times, channel.values)
                 for channel in baked_animation.channels])
     return found

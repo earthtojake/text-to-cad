@@ -13,6 +13,7 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 - [The xbf is Save As](#the-xbf-is-save-as)
 - [Formats](#formats)
 - [Print tolerance](#print-tolerance)
+- [A GLB for another renderer](#a-glb-for-another-renderer)
 - [Other tools](#other-tools)
 
 ## A file is an action
@@ -47,8 +48,9 @@ written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes
 the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
 `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
-An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
-mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's
+An export takes a document and its destinations, and nothing else but a GLB's, an STL's or a
+3MF's mesh tolerance and angle (`--tolerance`, `--angle`: [print tolerance](#print-tolerance),
+[a GLB for another renderer](#a-glb-for-another-renderer)), which a model's, an xbf's and a STEP's
 export take and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
@@ -160,23 +162,33 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   face, edge and vertex, so a STEP read back keeps them. It drops the rest of a
   material's look and physical fields, a face's material (the face keeps its colour),
   and the mechanism: a STEP is placements only.
-- **GLB**: glTF 2.0, Y up, in metres. One mesh per part, a node per placement named by
-  its occurrence, a PBR material per look (with the glTF extensions for IOR,
+- **GLB**: glTF 2.0, Y up, in metres. One mesh per part and the assembly's tree as nodes: a
+  node per sub-assembly with its components under it, each placed in its parent's frame and
+  named by its path below the root (`arm/head/pin_1`), so Blender and any glTF reader show the
+  sub-assemblies, a PBR material per look (with the glTF extensions for IOR,
   transmission, clear coat, anisotropy and emission where a material has them), each of
   the model's configuration sequences as an animation of its name
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
-  ([animation](animation.md)). A GLB exported from the model, by its id, by
+  ([animation](animation.md)); a sub-assembly that moves as one is keyed on its own node. A GLB exported from the model, by its id, by
   `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
-  animations, byte for byte the same file.
+  animations, byte for byte the same file. A program that reads it walks the tree for a part's
+  place: a part's `matrix` is in its sub-assembly's frame (an earlier release placed every part in
+  the world, under the root), its name and its place in the world as they were. A clip's
+  `extras.cad` holds its `duration` and its `kind`, `"motion"` or `"animation"` (an earlier
+  release's `extras.cadgen`, the duration alone), and `asset.generator` is `cad`. A transmissive material (`transmission` above zero) is
+  written opaque at alpha 1, so another renderer refracts the part and does not also fade it; to fade
+  one too, give its PBR `opacity` below 1 (a translucent `part.color` is not read as a fade).
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
-  and materials through the materials extension.
+  and materials through the materials extension. A 3MF draws no transmission, so a transmissive
+  material's colour is written at its preview alpha (`transmission=1` gives `0.3`), or at its PBR
+  `opacity` below 1, whatever `part.color`'s alpha; the 3MF of the model and the 3MF of its GLB agree.
 - **STL**: binary, every placed triangle, in millimetres.
 - **xbf**: of a model, or of a STEP (converting a vendor file).
 - **DXF**: of a planar document only (a 2D drawing); a solid is refused.
 
 Mesh exports and the viewer draw the same meshes, made at one tolerance
 (a chord deviation of 0.25% of the mean side of each part's bounding box, and
-28.5 degrees), unless an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
+28.5 degrees), unless a GLB, an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
 face the mesher leaves without triangles is left out, so a mesh export has a hole there; a
 snapshot names such faces in a warning, and they are usually slivers a boolean left. Repair
 the face in the model.
@@ -199,13 +211,28 @@ at the finer of the tolerance and its own, for that file alone, so a small part 
 coarser; the viewer, snapshots and every other export keep the viewer's mesh. The tolerance
 holds on every face, an imported STEP's faces whose edges carry a looser tolerance too (those
 cost the most triangles). The file says
-what it was meshed to (the STL's header, the 3MF's description). It is
-for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
-one), and a GLB is the viewer's mesh. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
+what it was meshed to (the STL's header, the 3MF's description, the GLB's `asset.extras.cad`). A STEP
+has no mesh and takes no tolerance (send a STEP when the person's slicer or shop takes one), and a
+mesh file's triangles are its own, so a conversion takes none. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
 three times the segments round a curve and ten times the triangles of a doubly curved face (a
 600-part robot arm at 0.01 mm was 30% more triangles than the viewer's mesh), so stay at or
 above 0.001 (the floor) and say the file's size when it is large. If the export
 names faces left without triangles, try a slightly different tolerance or repair the face.
+
+## A GLB for another renderer
+
+A GLB is the viewer's mesh unless the export says otherwise, and in a path tracer or at a close
+camera the viewer's mesh shows its facets. Give a GLB for rendering a finer one, in the same two
+options, either alone:
+
+```bash
+cad model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
+```
+
+`--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's, so a file is never coarser than its
+mesh): it draws small radii in more segments, where a tolerance does not reach them. The same is
+`model.export(x, path, tolerance=0.05, angle=5)` and `@glb("hero.glb", tolerance=0.05, angle=5)`, and
+an STL and a 3MF take it too. The cost is triangles: say the file's size when it is large.
 
 ## Other tools
 

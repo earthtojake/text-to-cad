@@ -107,11 +107,11 @@ class EngineTelemetryTest(unittest.TestCase):
         stopped = facts(ok=False, error=error("KeyboardInterrupt", here=True))
         self.assertEqual(engine_telemetry.counts(stopped, "script")["builds"][0]["outcome"], "cancelled")
 
-        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 8.
+        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 9.
         for found, via in ((built, "script"), (facts(ok=False, error=model), "script"), (died, "command")):
             self.assertTrue(analytics.spool(engine_telemetry.counts(found, via), path=self.settings))
         [payload] = self.sent()
-        self.assertEqual((payload["schema"], payload["process"]), (8, "cli"))
+        self.assertEqual((payload["schema"], payload["process"]), (9, "cli"))
         self.assertEqual(payload["events"], [
             {"name": "build", "kind": "model", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
              "cached": 0, "seconds": 0.5, "longest": 0.5},
@@ -158,8 +158,28 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertEqual(why(error(), models=[{"ok": False, "cached": False, "children": 0, "parts": 0, "files": []}]),
                          "input_error")
         self.assertEqual(why(error("TimeoutError", here=True)), "timeout")
-        # No OpenGL to draw with: the picture was not drawn.
+        # A picture that was not drawn.
         self.assertEqual(why(error("RuntimeError", engine=True, here=True)), "render_error")
+        # No OpenGL context to draw in, wherever it was to be drawn: in this process, in a model's worker (its
+        # traceback), or in a file's render process (the type the daemon's answer names).
+        from cad.engine import api
+        from cad.engine.render.context import Unavailable
+
+        no_display = "no X display for OpenGL: secret"
+        source = (self.tmp / "secret.xbf", self.tmp / "out.png")
+        (self.tmp / "secret.xbf").touch()
+        try:
+            raise Unavailable(no_display)
+        except Unavailable as raised:
+            here = raised
+        worker = api.EngineError("Traceback (most recent call last):\n  File \"/x/context.py\", line 9, in driver\n"
+                                 f"cad.engine.render.context.Unavailable: {no_display}")
+        render = api._failed({"failed": f"RuntimeError: cad.engine.render.context.Unavailable: {no_display}",
+                              "type": "cad.engine.render.context.Unavailable"})
+        for failed in (here, worker, render):
+            told = api._facts("snapshot", source, {}, {}, None, failed, 0.5)
+            self.assertEqual(engine_telemetry.counts(told, "command")["snapshots"][0]["reason"], "no_gl", failed)
+        self.assertIn("no_gl", analytics.SNAPSHOT_FAILURES)
 
     def test_snapshot_sources_and_failures_keep_model_and_file_kinds_through_the_spool(self) -> None:
         from cad.engine import api
@@ -185,9 +205,99 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertEqual([(row["kind"], row["count"], row["failed"]) for row in snapshots],
                          [("model", 4, 2), ("xbf", 4, 2)])
         failures = [event for event in payload["events"] if event["name"] == "snapshot_failure"]
-        self.assertEqual([(row["kind"], row["count"]) for row in failures], [("model", 2), ("xbf", 2)])
+        self.assertEqual([(row["kind"], row["reason"], row["part"], row["count"]) for row in failures],
+                         [("model", "bad_request", "other", 2), ("xbf", "bad_request", "other", 2)])
         self.assertNotIn("private", json.dumps(payload))
         self.assertNotIn(ident, json.dumps(payload))
+
+    def test_a_refused_snapshot_is_counted_by_the_part_of_its_request_it_refused_never_the_value(self) -> None:
+        from cad.engine import api, worker
+        from cad.engine.mechanism import KinematicsError
+        from cad.engine.snapshot import SnapshotRefused, parse_camera, parse_display, parse_size
+
+        def refused(call) -> BaseException:
+            try:
+                call()
+            except ValueError as error:
+                return error
+            raise AssertionError("not refused")
+
+        source = (self.tmp / "secret.xbf", self.tmp / "out.png")
+        (self.tmp / "secret.xbf").touch()
+        cases = [
+            (refused(lambda: parse_display('{"clip": {"axis": "w-secret"}}', False)), "display.clip"),
+            (refused(lambda: parse_display("secret-mode", False)), "display.mode"),
+            (refused(lambda: parse_display('{"secret": 1}', False)), "display"),
+            (refused(lambda: parse_camera("secret-angle")), "camera"),
+            (refused(lambda: parse_size(9, 9, None)), "size"),
+            (KinematicsError("joint secret_joint is out of range"), "pose"),
+            (SnapshotRefused("named nothing"), "other"),
+        ]
+        for error, part in cases:
+            with self.subTest(part=part):
+                # As a worker answers it and this process raises it again (``api._failed``), and -- the library's
+                # own refusals -- as raised here.
+                answered = api._failed({"failed": str(error), **worker.refusal(error)})
+                for raised in (answered, *((error,) if isinstance(error, SnapshotRefused) else ())):
+                    told = api._facts("snapshot", source, {}, {}, None, raised, 0.5)
+                    [counted] = engine_telemetry.counts(told, "command")["snapshots"]
+                    self.assertEqual((counted["reason"], counted.get("part", "other")), ("bad_request", part))
+                    self.assertTrue(analytics.spool(engine_telemetry.counts(told, "command"), path=self.settings))
+        # Every word the library names a part by is one the receiver takes.
+        library = Path(inspect.getfile(api)).parent
+        import re
+
+        named = {word for path in library.rglob("*.py")
+                 for word in re.findall(r'(?:refusing\(|part=)"([a-z.]+)"', path.read_text(encoding="utf-8"))}
+        self.assertTrue(named)
+        self.assertLessEqual(named, analytics.SNAPSHOT_PARTS)
+        # A failure that was no refusal names no part.
+        told = api._facts("snapshot", source, {}, {}, None, RuntimeError("secret"), 0.5)
+        self.assertTrue(analytics.spool(engine_telemetry.counts(told, "command"), path=self.settings))
+        [payload] = self.sent()
+        failures = sorted((row["reason"], row["part"], row["count"]) for row in payload["events"]
+                          if row["name"] == "snapshot_failure")
+        self.assertEqual(failures, sorted([("bad_request", part, 2 if isinstance(error, SnapshotRefused) else 1)
+                                           for error, part in cases] + [("render_error", "none", 1)]))
+        self.assertNotIn("secret", json.dumps(payload))
+
+    def test_a_failure_the_engine_answers_in_words_is_counted_by_its_type_never_as_a_refusal(self) -> None:
+        # The engine that could not start the kernel process the work runs in, a file the worker could not write:
+        # failures the daemon or the worker answers in words alone, with the type they failed with beside them
+        # (``frames.failed_type``). Each is what it is; only a type that is a refusal is one.
+        from cad.engine import api, frames
+        from cad.engine.build import BuildError
+        from cad.engine.serve import KernelProcessesUnavailable
+        from cad_server.engine.daemon import _unstarted
+        from cad_server.engine.supervisor import Gone
+
+        source = (self.tmp / "secret.xbf", self.tmp / "out.png")
+        (self.tmp / "secret.xbf").touch()
+
+        def counted(answer: dict) -> tuple[str, str]:
+            failed = api._failed(answer)
+            snapshot = api._facts("snapshot", source, {}, {}, None, failed, 0.5)
+            build = api._facts("build", (), {}, {}, None, failed, 0.5)
+            return (engine_telemetry.counts(snapshot, "command")["snapshots"][0]["reason"],
+                    engine_telemetry.counts(build, "command")["builds"][0]["reason"])
+
+        unavailable = KernelProcessesUnavailable("the server has no CAD kernel environment: secret")
+        unstarted = Gone("the worker for secret.py did not start", unready=True)
+        cases = [
+            ({"failed": str(unavailable), **frames.failed_type(unavailable)}, ("no_kernel", "no_kernel")),
+            ({"failed": str(unstarted), **_unstarted(unstarted)}, ("no_kernel", "no_kernel")),
+            ({"failed": "secret.png: permission denied", **frames.failed_type(PermissionError())}, ("render_error", "io_error")),
+            ({"failed": "no secret.step", **frames.failed_type(FileNotFoundError())}, ("no_file", "missing_file")),
+            ({"failed": "@xbf returned no shape", **frames.failed_type(BuildError("x"))}, ("bad_request", "refused")),
+            ({"failed": "unknown request 'secret'"}, ("bad_request", "refused")),  # in words alone: a refusal, as ever
+        ]
+        for answer, reasons in cases:
+            with self.subTest(answer=answer):
+                self.assertEqual(counted(answer), reasons)
+        # One that died under the work says so in its words (its exit status): no type to count it by.
+        self.assertEqual(_unstarted(Gone("the worker for secret.py exited (-9) during the build", during=True)), {})
+        self.assertLessEqual({"no_kernel", "no_gl"}, analytics.SNAPSHOT_FAILURES)
+        self.assertIn("no_kernel", analytics.BUILD_FAILURES)
 
     def test_nothing_is_counted_where_the_environment_or_the_asker_says_so(self) -> None:
         for switch in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, {"CAD_ENGINE_WORKER": "1"}):
@@ -236,7 +346,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         [kept] = [json.loads(line) for line in self.settings.with_name(analytics.KEPT).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((kept["batch"]["process"], kept["batch"]["schema"], kept["batch"]["events"][0]["kind"]),
-                         ("cli", 8, "xbf"))
+                         ("cli", 9, "xbf"))
 
 
 class ThroughTheDaemonTest(unittest.TestCase):

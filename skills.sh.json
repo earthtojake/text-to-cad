@@ -4,11 +4,13 @@
   "groupings": [
     {
       "title": "CAD",
-      "description": "Model, draw, source, check and fabricate parts.",
+      "description": "Model, draw, render, source, check and fabricate parts.",
       "skills": [
         "cad",
         "engineering-drawing",
         "print3d",
+        "fea",
+        "render",
         "sendcutsend"
       ]
     },

@@ -34,11 +34,17 @@ exits, each batch under an id of its own and stamped with the time it was made:
   xbf whole without building, and how long they took;
 - ``build_failure`` (the engine's verbs): how many of those failed for each reason (``BUILD_FAILURES``),
   one word decided where the build failed (``build_failure``), from what the error is and whose code
-  raised it -- the model's, the CAD kernel's under it, cadgen's -- never from its message;
+  raised it -- the model's, the CAD kernel's under it, cadgen's, the machine's (no kernel process the
+  engine could start) -- never from its message; a failure the engine answered in words alone is told by
+  the type it answered with, a refusal only where that type is one;
 - ``snapshot`` (the command that rendered it): for each source kind (``model`` or a file format), how many renders, how many failed,
   and how long they took;
-- ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``), decided as
-  the snapshot failed (``cad_server._internal.engine_telemetry``);
+- ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``: a refusal, a file not
+  there, no OpenGL context to draw in, no kernel process to draw in, a picture not drawn...), decided as
+  the snapshot failed (``cad_server._internal.engine_telemetry``), and for a refused request which part
+  of it the refusal named (``SNAPSHOT_PARTS``: the display's mode or its clip, the camera, the size, the
+  source...), a word cadgen chose where it refused, never the value given (``none`` for any other
+  reason);
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
   played an animation, engineering drawings were made, and CAD views' Quick Edits were sent
   (``FEATURES``);
@@ -159,12 +165,13 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
 # 8: live models have their own kind (``model``), distinct from files, including exported/opened xbfs;
 # 7: the controls a person used in a CAD view (``control``), and room for one event each (``MAX_EVENTS``); 6: the
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 8
+SCHEMA = 9
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install. Neither schema 4, 5 nor 6 raised it
@@ -174,6 +181,8 @@ SCHEMA = 8
 # which of a view's controls a person used, and how long a tool was in hand, is the use a view already counted
 # (``view``, ``feature``'s Quick Edit) told apart by control, under the same install and process ids.
 # Nor schema 8: the same builds, views and snapshots told apart as models or files; no new field or identity.
+# Nor schema 9: a refused snapshot told apart by which part of its request was refused -- a word of ours, as its
+# reason is, never the value given.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -344,11 +353,13 @@ OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # no file (``no_file``) or a file CAD does not open (``not_cad``); no view, one that is gone or shows no model, or
 # a call to a tool of cadgen's its host was not listed -- a tab's or a view's, where the host shows none
 # (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read, or a
-# call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s). The view's: it
+# call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s), or an operation (``cad_export``,
+# ``cad_snapshot``, ``cad_inspect``) the engine refused by name (``bad_request`` too). The view's: it
 # did not answer in time (``timeout``), answered with an error or without
 # an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the CAD Viewer
 # did not start (``no_viewer``). cadgen's: anything else it raised (``bug``, reported as an ``exception`` too).
-# ``other``: a failure that named none of these.
+# ``other``: a failure that named none of these -- an operation's render or read that failed, the engine not reached
+# (``cad_server.mcp.operations.failure_reason``).
 FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view", "wrong_view", "bad_request",
                       "timeout", "view_error", "too_large", "no_viewer", "bug", "other"})
 # Why a build failed (``build_failure``), decided where it failed, never read from its message. The model's: its
@@ -357,18 +368,36 @@ FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view
 # given (``refused``: raised on purpose in cadgen's code); the script did not compile (``script_error``); its
 # arguments were refused (``arguments``). The machine's: a module
 # that is not installed (``missing_module``), a file that is not there (``missing_file``), another file error -- a
-# file locked or unwritable, a full disk (``io_error``) -- or out of time (``timeout``) or memory (``memory``).
+# file locked or unwritable, a full disk (``io_error``) -- out of time (``timeout``) or memory (``memory``), or no
+# kernel process the engine could start to build in (``no_kernel``: no kernel environment, a worker that never
+# started; ``FAILED_TYPES``).
 # cadgen's: the kernel failed under cadgen's own code, writing or meshing what the model made (``export_error``),
 # or a mistake in cadgen's code (``bug``, reported as an ``exception`` too). ``other``: none of these.
 BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_error", "arguments",
-                            "missing_module", "missing_file", "io_error", "timeout", "memory", "export_error", "bug",
-                            "other"})
+                            "missing_module", "missing_file", "io_error", "timeout", "memory", "no_kernel",
+                            "export_error", "bug", "other"})
 # Why a snapshot failed (``engine_telemetry``), decided as it failed: its request was refused (``bad_request``), a
 # file it names is not there (``no_file``), its input could not be read or built (``input_error``), the headless
-# browser did not start (``browser``), out of time (``timeout``) or memory (``memory``), the page did not render it
-# (``render_error``), a mistake in cadgen's code (``bug``), or none of these (``other``).
-SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "render_error",
-                               "bug", "other"})
+# browser did not start (``browser``, earlier releases'), out of time (``timeout``) or memory (``memory``), no OpenGL
+# context to draw in (``no_gl``: no X display on Linux, no GLX, a GPU-less Windows' GDI 1.1 --
+# ``render.context.Unavailable``), no kernel process the engine could start to draw in (``no_kernel``), the picture
+# was not drawn (``render_error``), a mistake in cadgen's code (``bug``), or none of these (``other``).
+SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "no_gl",
+                               "no_kernel", "render_error", "bug", "other"})
+# The failures that say why by their type alone, wherever they were raised: the library's and the server's, as the
+# engine answers them (``frames.failed_type``) or a traceback names them. A word a vocabulary lacks (``no_gl`` for a
+# build) is no reason of its.
+FAILED_TYPES = {"cad.engine.render.context.Unavailable": "no_gl",
+                "cad.engine.serve.KernelProcessesUnavailable": "no_kernel",
+                "cad_server.engine.supervisor.Gone": "no_kernel"}
+# Which part of a snapshot's request a refusal (``bad_request``) named (``cad.engine.snapshot.SnapshotRefused.part``,
+# where the library refused it): its source, its picture's path (``out``), the display -- its mode, Explode, Clip, the
+# grid, what it hides and isolates -- the camera, the pose, the size, the annotation, the measurements, a board's
+# references, a job; ``other`` where the refusal named none; ``none`` for a failure that was no refusal. A word,
+# never the value given.
+SNAPSHOT_PARTS = frozenset({"source", "out", "display", "display.mode", "display.exploded", "display.clip",
+                            "display.grid", "display.visibility", "camera", "pose", "size", "annotation",
+                            "measurements", "references", "job", "other"})
 # What a person used: a model with children (an engine model of several parts too), a model declaring mesh
 # exports (``@stl``, ``@glb``, ``@threemf``), a snapshot (or an engine export) that posed joints or played an
 # animation, an engineering drawing (``@eng_drawing``), and a CAD view's Quick Edit sending its prompt.
@@ -434,7 +463,7 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "build": (("kind", "via"), ("count", "failed", "crashed", "cancelled", "cached", "seconds", "longest")),
     "build_failure": (("kind", "via", "reason"), ("count",)),
     "snapshot": (("kind",), ("count", "failed", "seconds")),
-    "snapshot_failure": (("kind", "reason"), ("count",)),
+    "snapshot_failure": (("kind", "reason", "part"), ("count",)),
     "feature": (("feature",), ("count",)),
     "health": ((), HEALTH),
     "control": (("control",), ("count", "seconds")),
@@ -1094,13 +1123,16 @@ _KERNEL = frozenset({"OCP", "build123d"})
 def told_failure(found: Mapping[str, Any]) -> str:
     """``build_failure`` of an error told as facts (``told_signature``'s, with ``engine``: the engine's own code
     raised it, and ``refused``: the engine refused the request by name), never from what it said: a refusal
-    (``refused``); cadgen's mistake (``bug``); one its class says (``_BUILD_ERRORS``, by a built-in's name); else
+    (``refused``); one its type names (``FAILED_TYPES``: the engine could start no kernel process); cadgen's mistake
+    (``bug``); one its class says (``_BUILD_ERRORS``, by a built-in's name); else
     the engine's (``export_error``: writing what the model made) or, for the model's own error, the class's
     module -- cadgen's (``refused``), the kernel's or a library's (``kernel_error``), anyone else's
     (``model_error``). Never raises."""
     try:
         if found.get("refused"):
             return "refused"
+        if FAILED_TYPES.get(str(found.get("type"))) in BUILD_FAILURES:
+            return FAILED_TYPES[str(found.get("type"))]
         if told_signature(found, "build") is not None:
             return "bug"
         kind = _builtin(found.get("type"))
@@ -1617,13 +1649,18 @@ class Recorder:
             self._note("build_failure", (kind, via, reason if reason in BUILD_FAILURES else "other"), {"count": 1})
 
     @_guarded(lambda: None)
-    def rendered(self, kind: str, ok: bool, seconds: float = 0.0, reason: str | None = None) -> None:
+    def rendered(self, kind: str, ok: bool, seconds: float = 0.0, reason: str | None = None,
+                 part: str | None = None) -> None:
         """A snapshot of a model or file format was rendered, or failed to be, for ``reason`` (one of
-        ``SNAPSHOT_FAILURES``; anything else is ``other``)."""
+        ``SNAPSHOT_FAILURES``; anything else is ``other``); a refused one (``bad_request``) refused ``part`` of
+        its request (one of ``SNAPSHOT_PARTS``; anything else, or none, is ``other``), and any other failure
+        none."""
         if kind in KINDS:
             self._note("snapshot", (kind,), {"count": 1, "failed": not ok, "seconds": _seconds(seconds)})
             if not ok:
-                self._note("snapshot_failure", (kind, reason if reason in SNAPSHOT_FAILURES else "other"), {"count": 1})
+                reason = reason if reason in SNAPSHOT_FAILURES else "other"
+                part = (part if part in SNAPSHOT_PARTS else "other") if reason == "bad_request" else "none"
+                self._note("snapshot_failure", (kind, reason, part), {"count": 1})
 
     @_guarded(lambda: None)
     def used(self, feature: str) -> None:
@@ -1680,7 +1717,8 @@ class Recorder:
                            cached=build.get("cached") is True, reason=build.get("reason"))
         for snapshot in each("snapshots"):
             if isinstance(snapshot, dict) and isinstance(snapshot.get("ok"), bool):
-                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"), snapshot.get("reason"))
+                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"), snapshot.get("reason"),
+                              snapshot.get("part"))
         for feature in each("features"):
             self.used(feature)
         for crash in each("crashes"):

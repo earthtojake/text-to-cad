@@ -20,6 +20,8 @@
 //   under the pointer unless one of that face's own edges is within a few pixels of it, and an
 //   edge near the pointer where no face is under it, as a STEP's Select does.
 // - A face the mesher left without triangles is not drawn and is reported (`unmeshed`).
+// - A material's texture maps are not drawn (the part's buffer has no UVs): its scalar look is, and the
+//   structure's `untextured` (the engine's, by part and material) is reported as the scene's.
 // - Each instance's placed group hangs in a carrier of its own, which Explode moves
 //   (`sceneExplode.js`, a STEP's layout over the document's tree).
 //
@@ -45,6 +47,7 @@ import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
 import { createSceneExplode } from "../viewer/sceneExplode.js";
 import { createSceneHighlight } from "../viewer/sceneHighlight.js";
 import { createSurfaceLook, surfaceOffset } from "../viewer/surfaceLook.js";
+import { previewOpacity, transmittedOpacity } from "../render/previewOpacity.js";
 import { releaseGeometry, shareGeometry } from "../render/sharedGeometry.js";
 import { xbfLookRig, xbfLookSurface, xbfLookXray, xbfLookXrayRig, xbfLookXraySurface } from "./xbfLook.js";
 import { placeXbfPoint, placeXbfSurface, xbfEdgePolyline, xbfFaceNodes, xbfFaceSurface, xbfVertexPoint } from "./xbfEntities.js";
@@ -99,14 +102,21 @@ const finite = (value, fallback) => (Number.isFinite(Number(value)) && value !==
  * opacity) and, for a part or a face given a material, the material's look as glTF carries it --
  * metalness, roughness, IOR, anisotropy and its rotation, transmission through `thickness`
  * millimetres with its attenuation (the material's depth is in metres), clear coat, emission.
- * A look without a material is its colour alone, as every part was before materials.
+ * A look without a material is its colour alone, as every part was before materials. Its texture
+ * maps and their transforms are left out (no UVs to draw them by): the engine's still and GLB draw
+ * the same scalar look (`finish.py`, `export/glb.py`) and the structure names them (`untextured`).
+ *
+ * A transmissive look is one fade, as its GLB is: drawn with its transmission at the alpha the GLB
+ * writes (`transmittedOpacity`: its PBR fade, else 1), and in a look that draws no transmission
+ * (`surfaceLook.js`) at its preview, `userData.cadPreviewOpacity` (`previewOpacity`), the alpha the
+ * engine's still draws it at. Its colour's alpha, build123d's own inference of that preview or a value
+ * that cannot be told from one, is not applied again.
  */
 export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
   const alpha = rgba ? Math.min(Math.max(finite(rgba[3], 1), 0), 1) : 1;
   const parameters = { color: rgba ? linearColor(THREE, rgba) : new THREE.Color(DEFAULT_SURFACE),
     transparent: alpha < 1, opacity: alpha, depthWrite: alpha >= 1 };
   if (!material) return parameters;
-  if (Object.keys(material.pbr.textures || {}).length) throw new Error("Native material texture maps require UV mapping; use a scalar PBR look");
   material = material.pbr.values;
   Object.assign(parameters, {
     metalness: finite(material.metalness, 0), roughness: finite(material.roughness, 0.5), ior: finite(material.ior, 1.5),
@@ -127,6 +137,9 @@ export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
   if (material.iridescenceThicknessRange) parameters.iridescenceThicknessRange = material.iridescenceThicknessRange;
   const transmission = finite(material.transmission, 0);
   if (transmission > 0) {
+    const opacity = transmittedOpacity(material.opacity);
+    Object.assign(parameters, { transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
+      userData: { cadPreviewOpacity: previewOpacity(opacity, transmission) } });
     parameters.transmission = transmission;
     parameters.thickness = Math.max(finite(thickness, 0), 0);
     if (finite(material.attenuationDistance, 0) > 0) {
@@ -138,9 +151,9 @@ export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
   return parameters;
 }
 
-/** A look's identity: its colour, its material's look and, where it transmits, its part's thickness. */
+/** A look's identity: its colour, its material's scalar look and, where it transmits, its part's thickness. */
 function lookKey(rgba, material, thickness) {
-  return JSON.stringify([rgba || null, material?.pbr ?? null, thickness]);
+  return JSON.stringify([rgba || null, material?.pbr?.values ?? null, thickness]);
 }
 
 /**
@@ -748,6 +761,8 @@ export function createXbfScene(THREE, document) {
 
   const unmeshed = surfaces.flatMap((surface, index) => surface.part.unmeshed.length
     ? [{ prototype: index, key: String(prototypes[index].key), name: prototypes[index].name || "", faces: surface.part.unmeshed }] : []);
+  const untextured = prototypes.flatMap((prototype, index) => prototype.untextured && Object.keys(prototype.untextured).length
+    ? [{ prototype: index, key: String(prototype.key), name: prototype.name || "", materials: prototype.untextured }] : []);
   const triangleCount = surfaces.reduce((sum, surface) => sum + Math.floor(surface.part.mesh.indices.length / 3), 0);
 
   const scene = {
@@ -792,6 +807,9 @@ export function createXbfScene(THREE, document) {
     version: document.version,
     /** Faces the mesher left without triangles, by prototype: reported, not drawn. */
     unmeshed,
+    /** Parts whose materials' texture maps are not drawn, by prototype (the structure's `untextured`):
+     * map names by material name; each part wears its material's scalar look. */
+    untextured,
     triangleCount,
     /** The lighting of the regular modes (`sceneContract.js`): the engine's look's (`xbfLookRig`). */
     rig,

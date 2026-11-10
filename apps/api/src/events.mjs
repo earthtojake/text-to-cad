@@ -47,7 +47,11 @@
  * (`MAX_EVENTS_7`): one per control a person used that window. A receiver that reads a new schema is deployed
  * before any release sends it. Schema 8 adds `model` for live model builds, views and snapshots, while
  * actual file formats (including opened/exported `xbf`) keep their names. Earlier `xbf` rows remain as sent:
- * their mixed model/file usage cannot be separated after the fact.
+ * their mixed model/file usage cannot be separated after the fact. Schema 9 says which part of a snapshot's
+ * request a refusal named (`part`, `SNAPSHOT_PARTS`: a word cadgen chose, never the value; `none` for a failure
+ * that was no refusal), and two more reasons a snapshot or a build failed, the machine's: no OpenGL context
+ * (`no_gl`, a snapshot's) and no kernel process the engine could start (`no_kernel`). A schema before it sends
+ * none of them, and its rows are read, and keyed, as ever.
  */
 
 import { createHash } from 'node:crypto';
@@ -155,6 +159,16 @@ const BUILD_FAILURES = new Set(['model_error', 'kernel_error', 'refused', 'scrip
 // Why a snapshot failed (`SNAPSHOT_FAILURES`), by what it was doing or what the error was.
 const SNAPSHOT_FAILURES = new Set(['bad_request', 'no_file', 'input_error', 'browser', 'timeout', 'memory', 'render_error',
   'bug', 'other']);
+// Schema 9's: no OpenGL context to draw in (`no_gl`: no X display, no GLX, a GDI 1.1), and the engine could not
+// start the kernel process the work runs in (`no_kernel`), which earlier schemas counted as a refusal.
+const SNAPSHOT_FAILURES_9 = new Set([...SNAPSHOT_FAILURES, 'no_gl', 'no_kernel']);
+const BUILD_FAILURES_9 = new Set([...BUILD_FAILURES, 'no_kernel']);
+// Which part of a snapshot's request a refusal (`bad_request`) named, schema 9's (`cad_server/analytics.py`:
+// `SNAPSHOT_PARTS`): a word cadgen chose where it refused, never the value given. `none`: a failure that was no
+// refusal.
+const SNAPSHOT_PARTS = new Set(['source', 'out', 'display', 'display.mode', 'display.exploded', 'display.clip',
+  'display.grid', 'display.visibility', 'camera', 'pose', 'size', 'annotation', 'measurements', 'references', 'job',
+  'other']);
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
 const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).
@@ -169,7 +183,7 @@ export const FIELDS = {
   build: ['kind', 'via', 'count', 'failed', 'crashed', 'cancelled', 'cached', 'seconds', 'longest'],
   build_failure: ['kind', 'via', 'reason', 'count'],
   snapshot: ['kind', 'count', 'failed', 'seconds'],
-  snapshot_failure: ['kind', 'reason', 'count'],
+  snapshot_failure: ['kind', 'reason', 'part', 'count'], // `part` from schema 9
   feature: ['feature', 'count'],
   health: ['workers', 'crashes', 'recycles', 'refusals'],
   control: ['control', 'count', 'seconds'],
@@ -213,7 +227,7 @@ const exactly = (event, fields, name) => {
 };
 
 // Each event as a schema sends it: its key in the batch (one event per key), and its row's fields. A format is
-// one of the schema's own (`kinds`).
+// one of the schema's own (`schema.kinds`), and so is a failure's reason.
 const READERS = {
   tool(event, at) {
     only(event, ['name', 'tool', 'calls', 'errors'], at);
@@ -233,17 +247,17 @@ const READERS = {
     only(event, ['name', 'calls'], at);
     return { key: 'view', fields: { calls: some(event.calls, `${at}.calls`) } };
   },
-  file(event, at, kinds) {
+  file(event, at, { kinds }) {
     only(event, ['name', 'file', 'kind'], at);
     const file = typeof event.file === 'string' && FILE_CODE.test(event.file) ? event.file : fail(`${at}.file is not a file code`);
     return { key: `file ${file}`, event: 'files', fields: { kind: oneOf(event.kind, kinds, `${at}.kind`), count: 1 } };
   },
-  files(event, at, kinds) {
+  files(event, at, { kinds }) {
     exactly(event, FIELDS.files, at);
     const kind = oneOf(event.kind, kinds, `${at}.kind`);
     return { key: `files ${kind}`, fields: { kind, count: some(event.count, `${at}.count`) } };
   },
-  build(event, at, kinds) {
+  build(event, at, { kinds }) {
     exactly(event, FIELDS.build, at);
     const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const via = oneOf(event.via, VIAS, `${at}.via`);
@@ -254,20 +268,26 @@ const READERS = {
     return { key: `build ${kind} ${via}`, fields: { kind, via, count: builds, failed, crashed, cancelled, cached,
       seconds: seconds(event.seconds, `${at}.seconds`), longest: seconds(event.longest, `${at}.longest`) } };
   },
-  build_failure(event, at, kinds) {
+  build_failure(event, at, { kinds, buildFailures = BUILD_FAILURES }) {
     exactly(event, FIELDS.build_failure, at);
     const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const via = oneOf(event.via, VIAS, `${at}.via`);
-    const reason = oneOf(event.reason, BUILD_FAILURES, `${at}.reason`);
+    const reason = oneOf(event.reason, buildFailures, `${at}.reason`);
     return { key: `build_failure ${kind} ${via} ${reason}`, fields: { kind, via, reason, count: some(event.count, `${at}.count`) } };
   },
-  snapshot_failure(event, at, kinds) {
-    exactly(event, FIELDS.snapshot_failure, at);
+  snapshot_failure(event, at, { kinds, parts, snapshotFailures = SNAPSHOT_FAILURES }) {
+    exactly(event, parts ? FIELDS.snapshot_failure : FIELDS.snapshot_failure.filter(field => field !== 'part'), at);
     const kind = oneOf(event.kind, kinds, `${at}.kind`);
-    const reason = oneOf(event.reason, SNAPSHOT_FAILURES, `${at}.reason`);
-    return { key: `snapshot_failure ${kind} ${reason}`, fields: { kind, reason, count: some(event.count, `${at}.count`) } };
+    const reason = oneOf(event.reason, snapshotFailures, `${at}.reason`);
+    const count = some(event.count, `${at}.count`);
+    // Before schema 9 a failure names no part, and its row's key is as it ever was (a batch sent again keeps its ids).
+    if (!parts) return { key: `snapshot_failure ${kind} ${reason}`, fields: { kind, reason, count } };
+    // A refusal names the part of the request it refused; any other failure, none.
+    const part = reason === 'bad_request' ? oneOf(event.part, SNAPSHOT_PARTS, `${at}.part`)
+      : (event.part === 'none' ? 'none' : fail(`${at}.part is none: only a refusal names a part`));
+    return { key: `snapshot_failure ${kind} ${reason} ${part}`, fields: { kind, reason, part, count } };
   },
-  snapshot(event, at, kinds) {
+  snapshot(event, at, { kinds }) {
     exactly(event, FIELDS.snapshot, at);
     const kind = oneOf(event.kind, kinds, `${at}.kind`);
     const snapshots = some(event.count, `${at}.count`);
@@ -351,6 +371,11 @@ const SCHEMAS = new Map([
   // A live model is distinct from an actual file, even an xbf. Older schemas keep their own vocabulary.
   [8, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
+  // Which part of a snapshot's request a refusal named, and the machine's two reasons more: no OpenGL context, no
+  // kernel process.
+  [9, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
 ]);
 
 export function isUuid(value) {
@@ -405,7 +430,7 @@ export function rowsOf(batch) {
   events.forEach((event, index) => {
     const at = `events[${index}]`;
     if (!event || typeof event !== 'object' || Array.isArray(event) || !schema.events.has(event.name)) fail(`${at} is not an event`);
-    const { key, event: name = event.name, fields } = READERS[event.name](event, at, schema.kinds);
+    const { key, event: name = event.name, fields } = READERS[event.name](event, at, schema);
     if (seen.has(key)) fail(`${at} is already in the batch`);
     seen.add(key);
     // A file by its code (schemas 1 and 2) is one more of its format's.
