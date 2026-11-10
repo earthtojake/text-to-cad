@@ -1032,8 +1032,9 @@ ignore the check -- so the errors are few:
   the least a guide recommends) at most: 0.1 deg at 20 mm, 0.2 deg at 30 mm. One criterion of draft against
   depth, with no step at `--zero-tol`: a wall leaning 0.07 deg over 30 mm is as stuck as one leaning 0. Depth is
   a mold half's (`half_depth_mm`): a wall on the outline is split where the parting plane stands, a core's wall
-  runs whole. Broad is `BROAD_WALLS` (10) nominal walls across the pull: a boss, a bore, a pin, a standoff, a
-  gear's teeth, a snap arm, a rib and a window's sides are not, and a face a slide forms is the undercut's --
+  runs whole. Broad is `BROAD_WALLS` (10) nominal walls across the pull, and clearly so (2% over, a
+  rolling-ball thickness's own error: a wall at the limit is no broad wall): a boss, a bore, a pin, a standoff,
+  a gear's teeth, a snap arm, a rib and a window's sides are not, and a face a slide forms is the undercut's --
   the draft recommendations warn of those;
 - a **broad wall too thin to fill** (`molding.wall_too_thin`): under `WALL_FLOOR_SHARE` (half) of the resin's
   recommended minimum (with no resin of the table named, under every resin's), read as the wall's own

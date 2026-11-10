@@ -604,6 +604,10 @@ class _Geometry:
 # --- draft -----------------------------------------------------------------------------------------------
 
 
+#: A wall is broad where it is clearly so: ``BROAD_WALLS`` of its thickness wide and this much over, the error of
+#: a thickness read by rolling balls off a triangulation (a tube 30 across with a 3 mm wall reads 2.995). A face
+#: at the limit is no broad wall: an error rests on it.
+_BROAD_CLEAR = 1.02
 #: A face that turns through the pull (``split``) is a wall along it all the same where this share of its area or
 #: more has less draft than ``_TURN_DRAFT_DEG``: a boss a degree off the pull, not a round the parting line
 #: crosses (whose draft is none along a line, and climbs away from it).
@@ -1477,7 +1481,7 @@ def _broad(geo: _Geometry, per_face: dict[int, dict[str, Any]]) -> None:
             else across
     for face in per_face.values():
         other = per_face.get(face["across"]) if face["across"] else None
-        least = BROAD_WALLS * face["own"] if face["own"] else math.inf
+        least = _BROAD_CLEAR * BROAD_WALLS * face["own"] if face["own"] else math.inf
         face["broad"] = bool(face["width"] >= least and other is not None and not other["narrow"]
                              and other["width"] >= least)
 
@@ -2527,15 +2531,16 @@ def _families(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float,
         # draft along the pull is no wall's either, and the undercut's rule is its one finding.
         formed = {face for item in (report["undercuts"].get("items") or []) if isinstance(report["undercuts"], dict)
                   for face in item.get("trapped_faces") or ()}
-        # A wall of the part's shell is broad: at least ``BROAD_WALLS`` nominal walls wide across the pull. A
-        # boss, a bore, a pin, a gear's tooth, a snap arm and a window's side are not: the draft floor is no
-        # rule of theirs.
+        # A wall of the part's shell is broad: clearly ``BROAD_WALLS`` nominal walls wide across the pull
+        # (``_BROAD_CLEAR``). A boss, a bore, a pin, a gear's tooth, a snap arm and a window's side are not: the
+        # draft floor is no rule of theirs.
         nominal = {geo.ref(face): t.nominal for geo, t in zip(geos, thick) for face in range(1, len(geo.faces) + 1)}
         for item in (report["draft"].get("items") or []) if isinstance(report["draft"], dict) else []:
             where = item.get("location")
             item["feature"] = sides.get(where, "undercut" if where in formed else item["feature"])
             wall = nominal.get(where)
-            item["broad"] = bool(wall and item["width_mm"] is not None and item["width_mm"] >= BROAD_WALLS * wall)
+            item["broad"] = bool(wall and item["width_mm"] is not None
+                                 and item["width_mm"] >= _BROAD_CLEAR * BROAD_WALLS * wall)
     for name in ("projection", "parting", "envelope"):
         if name in pulled:
             report[name] = pulled[name]

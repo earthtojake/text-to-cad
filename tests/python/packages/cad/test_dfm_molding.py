@@ -185,6 +185,10 @@ class DraftTest(unittest.TestCase):
             self.assertTrue(result.ok, tilt)
             self.assertEqual([f.code for f in result.findings if "draft" in f.code and f.severity != "info"],
                              ["molding.draft_min"] * 2, tilt)
+        # A tube 30 across with a 3 mm wall is ten walls across to the measurement's own error (its wall reads
+        # 2.995): at the limit of broad, which is no broad wall -- an error rests on what is clearly one.
+        tube = _check(bd.Cylinder(15, 30) - bd.Cylinder(12, 30))
+        self.assertEqual((tube.ok, {item["broad"] for item in tube.measurements["draft"]["items"]}), (True, {False}))
         # a dome 15 mm deep is tangent to the pull along its rim: no draft there, on a line -- no depth without it
         dome = _check(bd.Sphere(15) - bd.Sphere(13) - bd.Pos(0, 0, -20) * bd.Box(60, 60, 40))
         self.assertLess(max(item["half_depth_mm"] for item in dome.measurements["draft"]["items"]), 1.0)
