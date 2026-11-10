@@ -6,6 +6,7 @@ import { PerspectiveCamera } from "three";
 import {
   MEASURE_SERIES_COLORS,
   dimensionLayoutHit,
+  dimensionLayoutTouchesBox,
   drawMeasureDimension,
   drawMeasureSnapChip,
   drawMeasureSnapMarker,
@@ -102,6 +103,23 @@ test("a press is on a drawn dimension near its dimension line, a witness line or
   assert.equal(dimensionLayoutHit(layout, layout.witnesses[0][1]), true);
   assert.equal(dimensionLayoutHit(layout, { x: middle.x, y: middle.y + 60 }), false);
   assert.equal(dimensionLayoutHit(null, middle), false);
+});
+
+test("a box takes a drawn dimension where it touches its lines, an arrowhead or its label, even in part", () => {
+  const layout = screenSpaceDimensionLayout({ point: [0, 0, 0] }, { point: [1, 0, 0] }, null, makePerspectiveCamera(), makeRect());
+  const [start, end] = layout.dimensionLine;
+  const around = (point, half) => ({ left: point.x - half, top: point.y - half, right: point.x + half, bottom: point.y + half });
+  // Across the middle of the dimension line, with neither end inside.
+  assert.equal(dimensionLayoutTouchesBox(layout, around({ x: (start.x + end.x) / 2, y: start.y }, 2)), true);
+  // The far end of a witness line, the tip of an arrowhead.
+  assert.equal(dimensionLayoutTouchesBox(layout, around(layout.witnesses[1][1], 1)), true);
+  assert.equal(dimensionLayoutTouchesBox(layout, around(layout.arrows[0].left, 0.5)), true);
+  // The label's chip reaches further than its middle.
+  assert.equal(dimensionLayoutTouchesBox(layout, around({ x: layout.label.x + 30, y: layout.label.y + 10 }, 1)), true);
+  // Well clear of all of it, on either side.
+  assert.equal(dimensionLayoutTouchesBox(layout, around({ x: (start.x + end.x) / 2, y: start.y + 80 }, 10)), false);
+  assert.equal(dimensionLayoutTouchesBox(layout, around({ x: (start.x + end.x) / 2, y: start.y - 80 }, 10)), false);
+  assert.equal(dimensionLayoutTouchesBox(null, around(start, 10)), false);
 });
 
 test("screenSpaceDimensionLayout returns null for invalid or unprojectable points", () => {

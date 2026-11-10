@@ -28,9 +28,15 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // The tools on the strip, each one a mode that stays on (its seconds counted), and Preview; Explode
   // and Clip are popovers from their tiles, no mode, counted as used each time one opens (no seconds).
   'select', 'pencil', 'shapes', 'measure', 'explode', 'clip', 'preview',
-  // Select's and Measure's filters.
+  // Select's and Measure's filters, a press on each box of their Filter (`selectFilter.js`'s `filterControl`:
+  // All, then each kind and extra of every file's); Group faces and Group edges, settings of Select's menu until
+  // the view's menu's Select tangent faces and edges replaced them: no view sends them now, but older releases do.
   'select_filter_all', 'select_filter_parts', 'select_filter_faces', 'select_filter_edges', 'select_filter_position',
   'select_filter_links', 'select_group_faces', 'select_group_edges',
+  'select_filter_annotations', 'select_filter_measurements', 'select_filter_texts', 'select_filter_tracks', 'select_filter_vias',
+  'select_filter_pads', 'select_filter_graphics', 'select_filter_zones', 'select_filter_rule_areas', 'select_filter_dimensions',
+  'select_filter_locked', 'select_filter_symbols', 'select_filter_pins', 'select_filter_wires', 'select_filter_labels',
+  'select_filter_sheets', 'select_filter_other',
   'measure_filter_all', 'measure_filter_vertices', 'measure_filter_edges', 'measure_filter_faces',
   'measure_taken', 'measure_delete', 'measure_clear',
   // Pencil's and Shapes' tools, and what is done to their ink.
@@ -57,10 +63,11 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // lists are one vocabulary. Then the trees.
   'sidebar_tree', 'sidebar_position', 'sidebar_animation', 'sidebar_layers', 'sidebar_sdf',
   'tree_filter', 'tree_visibility', 'layer_visibility',
-  // A part's menu, over the model or in its tree.
+  // A part's menu, over the model or in its tree, and the view's menu's Select tangent faces and edges.
   'menu_copy_reference', 'menu_select', 'menu_isolate', 'menu_exit_all_isolates', 'menu_hide_others', 'menu_show_all',
   'menu_hide', 'menu_reveal', 'menu_expand', 'menu_collapse', 'menu_expand_all', 'menu_collapse_all', 'menu_zoom_fit',
   'menu_zoom_selection',
+  'menu_select_tangent_faces', 'menu_select_tangent_edges',
   // The view itself: a double-click's Look at and isolate, the view cube, F's fit.
   'look_at', 'isolate', 'view_cube', 'view_cube_drag', 'fit',
   // Quick Edit's Copy, Queue and Send.

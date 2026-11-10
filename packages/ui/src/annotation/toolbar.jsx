@@ -128,7 +128,7 @@ const strokeGlyph = width => <svg {...GLYPH} aria-hidden="true" className="h-4 w
 const swatch = color => ({ backgroundColor: color, boxShadow: 'inset 0 0 0 1px color-mix(in oklab, currentColor 35%, transparent)' });
 const ROW = 'flex min-w-0 flex-wrap items-center gap-0.5';
 
-// A menu's heading, as the strip's menus have one (Select's and Measure's "Selection filter", Display's).
+// A menu's heading, as the strip's menus have one (Select's "Filter" and Measure's "Measure filter", Display's).
 const menuHeading = text => <DropdownMenuLabel className="text-tiny font-normal text-muted-foreground">{text}</DropdownMenuLabel>;
 
 /**

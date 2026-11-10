@@ -33,7 +33,7 @@ the reverse.
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions — each a turn of the camera about its target, its whole orientation on the shortest turn and its distance eased, so the eye goes round and never through the target, and a half turn goes the screen's right — fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor` (a wheel step first moves the pivot's depth onto the surface under the cursor, and a perspective pan is scaled by that surface's depth, so Render pans and zooms what the cursor is on at Solid's rate), `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `canvasColor` and `useCanvasColor` (the canvas a scene is drawn on, the `--canvas` token, and the colour of the box it fills). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), the content of Display's dropdown (`DisplayModeOptions`: the modes and the Grid switch's icons; `DisplayPopover` draws it), and Preview's settings form (`PreviewRenderSettings`). |
-| `tools/` | `FloatingToolBar` (the dumb strip: the tools it is handed, in groups parted by one thin rule, then the view's controls, which end the last section the tools have with no rule of their own, with a navbar or without; after a rule only where the tools are a single group), `SubToolbar` (the tool in hand's one row under the strip, its groups parted by `SubToolbarSeparator`; `SLIDER_SUB_TOOLBAR_CLASS`, the one width of a slider row; Explode's and Clip's rows are the same component in a popover from their tiles, `model-effects/ModelTools.jsx`, a strip tool with a `tile` and, for a phone's More, its `popover`), `toolModes` (the tool-mode state machine), `ToolModeMenu` (`ToolSettingsMenu`: a tool's settings dropdown, from a chevron right after its button on the strip, or a sliders button in a panel's heading), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: the playbar's Playback settings), `ToolStack` (the bounded column under the strip and sub-toolbar for a renderer's own `toolPanels`, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of the stack, or one tab of the view's panel, `kit/shell/FlatPanel.jsx`: `fit` says how it gives way when the viewer is short, `resizable` makes a stack panel the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at the bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded stack panels and the Selected pane's height — `flatDetailHeight`: the kept height, else 40% of the panel (`FLAT_DETAIL_SHARE`) whatever is picked, never under 96px, the lists keeping 160px — defaults, bounds and the tab's stored record, whose old shared fields for the view's panel it still reads so that `file-viewer/filePanel.js` adopts them once; the view's panel itself is the file's, `filePanel.js`), and the format-blind tools: `annotate/` (`AnnotationOverlay`, the surface the drawing tools' gestures land on; `annotation3d`, its ink projected into the model; `AnnotationSelectionBar`, the bar of the annotations Select picked), `PreviewChrome` (Preview's chrome: the tools view's controls hidden and inert while it is up, and its own corner, `end`, with its settings panel under it, `panel`), `PlaybackMenu` (the Playback settings — Speed, Loop, Autoplay — and `ORBIT_SPEEDS`, Preview's Orbit speeds), `playbar/` (`PreviewPlaybar`, the playbar under the model, in the tools view (`toolsView`) and in Preview, the same row: the routine where there are several, Play/Pause, the scrubber, Playback settings, whose last item in the tools view is Reset; `AnimationTimeControl`, the scrubber, and `animationControlsHaveContent`; `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's playback settings — Orbit's speed, Autoplay, and the chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`SelectFilterMenu`, Select's selection filter on its chevron; `selectFilter`, its pure toggles; `usePointerPick`: taps and hover through a scene's own `pick`, each with where the pointer was; `useSceneSelection` and `sceneReferences`: the parts a scene's pick names, selected, lit and handed to Quick Edit as references), `measure/` (Measure, for any 3D view: `useMeasureSession`, the session; `useMeasureOverlay`, its drawing; `MeasurementCard`; `measurementChips`, its chips and its row under the strip (`MeasurementsBar`); `measureSelection`, Select's press and hover on a measurement; `SceneMeasure`, two points on a scene's surface, and the model's size row), `model-effects/` (Explode and Clip, for any scene that opts in: `ModelTools`, their strip tools and slider rows, each the slider control `inline`; `useSceneEffects`, the viewport applying them to the scene; `motionExclusion`, one motion at a time), `sceneTools` (the tools a scene's renderer composes around the shell: the tool in hand, Pencil and Shapes, Measure and the model effects), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@cad/core/lib/viewer/screenshotCapture.js`. |
+| `tools/` | `FloatingToolBar` (the dumb strip: the tools it is handed, in groups parted by one thin rule, then the view's controls, which end the last section the tools have with no rule of their own, with a navbar or without; after a rule only where the tools are a single group), `SubToolbar` (the tool in hand's one row under the strip, its groups parted by `SubToolbarSeparator`; `SLIDER_SUB_TOOLBAR_CLASS`, the one width of a slider row; Explode's and Clip's rows are the same component in a popover from their tiles, `model-effects/ModelTools.jsx`, a strip tool with a `tile` and, for a phone's More, its `popover`), `toolModes` (the tool-mode state machine), `ToolModeMenu` (`ToolSettingsMenu`: a tool's settings dropdown, from a chevron right after its button on the strip, or a sliders button in a panel's heading), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: the playbar's Playback settings), `ToolStack` (the bounded column under the strip and sub-toolbar for a renderer's own `toolPanels`, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of the stack, or one tab of the view's panel, `kit/shell/FlatPanel.jsx`: `fit` says how it gives way when the viewer is short, `resizable` makes a stack panel the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at the bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded stack panels and the Selected pane's height — `flatDetailHeight`: the kept height, else 40% of the panel (`FLAT_DETAIL_SHARE`) whatever is picked, never under 96px, the lists keeping 160px — defaults, bounds and the tab's stored record, whose old shared fields for the view's panel it still reads so that `file-viewer/filePanel.js` adopts them once; the view's panel itself is the file's, `filePanel.js`), and the format-blind tools: `annotate/` (`AnnotationOverlay`, the surface the drawing tools' gestures land on; `annotation3d`, its ink projected into the model; `AnnotationSelectionBar`, the bar of the annotations Select picked), `PreviewChrome` (Preview's chrome: the tools view's controls hidden and inert while it is up, and its own corner, `end`, with its settings panel under it, `panel`), `PlaybackMenu` (the Playback settings — Speed, Loop, Autoplay — and `ORBIT_SPEEDS`, Preview's Orbit speeds), `playbar/` (`PreviewPlaybar`, the playbar under the model, in the tools view (`toolsView`) and in Preview, the same row: the routine where there are several, Play/Pause, the scrubber, Playback settings, whose last item in the tools view is Reset; `AnimationTimeControl`, the scrubber, and `animationControlsHaveContent`; `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's playback settings — Orbit's speed, Autoplay, and the chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`SelectFilterMenu`, every picking tool's Filter on its chevron, its one row `SelectionSettings.jsx`'s `FilterRow`; `selectFilter`, its pure ticks, the strip's badge and the telemetry name of each box; `usePointerPick`: taps and hover through a scene's own `pick`, each with where the pointer was; `useBoxSelectGesture`, the one box of every viewer (a window left to right, a crossing right to left, each its own look), which draws its box over a scene and holds the camera for the press, mounted by `RendererShell` for a renderer's `boxSelect` and by `useFlatBoxSelect` for a flat view's Select; `boxTake`, what a box takes of each kind, Shift adding; `useSceneSelection` and `sceneReferences`: the parts a scene's pick names, selected, lit and handed to Quick Edit as references), `measure/` (Measure, for any 3D view: `useMeasureSession`, the session; `useMeasureOverlay`, its drawing; `MeasurementCard`; `measurementChips`, its chips and its row under the strip (`MeasurementsBar`); `measureSelection`, Select's press, hover and box on a measurement; `SceneMeasure`, two points on a scene's surface, and the model's size row), `model-effects/` (Explode and Clip, for any scene that opts in: `ModelTools`, their strip tools and slider rows, each the slider control `inline`; `useSceneEffects`, the viewport applying them to the scene; `motionExclusion`, one motion at a time), `sceneTools` (the tools a scene's renderer composes around the shell: the tool in hand, Pencil and Shapes, Measure and the model effects), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@cad/core/lib/viewer/screenshotCapture.js`. |
 | `inspector/` | `FileSheet` and its row and section primitives, `SliderField` (the slider control: every number a slider sets, in a panel or `inline` in a toolbar row), `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `VirtualRows` (a long tree's rows, windowed), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row that heads every Position section, laid out as the panel's head: Default, the named poses, Custom, and its Reset in the collapse button's column), `CircuitTree` (a board's or a schematic's Parts and Nets), `ItemDetail` (what a pick is, ONE component for the Selected pane every view with a panel has and a Quick Edit chip's card, `useSelectedDetail`; with several picks the pane draws the active one under its switcher, `SelectedPane`) over `inspect.js` (the view's one description of a pick, `DetailItem`, and the `Inspect` it hands its frame: the pane's, the cards', the hover tip's; `nextActivePick`, which of several picks the pane draws, and `pickRows`, the switcher's list of them), `layerRows` (`LayerSwatch`, a layer's colour in a row's glyph slot). Every list's row is `primitives/tree-row`'s one row (`TreeRowSurface` with its `depth`, `TreeRowGlyph`, `TreeRowToggle`, `TreeRowActions`), which alone sets a row's horizontal geometry from the panel's `--tree-row-pad` and `--tree-row-actions-pad`; the filter box is `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport for every alert, and `useAlertDismissal`: a card put away, and its icon in the navbar that brings it back) and `reportIssue` (`alertIssueUrl`: its Report Issue's new issue), `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
@@ -332,12 +332,15 @@ a drawing — every view's one frame (`kit/shell/ViewFrame.jsx`) and the flat vi
 at the top centre, the tool's row under it, the view's panel docked at the left (`kit/shell/FlatPanel.jsx`,
 where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right, the zoom pill in the corner.
 
-- **Tools** (`dxf/tools.js`): **Select** (in hand; the view's hand too: a drag pans, a
-  tap picks), **Pencil**, **Shapes** and **Measure**, no view controls (Display, Projection and
+- **Tools** (`dxf/tools.js`): **Select** (in hand: a tap picks, a plain drag draws the box,
+  every viewer's, below), **Pencil**, **Shapes** and **Measure**, no view controls (Display, Projection and
   Preview are a 3D view's). Select picks, front to back, a measurement, then ink, then
   the drawing's ENTITY under the pointer (`drawing2d/entities.js`'s `entityAt`: within
   6 px, a fingertip's 16; the lines over a hatch before the hatch; nothing on a hidden
-  layer); Shift adds. Its selection is the kit's (`useSceneSelection`,
+  layer); Shift adds. Its box (`useFlatBoxSelect`) takes the entities it touches
+  (`entitiesInBox`, over each entity's drawn line-work, points,
+  regions and words, on the layers shown), with the ink and the measurements (`boxTake.js`'s
+  `takeFlatBox`). Its selection is the kit's (`useSceneSelection`,
   `useSceneReferences`) over a drawing "scene" (`createDrawingScene`), lit over the
   drawing (`drawEntityHighlights`). Its cursors are the 3D views': the arrow, pressed
   or dragging too, the pointing hand over what a press picks. The drawing tools are the kit's
@@ -406,8 +409,9 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
 - **Interaction** (`dxf/useDrawingView.js`, every flat view's `kit/viewport/useFlatCanvasView.js`
   under the drawing's paint): fit on open and on resize until the person moves the view, with a board's
   and a schematic's margin (`fitBoardBounds`: 6% of the pane's shorter side, at least 16px), drag to
-  pan (a primary press, one finger, once it has travelled more than a tap's 4 px; a press that lets
-  go before is the tool's tap), the 3D views' pans too (the right or middle button's drag, a drag
+  pan (a primary press, one finger, once it has travelled more than a tap's 4 px, unless Select's box
+  has the press: `controls.enabled`, which `useFlatBoxSelect` turns off for it as Box select turns
+  OrbitControls off; a press that lets go before is the tool's tap), the 3D views' pans too (the right or middle button's drag, a drag
   with Ctrl, Cmd or Shift), a mouse's wheel or a pinch to zoom about the pointer and a trackpad's
   two-finger scroll to pan, double-click to fit again, and a right-click for the view's menu (an
   entity's reference, Select, Hide its layer; Show all layers; the framing). The view lives in a REF and the
@@ -621,9 +625,10 @@ the loader asks which format it was.
 - **Display**: `viewFeaturesForKind` (Solid and Clip, and Parts where it has several link
   meshes; Preview drawing Render). A robot is posed, never exploded.
 - **Tools** (`robot/tools.js`): **Select**, its menu the chevron after it
-  (`kit/tools/select/SelectFilterMenu.jsx`): **All** (when a file opens), **Links** alone or
-  **Position** alone (the joints' knobs; the menu is offered where a control can be driven, and
-  until the robot has loaded); then **Pencil**, **Shapes**, **Measure** (the description's metres, REP
+  (`kit/tools/select/SelectFilterMenu.jsx`), its one row Filter: All, **Links**, then **Position** (the
+  joints' knobs, shown while it is ticked, beside the links a click picks; the menu is offered where a
+  control can be driven, and until the robot has loaded), both ticked when a file opens; Select's button
+  badged with Position's knobs while they are all it picks, a funnel while nothing is; then **Pencil**, **Shapes**, **Measure** (the description's metres, REP
   103, each mesh as its `<mesh scale>` draws it; approximate) and **Clip**. Clip turned on puts
   the joints back at the opening pose, and a joint moved takes Clip off: the second is heard
   on the pose store itself, outside React, so a pose step still renders no component.
@@ -684,11 +689,11 @@ follow the rules of [Selection and inspection tools](#selection-and-inspection-t
 
 Underneath, the page reads the document from the engine (`useXbfScene.js`), and
 every face and edge is to hand from the start, so nothing waits on topology: under Faces and Edges
-every part is pickable at once, and under All a part's faces and edges are once its row is open
+every part is pickable at once, and with Parts and Faces or Edges ticked a part's faces and edges are once its row is open
 (its menu's Expand), the part (or the collapsed assembly holding it) elsewhere. The tree is the
 engine's (`xbfTree.js`): the document's wrapper is no row, and sibling parts of one prototype
-sharing a name's stem fold, as a STEP's repeated components do. Group faces and Group edges grow a
-pick by the engine's groups of the part (`GET …/part/<key>/groups`), and a chip's card reads the
+sharing a name's stem fold, as a STEP's repeated components do. The view's menu's Select tangent faces
+and Select tangent edges add the engine's groups of the part to the selection (`GET …/part/<key>/groups`), and a chip's card reads the
 engine's facts of the element, measured on the exact shape. Position's rows are the mechanism's
 pairs (core's `lib/xbf/xbfKinematics.js`), a geared pair written through its gear, and its knobs are Select's as
 a STEP's are (`xbfJointHandles.js`). A pair the engine could not keep a value for is said in the
@@ -861,7 +866,7 @@ as showing again a file the page left restores that file's:
 | Preview, its camera and its Orbit | Off; the tools view's camera is the one kept, Preview opens still, and its settings are the file's (`playback`) |
 | The routine, its time and whether it plays | At rest |
 | Quick Edit's note | Empty, its box following what is picked or annotated |
-| Select's menu | All |
+| Select's menu | Filter every box ticked, Selection tool Select |
 | Hover, menus, popovers | Closed |
 
 The rule is one generic one in `readFileView(raw, signatures)`: a slice whose stored
@@ -907,7 +912,7 @@ An optional `ViewerCommandSource` (`@cad/ui/renderers/workspace`) has the same
 subscription shape and publishes
 `selectReference: { selector, key? }` or `captureRequest: { key }`. A fresh key
 requests another operation even when its selector or target file is unchanged.
-Selecting a reference also expands the matching model tree row's ancestors (under All)
+Selecting a reference also expands the matching model tree row's ancestors (with every box ticked)
 and scrolls it into view; the model tree is on screen whenever Select is.
 Repeating the request reveals the existing selection again without toggling it off; a face-group
 reference keeps the group highlighted and reveals its active face.
@@ -1003,10 +1008,10 @@ selected entities, without attaching a source filename or source line.
 
 ## Selection and inspection tools
 
-An engine document's Select picks what its menu chooses — All, or Parts, Faces, Edges or
-Position's knobs alone — and grows a face or edge pick by Group edges or Group faces
-(`xbf/xbfSelectionFilter.js`, `kit/tools/select/selectFilter.js`); Measure's menu chooses the
-same way among vertices, edges and faces, which a press takes whole. Explicit filters never fall
+An engine document's Select picks what its menu's Filter ticks — any of Parts, Faces, Edges,
+Annotations and Measurements, with Position's knobs beside them — and the view's menu adds a face's or
+an edge's tangent chain (`xbf/xbfSelectionFilter.js`, `kit/tools/select/selectFilter.js`); Measure's
+Filter ticks any of vertices, edges and faces, which a press takes whole (none: the free point). Explicit filters never fall
 back to a different entity type. Every face and edge is to hand from the start, so nothing waits
 on topology.
 Shift-click adds/removes entities. A double-click on a face or edge (outside the
@@ -1055,11 +1060,12 @@ Escape clears the
 selection after any open menu has been dismissed. Input fields
 keep their own Escape behaviour.
 
-Measure is an exclusive picking tool. Its chevron chooses, as Select's does, All or vertices,
-edges or faces alone (`kit/tools/measure/MeasureFilterMenu.jsx`, `measureFilter.js`), and badges
-Measure's button with the choice. A press takes an entity whole, as a STEP's Measure did
+Measure is an exclusive picking tool. Its chevron's Filter ticks, as Select's does, any of vertices,
+edges and faces (`kit/tools/measure/MeasureFilterMenu.jsx`, `measureFilter.js`; all when a file opens),
+and badges Measure's button with what it ticks (`measureBadge`: none for all, a kind's glyph alone, else
+a funnel). A press takes an entity whole, as a STEP's Measure did
 (`xbf/XbfMeasure.jsx`, `xbf/xbfMeasurePick.js`): an edge's end within 10px of the pointer is its
-vertex, else the edge, else the face, of any part, open in the tree or not, kept to the choice;
+vertex, else the edge, else the face, of any part, open in the tree or not, kept to what is ticked (none ticked: the free point);
 Shift takes the point on the model as it is. What it is comes from the document
 (`@cad/core/lib/xbf/xbfMeasure.js`): a face's surface read off its mesh, an edge's
 polyline; an edge's length along a curve and a face's area, beside the pointer, are the engine's
@@ -1076,16 +1082,18 @@ Clip caps the cut with core's section fill (`sceneClip.js`, [Clip and Explode on
 scene](#clip-and-explode-on-any-scene)): a non-pickable display fill, not new topology or an
 edit to the document. Open/non-manifold meshes cannot guarantee a solid section fill.
 
-**Group faces and Group edges.** Clicking a face selects its tangent group and
-clicking an edge its chain: both are the engine's, read off the part's shape
-(`GET …/part/<key>/groups`, asked for when Group faces or Group edges first needs it: faces
-joined across tangent edges, edges that continue one another at a shared vertex), and the page
-grows the pick to the members of the same group in the same instance. Selection never crosses
-instances. Shift-click adds a group, or removes it if the whole group is already
-selected; a plain click on a group that is, exactly, what is selected lets it go, as a plain
-click on the one face or edge selected does (`xbf/xbfSelectionFilter.js`'s `nextSelectionIds`).
-The resulting faces use the existing highlight and Copy Reference
-controls. This changes selection only, not CAD geometry.
+**Select tangent faces and Select tangent edges.** Actions of the view's menu, not settings: a click
+or a box takes the face or edge it lands on, never more. Over a face, or while faces are selected,
+the menu offers Select tangent faces; over an edge, or while edges are selected, Select tangent edges
+(`xbfMenus.js`'s `xbfTangentSources`, `kit/shell/viewMenu.js`'s `tangentGroup`). Running one adds to
+the selection the tangent chain of the face or edge pressed and of each one of its kind selected
+(`xbf/xbfSelectionFilter.js`'s `tangentChain`, `withTangentChains`): the engine's groups, read off the
+part's shape (`GET …/part/<key>/groups`, asked for once per part when an action first needs it: faces
+joined across tangent edges, edges that continue one another at a shared vertex), the members of the
+same group in the same instance. Selection never crosses instances. A plain click on a chain that is,
+exactly, what is selected lets it go, as a plain click on the one face or edge selected does
+(`nextSelectionIds`). The resulting faces use the existing highlight and Copy Reference controls. This
+changes selection only, not CAD geometry.
 
 ### Engine document panels
 
@@ -1109,25 +1117,76 @@ whole name in its card's title (a chip with no card: in its hint). In a document
 which the page already names, a face or edge chip shows its kind's glyph, the kind and the number
 alone ("face 1", "6 faces"); its accessible name and its card's title still say the part.
 
-**Select's menu.** The chevron after Select's button (`SelectModeMenu` in
-`XbfSelectionModes.jsx`, over `kit/tools/select/SelectFilterMenu.jsx`) is one choice among an
-engine document's modes (`xbfSelectModes`): All (`XBF_SELECT_DEFAULT`: Parts, Faces, Edges,
-Position, and the annotations and measurements), then Parts (assemblies only), Faces, Edges and
-Position (where the document has a mechanism) alone — All when a file opens, and for another
-file — then, below a rule, the independent checkboxes Group edges and Group faces
-(`CONNECTED_SELECTION`, each shown while its kind is picked; a hidden one keeps its choice). A
-mode is the list of kinds it picks, which is the filter the renderer reads (`selectFilter.js`'s
-`pickModeOf` names the mode of a filter). Choosing one takes Select up. Select's button is the
-pointer (`SelectIcon`), Measure's the ruler (`MeasureIcon`), each badged with its mode
-(`ToolModeIcon`; none for All). The renderer keeps the filter, the geometry mode it gives
-(`xbfSelectionFilter.js`'s `selectGeometryMode`: "all", "parts", "faces", "edges", "topology"
-or "none") and the options; while Select is up the press goes to a measurement first
-(`onSelectPress`, under All), then the annotations (`selectsAnnotations`, under All), then a
-part, and Position's knobs are drawn under All and Position. The geometry chosen shapes the tree
-(`treeShape`: "all" for Parts with Faces or Edges or no geometry, else "parts", "faces" or
+**Select's menu.** The chevron after Select's button (`SelectMenu` in
+`XbfSelectionModes.jsx`, over `kit/tools/select/SelectFilterMenu.jsx` and the kit's
+`SelectionSettings.jsx`) is its Selection tool section, then one row, Filter, whose submenu ticks an
+engine document's kinds (`xbfSelectKinds`: Parts in an assembly, Faces, Edges, Annotations, Measurements)
+after All, then Position (`xbfSelectExtras`, where the document has a mechanism). The filter is the list
+of what is ticked, kept in `XBF_SELECT_DEFAULT`'s order (Parts, Faces, Edges, Position, and the
+annotations and measurements): every box ticked when a file opens, and for another file. Ticking takes
+Select up and leaves the submenu open. Select's button is the pointer (`SelectIcon`), Measure's the
+ruler (`MeasureIcon`), each badged with what its Filter ticks (`xbfSelectBadge`, `measureBadge`:
+`ToolModeIcon`; none for every kind, one kind's glyph, Position's knobs alone, else a funnel). The
+renderer reads the filter's geometry (`xbfSelectionFilter.js`'s `xbfGeometryPicks`: the geometry mode
+`selectGeometryMode` gives — "all", "parts", "faces", "edges", "topology" or "none" — and the booleans
+`faces`, `edges` and `parts` that the scene's `pickElement` and `pickBox` take, Parts read only in an
+assembly); while Select is up the press goes to a measurement first (`onSelectPress`, while Measurements
+is ticked), then the annotations (`selectsAnnotations`, while Annotations is), then a part, and
+Position's knobs are drawn while Position is ticked. Each earlier single choice is its kind ticked alone
+and picks as it did; every box ticked is the earlier Automatic. With no geometry ticked the picker
+offers nothing, the pointer lights nothing and a click lets the selection go. The geometry shapes the
+tree (`treeShape`: "all" for Parts with Faces or Edges or no geometry, else "parts", "faces" or
 "edges"): Parts opens every assembly and shuts every part, and Faces and Edges open every
 assembly, every part pickable at once. Outside the "all" shape the tree's disclosure is locked
 (`data-disclosure-locked`) and the part menus drop Expand/Collapse.
+
+**Box select.** Select's menu opens on its two tools, its Selection tool section (`SELECT_TOOLS`: Select and Box select,
+`tools` of `SelectFilterMenu`, `SelectionSettings.jsx`'s `SelectionToolSection`); the renderer keeps the one chosen (`selectTool`). Under Select a
+drag turns the camera; under Box select `kit/tools/select/useBoxSelectGesture.js` turns a left-button
+drag past the slop that starts on empty space into a box in the viewport's pixels and the page's
+(core's `lib/viewer/boxSelect.js`, `boxFromDrag`), which takes whatever it touches, even in part,
+whichever way it was drawn, drawn as one solid blue outline as it goes, holding the camera for the
+press; a tap still picks. Where a drag
+starts is asked at the press (`mayStart`): not on the annotation's ink (the shell's own test,
+`annotationAt`) and not where the renderer says no -- the XBF renderer's `modelAt` (a ray meeting
+the model's visible geometry, `pickElement` with every kind, whatever the filter, an edge only within
+the couple of pixels it is drawn in, `XBF_PICK_PIXELS.edgeDrawn`, not a click's reach: a press on the
+empty space just beside a part, where a box round it starts, draws the box) or a measurement
+(`measureSelectHandlers`' `under`) -- so a drag on the model orbits, Shift with it, as Select's does.
+The shell mounts it for a renderer that hands `RendererShell` its `boxSelect` (`{ enabled, onBox,
+mayStart }`), so any renderer that adopts Box select gets its annotation half: the shell takes the ink
+the box touches (`ShellViewport`'s `annotationsInBox`: the ink's screen projection,
+`annotationsOnScreen`, against the box by `annotation/geometry.js`'s `annotationsInBox` over core's
+`polylineTouchesBox` and `polygonTouchesBox`, a stroke at its drawn width, with what was drawn with it), under Select's filter (`selectsAnnotations`),
+then hands the box to `onBox`. A renderer's measurements are its own half: `measureSelectHandlers`'
+`box` takes every measurement whose dimension, as the overlay draws it (`screenSpaceDimensionLayout`),
+the box touches (core's `dimensionLayoutTouchesBox`: its lines, an
+arrowhead or the label's reach a press has, `dimensionLayoutHit`'s), while the filter picks
+measurements. The scene judges the model (`xbfScene.js`'s `pickBox`, under the options a click's
+`pickElement` is given), visible-only: faces from each open instance's triangles, confirmed by rays
+on a bounded grid over the box (`boxSamplePoints`, at most 4096), and a face the grid passed between
+by a ray at up to `BOX_LOOKS` points of its triangles in the box (`trianglePoints`: a sliver along a
+side of the box among them); edges from its edge polylines (`segmentInBox`), each kept where no
+surface stands nearer than it at a point in the box; an instance whose elements are not open, where
+Parts is ticked, from the grid's hits and the same looks over its triangles in the box. So a face
+partly behind another part counts by what of it shows, and something wholly hidden is never taken;
+past the box's ray budget (`BOX_PROBE_MAX`) nothing more is. Hidden, dimmed and clipped geometry is
+never taken. `handleBoxSelect` makes a part the node a click on it takes
+(`xbfPickFrontier`), within an isolation, takes a face or edge as it is, as a click does, and hands the box to `measureSelectHandlers`' `box`. Every kind a box takes stays picked with
+the others (parts, faces and edges, measurements, ink: three states, none of which lets go of another;
+`kit/tools/select/boxTake.js`). With Shift it adds to each; otherwise it replaces each, a kind the
+filter leaves out or the box misses included. A measurement or ink is taken wherever it is drawn,
+over a hidden or isolated-away part too, as a click takes it.
+
+The flat views (a board, a schematic, a drawing) have the same box under Select, with no tool of its
+own: `useFlatBoxSelect` mounts the gesture over the flat canvas (its pan switched off for the press,
+`useFlatCanvasView`'s `controls`), where a plain left drag draws it wherever it starts, a Shift,
+Ctrl, Cmd, right or middle drag panning; Shift at the release adds. Each renderer finds its own
+picks in the box's page box under its filter, what it touches (a board's `boardIndex.js`
+`pickBox`, a schematic's page `pickBox`, a drawing's `entitiesInBox`), and `boxTake.js`'s `takeFlatBox` takes them with the ink and the
+measurements. A board's box that takes nothing names its area on the working layer
+(`board.areaSelector`). A guard test (`kit/tools/select/boxSelectShared.test.js`) holds every flat
+renderer to the shared box and the box's element to one module.
 
 Explode and Clip follow Measure on the strip; Explode only with two or more parts
 (hidden, never disabled, once the document is known; idle until it is). Each is a popover from
@@ -1220,10 +1279,10 @@ Flattening never rewrites occurrence or reference IDs, and hidden-owner
 restrictions still apply to the exposed children. Assembly expansion uses the same
 controlled state as viewport picking. A collapsed assembly is
 picked as a unit; expanding it exposes its children. A part is expanded in the host
-alone, never in the tree: by its menu's Expand (Expand all), so that a press under All picks
+alone, never in the tree: by its menu's Expand (Expand all), so that a press with every box ticked picks
 its faces and edges (`xbfTree.js`'s `xbfPickFrontier`). Viewport hits select individual faces
-and edges in All, Faces and Edges modes; connected selection modes explicitly opt into edge
-chains or tangent face groups. Double-clicking empty space exits isolation, or, with nothing isolated, fits the model.
+and edges with every box ticked, Faces and Edges; the view's menu's Select tangent faces and Select tangent
+edges add tangent face groups and edge chains. Double-clicking empty space exits isolation, or, with nothing isolated, fits the model.
 
 Isolation restricts the selectable subtree without propagating an excluded
 ancestor's disabled state into the isolated descendants. Hidden geometry stays
@@ -1273,7 +1332,7 @@ in the viewport, under Select while its filter ticks Position. They exist where
 something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
 or prismatic joint that is not a mimic follower, and an engine document whose mechanism
 has a pair that turns or slides. Robots and engine documents
-open in Select on All: the tool in hand is never stored, and a reload
+open in Select with every Filter box ticked: the tool in hand is never stored, and a reload
 brings back a robot's joint values with the rest of the file's view. The knobs are absent in
 preview and under every other tool. A press on a knob is the knob's (`useJointHandles`),
 anywhere else Select's pick; the camera orbits, pans and zooms exactly as under every other
@@ -1461,7 +1520,8 @@ Select picks a measurement the same way (`measureSelectHandlers`' press in
 label picks it before ink and parts, haloed in the selection blue, and Delete deletes
 it (`useMeasureSession`'s `removeSelected`, the shell's `deleteSelection`). One press
 picks one kind: a measurement, an annotation or a part lets go of the others
-unless Shift keeps them, while Select's filter ticks Measurement. The pointer resting on a measurement lights it first, a
+unless Shift keeps them, while Select's filter ticks Measurement (a box takes every kind it holds at
+once, `measureSelectHandlers`' `box`). The pointer resting on a measurement lights it first, a
 fainter halo (its hover, through the shell's `onSelectHover`), and the part under it is not lit.
 
 A file view has one set of annotations (`annotation/session.js`). It has no panel: while

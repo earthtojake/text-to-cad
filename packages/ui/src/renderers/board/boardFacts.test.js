@@ -35,8 +35,8 @@ test("each kind's card says what it is, in KiCad's millimetres", () => {
   assert.equal(card("#@x0.2y0.2..x1y1")["Parts inside"], "Nothing");
 });
 
-test("Select's filter is KiCad's grid: its boxes are the index's kinds, All items as KiCad picks, Locked items off as a board opens", () => {
-  // All items: the most specific thing, a footprint's graphics its part's, a pour by its outline; no locked items.
+test("Select's filter is KiCad's grid: its boxes are the index's kinds, All as KiCad picks, Locked items off as a board opens", () => {
+  // All: the most specific thing, a footprint's graphics its part's, a pour by its outline; no locked items.
   assert.deepEqual(boardPickKinds(BOARD_DEFAULT_FILTER), { parts: true, pads: true, tracks: true, vias: true, texts: true, dimensions: true,
     shapes: true, footprintShapes: false, zones: true, ruleAreas: true, zoneFill: false, nets: false, locked: false });
   assert.equal(boardPickKinds([...BOARD_SELECT_KINDS, "locked"]).locked, true);

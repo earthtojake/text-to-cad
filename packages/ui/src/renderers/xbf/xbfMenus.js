@@ -1,9 +1,11 @@
+import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { implicitXbfRoots } from "./xbfTree.js";
 
 // The three menus an engine document offers, as a STEP's were, as descriptors
 // (`xbfMenuItems.js` renders them):
 // the model as a whole (a press on empty space), one node's part menu (the viewport and a model
-// tree row alike), and a face's or edge's. Each is built from what the surface holds when the
+// tree row alike), and a face's or edge's; over the view, each with what Select tangent faces and
+// Select tangent edges take from (`xbfTangentSources`). Each is built from what the surface holds when the
 // menu is asked for; nothing here holds state.
 
 const unique = ids => [...new Set(ids.filter(Boolean))];
@@ -82,4 +84,14 @@ export function xbfTopologyMenu({ elementId, label, selectedElementIds, copyText
     actionCount: referenceIds.length, copyText, zoomSelectionAvailable,
     showIsolate: false, showHideOther: false, showVisibility: false, showHideAll: false
   };
+}
+
+/**
+ * What the view's menu's Select tangent faces and Select tangent edges take the chains of: the face or
+ * edge the menu was asked over (`pressed`), and every one of its kind selected. An empty list hides its
+ * item: tangent faces show over a face or while faces are selected, tangent edges likewise.
+ */
+export function xbfTangentSources({ pressed = "", selectedElementIds = [] }) {
+  const of = kind => unique([pressed, ...selectedElementIds].filter(id => parseXbfElementId(id)?.kind === kind));
+  return { tangentFaceIds: of("face"), tangentEdgeIds: of("edge") };
 }
