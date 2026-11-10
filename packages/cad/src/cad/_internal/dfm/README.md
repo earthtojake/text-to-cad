@@ -19,25 +19,23 @@ refused with the reason and the check to run instead, the STEP's or the model's 
 exit 2). Geometry both paths share is numpy alone (`cad/_internal/meshops_<process>.py`): numpy is the
 library's one required dependency, so neither integration imports the other's.
 
-**Where exact geometry is measured.** In the engine, where the document is held: the caller resolves the
-options (`manufacturing.options`) and asks the engine (`cad.engine.api.check`, an `export` carrying a `check`
-and the caller's release), which decides who measures it before anything is measured (`Daemon.check`) and answers
-the report, which the caller finishes into its result (`manufacturing.finish`).
+**Where exact geometry is measured.** In the engine's checks processes: the caller resolves the options
+(`manufacturing.options`) and asks the engine (`cad.engine.api.check`, an `export` carrying a `check` and the
+caller's release), which answers the report, which the caller finishes into its result (`manufacturing.finish`).
 
-- A model's warm worker measures it, in memory, when the worker's library is the caller's release.
-- One of the engine's checks processes measures it when the server's library is the caller's release: a STEP's or
-  an xbf's file, read once while its bytes stay as they were (by their digest, four files at most); a document no
-  warm worker holds, read once per version; and a model built at another release, from the document's bytes. They
-  are a small pool of warm kernels of their own, so checks of different documents run at once, and a long check or
-  its crash costs no other document anything.
-- Otherwise it is another release's check, answered at once with no report. A file is then measured in the calling
-  process, a model's document exported by the engine and read back there, as before the engine measured checks; a
-  command whose environment holds no kernel sends either to the base's environment.
+- One of the engine's checks processes measures it when the server's library is the caller's (its release, code
+  and libraries): a STEP's or an xbf's file, read once while its bytes stay as they were (by their digest, four
+  files at most), or a document the engine holds, a model's, from its bytes, read once per version. They are a
+  small pool of warm kernels of their own, never a model's worker, so checks of different documents run at once,
+  a build or an inspection of a model waits for no check of it, and a long check or its crash costs no document
+  anything.
+- Otherwise it is another library's check, answered at once with no report. A file is then measured in the calling
+  process, a model's document exported by the engine and read back there; a command whose environment holds no
+  kernel sends either to the base's environment. So is a file where no engine can be reached. One line on stderr
+  says so: nothing keeps such a check, so it is measured again each time.
 
-Nothing is exported, written or read again but for that last case; a first call may still start the engine or the
-checks process. Each part is measured on a copy that shares nothing with the held document
-(`_dfm_brep.of_source`: a check's meshing never touches it), its result equal to the same document's read from
-its file. The engine keeps each clean result by the version it measured -- a model's generation, a file's bytes'
+Each part is measured on a copy that shares nothing with the document read (`_dfm_brep.of_source`), its result
+equal to the same document's read from its file. The engine keeps each clean result by the version it measured -- a model's generation, a file's bytes'
 digest -- with the check's type, process, options and the measuring library's release (128 results and 64 MB at
 most in the engine's memory, and written beside its cache, under a model's revision, so a restarted engine finds
 them), so the same check of an unchanged document measures nothing; a document holds one version's results. A
@@ -45,13 +43,13 @@ document that did not read, a refused check or a family not measured is not kept
 
 A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, its
 result kept, so the same check asked again finds it; asked while it still runs, it waits for that check and
-answers with its result, measuring nothing. A check waiting for a busy process says what it waits for. Only a build
-of a model's script cancels a check of it: a check waiting for its process leaves the queue at once, and a running
-one stops at its next checkpoint (`checkpoint`, between parts, families, faces and rays) and answers that it was
-cancelled. A stop takes effect when the kernel call in progress returns. On a part of 1606 faces the longest stretch
-between two checkpoints was the whole part's one mesh, 7 to 21 s across the processes with four running at once;
-every other was at most a few seconds (a large face's own mesh, the file's read). A process killed in a check says
-so, and is not asked again.
+answers with its result, measuring nothing. A check waiting for a busy process says what it waits for. A check
+that does not complete is never a result: the engine's answer is a failure with one word for why (`reason`) --
+`stopped` (the engine stopped), `cancelled` (its callers all gone, its process given to a check someone waits
+for), `over_time` and `over_memory` (past a check's limits, `CAD_ENGINE_CHECK_SECONDS`, half an hour by default,
+and `CAD_ENGINE_CHECK_RSS_MB`, by default the engine's memory cap), `process_lost` (its process exited under it),
+`no_kernel`, `superseded` (its model was built again, or its file rewritten, while it was measured) and `error`
+(the measuring raised). A run of a model's script that changes nothing disturbs no check of it.
 
 A mesh and a DXF are measured in the calling process (or the integration's environment) always. A mesh is read
 and cleaned (`cad/trimesh/_mesh.py`): corners at one place welded into one
