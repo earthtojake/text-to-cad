@@ -207,14 +207,8 @@ def _refs(item: Mapping[str, Any]) -> list[str]:
     return sorted(found, key=lambda ref: _SPECIFIC[_REF.search(ref).group(1)])  # type: ignore[union-attr]
 
 
-def _where(item: Mapping[str, Any], rule: Rule, refs: list[str] | None = None) -> str:
-    """Where a failing item is: its own edge (or vertex) where it names one -- a corner is its edge, not one of
-    the two faces that meet there, so two corners of one face are two places --, else its ``location``, its
-    ``xyz``, the family."""
-    for key in ("vertex", "edge"):
-        named = item.get(key)
-        if isinstance(named, str) and _REF.search(named):
-            return named
+def _where(item: Mapping[str, Any], rule: Rule) -> str:
+    """Where an item says it is: its ``location``, else its ``xyz``, else the family."""
     location = item.get("location")
     if location:
         return str(location)
@@ -222,6 +216,17 @@ def _where(item: Mapping[str, Any], rule: Rule, refs: list[str] | None = None) -
     if xyz:
         return ", ".join(f"{float(value):g}" for value in xyz)
     return rule.family
+
+
+def _feature(item: Mapping[str, Any], rule: Rule) -> str:
+    """The feature a failing item is, for its finding's place: its own edge (or vertex) where it names one -- a
+    corner is its edge, not one of the two faces that meet there, so two corners of one face are two features
+    --, else where it says it is (``_where``)."""
+    for key in ("vertex", "edge"):
+        named = item.get(key)
+        if isinstance(named, str) and _REF.search(named):
+            return named
+    return _where(item, rule)
 
 
 def _message(rule: Rule, value: float, limit: float, severity: str | None = None) -> str:
@@ -275,7 +280,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     outcome, every failure's value, limit, place and item).
 
     The record holds every failure. The findings are what a reader acts on, so they are fewer: failures of
-    one rule at one feature -- the item's most specific ref, ``_where`` -- are one finding (``and N more at
+    one rule at one feature -- the item's most specific ref, ``_feature`` -- are one finding (``and N more at
     this ref``, each in its ``items``), and a failure on a figure that already fails a rule of higher
     severity, or of the same severity with a limit further off -- the same family, field and direction at the
     same place: a recommendation beside the feasibility limit it exceeds, the looser of two recommendations
@@ -291,6 +296,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     # per outcome: the items it read, and those it could not (with their places), so variants of one rule count
     # each item once
     judged: dict[int, tuple[dict[int, None], dict[int, str]]] = {}
+    feature: dict[int, str] = {}  # each failure's feature, its finding's place; the record keeps the item's own
     for rule in rule_set.rules:
         if not rule.applies(context):
             # Recorded, never dropped: a rule that does not apply here is not a pass either.
@@ -325,7 +331,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         for (index, item), limit in zip(items, limits):
             value = _number(item.get(rule.field))
             if value is None or limit is None:
-                unread[id(item)] = _where(item, rule)
+                unread[id(item)] = _feature(item, rule)
                 continue
             read[id(item)] = None
             if _fails(rule, value, limit):
@@ -334,6 +340,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                                  **({"refs": refs} if refs else {}), **({"item": index} if index is not None else {}),
                                  **({"limit": limit} if limit != base else {})})
                 failing[id(failures[-1])] = item
+                feature[id(failures[-1])] = _feature(item, rule)
         failures.sort(key=lambda found: found["value"], reverse=rule.op == "max")
         # Faces the family's rays could not be intersected with (``unmeasured_faces``: the kernel failed there):
         # its figures there are not measured, each such face counted not measured -- never a pass.
@@ -377,7 +384,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             key = (rule.family, rule.field, rule.op, failure["location"], id(failing.get(id(failure))))
             if implied(rule, limit_of(rule, failure), key):
                 continue
-            places.setdefault(failure["location"], []).append(failure)
+            places.setdefault(feature[id(failure)], []).append(failure)
         if not places:
             continue
         counts[rule.severity][rule.id] = counts[rule.severity].get(rule.id, 0) + len(places)

@@ -204,8 +204,9 @@ finding counts the rest (`value` None, `location` `measurements.rules`, `items` 
            "sources": [{"id", "publisher", "title", "url", "accessed"}]}}
 ```
 
-A failure's `item` is the index of its item in its family's `items`, and its `limit` is there where it is
-the item's own (below). `rules.failing` counts the features that fail each rule, by severity, as the
+A failure's `location` is its item's own, its `refs` every ref the item names, the feature's first (the
+finding's `location`: a corner's edge, where the item's `location` is one of its faces), its `item` the index
+of its item in its family's `items`, and its `limit` is there where it is the item's own (below). `rules.failing` counts the features that fail each rule, by severity, as the
 findings count them -- those past the eight shown too, a failure another finding implies left out: the one
 count a summary says.
 

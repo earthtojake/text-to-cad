@@ -68,7 +68,11 @@ class RulesTest(unittest.TestCase):
         self.assertIn("(and 1 more at this ref)", found[2].message)
         self.assertEqual(([item["value"] for item in found[2].items], found[2].value), ([0.2, 0.4], 0.2))
         self.assertEqual(record["failing"]["error"], {"cnc.sharp": 3})
-        self.assertEqual([failure["item"] for failure in record["outcomes"][0]["failures"]], [0, 1, 2, 3])
+        # the record keeps every failure at its item's own place, with its refs (the feature first) and its item
+        self.assertEqual([(failure["item"], failure["location"], failure["refs"][0])
+                          for failure in record["outcomes"][0]["failures"]],
+                         [(0, "p/face 7", "p/edge 17"), (1, "p/face 7", "p/edge 23"), (2, "p/face 3", "p/face 3"),
+                          (3, "p/face 3", "p/face 3")])
 
     def test_a_rule_scales_by_the_items_own_figure_before_the_contexts(self) -> None:
         """Parts of several thicknesses: a hole is held to its own part's thickness (the item's ``thickness``),
@@ -1350,6 +1354,18 @@ class SeveralSolidsTest(unittest.TestCase):
                 if process != "printing":  # printing's own solid family says it, by its boolean check
                     self.assertIn("solids 1 and 2 share 500 mm3", unsound.message)
 
+    def test_the_pairs_compared_are_bounded_and_the_rest_is_said(self) -> None:
+        from unittest import mock
+
+        import cad.build123d as cb
+        from cad.build123d import _dfm_check
+
+        through = bd.Compound([bd.Box(10, 10, 10), bd.Pos(5, 0, 0) * bd.Box(10, 10, 10)])
+        with mock.patch.object(_dfm_check, "_PAIRS", 0):
+            found = {f.code: f for f in cb.dfm(through, process="cnc").findings}
+        self.assertNotIn("not_sound", found)
+        self.assertIn("1 pair(s)", found["solids_not_compared"].message)
+
 
 class IntervalsTest(unittest.TestCase):
     """``Rays.intervals`` tells each crossing by which way the line passes the face: a tangent touch is no
@@ -1370,6 +1386,12 @@ class IntervalsTest(unittest.TestCase):
         self.assertEqual(self._spans(bd.Sphere(10), (10, -50, 0), (0, 1, 0)), [])
         # a pole, where the surface has no normal of its own, is crossed all the same
         self.assertEqual(self._spans(bd.Sphere(10), (0, 0, -50), (0, 0, 1)), [(40.0, 60.0)])
+        # wherever the part stands: the same lines of the same torus, turned and moved with it
+        turn = bd.Location((7, -3, 11), (31, 47, 59))
+        turned = turn * torus
+        for origin, end, spans in (((-50, 0, 5), (50, 0, 5), []), ((15, -50, 0), (15, 50, 0), [(30.0, 70.0)])):
+            a, b = (np.array(tuple((turn * bd.Pos(*point)).position)) for point in (origin, end))
+            self.assertEqual(self._spans(turned, tuple(a), tuple(b - a)), spans)
 
     def test_an_edge_or_a_vertex_touched_is_no_crossing_and_one_passed_is_one(self) -> None:
         box = bd.Box(20, 20, 20)
