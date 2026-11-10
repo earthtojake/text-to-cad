@@ -40,7 +40,8 @@ OUT = HERE / "tmp" / "film"
 FPS = 24
 # How well a frame is rendered: its size and its samples (a shot may ask for more). The folder a quality's frames go in ends in its name.
 QUALITY = {"final": ((1600, 900), 14), "draft": ((960, 540), 10), "preview": ((640, 360), 6)}
-FONT = "/usr/share/fonts/opentype/inter/Inter-Medium.otf"
+FONT = "/usr/share/fonts/opentype/inter/Inter-Medium.otf"            # the title's face, and the captions': Inter where it is installed
+FONT_LIGHT = "/usr/share/fonts/opentype/inter/Inter-Light.otf"
 
 # Labels (or their beginnings) of the parts that are skin: what the wipe takes away.
 SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back",
@@ -107,12 +108,22 @@ SHOTS = {
     "walk": dict(clip="walk", loop=True, frames=96, plant="walk", lens=35, blur=True, turn=-15, follow="pelvis",
                  camera=[(0, (-1150, -3050, 420), (0, 0, 900)), (96, (-950, -3600, 500), (0, 0, 900))], lights=[(0, ON)]),
     # It bows; the lights go down on it, and its own stay.
-    "bow": dict(clip="bow", frames=132, plant="l_foot", lens=50, turn=10,
-                camera=[(0, (460, -5350, 1100), (0, -40, 880)), (132, (260, -4850, 1000), (0, -60, 880))],
+    "bow": dict(clip="bow", frames=156, plant="l_foot", lens=50, turn=10,
+                camera=[(0, (460, -5350, 1100), (0, -40, 880)), (156, (240, -4800, 1000), (0, -60, 880))],
                 lights=[(0, ON), (102, ON), (126, LOW)], face=[(0, 1.0)], chest=[(0, 1.0)]),
 }
 ORDER = ("wake", "hero", "chest", "name", "leg", "scan", "crouch", "linkage", "hand", "walk", "bow")
-TITLE = dict(shot="bow", text="G A L A T E A", frames=(100, 124), height=0.045, at=0.80)      # fades in over these frames
+# The title, which fades in over these frames of its shot, and the line under it.
+TITLE = dict(shot="bow", text="G A L A T E A", frames=(118, 136), height=0.045, at=0.76,
+             under="designed, modelled and checked in code with text-to-cad")
+# Lines laid over the picture in the cut, low on the left: (shot, first frame, last frame, words). Each fades in and out.
+CAPTIONS = [
+    ("hero", 28, 110, "1.76 m    57 kg    44 driven joints"),
+    ("scan", 12, 72, "689 parts in 73 links"),
+    ("crouch", 8, 78, "33 RobStride drives, each its maker's own CAD model"),
+    ("linkage", 6, 54, "the knee's drive rides at the hip: a crank, a pushrod, a parallelogram"),
+    ("hand", 6, 54, "six degrees of freedom in each hand"),
+]
 
 # The lights: (azimuth from the robot's front toward its left, elevation, distance m, width m, height m, watts, colour).
 LIGHTS = {
@@ -568,16 +579,15 @@ def folder_of(name, quality):
 
 
 def cut(quality, step=1):
-    """Every shot's frames in order as one mp4: in from black, the title over the last shot, out to black.
-    With `step`, every step-th frame, played as slowly: a preview's cut."""
+    """Every shot's frames in order as one mp4: in from black, the captions and the title laid over, out to
+    black. With `step`, every step-th frame, played as slowly: a preview's cut."""
     reel = folder_of("reel", quality)
     reel.mkdir(parents=True, exist_ok=True)
     for old in reel.iterdir():
         old.unlink()
-    count, missing, title_at = 0, [], None
+    count, missing, begins = 0, [], {}
     for name in ORDER:
-        if name == TITLE["shot"]:
-            title_at = count
+        begins[name] = count
         for frame in range(0, SHOTS[name]["frames"], step):
             source = folder_of(name, quality) / f"{frame:04d}.png"
             if not source.exists():
@@ -586,15 +596,30 @@ def cut(quality, step=1):
             (reel / f"{count:05d}.png").symlink_to(source)
             count += 1
     if missing:
-        print(f"{len(missing)} frames are not rendered yet (the first: {missing[0]}); the cut has the rest")
+        print(f"{len(missing)} frames are not rendered yet (the first: {missing[0]}); the cut has the rest, without its text")
     rate = FPS / step
     seconds, height = count / rate, QUALITY[quality][0][1]
+    at = lambda shot, frame: begins[shot] / rate + frame / FPS            # when a shot's frame plays, seconds
+
+    def text(words, size, colour, x, y, alpha, face=FONT):
+        """One drawtext step. The words go by a file, so that nothing in them needs escaping."""
+        page = reel / f"text{len(list(reel.glob('text*.txt')))}.txt"
+        page.write_text(words)
+        font = f"fontfile={face}:" if Path(face).exists() else ""
+        return (f"drawtext={font}textfile={page}:expansion=none:fontsize={round(size * height)}:fontcolor={colour}:"
+                f"shadowcolor=0x000000@0.5:shadowx={max(1, round(height / 540))}:shadowy={max(1, round(height / 540))}:"
+                f"alpha='{alpha}':x={x}:y={y}")
+
     steps = ["fade=t=in:st=0:d=0.4"]
-    if title_at is not None and not missing:
-        first, last = (title_at / rate + frame / FPS for frame in TITLE["frames"])
-        face = f"fontfile={FONT}:" if Path(FONT).exists() else ""
-        steps.append(f"drawtext={face}text='{TITLE['text']}':fontsize={round(TITLE['height'] * height / 0.727)}:fontcolor=0xCDB288:"
-                     f"alpha='clip((t-{first:.3f})/{last - first:.3f}\\,0\\,1)':x=(w-text_w)/2:y=h*{TITLE['at']}")
+    if not missing:
+        for shot, first, last, words in CAPTIONS:
+            a, b = at(shot, first), at(shot, last)
+            fade = f"0.85*min(1,min((t-{a:.3f})/0.35,({b:.3f}-t)/0.35))*between(t,{a:.3f},{b:.3f})"
+            steps.append(text(words, 0.027, "0xDADCE0", "w*0.06", "h*0.885", fade, FONT_LIGHT))
+        a, b = (at(TITLE["shot"], frame) for frame in TITLE["frames"])
+        rise = f"min(1,max(0,(t-{a:.3f})/{b - a:.3f}))"
+        steps.append(text(TITLE["text"], TITLE["height"] / 0.727, "0xCDB288", "(w-text_w)/2", f"h*{TITLE['at']}", rise))
+        steps.append(text(TITLE["under"], 0.024, "0xDADCE0", "(w-text_w)/2", f"h*{TITLE['at'] + 0.085}", f"0.8*{rise}", FONT_LIGHT))
     steps.append(f"fade=t=out:st={seconds - 0.35:.3f}:d=0.35")
     film = OUT / ("galatea.mp4" if quality == "final" else f"galatea-{quality}.mp4")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", f"{rate:g}", "-i", str(reel / "%05d.png"), "-vf", ",".join(steps),

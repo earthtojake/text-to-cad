@@ -329,14 +329,22 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     it) would make that the path of least effort, and the build's error for a missing
     xbf could name the command.
 
-32. **A change to the motions alone rebuilt the whole robot on another worker.** After
-    an edit to `lib/poses.py` (two motions added, no geometry touched) a check that
-    imports `trimesh` ran in a worker of its own integration set, and that worker built
-    everything: `warm in 251.85s: bodies 2 run; 6154 misses, 0 hits`. The worker that
-    had built the robot a minute earlier would have taken seconds. The kernel memo lives
-    in a worker; the disk cache holds whole bodies by key. A memo shared between workers
-    (or bodies keyed apart from the motions written on them) would have saved four
-    minutes each time.
+32. **One shape made with the kernel's own classes switches the memo off behind it, and
+    nothing says so.** To mend a loft's pointed end (entry 27) I called
+    `BRepOffsetAPI_MakeFilling` and `BRepBuilderAPI_Sewing` from `OCP` directly. The model
+    was right, and from then on every build of it took 150 to 250 s that had taken 25:
+    the memo cannot name a shape it did not see made, so every boolean on the helmet's
+    form ran again each time, the `@memo` stage could not be replayed, a change to a
+    motion alone rebuilt the robot (`bodies 2 run; 6154 misses, 0 hits` on a worker that
+    had not built it), and nine posed copies took 170 s each, not 2. The build line gave
+    no hint: `12 misses, 6142 hits; body 152.64s` reads as a slow machine. I found it
+    with `py-spy dump` on the worker. The same cap made with build123d's own
+    `Face.make_surface_patch`, `Shell` and `Solid` is the same solid to four decimals,
+    and a change to a motion now rebuilds in 1.5 s (`bodies 1 run, 1 replayed`). Two
+    things would have saved the afternoon: a line in the build's report when calls ran
+    plain because an input was made outside the memo (`31 calls ran plain behind a shape
+    made at lib/geo.py:302`), and a sentence in the skill: reach for `OCP` only for
+    questions; a shape made with it is one the memo cannot keep.
 
 33. **On a machine without a GPU, EEVEE ends the process.** `scene.render.engine =
     "BLENDER_EEVEE"` and a render print `Couldn't open libEGL.so.1` and abort (exit 134),

@@ -32,7 +32,7 @@ linkages close, and what holding each pose asks of each drive against its datash
 
 ```
 cad run src/vendor.py                        # once: RobStride's five STEP files, 53 MB, into vendor/ (Git keeps no CAD file)
-cad run src/galatea.py                       # about three minutes cold; unchanged 0.1 s
+cad run src/galatea.py                       # about three minutes cold; a pose or a motion changed 1.5 s; unchanged 0.1 s
 cad run src/stances.py                       # the nine poses: the first builds the robot, the rest take 2 s each
 cad run src/fit.py                           # every skin against its mechanism
 cad run src/checks/interference.py --poses   # and the other checks, below
@@ -221,7 +221,10 @@ A form that ends in a point (the helmet's crown, the toe cap's tip, the heel) is
 to that point and then mended there: the kernel's loft arrives at a point as a cusp a
 millimetre high, or overshoots it and leaves a dimple, and rows added near the point make
 its surface ring along the whole form. `geo.smooth_tip` drills the end out round its
-axis and fills the mouth with a surface held tangent to the loft's own face.
+axis and fills the mouth with a surface held tangent to the loft's own face
+(`Face.make_surface_patch`: one of build123d's own calls, so the engine's memo keeps
+the result; the same cap made with the kernel's classes directly cost every later
+build two and a half minutes).
 
 The mechanism stands inside the liner with 3 mm of air round it, through the travel of
 whatever moves under it. `fit.py` measures that from the sections and the meshes, without

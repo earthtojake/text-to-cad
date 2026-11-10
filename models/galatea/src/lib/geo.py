@@ -261,12 +261,11 @@ def smooth_tip(solid, apex, direction, radius=TIP_R):
     dimple (a blunt heel). Rows added near the point do not cure it: the loft's spline rings along its
     whole length when its rows are crowded at one end. So the end is drilled out round its axis and the
     hole's mouth is filled by a surface held tangent to the loft's own face along the rim; the form
-    outside the hole is untouched."""
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid, BRepBuilderAPI_Sewing
-    from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling
-    from OCP.GeomAbs import GeomAbs_G1
-    from OCP.TopoDS import TopoDS
+    outside the hole is untouched.
 
+    Every step is one of build123d's own calls, which the engine's memo knows. Made with the kernel's
+    classes directly, the same cap is a shape the memo cannot name, and every boolean on the form after
+    it runs again at each build: two and a half minutes for the helmet alone."""
     d, tip, deep = bd.Vector(*direction).normalized(), bd.Vector(*apex), 0.8 * radius
     body = solid - cyl(radius, 2.0 * deep, tuple(tip - d * deep), tuple(d))
     off_axis = lambda p: ((p - tip) - d * (p - tip).dot(d)).length
@@ -278,26 +277,11 @@ def smooth_tip(solid, apex, direction, radius=TIP_R):
         raise WrongBoolean(f"a tip drilled {radius} wide has {len(wall)} wall faces and {len(floor)} floors")
     hole = [*wall, *floor]
     others = [face for face in body.faces() if not any(face.is_same(h) for h in hole)]
-    filling = BRepOffsetAPI_MakeFilling(3, 15, 2, False, 1e-5, 1e-4, 1e-2, 0.1, 8, 9)
-    rim = 0
-    for face in others:
-        for edge in face.edges():
-            if any(edge.is_same(e) for w in wall for e in w.edges()):
-                filling.Add(edge.wrapped, face.wrapped, GeomAbs_G1, True)
-                rim += 1
+    rim = [(edge, face, bd.ContinuityLevel.C1) for face in others for edge in face.edges()
+           if any(edge.is_same(e) for w in wall for e in w.edges())]
     if not rim:
         raise WrongBoolean("a drilled tip has no rim on the loft's surface")
-    filling.Build()
-    if not filling.IsDone():
-        raise WrongBoolean("a tip's cap could not be filled")
-    sewing = BRepBuilderAPI_Sewing(1e-4)
-    for face in others:
-        sewing.Add(face.wrapped)
-    sewing.Add(filling.Shape())
-    sewing.Perform()
-    made = bd.Solid(BRepBuilderAPI_MakeSolid(TopoDS.Shell(sewing.SewedShape())).Solid())
-    if made.volume < 0:
-        made = bd.Solid(made.wrapped.Reversed())
+    made = bd.Solid(bd.Shell([*others, bd.Face.make_surface_patch(rim)]))
     if not made.is_valid or abs(made.volume - solid.volume) > 0.01 * solid.volume + 2.0 * radius ** 3:    # `volume` is good to a per cent here
         raise WrongBoolean(f"a tip's cap made {made.volume:.0f} of a solid of {solid.volume:.0f}")
     return made
