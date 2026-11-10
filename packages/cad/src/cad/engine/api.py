@@ -954,6 +954,8 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
 
     from cad.engine.addresses import key, parts, split
 
+    if isinstance(source, Document):
+        source = source.id  # the handle a model call returns, as every verb takes it: its document, by its id
     named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:

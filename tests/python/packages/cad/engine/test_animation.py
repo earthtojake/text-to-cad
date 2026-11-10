@@ -380,6 +380,32 @@ class HarvestTest(_Folder):
                 report = self.channels(more, ok=False)
                 self.assertRegex(report["error"], error)
 
+    def test_a_name_an_assembly_and_a_part_inside_it_share_is_refused_with_paths_that_name_each(self) -> None:
+        # An assembly named after its main part: the bare label is both, and the refusal lists each by a
+        # path that names it alone, from the animation's own assembly.
+        source = textwrap.dedent("""
+            import build123d as bd
+            from cad.build123d import animation
+            from cad.engine import xbf
+
+
+            @xbf("XBF/bot.xbf")
+            def bot():
+                def part(label, x):
+                    solid = bd.Pos(x, 0, 0) * bd.Box(10, 10, 10)
+                    solid.label = label
+                    return solid
+                stem = bd.Compound(children=[part("stem", 0), part("screw", 20)], label="stem")
+                robot = bd.Compound(children=[part("base", -20), stem], label="bot")
+                animation(robot, "show", duration=2).translation("{name}", by=(0, 0, 5))
+                return robot
+            """)
+        report = self.build(source.replace("{name}", "stem"), "bot", ok=False)
+        self.assertIn("stem names 2 occurrences: bot/stem, bot/stem/stem", report["error"])
+        for name in ("bot/stem", "bot/stem/stem"):
+            with self.subTest(name=name):
+                self.build(source.replace("{name}", name), "bot")
+
     def test_an_animation_named_as_a_configuration_sequence_is_refused(self) -> None:
         report = self.build(MOTION.replace('    return configuration_sequence(box', '    from cad.build123d import animation\n'
                                            '    animation(box, "open_close", duration=1).translation("lid", by=(0, 0, 1))\n'

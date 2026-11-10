@@ -2,7 +2,9 @@
 
 A folder of `models/` that holds a `build.py` makes its KiCad project with it (`cad run build.py`): every file that
 build writes is listed in GENERATED, kept out of Git by the folder's `.gitignore`, and never tracked, so the board
-can never drift from the scripts that make it. Any other KiCad file such a folder tracks is source, listed in
+can never drift from the scripts that make it. The name is that convention's alone: only tracked paths are read
+here, and a generator's KiCad files are untracked, so a `build.py` is taken for one whatever it builds, and a script
+under `models/` that builds anything else takes another name. Any other KiCad file such a folder tracks is source, listed in
 SOURCE with the reason no script makes it. A board no script makes (a folder without a `build.py`) is source, and
 nothing here looks at it.
 """
@@ -63,7 +65,8 @@ def violations(tracked: Iterable[str], generated: Mapping[str, Iterable[str]] = 
     broken = []
     builders = {path[: -len(BUILD) - 1] for path in tracked if path.endswith(f"/{BUILD}")}
     for folder in sorted(builders - set(generated)):
-        broken.append(f"{folder}: has a {BUILD} but GENERATED does not list what it writes")
+        broken.append(f"{folder}: has a {BUILD}, the name of a KiCad sample's build under models/: list the KiCad "
+                      f"files it writes in GENERATED, or give a script that builds no KiCad project another name")
     for folder in sorted(set(generated) - builders):
         broken.append(f"{folder}: listed in GENERATED, but no {BUILD} is tracked there")
     for path, why in sorted(source.items()):

@@ -3587,7 +3587,10 @@ kernel work an edit elsewhere leaves untouched: roughly a thousand kernel calls 
 per part, never on a helper called many times; whole sub-assembly stages are the usual
 candidates (tom's six stages, movement's three layers: 1.3–3 s each, and twice as fast on an
 edit), while per-part markers measured under 0.1 s. Nested `@xbf` is never needed for caching:
-the operation-level memo handles every kernel call in any model, markers or not.
+the operation-level memo handles every kernel call in any model, markers or not. The one other
+case is a builder several models call with the same arguments (nine posed copies of one
+assembly): an operation's entry is keyed by the body that ran it, so two models never share one,
+and unmarked the builder runs whole in each; marked, it runs once and the rest replay it.
 
 A verifying build (`Model.build(verify=True)`) runs every
 body the memo would replay -- a model's and every `@memo` call's -- and compares each fresh

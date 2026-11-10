@@ -264,13 +264,26 @@ duration=None, ease="cubic")` takes one of:
   (1e-3 radian, 1e-3 of the model's size), the same code always the same samples.
 
 `ease` is `cubic` (each step eased in and out, every joint arriving together at every
-waypoint) or `linear` (constant speed). A sequence is a finite clip, and a player repeats
+waypoint) or `linear` (constant speed). Between two waypoints a fraction `s` of the way in
+time, a `cubic` value is `a + (3 s^2 - 2 s^3) (b - a)` and a `linear` one `a + s (b - a)`,
+each joint on its own; a program that plays the sequence elsewhere (a simulator, a check
+that follows it in time) uses the same formula. A sequence is a finite clip, and a player repeats
 it: one that comes back writes its way back as waypoints. A coupling's name poses in
 waypoints and sweeps like a joint's. A sequence naming a mechanism state or a joint the
 assembly lacks fails the run.
 
 - **Prefer waypoints.** A sequence of waypoints is a few numbers in the document and a
   few keys in a GLB; a function of time is sampled on every run that runs its body.
+- **A path the joints must follow together is dense waypoints with `ease="linear"`.** An ease
+  moves each joint on its own between two waypoints, so two sound poses do not make a sound
+  path between them: a foot that should stay on the floor slides, the knee and the hip
+  easing separately. Solve the path in your own code (the pelvis over feet that stay, a
+  linkage that closes) and write its samples, forty to sixty of them, as waypoints.
+- **The fixed link is a choice of frame.** A mechanism has one ground, and a sequence moves
+  the joints under it: a robot whose ground is its pelvis crouches by lifting its feet. A
+  motion that is right in that frame says nothing of what a floor would hold. Check it in
+  the frame of what the robot stands on: the supporting foot's world placement at each
+  sample, which should not move, and the centre of mass over it.
 - **A sequence costs nothing outside a GLB**: STEP, STL and 3MF carry no motion.
 - Every GLB exported from the model carries each sequence as a glTF animation of its
   name, keyed within 1e-3 of the model's size of the true motion. Blender, three.js and

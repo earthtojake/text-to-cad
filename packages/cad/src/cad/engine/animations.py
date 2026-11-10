@@ -503,8 +503,11 @@ def _resolve(base: Any, ref: str, where: str) -> list[Any]:
         raise AnimationError(f"{where}: {_shown(base)} has no part or assembly {ref}; nearest: "
                              f"{refs._nearest(base, ref)}")
     if len(found) > 1:
+        # Each by a path that names it alone: from the assembly the animation is on, its own label
+        # first (an assembly and a part inside it of one label are ``bot/stem`` and ``bot/stem/stem``:
+        # counted from below, ``stem`` is both of them).
         raise AnimationError(f"{where}: {ref} names {len(found)} occurrences: "
-                             f"{', '.join(_relative(base, node) for node in found[:8])}")
+                             f"{', '.join(f'{base.segment}/{_relative(base, node)}' for node in found[:8])}")
     return found
 
 

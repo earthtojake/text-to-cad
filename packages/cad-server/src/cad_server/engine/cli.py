@@ -515,10 +515,24 @@ def _joint_value(value: Any) -> str:
     return "0" if text in ("-0", "") else text
 
 
+# The occurrences a line of the first screen names before it counts the rest (``_some``).
+_LISTED = 8
+
+
+def _some(paths: list[str]) -> str:
+    """Occurrence paths on one line of the first screen: the first ``_LISTED``, then how many more
+    there are and where they all are -- a material of hundreds of occurrences is still one line of
+    a screen (``--json`` lists every one)."""
+    if len(paths) <= _LISTED:
+        return ", ".join(paths)
+    return f"{', '.join(paths[:_LISTED])} and {len(paths) - _LISTED:,} more (--json lists them)"
+
+
 def summary_text(summary: dict[str, Any]) -> str:
     """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
     holds, its lists one item per line under it; a fact it has none of says so. A structure
-    (``--query structure``) has no measured line: no bounds, volume or masses."""
+    (``--query structure``) has no measured line: no bounds, volume or masses. A line that lists
+    occurrences names the first few and counts the rest (``_some``)."""
     import time
 
     lines = [f"{summary['name']}  {summary['id']}"]
@@ -547,20 +561,20 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append("bounds      none: no geometry")
         lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
         if summary.get("inverted"):  # a solid inside out: its faces point inward, its volume below zero
-            lines.append(f"inside out  {', '.join(summary['inverted'])}: a solid whose faces point inward")
+            lines.append(f"inside out  {_some(summary['inverted'])}: a solid whose faces point inward")
     if summary["materials"]:
         mass = summary.get("mass")
         lines.append("materials" + (f"   {_said.number(mass)} kg in all" if mass is not None else ""))
         for row in summary["materials"]:
             if not measured:
-                lines.append(f"  {row['name']}: {', '.join(row['parts'])}")
+                lines.append(f"  {row['name']}: {_some(row['parts'])}")
                 continue
             weight = f"{_said.number(row['mass'])} kg" if row["mass"] is not None else "no density"
-            lines.append(f"  {row['name']}: {weight}, {', '.join(row['parts'])}")
+            lines.append(f"  {row['name']}: {weight}, {_some(row['parts'])}")
         assigned = {part for row in summary["materials"] for part in row["parts"]}
         missing = [part for part in summary["unweighed"] if part not in assigned]
         if missing:
-            lines.append(f"  no material: {', '.join(missing)}")
+            lines.append(f"  no material: {_some(missing)}")
     else:
         lines.append("materials   none set")
     if summary.get("untextured"):  # texture maps on a mesh with no UVs: drawn as the scalar look

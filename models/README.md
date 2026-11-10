@@ -46,6 +46,13 @@ XBF, no KiCad file a sample's scripts write, and no `.blend`, which a render's b
 (`.gitignore` keeps images and video out of this tree) or runtime debris. One project renders with Blender:
 `orbit_clock`'s `render.py`, a bpy script `cad run` runs, writes its stills into the project's gitignored `RENDERS/`.
 
+Two rules reach a new project from outside this folder, and the policy suite holds both; run it
+(`scripts/test/test-global.sh`, under a minute) before the first push. A script named `build.py` under `models/` is
+a KiCad sample's build and nothing else: `test_generated_kicad_files_untracked.py` asks every folder that tracks
+one which KiCad files it writes, so a script that builds anything else takes another name. And every tracked path
+is one a CI rule names (`scripts/github-workflows/select_checks.py`): a file under `models/` is, a new file at the
+repository's root is not until a rule there names it, so a project's notes go in its own folder.
+
 ## The files the corpus writes
 
 Most models write nothing. A few keep files on purpose, as examples of each way a

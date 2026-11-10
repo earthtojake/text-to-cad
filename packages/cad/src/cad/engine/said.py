@@ -108,18 +108,61 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
         stages = ", ".join(f"{name} {timings[name]:.2f}s" for name in ("body", "names", "document", "xbf", "step",
                                                                         "glb", "stl", "threemf", "dxf")
                            if timings.get(name))
-        misses, hits = memo.get("misses", 0), memo.get("hits", 0)
+        misses, hits, uncached = memo.get("misses", 0), memo.get("hits", 0), memo.get("uncached", 0)
         line = (f"built {report['model']}{worker} in {wall:.2f}s: bodies {ran}; {misses} miss{'' if misses == 1 else 'es'}, "
-                f"{hits} hit{'' if hits == 1 else 's'}" + (f"; {stages}" if stages else ""))
+                f"{hits} hit{'' if hits == 1 else 's'}" + (f", {uncached} uncached" if uncached else "")
+                + (f"; {stages}" if stages else ""))
         line += _waited(report, "replayed" if counted.get("replayed") and not counted.get("run") else "ran after")
         line += _delta(report.get("delta"))
         if (report.get("cache") or {}).get("changed"):
             line += f"\n  rebuilt: {report['cache']['reason']}"
+        line += "".join(f"\n  not retained: {text}" for text in _unretained(report))
+    line += _cold(report) if fresh else ""
     if report.get("retired"):
         listed.append(f"retired: {report['retired']}")
     return (line + "".join(f"\n  {text}" for text in listed) + children
             + "".join(f"\n  warning: kinematics: {text}" for text in report.get("kinematics", {}).get("warnings", ()))
             + _verified(report.get("verify")))
+
+
+# Why the engine retired a script's worker (the supervisor's reasons), as the next run's line says it.
+_RETIRED = {
+    "RSS": "the engine's processes were over their memory cap (CAD_ENGINE_WORKER_RSS_MB, read when the engine starts)",
+    "pressure": "the system was short of memory",
+    "LRU": "the engine was at its count of workers, and this one was the least recently used",
+    "exited": "it exited (the system ends a process when memory runs out)",
+}
+
+
+def _cold(report: dict[str, Any]) -> str:
+    """Under a cold run's line, why its script's last worker went (``cold``: the engine's note of its
+    retirement, ``{reason, ago}``), so a build that took minutes where the last took seconds says what
+    cost it its warm worker. Nothing for a script that had none."""
+    cold = report.get("cold")
+    if not cold:
+        return ""
+    ago = int(cold.get("ago") or 0)
+    span = f"{ago}s" if ago < 60 else f"{ago // 60}m" if ago < 3600 else f"{ago // 3600}h{ago % 3600 // 60:02d}m"
+    reason = _RETIRED.get(cold.get("reason"), f"retired ({cold.get('reason')})")
+    return f"\n  cold: this script's worker went {span} ago: {reason}"
+
+
+# The bodies' reasons a build's lines give before they count the rest (``_unretained``).
+_REASONS = 4
+
+
+def _unretained(report: dict[str, Any]) -> list[str]:
+    """Why a body of this model cannot be kept and runs whole on every build, each with its remedy
+    (``retention.fallbacks``, the run's, of which this model's bodies are ``bodies``: a call that ran
+    uncached, a file read past the engine's readers): the first ``_REASONS``, then how many more.
+    Said under the run's line, where a build that is slow for it is read: ``12 misses, 6142 hits``
+    alone reads as a slow machine."""
+    mine = report.get("bodies") or {}
+    found = [f"{body} {reason}" for body, reasons in ((report.get("retention") or {}).get("fallbacks") or {}).items()
+             if body in mine for reason in reasons]
+    if len(found) > _REASONS:
+        found[_REASONS:] = [f"and {len(found) - _REASONS} more reason{'' if len(found) - _REASONS == 1 else 's'}"]
+    return found
 
 
 def _waited(report: dict[str, Any], how: str) -> str:

@@ -1401,6 +1401,8 @@ class Daemon:
                             if ahead is not None and send in ahead[0].followers:
                                 ahead[0].followers.remove(send)
                         fresh = worker.requests == 0
+                        # Why a script that had a worker starts cold: the last one's retirement, said in the run's line.
+                        gone = self.supervisor.retirement("script", worker.label) if fresh else None
                         order = {"id": 1, "op": "build", "script": script, "functions": request.get("functions"),
                                  "cwd": request.get("cwd"), "verify": bool(request.get("verify")),
                                  "profile": bool(request.get("profile")), "run": request.get("run")}
@@ -1427,6 +1429,10 @@ class Daemon:
                                     answer["header"] = interpreter["header"]
                             else:
                                 answer["python"] = python
+                        if gone is not None:
+                            for report in answer.get("done") or []:
+                                if isinstance(report, dict):
+                                    report["cold"] = gone
                         if ahead is not None:
                             # The build it waited for, the one its own replays: began how long before it asked.
                             for report in answer.get("done") or []:

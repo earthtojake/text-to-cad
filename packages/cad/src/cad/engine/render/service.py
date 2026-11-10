@@ -172,6 +172,21 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
     return scene.camera
 
 
+def view_of(scene: Any) -> dict[str, Any]:
+    """The camera a picture was drawn from, where its fit settled, as a job's view holds one
+    (``position``, ``target``, ``up`` and, orthographic, ``orthographicHalfHeight``, in the viewer's
+    scene coordinates: ``camera_in_millimetres``): given back as a job's ``camera`` with
+    ``output.tightFrame`` false it is drawn exactly so, with no fit, which is how several pictures
+    share one frame whatever each shows."""
+    camera, factor = scene.camera, scene.millimetres_per_scene_unit
+    view = {"position": [float(value) / factor for value in camera["eye"]],
+            "target": [float(value) / factor for value in camera["target"]],
+            "up": [float(value) for value in camera["up"]]}
+    if camera.get("scale") is not None:
+        view["orthographicHalfHeight"] = float(camera["scale"]) / 2 / factor
+    return view
+
+
 # --- the picture -------------------------------------------------------------------------------
 
 
@@ -412,7 +427,7 @@ class Held:
         untextured = {p.get("name") or p["key"]: p["untextured"] for p in self.structure["prototypes"]
                       if p.get("untextured")}
         return data, {"width": still.size[0], "height": still.size[1], **finished(still), "camera": name,
-                      "projection": projection,
+                      "view": view_of(scene), "projection": projection,
                       "displayMode": display.get("mode", "solid"), "preview": still.preview,
                       "parts": len(self.structure["prototypes"]), "instances": len(shown["instances"]),
                       "unmeshed": unmeshed, **({"untextured": untextured} if untextured else {}),

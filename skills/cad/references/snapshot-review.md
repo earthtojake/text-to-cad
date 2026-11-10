@@ -201,6 +201,13 @@ lines stay one pixel of the larger picture, so they read finer -- and `sizeProfi
 sizes an output that gives no size. Every job is checked before anything renders,
 and a failure writes none of its pictures, leaving existing ones unchanged. `--json` prints each picture's report.
 
+A preset or `azimuth:elevation` is fitted to what each picture shows, so two pictures of
+different parts or poses are framed differently. For frames that must not move (a motion's
+frames, a part alone beside the whole), draw one picture with `--json`, take the camera it
+settled on from its report (`view`: `position`, `target`, `up` and, orthographic,
+`orthographicHalfHeight`), and give it to every job as its `camera` with
+`"output": {"tightFrame": false}`: it is drawn exactly, with no fit.
+
 Inspect supplied annotations before editing. A view without annotations is optional
 context: render it only when useful to the request. After an edit, run the script and
 draw the same view again to see the change from where the person looked, with their ink

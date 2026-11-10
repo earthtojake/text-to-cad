@@ -154,6 +154,10 @@ def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
         digest.update(b"\0")
 
 
+# What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad viewer`` says.
+NOT_BUILT = "CAD Viewer client is not built; build apps/web or install the cad-server wheel"
+
+
 def identity_token(dist_dir: str) -> str:
     """Identity of the Python runtime and exact built client this server uses.
 
@@ -490,7 +494,9 @@ class CadApp:
             # empty base is load-bearing: os.path.join("", x) resolves against
             # the CURRENT WORKING DIRECTORY, which would silently turn the
             # viewer into a static server for wherever it was launched from.
-            response.send_plain(404, "Not found")
+            # It says why, as ``cad viewer`` does: a build's ``view:`` link leads here in a
+            # checkout whose client is not built, and a bare "Not found" named nothing to fix.
+            response.send_plain(404, NOT_BUILT)
             return
         pathname = request.path
         request_path = "/index.html" if pathname == "/" else pathname

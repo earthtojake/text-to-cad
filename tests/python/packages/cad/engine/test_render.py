@@ -278,6 +278,22 @@ class HeldTest(unittest.TestCase):
         np.testing.assert_allclose(middle, (160, 120), atol=0.5)
         np.testing.assert_allclose(top, (160, 0), atol=0.5)
 
+    def test_a_picture_reports_the_camera_it_settled_on_and_that_camera_draws_it_again_exactly(self) -> None:
+        """The report's ``view`` is the fitted camera as a job's view holds one: drawn exactly (no fit)
+        it is the same picture, and it frames a picture of fewer parts the same way, where a fit
+        would have filled the frame with them."""
+        for projection in ("orthographic", "perspective"):
+            with self.subTest(projection=projection):
+                display = {"mode": "solid", "camera": {"projection": projection}}
+                data, report = self.draw((320, 240), display=display, camera="35:20")
+                view = report["view"]
+                self.assertEqual(sorted(view), sorted(["position", "target", "up"]
+                                                      + (["orthographicHalfHeight"] if projection == "orthographic" else [])))
+                again, pinned = self.draw((320, 240), display=display, camera=view, exact=True)
+                self.assertLess(mismatch(pixels(again), pixels(data)), 0.001)
+                for key, value in view.items():
+                    np.testing.assert_allclose(pinned["view"][key], value, atol=1e-9)
+
     def test_x_ray_is_the_colour_only_model_and_gives_the_look_back(self) -> None:
         """X-ray draws the look's colour-only model (``look.py``) on OCCT's Phong program: a part's
         material is its colour alone, so the fixture with its materials taken away draws the same;

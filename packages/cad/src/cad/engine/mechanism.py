@@ -447,7 +447,9 @@ def configuration_sequence(assembly: Any, name: str, waypoints_or_fn: Any = None
 
     ``ease`` is ``cubic`` (each step eased in and out, resting at every waypoint: AP242's
     ``synchronous_interpolation_type``) or ``linear`` (constant speed:
-    ``linear_interpolation_type``). A sequence is a finite clip; a player repeats it. Kept in the
+    ``linear_interpolation_type``): a fraction ``s`` of the way in time from a waypoint's value
+    ``a`` to the next one's ``b``, ``a + (3 s**2 - 2 s**3) (b - a)`` and ``a + s (b - a)``, each
+    pair value on its own (``_interpolated``). A sequence is a finite clip; a player repeats it. Kept in the
     document beside the mechanism states, as a definition; a GLB export bakes it into a clip of
     the same name. Returns ``assembly``."""
     import build123d as bd
@@ -541,7 +543,8 @@ def posed(assembly: Any, state: Any) -> Any:
     ``assembly`` is what the model call returned, its document's handle, or a shape. Inside a body
     (``return posed(arm(), "folded")``: a posed file is this) the result is a copy of the shape that
     shares its geometry and keeps the joints, couplings, mechanism states and configuration
-    sequences, the asked values its as-built state. From a plain script (a check) the handle's
+    sequences, the asked values its as-built state; a value a state or a sequence gives a coupling
+    is said again from that state (``_rebase``), so each names the pose it named. From a plain script (a check) the handle's
     document is posed where the engine holds its mechanism (``posed_structure``), and the answer is
     the tree ``.shape`` is, at that pose: placed parts, no joints. A shape a plain script read
     through ``.shape`` has no joints left to pose, and is refused with what to pass instead."""
@@ -627,6 +630,7 @@ def posed(assembly: Any, state: Any) -> Any:
             changed.add(path)
     # The joints say the values they now stand at, as ``connect_to`` would have left them.
     naming = {path: "/".join(_occurrence(tree, path)[1]) for _obj, path in objects}
+    _rebase(objects, naming, kinematics, values)
     for obj, path in objects:
         for joint in (obj.__dict__.get("joints") or {}).values():
             kind = _joint_kind(joint)
@@ -641,6 +645,58 @@ def posed(assembly: Any, state: Any) -> Any:
             else:
                 joint.angle, joint.position = value
     return made
+
+
+def _rebase(objects: list, naming: dict, kinematics: dict[str, Any], values: dict[str, tuple[float, ...]]) -> None:
+    """A posed copy's mechanism states and configuration sequences, saying the poses they said: a
+    coupling's value is its joints' displacement from as built, and the copy is built at the pose,
+    so each value a state or a sequence gives a coupling is less the coupling's value at the pose
+    (a joint's own value is where the joint stands, and stays). A key naming a coupling in several
+    placements is written once per coupling, by the name each is kept by: the pose may have moved
+    them apart."""
+    built = {label: _as_tuple(value) for label, value in kinematics["asBuilt"].items()}
+    moved = {}
+    for kept, coupling in (kinematics.get("couplings") or {}).items():
+        label, index, ratio = next(term for term in coupling["terms"] if term[2])
+        moved[kept] = (values[label][index] - built[label][index]) / ratio
+    if not any(abs(by) > 1e-12 for by in moved.values()):
+        return
+    held = [(path, own, own if own in moved else f"{naming[path]}:{own}")
+            for obj, path in objects for own in obj.__dict__.get(COUPLINGS) or {}]
+
+    for obj, path in objects:
+        names: dict[str, list[str]] = {}
+        for holder, own, kept in held:
+            if holder[:len(path)] == path and kept in moved:
+                for key in {own, kept}:
+                    names.setdefault(key, []).append(kept)
+
+        def rebased(given: Any, names: dict = names) -> Any:
+            if not isinstance(given, dict) or not any(key in names for key in given):
+                return given
+            found: dict[str, Any] = {}
+            for key, value in given.items():
+                numbers = _number_values(value) if key in names else None
+                if numbers is None or len(numbers) != 1:
+                    found[key] = value
+                    continue
+                for kept in names[key]:
+                    found[kept if len(names[key]) > 1 else key] = (numbers[0] - moved[kept],)
+            return found
+
+        state = obj.__dict__
+        if state.get(CONFIGURATIONS):
+            state[CONFIGURATIONS] = {name: rebased(given) for name, given in state[CONFIGURATIONS].items()}
+        if state.get(MOTIONS):
+            motions = {}
+            for name, spec in state[MOTIONS].items():
+                if spec[0] == "function":
+                    _kind, function, duration, ease = spec
+                    motions[name] = ("function", lambda t, f=function, r=rebased: r(f(t)), duration, ease)
+                else:
+                    _kind, rows, ease = spec
+                    motions[name] = ("keys", [(t, state_name, rebased(given)) for t, state_name, given in rows], ease)
+            state[MOTIONS] = motions
 
 
 # Set on the tree a plain script's ``.shape`` brings out of the engine (``api.Document.shape``): the
@@ -1587,8 +1643,8 @@ def _configurations(configured: list, mechanism: Mechanism, joint_labels: list, 
     state, the joint, the value and the range (a value on a bound is within it): left out, the
     state would be another design than the one the model declares. Anything else a value cannot
     be taken for (``_converted``) is left out, and warned -- a coupling's value outside its range
-    among them: a posed copy (``posed``) is built at its pose, which moves each coupling's zero,
-    so a value the original's state gives a coupling stands for another pose in the copy."""
+    among them. (A posed copy is built at its pose, which moves each coupling's zero: ``posed``
+    says its states' values again from there, ``_rebase``, so they are the poses they were.)"""
     merged: dict[str, dict[str, tuple[float, ...]]] = {}
     for path, _obj, held in sorted(configured, key=lambda item: -len(item[0])):
         for name, values in held.items():

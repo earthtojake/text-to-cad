@@ -294,6 +294,9 @@ Its options say how the picture is drawn: camera (`--camera top`), display, grid
 touched or hide what covers them, instead of drawing the whole model.
 
 - A number is never read off a picture: a snapshot shows arrangement and appearance, not dimensions.
+- In an assembly, look at a part alone before it is placed, then the parts that move together, then a
+  joint at both ends of its travel, and only then the whole, from behind as well as the front: a cover
+  that half encloses what it covers is a few pixels of the whole model's picture and most of its own.
 - A check that fails or cannot decide has shown nothing about the design.
 - A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius reduced) builds a
   different design from the one asked for.
@@ -324,6 +327,12 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
   fits named on purpose, and a part meant to rest on another touches it when their `closest_points`
   distance is 0. Both describe the parts as built, not a pose
   ([measurements](references/inspection-and-validation.md#measurements)).
+- A check is trusted once it has been seen to fail: plant what it guards against (a plate through
+  a thin cover, a pin a little out of its bore) and watch it report it. A test on boxes, mesh points
+  or sampled distances only picks the pairs worth measuring, and is never the verdict: a thin wall
+  has almost no volume for a point to land in, so a plate through it scores nothing.
+- Report what a check cannot see beside what it passed: the poses it did not take, the pairs it could
+  not measure, the path between two poses it checked only at its ends.
 - `cad model inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
   the root name `inspect "$ID"` prints): each part's volume times its material's density, and the
   parts that have no material.

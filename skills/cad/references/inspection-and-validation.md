@@ -53,7 +53,10 @@ def world_parts(node, parent=None):
         for child in node.children:
             yield from world_parts(child, here)
     else:
-        yield node.located(here)   # a copy with the full placement, not an extra move
+        free = bd.Shape.cast(node.wrapped)   # the leaf, out of its tree (below)
+        free.label, free.material = node.label, node.material
+        free.color = node.color              # after the material, which sets a colour of its own
+        yield free.located(here)   # a copy with the full placement, not an extra move
 
 
 def find_part(tree, label):
@@ -62,6 +65,12 @@ def find_part(tree, label):
         raise ValueError(f"Expected one part labelled {label!r}, found {len(matches)}")
     return matches[0]
 ```
+
+A leaf still in its tree takes the tree with it: `moved`, `located`, `Location * leaf` and
+`copy.copy` each copy every ancestor and sibling (half a second a call on 300 small parts, and
+far more memory on a large model), which is why `world_parts` makes the leaf again from its
+`wrapped` first. Do the same before moving any leaf of `.shape` in a check:
+`bd.Shape.cast(leaf.wrapped).moved(location)`.
 
 These are project helpers, not the library's imports. `find_part` requires a unique leaf label:
 it refuses both missing and repeated labels. For repeated components, walk a known branch
@@ -90,7 +99,11 @@ plate = find_part(step.read("kit.step"), "plate")
   face of the part it is.
 - `bounding_box()` is the axis-aligned envelope in the shape's current frame. It is
   world-aligned after accumulating placements as above; `bounding_box(optimal=False)`
-  is a fast conservative one for curved geometry.
+  is a fast conservative one for curved geometry: on a piece cut from a lofted face it is
+  several times too wide (a 13 mm strip read 39 to 72 mm), so rule pairs out with it and
+  never say where a part is by it. `bounding_box()` is tight, at tens of milliseconds a part.
+- A cylindrical face's `center()` is a point on its wall; its axis is
+  `face.axis_of_rotation`.
 
 ## References
 
@@ -255,7 +268,8 @@ closure
 
 The state is the server's: `live` (a worker holds it), `held` (the server holds it, no
 worker), whether its cache has it on disk, and when it was built. `--json` prints the same as `{"summary", "closure"}`, and `--query closure` the
-closure alone. For the names alone, `--query structure` prints the same lists without the
+closure alone. A line that lists occurrences names the first eight and counts the rest; `--json` has
+every one. For the names alone, `--query structure` prints the same lists without the
 bounds, volume and masses, and measures nothing. Nothing is built or meshed, and each part is
 measured once: an inspection after an edit measures only the parts it changed. A part with a solid
 inside out (its faces pointing inward, a negative volume a boolean can leave, which a run and a
@@ -326,7 +340,18 @@ usually a sliver a boolean left.
 
 A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cad model inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
+`cad model inspect "$ID" OWNER`. A script that needs every part's density (a link's mass summed
+from its parts, a simulator's description) asks the server, which transfers no solid:
+
+```python
+from cad import model
+
+materials = model.inspect(robot(), query="structure")["summary"]["materials"]
+# [{"name": "Alu_G6061_T6", "density": 2700.0, "parts": ["robot/hip/bracket", ...]}, ...]
+```
+
+`model.inspect(handle, "hip/bracket")` answers one part or assembly: its volume, mass, material,
+density and bounds. For explicit densities, a centre of mass or inertia:
 
 ```python
 from cad.build123d import mass_properties
@@ -337,6 +362,21 @@ properties = mass_properties([
 ])
 print(properties.volume, properties.mass, properties.center_of_mass)
 print(properties.inertia)
+```
+
+`.volume`, `mass_properties` and `overlap_volume` integrate at a fixed order, exact on
+planes, cylinders and spheres and a little off on lofted and spline solids: 0.4 % high on one
+lofted solid, so the three volumes of a correct cut (what was there, what is left, what was
+removed) need not add up, and a hole can change a volume by more than its own. A check that
+guards a Boolean by volume allows a per cent, or integrates adaptively (0.04 to 2.4 s a solid):
+
+```python
+from OCP.BRepGProp import BRepGProp
+from OCP.GProp import GProp_GProps
+
+props = GProp_GProps()
+BRepGProp.VolumePropertiesGK_s(solid.wrapped, props, 1e-6, False, False, False, False, False)
+volume = props.Mass()
 ```
 
 `mass_properties` integrates uniform density per solid and sums the bodies,

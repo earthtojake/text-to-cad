@@ -1059,14 +1059,31 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
     else of the engine's cache file of it (``cache``: ``<id>/document.xbf`` there, ``"from":
     "cache"``) -- the one take-up of every model, with or without declared files, warm and after a
     restart. A model's declared files play no part: they are written after it, from the document
-    taken, as an export of it is (``_taken_outputs``)."""
+    taken, as an export of it is (``_taken_outputs``).
+
+    A worker whose own record holds another key asks the cache too: its script's worker of another
+    environment (a check with another header) may have built this very state since, and the document
+    it saved is this model's whoever built it. Where the cache holds another key as well, the verdict
+    is the one against this worker's record: what changed since it last built."""
+    name = f"{model.script}::{model.name}"
+    remembered = _WRITTEN.get(name)
+    verdict, report = _taken(model, context, shown, cache, remembered)
+    if report is None and remembered is not None and cache is not None and verdict.get("changed"):
+        other, report = _taken(model, context, shown, cache, None)
+        if report is not None:
+            return other, report
+    return verdict, report
+
+
+def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: Any) -> tuple[dict, dict | None]:
+    """``_previous`` asked of one holder: this worker's record of the model (``remembered``), else,
+    with None, the engine's cache file of it."""
     from cad.engine import document, previous
     from cad.engine.kernel import memo
 
     targets = model.targets()
     xbf = next((Path(path) for kind, path in targets if kind == "xbf"), None)
     name = f"{model.script}::{model.name}"
-    remembered = _WRITTEN.get(name)
     if not memo.enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return {"used": False, "reason": "retention is off"}, None
     folder = xbf.parent if xbf is not None else model.script.parent  # what the closure's paths are relative to
