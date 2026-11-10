@@ -21,10 +21,9 @@ def main() -> None:
 
     import build123d as bd
     # The old release's own names: cadgen 0.8.0 is the library before it was named cad.
-    from cad import Material
-    from cad.build123d import paint
-    from cad.engine import document, previous
-    from cad.engine.colors import linear
+    from cadgen import Material, paint
+    from cadgen.engine import document, previous
+    from cadgen.engine.colors import linear
     from OCP.TCollection import TCollection_ExtendedString
     from OCP.TDataStd import TDataStd_NamedData
     from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_VisMaterialTool

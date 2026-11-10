@@ -4,7 +4,6 @@ file never written, and the payload kept by the board's bytes."""
 
 import json
 import os
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path

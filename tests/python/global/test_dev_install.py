@@ -96,8 +96,6 @@ class DevPluginTests(unittest.TestCase):
         self.assertIsNone(page, "a wheel serves the page it was built with")
 
     def test_this_scripts_launcher_and_install_command_are_the_servers(self) -> None:
-        import sys
-
         from tests.python.support.paths import add_sources
 
         add_sources()

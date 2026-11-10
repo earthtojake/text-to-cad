@@ -336,8 +336,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
     def test_every_server_runs_the_one_launch_command(self) -> None:
         # The plugins' servers start the shim by one command (cad_server._internal.launch's mcp_command), as
         # the skills run the server by one: no config may spell it differently.
-        import sys
-
         from tests.python.support.paths import add_sources
 
         add_sources()
@@ -361,8 +359,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # flags: main pins the last release, and a release ignores a variable it does not know but
         # refuses a flag. Nothing is worked out at runtime (the server's _internal/channel.py); the plugin
         # branch and the OpenAI ZIP stamp their own.
-        import sys
-
         from tests.python.support.paths import add_sources
 
         add_sources()

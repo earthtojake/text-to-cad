@@ -1,16 +1,16 @@
-// Parity-oracle generator. Run with Node from the app root:
+// Parity-oracle generator. Run with Node from the repository root:
 //
 //   node tests/python/packages/cad_server/viewer/golden/gen_golden.mjs
 //
 // Writes two files:
-//   tests/python/packages/cad_server/viewer/golden/golden.json  fixture for the Python encoder tests
-//   server/collation.json            RUNTIME collation table shipped in the bundle
+//   tests/python/packages/cad_server/viewer/golden/golden.json      fixture for the Python encoder tests
+//   packages/cad-server/src/cad_server/viewer/collation.json        RUNTIME collation table shipped in the wheel
 //
 // The oracle here is the JavaScript LANGUAGE, not our copy of it: every expected
 // value comes from Node's own encodeURIComponent / URLSearchParams /
 // BigInt.prototype.toString(36) / decodeURIComponent / Intl.Collator. Nothing is
-// imported from server/, so the fixture cannot drift into agreement with a buggy
-// implementation on either side.
+// imported from cad_server.viewer, so the fixture cannot drift into agreement with a
+// buggy implementation on either side.
 //
 // Performance note: `localeCompare(a, b, undefined, opts)` constructs a fresh
 // Intl.Collator on EVERY call (measured 415ms vs 9ms for 200k comparisons — 46x).
@@ -21,7 +21,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const APP_ROOT = path.resolve(HERE, "..", "..");
+const REPO_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
 
 const COLLATOR_OPTIONS = { numeric: true, sensitivity: "base" };
 const collator = new Intl.Collator(undefined, COLLATOR_OPTIONS);
@@ -544,7 +544,7 @@ const golden = {
 };
 
 fs.writeFileSync(path.join(HERE, "golden.json"), `${JSON.stringify(golden, null, 0)}\n`, "utf8");
-fs.writeFileSync(path.join(APP_ROOT, "server", "collation.json"), `${JSON.stringify(collation)}\n`, "utf8");
+fs.writeFileSync(path.join(REPO_ROOT, "packages", "cad-server", "src", "cad_server", "viewer", "collation.json"), `${JSON.stringify(collation)}\n`, "utf8");
 
 console.error(`wrote tests/python/packages/cad_server/viewer/golden/golden.json (${sortCorpusUnique.length} sort rows, ${sortPairs.length} pair signs)`);
-console.error(`wrote server/collation.json`);
+console.error(`wrote packages/cad-server/src/cad_server/viewer/collation.json`);

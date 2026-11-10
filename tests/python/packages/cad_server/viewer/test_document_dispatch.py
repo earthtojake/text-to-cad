@@ -1,6 +1,5 @@
 """Exact document reads and response headers survive the in-process adapter: the engine's own
 vocabulary (``/api/doc/<id>...``, ``cad/engine/serve.py``'s), which ``/api/v1``'s routes read."""
-import io
 import json
 import unittest
 from unittest.mock import Mock

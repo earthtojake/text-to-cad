@@ -135,18 +135,28 @@ class Metavars(unittest.TestCase):
         self.assertEqual("DEFORM_TOLERANCE", actions["deform_tolerance"])
 
     def test_every_generated_door_has_distinct_metavars(self):
+        """Every parser ``generated_parser`` builds for a document type's operation (``cad sdf validate``,
+        ``cad step dfm``, ...); the sweep is asserted non-empty, so a door that moves fails here, never passes."""
         import collections
-        import importlib
+        from unittest import mock
 
-        from cad_server import cli
+        from cad_server._internal import cli_from_function as derivation
+        from cad_server.cli import document_types
 
-        for command, (module_name, _) in sorted(cli._COMMANDS.items()):
-            module = importlib.import_module(module_name)
-            if not hasattr(module, "VERB"):
-                continue
-            with self.subTest(command=command):
+        generated, build = [], derivation.generated_parser
+
+        def recorded(*args, **kwargs):
+            generated.append(build(*args, **kwargs))
+            return generated[-1]
+
+        with mock.patch.object(derivation, "generated_parser", recorded):
+            for document_type, operation in sorted(document_types.OPERATIONS):
+                document_types.build_parser(document_type, operation)
+        self.assertTrue(generated, "no document type's operation has a generated parser")
+        for parser in generated:
+            with self.subTest(command=parser.prog):
                 metavars = collections.Counter(
-                    a.metavar for a in module.build_parser()._actions if a.option_strings and a.metavar
+                    a.metavar for a in parser._actions if a.option_strings and a.metavar
                 )
                 self.assertEqual({}, {name: n for name, n in metavars.items() if n > 1})
 

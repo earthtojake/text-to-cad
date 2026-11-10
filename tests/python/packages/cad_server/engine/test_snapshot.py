@@ -311,8 +311,6 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in folder.iterdir()), ["first.png", "second.png"])
 
     def test_an_out_that_is_a_folder_is_given_the_source_s_stem_and_the_time(self) -> None:
-        import re
-
         from cad.engine import api
         from cad.engine.snapshot import picture_path
 
@@ -374,6 +372,7 @@ class SnapshotTest(unittest.TestCase):
         mark = {"id": "m1", "kind": "stroke", "part": "i0", "points": [-10, 0, 2, 10, 0, 2], "color": "#ff00ff", "width": 4,
                 "view": "view 1"}
         annotation = {"units": "mm", "parts": {}, "marks": [mark]}
+        self.assertEqual(parse_annotation(json.dumps(annotation)), annotation, "an annotation given inline")
         for broken, said in (({"marks": {}}, "units, parts and marks"), ({"marks": [], "colour": 1}, "has no colour"),
                              ({"marks": [{**mark, "kind": "blob"}]}, r"marks\[0\].kind"),
                              ({"marks": [{**mark, "points": [0, 0]}]}, "triples"),

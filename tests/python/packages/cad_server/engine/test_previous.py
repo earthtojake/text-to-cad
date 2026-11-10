@@ -15,7 +15,6 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
-from typing import Any
 
 from cad.engine import build as engine_build
 from cad.engine import document, previous

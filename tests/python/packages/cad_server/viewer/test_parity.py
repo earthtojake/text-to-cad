@@ -3,7 +3,7 @@
 ``golden/golden.json`` is produced by ``golden/gen_golden.mjs``, which uses only
 the JavaScript LANGUAGE — ``encodeURIComponent``, ``URLSearchParams``,
 ``BigInt.prototype.toString(36)``, ``decodeURIComponent``, ``new URL()`` and a
-cached ``Intl.Collator``. It imports nothing from ``server/``, so the oracle
+cached ``Intl.Collator``. It imports nothing from ``cad_server.viewer``, so the oracle
 cannot drift into agreement with a bug on either side.
 
 Regenerate with::

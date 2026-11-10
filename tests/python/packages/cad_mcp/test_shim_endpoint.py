@@ -151,10 +151,6 @@ class ShimEndpointTest(unittest.TestCase):
         self.assertEqual(self.reads, before + 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class HolderTest(unittest.TestCase):
     """The server's hold on the engine (``shim.Holder``): taken at its start, and after the engine
     goes held again only at the host's next request -- a stop is obeyed."""
@@ -215,3 +211,7 @@ class HolderTest(unittest.TestCase):
                 threading.Event().wait(0.01)
         self.assertEqual(len(calls), 2)
         self.assertTrue(holder.thread.is_alive())
+
+
+if __name__ == "__main__":
+    unittest.main()

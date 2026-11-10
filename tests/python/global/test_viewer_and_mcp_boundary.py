@@ -1,7 +1,7 @@
 """The CAD Viewer's backend and the CAD app's server are leaves of the server.
 
-Outside `cad_server/viewer/`, `cad_server/mcp/` and the commands that start them (`cli/viewer.py`,
-`cli/mcp.py`, which the CLI registry names by string), no module of the server's
+Outside `cad_server/viewer/`, `cad_server/mcp/` and the command that starts the Viewer
+(`cli/viewer.py`, which the CLI registry names by string), no module of the server's
 imports either (the library imports nothing of the server's at all: test_core_imports)
 -- except the injected `_internal/engine_host.py` composition root
 and `cad_server.viewer.recents`, the state directory's one definition. CI
@@ -80,7 +80,7 @@ class ViewerAndMcpAreLeaves(unittest.TestCase):
             with self.subTest(test=relative):
                 if any(name.startswith(("cad_server.viewer", "cad_server.cli.viewer")) for name in names):
                     self.assertIn(relative, viewer)
-                if any(name.startswith(("cad_server.mcp", "cad_server.cli.mcp")) for name in names):
+                if any(name.startswith("cad_server.mcp") for name in names):
                     self.assertIn(relative, mcp)
                     self.assertIn(relative, viewer)
 

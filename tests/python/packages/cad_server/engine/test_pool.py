@@ -425,7 +425,7 @@ class ConnectedPoolTest(unittest.TestCase):
         server.put(_address("watched"), {"version": "one", "prototypes": []}, {})
         daemon.builders[document_id(_address("watched"))] = watched
         server.sync(_address("watched"))
-        third = daemon.supervisor.lease("worker", "third.py", {})
+        daemon.supervisor.lease("worker", "third.py", {})
         self.assertTrue(unwatched.stopped, "the unwatched worker made room")
         self.assertFalse(watched.stopped, "a watched worker is not the count cap's victim")
         self.assertEqual([row["reason"] for row in daemon.supervisor.retired], ["LRU"])

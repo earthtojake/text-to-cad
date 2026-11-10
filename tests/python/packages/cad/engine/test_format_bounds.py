@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import shutil
 import struct
-import sys
 import zipfile
 import tempfile
 import unittest
@@ -22,7 +21,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_sources
 
-SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
+add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine import document  # noqa: E402
 from cad.engine.formats import FormatError, dxf, glb, gltf, threemf  # noqa: E402

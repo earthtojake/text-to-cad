@@ -1,6 +1,6 @@
 """The Python and JS board-reference grammars are two implementations of one language.
 
-`cad.engine.formats.kicad.refs` and `@text-to-cad/core/lib/boardRefs.js` parse the references a person
+`cad.engine.formats.kicad.refs` and `@cad/core/lib/boardRefs.js` parse the references a person
 copies from a KiCad board in the viewer and an agent resolves against the board.
 Both suites read `packages/core/src/lib/boardRefs.parity.json`, as the STEP grammars share
 `cadRefs.parity.json`, so a form one side learns and the other forgets fails here rather than

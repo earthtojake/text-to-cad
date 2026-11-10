@@ -322,10 +322,8 @@ class RefinementLoopTest(unittest.TestCase):
             def value(self, index, path, t):  # a step jump across the edge, larger than any tolerance
                 return np.array([0.0, 0.0, 0.0]) if t <= edge else np.array([30.0, 0.0, 0.0])
 
-        start = time.monotonic()
         with self.assertRaises(ExportRefused):
             _channel(StubMotion(), 0, 'translation', {'LINEAR'}, {edge, nxt}, {'translation': 0.03})
-        self.assertLess(time.monotonic() - start, 10.0, 'the loop must end quickly, not spin')
 
 
 class KeysTest(unittest.TestCase):

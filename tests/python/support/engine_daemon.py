@@ -219,8 +219,6 @@ def _say_stacks(env: dict[str, str]) -> None:
     """A failed command's stacks, on the test's stderr, before the journal goes with the test."""
     said = stacks(env)
     if said:
-        import sys
-
         print(f"engine journal stacks after a failed command:\n{said}", file=sys.stderr)
 
 

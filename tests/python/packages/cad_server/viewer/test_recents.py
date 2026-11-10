@@ -147,16 +147,22 @@ class RecentStoreTest(unittest.TestCase):
         self.assertIsNone(entry["created"], "an opening makes no creation time up")
 
     def test_a_file_is_created_at_its_first_open_and_a_model_at_its_first_run(self) -> None:
+        from unittest import mock
+
+        from cad_server.viewer import recents
+
         store = RecentStore(self.tmp)
         path = str(self.tmp / "part.step")
-        store.opened(path)
+        with mock.patch.object(recents.time, "time", return_value=1_700_000_200.0):
+            store.opened(path)
         [first] = [recent.public() for recent in store.list()]
-        self.assertEqual(first["created"], first["opened"], "a file's record is made as a page first opens it")
-        time.sleep(0.01)
-        store.opened(path)
+        self.assertEqual((first["created"], first["opened"]), (1_700_000_200.0, 1_700_000_200.0),
+                         "a file's record is made as a page first opens it")
+        with mock.patch.object(recents.time, "time", return_value=1_700_000_300.0):
+            store.opened(path)
         [again] = [recent.public() for recent in store.list()]
-        self.assertEqual(again["created"], first["created"], "a second open keeps the first")
-        self.assertGreater(again["opened"], first["opened"])
+        self.assertEqual((again["created"], again["opened"]), (1_700_000_200.0, 1_700_000_300.0),
+                         "a second open keeps the first's creation and is its own opening")
         # A model's run writes its record with the time it was first built (``Models.record``).
         ident = model_id(self.tmp / "parts.py", "plate")
         Registry(self.tmp).put({"id": ident, "kind": "model", "root": str(self.tmp), "home": "parts.py",

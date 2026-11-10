@@ -9,7 +9,6 @@ from __future__ import annotations
 import math
 import re
 import shutil
-import struct
 import tempfile
 import textwrap
 import unittest

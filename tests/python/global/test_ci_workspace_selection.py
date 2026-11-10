@@ -250,10 +250,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
-                solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
                 self.assertEqual(jobs_for(path),
-                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "routing-macos"} | solves)
+                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "routing-macos"})
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -308,7 +306,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn(f"{SERVER}/mcp/test_server.py", viewer["cadgen_tests"])
         self.assertNotIn(f"{LIBRARY}/test_flatten.py", viewer["cadgen_tests"])
         self.assertNotIn(f"{LIBRARY}/engine/test_memo.py", viewer["cadgen_tests"])
-        self.assertIn(f"{SERVER}/test_cli_from_function.py", viewer["cadgen_tests"])  # imports every command
+        self.assertIn(f"{SERVER}/test_public_surface.py", viewer["cadgen_tests"])  # builds every command's parser
         self.assertIn(f"{LIBRARY}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
         self.assertEqual(viewer["skills_tests"], [])
         self.assertEqual(jobs_for("packages/cad-server/src/cad_server/viewer/scanner.py"),

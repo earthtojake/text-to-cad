@@ -17,8 +17,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.fea_fixtures import (
-    notes, kinds,
-    class_directory, glb_array, glb_attribute_names, glb_extras, needs_fea, quiet, reported, solve,
+    notes,
+    class_directory, glb_array, glb_extras, needs_fea, quiet, reported, solve,
 )
 from tests.python.support.fea_fixtures import AL6061_NUMBERS, STEEL_NUMBERS  # noqa: E402
 

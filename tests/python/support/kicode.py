@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-__all__ = ["call", "kicad_cli", "python", "run_python"]
+__all__ = ["call", "environment", "kicad_cli", "python", "run_python"]
 
 VARIABLE = "CAD_TEST_KICODE_PYTHON"
 

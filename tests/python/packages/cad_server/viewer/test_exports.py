@@ -1,5 +1,4 @@
 """Export jobs: identity, retention and streaming leases, without a kernel."""
-import json
 import tempfile
 import threading
 import unittest

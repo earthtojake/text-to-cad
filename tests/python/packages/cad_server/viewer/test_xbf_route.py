@@ -22,17 +22,12 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import threading
 import time
 import unittest
 from pathlib import Path
-from unittest import mock
 from urllib.parse import quote
 
-from cad_server.viewer import handler as handler_module
-from cad_server.viewer.http_app import create_cad_app
 from cad_server.viewer.scanner import catalog_entry
-from cad_server.viewer.documents import EngineDocuments
 from tests.python.support import engine_daemon
 from tests.python.support.paths import add_sources
 

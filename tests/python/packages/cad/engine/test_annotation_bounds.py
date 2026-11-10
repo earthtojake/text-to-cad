@@ -6,15 +6,13 @@ render.drawing.paint_ink."""
 from __future__ import annotations
 
 import json
-import sys
 import unittest
-from pathlib import Path
 
 import numpy as np
 
 from tests.python.support.paths import add_sources
 
-SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
+add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine import snapshot  # noqa: E402
 from cad.engine.render import drawing, text  # noqa: E402

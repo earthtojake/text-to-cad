@@ -5,14 +5,13 @@ document.Loaded's walk and reader.assemble, which share the bounds."""
 
 from __future__ import annotations
 
-import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from tests.python.support.paths import add_sources
 
-SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
+add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine import document, reader  # noqa: E402
 

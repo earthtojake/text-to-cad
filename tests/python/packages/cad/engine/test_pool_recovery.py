@@ -5,14 +5,12 @@ when reads come at once (``Server._reading``: the reader, else one of its helper
 
 from __future__ import annotations
 
-import sys
 import threading
 import unittest
-from pathlib import Path
 
 from tests.python.support.paths import add_sources
 
-SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
+add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine import serve  # noqa: E402
 

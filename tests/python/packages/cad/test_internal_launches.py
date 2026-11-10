@@ -5,8 +5,7 @@ processes (the engine's build workers, its document readers and render processes
 telemetry sender) run in a project or in the system temp folder: whatever other
 programs, or on a shared ``/tmp`` other users, leave there must never stand in for
 their own modules. ``-P`` keeps that folder off the path; PYTHONPATH and
-the installation still apply. ``test_daemon_pool`` runs a worker beside a shadow package;
-this pins every other launch to the same flag.
+the installation still apply. This pins every launch to that flag.
 """
 
 from __future__ import annotations

@@ -80,10 +80,6 @@ def resolved_viewer_package_manager(*lockfiles: str, override: str = "") -> str:
             {
                 "PATH": f"{bin_dir}:{env.get('PATH', '')}",
                 "REPO_ROOT": str(root),
-                # The resolver reads the viewer SOURCE dir; the two bundlers have
-                # spelled that variable differently over time, so set both.
-                "VIEWER_SRC": str(viewer_dir),
-                "VIEWER_DIR": str(viewer_dir),
                 "VIEWER_APP_DIR": str(viewer_dir),
                 "VIEWER_PACKAGE_MANAGER": override,
             }

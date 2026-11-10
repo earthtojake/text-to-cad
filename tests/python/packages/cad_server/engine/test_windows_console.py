@@ -40,8 +40,11 @@ class _Os:
 
 class WindowsConsoleTest(unittest.TestCase):
     def popen(self, start: Callable[[], Any], name: str = "nt") -> dict[str, Any]:
-        """The keyword arguments ``start`` hands ``Popen`` where ``os.name`` is ``name``."""
+        """The keyword arguments ``start`` hands ``Popen`` where ``os.name`` is ``name``. A ``DISPLAY`` is
+        named, so a process that draws is given it and the engine starts no Xvfb of its own first
+        (``display.name``): the one ``Popen`` called is the process's own, whatever this machine has."""
         with mock.patch.object(places, "os", _Os(name)), \
+                mock.patch.dict(os.environ, {"DISPLAY": ":0"}), \
                 mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
             with self.assertRaises(Started):
                 start()

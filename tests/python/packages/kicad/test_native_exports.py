@@ -183,7 +183,9 @@ class StepWithoutModels(unittest.TestCase):
 
         from cad.kicad._export import _missing_models, _step_written
 
-        step = Path(tempfile.mkdtemp(prefix="kicad-step-failed-")) / "board.step"
+        folder = tempfile.TemporaryDirectory(prefix="kicad-step-failed-")
+        self.addCleanup(folder.cleanup)
+        step = Path(folder.name) / "board.step"
         step.write_text("ISO-10303-21;", encoding="utf-8")
         written = f"STEP file '{step}' created.\n"
         aborted = "** Error exporting STEP file. Export aborted. **\n"

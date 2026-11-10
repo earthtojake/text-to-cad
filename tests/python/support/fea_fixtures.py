@@ -151,11 +151,6 @@ def ends(step_or_listing, axis: int = 0) -> tuple[str, str]:
     return planes[min(planes)], planes[max(planes)]
 
 
-def side_faces(step: Path) -> list[str]:
-    """The faces whose normal is square to x: the sides of a bar along x."""
-    return [face.ref for face in _listing(step).faces if face.normal and abs(face.normal[0]) < 1e-6]
-
-
 # --- Result files (.fea: a binary glTF) ------------------------------------------------------------------
 
 def read_glb(path: Path) -> tuple[dict, bytes]:
@@ -168,10 +163,6 @@ def read_glb(path: Path) -> tuple[dict, bytes]:
 def glb_extras(path: Path) -> dict:
     """The result mesh's extras: its study, fields, checks and parts."""
     return read_glb(path)[0]["meshes"][0]["extras"]
-
-
-def glb_attribute_names(path: Path) -> list[str]:
-    return list(read_glb(path)[0]["meshes"][0]["primitives"][0]["attributes"])
 
 
 def glb_array(path: Path, name: str, width: int = 1):
@@ -193,8 +184,3 @@ parts = setup
 def notes(result) -> tuple[str, ...]:
     """What a solve said beside its findings (a finer solve that failed): its ``solver_note`` findings' words."""
     return tuple(finding.message for finding in result.findings if finding.code == "solver_note")
-
-
-def kinds(result) -> list[str]:
-    """Each finding's code (its type), in order."""
-    return [finding.code for finding in result.findings]

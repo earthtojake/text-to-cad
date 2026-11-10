@@ -68,8 +68,7 @@ class NoKernelInTheServer(unittest.TestCase):
         self.assertEqual(
             offenders,
             [],
-            "the CAD kernel is imported inside the compile worker's function bodies, "
-            "never at module scope: `cad viewer` must start without it",
+            "no module of cad_server.viewer imports the CAD kernel: `cad viewer` must start without it",
         )
 
     def test_importing_the_whole_package_leaves_the_kernel_unloaded(self) -> None:

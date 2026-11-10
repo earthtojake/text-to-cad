@@ -25,7 +25,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from tests.python.support.fea_fixtures import (
-    notes, kinds,
+    notes,
     box_step, class_directory, ends, glb_array, glb_extras, needs_fea, quiet, read_glb, reported, setup, solve, value_error,
 )
 from tests.python.support.fea_fixtures import AL6061_NUMBERS, AL7075_NUMBERS, PLA_NUMBERS, STEEL_NUMBERS  # noqa: E402

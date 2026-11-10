@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.python.support.fea_fixtures import notes, kinds, box_step, class_directory, ends, glb_extras, needs_fea, solve
+from tests.python.support.fea_fixtures import notes, box_step, class_directory, ends, glb_extras, needs_fea, solve
 from tests.python.support.fea_fixtures import STEEL_NUMBERS  # noqa: E402
 
 from cad._internal.fea.materials import material_from_spec  # noqa: E402

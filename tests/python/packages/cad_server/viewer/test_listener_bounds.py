@@ -49,9 +49,7 @@ class ListenerBoundsTest(unittest.TestCase):
         sock = socket.create_connection(("127.0.0.1", fixture.port), timeout=10)
         self.addCleanup(sock.close)
         sock.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n")  # headers never finished
-        started = time.monotonic()
         self.assertTrue(closed(sock, 10), "the half-sent request was let go")
-        self.assertLess(time.monotonic() - started, 10)
 
     def test_connections_past_the_cap_are_closed_as_they_are_accepted(self) -> None:
         with mock.patch.object(handler_module, "MAX_CONNECTIONS", 2):

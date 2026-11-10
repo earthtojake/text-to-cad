@@ -55,11 +55,23 @@ class ExplicitRuntimeAssets(unittest.TestCase):
                 self.assertEqual(assets.viewer_dist_dir(), packaged / "viewer")
 
     def test_a_checkout_serves_its_own_web_build(self):
-        root = Path(__file__).resolve().parents[4]
         self.assertTrue(assets._in_source_checkout())
-        web_dist = root / "apps" / "web" / "dist"
-        if (web_dist / "index.html").is_file():
-            self.assertEqual(assets.viewer_dist_dir(), web_dist)
+        # A checkout's built apps/web/dist wins over the packaged copy, in a checkout of the exact layout
+        # made here: the repository's own has a web build only where someone ran one.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "apps" / "web" / "dist").mkdir(parents=True)
+            (root / "apps" / "web" / "dist" / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            (root / "packages" / "core").mkdir(parents=True)
+            (root / "packages" / "core" / "package.json").write_text("{}", encoding="utf-8")
+            package = root / "packages" / "cad-server" / "src" / "cad_server"
+            package.mkdir(parents=True)
+            (root / "packages" / "cad-server" / "pyproject.toml").write_text("", encoding="utf-8")
+            with mock.patch.object(assets, "__file__", str(package / "assets.py")), \
+                    mock.patch.object(assets, "_RUNTIME", package / "_runtime"), \
+                    mock.patch.dict(os.environ, {"CAD_VIEWER_DIST": ""}):
+                self.assertEqual(assets.checkout_root(), root)
+                self.assertEqual(assets.viewer_dist_dir(), root / "apps" / "web" / "dist")
 
     def test_an_installation_never_takes_a_folder_above_it_for_a_checkout(self):
         # A wheel installed under any folder (a venv inside some project, a tool directory): an

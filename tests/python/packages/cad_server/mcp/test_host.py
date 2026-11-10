@@ -4,7 +4,6 @@ decides how a host presents CAD (the server's ``cad_server.mcp.host``)."""
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import unittest
@@ -44,8 +43,8 @@ class LauncherTest(unittest.TestCase):
                 ([UVX, *CLAUDE_CODE], "claude code", False),
                 (CLAUDE_DESKTOP, "claude desktop", True),
                 (CLAUDE_DESKTOP[1:], "claude desktop", True),
-                ([[], *CODEX_EXEC], "codex exec", False),  # a parent exiting as it was read: past it  # its own program nearest: never Claude Code
-                ([["/opt/homebrew/bin/python3.13", "-m", "unittest"], *CLAUDE_CODE], "python3.13", None)):
+                ([[], *CODEX_EXEC], "codex exec", False),  # a parent exiting as it was read: past it
+                ([["/opt/homebrew/bin/python3.13", "-m", "unittest"], *CLAUDE_CODE], "python3.13", None)):  # its own program nearest: never Claude Code
             with self.subTest(named=named, nearest=chain[0][:1]):
                 found = launcher.host_of(chain)
                 self.assertEqual((found["host"], found["renders"]), (named, renders))

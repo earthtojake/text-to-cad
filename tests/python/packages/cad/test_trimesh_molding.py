@@ -147,13 +147,6 @@ class PullsTest(unittest.TestCase):
         self.assertAlmostEqual(by["z"]["min_wall_draft_deg"], 2.0, delta=0.01)
 
 
-def _hollow_box(wall: float, outer: float = 24.0, height: float = 16.0):
-    """Open-top box sitting on Z=0 with `wall` on the floor and four sides."""
-    align = (Align.CENTER, Align.CENTER, Align.MIN)
-    inner = outer - 2 * wall
-    return Box(outer, outer, height, align=align) - Pos(0, 0, wall) * Box(inner, inner, height, align=align)
-
-
 def _grooved_box():
     """20 mm cube with a 4 x 4 mm groove across one side face at mid height.
 

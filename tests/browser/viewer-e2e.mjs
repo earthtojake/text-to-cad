@@ -52,8 +52,6 @@ const fixtures = [
 // layout to be the desktop one.
 const viewport = { width: 1024, height: 640 };
 const viewerOrigin = args.url ? new URL(args.url).origin : "";
-const latestReleaseApiUrl = "https://api.github.com/repos/earthtojake/text-to-cad/releases/latest";
-const currentVersion = fs.readFileSync(path.join(REPO, "VERSION"), "utf8").trim();
 const failures = [];
 const results = [];
 const cameraReadiness = new WeakMap();
@@ -91,18 +89,6 @@ async function newPage() {
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = request.url();
-    if (url === latestReleaseApiUrl && request.method() === "GET") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          tag_name: `v${currentVersion}`,
-          html_url: `https://github.com/earthtojake/text-to-cad/releases/tag/v${currentVersion}`,
-          body: "",
-        }),
-      });
-      return;
-    }
     const parsed = new URL(url);
     // A file is named by its absolute path in every request: the page addresses documents by id
     // (`/<id>`) and asks for a file by the path its row gives.
@@ -289,8 +275,8 @@ async function canvasMenuItems(page, canvas) {
 }
 
 async function formatGate() {
-  // Framing lives in STEP's viewport menu and nowhere else: no other renderer opens a
-  // viewport menu at all, and the Inspector's zoom readout and its menu are gone.
+  // Framing lives in the viewport menu every view has, and nowhere else: the Inspector's zoom
+  // readout and its menu are gone.
   const framing = ["Zoom to fit", "Zoom to selection"];
   const presentTree = ["Expand all", "Collapse all"];
   for (const fixture of fixtures) {
@@ -469,7 +455,7 @@ async function cameraHeld(page, zeroPose, what) {
 }
 
 // Reset view is the viewport menu's Zoom to fit: the model framed again, the camera not turned.
-// Only a renderer with a viewport menu (STEP) offers it, and only under Select, whose menu it is.
+// Every view's viewport menu offers it, under Select, whose menu it is.
 async function resetView(page) {
   await page.getByRole("button", { name: "Select", exact: true }).click();
   const box = await page.locator("canvas").first().boundingBox();

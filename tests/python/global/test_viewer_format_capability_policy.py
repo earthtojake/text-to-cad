@@ -38,10 +38,8 @@ CLIENT_ROOT = UI_ROOT / "renderers" / "xbf"
 MAX_RENDER_FORMAT_CHECKS = 0
 MAX_FORMAT_PREDICATE_CALLS = 0
 
-RENDER_FORMAT_MEMBER = re.compile(
-    r"RENDER_FORMAT\.(?:STEP|STL|THREE_MF|GLB|DXF|URDF|SRDF|SDF)\b"
-)
-FORMAT_PREDICATE = re.compile(r"\b(?:isMeshRenderFormat|isRobotRenderFormat)\s*\(")
+RENDER_FORMAT_MEMBER = re.compile(r"RENDER_FORMAT\.[A-Z][A-Z0-9_]*\b")
+FORMAT_PREDICATE = re.compile(r"\bisMeshRenderFormat\s*\(")
 
 
 def _client_sources() -> list[Path]:
@@ -84,26 +82,9 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
         self.assertLessEqual(
             total,
             MAX_FORMAT_PREDICATE_CALLS,
-            "viewer client gained isMeshRenderFormat/isRobotRenderFormat calls "
+            "viewer client gained isMeshRenderFormat calls "
             f"({total} > {MAX_FORMAT_PREDICATE_CALLS}). These are format-identity tests; "
             f"use a capability instead. Files: {sorted(by_file.items())}",
-        )
-
-    def test_budgets_are_tight(self) -> None:
-        """A budget far above the real count stops ratcheting anything."""
-        render_total, _ = _count(RENDER_FORMAT_MEMBER)
-        predicate_total, _ = _count(FORMAT_PREDICATE)
-        self.assertGreaterEqual(
-            render_total,
-            MAX_RENDER_FORMAT_CHECKS - 10,
-            "RENDER_FORMAT budget is stale — lower MAX_RENDER_FORMAT_CHECKS to "
-            f"{render_total} to lock in the removals.",
-        )
-        self.assertGreaterEqual(
-            predicate_total,
-            MAX_FORMAT_PREDICATE_CALLS - 5,
-            "predicate budget is stale — lower MAX_FORMAT_PREDICATE_CALLS to "
-            f"{predicate_total} to lock in the removals.",
         )
 
     def test_shared_shell_components_are_capability_driven(self) -> None:
