@@ -92,6 +92,17 @@ MCP Apps hosts keep out of the model's context, and refuses a call without it
 before anything routes the request. Agents reach none of the viewer's routes.
 The page answers only messages from its host's window.
 
+**MuJoCo Studio.** `cad run mujoco-studio`, and a page's **Open in > MuJoCo Studio** on an MJCF,
+start MuJoCo Studio's web viewer, which listens on a port of its own on every network interface (`::`)
+with no authentication: MuJoCo binds it so itself and offers no way to pin it to loopback. None of the
+credentials above guards it, so anyone who can reach that port reaches what Studio's page offers: the model
+it shows and its simulation. A run says so in one line on its stderr, and the server says so in its log
+when Open in starts one. `cad run mujoco-studio` runs until you stop it (Ctrl-C). A Studio Open in started
+runs until it exits or the server that started it stops (`cad stop`, an update, a logout), when the server
+stops it; one whose page did not appear within a minute is stopped at once. A server killed outright stops
+none. On a network you do not trust, do not start Studio, or keep its port closed in your firewall, and
+stop one that runs (`cad stop`, or end its `mujoco-studio` process).
+
 **Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF, SRDF, KiCad board or
 schematic written by someone else is untrusted input. The server reads it in separate
 processes (a KiCad file off its request threads, its refill in KiCad's own process) and bounds its work: assembly, node and block expansion, archive
@@ -131,8 +142,10 @@ and check it against the release's `SHA256SUMS`.
   consented analytics).
 
 Out of scope: what someone who already has your token, a link or
-your session cookie, or already runs code as you, can do; and effects on your
-own machine that you start yourself, such as building your own script.
+your session cookie, or already runs code as you, can do; effects on your
+own machine that you start yourself, such as building your own script; and
+MuJoCo Studio's open listener, described above, which is MuJoCo's own (a Studio
+the server started that outlives the server's own stop is ours).
 
 ## Reporting a Vulnerability
 

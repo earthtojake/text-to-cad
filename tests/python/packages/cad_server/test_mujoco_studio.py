@@ -1,15 +1,18 @@
 """MuJoCo Studio, from the server: ``cad run mujoco-studio`` adds the mujoco integration as ``--with cad[mujoco]``
 would and runs ``cad.mujoco._command`` in its environment, and Open in offers Studio for an MJCF where the
 installation runs it with nothing fetched (``studio.find``), starting ``cad run mujoco-studio --model FILE``
-detached and opening the URL Studio prints (``studio.start``). Nothing is made or launched: the
-environments are files in a temporary folder, the process a recorder."""
+detached and opening the URL Studio prints (``studio.start``), one Studio per file, stopped where its URL
+never appears and when the server exits (``studio.stop``). Nothing is made or launched: the environments
+are files in a temporary folder, the process a recorder."""
 from __future__ import annotations
 
 import os
 import shutil
 import subprocess
 import sys
+import signal
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -90,6 +93,11 @@ class StartTest(Folder):
         patch = mock.patch.dict(studio._RUNNING, clear=True)
         patch.start()
         self.addCleanup(patch.stop)
+        registered = mock.patch.object(studio, "_REGISTERED", True)  # no exit handler in the test process
+        registered.start()
+        self.addCleanup(registered.stop)
+        self.said: list[str] = []
+        self.ended: list = []
 
     def start(self, printed: str | None, exited: int | None = None, child: mock.Mock | None = None):
         opened: list[str] = []
@@ -104,8 +112,9 @@ class StartTest(Folder):
 
         times = iter(range(1000))
         with mock.patch.object(tempfile, "tempdir", str(self.folder)):
-                studio.start(str(self.folder / "scene.xml"), spawn=spawn, opener=opened.append, platform="linux",
-                         seconds=5, clock=lambda: float(next(times)), sleep=lambda _s: None, wait=True)
+            studio.start(str(self.folder / "scene.xml"), spawn=spawn, opener=opened.append, platform="linux",
+                         seconds=5, clock=lambda: float(next(times)), sleep=lambda _s: None, wait=True,
+                         say=self.said.append, end=self.ended.append)
         return calls, opened
 
     def test_cad_run_starts_detached_and_its_printed_url_is_opened(self) -> None:
@@ -117,6 +126,9 @@ class StartTest(Folder):
                          (subprocess.DEVNULL, subprocess.STDOUT, True), "detached, never through a shell")
         self.assertNotIn("shell", options)
         self.assertEqual(opened, ["http://localhost:8081/"])
+        [said] = self.said
+        self.assertIn("listens on every network interface with no authentication", said, "the server says so too")
+        self.assertIn(str(self.folder / "scene.xml"), said)
         if os.name != "nt":
             self.assertEqual(list(self.folder.glob("cad-mujoco-studio-*.log")), [], "its log is removed once read")
 
@@ -130,7 +142,68 @@ class StartTest(Folder):
 
     def test_nothing_is_opened_when_studio_exits_or_prints_no_url_in_time(self) -> None:
         self.assertEqual(self.start("cad run: cad[mujoco] could not be made\n", exited=1)[1], [])
-        self.assertEqual(self.start("loading\n")[1], [])
+        self.assertEqual((studio._RUNNING, self.ended), ({}, []), "one that exited is forgotten, nothing to stop")
+        child = mock.Mock(**{"poll.return_value": None})
+        self.assertEqual(self.start("loading\n", child=child)[1], [])
+        self.assertEqual(self.ended, [child], "one still running with no URL in time is stopped")
+        self.assertEqual(studio._RUNNING, {}, "and forgotten: the next Open in starts afresh")
+        self.assertEqual(list(self.folder.glob("cad-mujoco-studio-*.log")), [], "its log is removed on every platform")
+        self.assertEqual(len(self.start(BANNER, child=mock.Mock(**{"poll.return_value": None}))[0]), 1)
+
+    def test_a_second_open_while_studio_starts_awaits_its_page_rather_than_starting_another(self) -> None:
+        path = str(self.folder / "scene.xml")
+        opened: list[str] = []
+        spawned: list = []
+        printed = threading.Event()
+
+        def spawn(argv, **options):
+            spawned.append(argv)
+            return mock.Mock(**{"poll.return_value": None})
+
+        def sleep(_seconds: float) -> None:  # the banner appears once the second request is in
+            printed.wait()
+            [log] = self.folder.glob("cad-mujoco-studio-*.log")
+            log.write_text(BANNER, encoding="utf-8")
+
+        times = iter(range(1000))
+        with mock.patch.object(tempfile, "tempdir", str(self.folder)):
+            first = studio.start(path, spawn=spawn, opener=opened.append, platform="linux", seconds=50,
+                                 clock=lambda: float(next(times)), sleep=sleep, say=self.said.append,
+                                 end=self.ended.append)
+            second = studio.start(path, spawn=spawn, opener=opened.append, platform="linux", seconds=50,
+                                  say=self.said.append, end=self.ended.append)
+        printed.set()
+        first.join()
+        second.join()
+        self.assertEqual(len(spawned), 1, "one Studio for the file, recorded at its spawn")
+        self.assertEqual(opened, ["http://localhost:8081/"] * 2, "the second request opens the first's page")
+        self.assertEqual((len(self.said), self.ended), (1, []))
+
+    def test_the_studios_this_process_started_are_stopped_as_it_exits(self) -> None:
+        children = [mock.Mock(**{"poll.return_value": None}) for _ in range(2)]
+        for index, child in enumerate(children):
+            studio._RUNNING[f"scene{index}.xml"] = studio._Run(child, self.touch(f"scene{index}.log"))
+        stopped: list = []
+        studio.stop(end=stopped.append)
+        self.assertEqual((stopped, studio._RUNNING), (children, {}))
+        self.assertEqual(list(self.folder.glob("*.log")), [], "their logs go with them")
+        with mock.patch.object(studio, "_REGISTERED", False), mock.patch.object(studio.atexit, "register") as register:
+            studio._stopped_at_exit()
+            studio._stopped_at_exit()
+        register.assert_called_once_with(studio.stop)
+
+    def test_a_studio_is_stopped_with_its_process_group_or_tree(self) -> None:
+        child = mock.Mock(pid=4321, **{"poll.return_value": None})
+        sent: list = []
+        studio._end(child, platform="linux", killpg=lambda pid, number: sent.append((pid, number)))
+        self.assertEqual(sent, [(4321, signal.SIGTERM)])
+        child.wait.side_effect = subprocess.TimeoutExpired("studio", 5)
+        studio._end(child, platform="darwin", killpg=lambda pid, number: sent.append((pid, number)))
+        self.assertEqual(sent[1:], [(4321, signal.SIGTERM), (4321, signal.SIGKILL)], "killed when it does not go")
+        ran: list = []
+        child.wait.side_effect = None
+        studio._end(child, platform="win32", taskkill=lambda argv, **_o: ran.append(argv))
+        self.assertEqual(ran, [["taskkill", "/T", "/F", "/PID", "4321"]])
 
     def test_the_url_as_the_banner_prints_it(self) -> None:
         self.assertEqual(studio.url_of(BANNER), "http://localhost:8081/")
