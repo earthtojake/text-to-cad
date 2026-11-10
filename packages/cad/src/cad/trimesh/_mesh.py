@@ -29,6 +29,17 @@ unknown and its cracks gaps. Cleaned:
   the mesh is not watertight.
 
 Watertightness is judged per body (``closure``): which bodies are open, and the volume of the closed ones.
+
+**The gate.** A check measures the inside of a surface, so a mesh with none is refused before any family runs
+(``readable``, ``sound``: ``Unmeasured``, one finding each), and what is unambiguous is repaired and said:
+
+- no triangles, or none with area: ``mesh_empty``; a corner that is not a number: ``mesh_unreadable``;
+- more than ``MAX_TRIANGLES`` triangles: ``mesh_too_large`` (the check's memory is bounded: decimate it);
+- a triangle doubled in place, wound the same way: one kept (``duplicate_faces_dropped``);
+- triangles wound against their neighbours: turned to agree across every edge two triangles share
+  (``faces_rewound``; a surface no winding makes consistent -- one-sided -- is ``inconsistent_normals``);
+- a closed shell wound inside out that is no void of another shell: turned (``shells_turned``);
+- a closed mesh that encloses no volume (a surface doubled back on itself): ``mesh_no_volume``.
 """
 
 from __future__ import annotations
@@ -39,7 +50,8 @@ from typing import Any
 import numpy as np
 import trimesh
 
-__all__ = ["CRACK_FRACTION", "FOLD_DOT", "SLIVER_AREA", "clean", "closure", "facts", "load", "prepared"]
+__all__ = ["CRACK_FRACTION", "FOLD_DOT", "MAX_TRIANGLES", "SLIVER_AREA", "clean", "closure", "facts", "load",
+           "prepared", "readable", "sound"]
 
 #: A boundary loop whose corners all lie within this fraction of the part's diagonal of the line through its
 #: two farthest corners is a crack of the tessellation, not an opening: a chord tolerance's width (a 117 mm
@@ -58,6 +70,12 @@ FOLD_DOT = -0.999
 FOLD_PLANE = 1e-5
 
 
+#: Triangles a mesh may have for the check to measure it. Every family's tables are bounded per block, so the
+#: check's memory grows with the mesh alone. Past this the check refuses (``mesh_too_large``) rather than take
+#: a machine's memory: a slicer needs far fewer triangles.
+MAX_TRIANGLES = 2_000_000
+
+
 def load(path: str, units: str = "mm") -> trimesh.Trimesh:
     """The mesh file at ``path`` (an STL), made millimetres and cleaned (``prepared``)."""
     mesh = trimesh.load(path, force="mesh", process=False)
@@ -67,17 +85,192 @@ def load(path: str, units: str = "mm") -> trimesh.Trimesh:
 
 
 def prepared(mesh: trimesh.Trimesh, units: str = "mm") -> trimesh.Trimesh:
-    """``mesh`` (changed in place: hand it a copy) scaled from ``units`` to millimetres and cleaned."""
+    """``mesh`` (changed in place: hand it a copy) scaled from ``units`` to millimetres, cleaned and through
+    the gate (``readable``, ``sound``): ``Unmeasured`` where it has no inside to measure."""
     from cad._internal.manufacturing import UNITS_MM
 
     if units not in UNITS_MM:
         raise ValueError(f"units is one of {', '.join(sorted(UNITS_MM))}, not {units!r}")
+    readable(mesh)
     factor = UNITS_MM[units]
     if factor != 1.0:
         mesh.apply_scale(factor)
     clean(mesh)
+    sound(mesh)
     mesh.metadata["source_units"] = units
     return mesh
+
+
+def readable(mesh: Any) -> None:
+    """``Unmeasured`` for a mesh there is nothing to read of: no triangles (``mesh_empty``), a corner that is
+    not a number (``mesh_unreadable``), or more triangles than the check measures (``mesh_too_large``)."""
+    from cad._internal.dfm import Unmeasured
+
+    faces = np.asarray(getattr(mesh, "faces", ()))
+    if not len(faces):
+        raise Unmeasured("mesh_empty", "the mesh holds no triangles: there is nothing to measure. Export it again "
+                         "from the model")
+    if len(faces) > MAX_TRIANGLES:
+        raise Unmeasured("mesh_too_large", f"the mesh has {len(faces)} triangles, over the {MAX_TRIANGLES} this "
+                         "check measures (its memory is bounded): decimate it -- a slicer needs far fewer -- or "
+                         "check the part's STEP or model")
+    corners = np.asarray(mesh.vertices, dtype=float)[faces]
+    broken = int((~np.isfinite(corners).all(axis=(1, 2))).sum())
+    if broken:
+        raise Unmeasured("mesh_unreadable", f"{broken} of the mesh's {len(faces)} triangles have a corner that "
+                         "is not a number: the file is damaged. Export it again from the model")
+
+
+def sound(mesh: trimesh.Trimesh) -> None:
+    """The gate ahead of the families (the module's docstring), in place: a triangle doubled in place dropped,
+    triangles wound against their neighbours turned, a closed shell wound inside out turned -- each said in
+    ``mesh.metadata`` (``duplicate_faces_dropped``, ``faces_rewound``, ``shells_turned``) -- and ``Unmeasured``
+    for a mesh left with no surface (``mesh_empty``), one no winding makes consistent
+    (``inconsistent_normals``) or a closed one that encloses no volume (``mesh_no_volume``)."""
+    from cad._internal.dfm import Unmeasured
+
+    if not len(mesh.faces) or not float(np.asarray(mesh.area_faces).sum()) > 0.0:
+        raise Unmeasured("mesh_empty", "the mesh holds no surface: none of its triangles has an area. Export it "
+                         "again from the model")
+    mesh.metadata["duplicate_faces_dropped"] = _drop_doubles(mesh)
+    mesh.metadata["faces_rewound"] = _rewind(mesh)
+    mesh.metadata["shells_turned"] = _turn_outward(mesh)
+    diagonal = float(np.linalg.norm(mesh.extents)) or 1.0
+    triangles = np.asarray(mesh.triangles, dtype=float)
+    volume = float(np.einsum("ij,ij->i", triangles[:, 0], np.cross(triangles[:, 1], triangles[:, 2])).sum()) / 6.0
+    if not _uses(np.asarray(mesh.faces))[3].any() and abs(volume) <= 1e-9 * diagonal ** 3:
+        raise Unmeasured("mesh_no_volume", "the mesh is closed but encloses no volume: a surface doubled back on "
+                         "itself, with no inside to print. Give the part a thickness and export it again")
+
+
+def _uses(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Each triangle's three edges (their index among the mesh's edges, (m, 3)) and whether it runs each from
+    its lower corner to its higher; and per edge, how often it is run each way (e, 2) and whether its uses are
+    odd (a boundary)."""
+    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+    _unique, inverse = np.unique(np.sort(directed, axis=1), axis=0, return_inverse=True)
+    edges = inverse.ravel().reshape(3, -1).T
+    ways = (directed[:, 0] < directed[:, 1]).reshape(3, -1).T
+    runs = np.zeros((int(edges.max()) + 1, 2), dtype=int)
+    np.add.at(runs, (edges.ravel(), ways.ravel().astype(int)), 1)
+    return edges, ways, runs, runs.sum(axis=1) % 2 == 1
+
+
+def _drop_doubles(mesh: trimesh.Trimesh) -> int:
+    """Drop every triangle that repeats another on the same three corners wound the same way (a surface
+    exported twice in place), in place; the number dropped. Two copies wound against each other are a face two
+    bodies share, and stay."""
+    faces = np.asarray(mesh.faces)
+    low = faces.argmin(axis=1)
+    turned = np.stack([faces[np.arange(len(faces)), (low + k) % 3] for k in range(3)], axis=1)  # lowest first
+    _unique, first = np.unique(turned, axis=0, return_index=True)
+    if len(first) == len(faces):
+        return 0
+    keep = np.zeros(len(faces), dtype=bool)
+    keep[first] = True
+    mesh.update_faces(keep)
+    mesh.remove_unreferenced_vertices()
+    return int((~keep).sum())
+
+
+def _rewind(mesh: trimesh.Trimesh) -> int:
+    """Turn the triangles wound against their neighbours, in place: across every edge exactly two triangles
+    share, the two run it opposite ways (the fewer of each connected piece are turned; which way the piece then
+    faces is ``_turn_outward``'s). The number turned; ``Unmeasured`` where no winding does it (a one-sided
+    surface)."""
+    from collections import deque
+
+    from cad._internal.dfm import Unmeasured
+
+    faces = np.asarray(mesh.faces).copy()
+    edges, ways, runs, _odd = _uses(faces)
+    shared = runs.sum(axis=1) == 2
+    if (runs[shared, 0] == 1).all():
+        return 0
+    # the two triangles of each shared edge, and whether they run it the same way (one of them is turned)
+    slot = np.flatnonzero(shared[edges.ravel()])
+    order = slot[np.argsort(edges.ravel()[slot], kind="stable")]
+    owner = np.repeat(np.arange(len(faces)), 3)  # ``edges`` is (m, 3), raveled a triangle at a time
+    first, second = owner[order[0::2]], owner[order[1::2]]
+    clash = ways.ravel()[order[0::2]] == ways.ravel()[order[1::2]]
+    neighbours: list[list[tuple[int, bool]]] = [[] for _ in range(len(faces))]
+    for a, b, c in zip(first.tolist(), second.tolist(), clash.tolist()):
+        neighbours[a].append((b, c))
+        neighbours[b].append((a, c))
+    areas = np.asarray(mesh.area_faces)
+    turn = np.zeros(len(faces), dtype=bool)
+    seen = np.zeros(len(faces), dtype=bool)
+    for start in range(len(faces)):
+        if seen[start]:
+            continue
+        seen[start] = True
+        piece, queue = [start], deque([start])
+        while queue:
+            at = queue.popleft()
+            for other, clashes in neighbours[at]:
+                wanted = bool(turn[at]) != clashes
+                if not seen[other]:
+                    seen[other], turn[other] = True, wanted
+                    piece.append(other)
+                    queue.append(other)
+                elif bool(turn[other]) != wanted:
+                    raise Unmeasured("inconsistent_normals", "the mesh's triangles cannot be wound consistently: "
+                                     "the surface is one-sided where its triangles meet, with no inside and "
+                                     "outside. Repair the mesh, or export it again from the model")
+        members = np.asarray(piece)
+        if float(areas[members][turn[members]].sum()) > 0.5 * float(areas[members].sum()):
+            turn[members] = ~turn[members]
+    if not turn.any():
+        return 0
+    faces[turn] = faces[turn][:, ::-1]
+    mesh.faces = faces
+    return int(turn.sum())
+
+
+def _turn_outward(mesh: trimesh.Trimesh) -> int:
+    """Turn each closed shell wound inside out, in place; the number turned. A shell (a connected piece every
+    edge of which exactly two of its triangles share) of negative volume is a sealed void where it lies inside
+    another shell's material, and stays; anywhere else its triangles face their own inside, and are turned."""
+    from cad._internal.meshops_printing import Caster
+
+    faces = np.asarray(mesh.faces)
+    if not len(faces):
+        return 0
+    edges, _ways, runs, _odd = _uses(faces)
+    plain = (runs.sum(axis=1)[edges] == 2).all(axis=1)  # per triangle: each of its edges shared by two
+    pieces = [np.asarray(piece, dtype=int) for piece in trimesh.graph.connected_components(
+        mesh.face_adjacency, nodes=np.arange(len(faces)), min_len=1)]
+    triangles = np.asarray(mesh.triangles, dtype=float)
+    six = np.einsum("ij,ij->i", triangles[:, 0], np.cross(triangles[:, 1], triangles[:, 2]))
+    shells = [(piece, float(six[piece].sum()) / 6.0) for piece in pieces if plain[piece].all()]
+    inside_out = [piece for piece, volume in shells if volume < 0.0]
+    if not inside_out:
+        return 0
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    hosts = [(piece, triangles[piece].reshape(-1, 3).min(axis=0), triangles[piece].reshape(-1, 3).max(axis=0))
+             for piece, volume in shells if volume > 0.0]
+    casters: dict[int, Any] = {}
+    turned = np.zeros(len(faces), dtype=bool)
+    for piece in inside_out:
+        corners = triangles[piece].reshape(-1, 3)
+        low, high = corners.min(axis=0), corners.max(axis=0)
+        held = False
+        for at, (host, host_low, host_high) in enumerate(hosts):
+            if (low < host_low).any() or (high > host_high).any():
+                continue
+            if at not in casters:
+                casters[at] = Caster(vertices, faces[host])
+            if casters[at].inside(corners[:1])[0]:
+                held = True
+                break
+        if not held:
+            turned[piece] = True
+    if not turned.any():
+        return 0
+    changed = faces.copy()
+    changed[turned] = changed[turned][:, ::-1]
+    mesh.faces = changed
+    return len([piece for piece in inside_out if turned[piece[0]]])
 
 
 def clean(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
@@ -550,7 +743,8 @@ def facts(mesh: trimesh.Trimesh) -> dict[str, Any]:
     found: dict[str, Any] = {"watertight": closed["watertight"], "volume_mm3": closed["closed_volume_mm3"]}
     if closed["open_body_count"]:
         found.update(open_body_count=closed["open_body_count"], open_bodies=closed["open_bodies"])
-    for key in ("degenerate_faces_dropped", "folds_laid_flat", "cracks_closed"):
+    for key in ("degenerate_faces_dropped", "folds_laid_flat", "cracks_closed", "duplicate_faces_dropped",
+                "faces_rewound", "shells_turned"):
         if mesh.metadata.get(key):
             found[key] = int(mesh.metadata[key])
     return found

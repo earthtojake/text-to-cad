@@ -57,9 +57,9 @@ IN_PLACE = ("the check measures the parts as printed together, in place (print-i
 #: Materials that warp on an FDM plate (shrinking as they cool): a long flat contact is a risk.
 WARP_PRONE = ("abs", "nylon", "nylon_gf", "pc", "pc_abs", "pp", "peek", "pei", "pom", "pbt")
 
-_ACCESSED = "2026-11-03"
+_ACCESSED = "2026-11-10"
 #: The rules' own version (``RuleSet.version``), bumped when a rule changes.
-_VERSION = "2026-11-08"
+_VERSION = "2026-11-10"
 
 
 def _src(ident: str, publisher: str, title: str, url: str) -> Source:
@@ -97,11 +97,9 @@ SOURCES = {source.id: source for source in (
          "https://xometry.pro/en/3d-printing-design-guide/quick-guide/stereolithography/"),
     _src("xometry-3dp", "Xometry", "3D printing service: general guidelines",
          "https://www.xometry.com/capabilities/3d-printing-service/"),
-    _src("xometry-guide", "Xometry (Xometry Pro)", "Ultimate 3D printing design guide",
-         "https://xometry.pro/en-uk/3d-printing-design-guide/"),
-    Source("xometry-fdm-tips", "Xometry (Xometry Pro)",
-           "FDM 3D printing design tips: best practices and techniques for stronger prints",
-           "https://xometry.pro/en/articles/fdm-design-tips/", "2026-11-08"),
+    _src("xometry-fdm-tips", "Xometry (Xometry Pro)",
+         "FDM 3D printing design tips: best practices and techniques for stronger prints",
+         "https://xometry.pro/en/articles/fdm-design-tips/"),
     # a rule no fetched guide states: text-to-cad's own figure, said as such in every verdict of it
     Source(OWN, "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
            "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
@@ -115,6 +113,17 @@ BUILD_VOLUMES: dict[str, tuple[tuple[float, float, float], str]] = {
     "fdm": ((200, 200, 200), "hubs-geometry"), "sla": ((145, 145, 175), "hubs-geometry"),
     "sls": ((300, 300, 300), "hubs-geometry"), "mjf": ((380, 285, 380), "hubs-geometry"),
     "pbf": ((250, 150, 150), "hubs-geometry")}
+#: The largest machine the same page lists per technology, mm ("up to ..."; MJF's one machine): a part no
+#: orientation of which fits it is made by no machine of the technology -- ``printing.build_volume``'s error
+#: where no ``build_volume`` is given, as the typical machine is its warning.
+LARGEST_VOLUMES: dict[str, tuple[float, float, float]] = {
+    "fdm": (900, 600, 900), "sla": (1500, 750, 500), "sls": (750, 550, 550), "mjf": (380, 285, 380),
+    "pbf": (500, 280, 360)}
+#: The nozzle Hubs's FDM wall minimum (0.8 mm) is two beads of: the common one. With ``--nozzle`` given the
+#: minimum is two beads of that nozzle (``NOZZLE_BEADS``), text-to-cad's own scaling of the cited figure (Hubs:
+#: "wall thickness depends on nozzle diameter and how well passes fuse together").
+COMMON_NOZZLE_MM = 0.4
+NOZZLE_BEADS = 2.0
 
 # --- the rules ----------------------------------------------------------------------------------------------
 # Each rule: (technology, limit, source, severity) rows of one figure. One Rule per source (a rule cites one
@@ -145,6 +154,13 @@ def _rules(rid: str, family: str, field: str, op: str, unit: str, what: str, row
             for (source, severity), (limits, notes) in groups.items()]
 
 
+def _context(resolved: dict[str, Any]) -> dict[str, Any]:
+    """What the wall rules read of the options: the technology and the nozzle, where one is given."""
+    nozzle = resolved.get("nozzle")
+    return {"technology": resolved["technology"], "nozzle": float(nozzle) if nozzle is not None else None,
+            "nozzle_given": nozzle is not None}
+
+
 def _overhang(rows: list[Row], kinds_by_tech: dict[str, tuple[str, ...]]) -> list[Rule]:
     found = []
     for technology, limit, source, severity, said in rows:
@@ -169,131 +185,137 @@ _KINDS = {"fdm": _SUPPORT_KINDS, "sla": _SUPPORT_KINDS, "pbf": (*_SUPPORT_KINDS,
 _FIX_WALL = "thicken it to at least {limit:g} mm"
 
 
+_AT_LIMIT = ("at the limit within the mesh's accuracy: its chords may depart from the surface by {chord_mm:.3g} mm "
+             "there, read from its curvature and edge lengths")
+
+
+def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
+    """The wall rules: a wall's minimum by whether it is supported (joined to the part on two or more sides:
+    ``wall_thickness.items[].supported``, read off the wall on both paths), each with its variant for a wall at
+    the limit within a mesh's accuracy (a warning) and, for FDM with ``--nozzle`` given, two beads of that
+    nozzle in place of Hubs's 0.8 mm. A wall whose support could not be read (``supported`` None) is judged as
+    supported -- and, between the two minima, said: it fails if it is free."""
+    found: list[Rule] = []
+    unread = "wall thickness (whether it is supported could not be read: judged as supported)"
+    for rid, what, rows, joined, fix, note in (
+            ("printing.wall_supported", "supported wall thickness", supported, True, _FIX_WALL,
+             "a wall joined to the part on two or more sides"),
+            ("printing.wall_unsupported", "unsupported wall thickness", free, False,
+             _FIX_WALL + ", or join it to the part on a second side", "a wall joined to the part on one side or none"),
+            ("printing.wall", unread, supported, None, _FIX_WALL, "")):
+        for near in (False, True):
+            # a mesh's wall under the limit by no more than its chords may depart from the surface is at the
+            # limit within the mesh's accuracy (``_at_limit``): a warning whatever the limit's own severity
+            item_when = {"supported": joined, "at_limit": True if near else (False, None)}
+            kept = [(tech, limit, source, "warning" if near else severity, said) for tech, limit, source, severity, said in rows]
+            mended = fix + ("; or check the exact model (a STEP or the model): the mesh cannot tell" if near else "")
+            # FDM's figure is two beads of the common nozzle: its verdicts say the nozzle assumed
+            for chosen, assumed in (([row for row in kept if row[0] != "fdm"], ""),
+                                    ([row for row in kept if row[0] == "fdm"],
+                                     f"assuming the common {COMMON_NOZZLE_MM:g} mm nozzle: give --nozzle for another")):
+                found += _rules(rid, "wall_thickness", "thickness_mm", "min", "mm", what, chosen, mended, item_when, note,
+                                when={"technology": tuple(row[0] for row in chosen), "nozzle_given": False},
+                                detail="; ".join(part for part in (_AT_LIMIT if near else "", assumed) if part))
+            found.append(Rule(
+                rid, "wall_thickness", "thickness_mm", "min", {"fdm": NOZZLE_BEADS}, "mm", what, OWN,
+                severity="warning" if near else "error", by="technology", scale_by="nozzle",
+                when={"technology": "fdm", "nozzle_given": True}, item_when=item_when, fix=mended,
+                note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): text-to-cad's own scaling of Hubs's 0.8 "
+                     f"mm, two beads of the common {COMMON_NOZZLE_MM:g} mm nozzle",
+                detail=(_AT_LIMIT + "; " if near else "") + f"{NOZZLE_BEADS:g} beads of the {{nozzle:g}} mm nozzle given"))
+    # a wall whose support could not be read, between the two minima: it passes if it is supported and fails
+    # if it is free -- said, never passed in silence
+    found += _rules("printing.wall", "wall_thickness", "thickness_mm", "min", "mm",
+                    "wall thickness, were it unsupported (whether it is could not be read)",
+                    [(tech, limit, source, "warning", said) for tech, limit, source, _, said in free],
+                    "thicken it to at least {limit:g} mm, or check the exact model (a STEP or the model), which "
+                    "tells whether the wall is joined on two sides", {"supported": None},
+                    when={"technology": tuple(row[0] for row in free), "nozzle_given": False})
+    return found
+
+
 def _general() -> tuple[Rule, ...]:
+    """The table: per figure and technology the one row a guide gives it -- Hubs's where Hubs gives one, else
+    Protolabs's, else Xometry's. Each row was read on its page on ``_ACCESSED``."""
     rows: dict[str, list[Row]] = {key: [] for key in (
         "wall_s", "wall_u", "hole", "pin", "pin_aspect", "overhang", "bridge", "cantilever", "hhole", "clear", "gap",
-        "escape_n", "escape_d", "hollow", "fit", "emboss", "engrave_d", "engrave_w", "warp", "section", "hround")}
+        "escape_n", "escape_d", "escape_n_applied", "escape_d_applied", "hollow", "fit", "emboss", "engrave_d",
+        "engrave_w", "warp", "section", "hround")}
 
     def add(key: str, technology: str, limit: float, source: str, severity: str, said: str = "") -> None:
-        # the first source to give a technology a figure wins (Hubs, then Protolabs, then Xometry); a source may
-        # give one a recommendation and a limit (Hubs SLA holes: a warning at 0.8, an error at 0.5)
-        if any(row[0] == technology and row[2] != source for row in rows[key]):
-            return
+        # one source a technology a figure; a source may give one a recommendation and a limit (Hubs SLA holes:
+        # a warning at 0.8, an error at 0.5)
+        assert not any(row[0] == technology and row[2] != source for row in rows[key]), (key, technology, source)
         rows[key].append((technology, limit, source, severity, said))
 
-    for tech, supported, free in (("fdm", 0.8, 0.8), ("sla", 0.5, 1.0), ("sls", 0.8, 1.0), ("mjf", 0.7, 1.0),
-                                  ("pbf", 0.4, 0.8)):
+    # Hubs's table, "Min wall (supported / free)"; DMLS's row is a range each (0.4-0.8 / 0.8-1.5): its least
+    for tech, supported, free in (("sla", 0.5, 1.0), ("sls", 0.8, 1.0), ("mjf", 0.7, 1.0), ("pbf", 0.4, 0.8)):
         add("wall_s", tech, supported, "hubs-thin-walls", "error")
         add("wall_u", tech, free, "hubs-thin-walls", "error")
+    for key in ("wall_s", "wall_u"):
+        add(key, "fdm", NOZZLE_BEADS * COMMON_NOZZLE_MM, "hubs-thin-walls", "error")
     # Hubs SLA: holes "less than 0.8mm ... may close off" (a risk), its table's "Minimum diameter of 0.5mm"
     add("hole", "sla", 0.8, "hubs-sla", "warning", "holes less than 0.8 mm may close off")
     add("hole", "sla", 0.5, "hubs-sla", "error", "minimum diameter of 0.5 mm")
     add("hole", "sls", 1.5, "hubs-sls", "error", "all holes should be larger than 1.5 mm")
     add("hole", "pbf", 1.5, "hubs-metal", "error", "minimum hole diameter DMLS/SLM: 1.5 mm")
+    add("hole", "fdm", 1.0, "xometry-fdm", "warning", "greater than 0.04 in (1 mm) to retain a circular shape")
     # Hubs FDM gives pins no minimum (under 5 mm they "can be made up of only perimeter prints"): FDM's is
-    # Xometry's below
+    # Xometry's "Pins should be at least 1 mm in diameter and kept as short as possible." -- a should: a warning
+    add("pin", "fdm", 1.0, "xometry-fdm-tips", "warning", "pins should be at least 1 mm in diameter")
+    add("pin", "sla", 0.5, "xometry-sla", "error", "minimum shaft diameter 0.5 mm")
     add("pin", "sls", 0.8, "hubs-sls", "warning", "a minimum of 0.8 mm is recommended")
     add("pin", "mjf", 0.5, "hubs-mjf", "warning", "minimum feature size 0.5 mm")
     add("pin", "pbf", 0.6, "hubs-metal", "error", "minimum feature size DMLS/SLM 0.6 mm")
     add("pin_aspect", "pbf", 8.0, "hubs-metal", "warning", "maximum aspect ratio 8:1")
     add("overhang", "fdm", 45.0, "hubs-fdm", "warning", "overhangs up to 45 deg print without support")
     add("overhang", "sla", 19.0, "hubs-sla", "warning", "at least 19 deg from level")
+    # the rules keep Protolabs's 45 for metal: Hubs's metal guide lists "maximum overhang angle DMLS/SLM: 50
+    # deg" without saying from which axis, so no Hubs row stands for it
+    add("overhang", "pbf", 45.0, "protolabs-metal", "warning", "avoid overhangs less than 45 deg; Hubs metal "
+        "lists 50 deg, its reference unstated, and is not used")
     add("bridge", "fdm", 5.0, "hubs-fdm", "warning")
     add("bridge", "sla", 21.0, "hubs-sla", "warning")
     add("cantilever", "sla", 1.0, "hubs-sla", "warning")
     add("cantilever", "pbf", 0.5, "hubs-metal", "warning")
+    add("hhole", "pbf", 8.0, "protolabs-metal", "warning")
+    add("clear", "fdm", 0.762, "xometry-3dp", "warning", "clearance between features: at least 0.030 in")
     add("clear", "sla", 0.5, "hubs-sla", "warning")
     add("clear", "sls", 0.3, "hubs-sls", "warning")
     add("clear", "mjf", 0.9, "hubs-mjf", "warning")
+    add("clear", "pbf", 0.635, "protolabs-toolkit", "warning")
+    # FDM's gap: Xometry's general "clearance between features" line, no FDM limit -- a warning
+    add("gap", "fdm", 0.762, "xometry-3dp", "warning", "clearance between features: at least 0.030 in")
+    for tech, gap in (("sla", 0.635), ("sls", 0.762), ("mjf", 0.508), ("pbf", 0.635)):
+        add("gap", tech, gap, "protolabs-toolkit", "error")
     add("escape_n", "sla", 1, "hubs-sla", "error")
     add("escape_d", "sla", 3.5, "hubs-sla", "warning")
+    add("escape_n", "sls", 1, "hubs-sls", "error")
     add("escape_d", "sls", 3.5, "hubs-sls", "warning")
+    # Hubs's SLS escape-hole figure, and the need for one per cavity, for the other powder beds: their loose
+    # powder is trapped the same way (the rules' own reading, no page says it for them -- and every verdict of
+    # it says so)
+    for tech in ("mjf", "pbf"):
+        add("escape_n_applied", tech, 1, "hubs-sls", "error")
+        add("escape_d_applied", tech, 3.5, "hubs-sls", "warning")
     add("hollow", "sla", 2.0, "hubs-sla", "warning")
     for tech in TECHNOLOGIES:
         add("fit", tech, 1.0, "hubs-geometry", "error")
+    add("emboss", "fdm", 1.0, "xometry-fdm", "warning")
     add("emboss", "sla", 0.1, "hubs-sla", "warning")
     add("emboss", "sls", 1.0, "hubs-sls", "warning")
+    add("emboss", "mjf", 0.3048, "protolabs-toolkit", "warning")
     add("emboss", "pbf", 0.4, "hubs-metal", "warning")
     add("engrave_d", "sla", 0.4, "hubs-sla", "warning")
     add("engrave_d", "sls", 1.0, "hubs-sls", "warning")
     add("engrave_w", "sla", 0.4, "hubs-sla", "warning")
     add("engrave_w", "pbf", 0.4, "hubs-metal", "warning")
-    add("section", "pbf", 10.0, "hubs-metal", "warning")
-    # Hubs's SLS escape-hole figure, and the need for one per cavity, for the other powder beds: their loose
-    # powder is trapped the same way (the rules' own reading, no page says it for them).
-    add("escape_n", "sls", 1, "hubs-sls", "error")
-    add("escape_n", "mjf", 1, "hubs-sls", "error")
-    add("escape_n", "pbf", 1, "hubs-sls", "error")
-    add("escape_d", "mjf", 3.5, "hubs-sls", "warning")
-    add("escape_d", "pbf", 3.5, "hubs-sls", "warning")
-    # text-to-cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
-    add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN, "warning")
-    for tech, wall in (("sla", 0.305), ("sls", 0.762), ("mjf", 0.508), ("pbf", 0.381)):
-        add("wall_s", tech, wall, "protolabs-toolkit", "error")
-        add("wall_u", tech, wall, "protolabs-toolkit", "error")
-    for tech, gap in (("sla", 0.635), ("sls", 0.762), ("mjf", 0.508), ("pbf", 0.635)):
-        add("gap", tech, gap, "protolabs-toolkit", "error")
-    add("hole", "sla", 0.508, "protolabs-7mistakes", "error")
-    add("hole", "pbf", 0.635, "protolabs-7mistakes", "error")
-    # the rules keep Protolabs's 45 for metal: Hubs's metal guide lists "maximum overhang angle DMLS/SLM: 50
-    # deg" without saying from which axis, so no Hubs row stands for it
-    add("overhang", "pbf", 45.0, "protolabs-metal", "warning", "avoid overhangs less than 45 deg; Hubs metal "
-        "lists 50 deg, its reference unstated, and is not used")
-    add("cantilever", "pbf", 0.5, "protolabs-metal", "warning")
-    add("hhole", "pbf", 8.0, "protolabs-metal", "warning")
-    add("clear", "pbf", 0.635, "protolabs-toolkit", "warning")
     for tech in ("sls", "mjf"):
         add("warp", tech, 177.8, "protolabs-7mistakes", "warning")
-    for tech in ("sla", "sls", "mjf", "pbf"):
-        add("fit", tech, 1.0, "protolabs-toolkit", "error")
-        add("emboss", tech, 0.3048, "protolabs-toolkit", "warning")
-    add("wall_s", "fdm", 1.2, "xometry-fdm", "warning", "recommended at least 1.2-1.5 mm for supporting walls")
-    add("wall_u", "fdm", 1.2, "xometry-fdm", "warning", "recommended at least 1.2-1.5 mm for supporting walls")
-    add("hole", "fdm", 1.0, "xometry-fdm", "warning", "greater than 0.04 in (1 mm) to retain a circular shape")
-    add("emboss", "fdm", 1.0, "xometry-fdm", "warning")
-    # "Pins should be at least 1 mm in diameter and kept as short as possible." -- a should: a warning
-    add("pin", "fdm", 1.0, "xometry-fdm-tips", "warning", "pins should be at least 1 mm in diameter")
-    add("fit", "fdm", 1.0, "xometry-fdm", "error")
-    add("wall_s", "sla", 0.4, "xometry-sla", "error")
-    add("wall_u", "sla", 0.6, "xometry-sla", "error")
-    add("gap", "sla", 0.5, "xometry-sla", "error")
-    add("hole", "sla", 0.75, "xometry-sla", "error")
-    add("pin", "sla", 0.5, "xometry-sla", "error")
-    add("emboss", "sla", 0.3, "xometry-sla", "warning")
-    add("engrave_d", "sla", 0.5, "xometry-sla", "warning")
-    add("bridge", "sla", 20.0, "xometry-sla", "warning")
-    add("cantilever", "sla", 1.0, "xometry-sla", "warning")
-    add("clear", "sla", 0.5, "xometry-sla", "warning")
-    add("fit", "sla", 1.0, "xometry-sla", "error")
-    for tech in ("fdm", "sls", "mjf", "pbf"):
-        add("clear", tech, 0.762, "xometry-3dp", "warning", "clearance between features: at least 0.030 in")
-        # FDM's: the general line, no FDM limit -- a warning
-        add("gap", tech, 0.762, "xometry-3dp", "warning" if tech == "fdm" else "error",
-            "clearance between features: at least 0.030 in")
-    for tech in ("sls", "mjf", "pbf"):
-        add("wall_s", tech, 0.508, "xometry-3dp", "error")
-        add("wall_u", tech, 0.508, "xometry-3dp", "error")
-    for tech in ("sls", "mjf"):
-        add("fit", tech, 1.0, "xometry-guide", "error")
-    found: list[Rule] = []
-    found += _rules("printing.wall_supported", "wall_thickness", "thickness_mm", "min", "mm",
-                    "supported wall thickness", rows["wall_s"], _FIX_WALL, {"supported": True},
-                    "a wall joined to the part on two or more sides")
-    found += _rules("printing.wall_unsupported", "wall_thickness", "thickness_mm", "min", "mm",
-                    "unsupported wall thickness", rows["wall_u"], _FIX_WALL + ", or join it to the part on a second side",
-                    {"supported": False}, "a wall joined to the part on one side or none")
-    found += _rules("printing.wall", "wall_thickness", "thickness_mm", "min", "mm",
-                    "wall thickness (a mesh: whether supported is not known, judged as supported)", rows["wall_s"],
-                    _FIX_WALL, {"supported": None, "at_limit": (False, None)})
-    # a mesh's wall under the limit by no more than its chords may depart from the surface: at the limit within
-    # the mesh's accuracy (``_at_limit``), a warning whatever the limit's own severity
-    found += _rules("printing.wall", "wall_thickness", "thickness_mm", "min", "mm",
-                    "wall thickness (a mesh: whether supported is not known, judged as supported)",
-                    [(tech, limit, source, "warning", said) for tech, limit, source, _, said in rows["wall_s"]],
-                    _FIX_WALL + "; or check the exact model (a STEP or the model): the mesh cannot tell",
-                    {"supported": None, "at_limit": True},
-                    detail="at the limit within the mesh's accuracy: its chords may depart from the surface by "
-                           "{chord_mm:.3g} mm there, read from its curvature and edge lengths")
+    add("section", "pbf", 10.0, "hubs-metal", "warning")
+    # text-to-cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
+    add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN, "warning")
+    found: list[Rule] = _walls(rows["wall_s"], rows["wall_u"])
     found += _rules("printing.hole_diameter", "holes", "diameter_mm", "min", "mm", "hole diameter", rows["hole"],
                     "open it to at least {limit:g} mm, or drill it after printing")
     found += _rules("printing.pin_diameter", "pins", "diameter_mm", "min", "mm", "pin diameter", rows["pin"],
@@ -315,20 +337,29 @@ def _general() -> tuple[Rule, ...]:
                     "text-to-cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
                     "is hard to remove and turning the part 90 deg removes it",
                     detail="text-to-cad's own figure: no fetched guide states one")
+    # the rule judges a gap or a contact; bodies that pass through each other are their own finding
     found += _rules("printing.clearance", "clearances", "distance_mm", "min", "mm", "clearance between parts",
                     rows["clear"], "open the clearance to at least {limit:g} mm (parts printed together fuse); "
-                    + IN_PLACE)
+                    + IN_PLACE, {"kind": ("gap", "near", "contact")})
     found += _rules("printing.gap", "gaps", "gap_mm", "min", "mm", "gap between faces", rows["gap"],
                     "open the gap to at least {limit:g} mm or close it")
-    found += _rules("printing.escape_holes", "trapped_volumes", "escape_holes", "min", "count",
-                    "escape holes of a cavity", rows["escape_n"],
-                    "add an escape hole of at least 3.5 mm (two, opposite, drain best), or fill the cavity")
-    found += _rules("printing.escape_hole_diameter", "trapped_volumes", "min_escape_hole_mm", "min", "mm",
-                    "smallest escape hole of a cavity", rows["escape_d"], "open it to at least {limit:g} mm")
+    applied = "Hubs's SLS figure, applied: no fetched guide states one for {technology}"
+    # a hole under the limit by no more than its reading's own error (a mesh's round hole is a polygon inside
+    # the circle) is at the limit (``_at_limit``): no verdict turns on it
+    for count, diameter, detail in ((rows["escape_n"], rows["escape_d"], ""),
+                                    (rows["escape_n_applied"], rows["escape_d_applied"], applied)):
+        found += _rules("printing.escape_holes", "trapped_volumes", "escape_holes", "min", "count",
+                        "escape holes of a cavity", count,
+                        "add an escape hole of at least 3.5 mm (two, opposite, drain best), or fill the cavity",
+                        detail=detail)
+        found += _rules("printing.escape_hole_diameter", "trapped_volumes", "min_escape_hole_mm", "min", "mm",
+                        "smallest escape hole of a cavity", diameter, "open it to at least {limit:g} mm",
+                        {"escape_at_limit": (False, None)}, detail=detail)
     found += _rules("printing.hollow_wall", "trapped_volumes", "min_wall_mm", "min", "mm",
                     "wall around a hollow", rows["hollow"], "thicken the hollow's wall to at least {limit:g} mm")
-    # the machine given (--build-volume) is the printer's: a part over it is not made, an error; the assumed
-    # typical machine is no printer of the user's: a warning that names it
+    # The machine given (--build-volume) is the printer's: a part over it is not made, an error. With none
+    # given: over the typical machine assumed (no printer of the user's) is a warning that names it; over the
+    # largest machine the same page lists, in every orientation, no machine of the technology makes it: an error.
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
                     "part size over the build volume (best axis orientation)", rows["fit"],
                     "split the part, or print it on a larger machine", when={"machine_given": True},
@@ -337,8 +368,13 @@ def _general() -> tuple[Rule, ...]:
                     "part size over the build volume (best axis orientation)",
                     [(*row[:3], "warning", row[4]) for row in rows["fit"]],
                     "give the machine it prints on (--build-volume XxYxZ), or split the part",
-                    when={"machine_given": False},
+                    when={"machine_given": False, "beyond_largest": False},
                     detail="against an assumed typical {technology} machine, {machine} mm: give --build-volume")
+    found += _rules("printing.build_volume", "build_volume", "largest_fill_ratio", "max", "ratio",
+                    "part size over the largest machine listed (best axis orientation)", rows["fit"],
+                    "split the part into pieces a machine holds (--build-volume XxYxZ checks one)",
+                    when={"machine_given": False, "beyond_largest": True},
+                    detail="the largest {technology} machine the guide lists is {largest} mm, a typical one {machine} mm")
     found += _rules("printing.emboss_height", "details", "height_mm", "min", "mm", "embossed detail height",
                     rows["emboss"], "raise it to at least {limit:g} mm", {"kind": "emboss"})
     found += _rules("printing.engrave_depth", "details", "height_mm", "min", "mm", "engraved detail depth",
@@ -389,14 +425,9 @@ def angle_limit(resolved: dict[str, Any]) -> float:
 
 
 def wall_minimum(resolved: dict[str, Any]) -> float | None:
-    """The rules' unsupported-wall minimum for the technology: what a knife edge's thin depth is measured
-    against."""
-    for rule in RULES.rules:
-        if rule.id == "printing.wall_unsupported":
-            limit = rule.limit_for({"technology": resolved["technology"]})
-            if limit is not None:
-                return limit
-    return None
+    """The rules' unsupported-wall minimum for the technology (and the nozzle, where one is given): what a
+    knife edge's thin depth is measured against, and the thickness under which a wall's support is read."""
+    return max(_limits("printing.wall_unsupported", resolved, "error"), default=None)
 
 
 def layer_height(resolved: dict[str, Any]) -> float:
@@ -406,11 +437,12 @@ def layer_height(resolved: dict[str, Any]) -> float:
 
 def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
     """The build volume the fit is measured against: ``build_volume`` given, else a typical machine of the
-    technology's (``BUILD_VOLUMES``), assumed."""
+    technology's (``BUILD_VOLUMES``), assumed -- with the largest the same page lists (``LARGEST_VOLUMES``)."""
     if resolved.get("build_volume") is not None:
         return {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": "given"}
     volume, source = BUILD_VOLUMES[resolved["technology"]]
-    return {"volume_mm": [float(value) for value in volume], "origin": f"assumed ({SOURCES[source].url})"}
+    return {"volume_mm": [float(value) for value in volume], "origin": f"assumed ({SOURCES[source].url})",
+            "largest_mm": [float(value) for value in LARGEST_VOLUMES[resolved["technology"]]]}
 
 
 def validate(resolved: dict[str, Any], document_type: str) -> None:
@@ -456,7 +488,11 @@ def build_volume(text: str) -> tuple[float, float, float]:
 def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     material = materials.resolve(resolved.get("material"))
     machine = machine_volume(resolved)
-    return {"technology": resolved["technology"], "material": material,
+    fit = _ok(report.get("build_volume"))
+    return {**_context(resolved), "material": material,
+            # no orientation of the part fits the largest machine the guide lists (no build volume given)
+            "beyond_largest": fit.get("fits_largest") is False,
+            "largest": " x ".join(f"{value:g}" for value in machine.get("largest_mm") or ()) or None,
             "material_class": materials.material_class(material), "angle_limit": angle_limit(resolved),
             "angle_given": resolved.get("angle_limit") is not None,
             "layer_height": layer_height(resolved),
@@ -472,19 +508,48 @@ def _ok(family: Any) -> dict[str, Any]:
     return family if isinstance(family, dict) and "error" not in family else {}
 
 
+def _limits(rule_id: str, resolved: dict[str, Any], severity: str | None = None,
+            supported: Any = ...) -> list[float]:
+    """The limits ``rule_id``'s variants give this technology and nozzle (those of ``severity``, and for walls
+    of this ``supported``, where given)."""
+    context = _context(resolved)
+    return [limit for rule in RULES.rules
+            if rule.id == rule_id and severity in (None, rule.severity) and rule.applies(context)
+            and (supported is ... or rule.item_when.get("supported", ...) is supported)
+            for limit in [rule.limit_for(context)] if limit is not None]
+
+
 def _at_limit(report: dict[str, Any], resolved: dict[str, Any]) -> None:
-    """A mesh's wall (an item with ``chord_mm``) under ``printing.wall``'s limit by no more than its chords may
-    depart from the surface there, and past no limit by more, is at the limit within the mesh's accuracy
-    (``at_limit``): the rule's warning, not its error. Exact geometry's walls carry no ``chord_mm``."""
+    """A figure under its limit by no more than its own reading may be off is at the limit (no tolerance
+    cliff): the item says so, and its rule's variant for it judges it.
+
+    - A mesh's wall (an item with ``chord_mm``) under its rule's limit (the supported, the unsupported or the
+      unread wall's) by no more than its chords may depart from the surface there, and past no limit by more,
+      is ``at_limit``: the rule's warning, not its error. Exact geometry's walls carry no ``chord_mm``.
+    - A cavity's smallest escape hole under ``printing.escape_hole_diameter``'s limit by no more than its
+      ``escape_hole_uncertainty_mm`` (a round hole's chords stand inside its circle) is ``escape_at_limit``:
+      not judged under. One the voxels could only bound (``escape_hole_at_most``: narrower than a voxel) that
+      does not put it under the limit is not measured (None), never a pass."""
     walls = _ok(report.get("wall_thickness"))
-    limits = [limit for rule in RULES.rules if rule.id == "printing.wall" and rule.severity == "error"
-              for limit in [rule.limit_for({"technology": resolved["technology"]})] if limit is not None]
+    rule_of = {True: "printing.wall_supported", False: "printing.wall_unsupported", None: "printing.wall"}
     for item in walls.get("items") or ():
         chord, value = item.get("chord_mm"), item.get("thickness_mm")
         if not isinstance(chord, (int, float)) or not isinstance(value, (int, float)) or "at_limit" in item:
             continue
+        limits = _limits(rule_of[item.get("supported")], resolved, "error", item.get("supported"))
         under = [limit for limit in limits if value < limit]
         item["at_limit"] = bool(under) and all(limit <= value + chord for limit in under)
+    limits = _limits("printing.escape_hole_diameter", resolved)
+    for item in _ok(report.get("trapped_volumes")).get("items") or ():
+        value, slack = item.get("min_escape_hole_mm"), item.get("escape_hole_uncertainty_mm")
+        if not isinstance(value, (int, float)) or "escape_at_limit" in item:
+            continue
+        under = [limit for limit in limits if value < limit]
+        if item.get("escape_hole_at_most") and limits and not under:
+            item["min_escape_hole_mm"] = None  # under a voxel wide, and a voxel is no narrower than the limit
+            continue
+        item["escape_at_limit"] = bool(under) and isinstance(slack, (int, float)) and \
+            all(limit <= value + slack for limit in under)
 
 
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
@@ -506,6 +571,15 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       "-- read every figure below with that",
                                       where(opened[0].get("xyz")) if opened else "mesh",
                                       "close the surface (repair the mesh), or export it again from the model"))
+        repairs = [f"{mesh[key]} {said}" for key, said in (
+            ("duplicate_faces_dropped", "triangle(s) doubled in place dropped"),
+            ("faces_rewound", "triangle(s) wound against their neighbours turned"),
+            ("shells_turned", "closed shell(s) wound inside out turned to face outward")) if mesh.get(key)]
+        if repairs:
+            # said, never silent: what was measured is the mesh repaired, and a slicer reads the file as it is
+            found.append(CheckFinding("warning", "mesh_repaired", "the mesh was repaired before it was measured: "
+                                      + "; ".join(repairs) + ". A slicer may read the file as it is differently",
+                                      "mesh", "export it again from the model, or repair the file"))
         if (mesh.get("body_count") or 0) > 1:
             found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: walls are "
                                       "measured per body", "mesh"))
@@ -549,6 +623,19 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     if (solid.get("body_count") or 0) > 1:
         found.append(CheckFinding("info", "several_bodies", f"{solid['body_count']} solids in {solid['part_count']} "
                                   "part(s): each is measured on its own, their clearances between", "solid"))
+    # Bodies that pass through each other: one finding a pair (the clearance rule judges gaps and contacts).
+    crossing = [item for item in _ok(report.get("clearances")).get("items") or () if item.get("kind") == "overlap"]
+    for item in crossing[:8]:
+        names = item.get("parts") or [f"body {index + 1}" for index in item.get("bodies") or ()]
+        shared = f" ({item['overlap_mm3']:g} mm3 shared)" if item.get("overlap_mm3") else ""
+        found.append(CheckFinding(
+            "warning", "bodies_intersect", f"{' and '.join(str(name) for name in names) or 'two bodies'} pass "
+            f"through each other{shared}: a slicer may join them or fill the overlap twice, and the volume given is "
+            "the bodies' sum, their overlap counted twice", item.get("location") or where(item.get("xyz")),
+            "join them into one body (a union), or move them apart"))
+    if len(crossing) > 8:
+        found.append(CheckFinding("warning", "bodies_intersect", f"{len(crossing) - 8} more pairs pass through "
+                                  "each other (measurements.clearances lists every one)", "clearances"))
     if candidates:
         return found
     overhangs = _ok(report.get("overhangs"))
@@ -568,6 +655,23 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             faces[0].get("location") or where(faces[0].get("location_xyz")),
             "support it, chamfer the undersides to the angle or steeper, or turn the part (--candidates ranks the "
             "orientations; turn it in the model)" if technology not in POWDER else None))
+    # What the mesh could not judge, said: surface and edges within its own angular deflection of a limit. The
+    # exact model has the angle; a finer mesh narrows the band.
+    knives = _ok(report.get("knife_edges"))
+    near_area = overhangs.get("at_limit_area_mm2") or 0.0
+    near_slope = near_area >= (overhangs.get("area_floor_mm2") or 0.0) and (overhangs.get("at_limit_tolerance_deg") or 0) >= 0.01
+    if mesh and (near_slope or knives.get("at_limit_count")):
+        said = []
+        if near_slope:
+            said.append(f"{near_area:g} mm2 of down-facing surface reads under the {overhangs['angle_limit_used_deg']:g} "
+                        f"deg limit by less than the mesh's chords turn from the surface there (up to "
+                        f"{overhangs['at_limit_tolerance_deg']:g} deg)")
+        if knives.get("at_limit_count"):
+            said.append(f"{knives['at_limit_count']} edge(s), {knives['at_limit_length_mm']:g} mm, read within "
+                        f"{knives['at_limit_tolerance_deg']:g} deg of a knife edge's {knives.get('knife_below_deg', 45):g} deg")
+        found.append(CheckFinding("info", "mesh_at_limit", "at the limit within the mesh's accuracy, not judged: "
+                                  + "; ".join(said), "mesh",
+                                  "check the exact model (its STEP), or export a finer mesh"))
     # a face on the plate's edge that faces down under the limit (a 45 deg chamfer there is the cure, not one)
     edge = [item for item in overhangs.get("items") or ()
             if item.get("kind") == "plate_edge" and (item.get("area_below_limit_mm2") or 0) > 0]

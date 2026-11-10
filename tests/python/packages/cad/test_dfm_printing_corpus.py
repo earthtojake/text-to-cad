@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 """3D printing's planted-defect corpus: parts built with known defects -- and clean controls -- checked for
-every technology through ``cad.step.dfm`` (and a mesh path through ``cad.stl.dfm``), each rule's
-verdicts compared with the construction: which rules must fire, where, and that nothing else does.
+every technology (each STEP read and measured once, its rules judged per technology; one of them through
+``cad.step.dfm`` too, the same verdicts) and a mesh path through ``cad.stl.dfm``, each rule's verdicts
+compared with the construction: which rules must fire, where, and that nothing else does.
 
 The ground truth is here, beside the parts: each planted defect is (rule id, the technologies whose
 rules have a limit it breaks, its place, a radius). A failure the rules record
@@ -28,6 +29,9 @@ import build123d as bd
 import numpy as np
 
 import cad
+from cad._internal import manufacturing
+from cad.build123d import _dfm_brep as brep
+from cad.build123d import _dfm_printing as measured
 
 A = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 TOP = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX)
@@ -70,11 +74,12 @@ def features():
         ("printing.engrave_width", ("sla", "pbf"), (25, 0, 4), 5.0),
         ("printing.gap", ALL, (25, 0, 4), 5.0),
     ]
-    # a mesh has no axes: the pin is a thin wall, the hole a gap, the steps not measured
+    # a mesh's walls are read as exact geometry's are, their support off the wall itself; it has no axes: the
+    # pin is a thin wall joined at its foot alone, the hole a gap, the steps not measured
     mesh = [
-        ("printing.wall", ALL, (-25, 10, 8), 7.0),
-        ("printing.wall", ALL, (-25, -10, 8), 8.0),
-        ("printing.wall", ALL, (-5, 12, 6), 3.0),
+        ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
+        ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
+        ("printing.wall_unsupported", ALL, (-5, 12, 6), 3.0),
         ("printing.gap", ALL, (-5, -12, 2), 3.0),
         ("printing.gap", ALL, (10, 10, 2.5), 7.0),
         ("printing.gap", ALL, (25, 0, 4), 5.0),
@@ -255,17 +260,28 @@ class CorpusTest(unittest.TestCase):
         cls.folder.cleanup()
 
     def test_every_planted_defect_and_nothing_else(self) -> None:
-        tally, started, facts = Tally(), time.monotonic(), {}
+        tally, started, facts, results = Tally(), time.monotonic(), {}, {}
         for name, (_, step, planted, _) in self.parts.items():
-            for technology in ALL:
-                result = cad.step.dfm(step, process="printing", technology=technology, samples=SAMPLES)
+            # read and measured once, judged per technology: what no option decides (the solids, the voxel
+            # fields and their cavities, the holes, the gaps) is not measured again (``measure_each``)
+            each = [manufacturing.options("step", "printing", {"technology": technology, "samples": SAMPLES})
+                    for technology in ALL]
+            reports = measured.measure_each(brep.read("step", step), each)
+            for technology, resolved, report in zip(ALL, each, reports):
+                result = manufacturing.finish(Path(name), {"process": "printing", **report}, "printing", resolved, False)
                 self.assertFalse(result.measurements.get("partial"), f"{name} {technology}: "
                                  f"{result.measurements.get('partial_sections')}")
                 tally.score(name, result, planted, technology)
                 facts[(name, technology)] = result.measurements
+                results[(name, technology)] = result
         print(f"\nprinting corpus, exact geometry ({time.monotonic() - started:.1f} s)\n{tally.table()}",
               file=sys.stderr)
         self.assertEqual(tally.misses, [], "\n".join(tally.misses))
+        # through the door a person uses, a technology that is not the first measured: the same verdicts
+        public = cad.step.dfm(self.parts["features"][1], process="printing", technology="sls", samples=SAMPLES)
+        self.assertEqual(sorted(_failures(public)), sorted(_failures(results[("features", "sls")])))
+        self.assertEqual([finding.code for finding in public.findings if finding.severity == "error"],
+                         [finding.code for finding in results[("features", "sls")].findings if finding.severity == "error"])
         # the facts the controls and edge cases stand for
         inch = facts[("inch", "fdm")]
         np.testing.assert_allclose(inch["solid"]["bbox_mm"], [40.0, 30.0, 30.0], atol=1e-3,

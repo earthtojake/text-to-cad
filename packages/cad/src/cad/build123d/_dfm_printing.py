@@ -42,7 +42,7 @@ from cad._internal.dfm import checkpoint
 from cad._internal.dfm import printing as rules
 from cad.build123d import _dfm_brep as brep
 
-__all__ = ["measure"]
+__all__ = ["measure", "measure_each"]
 
 #: Items a family lists, at most (worst first); the rest are counted.
 CAP = 300
@@ -410,9 +410,9 @@ def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, out
         return
 
 
-def _facing(rays: brep.Rays, props: dict[int, Any], hit: tuple, direction: np.ndarray) -> bool:
-    """Whether the face a ray of ``direction`` crossed (``hit``: distance, face index, u, v) looks back along it:
-    its outward normal there within ``KNIFE_DEG`` of the ray."""
+def _normal_at(rays: brep.Rays, props: dict[int, Any], hit: tuple) -> np.ndarray | None:
+    """The outward unit normal of the face a ray crossed, where it crossed (``hit``: distance, face index, u, v);
+    None at a degenerate point (a cone's apex)."""
     from OCP.BRepGProp import BRepGProp_Face
     from OCP.gp import gp_Pnt, gp_Vec
 
@@ -423,10 +423,35 @@ def _facing(rays: brep.Rays, props: dict[int, Any], hit: tuple, direction: np.nd
     props[face].Normal(float(hit[2]), float(hit[3]), point, normal)
     length = normal.Magnitude()
     if not length > 1e-300:
+        return None
+    return np.array([normal.X(), normal.Y(), normal.Z()]) / length
+
+
+def _facing(rays: brep.Rays, props: dict[int, Any], hit: tuple, direction: np.ndarray) -> bool:
+    """Whether the face a ray of ``direction`` crossed (``hit``: distance, face index, u, v) looks back along it:
+    its outward normal there within ``KNIFE_DEG`` of the ray."""
+    n = _normal_at(rays, props, hit)
+    if n is None:
         return True  # a degenerate point (a cone's apex): no normal to turn away
-    n = np.array([normal.X(), normal.Y(), normal.Z()]) / length
     d = direction / (np.linalg.norm(direction) or 1.0)
     return float(n @ d) > _FACING
+
+
+def _cast(ctx: "Context", part: int) -> Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+    """``meshops_printing.wall_support``'s rays on a part, exact: each ray's distance to the surface and the
+    surface's outward normal where it lands."""
+    rays, props = ctx.rays(part), {}
+
+    def cast(origins: np.ndarray, directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        distance, normals = np.full(len(origins), np.inf), np.zeros((len(origins), 3))
+        for k, hit in enumerate(_first_hits(rays, np.asarray(origins, dtype=float),
+                                            np.asarray(directions, dtype=float), 1e-7, 1e9)):
+            normal = _normal_at(rays, props, hit) if hit is not None else None
+            if normal is not None:
+                distance[k], normals[k] = hit[0], normal
+        return distance, normals
+
+    return cast
 
 
 def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, start: float, end: float,
@@ -814,8 +839,9 @@ def _bridges(ctx: Context) -> dict[str, Any]:
 
 
 def _connections(ctx: Context, part: int, ordinal: int) -> int:
-    """The sides a face is joined to the part by: its concave edges (and smooth ones into a concave round);
-    a closed ring (a tube's face) counts as joined all round."""
+    """The sides a face is joined to the part by, counted on its edges: its concave edges (and smooth ones into
+    a concave round); a closed ring (a tube's face) counts as joined all round. The quick reading, for the walls
+    no verdict turns on (``_walls``): a skin over a cavity has no concave edge and reads 0."""
     if ctx.info(part, ordinal).coverage_deg >= 355.0:
         return 2
     count = 0
@@ -912,6 +938,7 @@ def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, 
 
 def _walls(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
+    minimum = rules.wall_minimum(ctx.options)
     items, every, where = [], [], []
     for part, infos in enumerate(ctx.faces):
         checkpoint()
@@ -948,7 +975,8 @@ def _walls(ctx: Context) -> dict[str, Any]:
                           "thickness_mm": _r(thinnest[0], JUDGED), "median_mm": _r(float(np.median(values)), 4),
                           "opposite": ctx.ref(part, thinnest[2]), "faces": [ctx.ref(part, thinnest[2])],
                           "supported": joined >= 2, "joined_sides": joined, "samples": len(values), "sampled": True,
-                          "_at": (part, info.ordinal, thinnest[2])})
+                          "_at": (part, info.ordinal, thinnest[2]),
+                          "_sample": (info.samples[thinnest[1]], float(thinnest[0]))})
     if not every:
         return {"items": [], "samples_valid": 0, "note": "no ray met a wall: the shape is open or empty"}
     field_ = np.array(every)
@@ -958,11 +986,18 @@ def _walls(ctx: Context) -> dict[str, Any]:
             _refine(ctx, part, item, i, j, outward=False)
     seen, unique = set(), []
     for item in sorted(items, key=lambda item: item["thickness_mm"]):
-        item.pop("_at", None)
+        part = item.pop("_at")[0]
+        sample, sampled = item.pop("_sample")
         pair = tuple(sorted((item["location"], item["opposite"])))
         if pair not in seen:
             seen.add(pair)
             unique.append(item)
+            # a wall a verdict can turn on (under the unsupported minimum) has its support read off the wall
+            # itself, as a mesh's is (``mo.wall_support``): where it runs into the part, and on how many sides
+            if minimum is not None and item["thickness_mm"] < minimum and len(unique) <= CAP:
+                found = mo.wall_support(_cast(ctx, part), sample.point, sample.normal, sampled)
+                if found["supported"] is not None:
+                    item.update(supported=found["supported"], joined_sides=found["joined_sides"])
     items, count = _capped(unique, lambda item: item["thickness_mm"])
     thinnest = sorted(where, key=lambda pair: pair[0])[:8]
     # the least is the thinner of the field's and a refined item's: the summary never reads thicker than a finding
@@ -1363,7 +1398,8 @@ def _grid(ctx: Context, part: int) -> tuple[Any, list[mo.Cavity], np.ndarray, fl
     remap = np.full(len(V), -1)
     remap[used] = np.arange(len(used))
     grid = mo.voxels(V[used], remap[F[own]], pitch, pad=mo.ball_pad(ball, pitch))
-    found, labels = mo.cavities(grid, ball)
+    # each opening's throat is measured on the part's triangulation (``mo.cavities``): to its deflection
+    found, labels = mo.cavities(grid, ball, caster=mo.Caster(V[used], remap[F[own]]))
     ctx._grids[part] = (grid, found, labels, ball)
     return ctx._grids[part]
 
@@ -1439,10 +1475,8 @@ def _trapped(ctx: Context) -> dict[str, Any]:
         def label(point: np.ndarray, grid: Any = grid, labels: np.ndarray = labels) -> int:
             return int(labels[grid.index(np.asarray(point))[0]])
 
-        cavities: list[dict[str, Any]] = []
-        for k, cavity in enumerate(found):
-            cavities.append({"k": k, "volume_mm3": cavity.volume_mm3, "sealed": cavity.sealed, "exact": False,
-                             "centroid": cavity.centroid, "faces": [], "openings": cavity.openings, "holes": []})
+        cavities: list[dict[str, Any]] = [{"k": k, "cavity": cavity, "shell": None, "faces": [], "holes": []}
+                                          for k, cavity in enumerate(found)]
         # every inner shell is a sealed cavity, measured exactly; it replaces the voxels' reading of it
         for shell in exact:
             k = None
@@ -1457,10 +1491,9 @@ def _trapped(ctx: Context) -> dict[str, Any]:
                     break
             entry = next((c for c in cavities if c["k"] == k), None) if k is not None else None
             if entry is None:
-                entry = {"k": None, "openings": [], "holes": []}
+                entry = {"k": None, "cavity": None, "holes": []}
                 cavities.append(entry)
-            entry.update(volume_mm3=shell["volume_mm3"], sealed=True, exact=True, centroid=shell["centroid"],
-                         faces=shell["faces"])
+            entry.update(shell=shell, faces=shell["faces"])
         # escape holes: each run of a hole along its axis with one end in the cavity and the other outside --
         # a run, not the whole round, so one cut through two opposite walls is the two holes it makes
         for index, group in ctx.rounds_of(True):
@@ -1483,25 +1516,26 @@ def _trapped(ctx: Context) -> dict[str, Any]:
                 walls = [(rows[i][0], rows[i][1]) for i in np.flatnonzero(facing == cavity["k"])]
             for ordinal in cavity["faces"]:
                 walls += [(t, ordinal) for t, _, _ in ctx.info(part, ordinal).thickness]
-            diameters = sorted(2.0 * group.radius for group in cavity["holes"])
-            # voxel openings no hole explains: an opening of another shape, its width estimated
-            for opening in cavity["openings"]:
-                explained = False
-                for group in cavity["holes"]:
-                    rel = opening["xyz"] - group.origin
-                    off = np.linalg.norm(rel - group.axis * float(rel @ group.axis))
-                    explained |= bool(off <= group.radius + 2.0 * grid.pitch)
-                if not explained:
-                    diameters.append(float(opening["diameter_mm"]))
-            diameters.sort()
+            shell = cavity["shell"]
+            if shell is not None:
+                item = {"xyz": shell["centroid"], "volume_mm3": _r(shell["volume_mm3"], 2), **mo.SEALED_EXACT}
+            else:
+                # the exact holes' diameters, and the throat of every opening no hole explains: an opening of
+                # another shape, measured on the triangulation
+                diameters = [(2.0 * group.radius, 0.0) for group in cavity["holes"]]
+                for opening in cavity["cavity"].openings:
+                    explained = False
+                    for group in cavity["holes"]:
+                        rel = opening["xyz"] - group.origin
+                        off = np.linalg.norm(rel - group.axis * float(rel @ group.axis))
+                        explained |= bool(off <= group.radius + 2.0 * grid.pitch)
+                    if not explained:
+                        diameters.append((float(opening["diameter_mm"]), float(opening["uncertainty_mm"])))
+                item = mo.trapped_item(cavity["cavity"], grid.pitch, diameters)
             thinnest = min(walls) if walls else None
             location = (ctx.ref(part, thinnest[1]) if thinnest else
                         ctx.ref(part, cavity["faces"][0]) if cavity["faces"] else ctx.ref(part, 1))
-            items.append({"location": location, "xyz": _xyz(cavity["centroid"]),
-                          "volume_mm3": _r(cavity["volume_mm3"], 2), "sealed": bool(cavity["sealed"] and not diameters),
-                          "exact": cavity["exact"], "escape_holes": len(diameters),
-                          "escape_hole_diameters_mm": [_r(d, 4) for d in diameters],
-                          "min_escape_hole_mm": _r(diameters[0], JUDGED) if diameters else None,
+            items.append({"location": location, **item, "xyz": _xyz(item["xyz"]),
                           "min_wall_mm": _r(thinnest[0], JUDGED) if thinnest else None,
                           "faces": [ctx.ref(part, ordinal) for ordinal in cavity["faces"][:12]]})
         ctx._grids[part] = _DROPPED
@@ -1509,8 +1543,8 @@ def _trapped(ctx: Context) -> dict[str, Any]:
     return {"items": items, "count": count, "sealed_count": sum(1 for item in items if item["sealed"]),
             "trapped_volume_mm3": _r(sum(item["volume_mm3"] or 0 for item in items), 2),
             "pitch_mm": _r(max(pitches), 4) if pitches else None, "ball_radius_mm": _r(max(balls), 3) if balls else None,
-            "method": "inner shells exactly; air a ball cannot reach from outside, from a voxel field; escape holes the "
-                      "exact holes from a cavity to outside, other openings estimated from the voxels"}
+            "method": mo.TRAPPED_METHOD + "; escape holes the exact holes from a cavity to outside, every other "
+                      "opening's throat measured on the triangulation"}
 
 
 def _build_volume(ctx: Context) -> dict[str, Any]:
@@ -1613,6 +1647,26 @@ def _pitch(ctx: Context) -> float:
     return mo.raster_pitch(ctx.hi - ctx.lo)
 
 
+def _at_limit(ctx: Context, turned: np.ndarray | None = None) -> np.ndarray:
+    """The triangles (a mask) of the triangulation whose face, the document turned by the rotation ``turned``
+    where given, is nowhere under the angle limit: the support raster and the orientations read the triangles,
+    and a round's chords turn from its surface -- a 45 deg cone's triangles read 44.3 deg, where the cone, read
+    exactly on its samples, is at 45 and needs no support."""
+    V, F, O = ctx.mesh()
+    under: set[int] = set()
+    for infos in ctx.faces:
+        for info in infos:
+            normals = np.array([sample.normal for sample in info.samples]).reshape(-1, 3)
+            if info.surface.kind == "plane" and info.surface.normal is not None:
+                normals = np.array([info.surface.normal], dtype=float)
+            if turned is not None:
+                normals = normals @ np.asarray(turned, dtype=float).T
+            if len(normals) and bool(((normals[:, 2] < -1e-9) &
+                                      (mo.angles(normals) < ctx.angle_limit - mo.ANGLE_EPS)).any()):
+                under.add((info.part << 20) | info.ordinal)
+    return ~np.isin(O, np.fromiter(under, dtype=np.int64, count=len(under)))
+
+
 def _cosmetic(ctx: Context) -> set[int]:
     """The faces a support mark spoils, as owners: each part's faces of 5% of its area or more, holes aside."""
     chosen = set()
@@ -1629,7 +1683,7 @@ def _cosmetic(ctx: Context) -> set[int]:
 
 def _support(ctx: Context) -> dict[str, Any]:
     V, F, O = ctx.mesh()
-    held = mo.support(V, F, ctx.angle_limit, _pitch(ctx), plate_z=ctx.z0, owners=O)
+    held = mo.support(V, F, ctx.angle_limit, _pitch(ctx), plate_z=ctx.z0, owners=O, skip=_at_limit(ctx))
     volume = sum(float(part.shape.volume) for part in ctx.parts)
     cosmetic = _cosmetic(ctx)
     items = [{"location": ctx.owner_ref(owner), "contact_mm2": _r(area, 3), "cosmetic": owner in cosmetic}
@@ -1704,7 +1758,7 @@ def _orientations(ctx: Context) -> dict[str, Any]:
         if len(candidates) >= 10:
             break
     rows = mo.orientation_rows(V, F, candidates, ctx.angle_limit, _pitch(ctx), SHALLOW_DEG, owners=O,
-                               cosmetic=_cosmetic(ctx))
+                               cosmetic=_cosmetic(ctx), at_limit=lambda R: _at_limit(ctx, R))
     volume = np.array(rules.machine_volume(ctx.options)["volume_mm"])
     for row in rows:
         box = np.array(row["bbox_mm"])
@@ -1728,19 +1782,58 @@ FAMILIES: tuple[tuple[str, Callable[[Context], dict[str, Any]]], ...] = (
 )
 
 
+#: The families no option decides but the samples: read once a ``Context``, whatever it is then measured for
+#: (``measure_each``). The others read the technology's angle limit, layer, wall minimum or machine.
+FIXED = frozenset({"solid", "scale", "gaps", "holes", "pins", "details", "clearances", "trapped_volumes", "bed",
+                   "sections"})
+
+
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The printing report of ``document``: facts alone, every family's ``items`` at a ref."""
     from cad._internal.dfm import Unmeasured
 
     if not document.parts:
         raise Unmeasured("not_measured", "the document has no parts to print")
-    ctx = Context(document, options)
+    return _report(Context(document, options), candidates, {})
+
+
+def measure_each(document: brep.Document, each: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The printing reports of ``document`` for each of the options ``each`` -- the same but for what a
+    technology changes -- the document read once: its faces sampled, its rays cast, its triangulation and its
+    voxel fields made once serve them all, the families no option decides (``FIXED``) are measured once, and
+    what an option decides (the overhangs under its angle, a knife's thin depth and a wall's support against its
+    wall minimum, the support, the build volume) is read again for each. Each report is what ``measure`` answers
+    for its options."""
+    import copy
+
+    from cad._internal.dfm import Unmeasured
+
+    if not document.parts:
+        raise Unmeasured("not_measured", "the document has no parts to print")
+    if len({options.get("samples") for options in each}) > 1:
+        raise ValueError("measure_each: the options differ in samples, which decide what is read once")
+    ctx, kept, found = Context(document, each[0]), {}, []
+    for options in each:
+        ctx.options, ctx.technology = options, options["technology"]
+        ctx.angle_limit, ctx.layer = rules.angle_limit(options), rules.layer_height(options)
+        for name in ("_zones", "_runs"):  # the knives' thin depths, against this technology's wall minimum
+            ctx.__dict__.pop(name, None)
+        found.append(copy.deepcopy(_report(ctx, False, kept)))
+    return found
+
+
+def _report(ctx: Context, candidates: bool, kept: dict[str, Any]) -> dict[str, Any]:
+    """``ctx``'s report for its options; a family of ``FIXED`` already in ``kept`` is not measured again, and
+    one measured is kept there."""
     report: dict[str, Any] = {"technology": ctx.technology}
     if candidates:
         report["scale"] = _safe(lambda: _scale(ctx))
         report["orientations"] = _safe(lambda: _orientations(ctx))
     else:
         for name, family in FAMILIES:
+            if name in FIXED and name in kept:
+                report[name] = kept[name]
+                continue
             ctx.used_rays = False
             before = ctx.failures()
             report[name] = _safe(lambda family=family: family(ctx))
@@ -1752,6 +1845,8 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             refs = sorted(ctx.parts[part].ref("face", ordinal) for part, ordinals in lost.items() for ordinal in ordinals)
             if refs and isinstance(report[name], dict) and "error" not in report[name]:
                 report[name]["unmeasured_faces"] = refs
+            if name in FIXED:
+                kept[name] = report[name]
     failed = sorted(name for name, value in report.items() if isinstance(value, dict) and "error" in value)
     missed = [brep.unintersected(ctx.parts[index], [rays.screen], [rays.faces]) for index, rays in sorted(ctx._rays.items())]
     if any(missed):

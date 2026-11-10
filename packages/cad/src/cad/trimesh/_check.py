@@ -49,6 +49,8 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         try:
             stl = _mesh_file(path, Path(folder))
             mesh = _mesh.load(str(stl), options["units"])
+        except Unmeasured:  # the gate's own refusal (``_mesh.readable``, ``_mesh.sound``), in its words
+            raise
         except Exception as error:  # noqa: BLE001 - a mesh that does not read is the check's answer
             raise Unmeasured("mesh_unreadable", f"failed to load mesh: {error}") from None
         if process == "printing":

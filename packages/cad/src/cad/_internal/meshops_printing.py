@@ -11,8 +11,9 @@ plain arrays and numbers:
   the part's surface the supports touch (per triangle owner: a face ordinal), from a raster along Z;
 - ``voxels``: the material (by the winding of each Z line's crossings) and the surface (every voxel a
   crossing along X, Y or Z passes through), so a wall thinner than a voxel still closes a cavity;
-- ``cavities``: air the outside cannot reach -- sealed, or reachable only through openings narrower
-  than a ball (a hollow part's drain holes) -- with each cavity's volume and openings;
+- ``Caster``: rays against the triangles in bounded memory (a linear bounding-volume hierarchy);
+- ``cavities``: air wider than its way out -- sealed, or open through a throat narrower than the air behind
+  it (a hollow part's drain holes), whatever the cavity's shape -- with each cavity's volume and openings;
 - ``span``: a flat overhang's span between the walls that carry it (a bridge) or its reach beyond the
   one wall that does (a cantilever);
 - ``orientation_rows`` and ``ranked``: each candidate rotation's support volume and contact, build height,
@@ -29,10 +30,10 @@ import numpy as np
 
 from cad._internal.dfm import checkpoint
 
-__all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS",
-           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
+__all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
+           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "SPREADS", "Smooth", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
            "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
-           "voxels"]
+           "voxels", "wall_support"]
 
 # Lines of a raster are offset by these irrational fractions of the pitch, so no line runs exactly
 # through a vertex or along an edge of a mesh built on round numbers (each crossing counted once).
@@ -92,6 +93,406 @@ def frame(V: np.ndarray, F: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def angles(normals: np.ndarray) -> np.ndarray:
     """Each surface's angle from horizontal, in degrees: 0 a flat floor or ceiling, 90 a wall."""
     return np.degrees(np.arccos(np.clip(np.abs(normals[..., 2]), 0.0, 1.0)))
+
+
+#: The relative spacing of the numbers a mesh file holds (a binary STL's, a GLB's: 32-bit floats), four of
+#: them to a triangle's normal: the floor of every angular tolerance (``Smooth.noise``), so one triangle alone
+#: -- no neighbour to scatter against -- still reads a 45 deg face as 45 however the part is turned.
+_COORDINATE_NOISE = 4.0 * 2.0 ** -23
+#: An angle read off a triangle (its own normal's) stands within this many times the spread between that
+#: reading and the same angle read off its corners' smoothed normals of the surface's own (``Smooth``). Measured
+#: on cones of 20 to 60 deg, a sphere and a torus meshed at 0.05 to 0.5 rad of angular deflection against their
+#: exact normals: the spread itself held 66 to 100 % of the triangles, twice it every one (but the poles of the
+#: coarsest sphere). ``tests``: a 45 deg cone's every triangle reads 45 within its tolerance, fine and coarse.
+SPREADS = 2.0
+
+
+@dataclass
+class Smooth:
+    """The surface a mesh stands for, as the mesh itself knows it (``smooth``): at each corner of each
+    triangle the surface's normal there -- the mean, by the angle each takes up at the corner, of the normals of
+    the triangles round it that are the triangle's own surface -- and each triangle's ``noise``, degrees: what
+    its coordinates' own spacing can turn its normal by (their size over its least height).
+
+    A triangle is a chord of the surface: its normal turns from the surface's by about half the turn to its
+    neighbours, so an angle read off it is the surface's only to within that. Every comparison of a triangle's
+    angle with a limit reads the same angle off the corners' normals too, and takes ``SPREADS`` times the
+    difference (and the noise) as the reading's tolerance (``within``): nothing on a plane, a degree on a
+    cone's chords -- whose triangles read 44.3 to 45.4 deg where the cone is 45, every one of them at 45."""
+
+    normals: np.ndarray     # (m, 3) each triangle's own
+    corners: np.ndarray     # (m, 3, 3) the surface's at each of its corners
+    noise: np.ndarray       # (m,) degrees
+
+    def within(self, read: np.ndarray, smoothed: np.ndarray, triangles: Any) -> np.ndarray:
+        """The tolerance, degrees, of the angles ``read`` off ``triangles``' own normals, given the same angles
+        ``smoothed`` (read off their corners' normals; (n, k): the most of the k counts): see the class."""
+        spread = np.abs(np.asarray(smoothed, dtype=float).reshape(len(read), -1) - np.asarray(read)[:, None]).max(axis=1)
+        return SPREADS * spread + self.noise[triangles]
+
+    def slopes(self, turned: np.ndarray | None = None) -> np.ndarray:
+        """Each triangle's tolerance on its angle from horizontal (``angles``), the mesh turned by the rotation
+        ``turned`` where given."""
+        normals, corners = (self.normals, self.corners) if turned is None else \
+            (self.normals @ turned.T, self.corners @ turned.T)
+        return self.within(angles(normals), angles(corners), slice(None))
+
+    def at(self, triangles: np.ndarray, points: np.ndarray, V: np.ndarray, F: np.ndarray) -> np.ndarray:
+        """The surface's normal at ``points`` on ``triangles``: their corners' normals, weighed by where each
+        point lies in its triangle."""
+        tri = np.asarray(V, dtype=float)[np.asarray(F, dtype=int)[triangles]]
+        e0, e1, rel = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0], np.asarray(points, dtype=float) - tri[:, 0]
+        d00, d01, d11 = (np.einsum("ij,ij->i", e0, e0), np.einsum("ij,ij->i", e0, e1), np.einsum("ij,ij->i", e1, e1))
+        d20, d21 = np.einsum("ij,ij->i", rel, e0), np.einsum("ij,ij->i", rel, e1)
+        den = d00 * d11 - d01 * d01
+        den = np.where(np.abs(den) > 1e-300, den, 1.0)
+        b1 = np.clip((d11 * d20 - d01 * d21) / den, 0.0, 1.0)
+        b2 = np.clip((d00 * d21 - d01 * d20) / den, 0.0, 1.0)
+        weights = np.stack([np.clip(1.0 - b1 - b2, 0.0, 1.0), b1, b2], axis=1)
+        mixed = np.einsum("ik,ikj->ij", weights, self.corners[triangles])
+        return mixed / np.maximum(np.linalg.norm(mixed, axis=1, keepdims=True), 1e-300)
+
+
+#: Triangles round one corner that its smoothed normal is read from, at most (a fan's hub has thousands, all
+#: alike), and corner-triangle pairs weighed at once.
+_SMOOTH_ROUND = 256
+_SMOOTH_PAIRS = 2_000_000
+
+
+def smooth(V: np.ndarray, F: np.ndarray, within_deg: float = 30.0) -> Smooth:
+    """``Smooth`` of a mesh: each triangle's corners' normals the mean of the triangles round the corner whose
+    own normals turn from the triangle's by under ``within_deg`` (its surface's, not an edge's other side, nor
+    the next face round a mitre), each weighed by the angle it takes up at the corner -- so a surface cut into
+    triangles either way reads the same."""
+    V, F = np.asarray(V, dtype=float), np.asarray(F, dtype=int)
+    tri = V[F]
+    normals, areas = frame(V, F)
+    if not len(tri):
+        return Smooth(normals, np.zeros((0, 3, 3)), np.zeros(0))
+    edges = [tri[:, (k + 1) % 3] - tri[:, k] for k in range(3)]
+    lengths = [np.linalg.norm(edge, axis=1) for edge in edges]
+    corner = np.empty((len(tri), 3))
+    for k in range(3):
+        cosine = np.einsum("ij,ij->i", edges[k], -edges[(k + 2) % 3]) / \
+            np.maximum(lengths[k] * lengths[(k + 2) % 3], 1e-300)
+        corner[:, k] = np.arccos(np.clip(cosine, -1.0, 1.0))
+    # the triangles round each vertex, and the angle each takes up there
+    flat = F.ravel()
+    order = np.argsort(flat, kind="stable")
+    first = np.searchsorted(flat[order], np.arange(len(V) + 1))
+    round_face, round_angle = order // 3, corner.ravel()[order]
+    count = np.diff(first)[flat]
+    taken = np.minimum(count, _SMOOTH_ROUND)
+    summed = np.zeros((len(flat), 3))
+    alike = math.cos(math.radians(within_deg))
+    ends = np.cumsum(taken)
+    begin = 0
+    while begin < len(flat):
+        checkpoint()
+        stop = max(begin + 1, int(np.searchsorted(ends, (ends[begin - 1] if begin else 0) + _SMOOTH_PAIRS)))
+        rows = np.repeat(np.arange(begin, stop), taken[begin:stop])
+        nth = np.arange(len(rows)) - np.repeat(ends[begin:stop] - taken[begin:stop] - (ends[begin - 1] if begin else 0),
+                                               taken[begin:stop])
+        # a corner of more triangles than are read: every (count / taken)-th of them
+        pick = first[flat[rows]] + (nth * count[rows]) // taken[rows]
+        other = round_face[pick]
+        keep = np.einsum("ij,ij->i", normals[rows // 3], normals[other]) > alike
+        weighed = normals[other[keep]] * round_angle[pick[keep]][:, None]
+        for axis in range(3):
+            summed[:, axis] += np.bincount(rows[keep], weights=weighed[:, axis], minlength=len(flat))
+        begin = stop
+    summed /= np.maximum(np.linalg.norm(summed, axis=1, keepdims=True), 1e-300)
+    height = 2.0 * areas / np.maximum(np.maximum.reduce(lengths), 1e-300)
+    noise = np.degrees(_COORDINATE_NOISE * float(np.abs(tri).max()) / np.maximum(height, 1e-300))
+    return Smooth(normals, summed.reshape(-1, 3, 3), np.minimum(noise, 90.0))
+
+
+# --- rays -------------------------------------------------------------------------------------------------
+
+
+#: Triangles a leaf of ``Caster`` holds, and boxes a box of the level above.
+_LEAF = 16
+_FAN = 8
+#: Ray-box and ray-triangle pairs tested at once: each block's tables are this many rows, about 100 MB at most,
+#: however many triangles the mesh has and however many rays are cast.
+RAY_PAIRS = 400_000
+
+
+class Caster:
+    """Rays against triangles, numpy alone, in bounded memory: the triangles in Morton order of their centres,
+    every ``_LEAF`` of them in a box, every ``_FAN`` boxes in a box of the level above (a linear bounding-volume
+    hierarchy, no pointers). A ray's slab test runs down the levels on the (ray, box) pairs still crossing, and
+    the triangles of the leaves it crosses are intersected exactly (Moller-Trumbore, both faces), ``RAY_PAIRS``
+    pairs at a time: a ray costs the triangles near its line, never the mesh."""
+
+    def __init__(self, V: np.ndarray, F: np.ndarray) -> None:
+        tri = np.asarray(V, dtype=float)[np.asarray(F, dtype=int)]
+        centre = tri.mean(axis=1) if len(tri) else np.zeros((0, 3))
+        lo = centre.min(axis=0) if len(tri) else np.zeros(3)
+        size = float((centre.max(axis=0) - lo).max()) if len(tri) else 1.0
+        cell = np.clip(((centre - lo) / (size or 1.0) * 1023.0).astype(np.int64), 0, 1023)
+        key = np.zeros(len(tri), dtype=np.int64)
+        for bit in range(10):
+            for axis in range(3):
+                key |= ((cell[:, axis] >> bit) & 1) << (3 * bit + axis)
+        self.order = np.argsort(key, kind="stable")
+        tri = tri[self.order]
+        self.a = tri[:, 0]
+        self.e1, self.e2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+        normal = np.cross(self.e1, self.e2)
+        length = np.linalg.norm(normal, axis=1, keepdims=True)
+        self.normals = np.divide(normal, length, out=np.zeros_like(normal), where=length > 0)
+        self.count = len(tri)
+        self._place: np.ndarray | None = None
+        # the levels' boxes, leaves first; padded by a hair so a ray along a box's face is in it
+        pad = 1e-9 * (float(np.abs(tri).max()) if len(tri) else 1.0) + 1e-12
+        starts = np.arange(0, max(self.count, 1), _LEAF)
+        lows = np.minimum.reduceat(tri.min(axis=1), starts) - pad if len(tri) else np.zeros((0, 3))
+        highs = np.maximum.reduceat(tri.max(axis=1), starts) + pad if len(tri) else np.zeros((0, 3))
+        self.levels = [(lows, highs)]
+        while len(self.levels[-1][0]) > _FAN:
+            lows, highs = self.levels[-1]
+            starts = np.arange(0, len(lows), _FAN)
+            self.levels.append((np.minimum.reduceat(lows, starts), np.maximum.reduceat(highs, starts)))
+
+    def first(self, origins: np.ndarray, directions: np.ndarray, reach: float | None = None,
+              ) -> tuple[np.ndarray, np.ndarray]:
+        """Each ray's first crossing: its distance along the (unit) direction (inf where none within ``reach``)
+        and the triangle crossed (its index in ``F``; -1 where none)."""
+        origins = np.asarray(origins, dtype=float).reshape(-1, 3)
+        directions = np.asarray(directions, dtype=float).reshape(-1, 3)
+        found = np.full(len(origins), np.inf if reach is None else float(reach))
+        which = np.full(len(origins), -1)
+        if not self.count or not len(origins):
+            return np.where(which >= 0, found, np.inf), which
+        flat = np.abs(directions) <= 1e-300
+        inverse = np.where(flat, np.inf, 1.0 / np.where(flat, 1.0, directions))
+        top = len(self.levels[-1][0])
+        block = max(1, RAY_PAIRS // (top * _FAN))
+        for at in range(0, len(origins), block):
+            checkpoint()
+            rays = np.repeat(np.arange(at, min(at + block, len(origins))), top)
+            nodes = np.tile(np.arange(top), len(rays) // top)
+            for level in range(len(self.levels) - 1, -1, -1):
+                rays, nodes = self._crossing(origins, inverse, found, rays, nodes, level)
+                if level:
+                    below = len(self.levels[level - 1][0])
+                    nodes = (nodes[:, None] * _FAN + np.arange(_FAN)[None, :]).ravel()
+                    rays = np.repeat(rays, _FAN)[nodes < below]
+                    nodes = nodes[nodes < below]
+            step = max(1, RAY_PAIRS // _LEAF)
+            for begin in range(0, len(rays), step):
+                r = np.repeat(rays[begin:begin + step], _LEAF)
+                k = (nodes[begin:begin + step, None] * _LEAF + np.arange(_LEAF)[None, :]).ravel()
+                r, k = r[k < self.count], k[k < self.count]
+                t, hit = self._triangles(origins[r], directions[r], k)
+                r, k, t = r[hit], k[hit], t[hit]
+                if not len(r):
+                    continue
+                order = np.lexsort((t, r))
+                r, k, t = r[order], k[order], t[order]
+                head = np.ones(len(r), dtype=bool)
+                head[1:] = r[1:] != r[:-1]
+                r, k, t = r[head], k[head], t[head]
+                nearer = t < found[r]
+                found[r[nearer]] = t[nearer]
+                which[r[nearer]] = self.order[k[nearer]]
+        return np.where(which >= 0, found, np.inf), which
+
+    def _crossing(self, origins: np.ndarray, inverse: np.ndarray, found: np.ndarray, rays: np.ndarray,
+                  nodes: np.ndarray, level: int) -> tuple[np.ndarray, np.ndarray]:
+        """The (ray, box) pairs of ``level`` whose ray crosses its box before its nearest crossing so far."""
+        lows, highs = self.levels[level]
+        if not len(rays):
+            return rays, nodes
+        kept_r, kept_n = [], []
+        for begin in range(0, len(rays), RAY_PAIRS):
+            r, n = rays[begin:begin + RAY_PAIRS], nodes[begin:begin + RAY_PAIRS]
+            o, inv = origins[r], inverse[r]
+            with np.errstate(invalid="ignore", over="ignore"):
+                t1, t2 = (lows[n] - o) * inv, (highs[n] - o) * inv
+            # a ray parallel to a slab is in it or never: its two times are -inf and inf, or the same infinity
+            enter = np.nanmax(np.minimum(t1, t2), axis=1)
+            leave = np.nanmin(np.maximum(t1, t2), axis=1)
+            keep = (enter <= leave) & (leave >= 0.0) & (enter <= found[r])
+            kept_r.append(r[keep])
+            kept_n.append(n[keep])
+        return np.concatenate(kept_r), np.concatenate(kept_n)
+
+    def _triangles(self, o: np.ndarray, d: np.ndarray, k: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Where each ray ``o + t d`` crosses its triangle ``k`` (Moller-Trumbore, either face): ``t``, and
+        whether it does, ahead of the origin. A crossing on an edge counts for both its triangles, so no ray
+        slips between two."""
+        e1, e2 = self.e1[k], self.e2[k]
+        p = np.cross(d, e2)
+        det = np.einsum("ij,ij->i", e1, p)
+        scale = np.linalg.norm(e1, axis=1) * np.linalg.norm(e2, axis=1)
+        good = np.abs(det) > 1e-12 * scale
+        inv = 1.0 / np.where(good, det, 1.0)
+        s = o - self.a[k]
+        u = np.einsum("ij,ij->i", s, p) * inv
+        q = np.cross(s, e1)
+        v = np.einsum("ij,ij->i", d, q) * inv
+        t = np.einsum("ij,ij->i", e2, q) * inv
+        eps = 1e-9
+        return t, good & (u >= -eps) & (v >= -eps) & (u + v <= 1.0 + eps) & (t > 0.0)
+
+    def normals_of(self, triangles: np.ndarray) -> np.ndarray:
+        """The unit normals of ``triangles`` (their indices in ``F``, as ``first`` answers them)."""
+        if self._place is None:
+            self._place = np.empty(self.count, dtype=int)
+            self._place[self.order] = np.arange(self.count)
+        return self.normals[self._place[np.asarray(triangles, dtype=int)]]
+
+    def inside(self, points: np.ndarray) -> np.ndarray:
+        """Which points lie in the material of a closed, outward-wound mesh: a ray from each first leaves
+        through the back of a triangle (one direction, off every axis, so few rays run along a face)."""
+        points = np.asarray(points, dtype=float).reshape(-1, 3)
+        way = np.array([0.4395064455, 0.617598629942, 0.652231566745])
+        _, hit = self.first(points, np.broadcast_to(way, points.shape))
+        back = np.zeros(len(points), dtype=bool)
+        met = hit >= 0
+        back[met] = self.normals_of(hit[met]) @ way > 0.0
+        return back
+
+
+# --- a wall's support -------------------------------------------------------------------------------------
+
+
+#: Directions a wall is walked in from its thinnest place (``wall_support``), every 22.5 degrees in its plane.
+_WALL_FAN = 16
+#: Stretches a walk follows a curved wall for, at most: round a tube in about forty.
+_WALL_STEPS = 64
+#: A wall has run into the part where the material across it is over this many times its own thickness.
+_JOINED = 2.0
+
+
+def wall_support(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]], point: np.ndarray,
+                 normal: np.ndarray, thickness: float) -> dict[str, Any]:
+    """Whether the wall of ``thickness`` under ``point`` (on its face, of outward ``normal``) is **supported**:
+    joined to the part on two or more sides (the guides' word: Hubs, "connected to other structures on at least
+    two sides"), read off the wall itself, the same on exact geometry and on a mesh. ``cast(origins,
+    directions)`` answers each ray's distance to the surface from inside the material (inf where none) and the
+    surface's outward normal there.
+
+    From the middle of the wall under the point it is walked in ``_WALL_FAN`` directions in its own plane. Each
+    walk ends where the wall does: **joined**, where the material across it grows past ``_JOINED`` times its
+    thickness (it runs into a floor, a rib, the body: the place is kept); **free**, where it ends in a face
+    across the way with the wall still thin (an edge in the air), or thins away to nothing; or it comes back to
+    where it started (a **ring**: a tube's wall, joined all round). A curved wall is followed: where a walk
+    leaves through the wall's own face it is put back in the middle and turned along the wall.
+
+    Supported: a ring; two or more separate runs of joined directions (a web between two posts); or one run
+    whose joins do not lie along one line (a floor and a side wall: round a corner; a skin over a cavity: all
+    round). One run along one line is one side (a fin on its base), none is none: unsupported. A walk that
+    reaches no end leaves an unsupported reading unknown (``supported`` None), never supported."""
+    n0 = np.asarray(normal, dtype=float) / (np.linalg.norm(normal) or 1.0)
+    t0 = float(thickness)
+    seed = np.array([1.0, 0.0, 0.0]) if abs(n0[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(n0, seed)
+    u /= np.linalg.norm(u)
+    v = np.cross(n0, u)
+    turn = np.linspace(0.0, 2.0 * math.pi, _WALL_FAN, endpoint=False)
+    d = np.cos(turn)[:, None] * u[None, :] + np.sin(turn)[:, None] * v[None, :]
+    start = np.asarray(point, dtype=float) - n0 * t0 / 2.0
+    m, n = np.tile(start, (_WALL_FAN, 1)), np.tile(n0, (_WALL_FAN, 1))
+    WALKING, FREE, JOINED, RING, LOST = range(5)
+    state = np.full(_WALL_FAN, WALKING)
+    joins = np.full((_WALL_FAN, 3), np.nan)
+    walked = np.zeros(_WALL_FAN)
+
+    def across(points: np.ndarray, normals: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        up, face_up = cast(points, normals)
+        down, face_down = cast(points, -normals)
+        return up, down, face_up, face_down
+
+    near, far = np.array([1 / 16, 1 / 8, 1 / 4, 1 / 2, 3 / 4]), np.array([1.0, 1 / 2, 1 / 4, 1 / 8, 1 / 16])
+    for _step in range(_WALL_STEPS):
+        active = np.flatnonzero(state == WALKING)
+        if not len(active):
+            break
+        checkpoint()
+        length, ahead = cast(m[active], d[active])
+        state[active[~np.isfinite(length)]] = LOST
+        keep = np.isfinite(length)
+        active, length, ahead = active[keep], length[keep], ahead[keep]
+        if not len(active):
+            break
+        # the material across the wall at places along the walk, the more of them near its end
+        x = np.concatenate([length[:, None] * near[None, :], length[:, None] - t0 * far[None, :]], axis=1)
+        x = np.sort(np.clip(x, length[:, None] * 1e-3, length[:, None] * (1.0 - 1e-3)), axis=1)
+        places = m[active][:, None, :] + x[:, :, None] * d[active][:, None, :]
+        up, down, _, _ = across(places.reshape(-1, 3), np.repeat(n[active], x.shape[1], axis=0))
+        thick = ((up + down) > _JOINED * t0).reshape(x.shape)
+        thick &= np.isfinite(up + down).reshape(x.shape)
+        first = thick.argmax(axis=1)
+        met = np.flatnonzero(thick.any(axis=1))
+        if len(met):
+            who = active[met]
+            lo = np.where(first[met] > 0, x[met, np.maximum(first[met] - 1, 0)], 0.0)
+            hi = x[met, first[met]]
+            for _halving in range(6):
+                middle = (lo + hi) / 2.0
+                a, b, _, _ = across(m[who] + middle[:, None] * d[who], n[who])
+                grown = ~np.isfinite(a + b) | ((a + b) > _JOINED * t0)
+                lo, hi = np.where(grown, lo, middle), np.where(grown, middle, hi)
+            joins[who] = m[who] + hi[:, None] * d[who]
+            state[who] = JOINED
+        rest = np.flatnonzero(~thick.any(axis=1))
+        if not len(rest):
+            continue
+        # the face the walk left through: across the way (an end: the wall stops in the air), or the wall's own
+        # (its normal the wall's: the wall curves away under the walk)
+        ends = np.abs(np.einsum("ij,ij->i", ahead[rest], n[active[rest]])) < math.cos(math.radians(45.0))
+        state[active[rest[ends]]] = FREE
+        rest = rest[~ends]
+        if not len(rest):
+            continue
+        # the walk left through the wall's own face: the wall curves. Back to its middle, turned along it
+        who = active[rest]
+        half = 0.5 * length[rest]
+        at = m[who] + half[:, None] * d[who]
+        a, b, face_a, face_b = across(at, n[who])
+        found = np.isfinite(a + b)
+        state[who[~found]] = LOST
+        thinned = found & ((a + b) < 0.25 * t0)
+        state[who[thinned]] = FREE
+        go = found & ~thinned
+        who, at, a, b, half = who[go], at[go], a[go], b[go], half[go]
+        if not len(who):
+            continue
+        centre = at + n[who] * ((a - b) / 2.0)[:, None]
+        turned = face_a[go] - face_b[go]
+        turned /= np.maximum(np.linalg.norm(turned, axis=1, keepdims=True), 1e-300)
+        way = d[who] - np.einsum("ij,ij->i", d[who], turned)[:, None] * turned
+        way /= np.maximum(np.linalg.norm(way, axis=1, keepdims=True), 1e-300)
+        walked[who] += np.linalg.norm(centre - m[who], axis=1)
+        m[who], n[who], d[who] = centre, turned, way
+        reach = np.maximum(half, t0)
+        state[who[(np.linalg.norm(centre - start, axis=1) < reach) & (walked[who] > 4.0 * reach)]] = RING
+    state[state == WALKING] = LOST
+    joined = state == JOINED
+    # the runs of joined directions round the circle
+    runs = int(np.count_nonzero(joined & ~np.roll(joined, 1))) if not joined.all() else 1
+    supported: bool | None
+    if (state == RING).any() or runs >= 2 or joined.all():
+        supported = True
+    elif runs == 1 and int(joined.sum()) >= 3:
+        places = joins[joined] - joins[joined].mean(axis=0)
+        _, _, axes = np.linalg.svd(places, full_matrices=False)
+        along = places @ axes[0]
+        off = np.linalg.norm(places - along[:, None] * axes[0][None, :], axis=1)
+        # round a corner: the joins stand off their own line by a fifth of its length (a fin's on a round base
+        # lie a few hundredths off)
+        supported = bool(off.max() > max(0.2 * float(np.ptp(along)), 0.5 * t0))
+    else:
+        supported = False
+    if supported is False and (state == LOST).any():
+        supported = None
+    # sides as the guides count them: none, one, or two and more (a run round a corner is two)
+    return {"supported": supported, "joined_sides": 2 if supported else min(runs, 1),
+            "joined_directions": int(joined.sum()), "free_directions": int((state == FREE).sum()),
+            "unread_directions": int((state == LOST).sum()), "ring": bool((state == RING).any())}
 
 
 # --- the raster -------------------------------------------------------------------------------------------
@@ -189,13 +590,15 @@ def _sorted(c: Crossings) -> tuple[np.ndarray, ...]:
 
 
 def support(V: np.ndarray, F: np.ndarray, angle_limit: float, pitch: float, plate_z: float | None = None,
-            owners: np.ndarray | None = None, band: float | None = None) -> dict[str, Any]:
+            owners: np.ndarray | None = None, band: float | None = None,
+            skip: np.ndarray | None = None) -> dict[str, Any]:
     """The support a part needs standing on the plate (its lowest point unless ``plate_z``), from a raster
     along Z at ``pitch``: under every crossing of a down-facing surface under ``angle_limit`` degrees from
     horizontal that has air below, a column down to the material below or the plate. Its volume, its
     contact with the part (the tops of the columns, and their feet where they stand on the part rather
     than the plate), and that contact per ``owners`` value (a face ordinal) of the triangles touched.
-    ``band``: surfaces this close above the plate stand on it (default a fifth of the pitch)."""
+    ``band``: surfaces this close above the plate stand on it (default a fifth of the pitch). ``skip``: the
+    triangles (a mask) that read under the limit and are at it -- a 45 deg cone's chords -- and need none."""
     empty = {"volume_mm3": 0.0, "contact_area_mm2": 0.0, "column_count": 0, "per_owner_mm2": {}, "pitch_mm": pitch}
     if len(F) == 0:
         return empty
@@ -209,6 +612,8 @@ def support(V: np.ndarray, F: np.ndarray, angle_limit: float, pitch: float, plat
     line, t, tri, sign, first, before = _sorted(c)
     normals, _ = frame(V, F)
     steep = angles(normals[tri]) < angle_limit - ANGLE_EPS
+    if skip is not None:
+        steep &= ~skip[tri]
     starts = (sign < 0) & (before <= 0) & steep & (t > plate + band)
     below = np.where(first, plate, np.roll(t, 1))
     length = np.where(starts, t - below, 0.0)
@@ -365,103 +770,272 @@ def _dilate(mask: np.ndarray, within: np.ndarray, steps: int) -> np.ndarray:
     return grown
 
 
+def _flood(seed: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """The cells of ``mask`` a ``seed`` cell reaches through it (6-connected). A few steps to the neighbours
+    first (a flood that starts from the one before it, a voxel smaller, ends there); then the seeds spread along
+    every run of the mask, axis after axis, until none grows."""
+    grown = seed & mask
+    count, whole = int(np.count_nonzero(grown)), int(np.count_nonzero(mask))
+    if not count or count == whole:
+        return grown
+    for _step in range(8):
+        grown = (grown | _near(grown, full=False)) & mask
+        before, count = count, int(np.count_nonzero(grown))
+        if count == before or count == whole:
+            return grown
+    runs = []
+    for axis in (2, 1, 0):
+        moved = np.ascontiguousarray(np.moveaxis(mask, axis, -1))
+        starts = moved.copy()
+        starts[..., 1:] &= ~moved[..., :-1]
+        ids = np.cumsum(starts.ravel(), dtype=np.int32)  # each run of the mask along the axis, numbered from 1
+        ids[~moved.ravel()] = 0
+        runs.append((axis, ids, moved.shape))
+    while True:
+        checkpoint()  # a sweep at a time: a maze of air takes many
+        before = count
+        for axis, ids, shape in runs:
+            cells = np.ascontiguousarray(np.moveaxis(grown, axis, -1)).ravel()
+            reached = np.zeros(int(ids.max()) + 1, dtype=bool)
+            reached[ids[cells]] = True
+            reached[0] = False
+            grown = np.moveaxis(reached[ids].reshape(shape), -1, axis)
+        count = int(np.count_nonzero(grown))
+        if count == before:
+            return np.ascontiguousarray(grown)
+
+
+def _box(mask: np.ndarray, margin: int = 0) -> tuple[slice, slice, slice]:
+    """The slices of the box that holds ``mask``'s cells, ``margin`` cells wider each way (within the grid)."""
+    found = []
+    for axis in range(3):
+        along = np.flatnonzero(mask.any(axis=tuple(k for k in range(3) if k != axis)))
+        found.append(slice(max(int(along[0]) - margin, 0), min(int(along[-1]) + 1 + margin, mask.shape[axis])))
+    return tuple(found)  # type: ignore[return-value]
+
+
 @dataclass
 class Cavity:
-    """Air the outside cannot reach, or only through openings narrower than the probing ball."""
+    """Air the outside reaches only through a way out narrower than the air itself, or not at all."""
 
     voxels: np.ndarray                  # flat indices of its voxels
     volume_mm3: float
     centroid: np.ndarray
     sealed: bool                        # no air path out at all at the grid's resolution
-    openings: list[dict[str, Any]] = field(default_factory=list)  # {"diameter_mm", "xyz", "voxels"}
+    openings: list[dict[str, Any]] = field(default_factory=list)  # {"diameter_mm", "uncertainty_mm", "exact", "xyz"}
+    inscribed_mm: float = 0.0           # the largest ball it holds, to a voxel
 
 
-def _neighbour_labels(labels: np.ndarray) -> list[np.ndarray]:
-    """For each of the 6 directions, every voxel's neighbour's label (the grid's edge: -2)."""
-    padded = np.pad(labels, 1, constant_values=-2)
-    nx, ny, nz = labels.shape
-    return [padded[1 + dx:1 + dx + nx, 1 + dy:1 + dy + ny, 1 + dz:1 + dz + nz] for dx, dy, dz in _STEPS6]
+#: Rays of the fan that reads a passage's cross-section (``_section``): the least of them reads the inscribed
+#: circle of a slot to 1 / cos(pi / 32), half a percent.
+_FAN_RAYS = 32
+#: Two facets a throat's rays land on that turn by less than this are one curved wall's chords (a round hole's
+#: polygon), whose sag the reading carries as its uncertainty; a sharper turn is the opening's own corner.
+_CHORD_DEG = 45.0
 
 
-def cavities(grid: Grid, ball_radius: float, cap: int = 32) -> tuple[list[Cavity], np.ndarray]:
-    """The cavities of ``grid``, and a label per voxel (flat): -2 material, -1 outside (the probing ball's
-    reach), -3 a passage or crevice the ball does not fill, ``k`` cavity ``k``. A cavity is a region of air a
-    ball of ``ball_radius`` fits inside but cannot reach from outside -- sealed (no air path out at all) or
-    open through narrower openings, a hollow part's drain holes, each opening's diameter estimated from the
-    largest ball that fits through it -- or a sealed pocket of air too small for the ball. The grid's padding
-    must hold the ball: ``voxels(..., pad=ball_pad(ball_radius, pitch))``."""
+def _section(caster: Caster, at: np.ndarray, way: np.ndarray, reach: float,
+             ) -> tuple[np.ndarray, float, float, np.ndarray] | None:
+    """The cross-section of a passage through ``at`` square to ``way``: a fan of rays in that plane reads the
+    walls all round, the point moved to their middle (half the way between each pair of opposite walls, four
+    times) -- its middle, the radius of the largest circle about it (the nearest wall), how far a round wall's
+    chords (``_CHORD_DEG``) stand inside the circle they stand for, and the walls' normals where the rays
+    landed. None where a ray meets no wall within ``reach``: the section is open, no passage's."""
+    seed = np.array([1.0, 0.0, 0.0]) if abs(way[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(way, seed)
+    u /= np.linalg.norm(u)
+    v = np.cross(way, u)
+    angles = np.linspace(0.0, 2.0 * math.pi, _FAN_RAYS, endpoint=False)
+    fan = np.cos(angles)[:, None] * u[None, :] + np.sin(angles)[:, None] * v[None, :]
+    centre = np.asarray(at, dtype=float)
+    for _move in range(4):
+        distance, hit = caster.first(np.broadcast_to(centre, fan.shape), fan, reach)
+        if not np.isfinite(distance).all():
+            return None
+        shift = ((distance - np.roll(distance, _FAN_RAYS // 2)) / 2.0)[:, None] * fan
+        centre = centre + shift.sum(axis=0) / (_FAN_RAYS / 2.0)
+    distance, hit = caster.first(np.broadcast_to(centre, fan.shape), fan, reach)
+    if not np.isfinite(distance).all():
+        return None
+    radius = float(distance.min())
+    normals = caster.normals_of(hit)
+    turn = np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", normals, np.roll(normals, 1, axis=0)), -1.0, 1.0)))
+    chord = turn[(turn > 1e-6) & (turn < _CHORD_DEG)]
+    sag = radius * (1.0 / math.cos(math.radians(float(chord.max())) / 2.0) - 1.0) if len(chord) else 0.0
+    return centre, radius, sag, normals
+
+
+def _throat(caster: Caster, start: np.ndarray, inward: np.ndarray, pitch: float, ceiling: float,
+            ) -> dict[str, Any] | None:
+    """The narrowest cross-section of the passage that leaves a cavity at ``start`` (a point in its mouth)
+    going ``inward`` (from the outside to the cavity): the largest ball that goes through. Stations half a
+    voxel apart along it each read their section (``_section``; one wider than ``ceiling`` -- the widest the
+    voxels allow -- is in the open, or in the cavity). ``inward`` is only the voxels' guess of the passage's
+    line, and a section cut askew through a passage's end reads narrow, so each station takes the line from
+    its own walls -- the direction their normals are all square to -- and reads its section square to that.
+    The least is the throat: ``diameter_mm``, ``xyz`` and ``uncertainty_mm`` (its chords' sag, and the fan's
+    own half a percent). None where no station reads a section."""
+    way = inward / (np.linalg.norm(inward) or 1.0)
+    at = np.asarray(start, dtype=float) - way * 2.0 * pitch
+    best: dict[str, Any] | None = None
+    opened = 0
+    for _station in range(256):
+        checkpoint()
+        read = _section(caster, at, way, 4.0 * ceiling)
+        if read is not None and read[1] <= ceiling:
+            # the walls' own line: the direction their normals are all square to (the least of their spread)
+            values, vectors = np.linalg.eigh(read[3].T @ read[3])
+            if values[0] < 0.05 * values[1]:
+                line = vectors[:, 0] * (1.0 if float(vectors[:, 0] @ way) >= 0.0 else -1.0)
+                if float(line @ way) < 1.0 - 1e-9:
+                    again = _section(caster, read[0], line, 4.0 * ceiling)
+                    if again is not None and again[1] <= ceiling:
+                        way, read = line, again
+        if read is not None and read[1] <= ceiling:
+            opened = 0
+            if best is None or 2.0 * read[1] < best["diameter_mm"]:
+                best = {"diameter_mm": 2.0 * read[1], "xyz": read[0], "exact": True,
+                        "uncertainty_mm": 2.0 * read[2] + 0.01 * read[1]}
+            if np.linalg.norm(read[0] - at) < pitch:
+                at = read[0]  # the passage's own middle: its bends are followed
+        else:
+            opened += 1
+            if best is not None and opened >= 4:
+                break  # through the throat and out into the cavity
+        ahead, _ = caster.first(at[None], way[None], pitch)
+        if np.isfinite(ahead[0]) and ahead[0] < 0.5 * pitch:
+            break  # a wall ahead: the passage ends or turns
+        at = at + way * 0.5 * pitch
+    return best
+
+
+def cavities(grid: Grid, ball_radius: float, cap: int = 32, caster: Caster | None = None,
+             ) -> tuple[list[Cavity], np.ndarray]:
+    """The cavities of ``grid``, and a label per voxel (flat): -2 material, -1 air that is no cavity, ``k``
+    cavity ``k``.
+
+    A cavity is air that is wider than its way out: a region holding a ball that cannot leave. For every
+    radius ``r`` up to ``ball_radius`` (a voxel at a time), the air a ball of ``r`` fits in is flooded from the
+    grid's border; what it fits in and the flood does not reach is enclosed at ``r``, and is a cavity where it
+    holds a ball two voxels larger still (the field's resolution: a slot whose voxels read a voxel wider here
+    than there is no cavity). Its extent is the air the outside's ball of ``r`` cannot touch, joined to it; it
+    is found at the least ``r`` that encloses it, so its way out -- its widest -- is known to a voxel whatever
+    the cavity's shape: a flat hollow 10 mm high behind a 2 mm vent is a cavity as a hollow sphere is. Air the
+    largest ball leaves by (an opening over ``2 ball_radius`` wide) is a pocket's mouth, no cavity. A cavity
+    no ball of any size leaves is ``sealed`` at the grid's resolution.
+
+    Each opening is where the cavity's air meets the outside's; with a ``caster`` (the triangles' rays) its
+    throat is measured on the triangles (``_throat``: ``exact``, with its chords' ``uncertainty_mm``), else read
+    off the voxels to a voxel. The grid's padding must hold the ball: ``voxels(..., pad=ball_pad(ball_radius,
+    pitch))``."""
     shape = grid.shape
     air = ~(grid.material | grid.surface)
     border = np.zeros(shape, dtype=bool)
     border[[0, -1], :, :] = True
     border[:, [0, -1], :] = True
     border[:, :, [0, -1]] = True
-
-    def touching_border(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        labelled = components(mask)
-        open_ = np.unique(labelled[border & mask])
-        return labelled, np.isin(labelled, open_) & mask
-
-    air_labels, outside_all = touching_border(air)
-    steps = max(1, int(round(ball_radius / grid.pitch)))
-    depth = _depth(air, steps + 1)
-    fits = depth >= steps
-    fit_labels, reached = touching_border(fits)
-    # the union of the balls: grown without regard to walls (a ball wholly in air covers only air), so the
-    # outside's reach never seeps through an opening narrower than the ball
-    everywhere = np.ones(shape, dtype=bool)
-    outside = _dilate(reached, everywhere, steps + 1) & air
-    labels = np.full(shape, -3, dtype=np.int32)
+    top = max(1, int(round(ball_radius / grid.pitch)))
+    depth = _depth(air, top + 2)  # 0: beside a wall; d: a ball of d voxels fits
+    # the outside at each radius, the widest first: each flood starts from the one before
+    reached: dict[int, np.ndarray] = {}
+    last = np.zeros(shape, dtype=bool)
+    for level in range(top, -1, -1):
+        fits = depth >= level if level else air
+        last = _flood(last | (border & fits), fits)
+        reached[level] = last
+    labels = np.full(shape, -1, dtype=np.int32)
     labels[~air] = -2
-    labels[outside] = -1
+    everywhere = np.ones(shape, dtype=bool)
     found: list[Cavity] = []
-    cores = np.unique(fit_labels[fits & ~reached])
-    inner_air = air & ~outside
-    for core in cores[:cap]:
-        checkpoint()
-        region = _dilate(fit_labels == core, everywhere, steps + 1) & inner_air & (labels == -3)
-        if not region.any():
+    for level in range(top + 1):
+        fits = (depth >= level if level else air) & (labels == -1)
+        cores = fits & ~reached[level]
+        if not cores.any() or len(found) >= cap:
             continue
-        sealed = not bool(outside_all[region].any())
-        if sealed:
-            # a sealed cavity is all the air of its pocket: the crevices the balls miss too
-            region |= np.isin(air_labels, np.unique(air_labels[region])) & (labels == -3)
-        labels[region] = len(found)
-        cells = np.flatnonzero(region)
-        ijk = np.stack(np.unravel_index(cells, shape), axis=1)
-        found.append(Cavity(cells, float(len(cells) * grid.pitch ** 3), grid.center(ijk.mean(axis=0)), sealed))
-    # sealed pockets too small for the ball -- but not a crumb of a few voxels, which the surface's own
-    # voxels close off at an inner corner (an exact inner shell is found apart, by the B-rep)
-    for pocket in np.unique(air_labels[air & ~outside_all & (labels == -3)])[:max(0, cap - len(found))]:
-        region = (air_labels == pocket) & (labels == -3)
-        cells = np.flatnonzero(region)
-        if len(cells) < POCKET_MIN_CELLS:
-            continue
-        labels[region] = len(found)
-        ijk = np.stack(np.unravel_index(cells, shape), axis=1)
-        found.append(Cavity(cells, float(len(cells) * grid.pitch ** 3), grid.center(ijk.mean(axis=0)), sealed=True))
-    # openings: the passages (label -3) that touch a cavity and the outside
-    passages = labels == -3
-    if found and passages.any():
-        pieces = components(passages)
-        around = _neighbour_labels(labels)
-        to_cavity: dict[int, set[int]] = {}
-        to_outside: set[int] = set()
-        for neighbour in around:
-            at = passages & (neighbour >= 0)
-            for piece, k in zip(pieces[at].tolist(), neighbour[at].tolist()):
-                to_cavity.setdefault(piece, set()).add(k)
-            to_outside.update(np.unique(pieces[passages & (neighbour == -1)]).tolist())
-        for piece, ks in to_cavity.items():
-            if piece not in to_outside:
-                continue
-            cells = np.flatnonzero(pieces == piece)
+        # the outside as its ball of this radius touches it: grown without regard to walls, a voxel past the
+        # ball (into the surface's own voxels, never through them), so it stops at an opening the ball does not fit
+        outside = (_dilate(reached[level], everywhere, level + 1) & air) if level else reached[0]
+        room = air & ~outside & (labels == -1)
+        joined = _flood(cores, room)
+        box = _box(joined, 1)
+        pieces = components(joined[box])
+        for piece in np.unique(pieces[cores[box]]):
+            region = np.zeros(shape, dtype=bool)
+            region[box] = pieces == piece
+            deepest = int(depth[region].max())
+            if deepest < level + 1 or len(found) >= cap:
+                continue  # no wider than its way out, to the field's resolution
+            cells = np.flatnonzero(region)
             ijk = np.stack(np.unravel_index(cells, shape), axis=1)
-            widest = int(depth.ravel()[cells].max())
-            for k in sorted(ks):
-                found[k].openings.append({"diameter_mm": float((2 * widest + 3) * grid.pitch),
-                                          "xyz": grid.center(ijk.mean(axis=0)), "voxels": cells})
+            # the surface's own voxels round it are half air: counted so, the volume is the cavity's
+            skin = int(np.count_nonzero(_near(region[box], full=False) & grid.surface[box]))
+            cavity = Cavity(cells, float((len(cells) + 0.5 * skin) * grid.pitch ** 3), grid.center(ijk.mean(axis=0)),
+                            sealed=level == 0, inscribed_mm=float((2 * deepest + 1) * grid.pitch))
+            if level:
+                wide = _box(region, 5)
+                origin = np.array([part.start for part in wide])
+                cavity.openings = _openings(grid, region[wide], outside[wide], origin, level, caster)
+            labels[region] = len(found)
+            found.append(cavity)
     return found, labels.ravel()
+
+
+def _openings(grid: Grid, region: np.ndarray, outside: np.ndarray, origin: np.ndarray, level: int,
+              caster: Caster | None) -> list[dict[str, Any]]:
+    """The openings of a cavity enclosed at ``level`` (``region`` and the ``outside``, both cut to the box of
+    the grid that starts at voxel ``origin``): each patch of its air that touches the outside's, with the
+    throat behind it (``_throat``), or the voxels' reading of it -- about ``2 level`` voxels wide, to two voxels
+    -- where no ray reads one."""
+    mouths = region & _near(outside, full=True)
+    if not mouths.any():
+        return []
+    patches = components(_near(mouths, full=True) & (region | outside))
+    ceiling = (level + 1.5) * grid.pitch
+    found = []
+    for patch in np.unique(patches[mouths]):
+        here = (patches == patch) & mouths
+        cells = np.stack(np.nonzero(here), axis=1)
+        near = _dilate(here, np.ones(here.shape, dtype=bool), 3)
+        inner, outer = np.stack(np.nonzero(near & region), axis=1), np.stack(np.nonzero(near & outside), axis=1)
+        middle = cells[np.argmin(np.linalg.norm(cells - cells.mean(axis=0), axis=1))]
+        opening = {"diameter_mm": float(2 * level * grid.pitch), "uncertainty_mm": float(2.0 * grid.pitch),
+                   "exact": False, "xyz": grid.center(origin + cells.mean(axis=0))}
+        way = inner.mean(axis=0) - outer.mean(axis=0) if len(inner) and len(outer) else np.zeros(3)
+        if caster is not None and np.linalg.norm(way) > 1e-9:
+            measured = _throat(caster, grid.center(origin + middle), way, grid.pitch, ceiling)
+            if measured is not None:
+                opening = measured
+        found.append(opening)
+    return found
+
+
+#: How both paths say they found the trapped volumes.
+TRAPPED_METHOD = ("sealed voids exactly, from their own shells; from a voxel field, air wider than its way out "
+                  "(a ball fits in it that cannot leave), whatever its shape; each opening's throat measured on "
+                  "the surface (exact: true), or read off the voxels to two voxels")
+#: What a sealed void read from its own shell says of its openings: none.
+SEALED_EXACT = {"sealed": True, "exact": True, "escape_holes": 0, "escape_hole_diameters_mm": [],
+                "min_escape_hole_mm": None, "escape_hole_uncertainty_mm": None}
+
+
+def trapped_item(cavity: Cavity, pitch: float, diameters: list[tuple[float, float]] | None = None) -> dict[str, Any]:
+    """A voxel cavity as both paths list it: its place, volume and openings -- ``diameters`` (each with its
+    uncertainty) where the caller read them (exact geometry's holes), else the cavity's own. A cavity the voxels
+    read sealed that is no sealed void's shell (the caller replaces those) has a way out under a voxel wide:
+    one opening of at most ``pitch`` (``escape_hole_at_most``), never no opening."""
+    found = sorted(diameters if diameters is not None else
+                   [(float(opening["diameter_mm"]), float(opening["uncertainty_mm"])) for opening in cavity.openings])
+    item = {"xyz": cavity.centroid, "volume_mm3": round(float(cavity.volume_mm3), 2), "sealed": False,
+            "exact": False, "escape_holes": len(found),
+            "escape_hole_diameters_mm": [round(d, 4) for d, _ in found],
+            "min_escape_hole_mm": round(found[0][0], JUDGED) if found else None,
+            "escape_hole_uncertainty_mm": round(found[0][1], 4) if found else None,
+            "inscribed_mm": round(float(cavity.inscribed_mm), 3)}
+    if cavity.sealed and not found:
+        item.update(escape_holes=1, escape_hole_diameters_mm=[round(float(pitch), 4)],
+                    min_escape_hole_mm=round(float(pitch), JUDGED), escape_hole_uncertainty_mm=0.0,
+                    escape_hole_at_most=True)
+    return item
 
 
 # --- a flat overhang's span ---------------------------------------------------------------------------------
@@ -686,12 +1260,19 @@ def fit(box: np.ndarray, volume: np.ndarray) -> tuple[float, tuple[int, int, int
 
 
 def build_fit(lo: np.ndarray, hi: np.ndarray, machine: dict[str, Any]) -> dict[str, Any]:
-    """The build-volume family of a part whose box is ``lo``..``hi`` in ``machine`` (``volume_mm``, ``origin``)."""
+    """The build-volume family of a part whose box is ``lo``..``hi`` in ``machine`` (``volume_mm``, ``origin``;
+    ``largest_mm`` where the volume is a typical machine assumed: the largest of the technology's, and whether
+    the part fits that in some axis orientation)."""
     volume = np.array(machine["volume_mm"], dtype=float)
     box = np.asarray(hi, dtype=float) - np.asarray(lo, dtype=float)
     ratio, order = fit(box, volume)
     placed = max(float(box[k]) / float(volume[k]) for k in range(3))
-    return {"volume_mm": [float(v) for v in volume], "volume_origin": machine["origin"],
+    largest: dict[str, Any] = {"largest_volume_mm": None, "largest_fill_ratio": None, "fits_largest": None}
+    if machine.get("largest_mm"):
+        most = fit(box, np.array(machine["largest_mm"], dtype=float))[0]
+        largest = {"largest_volume_mm": [float(v) for v in machine["largest_mm"]],
+                   "largest_fill_ratio": round(most, JUDGED), "fits_largest": bool(most <= 1.0 + 1e-9)}
+    return {**largest, "volume_mm": [float(v) for v in volume], "volume_origin": machine["origin"],
             "bbox_mm": [round(float(v), 4) for v in box], "fill_ratio": round(ratio, JUDGED),
             "fits": bool(ratio <= 1.0 + 1e-9), "as_placed_fill_ratio": round(placed, 4),
             "best_axes": ",".join("xyz"[k] for k in order), "max_dimension_mm": round(float(box.max()), JUDGED),
@@ -740,11 +1321,6 @@ def field_pitch(size: np.ndarray, ball: float | None = None) -> tuple[float, flo
 # --- orientations -------------------------------------------------------------------------------------------
 
 
-#: A sealed pocket of air under this many voxels is the voxelisation's, not the part's: a lone voxel the
-#: surface closes off at an inner corner read as a cavity with no escape hole (an error in powder and resin).
-POCKET_MIN_CELLS = 8
-
-
 def rot_text(R: np.ndarray) -> str:
     """``R`` as the build123d rotation that makes it, pasteable: ``bd.Rot(x, y, z)`` (degrees; build123d's
     ``Rot(x, y, z)`` is Rx @ Ry @ Rz)."""
@@ -786,10 +1362,12 @@ def down_to(normal: np.ndarray) -> np.ndarray:
 
 def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndarray], angle_limit: float,
                      pitch: float, shallow_deg: float = 20.0, owners: np.ndarray | None = None,
-                     cosmetic: set[int] | None = None) -> list[dict[str, Any]]:
+                     cosmetic: set[int] | None = None,
+                     at_limit: Callable[[np.ndarray], np.ndarray] | None = None) -> list[dict[str, Any]]:
     """Each candidate rotation's facts: support volume and contact area (and the contact on ``cosmetic``
     owners), build height, bed contact area, the down-facing area under ``angle_limit``, the area under
-    ``shallow_deg`` from horizontal (not flat) that stair-steps, and the box."""
+    ``shallow_deg`` from horizontal (not flat) that stair-steps, and the box. ``at_limit(R)``: the triangles
+    (a mask) that, turned by ``R``, read under the limit and are at it (``support``'s ``skip``)."""
     rows = []
     for name, R in candidates.items():
         W = V @ R.T
@@ -799,7 +1377,9 @@ def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndar
         tilt = angles(normals)
         on_plate = z.max(axis=1) <= zmin + 1e-3 * max(1.0, pitch)
         down = normals[:, 2] < -1e-9
-        held = support(W, F, angle_limit, pitch, plate_z=zmin, owners=owners)
+        skip = at_limit(R) if at_limit is not None else None
+        held = support(W, F, angle_limit, pitch, plate_z=zmin, owners=owners, skip=skip)
+        under = (tilt < angle_limit - ANGLE_EPS) & (~skip if skip is not None else True)
         on_cosmetic = sum(area for owner, area in held["per_owner_mm2"].items() if cosmetic and owner in cosmetic)
         box = W.max(axis=0) - W.min(axis=0)
         rows.append({"orientation": name, "rotation": np.round(R, 6).tolist(), "rotate": rot_text(R),
@@ -808,7 +1388,7 @@ def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndar
                      "support_contact_cosmetic_mm2": round(float(on_cosmetic), 2),
                      "build_height_mm": round(float(box[2]), 3),
                      "bed_contact_mm2": round(float(areas[down & on_plate & (tilt < 1.0)].sum()), 2),
-                     "overhang_area_mm2": round(float(areas[down & ~on_plate & (tilt < angle_limit - ANGLE_EPS)].sum()), 2),
+                     "overhang_area_mm2": round(float(areas[down & ~on_plate & under].sum()), 2),
                      "stair_step_area_mm2": round(float(areas[(tilt > 0.5) & (tilt < shallow_deg)].sum()), 2),
                      "bbox_mm": [round(float(v), 3) for v in box]})
     return rows

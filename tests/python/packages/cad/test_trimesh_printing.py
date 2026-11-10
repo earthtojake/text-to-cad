@@ -258,7 +258,7 @@ class WallThicknessTest(unittest.TestCase):
                 Pos(0, 0, 0.5) * Box(39, 39, 30, align=(Align.CENTER, Align.CENTER, Align.MIN))
             result = cad.stl.dfm(_stl(shell, tmp, "shell"), process="printing", technology="sla")
         self.assertEqual(facts["min_mm"], 2.0)
-        self.assertNotIn("printing.wall", {f.code for f in result.findings})
+        self.assertFalse([f.code for f in result.findings if f.code.startswith("printing.wall")])
         self.assertEqual(result.measurements["wall_thickness"]["min_mm"], 0.5)
 
     def test_thinner_wall_measures_thinner(self) -> None:
@@ -465,8 +465,9 @@ class OpenMeshTest(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertNotIn("measurement_failed", codes)
         self.assertNotIn("internal_void", codes, "an open mesh's voxel voids are its holes")
-        walls = [o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "printing.wall"]
-        self.assertEqual({o["status"] for o in walls}, {"failed"})
+        walls = [o for o in result.measurements["rules"]["outcomes"]
+                 if o["rule"].startswith("printing.wall") and o["status"] == "failed"]
+        self.assertTrue(walls, "the cup's walls are still measured, and fail")
         self.assertAlmostEqual(min(f["value"] for o in walls for f in o["failures"]), 0.4, delta=0.01)
 
     def test_an_open_mesh_s_holes_are_no_escape_holes(self) -> None:
@@ -510,13 +511,15 @@ class CheckTest(unittest.TestCase):
             export_stl(tube, str(path), tolerance=0.01, angular_tolerance=0.1)
             sla = cad.stl.dfm(str(path), process="printing", technology="sla")
             fdm = cad.stl.dfm(str(path), process="printing", technology="fdm")
-        walls = [f for f in sla.findings if f.code == "printing.wall"]
+        # a tube's wall is joined all round (a ring): supported, read off the mesh as off the exact tube
+        walls = [f for f in sla.findings if f.code == "printing.wall_supported"]
         self.assertTrue(walls and all(f.severity == "warning" for f in walls), [f.message for f in walls])
         self.assertIn("within the mesh's accuracy", walls[0].message)
         thinnest = min(sla.measurements["wall_thickness"]["items"], key=lambda item: item["thickness_mm"])
         self.assertTrue(thinnest["at_limit"])
+        self.assertTrue(thinnest["supported"])
         self.assertGreater(thinnest["chord_mm"], 0.5 - thinnest["thickness_mm"])
-        self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in fdm.findings})
+        self.assertIn(("error", "printing.wall_supported"), {(f.severity, f.code) for f in fdm.findings})
         # a 0.75 mm tube on FDM (0.8), coarsely meshed: its two rows of chords lie alike and cancel, so the
         # reading's own error is small and the wall is under its limit -- an error, not "at the limit"
         thin = Cylinder(5, 20) - Cylinder(4.25, 21)
@@ -526,11 +529,11 @@ class CheckTest(unittest.TestCase):
             coarse = cad.stl.dfm(str(path), process="printing", technology="fdm")
         least = min(coarse.measurements["wall_thickness"]["items"], key=lambda item: item["thickness_mm"])
         self.assertLess(least["chord_mm"], 0.8 - least["thickness_mm"])
-        self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in coarse.findings})
+        self.assertIn(("error", "printing.wall_supported"), {(f.severity, f.code) for f in coarse.findings})
         # a box's flat walls have no chords to depart: none is at a limit
         with tempfile.TemporaryDirectory() as td:
             flat = cad.stl.dfm(_stl(_hollow_box(0.45), Path(td), "box"), process="printing", technology="sla")
-        self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in flat.findings})
+        self.assertIn(("error", "printing.wall_supported"), {(f.severity, f.code) for f in flat.findings})
 
     def test_angle_limit_is_echoed_back(self) -> None:
         """The limit used has to travel with the numbers it produced."""
