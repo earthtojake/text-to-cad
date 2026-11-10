@@ -373,7 +373,7 @@ script that imports `bpy` its Blender), on the CPU where there is no GPU.
 
 ```
 cad model export <id> GLB/galatea.glb --tolerance 0.08 --angle 8    # 77 MB; again after every change to the model
-cad run src/film.py list                         # the shots: 870 frames, 36 s at 24 a second
+cad run src/film.py list                         # the shots: 894 frames, 37 s at 24 a second
 cad run src/film.py still hero 60 --draft        # one frame, 960 x 540, in a few seconds: framing and light
 cad run src/film.py shot hero --preview --step 2 # a shot's motion, small and quick
 cad run src/film.py shot hero                    # its frames, 1600 x 900, into tmp/film/hero/; kept, so a run can be resumed
@@ -384,7 +384,9 @@ The shots: it wakes in the dark (its face lights first); the camera goes round i
 settles its weight on one leg; three close ones (the breastplate's light and the collar,
 the name on the hatch, the hip's cap down to the knee); the skins are wiped away from the
 head down and the mechanism crouches, then a leg's linkage close; a hand closes; it walks
-toward the camera; it bows, the studio's lights go down and its own two stay.
+toward the camera; it bows, the studio's lights go down and its own two stay. The cut
+lays a few captions and the title over the frames (ffmpeg's `drawtext`), so the words
+can change without a frame being rendered again.
 
 What the script does that the GLB alone does not. The pelvis is the mechanism's fixed
 link, so an exported clip crouches and treads in the air: `plant` moves the whole robot,

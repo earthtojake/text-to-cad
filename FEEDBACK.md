@@ -196,10 +196,10 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     snapshot; both show at once in a path tracer. Rows added near the point (entry 24)
     made the whole foot ring: its width 90 mm away changed by 6 mm, and with three rows
     the solid came back inside out, 40 times its volume, and valid. What works is to
-    drill the end out round its axis and fill the mouth with
-    `BRepOffsetAPI_MakeFilling`, each rim edge added with its face at `GeomAbs_G1`
-    (`geo.smooth_tip` in the model). A `cap=` on the skill's loft notes, or that recipe,
-    would have saved two hours.
+    drill the end out round its axis and fill the mouth with `Face.make_surface_patch`,
+    each rim edge given with its face at `ContinuityLevel.C1` (`geo.smooth_tip` in the
+    model; with build123d's call and not the kernel's own, for the reason in entry 32).
+    That recipe in the skill's notes on `loft` would have saved two hours.
 
 28. **`Face.center()` of a cylinder's wall is a point on the wall,** not on its axis, and
     `shape.volume` of a lofted solid moved by 3,000 mm3 when a 790 mm3 hole was drilled
