@@ -49,6 +49,7 @@ import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from cad.registry import DOCUMENT_TYPES, by_extension, help_text
 
