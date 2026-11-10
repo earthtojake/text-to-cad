@@ -64,7 +64,7 @@ What to change:
 
     | Process | The `error` rules |
     | --- | --- |
-    | cnc | `cnc.internal_corner_sharp`, `cnc.sharp_internal_edge` (a warning where more axes, a special cutter or a second setup makes the edge), `cnc.internal_corner_radius`, `cnc.corner_reach_limit`, `cnc.pocket_depth_limit`, `cnc.wall_thickness`, `cnc.hole_diameter`, `cnc.hole_depth_limit`, `cnc.gap_width`, `cnc.no_line_of_sight`, `cnc.enclosed_void`, `cnc.part_size_limit`, and with `--turning` `cnc.groove_depth_limit` |
+    | cnc | `cnc.internal_corner_sharp`, `cnc.sharp_internal_edge` (a warning where more axes, a special cutter or a second setup makes the edge), `cnc.internal_corner_radius`, `cnc.corner_reach_limit`, `cnc.pocket_depth_limit`, `cnc.wall_thickness`, `cnc.hole_diameter`, `cnc.hole_depth_limit`, `cnc.gap_width`, `cnc.no_line_of_sight`, `cnc.enclosed_void`, and with `--turning` `cnc.groove_depth_limit` |
     | sheet | `sheet.uniform_thickness`, `sheet.thickness_limit`, `sheet.flange_length`, `sheet.bend_relief_width`, `sheet.hole_to_bend`, `sheet.hem_diameter` |
     | molding | `molding.draft_zero`, `molding.undercut_unreleasable`, `molding.wall_too_thin`, `molding.wall_too_thick` |
     | printing | `printing.wall_supported`, `printing.wall_unsupported`, `printing.wall` (each a warning for a mesh's wall at the limit within the mesh's accuracy), `printing.hole_diameter` (SLA under 0.5 mm, SLS, metal; a warning for FDM and for SLA under 0.8 mm), `printing.pin_diameter` (SLA, metal; a warning for FDM, SLS, MJF), `printing.gap` (a warning for FDM), `printing.escape_holes`, and `printing.build_volume` against the machine given (`--build-volume`) or, with none given, where no orientation fits the largest machine listed |
@@ -72,11 +72,13 @@ What to change:
     A limit no published guide states is **text-to-cad's own floor**, and its finding's `source` reads
     `text-to-cad, its own figure: no published guide states one`, never a publisher's name: with no
     `--tools`, a corner or edge radius under 0.025 mm and a gap under 0.05 mm (the smallest tool the cited
-    guide calls feasible); a corner or a cavity a tool under 1 mm across must reach more than 10 diameters
-    into (`cnc.corner_reach_limit`, `cnc.pocket_depth_limit`); a face no tool reaches at all
-    (`cnc.no_line_of_sight`); a part over 4000 mm long, or a turned one over 1000 mm across
-    (`cnc.part_size_limit`); an internal groove deeper than half the bore its tool enters by
-    (`cnc.groove_depth_limit`); sheet over 25 mm thick (`sheet.thickness_limit`); a wall or a rib deeper
+    guide calls feasible); a corner, a cavity or a hole a tool under 1 mm across must reach more than 25
+    of its diameters into (25 at 0.5 mm and under, rising evenly to the guide's 30, a drill's 40, at 1 mm:
+    `cnc.corner_reach_limit`, `cnc.pocket_depth_limit`, `cnc.hole_depth_limit`), and a straight slit open
+    at both ends, a slitting saw's, deeper than 60 of its widths; a face no tool reaches at all
+    (`cnc.no_line_of_sight`); an internal groove deeper than half the bore its tool enters by
+    (`cnc.groove_depth_limit`). A part's size alone fails nothing in CNC: over 4000 mm long, or turned over
+    1000 mm across, is a specialist's machine, a warning (`cnc.part_size_limit`); sheet over 25 mm thick (`sheet.thickness_limit`); a wall or a rib deeper
     than 10 mm with no draft at all (`molding.draft_zero`); a wall under half the resin's recommended
     minimum or over twice its maximum (`molding.wall_too_thin`, `molding.wall_too_thick`); and an FDM wall
     under two beads of the `--nozzle` given. A hole under 1 mm is a warning (`cnc.hole_diameter_small`:

@@ -271,7 +271,8 @@ count a summary says.
   (`occurrence_count`, `solid_count`, `volume_mm3`), and so does every process: a total counts a part once for
   each time it occurs (`_common.occurrences`: molding's draft, undercut and projected areas, its clamp force
   and its candidates' rows; the parts and the volume of CNC's and sheet's last lines), where a family's items
-  are the features measured, each once. A print is the exception that needs none: its parts stand together on
+  are the features measured, each once -- but for CNC, which says every occurrence's features at the
+  occurrence's own refs (below), so its items, its counts and its findings count every occurrence already. A print is the exception that needs none: its parts stand together on
   one plate, so the occurrences turned alike share neither their height above it nor what stands beside them,
   and it measures every occurrence where it stands (`_dfm_brep.every_occurrence`: each a part at its own path,
   its clearances to its copies among them). A part that is another's
@@ -282,10 +283,12 @@ count a summary says.
   as a turn, are no copy; never by bytes, which a copy does not keep) and, in CNC and sheet metal (each part read in
   its own frame, so where it stands changes nothing), measured once: the first's items said again at the copy's
   refs, its places and directions moved onto it, its counts counted again (`_dfm_brep.moved`), the faces the
-  kernel failed on said at the copy's own too. CNC reuses a measurement only where the copy's own machine frame
-  (`machine.frames`, its own) is the measured part's turned with it: a copy turned by a right angle reads square
-  to the world again, a frame of its own, and is measured anew (a mirrored copy too). A row of 46 copies among 107
-  parts costs 61 parts' measurement, its report the same. Molding reads a part against the world's pull, so it
+  kernel failed on said at the copy's own too. CNC takes every occurrence as a part
+  (`_dfm_brep.every_occurrence`) and measures each geometry once, however its instances are turned: a copy is
+  read in the measured part's machine frame moved with it (`machine.frames`: its `axes` that frame, `copy_of`
+  the part measured), so fifty instances turned alike and fifty turned fifty ways say the same features, the
+  same counts and the same findings, each at its own occurrence's refs (a mirrored copy is measured anew; a
+  solid of a part that holds several is a copy only of the same solid of another instance of that part). Molding reads a part against the world's pull, so it
   measures every part that stands another way; printing every occurrence.
 - **Exact rays** (`_dfm_brep.Rays`, each process's casts) cost what a crossing costs. On a heavy face -- free-form
   and of 48 edges or more, or a B-spline of 4000 control points or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
@@ -442,8 +445,11 @@ judged solid by solid (`_dfm_cnc._solids`): each its own stock, frame, setups an
 of the part is no obstacle to its tools and no wall of its gaps --, its refs the whole part's, its `part` name
 `<part> (solid 2 of 3)`; the part's `several_solids` (the warning every process gives) says so, and the
 summary counts the parts judged. A
-part of more than 20000 faces (`FACE_BUDGET`, text-to-cad's own bound) is not measured: `model` is
-`{"error": ...}`, the report `partial`, never a pass.
+part of more than 4000 faces (`FACE_BUDGET`, text-to-cad's own bound) is not measured: `model` is
+`{"error": ...}`, the report `partial`, never a pass. The bound is what holds a check's time where nothing
+else does (a check measured in the caller's own process is never stopped): a check's time grows about as its
+part's faces to the power 1.4 -- a plate of 144 holes takes 9 seconds, one of 576 a minute -- so a part at the
+bound takes about a quarter of an hour, and one of 20000 faces would take over two.
 
 Each part is machined in its own frame, never the world's: the rotation whose axes the most of its area lies
 along (each plane's normal, each cylinder's, cone's or torus's axis, by its face's area). Two tolerances, two
@@ -463,13 +469,18 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
 - **holes** — a connected set of coaxial concave cylinders and cones (plus the planes square to the axis whose
   every neighbour is one of them: a counterbore step, a flat floor); sets on one axis whose cylinders of one
   radius overlap along it are one hole (a hole a slot splits); one radius's cylinders sweep >= 300 degrees
-  together; a wider cylinder with a narrower one of the hole beyond it toward the opening (either way along a
+  together (the turn less the widest gap between the face's points about the axis: a fillet on a leaning edge
+  is a quarter-round whatever its parameters' box says); nothing stands inside its narrowest cylinder (`_cored`:
+  from just inside the wall, four ways about the axis at five places along it, a ray toward the axis meets no
+  face before it gets there) -- a cylinder that goes round a boss, a hub or a core is an annular cavity's outer
+  wall, an O-ring's face groove or a round pocket about a boss, which is a pocket's and no hole; a wider cylinder with a narrower one of the hole beyond it toward the opening (either way along a
   through hole) is an internal groove, no counterbore: it and the planes beside it leave the hole, a keyseat
   cutter's recess (`sharp_edges`, `access`), `grooves` [{diameter_mm, width_mm, location}] saying it.
   `diameter_mm` (narrowest full cylinder), `depth_mm` (the drilled length: that cylinder's axis between its two
   ends, each at its middle along the axis -- 25 / cos 30 deg for a 30 degree hole through 25 mm, where its
   longest side is longer --, below any counterbore), `overall_depth_mm` (every cylinder's extent),
-  `depth_to_diameter`, `through` / `bottom` (`through`, `drill_point`, `flat`, `closed`, `other`: an exact
+  `depth_to_diameter`, `micro_tool` (under 1 mm) and `reach_limit` (the diameters a drill that size reaches:
+  40 at 1 mm and over, 25 at 0.5 mm and under, evenly between), `through` / `bottom` (`through`, `drill_point`, `flat`, `closed`, `other`: an exact
   ray along the axis from inside the hole meets the hole's own floor or not), `point_angle_deg` (a drill
   point's included angle), `counterbores` [{diameter_mm, depth_mm, depth_to_diameter}] (each its own feature:
   its depth is not the hole's; the **counterbores** family lists each, a stepped bore's larger step too, with
@@ -487,38 +498,66 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   a turn or more (a pitch), with their end caps. `internal`, `major_diameter_mm`,
   `minor_diameter_mm`, `pitch_mm` (axial advance per unwrapped turn of a flank edge), `length_mm`,
   `length_to_diameter`, `modelled` (1). Thread faces are excluded from access, walls, gaps and sharp edges.
-- **pockets** — a planar face meeting, by a concave edge (or a concave root fillet), faces lying along its
-  normal, and seen end-on (a ray along its normal from it escapes), is a floor; its walls grow along
-  concave/tangent edges parallel to the normal. `kind` (`closed`; `slot`: open with opposite walls; `open`),
+- **pockets** — one cavity model. A planar face meeting, by a concave edge (or a concave root fillet), faces
+  that rise from it, and seen end-on (a ray along its normal from it escapes), is a **floor**. A face **rises**
+  (`Model.rises`) where it lies along the floor's normal or leans back from it by a draft of 25 degrees at most
+  (`DRAFT_MAX_DEG`, text-to-cad's own: tapered end mills are catalogued to about 20 degrees a side, and a face
+  30 degrees off the axis is a 60-degree chamfer mill's V), everywhere on it (its samples' normals and those at
+  12 of its mesh's nodes); a face leaning over the floor is an undercut, never a wall. The **walls** grow from
+  those along concave/tangent edges that run up the cavity (within 45 degrees of the normal). So a drafted, a
+  lofted or a tapered pocket, a cone's, and one with some walls drafted and some square are the pocket their
+  straight twin is, with its depth, width and corners. `kind` (`closed`; `slot`: open with a width; `open`),
   `depth_mm` (floor to the walls' rim), `depth_from_top_mm` (floor to the part's top along the normal: tool
-  reach), `width_mm` (narrowest exact ray between opposite walls of the pocket), `depth_to_width`,
+  reach), `width_mm` -- the narrowest gap across the void **at the floor** (`_floor_width`: from 17 stations
+  along each wall's foot, a ray across the axis along the wall's normal, 0.02 mm above the foot, to the first
+  face: where that face looks back within 45 degrees and shares no edge with the wall, its length is a gap --
+  a slot's width, a drafted pocket's at its floor, an annular groove's radial gap, a round pocket's diameter;
+  where no two walls face each other, a triangle's, the largest tool that touches a wall and clears the wall
+  its ray meets, the inscribed circle), or the narrowest sampled gap between two of its walls above the floor
+  where that is less (a T-slot's neck) --, `depth_to_width`, `draft_deg` (its walls' greatest),
+  `reach_limit` (the widths a tool that fits reaches: 30, a micro tool's 25 to 30), `saw` (a straight slit a
+  slitting saw runs through: two plane walls square to the floor, the floor running out of the part at both
+  ends), `engraved` and `engraved_corners` (a cavity at most 1 mm deep, no deeper than twice its width and
+  under 2.5 mm wide: lettering, an engraving tool's -- its corners are counted on it and leave
+  `internal_corners`, and `cnc.engraving` says them all once; its width is still a gap under 2.5 mm,
+  micro-machining),
   `open_boundary_fraction`, `floor_radius_mm` (root fillet), `axis`, `aligned`, `reachable` (along a direction
   the machine has; or none of its edges left unmade, an edge only a setup of its own makes counted unmade: a
   chamfer mill's V reads as a pocket on one flank; or every face of it along a machine direction square to its
   axis: a profile cut along that direction, a plate's notch turned in the plane, never inclined),
   `inclination_deg`, `wall_count`, `floor` (its
   floor's ref), `width_faces` (the two walls the width is between; `location` is the first of them, else the
-  floor), `micro_tool` (under 1 mm wide: only a micro tool fits). An open step that reads both ways (floor+wall or wall+floor seen from the side) keeps the shallower
-  reading. **Through** cavities (`kind` `through`: windows, through slots, cut-outs, no floor) are faces along
-  a world axis joined by concave or tangent edges along it, none a floor pocket's, none meeting a plane square
+  floor), `micro_tool` (under 1 mm wide: only a micro tool fits). A face that reads both ways -- an open step's
+  floor and wall, a drafted wall whose top a tool sees end-on with the floor beside it -- is one cavity: the
+  closed reading, else the one cut along a machine direction, else the shallower.
+  **Through** cavities (`kind` `through`: windows, through slots, cut-outs, no floor) are faces that rise
+  along a world axis, either way (a tapered window's from its wide side), joined by concave or tangent edges
+  that run up it, none a floor pocket's, none meeting a plane square
   to the axis by a concave edge, closed around the axis -- no ray across the axis from inside the cavity
   (from each face along its normal, then from the middle of that ray every 10 degrees and toward the middle
   of each pair of the edges leading out of it) leaves the part: an open valley, a quilted pad's grooves, a
   T-slot or a dovetail open at its neck is no window, whatever way its faces look; a keyway open only into
   its bore is closed --, with a corner -- a concave cylinder along
-  it that is no floor's root fillet (no tangent plane neighbour seen end-on), or a sharp concave edge along
-  it; `depth_mm` is the walls' extent along the axis, `depth_from_top_mm` the shallower side's reach,
-  `width_mm` / `depth_to_width` as for a pocket, `floor` null.
-- **internal_corners** — a pocket's in-plane corners: concave cylinders along the pocket's axis (`radius_mm`)
-  and sharp concave edges along it that no tool makes from another side (`radius_mm` 0, `sharp` true,
-  `edge`). A corner's `location` is its cavity's ref (`pocket`), which the cavity's corners share, so one
-  cavity is one finding a rule (`and 3 more at this ref`; the record holds each); `corner` is its own face. `height_mm` (the corner's own extent: the cavity depth there), `depth_mm` (from the part's top),
-  `radius_to_depth`, `tool_mm` (largest `--tools` tool <= 2r, else 2r), `reach_ratio` (depth / tool_mm),
-  `micro_tool` (that tool under 1 mm),
+  it that is no floor's root fillet (no tangent plane neighbour seen end-on), a drafted corner, or a sharp
+  concave edge that runs up it; `depth_mm` is the walls' extent along the axis, `depth_from_top_mm` the
+  shallower side's reach (a drafted one's from its wide side), `width_mm` the narrowest sampled gap between
+  two of its walls (a drafted one's at its narrow end, as a pocket's at its floor), `floor` null.
+- **internal_corners** — a pocket's in-plane corners: each wall that goes round the void -- a concave cylinder
+  along the pocket's axis (its `radius_mm`), else any other wall by the radius its foot turns by at the floor
+  (`_plan_radius`: the circle through the foot's ends and middle, seen along the axis; a drafted corner's cone
+  or a lofted one's ruled face is tightest there, a leaning fillet's cylinder reads its own radius) -- and
+  each sharp concave edge between two walls that runs up the cavity and no tool makes from another side
+  (`radius_mm` 0, `sharp` true, `edge`). One corner is one feature: a round one's `location` is its own face
+  (`corner`), the face to edit, a sharp one's finding is at its `edge`; `pocket` is its cavity's ref (the
+  floor), which its other corners share. `height_mm` (the corner's own extent: the cavity depth there),
+  `depth_mm` (from the part's top), `radius_to_depth`, `tool_mm` (largest `--tools` tool <= 2r, else 2r; a
+  wall that goes all round -- a round pocket's, an annular groove's outer one -- takes no tool wider than the
+  cavity), `reach_ratio` (depth / tool_mm), `micro_tool` (that tool under 1 mm), `reach_limit` (the diameters
+  a tool that size reaches),
   `pocket` (its floor's ref; a through cavity's `location`), `folded_edges` (the sharp edges its run makes
   through small edge rounds at its ends -- an edge sharing a vertex and a face with it that runs along its
   axis, or is a face of such a round and under twice its radius long; never a floor-to-wall edge -- folded in
-  rather than listed under sharp_edges). A through cavity's concave cylinders and unmade sharp edges along it
+  rather than listed under sharp_edges). A through cavity's round walls and unmade sharp edges along it
   are its corners the same way. `radius_mm` is read to 0.01 mm (`RADIUS_TOLERANCE`: 1.4999
   is 1.5). Floor-to-wall roots are never corners (a flat end mill makes them sharp). `third_of_depth_mm`: a
   third of its height, the radius the hint gives in millimetres; `opening_mm` its cavity's width, `fits_mm`
@@ -579,7 +618,10 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   station within twice the bore's radius of its axis (a 20 mm chamber behind a 4 mm bore: none); a slot or
   dovetail cutter's plunged through an opening as wide as the disc somewhere along the edge (its sides found by
   bisection), or fed in at its own level from a side the recess opens to (a T-slot from its open end; a round
-  chamber under a 5 mm port: neither). Else the edge is unmade, `no_way_in`. A slot cutter's opening is read at
+  chamber under a 5 mm port: neither). A recess's way in is the whole recess's: an edge its disc reaches
+  with no way in beside it is made where an edge on the same floor or ceiling is made by such a cutter (a
+  closed T-slot with an entry hole at one end: the cutter drops in there and travels the slot, its far end's
+  edges made). Else the edge is unmade, `no_way_in`. A slot cutter's opening is read at
   every station: narrower than the recess is tall, `narrow_opening` (a warning). A
   60/90/120 degree chamfer mill along a V's bisector where the bisector keeps to one axis along the edge
   (five axes tilt it along a curved one); a V of another angle under 90.5 degrees is a V cutter's ground to it
@@ -619,7 +661,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   each other.
 - **walls** — under each sampled point of each face, an exact ray into the material to the first face across
   that faces back (normals within ~45 degrees of opposite; not across a knife edge); the thinnest per face
-  under 5 mm: `thickness_mm`, `opposite`, `height_mm` (a plane's extent across its longest concave root edge),
+  under 5 mm, and thicker where it is a feature that stands over four times its thickness tall (a 6 mm pin
+  40 mm tall): `thickness_mm`, `opposite`, `height_mm` (a plane's extent across its longest concave root edge),
   `height_to_thickness`, `surface`, `standing` -- a thin feature that stands: a plane rising from a concave
   root edge (or a root fillet) at one end with no concave edge across its other (a fin, a rib, a wall beside a
   pocket; never a floor, held all round, nor a plate's face), or a convex cylinder with a root at one end
@@ -643,7 +686,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   part's longest first) whose sampled points no
   straight line from the machine's directions reaches (exact rays must escape the part; back-facing points
   never count): `unreached_fraction`, `unreached_any_direction_fraction` (a face of revolution's own axis
-  either way, then the probes: 200 directions over the sphere),
+  either way, then the probes: the part's own directions, then every 15 degrees about each world axis and
+  the 218 directions through a cube's surface cut in three a half side -- a set a cube's symmetries leave as
+  it is, each tried by every point it faces, so what is found does not turn with the part's frame),
   `kind` (`undercut`: five axes would reach it; `no_line_of_sight`: nothing straight would), `hole` and
   `hole_axis` (a hole's face, and its axis). A `no_line_of_sight` face is then tried for a disc cutter on a
   straight shank -- a keyseat cutter down a bore, a T-slot cutter through an opening, a lollipop
@@ -655,14 +700,17 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   0.005 mm it does) and the disc, at the point, touches no material. `disc_reach` (every point probed: a
   12 mm groove behind a 10 mm bore; a 24 mm chamber behind one is not) and `no_tool_fraction` (the share of
   the face neither a line nor such a cutter reaches). The faces of one recess that share an edge are one
-  item, judged at its worst face: `faces`, `face_count`. Items of `kind` `special_cutter` are the edges only a T-slot,
+  item, judged at its worst face (`faces`, `face_count`), and it takes in a face beside it that a line at an
+  angle reaches part of (a chamber's floor behind its neck): one recess, one finding, whichever of its faces
+  a sample's ray clears. A freeform face (a sweep, a loft, a spline: one may be a whole part, a coil spring's
+  wire) is sampled at up to 128 points, where a plane or a cylinder takes 16. Items of `kind` `special_cutter` are the edges only a T-slot,
   dovetail or keyseat cutter makes, joined by the faces they share, whatever line of sight says: `cutter`,
   `edge_count`, `edges` (their fractions 0), `advice` (the hint's ask: a recess whose dovetails are all within
   `SQUARABLE_DEG`, 10 degrees, of square is a wall drafted back, asked squared so an end mill makes it; any
   other kept to a standard cutter). Directions: 3
   axes the six world axes; 4 axes those plus every 15 degrees about the rotary axis (X, Y or Z, the one
-  that reaches most); 5 axes those plus every 15 degrees about each world axis, then the part's own and 200
-  over the sphere (so five reach at least what four do).
+  that reaches most); 5 axes those plus every 15 degrees about each world axis, then the part's own and the
+  spread ones (so five reach at least what four do).
   One cause, one judged item: an `undercut` or `no_line_of_sight` face of a special cutter's recess is that
   recess's (`part_of` its ref; the `special_cutter` item lists them in `unreached_faces` and its message names
   them, saying which no straight line reaches at all), and on 3 and 4 axes an inclined hole's unreached faces
@@ -691,7 +739,10 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   faces of revolution about it and on planes square to it whose every edge is a circle about it),
   `max_diameter_mm`, `length_mm`,
   `length_to_diameter`, `bar_removal_ratio`, `off_axis_faces`, `sharp_profile_corners`), **turned_diameters**
-  (convex coaxial cylinders not groove floors: `diameter_mm`, `length_mm`), **bores** (on-axis holes),
+  (convex coaxial cylinders not groove floors: `diameter_mm`, `length_mm`, and each section's slender run --
+  thinnest first, a section and the sections beside it no more than 1.25 of its diameter across bend as one
+  length: `run_mm` and `run_to_diameter` on the thinnest, a section a thinner one's run takes in naming it,
+  `run_of`; a 6 x 240 stem on a 60 mm flange is 40 diameters), **bores** (on-axis holes),
   **grooves** (a coaxial cylinder with both ends meeting square planes by concave edges: `internal`,
   `width_mm`, `depth_mm`, `depth_to_width`, `diameter_mm`, and internal: `entry_diameter_mm` -- the wider of
   the two bores beside it, its tool's best way in -- and `depth_to_entry`), **live_tooling** (off-axis face groups: `cross_hole`, `flat`,
@@ -708,8 +759,21 @@ no guide states is text-to-cad's own (`rules.OWN`: its finding's `source` reads 
 publisher's name, and the rule's note gives the reason). A limit that follows the tools is the smallest
 `--tools` tool's where one is given. With none, one tool floor holds for holes, slots and corners: the 0.05 mm
 the guide's small-features table calls a feasible hole (`TOOL_FLOOR_MM`; a corner's radius half of it, a
-gap's width all of it); a tool under 1 mm is a micro tool (`MICRO_TOOL_MM`), which reaches ten of its
-diameters (`MICRO_REACH`, own), where the guide's 30 diameters are specialised tooling's at full size.
+gap's width all of it); a tool under 1 mm is a micro tool (`MICRO_TOOL_MM`), whose reach is one continuous
+limit (`reach_limit`, own, no guide's or catalogue's figure: 25 diameters at 0.5 mm and under, `MICRO_REACH`,
+on a long neck made for it, rising evenly to the guide's 30 at 1 mm; no step at 1 mm), a micro drill's the
+same to the guide's 40. A straight slit open at both ends, deeper than an end mill of its width reaches, is a
+slitting saw's (`cnc.slitting_saw`, a warning that names it), and no saw's past 60 of its widths (`SAW_REACH`,
+own: a saw taken as about 200 times its thickness across, cutting under a third of its diameter deep).
+
+What is text-to-cad's own and why (each rule's note says it again): the tool floor for slots and corners; the
+micro reach and the saw's; `cnc.setups`' five (the guide says a part rotated three or four times: four rotations
+are five clampings); `cnc.drill_size`'s 0.005 mm (the guide recommends a standard drill and states no
+tolerance); `cnc.tall_feature`'s four; the draft a wall may have (25 degrees) and an engraving's depth (1 mm);
+`cnc.part_size_limit` (twice the cited network's sizes: a specialist's machine); turning's slenderness (ten
+diameters a section), groove depth (a quarter of the bore a warning, half of it the geometric limit, an error)
+and width (five). The part's size alone fails no part: long-bed mills and vertical lathes exist, so both size
+rules are warnings, and only a `--stock` given that the part does not fit is an error.
 
 The pocket and corner rules apply under `--turning` too, to the live tooling's pockets. Under `--turning` the
 milling rules -- `sharp_internal_edge`, `gap_width*`, `inclined_feature`, `special_cutter`, `undercut`,
@@ -722,17 +786,21 @@ part's size is judged against a general machine's alone (`cnc.part_size`). `--st
 (`cnc.stock_too_small`).
 
 Each finding's message ends with what its item says of itself (`Rule.detail`): `internal_corner_sharp` its
-edge, height and depth below the top; a round corner's rules its own face (`corner`) and height; `sharp_internal_edge` its edge, the two faces, the void angle and xyz
+edge, height and depth below the top; a round corner's rules its height and its cavity (`pocket`; the finding
+is at the corner's own face); `sharp_internal_edge` its edge, the two faces (in words, `between`: every ref an
+item carries is one ref), the void angle and xyz
 (its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point.
 
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`
 (e, `--turning` on a part with no surface of revolution), `cnc.mostly_not_turned` (w, under half the area
 turns), `cnc.live_tooling` (i), `cnc.turned_corner_sharp` (i: the sharp internal corners of the turned
 profile, each left with an insert's nose radius), `cnc.turning_not_judged` (i),
-`cnc.rotary_axis` (i), `cnc.fine_detail` (i, >= 20 faces under 1 mm),
+`cnc.rotary_axis` (i), `cnc.fine_detail` (i, >= 20 faces under 1 mm), `cnc.engraving` (i: the shallow, narrow
+cavities an engraving tool cuts, and their corners, said once),
 `cnc.material_assumed` (i: no `--material`, walls judged by metal's limits), `cnc.ball_creases` (i: the
 creases a ball end mill rounds, the worst one's departure from the drawn edge).
-The summary says a part's setups (an assembly: the most any part takes), never a sum.
+The summary says a part's setups (an assembly: the most any part takes), never a sum; its parts, holes and
+pockets count every occurrence and every solid, as the findings do.
 
 Context the rules read: `material_class`, `wall_class` (the class, else `metal`), `tools_given`,
 `min_tool_mm`, `axes`, `turning`.
