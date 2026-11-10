@@ -70,6 +70,9 @@ ALLOWED_CADGEN = {
     # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
     # is imported in the function that measures.
     "cad._internal.manufacturing",
+    # A B-rep type's interference check (no robot type's): its options and its result, stdlib only; the engine
+    # measures it.
+    "cad._internal.interference",
     # A B-rep type's stress study (no robot type's): its signature and options, stdlib only; the kernel, netgen
     # and CalculiX are imported in the function that studies.
     "cad._internal.fea.operation",

@@ -73,6 +73,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+    # A B-rep type's interference check: its poses, motions and fits repeat, lists no signature derives.
+    **{f"{document_type} interference": frozenset({"document", "pose", "states", "motion", "motions", "samples", "fit",
+                                                   "jobs", "pair_seconds", "seconds", "min_volume"})
+       for document_type in ("model", "xbf", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.

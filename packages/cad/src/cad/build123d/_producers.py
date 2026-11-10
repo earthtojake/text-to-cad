@@ -16,7 +16,7 @@ from typing import Any
 
 from cad.registry import Producer
 
-__all__ = ["PRODUCERS", "is_shape", "manufacturing_check"]
+__all__ = ["PRODUCERS", "interference_check", "is_shape", "manufacturing_check"]
 
 
 def manufacturing_check() -> Any:
@@ -25,6 +25,14 @@ def manufacturing_check() -> Any:
     from cad.build123d import _dfm_check
 
     return _dfm_check
+
+
+def interference_check() -> Any:
+    """The module that measures an interference check of a document the engine holds (``_interference``),
+    loaded now: asked by ``cad.registry.interference_check``, for a check alone."""
+    from cad.build123d import _interference
+
+    return _interference
 
 
 def is_shape(value: Any) -> bool:

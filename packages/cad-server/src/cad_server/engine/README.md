@@ -739,6 +739,12 @@ cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius
                                              trimesh integration's (at x, y, z); the general
                                              rules' verdicts (no shop's limits) and
                                              every measurement
+cad model|xbf|step interference SRC [--pose POSE]... [--states] [--motion NAME]... [--motions] [--samples N]
+                [--fit A,B]... [--jobs N] [--pair-seconds S] [--seconds S] [--min-volume MM3] [--json]
+                                             which parts share volume: every pair whose boxes meet
+                                             measured exactly on the parts' own solids, as built and at
+                                             each pose, state and sequence sample asked; a named fit
+                                             listed apart; each pair not measured said, and never passed
 cad model|xbf|step solve SRC [--occurrence PART] [--json]
                                              a stress study's setup, the kernel's: the parts, the pairs
                                              that touch and a part's faces by ref; writes nothing
@@ -1084,6 +1090,26 @@ the base's environment (`manufacturing.through_engine`, `integration_env`). So d
 engine can be reached. Either way `api.check` says so in one line on stderr, in the process that can then
 measure it: nothing keeps such a check, so it is measured again each time it is asked. What the engine measured
 `api.check` returns as `measured_in: "engine"` (`api.IN_ENGINE`; `IN_CALLER` is the caller's to say of its own).
+
+**The interference check** (`cad <type> interference`, `cad.<type>.interference`: a model's, an xbf's, a STEP's)
+is asked and answered the same way and is no manufacturing process's: the caller resolves its options
+(`cad._internal.interference.options`: the poses, the mechanism states, the configuration sequences and their
+samples, the named fits, its limits) and asks `api.check` with `process: "interference"`, which the runner takes
+beside a process's (`checks_runner.INTERFERENCE`) and the checks process hands to its own measurer
+(`registry.interference_check`, `cad.build123d._interference`, whose docstring is the mechanism). So it has a
+check's whole life -- a slot of the pool, the limits, the kept result by the document's version and the options,
+`superseded` when the model is built again. What it measures: each stance is every part's placement (as built,
+or the mechanism's forward kinematics at a pose or at a sample of a sequence); the pairs whose boxes meet there
+-- each part's tight box, turned with the part -- are measured by `overlap_volume` on the parts' own solids, once
+for each way two parts stand to one another, so the copies of a part and the parts no stance moves cost one
+measurement. The pairs are measured in a few processes the checks process starts for the check (`--jobs`: half
+the cores, four at most, each a kernel of its own, outside the memory the engine's rule counts), because a
+Boolean cannot be stopped from inside: a pair past its time (`--pair-seconds`) has its process killed and is
+answered **unmeasured**, as is one whose process exited, one the kernel refused and every pair not reached
+within the check's own time (`--seconds`, kept under `CAD_ENGINE_CHECK_SECONDS`). The result is a
+`CheckResult`: `failed` with an `interference` finding a pair; `not_checked` (`unmeasured`) where none was found
+but a pair went unmeasured; `ok` only with none of either. A caller of another release or code than the checks
+processes' is not measured for (`Unanswered`): there is no measuring in the caller.
 
 The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them (held to one to the machine's
 cores, which `cad status` says), else half the machine's cores, one at least and four at most, each a kernel

@@ -82,6 +82,13 @@ class DocumentType(types.ModuleType):
             value = dfm_for(entry.id)
             self.__dict__[name] = value
             return value
+        if name == "interference" and name in entry.operation_names:
+            # The interference check every B-rep type shares (``cad._internal.interference``).
+            from cad._internal.interference import interference_for
+
+            value = interference_for(entry.id)
+            self.__dict__[name] = value
+            return value
         if name == "solve" and (entry.operation("solve") or _NONE).integration == "calculix":
             # The stress study every B-rep type shares (``cad._internal.fea.operation``).
             from cad._internal.fea.operation import solve_for

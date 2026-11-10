@@ -14,6 +14,7 @@ prompt names a reference ([Check each change](../SKILL.md#check-each-change)).
 - [Which code made it](#which-code-made-it)
 - [Measurements](#measurements)
 - [Geometry diagnostics](#geometry-diagnostics)
+- [Interference](#interference)
 - [Mass properties](#mass-properties)
 
 Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` folder
@@ -132,7 +133,8 @@ plate/face 3                            in a document of one part, its elements 
   label are numbered among them, in component order, so a repeated part is always
   reached by its path, never by a number across the document. A label naming several
   occurrences is refused with their paths (`finger names 3 occurrences in kit.xbf:
-  hand/finger.1, hand/finger.2, hand/finger.3`).
+  hand/finger.1, hand/finger.2, hand/finger.3`), but for one that an assembly shares
+  with a part inside it: `stem` is then the assembly, and the part is `stem/stem`.
 - **An element is named by its name or its number.** Numbers are the part's own
   face, edge and vertex numbers, the ones the viewer and `cad <type> inspect` show; a
   name survives edits that a number does not. A bare element after an owner belongs
@@ -303,7 +305,8 @@ contact and containment all give 0, so it does not measure penetration.
 oriented solids, 0 for mere contact; pair bodies with a group's `solids()`, the
 group found in the model's tree by its label. Kernel failures raise.
 
-Two solids at `overlap_volume` 0 at most touch. A pair meant to overlap (a
+`cad model interference` is this measure of every pair of a document, posed too
+([interference](#interference)). Two solids at `overlap_volume` 0 at most touch. A pair meant to overlap (a
 press-fit pin, a bearing in its bore) is named as such, not inferred from where it
 sits in the tree. A part meant to sit on, bolt to or bear against another measures
 `closest_points` distance 0 against it; above 0 is a gap, and the part floats. Over
@@ -335,6 +338,46 @@ manifold.
 A face the mesher could not triangulate is named wherever the document is drawn:
 the snapshot warns with the part and the face, and the viewer leaves it out. It is
 usually a sliver a boolean left.
+
+## Interference
+
+`cad model interference "$ID"` (`cad xbf interference FILE`, `cad step interference FILE`) says which
+parts of a document share volume. Every pair of parts whose boxes meet is measured exactly by the
+kernel, on the parts' own solids, never on a mesh, so a plate through a 2.6 mm skin is found and a
+part 0.3 mm from another is not:
+
+```bash
+cad model interference "$ID"                                  # as built
+cad model interference "$ID" --states --motions               # and at every mechanism state, along every sequence
+cad model interference "$ID" --pose crouch --pose '{"l_knee": 90}' --motion walk --samples 24
+cad model interference "$ID" --fit 'bearing*,housing' --fit pin,base    # pairs meant to share volume
+```
+
+```text
+$ cad model interference "$ID" --states
+error: interference, 2 place(s). Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A,B)
+  arm/bar: shares 739 mm^3 with arm/stop (pose down)
+  arm/base: shares 125.7 mm^3 with arm/pin (as built, pose down)
+FAILED arm: 2 pairs of parts share volume (5 parts at 2 stances, the boxes of 6 pairs met, 4 measurements in 2.1 s)
+```
+
+- **The status is the verdict**: 0 clear, 1 a pair shares volume, 3 none found but a pair could not
+  be measured, which is no pass. A pair is unmeasured when its Boolean ran past `--pair-seconds` (60),
+  when the kernel refused it, or when the whole check ran past `--seconds` (1200): give it longer, or
+  measure that pair in a check of its own. `--json` is the result whole (`measurements.interferences`,
+  `.fits`, `.unmeasured`, each row two occurrence paths).
+- **A stance is every part where the mechanism puts it.** `--pose` takes a mechanism state's name or
+  `{joint or coupling: value}`; `--states` every state; `--motion NAME` (or `--motions`) samples a
+  configuration sequence at `--samples` times, its two ends among them. What a stance does not move
+  is not measured again, so a long motion costs its moving pairs alone.
+- **A fit is named, never inferred.** `--fit A,B` takes two refs or globs; the pair's overlap is
+  listed as a fit and is no interference.
+- **What it cannot see**: a pose between two samples, a part with no solid (left out, and counted),
+  and joints that share a centre taken to the corners of their travel together, which is a `--pose`
+  for each corner. Say so with the result.
+- From a script: `cad.model.interference(robot(), states=True, fits=[("pin", "base")])` returns the
+  same result (`.ok`, `.findings`, `.measurements`). The engine measures it and keeps the result: the
+  same check of an unchanged model answers at once.
 
 ## Mass properties
 

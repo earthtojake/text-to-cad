@@ -70,7 +70,8 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
+  `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -84,6 +85,8 @@ launcher for the engine’s one page, every document at `/<id>`, every file read
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
+B-rep document's interference check (`cad.<type>.interference(source, poses=..., motions=..., fits=...)`: every
+pair of parts whose boxes meet measured exactly, as built and posed, by the engine); a
 B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
 CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
 
@@ -415,7 +418,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `interference`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -495,12 +498,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two parts share volume, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `interference`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -636,7 +639,8 @@ src/cad/
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
                          #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
                          #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
-                         #   _dfm_check, the entry), named material looks (materials: solder mask, ENIG,
+                         #   _dfm_check, the entry), the interference check's measuring
+                         #   (_interference), named material looks (materials: solder mask, ENIG,
                          #   anodized, ..., each a native bd_materials FinishedMaterial), and the
                          #   producers it registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
@@ -652,11 +656,12 @@ src/cad/
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
-  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
-                         #   validate) and a KiCad export return, typed
+  results.py             # the operations' shared result types: what a check (dfm, interference, solve,
+                         #   drc, erc, validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
-  _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
+  _internal/             # DocumentType (document_type), a B-rep type's interference check: its
+                         #   options and its result (interference), a 3D type's manufacturing check: its
                          #   signature and options, its integration's measuring imported when it
                          #   runs (manufacturing), each process's options, rules and findings
                          #   (dfm/, its README the mechanism), the numpy geometry the checks measure
@@ -771,6 +776,30 @@ and the rest go on; each warning is on stderr (`route: warning: ...`) before rou
 an obstacle nor a connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the
 block refills the pours round the new copper. It runs in the script's process. It does not route differential
 pairs, keep a length, skew or track-angle rule, or choose what to route or in what order.
+
+## The interference check
+
+A B-rep document's `interference` says which of its parts share volume: `cad.model.interference`,
+`cad.xbf.interference` and `cad.step.interference`, one to one with `cad <type> interference SRC`. Every pair of
+parts whose boxes meet is measured exactly, on the parts' own solids, as built and at each stance asked:
+`poses` (mechanism states' names, or `{joint: value}`), `states` (every state), `motions` (configuration
+sequences by name, or `"all"`, each at `samples` stances). `fits` names the pairs meant to share volume, listed
+apart. The engine measures it and keeps the result; nothing is built, meshed or written.
+
+```python
+from cad import model
+
+found = model.interference(robot(), states=True, motions="all", fits=[("bearing*", "housing")])
+for finding in found.findings:          # an `interference` each: its two occurrences in .refs, mm3 in .value
+    print(finding.human_line())
+assert found.ok, found.summary          # not ok where a pair shares volume, or could not be measured
+```
+
+The result is a `CheckResult`: `failed` where a pair shares volume, `not_checked` (its `reason`
+`unmeasured`) where none was found but a pair could not be measured within its time (`pair_seconds`, 60 by
+default; the whole check's `seconds`, 1200) -- never a pass -- and `ok` only with every pair measured and none
+sharing. `measurements` holds the stances, the pairs counted, and every row of `interferences`, `fits` and
+`unmeasured`.
 
 ## Manufacturing checks
 

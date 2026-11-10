@@ -11,7 +11,8 @@ objects, producers and operations), and a process kind. A **producer** is code t
 type from some input; many integrations may produce one type, each stating which parts of the type's
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
-``dfm`` a 3D type's manufacturing check, ``solve`` a B-rep type's stress study,
+``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
+``solve`` a B-rep type's stress study,
 ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
 description's conformance check.
 
@@ -36,12 +37,12 @@ from typing import Any
 
 __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integrations_of",
-           "manufacturing_check", "platform_of", "producer_for", "producers_for",
+           "interference_check", "manufacturing_check", "platform_of", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "solve", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "drc", "erc", "validate")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -241,6 +242,14 @@ _DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): c
                                 "twice, features against the kerf and the thickness, the sheet's size", "build123d",
                        "manufacturing")
 
+# The interference check a B-rep type shares (``cad._internal.interference``): the engine measures, in a
+# checks process, every pair of parts whose boxes meet, on their own solids.
+_INTERFERENCE = Operation("interference", "which parts share volume: every pair measured exactly on the parts' own "
+                                          "solids, as built and at the poses, mechanism states and configuration "
+                                          "sequences asked (--pose, --states, --motion), the fits named on purpose "
+                                          "(--fit A,B) listed apart, and each pair it could not measure said",
+                          _KERNEL, engine=True)
+
 # The stress study a B-rep type shares (``cad._internal.fea``): the kernel reads the part, netgen meshes it, CalculiX
 # solves it. A mesh type has no faces a study can hold or load by, so it has none.
 _SOLVE = Operation("solve", "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, "
@@ -257,17 +266,17 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _SOLVE), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _SOLVE), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _SOLVE), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
@@ -431,6 +440,14 @@ def manufacturing_check() -> Any:
     with the producers, the one place the engine reaches an integration, and each integration names its own
     (``_producers``); it loads only for a check."""
     from cad.build123d._producers import manufacturing_check as named
+
+    return named()
+
+
+def interference_check() -> Any:
+    """The integration module that measures an interference check of a document the engine holds, for the
+    engine's worker: build123d's (``held``), reached as ``manufacturing_check`` is and loaded only for one."""
+    from cad.build123d._producers import interference_check as named
 
     return named()
 

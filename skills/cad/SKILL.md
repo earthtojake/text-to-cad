@@ -277,6 +277,7 @@ can be checked:
 | --- | --- |
 | A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad model inspect`; never by restating the constant, never by code after the call in the script |
 | A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
+| An assembly: parts added, moved or resized, a joint's travel | `cad model interference "$ID"`, with `--states` and `--motions` for a mechanism ([below](#check-scripts)): no two parts share volume, exactly; a pair it could not measure is not a pass |
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
@@ -323,9 +324,13 @@ print(plate.bounding_box().size)              # the envelope: not a hole's diame
 print(closest_points(plate, post).distance)   # 0: the standoff sits on the plate
 ```
 
-- In an assembly, nothing interferes when `overlap_volume` is 0 for every pair of solids apart from
-  fits named on purpose, and a part meant to rest on another touches it when their `closest_points`
-  distance is 0. Both describe the parts as built, not a pose
+- In an assembly, nothing interferes when no two parts share volume apart from fits named on purpose.
+  `cad model interference "$ID"` measures every pair whose boxes meet, exactly, on the parts' own solids:
+  as built, and with `--states`, `--pose` and `--motions` where the mechanism puts them. Name a fit
+  (`--fit pin,base`), and read what it could not measure: status 3 is not clear
+  ([interference](references/inspection-and-validation.md#interference)). `overlap_volume` is the same
+  measure of one pair, for a check script.
+- A part meant to rest on another touches it when their `closest_points` distance is 0, as built
   ([measurements](references/inspection-and-validation.md#measurements)).
 - A check is trusted once it has been seen to fail: plant what it guards against (a plate through
   a thin cover, a pin a little out of its bore) and watch it report it. A test on boxes, mesh points

@@ -314,7 +314,10 @@ where to review one.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. Measure a pose by posing the model in the check, using `find_part` and
+mid-motion. `cad model interference "$ID" --states --motions` measures every pair of parts at
+every mechanism state and along every sequence
+([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
+check script, pose the model there, using `find_part` and
 `world_parts` copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
 
 ```python
