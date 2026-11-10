@@ -1502,11 +1502,12 @@ class PythonCallTest(unittest.TestCase):
 
         import cad
 
-        for document_type in ("step", "xbf", "model", "threemf", "glb", "dxf"):
+        for document_type in ("step", "xbf", "model", "threemf", "glb"):
             self.assertNotIn("units", inspect.signature(getattr(cad, document_type).dfm).parameters, document_type)
             with self.assertRaises(TypeError):
                 getattr(cad, document_type).dfm("part", units="in")
         self.assertIn("units", inspect.signature(cad.stl.dfm).parameters)
+        self.assertIn("units", inspect.signature(cad.dxf.dfm).parameters)  # and a DXF's, which may declare none
         self.assertTrue(all("strict" in inspect.signature(getattr(cad, kind).dfm).parameters
                             for kind in ("step", "stl", "dxf")))
 

@@ -1,10 +1,10 @@
 """A sheet's cut file (a DXF), checked with ezdxf, build123d's own DXF library (``cad._internal.dfm.sheet``).
 
-The file is read as a cutter reads it: its units (``$INSUNITS``, never assumed: an unset or unknown code is
-reported and every size rule is withheld), each layer's intent by its name and its layer table
-(``cad.engine.export.dxf.layer_intent``: cut, bend, engrave or reference), and the drawing checks every
-export runs that bear on a cut (``validate_drawing_document``: units, zero-length entities), whose findings
-are kept.
+The file is read as a cutter reads it: its units (``_units``: the ones it declares, ``$INSUNITS``, or the
+ones given, ``--units``; never assumed -- a file that declares none, as every R12 file, is not measured until
+they are given), each layer's intent by its name and its layer table (``cad.engine.export.dxf.layer_intent``:
+cut, bend, engrave or reference), and the one drawing check every export runs that bears on a cut
+(``validate_drawing_document``'s zero-length entities), whose findings are kept.
 
 **Every entity on a cut layer is read, an annotation, or said not read.** ezdxf explodes what holds curves
 (``_primitives``): a block reference into its block's entities, its own transform applied and a nested
@@ -18,11 +18,15 @@ entities (the ``cut_entities`` family, not measured): never a pass of what it di
 cut curve at all is not measured (``Unmeasured``, ``no_cut_geometry``), whatever else it holds: a stray
 dimension makes no file a drawing here.
 
-The pieces are chained end to end into closed contours; ends within ``_JOIN`` are one point (a gap a
-cutter's path closes, counted in ``joined_gaps`` where it is wider than drawn exact). What does not close
-is open geometry, located by layer, entity handle and the dangling end. Pieces lying on one another
-(collinear lines overlapping, concentric arcs of one radius overlapping, a line along a polyline's
-segment) are cut twice; a contour crossing itself or another leaves a sliver; a loop enclosing no area is a
+What is drawn closed -- a circle, a closed spline, a full ellipse, a closed polyline -- is a contour as
+drawn; the other pieces are chained end to end into closed contours (``_chain``): ends drawn at one point are
+one, and ends left dangling within ``_JOIN`` of each other are joined (a gap a cutter's path closes, counted
+in ``joined_gaps``). What does not close is open geometry, located by layer, entity handle and the dangling end. Pieces lying on one another are cut
+twice: an exact copy of any curve, a spline or an ellipse as a line (``_unique``, one overlap per pair of
+entities), and lines and arcs that overlap in part (collinear lines, concentric arcs of one radius, a line
+along a polyline's segment: ``_overlaps``); a contour crossing itself or another leaves a sliver, and two that touch (a hole
+tangent to the edge, two parts corner to corner) leave no material or no gap between them (``contour_crossings``,
+within ``_SAME``; a whole circle crossed and held by its centre and radius); a loop enclosing no area is a
 doubled-back line; a run of many short lines turning a little at a time is a curve drawn as chords.
 
 The closed contours are nested (an outline, its holes, an island in a hole: a piece that falls out) and
@@ -30,7 +34,8 @@ measured in the plane with ``cad._internal.sheet_plane``, as the flat pattern of
 (``_dfm_sheet``): each part's size, holes (diameter, slot width), hole-to-edge and hole-to-hole distances
 (edge to edge), notches, tabs, the narrowest web of material and the narrowest gap. A bend layer's lines
 are read as the bends' centre lines: each hole's distance to the nearest (``hole_to_bend``; a line that
-ends on a cutout's edge ends there, the cutout a window or a relief at the bend's end, no hole beside it)
+ends on a cutout's edge ends there, the cutout a window or a relief at the bend's end, no hole beside it, and
+so does one drawn across a cutout that reaches ``WINDOW_T`` thicknesses to both sides of it)
 and each line's distance to the outline either side of it (``flanges``).
 """
 
@@ -58,10 +63,16 @@ _ANNOTATIONS = frozenset({"TEXT", "MTEXT", "DIMENSION", "ARC_DIMENSION", "LEADER
                           "SOLID", "TRACE", "VIEWPORT"})
 ITEM_CAP = 300
 _SAME = 1e-4          # mm: two points this close are one as drawn (a copy of a curve, a curve on another)
-#: Two ends this close are joined (mm): a hundredth of a millimetre is far under any cutter's resolution, and an
-#: inch file rounded to four decimals leaves ends 0.0025 mm apart. A gap between ``_SAME`` and this is closed and
-#: said (``joined_gaps``); a wider one is open geometry.
+#: Two dangling ends this close are joined (mm): a hundredth of a millimetre is far under any cutter's
+#: resolution, and an inch file rounded to four decimals leaves ends 0.0025 mm apart. A gap between ``_SAME`` and
+#: this is closed and said (``joined_gaps``); a wider one is open geometry.
 _JOIN = 0.01
+#: A cutout a bend line is drawn across is a window through the bend -- the bend ends at it -- where it reaches
+#: this many thicknesses to both sides of the line; short of that it is a hole in the bend. text-to-cad's own
+#: reading of a drawing that holds no bend radius: a 90 degree bend's tangent lines lie (pi / 4)(r + K t) either
+#: side of its centre line, under 2 t for any inside radius up to 2 t, so such a cutout takes the bend's whole
+#: width away.
+WINDOW_T = 2.0
 #: Block references nested deeper than this are not exploded (a block that holds itself would never end).
 _NESTED = 16
 
@@ -78,6 +89,8 @@ class _Piece:
     radius: float | None = None
     start: float = 0.0        # an arc's start angle and signed sweep, radians, in the world's XY
     sweep: float = 0.0
+    ring: Any = None          # the closed polyline it is a side of (``_primitives``): a loop as drawn
+    copy: bool = False        # an exact copy of another entity's piece (``_unique``)
 
     def ends(self) -> tuple[np.ndarray, np.ndarray]:
         return self.points[0], self.points[-1]
@@ -90,13 +103,14 @@ def _where(piece: _Piece, point: Any = None) -> str:
 # --- reading ------------------------------------------------------------------------------------------------
 
 
-def _primitives(entity: Any, layer: str, depth: int = 0) -> Iterator[tuple[Any, str, str | None]]:
+def _primitives(entity: Any, layer: str, depth: int = 0) -> Iterator[tuple[Any, str, str | None, Any]]:
     """``entity`` as what a cutter follows, each with its layer and None -- a block reference exploded, a
-    polyline as its lines and arcs, any other entity itself -- or with why it cannot be read."""
+    polyline as its lines and arcs, any other entity itself -- or with why it cannot be read; and, for a side
+    of a closed polyline, that polyline (its ring: the sides are a loop as drawn)."""
     kind = entity.dxftype()
     if kind == "INSERT":
         if depth >= _NESTED:
-            yield entity, layer, f"block references nested more than {_NESTED} deep"
+            yield entity, layer, f"block references nested more than {_NESTED} deep", None
             return
         skipped: list[tuple[Any, str]] = []
         try:
@@ -105,23 +119,24 @@ def _primitives(entity: Any, layer: str, depth: int = 0) -> Iterator[tuple[Any, 
                         for child in reference.virtual_entities(skipped_entity_callback=lambda e, why: skipped.append((e, why)))]
             children += list(entity.attribs)
         except Exception as error:  # noqa: BLE001 - a block that does not explode is said, never passed over
-            yield entity, layer, f"its block did not explode ({type(error).__name__}: {error})"
+            yield entity, layer, f"its block did not explode ({type(error).__name__}: {error})", None
             return
         for child in children:
             own = str(child.dxf.get("layer", "0") or "0")
             yield from _primitives(child, layer if own == "0" else own, depth + 1)
         for child, why in skipped:
             own = str(child.dxf.get("layer", "0") or "0")
-            yield child, layer if own == "0" else own, f"not placed by its block reference ({why})"
+            yield child, layer if own == "0" else own, f"not placed by its block reference ({why})", None
         return
     if kind in ("LWPOLYLINE", "POLYLINE"):
         if kind == "POLYLINE" and not (entity.is_2d_polyline or entity.is_3d_polyline):
-            yield entity, layer, "a mesh, not a curve"
+            yield entity, layer, "a mesh, not a curve", None
             return
+        closed = bool(entity.closed if kind == "LWPOLYLINE" else entity.is_closed)
         for child in entity.virtual_entities():
-            yield child, layer, None
+            yield child, layer, None, entity if closed else None
         return
-    yield entity, layer, None
+    yield entity, layer, None, None
 
 
 def _flat(points: list[Any], factor: float) -> str | None:
@@ -167,8 +182,9 @@ def _pieces(entity: Any, layer: str, top: str, handle: str, factor: float) -> li
         if len(points) < 2:
             return "its curve has no length"
         flat = np.array([(p[0], p[1]) for p in points], dtype=float) * factor
-        return _flat(points, factor) or [_Piece("curve", flat, handle, layer, top,
-                                                bool(np.linalg.norm(flat[0] - flat[-1]) <= _JOIN))]
+        # closed where it comes back to its start (one that never leaves it is a short open curve)
+        gap, reach = float(np.linalg.norm(flat[0] - flat[-1])), float(np.linalg.norm(flat - flat[0], axis=1).max())
+        return _flat(points, factor) or [_Piece("curve", flat, handle, layer, top, gap <= _JOIN and gap < reach / 2)]
     return "a type this check does not read as a curve"
 
 
@@ -176,13 +192,14 @@ def _read(document: Any, intent: Any, factor: float) -> dict[str, Any]:
     """The modelspace as a cutter reads it: the cut layers' ``pieces``, the bend layers' ``bend_lines``, the
     ``annotations`` and the entities ``unread`` on cut layers, and each layer's record (``layers``)."""
     found: dict[str, Any] = {"pieces": [], "bend_lines": [], "annotations": [], "unread": [], "layers": {}}
+    broken: list[Any] = []   # the closed polylines with a side not read: what is left of each is open
     for entity in document.modelspace():
         top = entity.dxftype()
         handle = str(entity.dxf.handle)
         layer = str(entity.dxf.get("layer", "0") or "0")
         record = found["layers"].setdefault(layer, {"layer": layer, "intent": intent(layer), "entities": 0})
         record["entities"] += 1
-        for primitive, on, why in _primitives(entity, layer):
+        for primitive, on, why, ring in _primitives(entity, layer):
             role, kind = intent(on), primitive.dxftype()
             where = f"layer {on}, {top} #{handle}"
             if why is None and kind in _ANNOTATIONS:
@@ -196,6 +213,8 @@ def _read(document: Any, intent: Any, factor: float) -> dict[str, Any]:
                 continue
             pieces = why or _pieces(primitive, on, top, handle, factor)
             if isinstance(pieces, str):
+                if ring is not None:
+                    broken.append(ring)
                 # a block that did not explode may hold cut curves whatever layer its reference is on
                 # (and one entity is said once, however many of its lines are off the plane)
                 if (role == "cut" or kind == "INSERT") and not any(
@@ -203,9 +222,14 @@ def _read(document: Any, intent: Any, factor: float) -> dict[str, Any]:
                     found["unread"].append({"entity": kind if kind == top else f"{kind} in {top}", "handle": handle,
                                             "layer": on, "why": pieces, "location": where})
             elif role == "cut":
+                for piece in pieces:
+                    piece.ring = ring
                 found["pieces"].extend(pieces)
             elif role == "bend":
                 found["bend_lines"].extend(piece for piece in pieces if piece.kind == "line")
+    for piece in found["pieces"]:
+        if any(piece.ring is ring for ring in broken):
+            piece.ring = None
     return found
 
 
@@ -241,23 +265,60 @@ def _cluster(points: np.ndarray, tolerance: float) -> np.ndarray:
     return np.array([numbers[root] for root in roots])
 
 
+def _ring(sides: list[_Piece]) -> list[tuple[_Piece, bool]]:
+    """A closed polyline's sides in order, each turned to run on from the last (an arc of a bulge is drawn
+    anticlockwise whichever way the polyline goes)."""
+    chain: list[tuple[_Piece, bool]] = []
+    for k, piece in enumerate(sides):
+        start, end = piece.ends()
+        if k == 0:
+            ahead = np.array(sides[1 % len(sides)].ends())
+            reverse = bool(np.linalg.norm(ahead - start, axis=1).min() < np.linalg.norm(ahead - end, axis=1).min())
+        else:
+            last, was = chain[-1]
+            at = last.points[0] if was else last.points[-1]
+            reverse = bool(np.linalg.norm(at - end) < np.linalg.norm(at - start))
+        chain.append((piece, reverse))
+    return chain
+
+
 def _chain(pieces: list[_Piece]) -> tuple[list[list[tuple[_Piece, bool]]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """The pieces chained into closed loops (each a list of (piece, reversed)); the open geometry, one item
-    per dangling end or branching point, located by layer and handle; and the joints closed across a gap
-    wider than drawn exact (``_SAME``; two ends within ``_JOIN`` are one point)."""
+    """The pieces as closed loops (each a list of (piece, reversed)); the open geometry, one item per dangling
+    end or branching point, located by layer and handle; and the joints closed across a gap.
+
+    What is drawn closed is a loop as drawn, whatever its sides' lengths: a circle, a closed spline, a full
+    ellipse, a closed polyline (its sides in order: ``_ring``). The rest are chained end to end: ends drawn at
+    one point (within ``_SAME``) are one, and only the ends left dangling by that are then joined across a gap
+    of up to ``_JOIN`` (said: ``joined``). So a side shorter than ``_JOIN`` is a side like any other, never two
+    ends "meeting" at one point."""
     loops: list[list[tuple[_Piece, bool]]] = [[(piece, False)] for piece in pieces if piece.closed]
-    open_pieces = [piece for piece in pieces if not piece.closed]
+    rings: dict[int, list[_Piece]] = {}
+    for piece in pieces:
+        if piece.ring is not None and not piece.closed:
+            rings.setdefault(id(piece.ring), []).append(piece)
+    loops.extend(_ring(sides) for sides in rings.values())
+    open_pieces = [piece for piece in pieces if not piece.closed and piece.ring is None]
     problems: list[dict[str, Any]] = []
     joined: list[dict[str, Any]] = []
     if not open_pieces:
         return loops, problems, joined
     ends = np.array([point for piece in open_pieces for point in piece.ends()])
-    nodes = _cluster(ends, _JOIN)
+    nodes = _cluster(ends, _SAME)
+    # a piece whose two ends are one point among others' is no side of anything: a speck inside a joint
+    speck = (nodes[0::2] == nodes[1::2]) & (np.bincount(nodes)[nodes[0::2]] > 2)
+    live = np.repeat(~speck, 2)
+    dangling = np.nonzero(live & (np.bincount(nodes[live], minlength=nodes.max() + 1)[nodes] == 1))[0]
+    if len(dangling) > 1:
+        across = _cluster(ends[dangling], _JOIN)
+        merged: dict[int, int] = {}
+        for index, group in zip(dangling, across):
+            nodes[index] = merged.setdefault(int(group), int(nodes[index]))
     incident: dict[int, list[tuple[int, int]]] = {}
     for index in range(len(open_pieces)):
         for side in (0, 1):
-            incident.setdefault(int(nodes[2 * index + side]), []).append((index, side))
-    used = [False] * len(open_pieces)
+            if not speck[index]:
+                incident.setdefault(int(nodes[2 * index + side]), []).append((index, side))
+    used = [bool(flag) for flag in speck]
     for node, touching in sorted(incident.items()):
         index, side = touching[0]
         piece = open_pieces[index]
@@ -329,10 +390,10 @@ def _loop(chain: list[tuple[_Piece, bool]]) -> plane.Loop:
 
 def _overlaps(pieces: list[_Piece], tolerance: float = _SAME) -> list[dict[str, Any]]:
     """Pieces lying on one another over a length: collinear lines overlapping, concentric arcs of one radius
-    overlapping in angle, a line along a polyline's straight segment."""
+    overlapping in angle, a line along a polyline's straight segment. An exact copy is ``_unique``'s."""
     found = []
-    lines = [p for p in pieces if p.kind == "line"]
-    arcs = [p for p in pieces if p.kind == "arc"]
+    lines = [p for p in pieces if p.kind == "line" and not p.copy]
+    arcs = [p for p in pieces if p.kind == "arc" and not p.copy]
     for group in _collinear(lines, tolerance):
         a = np.array([lines[i].points[0] for i in group])
         b = np.array([lines[i].points[-1] for i in group])
@@ -346,14 +407,12 @@ def _overlaps(pieces: list[_Piece], tolerance: float = _SAME) -> list[dict[str, 
             off_a = np.abs(rel_a[:, 0] * u[i, 1] - rel_a[:, 1] * u[i, 0])
             rel_b = b[i + 1:] - a[i]
             off_b = np.abs(rel_b[:, 0] * u[i, 1] - rel_b[:, 1] * u[i, 0])
-            candidates = np.nonzero((cross_dir < 1e-7) & (off_a < tolerance) & (off_b < tolerance))[0]
-            for k in candidates:
-                j = i + 1 + int(k)
-                s0, s1 = sorted((float(rel_a[k] @ u[i]), float(rel_b[k] @ u[i])))
-                overlap = min(s1, length[i]) - max(s0, 0.0)
-                if overlap > tolerance:
-                    found.append(_overlap_item(lines[group[i]], lines[group[j]], overlap,
-                                               a[i] + u[i] * (max(s0, 0.0) + overlap / 2)))
+            along = np.sort(np.column_stack([rel_a @ u[i], rel_b @ u[i]]), axis=1)
+            start = np.maximum(along[:, 0], 0.0)
+            overlap = np.minimum(along[:, 1], length[i]) - start
+            for k in np.nonzero((cross_dir < 1e-7) & (off_a < tolerance) & (off_b < tolerance) & (overlap > tolerance))[0]:
+                found.append(_overlap_item(lines[group[i]], lines[group[i + 1 + int(k)]], float(overlap[k]),
+                                           a[i] + u[i] * float(start[k] + overlap[k] / 2)))
     if arcs:
         centres = np.array([p.centre for p in arcs])
         radii = np.array([p.radius for p in arcs])
@@ -390,22 +449,31 @@ def _collinear(lines: list[_Piece], tolerance: float) -> list[list[int]]:
     return sorted(groups)
 
 
-def _unique(pieces: list[_Piece]) -> list[_Piece]:
+def _unique(pieces: list[_Piece]) -> tuple[list[_Piece], list[dict[str, Any]]]:
     """The pieces less exact copies of another entity's (the same kind through the same points, either way; a
-    whole circle from any start)."""
-    kept: list[_Piece] = []
-    seen: dict[tuple[Any, ...], str] = {}
-    for piece in pieces:
+    whole circle from any start), and each copy as an overlap, one per pair of entities: a line, an arc, a
+    spline or an ellipse drawn twice is cut twice. A closed polyline keeps every side unless all of it is a
+    copy (two squares that share a side are two squares, the side cut twice), and it is the loose line along
+    one of its sides that is the copy, whichever was drawn first."""
+    seen: dict[tuple[Any, ...], _Piece] = {}
+    copies: dict[tuple[str, str], dict[str, Any]] = {}
+    for piece in sorted(pieces, key=lambda piece: piece.ring is None):
         if piece.closed and piece.kind == "arc":
             key: tuple[Any, ...] = ("circle", *np.round(np.array([*piece.centre, piece.radius]) / (10 * _SAME)).astype(np.int64).tolist())
         else:
             grid = [tuple(point) for point in np.round(piece.points / (10 * _SAME)).astype(np.int64).tolist()]
             key = (piece.kind, *min(grid, grid[::-1]))
-        if seen.get(key, piece.handle) != piece.handle:
-            continue  # another entity's copy (one entity doubling back on itself is a zero-area loop)
-        seen.setdefault(key, piece.handle)
-        kept.append(piece)
-    return kept
+        first = seen.setdefault(key, piece)
+        if first.handle == piece.handle:
+            continue  # one entity doubling back on itself is a zero-area loop, or its own overlap
+        piece.copy = True
+        length = float(np.linalg.norm(np.diff(piece.points, axis=0), axis=1).sum())
+        item = copies.setdefault((first.handle, piece.handle), _overlap_item(first, piece, 0.0, piece.points[len(piece.points) // 2]))
+        item.update(kind="duplicate", length_mm=round(item["length_mm"] + length, 4))
+        item["detail"] = (f"{piece.entity} #{piece.handle} repeats {first.entity} #{first.handle} for "
+                          f"{item['length_mm']:.4g} mm")
+    whole = {id(piece.ring) for piece in pieces if piece.ring is not None and not piece.copy}
+    return [piece for piece in pieces if not piece.copy or id(piece.ring) in whole], list(copies.values())
 
 
 def _unexplained(problems: list[dict[str, Any]], overlaps: list[dict[str, Any]],
@@ -469,7 +537,8 @@ def _overlap_item(first: _Piece, second: _Piece, length: float, at: np.ndarray) 
 
 
 def _short_runs(loop: plane.Loop, most_turn_deg: float = 20.0, least_count: int = 8) -> list[dict[str, Any]]:
-    """Runs of short straight segments turning a little, the same way, at each joint: a curve as chords."""
+    """Runs of short straight segments turning a little, the same way, at each joint: a curve as chords. One
+    item for the contour, at its first run, counting them all: a traced outline is one curve drawn so."""
     pts = loop.points
     n = len(pts)
     if n < least_count + 2 or not loop.straight.any():
@@ -496,7 +565,7 @@ def _short_runs(loop: plane.Loop, most_turn_deg: float = 20.0, least_count: int 
             sign = np.sign(turn[j])
             j += 1
         count = j - i + 1
-        if count >= least_count:
+        if count >= least_count and float(length[i:j + 1].sum()) > short:  # shorter, and it is a speck, no curve
             source = loop.source[i]
             found.append({"segments": int(count), "length_mm": round(float(length[i:j + 1].sum()), 4),
                           "detail": f"{count} lines under {short:.3g} mm each", "layer": getattr(source, "layer", None),
@@ -504,7 +573,11 @@ def _short_runs(loop: plane.Loop, most_turn_deg: float = 20.0, least_count: int 
                           "location": _where(source) if source is not None else None,
                           "xyz": [round(float(pts[i][0]), 4), round(float(pts[i][1]), 4), 0.0]})
         i = j + 1
-    return found
+    if len(found) > 1:
+        lines, total = sum(item["segments"] for item in found), sum(item["length_mm"] for item in found)
+        found[0].update(segments=int(lines), length_mm=round(float(total), 4), runs=len(found),
+                        detail=f"{len(found)} runs, {lines} lines under {short:.3g} mm each")
+    return found[:1]
 
 
 # --- bend lines ---------------------------------------------------------------------------------------------
@@ -527,6 +600,23 @@ def _ends_on(line: _Piece, loop: plane.Loop) -> bool:
         if on_edge and not plane.inside((end + (other - end) * (2 * _JOIN / length))[None], [loop])[0]:
             return True
     return False
+
+
+def _window(line: _Piece, loop: plane.Loop, thickness: float | None) -> bool:
+    """Whether a cutout the bend line meets reaches ``WINDOW_T`` thicknesses to both sides of it: a window
+    through the bend, drawn across or not. With no thickness given nothing says so."""
+    if thickness is None:
+        return False
+    a, b = line.points[0], line.points[-1]
+    along = (b - a) / max(float(np.linalg.norm(b - a)), 1e-300)
+    normal = np.array([-along[1], along[0]])
+    if loop.circle is not None:
+        offset = float((np.array(loop.circle[:2]) - a) @ normal)
+        reach = (loop.circle[2] + offset, loop.circle[2] - offset)
+    else:
+        across = (loop.points - a) @ normal
+        reach = (float(across.max()), -float(across.min()))
+    return min(reach) >= WINDOW_T * float(thickness) * (1.0 - 1e-9)
 
 
 def _flanges(line: _Piece, outline: plane.Loop, others: list[_Piece]) -> list[dict[str, Any]]:
@@ -567,31 +657,57 @@ def _layer_intents(document: Any) -> tuple[dict[str, str], Any]:
     return declared, lambda layer: declared.get(layer) or layer_intent(layer)
 
 
-def _units_suspect(code: int, extents: Any, holes: list[float], options: dict[str, Any]) -> str | None:
-    """Why the declared unit makes the part implausible, read the other way, or None: in millimetres a part
-    under an inch or every hole under the given thickness; in inches a part larger than the sheet (the one
-    given, else the standard sheet). The rules still run in the declared unit."""
+def _units(name: str, code: int, given: str | None) -> tuple[str, float, list[dict[str, Any]]]:
+    """The unit the file is read in and its length in millimetres -- the one ``given`` (``--units``), else the
+    one it declares (``$INSUNITS``) -- with what a shop should know of it: a file that declares none, a
+    ``--units`` over the file's own. ``Unmeasured`` where neither says: no length would be a length."""
+    declared = UNITS.get(code)
+    if given is None:
+        if declared is None:
+            why = "is not set" if code == 0 else "names no length a cutter reads"
+            raise Unmeasured("units_not_set", f"{name} declares no length unit ($INSUNITS {code} {why}), so nothing "
+                                              "was measured: give --units (mm, cm, m, in or ft), the unit it was "
+                                              "drawn in")
+        return *declared, []
+    factor = next(length for unit, length in UNITS.values() if unit == given)
+    if declared is None:
+        said = (f"the file declares no length unit ($INSUNITS {code}), and is read with --units {given}: a shop's "
+                "software has to be told too")
+    elif declared[0] != given:
+        said = (f"the file declares {declared[0]} ($INSUNITS {code}), and is read with --units {given}: a shop's "
+                "software reads the file's own")
+    else:
+        return given, factor, []
+    return given, factor, [{"severity": "warning", "code": "units_not_set" if declared is None else "units_differ",
+                            "message": said, "location": None,
+                            "hint": "save the file with its unit set ($INSUNITS; R12 holds none: save a later "
+                                    "version), or tell the shop the unit"}]
+
+
+def _units_suspect(unit: str, extents: Any, options: dict[str, Any]) -> str | None:
+    """Why the unit makes the drawing implausible, or None. A cut file's own two mistakes first, each read the
+    other way: in millimetres a drawing under an inch; in inches one larger than the sheet (the one given,
+    else the standard sheet). Then what every source is held to (``_common.units_doubt``): under a
+    millimetre or over ten metres across. The rules still run in the unit the file is read in."""
+    from cad._internal.dfm import _common
     from cad._internal.dfm import sheet as rules_side
 
-    if code not in (1, 4) or extents is None or not len(extents):
+    if extents is None or not len(extents):
         return None
     long, short = float(max(extents)), float(min(extents))
     if long <= 0:
         return None
-    thickness = options.get("thickness")
-    if code == 4:
-        small_holes = bool(holes) and thickness is not None and max(holes) < float(thickness)
-        if not (long < 25.4 or small_holes):
-            return None
-        hole = f" (a {min(holes):.4g} mm hole)" if holes else ""
-        return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm{hole}; read as inches it is "
-                f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches set $INSUNITS to 1")
     sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.DEFAULT_SHEET
-    if long <= sheet[0] and short <= sheet[1]:
-        return None
-    return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "
-            f"{sheet[1]:.4g} mm sheet; read as millimetres it is {long / 25.4:.4g} x {short / 25.4:.4g} mm: if it "
-            "was drawn in millimetres set $INSUNITS to 4")
+    if unit == "mm" and long < 25.4:
+        return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm; read as inches it is "
+                f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches give --units in (and set "
+                "$INSUNITS to 1)")
+    if unit == "in" and (long > sheet[0] or short > sheet[1]):
+        return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "
+                f"{sheet[1]:.4g} mm sheet; read as millimetres it is {long / 25.4:.4g} x {short / 25.4:.4g} mm: if "
+                "it was drawn in millimetres give --units mm (and set $INSUNITS to 4)")
+    doubt = _common.units_doubt(math.hypot(long, short), f"the file is read in {unit} and its cut geometry is")
+    return doubt["note"] if doubt["units_suspect"] else None
 
 
 def _nothing_to_cut(name: str, read: dict[str, Any]) -> Unmeasured:
@@ -627,18 +743,16 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         document = ezdxf.readfile(str(path))
     except Exception as error:  # noqa: BLE001 - a file that does not read is the check's answer
         raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
-    # the drawing checks that bear on a cut: its units and its zero-length entities. The rest are this check's
-    # own, read exactly: open contours, curves cut twice (a duplicate is an overlap), and a file with dimensions
-    # in it is measured as any other
-    findings = [{"severity": found.severity, "code": found.code, "message": found.message, "location": None,
-                 "hint": None} for found in validate_drawing_document(document)
-                if found.code in ("units_not_set", "zero_length_entity")]
     try:
         code = int(document.header.get("$INSUNITS", 0))
     except (TypeError, ValueError):
         code = 0
-    unit, factor = UNITS.get(code, (None, 1.0))
-    unknown = unit is None
+    unit, factor, findings = _units(path.name, code, options.get("units"))
+    # the drawing check that bears on a cut: its zero-length entities. The rest are this check's own, read
+    # exactly: open contours, curves cut twice (a duplicate is an overlap), and a file with dimensions in it is
+    # measured as any other
+    findings += [{"severity": found.severity, "code": found.code, "message": found.message, "location": None,
+                  "hint": None} for found in validate_drawing_document(document) if found.code == "zero_length_entity"]
     _, intent = _layer_intents(document)
     is_drawing, evidence = document_is_drawing(document)
     read = _read(document, intent, factor)
@@ -647,7 +761,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     if not pieces:
         raise _nothing_to_cut(path.name, read)
     # a bend line drawn twice is one bend
-    bend_lines: list[_Piece] = _unique(read["bend_lines"])
+    bend_lines: list[_Piece] = _unique(read["bend_lines"])[0]
     report: dict[str, Any] = {"source": {"type": "dxf", "measured_as": "cut file", "document": path.name}}
     families: dict[str, list[dict[str, Any]]] = {name: [] for name in (
         "parts", "holes", "hole_spacing", "hole_to_bend", "flanges", "notches", "tabs", "webs", "gaps",
@@ -665,7 +779,8 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     all_points = np.vstack([piece.points for piece in pieces])
     extents = np.ptp(all_points, axis=0)
     report["cut_file"] = {
-        "insunits": code, "unit": unit or f"unknown ($INSUNITS {code})", "mm_per_unit": factor,
+        "insunits": code, "unit": unit, "unit_from": "--units" if options.get("units") else "$INSUNITS",
+        "mm_per_unit": factor,
         "extents_mm": [round(float(v), 4) for v in extents],
         "extents_min_mm": [round(float(v), 4) for v in all_points.min(axis=0)],
         "layers": sorted(layers.values(), key=lambda r: r["layer"]), "cut_layers": cut_layers,
@@ -676,13 +791,12 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     # ``not_measured``); the bent part's check judges them.
     report["not_measured"] = {family: "a cut file is flat: it holds no bend, relief, hem or thickness to read"
                               for family in ("bends", "reliefs", "hems", "not_sheet")}
-    report["scale"] = {"units_unknown": unknown, "units_suspect": unknown,
-                       "note": (f"$INSUNITS is {code}: the file's units are not set, so no size is compared with a "
-                                "rule; save it in mm or inches") if unknown else f"lengths in {unit}, read as mm"}
-    # an exact copy of a curve is cut twice (overlaps says so) but bounds nothing: the contours are chained
-    # without it, so the outline it doubles is still the part's
-    chains, problems, families["joined_gaps"] = _chain(_unique(pieces))
-    families["overlaps"] = _overlaps(pieces)
+    report["scale"] = {"units_suspect": False, "note": f"lengths in {unit}, read as mm"}
+    # an exact copy of a curve is cut twice (an overlap) but bounds nothing: the contours are chained without
+    # it, so the outline it doubles is still the part's
+    once, copies = _unique(pieces)
+    chains, problems, families["joined_gaps"] = _chain(once)
+    families["overlaps"] = copies + _overlaps(once)
     families["open_geometry"] = _unexplained(problems, families["overlaps"], pieces)
     loops: list[plane.Loop] = []
     for chain in chains:
@@ -692,8 +806,9 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         size = loop.length()
         crossing = plane.self_crossings(loop)
         if crossing is None:
-            failed["self_intersections"] = (f"a contour of {len(loop.points)} segments ({_where(loop.source[0])}) is "
-                                            f"past the {plane.SELF_CROSSING_SEGMENTS} this check seeks crossings in")
+            failed["self_intersections"] = (f"a contour of {len(loop.points)} segments ({_where(loop.source[0])}) has "
+                                            f"over {plane.SELF_CROSSING_PAIRS} pairs of segments that may cross: "
+                                            "past what this check seeks crossings in")
         elif crossing:
             source = loop.source[0]
             for point in crossing[:4]:
@@ -722,14 +837,20 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     for i in range(len(loops)):
         touching = np.nonzero((lows[i + 1:] <= highs[i] + 1e-9).all(axis=1) & (highs[i + 1:] >= lows[i] - 1e-9).all(axis=1))[0]
         for j in touching + i + 1:
-            for point in plane.crossings(loops[i], loops[j])[:2]:
+            met = [("crosses", point) for point in plane.crossings(loops[i], loops[j], _SAME)[:2]]
+            if not met:
+                # two that meet without crossing (a hole tangent to the edge, two parts corner to corner) leave
+                # no material, or no gap, between them
+                gap, point, _ = plane.distance(loops[i], loops[j])
+                met = [("touches", point)] if gap <= _SAME else []
+            for verb, point in met:
                 source = loops[i].source[0]
                 families["contour_crossings"].append({
-                    "detail": f"#{','.join(handles[i])} crosses #{','.join(handles[j])} at "
-                              f"{point[0]:.4g}, {point[1]:.4g}", "handles": handles[i] + handles[j],
+                    "kind": verb, "detail": f"#{','.join(handles[i])} {verb} #{','.join(handles[j])} at "
+                                            f"{point[0]:.4g}, {point[1]:.4g}", "handles": handles[i] + handles[j],
                     "layer": getattr(source, "layer", None), "location": _where(source),
-                    "xyz": [round(point[0], 4), round(point[1], 4), 0.0]})
-    depth, parent = plane.nest(loops)
+                    "xyz": [round(float(point[0]), 4), round(float(point[1]), 4), 0.0]})
+    depth, parent = plane.nest(loops, _SAME)
     thickness = options.get("thickness")
     outlines = [i for i, level in enumerate(depth) if level % 2 == 0]
     held: dict[int, list[int]] = {}   # each outline's holes: the loops it holds directly
@@ -795,10 +916,11 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                       "xyz": [round(float(v), 4) for v in (*loop.centroid(), 0.0)]}
             records.append(record)
             families["holes"].append(record)
-            # the nearest bend line that does not end on this cutout's edge (one that does ends there: the cutout
-            # is the bend's end, a window or a relief)
+            # the nearest bend line that does not end at this cutout: one that ends on its edge (the cutout is the
+            # bend's end, a window or a relief), or is drawn across a cutout wide enough to be a window
             near = [(plane.distance(loop, _line(line))[0], line) for line in bends]
-            near = [(d, line) for d, line in near if d > _JOIN or not _ends_on(line, loop)]
+            near = [(d, line) for d, line in near
+                    if d > _JOIN or not (_ends_on(line, loop) or _window(line, loop, thickness))]
             if near:
                 d, line = min(near, key=lambda found: found[0])
                 record["in_bend"] = d <= _SAME
@@ -808,13 +930,13 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                                                                "centre line"})
         pairs: dict[tuple[int, int], dict] = {}
         for k, found in enumerate(plane.nearest([loops[h] for h in mine])):
-            if found is not None:
-                d, g = found
+            if found is not None and "round" in (records[k]["kind"], records[found[1]]["kind"]):
+                d, g = found  # (the bar between two cutouts is a web: ``_outline_features``)
                 pairs.setdefault((min(k, g), max(k, g)), {
                     "distance_mm": round(d, 4), "location": records[k]["location"],
                     "other": records[g]["location"], "xyz": records[k]["xyz"]})
         families["hole_spacing"].extend(pairs.values())
-    suspect = _units_suspect(code, extents, [item["size_mm"] for item in families["holes"]], options)
+    suspect = _units_suspect(unit, extents, options)
     if suspect:
         report["scale"].update(units_suspect=True, note=suspect)
     sort_keys = {"holes": "size_mm", "hole_spacing": "distance_mm", "hole_to_bend": "distance_centerline_mm",

@@ -854,8 +854,8 @@ Several parts are said (`several_bodies`); one part of several solids says so in
 xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,
 `plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
 `bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
-`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's alone (the other types
-declare their own, and take no such option); an option of another process, a value of another kind
+`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's, and a DXF's where it
+declares none or the wrong ones (the other types declare their own, and take no such option); an option of another process, a value of another kind
 (`axes=3.7`, `turning="no"`) and a value no machine has (an end mill over 100 mm, an FDM layer taller than
 its nozzle) are refused by name, never coerced -- by the flag on the command line (`--tools`), by the
 parameter in Python (`tools`), where a list of numbers is given as one (`tools=[3, 6]`, `stock=(100, 60,

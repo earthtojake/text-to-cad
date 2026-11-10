@@ -59,8 +59,8 @@ __all__ = ["COMMON", "PROCESSES", "Unmeasured", "module"]
 
 #: The processes a check measures for, in the order the help lists them.
 PROCESSES = ("cnc", "sheet", "molding", "printing")
-#: The options every process takes, and their defaults. ``units`` is an STL's alone (the others declare
-#: theirs).
+#: The options every process takes, and their defaults. ``units`` is an STL's, and a DXF's (whose default is
+#: the ones it declares: ``manufacturing.options``); the other types declare theirs.
 COMMON: dict[str, Any] = {"material": None, "units": "mm"}
 
 

@@ -10,10 +10,10 @@ crossed and measured by them, never through its chords.
 
 The measures: a loop's signed area (``area``), containment (``inside``, ``nest``), the distance between
 two loops (``distance``) and each loop's nearest (``nearest``), rays across the material or the void
-(``cast``), the narrowest material and void about each loop (``widths``), the pockets of a loop off its convex hull (``pockets``: notches),
-straight-sided protrusions (``tabs``), a loop crossing itself (``self_crossings``) or another
-(``crossings``), and the smallest rectangle the points fit (``min_rectangle``) and their widths
-(``feret``).
+(``cast``), the narrowest material and void about each loop (``widths``), the pockets of a loop off its convex
+hull (``pockets``: notches), straight-sided protrusions (``tabs``), a loop crossing itself (``self_crossings``)
+or another (``crossings``), one holding another (``holds``), and the smallest rectangle the points fit
+(``min_rectangle``) and their widths (``feret``).
 
 **Bounded.** No measure holds more than ``PAIRS`` pairs (a point and a segment, a ray and a circle) at once,
 and each tries the nearest first: a point or a ray against a sampled loop only where it lies in or crosses
@@ -30,9 +30,9 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 
-__all__ = ["CHORD_MM", "PAIRS", "SELF_CROSSING_SEGMENTS", "Loop", "Pocket", "Tab", "Width", "arc_points", "area",
-           "cast", "crossings", "distance", "feret", "hull", "inside", "min_rectangle", "nearest", "nest", "pockets",
-           "self_crossings", "tabs", "widths"]
+__all__ = ["CHORD_MM", "PAIRS", "SELF_CROSSING_PAIRS", "Loop", "Pocket", "Tab", "Width", "arc_points", "area",
+           "cast", "crossings", "distance", "feret", "holds", "hull", "inside", "min_rectangle", "nearest", "nest",
+           "pockets", "self_crossings", "tabs", "widths"]
 
 #: The most a sampled curve's chord strays from its arc (mm): a tenth of what a laser holds, and five times
 #: fewer segments than a micron's worth would take. A whole circle is not read through its chords at all.
@@ -147,7 +147,7 @@ def inside(points: np.ndarray, loops: Sequence[Loop]) -> np.ndarray:
             p = points[rows, None, :]
             ya, yb = a[None, :, 1], b[None, :, 1]
             crosses = (ya > p[..., 1]) != (yb > p[..., 1])
-            dy = np.where(np.abs(yb - ya) < 1e-300, 1e-300, yb - ya)
+            dy = np.where(crosses, yb - ya, 1.0)  # (a segment the point's level crosses is not level itself)
             x_at = a[None, :, 0] + (p[..., 1] - ya) * (b[None, :, 0] - a[None, :, 0]) / dy
             count[rows] += (crosses & (p[..., 0] < x_at)).sum(axis=1)
     return count % 2 == 1
@@ -168,17 +168,15 @@ def _cross(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     return u[..., 0] * v[..., 1] - u[..., 1] * v[..., 0]
 
 
-def _segments_cross(a1: np.ndarray, b1: np.ndarray, a2: np.ndarray, b2: np.ndarray, proper: bool = False
-                    ) -> np.ndarray:
-    """(n, m): whether segment i of the first set crosses segment j of the second (``proper``: each
-    through the other's interior; meeting at an end not counted)."""
+def _segments_cross(a1: np.ndarray, b1: np.ndarray, a2: np.ndarray, b2: np.ndarray) -> np.ndarray:
+    """(n, m): whether segment i of the first set crosses segment j of the second, or meets it at an end."""
     d1, d2 = (b1 - a1)[:, None, :], (b2 - a2)[None, :, :]
     denom = _cross(d1, d2)
     w = a2[None, :, :] - a1[:, None, :]
     with np.errstate(divide="ignore", invalid="ignore"):
         s = _cross(w, d2) / denom
         u = _cross(w, d1) / denom
-    lo, hi = (1e-9, 1.0 - 1e-9) if proper else (-1e-12, 1.0 + 1e-12)
+    lo, hi = -1e-12, 1.0 + 1e-12
     return (np.abs(denom) > 1e-14) & (s > lo) & (s < hi) & (u > lo) & (u < hi)
 
 
@@ -233,8 +231,8 @@ def cast(origins: np.ndarray, directions: np.ndarray, loops: Sequence[Loop], ski
          ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Rays from ``origins`` along unit ``directions`` against ``loops``: the distance to the first crossing
     beyond ``skip`` (inf for none), the loop it crosses (-1 for none) and the segment's index in that loop
-    (-1 on a whole circle, which is crossed exactly). A sampled loop is tried only by the rays that cross
-    its box."""
+    (-1 on a whole circle, which is crossed exactly). A sampled loop is tried stretch by stretch, each only by
+    the rays that cross its box."""
     origins = np.asarray(origins, dtype=float).reshape(-1, 2)
     directions = np.asarray(directions, dtype=float).reshape(-1, 2)
     hit = np.full(len(origins), np.inf)
@@ -261,31 +259,44 @@ def cast(origins: np.ndarray, directions: np.ndarray, loops: Sequence[Loop], ski
     for number, loop in enumerate(loops):
         if loop.circle is not None or not len(loop.points):
             continue
-        lo, hi = loop.bbox()
-        # the rays whose line crosses the loop's box ahead of them (the slab test)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            t1, t2 = (lo - origins) / directions, (hi - origins) / directions
-        t1 = np.where(np.isnan(t1), -np.inf, t1)
-        t2 = np.where(np.isnan(t2), np.inf, t2)
-        enter, leave = np.minimum(t1, t2).max(axis=1), np.maximum(t1, t2).min(axis=1)
-        slack = 1e-9 * max(1.0, float(np.abs(hi - lo).max()))
-        rows = np.nonzero((enter <= leave + slack) & (leave >= -slack) & (enter < hit))[0]
         a, b = loop.a, loop.b
         e = b - a
-        for start in range(0, len(rows), max(1, PAIRS // len(a))):
-            r = rows[start:start + max(1, PAIRS // len(a))]
-            d = directions[r, None, :]
-            denom = _cross(d, e[None])
-            w = a[None] - origins[r, None, :]
+        n = len(a)
+        # the loop in stretches of consecutive segments, each in its box: a ray is tried against the stretches
+        # whose box its line crosses ahead of it (the slab test), so against a few of a long loop's segments
+        size = max(32, math.isqrt(n))
+        first = np.arange(0, n, size)
+        lo = np.minimum.reduceat(np.minimum(a, b), first, axis=0)
+        hi = np.maximum.reduceat(np.maximum(a, b), first, axis=0)
+        slack = 1e-9 * max(1.0, float(np.abs(hi.max(axis=0) - lo.min(axis=0)).max()))
+        for start in range(0, len(origins), max(1, PAIRS // len(first))):
+            rows = slice(start, start + max(1, PAIRS // len(first)))
             with np.errstate(divide="ignore", invalid="ignore"):
-                t = _cross(w, e[None]) / denom
-                u = _cross(w, d) / denom
-            valid = (np.abs(denom) > 1e-14) & (t > skip) & (u >= -1e-12) & (u <= 1.0 + 1e-12)
-            t = np.where(valid, t, np.inf)
-            j = np.argmin(t, axis=1)
-            best = t[np.arange(len(j)), j]
-            closer = best < hit[r]
-            hit[r[closer]], which[r[closer]], seg[r[closer]] = best[closer], number, j[closer]
+                t1 = (lo[None] - origins[rows, None, :]) / directions[rows, None, :]
+                t2 = (hi[None] - origins[rows, None, :]) / directions[rows, None, :]
+            t1 = np.where(np.isnan(t1), -np.inf, t1)
+            t2 = np.where(np.isnan(t2), np.inf, t2)
+            enter, leave = np.minimum(t1, t2).max(axis=2), np.maximum(t1, t2).min(axis=2)
+            rays, stretches = np.nonzero((enter <= leave + slack) & (leave >= -slack) & (enter < hit[rows, None]))
+            rays += start
+            for at in range(0, len(rays), max(1, PAIRS // size)):
+                r = rays[at:at + max(1, PAIRS // size)]
+                # (the last stretch is shorter: its last segment again)
+                k = np.minimum(first[stretches[at:at + max(1, PAIRS // size)], None] + np.arange(size)[None, :], n - 1)
+                d = directions[r, None, :]
+                denom = _cross(d, e[k])
+                w = a[k] - origins[r, None, :]
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    t = _cross(w, e[k]) / denom
+                    u = _cross(w, d) / denom
+                valid = (np.abs(denom) > 1e-14) & (t > skip) & (u >= -1e-12) & (u <= 1.0 + 1e-12)
+                t = np.where(valid, t, np.inf)
+                j = np.argmin(t, axis=1)
+                best = t[np.arange(len(j)), j]
+                # a ray may cross several stretches: written furthest first, so its nearest is the one kept
+                order = np.argsort(-best, kind="stable")
+                order = order[best[order] < hit[r[order]]]
+                hit[r[order]], which[r[order]], seg[r[order]] = best[order], number, k[order, j[order]]
     return hit, which, seg
 
 
@@ -532,22 +543,20 @@ def _sides(loop: Loop, angle: float = 1e-6) -> list[tuple[int, int, np.ndarray, 
     """Runs of collinear straight segments: (first segment, last segment, start point, end point)."""
     n = len(loop.points)
     a, b = loop.a, loop.b
-    runs: list[list[int]] = []
-
-    def collinear(j: int, i: int) -> bool:
-        u, v = b[j] - a[j], b[i] - a[i]
-        return abs(float(_cross(u, v))) <= angle * float(np.linalg.norm(u) * np.linalg.norm(v)) and float(u @ v) > 0
-
-    for i in range(n):
-        if not loop.straight[i] or np.linalg.norm(b[i] - a[i]) < 1e-12:
-            continue
-        if runs and runs[-1][-1] == i - 1 and collinear(i - 1, i):
-            runs[-1].append(i)
-            continue
-        runs.append([i])
-    if len(runs) > 1 and runs[0][0] == 0 and runs[-1][-1] == n - 1 and collinear(n - 1, 0):
-        runs[0] = runs.pop() + runs[0]
-    return [(run[0], run[-1], a[run[0]], b[run[-1]]) for run in runs]
+    edge = b - a
+    length = np.linalg.norm(edge, axis=1)
+    straight = loop.straight & (length >= 1e-12)
+    before, before_length = np.roll(edge, 1, axis=0), np.roll(length, 1)
+    # a segment runs on from the one before it where both are straight and point one way along one line
+    on = straight & np.roll(straight, 1) & (np.abs(_cross(before, edge)) <= angle * before_length * length) \
+        & ((before * edge).sum(axis=1) > 0)
+    first = np.nonzero(straight & ~on)[0]
+    if not len(first):
+        return []
+    breaks = np.nonzero(~on)[0]
+    after = breaks[np.searchsorted(breaks, first, side="right") % len(breaks)]  # where each run stops running on
+    last = (after - 1) % n
+    return [(int(i), int(j), a[i], b[j]) for i, j in zip(first, last)]
 
 
 def _turn(loop: Loop, at: int) -> float:
@@ -566,120 +575,260 @@ def tabs(loop: Loop, material_left: bool) -> list[Tab]:
     joined beyond their overlap by a tip no longer than a half round across them plus their width, both
     meeting the body at an inside corner at the other end: the tip stands proud of the body on three sides
     (an outside corner at either makes the strip a lobe of the outline -- an L plate's leg, a shoulder --
-    not a tab)."""
+    not a tab). A tip is 64 segments at most, so a side is tried only against the sides that start within 64
+    segments of its end and run back the way it came: the work is linear in the loop's sides."""
     n = len(loop.points)
     sides = _sides(loop)
     found: dict[tuple[int, int], Tab] = {}
+    if len(sides) < 2:
+        return []
     sign = 1.0 if material_left else -1.0
-    for i, (fi, li, si, ei) in enumerate(sides):
-        di = ei - si
-        length_i = float(np.linalg.norm(di))
-        if length_i < 1e-9:
+    run = np.array([side[3] - side[2] for side in sides])
+    unit = run / np.maximum(np.linalg.norm(run, axis=1), 1e-300)[:, None]
+    side_at = np.full(n, -1)
+    side_at[[side[0] for side in sides]] = np.arange(len(sides))
+    last = np.array([side[1] for side in sides])
+    pairs = []
+    for start in range(0, len(sides), PAIRS // 64):
+        rows = slice(start, start + PAIRS // 64)
+        ahead = side_at[(last[rows, None] + np.arange(1, 65)[None, :]) % n]
+        facing = (ahead >= 0) & ((unit[ahead] * unit[rows, None, :]).sum(axis=2) <= -1.0 + 1e-9)
+        pairs.extend((int(i) + start, int(ahead[i, column]), int(column) + 1) for i, column in np.argwhere(facing))
+    for i, j, between in pairs:
+        (fi, li, si, ei), (_, lj, sj, ej) = sides[i], sides[j]
+        length_i = float(np.linalg.norm(ei - si))
+        if j == i or length_i < 1e-9 or float(np.linalg.norm(ej - sj)) < 1e-9:
             continue
-        ui = di / length_i
+        ui = (ei - si) / length_i
         inward = sign * np.array([-ui[1], ui[0]])
-        for j, (fj, lj, sj, ej) in enumerate(sides):
-            if j == i:
-                continue
-            dj = ej - sj
-            length_j = float(np.linalg.norm(dj))
-            if length_j < 1e-9 or float(ui @ (dj / length_j)) > -1.0 + 1e-9:
-                continue
-            width = float((sj - si) @ inward)
-            if width <= 1e-9:
-                continue
-            # i runs along +u, j back along -u: the tip lies past i's end and j's start, the body before.
-            lo = max(0.0, float((ej - si) @ ui))
-            hi = min(length_i, float((sj - si) @ ui))
-            if hi - lo <= 1e-9:
-                continue
-            between = (fj - li) % n
-            if between < 1 or between > 64:
-                continue
-            path = [(li + step) % n for step in range(1, between + 1)]
-            tip_points = loop.points[path]
-            along = (tip_points - si) @ ui
-            across = (tip_points - si) @ inward
-            if along.min() < hi - 1e-6 or across.min() < -1e-6 or across.max() > width + 1e-6:
-                continue
-            tip_length = float(np.linalg.norm(np.diff(np.vstack([ei, tip_points]), axis=0), axis=1).sum())
-            if tip_length > width * (1.0 + math.pi / 2) + 1e-6:
-                continue
-            inside_i = sign * _turn(loop, fi) < -1e-9
-            inside_j = sign * _turn(loop, (lj + 1) % n) < -1e-9
-            if not (inside_i and inside_j):
-                continue
-            key = (min(i, j), max(i, j))
-            base = si + ui * lo + inward * (width / 2)
-            tip = si + ui * hi + inward * (width / 2)
-            found.setdefault(key, Tab(width, float(hi - lo), (float(base[0]), float(base[1])),
-                                      (float(tip[0]), float(tip[1])), key))
+        width = float((sj - si) @ inward)
+        if width <= 1e-9:
+            continue
+        # i runs along +u, j back along -u: the tip lies past i's end and j's start, the body before.
+        lo = max(0.0, float((ej - si) @ ui))
+        hi = min(length_i, float((sj - si) @ ui))
+        if hi - lo <= 1e-9:
+            continue
+        tip_points = loop.points[[(li + step) % n for step in range(1, between + 1)]]
+        along = (tip_points - si) @ ui
+        across = (tip_points - si) @ inward
+        if along.min() < hi - 1e-6 or across.min() < -1e-6 or across.max() > width + 1e-6:
+            continue
+        tip_length = float(np.linalg.norm(np.diff(np.vstack([ei, tip_points]), axis=0), axis=1).sum())
+        if tip_length > width * (1.0 + math.pi / 2) + 1e-6:
+            continue
+        inside_i = sign * _turn(loop, fi) < -1e-9
+        inside_j = sign * _turn(loop, (lj + 1) % n) < -1e-9
+        if not (inside_i and inside_j):
+            continue
+        key = (min(i, j), max(i, j))
+        base = si + ui * lo + inward * (width / 2)
+        tip = si + ui * hi + inward * (width / 2)
+        found.setdefault(key, Tab(width, float(hi - lo), (float(base[0]), float(base[1])),
+                                  (float(tip[0]), float(tip[1])), key))
     return list(found.values())
 
 
-#: A loop of more segments than this is not sought for crossings of itself (``self_crossings``): its pairs
-#: are the square of its segments.
-SELF_CROSSING_SEGMENTS = 20_000
+#: A loop is not sought for crossings of itself (``self_crossings``) past this many pairs of segments that may
+#: cross (their extents along x overlap): a traced outline of a hundred thousand segments has a few hundred
+#: thousand, and only a loop drawn to defeat the sort has the square of its segments.
+SELF_CROSSING_PAIRS = 100_000_000
 
 
 def self_crossings(loop: Loop) -> list[tuple[float, float]] | None:
     """The points where a loop crosses itself (neighbouring segments meeting at their shared end not
-    counted); None, not sought, for a loop of more than ``SELF_CROSSING_SEGMENTS`` segments."""
+    counted): each segment against those whose extent along x overlaps its own -- the segments sorted by where
+    they start, so a long outline's are few -- ``PAIRS`` at a time. None, not sought, past
+    ``SELF_CROSSING_PAIRS`` such pairs."""
     a, b = loop.a, loop.b
     n = len(a)
     if n < 4:
         return []
-    if n > SELF_CROSSING_SEGMENTS:
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    order = np.argsort(lo[:, 0], kind="stable")
+    # sorted by where they start in x, each segment's candidates are the run after it that starts before it ends
+    counts = np.searchsorted(lo[order, 0], hi[order, 0], side="right") - np.arange(n) - 1
+    total = np.cumsum(counts)
+    if total[-1] > SELF_CROSSING_PAIRS:
         return None
-    found = []
-    for start in range(0, n, max(1, PAIRS // n)):
-        stop = min(n, start + max(1, PAIRS // n))
-        crossing = _segments_cross(a[start:stop], b[start:stop], a, b, proper=True)
-        i, j = np.nonzero(crossing)
-        i = i + start
-        keep = (j > i + 1) & ~((i == 0) & (j == n - 1))
-        for p, q in zip(i[keep], j[keep]):
-            d1, d2 = b[p] - a[p], b[q] - a[q]
-            s = float(_cross(a[q] - a[p], d2) / _cross(d1, d2))
-            point = a[p] + s * d1
-            found.append((float(point[0]), float(point[1])))
-    return found
+    found: list[tuple[int, int, float, float]] = []
+    row = 0
+    while row < n:
+        done = int(total[row - 1]) if row else 0
+        upto = max(row + 1, int(np.searchsorted(total, done + PAIRS, side="right")))
+        count = counts[row:upto]
+        i = np.repeat(np.arange(row, upto), count)
+        j = i + 1 + np.arange(len(i)) - np.repeat(np.cumsum(count) - count, count)
+        p, q = np.minimum(order[i], order[j]), np.maximum(order[i], order[j])
+        row = upto
+        near = (lo[p, 1] <= hi[q, 1]) & (lo[q, 1] <= hi[p, 1]) & (q - p > 1) & (q - p < n - 1)
+        p, q = p[near], q[near]
+        d1, d2 = b[p] - a[p], b[q] - a[q]
+        denom = _cross(d1, d2)
+        w = a[q] - a[p]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            s = _cross(w, d2) / denom
+            u = _cross(w, d1) / denom
+        cross = (np.abs(denom) > 1e-14) & (s > 1e-9) & (s < 1.0 - 1e-9) & (u > 1e-9) & (u < 1.0 - 1e-9)
+        at = a[p[cross]] + s[cross, None] * d1[cross]
+        found.extend(zip(p[cross].tolist(), q[cross].tolist(), at[:, 0].tolist(), at[:, 1].tolist()))
+    return [(x, y) for _, _, x, y in sorted(found)]
 
 
-def crossings(first: Loop, second: Loop) -> list[tuple[float, float]]:
-    """The points where two loops cross through each other: sought among the segments of each in the
-    other's box."""
-    (lo1, hi1), (lo2, hi2) = first.bbox(), second.bbox()
-    found: list[tuple[float, float]] = []
-    one = np.nonzero((np.maximum(first.a, first.b) >= lo2).all(axis=1)
-                     & (np.minimum(first.a, first.b) <= hi2).all(axis=1))[0]
-    two = np.nonzero((np.maximum(second.a, second.b) >= lo1).all(axis=1)
-                     & (np.minimum(second.a, second.b) <= hi1).all(axis=1))[0]
-    if not len(one) or not len(two):
-        return found
-    a2, b2 = second.a[two], second.b[two]
-    for start in range(0, len(one), max(1, PAIRS // len(two))):
-        rows = one[start:start + max(1, PAIRS // len(two))]
-        a1, b1 = first.a[rows], first.b[rows]
-        for p, q in np.argwhere(_segments_cross(a1, b1, a2, b2, proper=True)):
-            d1, d2 = b1[p] - a1[p], b2[q] - a2[q]
-            s = float(_cross(a2[q] - a1[p], d2) / _cross(d1, d2))
-            point = a1[p] + s * d1
-            found.append((float(point[0]), float(point[1])))
-    return found
+def _signed(points: np.ndarray, loop: Loop, segments: np.ndarray | None = None) -> np.ndarray:
+    """How far each point lies outside ``loop`` (negative inside it): from a whole circle's centre and
+    radius; from a sampled loop's segments (``segments``: only those, the ones that can be near), signed by
+    ``inside``."""
+    if loop.circle is not None:
+        cx, cy, r = loop.circle
+        return np.hypot(points[:, 0] - cx, points[:, 1] - cy) - r
+    a, b = (loop.a, loop.b) if segments is None else (loop.a[segments], loop.b[segments])
+    off = np.full(len(points), np.inf)
+    for start in range(0, len(points) if len(a) else 0, max(1, PAIRS // len(a))):
+        stop = start + max(1, PAIRS // len(a))
+        off[start:stop] = _point_segment(points[start:stop], a, b)[0].min(axis=1)
+    return np.where(inside(points, [loop]), -off, off)
 
 
-def nest(loops: Sequence[Loop]) -> tuple[list[int], list[int]]:
+def _cuts(a: np.ndarray, b: np.ndarray, target: Loop, near: np.ndarray, tolerance: float
+          ) -> tuple[np.ndarray, np.ndarray]:
+    """Where segments ``a``-``b`` meet ``target`` within their own length: the segment of each cut and its
+    parameter along it. A whole circle by its equation; a sampled loop's segments (``near``) where they cross
+    (an end of theirs on the segment included) and where a vertex of theirs lies on it (two running along
+    each other part there)."""
+    d = b - a
+    if target.circle is not None:
+        cx, cy, r = target.circle
+        f = a - np.array([cx, cy])
+        aa = np.maximum((d * d).sum(axis=1), 1e-300)
+        bb = (f * d).sum(axis=1)
+        root = bb * bb - aa * ((f * f).sum(axis=1) - r * r)
+        hit = np.nonzero(root >= 0.0)[0]
+        root = np.sqrt(root[hit])
+        owner = np.concatenate([hit, hit])
+        t = np.concatenate([(-bb[hit] - root) / aa[hit], (-bb[hit] + root) / aa[hit]])
+    else:
+        ta, tb = target.a[near], target.b[near]
+        owners, ts = [], []
+        for start in range(0, len(a) if len(ta) else 0, max(1, PAIRS // len(ta))):
+            rows = slice(start, start + max(1, PAIRS // len(ta)))
+            d1, d2 = d[rows, None, :], (tb - ta)[None, :, :]
+            denom = _cross(d1, d2)
+            w = ta[None, :, :] - a[rows, None, :]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                s = _cross(w, d2) / denom
+                u = _cross(w, d1) / denom
+            scale = np.linalg.norm(d1, axis=2) * np.linalg.norm(d2, axis=2)
+            i, j = np.nonzero((np.abs(denom) > 1e-12 * scale) & (u >= -1e-9) & (u <= 1.0 + 1e-9))
+            owners.append(i + start)
+            ts.append(s[i, j])
+            off, along = _point_segment(np.vstack([ta, tb]), a[rows], b[rows])   # the target's vertices on them
+            j, i = np.nonzero(off <= tolerance)
+            owners.append(i + start)
+            ts.append(along[j, i])
+        owner = np.concatenate(owners) if owners else np.zeros(0, int)
+        t = np.concatenate(ts) if ts else np.zeros(0)
+    within = (t > 0.0) & (t < 1.0)
+    return owner[within], t[within]
+
+
+def crossings(first: Loop, second: Loop, tolerance: float = 1e-7) -> list[tuple[float, float]]:
+    """The points where two loops cross through each other: where one passes from inside the other to outside
+    it, by more than ``tolerance`` either way (two that only touch cross nowhere: their ``distance`` is 0).
+    Two whole circles by their centres and radii. Any other pair by walking one along the other (the sampled
+    one along a whole circle, read by its equation): it is cut wherever it meets the other -- at a vertex of
+    either as anywhere else, so a crossing through a sampled point is one -- and each piece between two cuts
+    lies inside the other, outside it or along it (judged where the piece is furthest from it); it crosses
+    where a piece inside is followed by one outside."""
+    if first.circle is not None and second.circle is not None:
+        (x1, y1, r1), (x2, y2, r2) = first.circle, second.circle
+        apart = math.hypot(x2 - x1, y2 - y1)
+        if apart >= r1 + r2 - tolerance or apart <= abs(r1 - r2) + tolerance:
+            return []
+        along = (apart * apart + r1 * r1 - r2 * r2) / (2.0 * apart)
+        half = math.sqrt(max(r1 * r1 - along * along, 0.0))
+        ux, uy = (x2 - x1) / apart, (y2 - y1) / apart
+        return [(x1 + along * ux - sign * half * uy, y1 + along * uy + sign * half * ux) for sign in (1.0, -1.0)]
+    walker, target = (second, first) if second.circle is None and first.circle is not None else (first, second)
+    a, b = walker.a, walker.b
+    if target.circle is not None:
+        cx, cy, r = target.circle
+        lo, hi = np.array([cx - r, cy - r]), np.array([cx + r, cy + r])
+        near = np.zeros(0, int)
+    else:
+        lo, hi = target.bbox()
+        wlo, whi = walker.bbox()
+        near = np.nonzero((np.maximum(target.a, target.b) >= wlo - tolerance).all(axis=1)
+                          & (np.minimum(target.a, target.b) <= whi + tolerance).all(axis=1))[0]
+    # the walker's segments that reach the target's box: the rest lie outside it
+    reach = (np.maximum(a, b) >= lo - tolerance).all(axis=1) & (np.minimum(a, b) <= hi + tolerance).all(axis=1)
+    rows = np.nonzero(reach)[0]
+    if not len(rows) or (target.circle is None and not len(near)):
+        return []
+    owner, t = _cuts(a[rows], b[rows], target, near, tolerance)
+    # each segment's pieces: from its start and from each cut, to the next cut or its end
+    owner = np.concatenate([np.arange(len(rows)), owner])
+    t0 = np.concatenate([np.zeros(len(rows)), t])
+    order = np.lexsort((t0, owner))
+    owner, t0 = owner[order], t0[order]
+    t1 = np.where(np.append(owner[1:] == owner[:-1], False), np.append(t0[1:], 1.0), 1.0)
+    base, edge = a[rows][owner], (b - a)[rows][owner]
+    start = base + t0[:, None] * edge
+    # a piece is one side of the target throughout, so its furthest point of three says which
+    off = _signed(np.vstack([start, base + ((t0 + t1) / 2)[:, None] * edge, base + t1[:, None] * edge]),
+                  target, near).reshape(3, -1)
+    off = off[np.abs(off).argmax(axis=0), np.arange(off.shape[1])]
+    side = np.where(off > tolerance, 1, np.where(off < -tolerance, -1, 0))
+    # the whole walk in order, the segments off the box outside; the pieces along the target say nothing
+    away = np.nonzero(~reach)[0]
+    index = np.concatenate([away, rows[owner]])
+    order = np.lexsort((np.concatenate([np.zeros(len(away)), t0]), index))
+    side = np.concatenate([np.ones(len(away), int), side])[order]
+    start = np.vstack([a[away], start])[order]
+    told = side != 0
+    side, start = side[told], start[told]
+    if not (side > 0).any() or not (side < 0).any():
+        return []
+    return [(float(x), float(y)) for x, y in start[side != np.roll(side, 1)]]
+
+
+def holds(outer: Loop, inner: Loop, tolerance: float = 1e-7) -> bool:
+    """Whether ``outer`` holds ``inner`` (two that do not cross: ``crossings``), touching it or not: two whole
+    circles by their centres and radii, a whole circle in a sampled loop by its centre and its distance to the
+    loop, a sampled loop by the first of its points that lies off ``outer``'s edge -- never by one point that
+    may lie on it."""
+    if inner.circle is not None:
+        x, y, r = inner.circle
+        if outer.circle is not None:
+            return math.hypot(x - outer.circle[0], y - outer.circle[1]) + r <= outer.circle[2] + tolerance
+        return bool(_signed(np.array([[x, y]]), outer)[0] <= -r + tolerance)
+    n = len(inner.points)
+    tried = 0
+    step = n
+    while step >= 1 and tried < 64:  # the points halfway between those tried, each round: spread from the first
+        for i in range(0, n, step) if step == n else range(step, n, 2 * step):
+            off = float(_signed(inner.points[i][None], outer)[0])
+            tried += 1
+            if abs(off) > tolerance:
+                return off < 0.0
+            if tried >= 64:
+                break
+        step //= 2
+    return False
+
+
+def nest(loops: Sequence[Loop], tolerance: float = 1e-7) -> tuple[list[int], list[int]]:
     """Each loop's depth -- how many larger loops hold it (0: an outline, 1: a hole, 2: an island in a hole)
-    -- and the loop that holds it directly, the smallest of them (-1 for none)."""
+    -- and the loop that holds it directly, the smallest of them (-1 for none). A loop is tried against the
+    larger loops whose boxes hold its own (``holds``)."""
     areas = np.array([abs(area(loop)) for loop in loops])
     lo = np.array([loop.bbox()[0] for loop in loops]).reshape(-1, 2)
     hi = np.array([loop.bbox()[1] for loop in loops]).reshape(-1, 2)
     depth, parent = [], []
     for i, loop in enumerate(loops):
-        probe = loop.points[0]
-        around = np.nonzero((areas > areas[i]) & (lo <= probe + 1e-9).all(axis=1) & (hi >= probe - 1e-9).all(axis=1))[0]
-        holders = [int(j) for j in around if inside(probe[None], [loops[int(j)]])[0]]
+        around = np.nonzero((areas > areas[i]) & (lo <= lo[i] + tolerance).all(axis=1)
+                            & (hi >= hi[i] - tolerance).all(axis=1))[0]
+        holders = [int(j) for j in around if holds(loops[int(j)], loop, tolerance)]
         depth.append(len(holders))
         parent.append(min(holders, key=lambda j: areas[j]) if holders else -1)
     return depth, parent

@@ -132,7 +132,7 @@ class CutFileTest(unittest.TestCase):
         (part,) = result.measurements["parts"]["items"]
         self.assertEqual((part["flat_length_mm"], part["flat_width_mm"]), (100.0, 60.0))
 
-    def test_units_inches_scale_and_unset_units_withhold_every_size_rule(self) -> None:
+    def test_a_file_is_read_in_its_units_or_the_ones_given_and_never_in_none(self) -> None:
         def build(msp, _):
             _plate(msp, 4.0, 3.0)
             msp.add_circle((1.0, 1.0), 0.02)     # a 0.04 in (1.016 mm) hole
@@ -141,12 +141,40 @@ class CutFileTest(unittest.TestCase):
         self.assertAlmostEqual(holes[0]["size_mm"], 1.016, places=6)
         self.assertEqual(inch.measurements["parts"]["items"][0]["flat_length_mm"], 101.6)
         self.assertIn("sheet.hole_diameter", self.codes(inch))  # 1.016 mm under the 2 mm sheet's 1 t
-        unset = self.check(self.write("unset", build, None), thickness=2.0)
-        codes = self.codes(unset)
-        self.assertIn("units_not_set", codes)
-        self.assertIn("units_suspect", codes)
-        self.assertNotIn("sheet.hole_diameter", codes)
-        self.assertFalse(unset.ok)
+        # a file that declares no unit (every R12 file) is not checked, and the one finding names the option
+        unset = self.write("unset", build, None)
+        result = self.check(unset, thickness=2.0)
+        self.assertEqual((result.status, result.reason), ("not_checked", "units_not_set"))
+        (finding,) = result.findings
+        self.assertIn("give --units (mm, cm, m, in or ft)", finding.message)
+        self.assertNotIn("ezdxf", finding.message)
+        # with its units given it is measured as the file that declares them is, and passes: the shop is to be told
+        given = self.check(unset, thickness=2.0, units="in")
+        self.assertEqual(given.status, "ok")
+        self.assertEqual(self.codes(given) - CLEAN_CODES, {"units_not_set", "sheet.hole_diameter"})
+        self.assertEqual(next(f.severity for f in given.findings if f.code == "units_not_set"), "warning")
+        self.assertEqual(given.measurements["parts"]["items"], inch.measurements["parts"]["items"])
+        self.assertEqual(given.measurements["cut_file"]["unit_from"], "--units")
+        # the units given are read over the file's own, and that is said
+        over = self.check(self.write("mm", build), thickness=2.0, units="in")
+        self.assertIn("units_differ", self.codes(over))
+        self.assertEqual(over.measurements["parts"]["items"][0]["flat_length_mm"], 101.6)
+
+    def test_a_drawing_larger_than_any_plate_fails_and_its_units_are_doubted(self) -> None:
+        import warnings
+
+        def build(msp, _):
+            _plate(msp, 100, 50)        # drawn in metres: 100 m x 50 m
+            msp.add_circle((20, 30), 5)
+        path = self.write("metres", build, ezdxf.units.M)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")   # no overflow in the plane's arithmetic at this size
+            result = self.check(path, thickness=2.0)
+        self.assertEqual(self.errors(result), ["sheet.flat_length_limit", "sheet.flat_width_limit"])
+        (doubt,) = [f for f in result.findings if f.code == "units_suspect"]
+        self.assertIn("111803 mm across, implausibly large", doubt.message)
+        # the same drawing read in millimetres is a 100 x 50 mm plate
+        self.assertEqual(self.errors(self.check(path, thickness=2.0, units="mm")), [])
 
     def test_a_cut_file_with_no_thickness_says_its_rules_waited(self) -> None:
         def build(msp, _):
@@ -174,6 +202,13 @@ class CutFileTest(unittest.TestCase):
         self.assertIn("$INSUNITS to 1", suspect.message)
         self.assertEqual(result.measurements["parts"]["items"][0]["flat_length_mm"], 4.0)  # judged as declared
 
+        # an ordinary plate with one small hole is no inch drawing: the hole is the hole rule's finding
+        def pierced(msp, _):
+            _plate(msp, 100, 60)
+            msp.add_circle((50, 30), 0.2)
+        result = self.check(self.write("pierced", pierced), thickness=2.0)
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.hole_diameter"})
+
     def test_features_against_the_thickness_the_kerf_and_the_sheet(self) -> None:
         def build(msp, _):
             _plate(msp, 300, 100)
@@ -192,6 +227,18 @@ class CutFileTest(unittest.TestCase):
         self.assertNotIn("sheet.under_kerf", codes)
         tight = self.check(path, thickness=2.0, kerf=0.9)
         self.assertIn("sheet.under_kerf", self.codes(tight))  # the 0.8 mm hole is narrower than the beam
+
+    def test_a_grilles_bars_are_webs_judged_once(self) -> None:
+        def build(msp, _):
+            _plate(msp, 140, 120)
+            for i in range(17):   # slots 4 mm wide, 1.5 mm bars between them
+                x = 20 + 5.5 * i
+                msp.add_lwpolyline([(x, 10), (x + 4, 10), (x + 4, 110), (x, 110)], close=True)
+        result = self.check(self.write("grille", build), thickness=3.0)
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.web_width"})
+        (finding,) = [f for f in result.findings if f.code == "sheet.web_width"]
+        self.assertIn("(between 17 cutouts)", finding.message)
+        self.assertEqual(result.measurements["hole_spacing"]["items"], [])
 
     def test_a_notch_a_tab_and_a_bend_layer(self) -> None:
         def build(msp, document):
@@ -335,6 +382,51 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(self.errors(self.check(self.write("mirrored_circle", crossing), thickness=2.0)),
                          ["sheet.crossing_contours"] * 2)
 
+    def test_contours_that_cross_through_a_sampled_point_or_touch_are_found(self) -> None:
+        def plate_and(*cuts):
+            def build(msp, _):
+                _plate(msp, 100, 60, layer="0")
+                for cut in cuts:
+                    cut(msp)
+            return build
+
+        def crossed(result) -> list[str]:
+            return [item["kind"] for item in result.measurements["contour_crossings"]["items"]]
+
+        # a circle centred on the edge crosses it a quarter turn from its first point, whatever its radius
+        for radius in (1.0, 2.0, 2.5, 3.0, 5.0, 10.0):
+            result = self.check(self.write(f"on_edge{radius}", plate_and(
+                lambda msp, radius=radius: msp.add_circle((100, 30), radius))), thickness=2.0)
+            self.assertEqual(self.errors(result), ["sheet.crossing_contours"] * 2, radius)
+            self.assertEqual(sorted(item["xyz"][:2] for item in result.measurements["contour_crossings"]["items"]),
+                             [[100.0, 30.0 - radius], [100.0, 30.0 + radius]])
+        # the circle a hole near the edge is, reaching 5 mm past it: where its equation says, not its chords
+        through = self.check(self.write("through", plate_and(lambda msp: msp.add_circle((95, 30), 10))), thickness=2.0)
+        self.assertEqual(sorted(item["xyz"][:2] for item in through.measurements["contour_crossings"]["items"]),
+                         [[100.0, 21.3397], [100.0, 38.6603]])
+        # two holes 5 mm across each other's centres cross 60 degrees round each: both holes of the one part
+        holes = self.check(self.write("holes", plate_and(lambda msp: msp.add_circle((50, 30), 5),
+                                                         lambda msp: msp.add_circle((55, 30), 5))), thickness=2.0)
+        self.assertEqual(crossed(holes), ["crosses", "crosses"])
+        self.assertEqual(holes.measurements["parts"]["items"][0]["hole_count"], 2)
+        self.assertEqual(holes.measurements["floating_interiors"]["items"], [])
+        # a diamond with two corners on the edge's line passes through it there
+        diamond = self.check(self.write("diamond", plate_and(lambda msp: msp.add_lwpolyline(
+            [(90, 30), (100, 20), (110, 30), (100, 40)], close=True))), thickness=2.0)
+        self.assertEqual(crossed(diamond), ["crosses", "crosses"])
+        # a hole tangent to the edge from inside is a hole of the part, with no material between it and the edge
+        tangent = self.check(self.write("tangent", plate_and(lambda msp: msp.add_circle((95, 30), 5))), thickness=2.0)
+        self.assertEqual(self.errors(tangent), ["sheet.crossing_contours"])
+        self.assertEqual(crossed(tangent), ["touches"])
+        (hole,) = tangent.measurements["holes"]["items"]
+        self.assertEqual(hole["edge_distance_mm"], 0.0)
+        # two parts corner to corner touch; a hole a hair inside the edge is a hole, and only close to it
+        corner = self.check(self.write("corner", plate_and(lambda msp: msp.add_lwpolyline(
+            [(100, 30), (120, 10), (140, 30), (120, 50)], close=True))), thickness=2.0)
+        self.assertEqual(crossed(corner), ["touches"])
+        clear = self.check(self.write("clear", plate_and(lambda msp: msp.add_circle((94.9, 30), 5))), thickness=2.0)
+        self.assertEqual((self.errors(clear), clear.measurements["holes"]["count"]), ([], 1))
+
     def test_ends_a_hair_apart_are_joined_and_said_and_a_real_gap_is_open(self) -> None:
         def gapped(gap):
             def build(msp, _):
@@ -352,6 +444,41 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(self.errors(self.check(self.write("gap", gapped(0.05)), thickness=2.0)),
                          ["measurement_failed", "sheet.open_contour", "sheet.open_contour"])
 
+    def test_a_side_shorter_than_the_join_is_a_side_and_no_open_contour(self) -> None:
+        def lines(msp, points):
+            for start, end in zip(points, points[1:] + points[:1]):
+                msp.add_line(start, end)
+
+        def fillet(msp):   # a corner rounded at 5 microns, as a CAD's fillet of a "sharp" corner is written
+            for start, end in (((0, 0), (100, 0)), ((100, 0), (100, 59.995)), ((99.995, 60), (0, 60)), ((0, 60), (0, 0))):
+                msp.add_line(start, end)
+            msp.add_arc((99.995, 59.995), 0.005, 0, 90)
+
+        run = [(50 + 0.003 * i, 60 + 0.0005 * i * (10 - i)) for i in range(10, -1, -1)]
+        cases = {
+            "polyline_stub": lambda msp: msp.add_lwpolyline(
+                [(0, 0), (100, 0), (100, 60), (50.005, 60), (50, 60), (0, 60)], close=True),
+            "polyline_chamfer": lambda msp: msp.add_lwpolyline(
+                [(0, 0), (100, 0), (100, 59.995), (99.995, 60), (0, 60)], close=True),
+            "polyline_run": lambda msp: msp.add_lwpolyline([(0, 0), (100, 0), (100, 60), *run, (0, 60)], close=True),
+            "line_stub": lambda msp: lines(msp, [(0, 0), (100, 0), (100, 60), (99.996, 60), (0, 60)]),
+            "line_run": lambda msp: lines(msp, [(0, 0), (100, 0), (100, 60), *run, (0, 60)]),
+            "fillet": fillet,
+        }
+        for name, draw in cases.items():
+            result = self.check(self.write(name, lambda msp, _, draw=draw: draw(msp)), thickness=2.0)
+            self.assertEqual(self.codes(result) - CLEAN_CODES, set(), name)   # closed as drawn: nothing joined
+            (part,) = result.measurements["parts"]["items"]
+            self.assertAlmostEqual(part["flat_length_mm"], 100.0, places=2, msg=name)
+
+        # two squares that share a side are two parts, that side cut twice: no open contour where three ends meet
+        def shared(msp, _):
+            msp.add_lwpolyline([(0, 0), (50, 0), (50, 50), (0, 50)], close=True)
+            msp.add_lwpolyline([(50, 0), (100, 0), (100, 50), (50, 50)], close=True)
+        result = self.check(self.write("shared", shared), thickness=2.0)
+        self.assertEqual(self.errors(result), ["sheet.crossing_contours", "sheet.overlapping_curves"])
+        self.assertEqual(result.measurements["parts"]["count"], 2)
+
     def test_a_circle_drawn_twice_is_cut_twice_and_is_one_hole(self) -> None:
         def build(msp, _):
             _plate(msp)
@@ -362,11 +489,28 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.overlapping_curves"})  # no holes 0 mm apart
         self.assertEqual(result.measurements["holes"]["count"], 2)
 
+    def test_any_curve_drawn_twice_is_cut_twice(self) -> None:
+        fit = [(20, 20), (40, 40), (60, 20), (40, 10), (20, 20)]
+        for name, draw in (("ellipse", lambda msp: msp.add_ellipse((50, 30), (10, 0), 0.5)),
+                           ("spline", lambda msp: msp.add_spline(fit)),
+                           ("outline", lambda msp: _plate(msp, 100, 60))):   # a polyline of four lines
+            def build(msp, _, name=name, draw=draw):
+                if name != "outline":
+                    _plate(msp, 100, 60)
+                draw(msp)
+                draw(msp)
+            result = self.check(self.write(f"twice_{name}", build), thickness=2.0)
+            self.assertEqual(self.errors(result), ["sheet.overlapping_curves"], name)  # once for the pair of entities
+            (overlap,) = [item for item in result.measurements["overlaps"]["items"] if item["kind"] == "duplicate"]
+            self.assertEqual(len(overlap["handles"]), 2)
+            self.assertEqual(result.measurements["parts"]["count"], 1)
+
     # --- bend lines ----------------------------------------------------------------------------------------
 
-    def bent_plate(self, name: str, holes=(), bend_x=50.0, split=None, turn=0.0):
-        """A 100 x 60 plate with a bend line at ``bend_x`` (in two, either side of ``split``, a y range) and
-        round ``holes`` (x, y, diameter), the whole drawing turned ``turn`` degrees about a point off it."""
+    def bent_plate(self, name: str, holes=(), bend_x=50.0, split=None, turn=0.0, across=None):
+        """A 100 x 60 plate with a bend line at ``bend_x`` (in two, either side of ``split``, a y range, a window
+        cut there; ``across``: the window cut and the line drawn across it) and round ``holes`` (x, y, diameter),
+        the whole drawing turned ``turn`` degrees about a point off it."""
         c, s = math.cos(math.radians(turn)), math.sin(math.radians(turn))
 
         def at(x, y):
@@ -377,9 +521,9 @@ class CutFileTest(unittest.TestCase):
             msp.add_lwpolyline([at(0, 0), at(100, 0), at(100, 60), at(0, 60)], close=True)
             for y0, y1 in ([(0, split[0]), (split[1], 60)] if split else [(0, 60)]):
                 msp.add_line(at(bend_x, y0), at(bend_x, y1), dxfattribs={"layer": "BEND"})
-            if split:  # a window across the bend line
-                msp.add_lwpolyline([at(bend_x - 7, split[0]), at(bend_x + 7, split[0]), at(bend_x + 7, split[1]),
-                                    at(bend_x - 7, split[1])], close=True)
+            for y0, y1 in filter(None, (split, across)):  # a window across the bend line
+                msp.add_lwpolyline([at(bend_x - 7, y0), at(bend_x + 7, y0), at(bend_x + 7, y1), at(bend_x - 7, y1)],
+                                   close=True)
             for x, y, d in holes:
                 msp.add_circle(at(x, y), d / 2)
         return self.check(self.write(name, build), thickness=2.0)
@@ -406,11 +550,46 @@ class CutFileTest(unittest.TestCase):
             # exactly 2 t from the line is at the limit, and passes
             self.assertEqual(self.errors(self.bent_plate(f"bend_at{turn}", holes=[(43.5, 30, 5)], turn=turn)), [])
 
+    def test_a_cad_flat_pattern_exports_layers_are_read_as_what_they_are(self) -> None:
+        allowance = math.pi / 2 * (1.0 + 0.4 * 2.0)   # a 90 degree bend of 1 mm inside radius in 2 mm sheet
+
+        def flat(layers):
+            outer, inner, bend, extent, marks = layers
+
+            def build(msp, document):
+                for layer in layers:
+                    document.layers.add(layer)
+                length = 70 + allowance
+                msp.add_lwpolyline([(0, 0), (length, 0), (length, 50), (0, 50)], close=True, dxfattribs={"layer": outer})
+                msp.add_circle((15, 25), 2.75, dxfattribs={"layer": inner})
+                msp.add_point((15, 25), dxfattribs={"layer": marks})
+                msp.add_line((40 + allowance / 2, 0), (40 + allowance / 2, 50), dxfattribs={"layer": bend})
+                for x in (40, 40 + allowance):   # the bend's two tangent lines: no cut, and no bend
+                    msp.add_line((x, 0), (x, 50), dxfattribs={"layer": extent})
+            return build
+
+        for name, layers in (
+                ("inventor", ("IV_OUTER_PROFILE", "IV_INTERIOR_PROFILES", "IV_BEND", "IV_TANGENT", "IV_ARC_CENTERS")),
+                ("fusion", ("OUTER_PROFILES", "INTERIOR_PROFILES", "BEND", "BEND_EXTENT", "MARKS_CENTERS"))):
+            result = self.check(self.write(name, flat(layers)), thickness=2.0)
+            self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.bend_lines_read"}, name)
+            cut = result.measurements["cut_file"]
+            self.assertEqual((cut["bend_line_count"], cut["contour_count"], cut["cut_layer_count"]), (1, 2, 2), name)
+            intents = {layer["layer"]: layer["intent"] for layer in cut["layers"]}
+            self.assertEqual([intents[layer] for layer in layers], ["cut", "cut", "bend", "reference", "reference"])
+
     def test_a_window_across_a_bend_line_ends_the_bend_and_is_no_hole_beside_it(self) -> None:
         result = self.bent_plate("bend_window", split=(27, 33))
         self.assertTrue(result.ok, [f.human_line() for f in result.findings])
         self.assertEqual(result.measurements["hole_to_bend"]["items"], [])
         self.assertEqual(result.measurements["cut_file"]["bend_line_count"], 2)
+        # and so does the one line drawn straight across the window, as a draughtsman draws it: the window
+        # reaches 7 mm, over 2 t, to both sides of the line (a 5 mm hole on the line stays a hole in the bend)
+        for turn in (0.0, 37.0):
+            result = self.bent_plate(f"bend_across{turn}", across=(27, 33), turn=turn)
+            self.assertTrue(result.ok, [f.human_line() for f in result.findings])
+            self.assertEqual(result.measurements["hole_to_bend"]["items"], [])
+            self.assertEqual(result.measurements["cut_file"]["bend_line_count"], 1)
 
     # --- bounded -------------------------------------------------------------------------------------------
 
@@ -426,6 +605,27 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(result.measurements["cut_file"]["contour_count"], 2026)
         nearest = result.measurements["hole_spacing"]["items"][0]
         self.assertAlmostEqual(nearest["distance_mm"], 11.0, places=6)  # 21 mm apart, 10 mm across
+
+    def test_a_traced_outline_of_twenty_five_thousand_lines_is_measured(self) -> None:
+        count = 25000   # one contour: every measure of it is pruned, none the square of its sides
+
+        def build(msp, _):
+            turns = [2 * math.pi * i / count for i in range(count)]
+            msp.add_lwpolyline([(200 + 150 * math.cos(t) * (1 + 0.05 * math.sin(40 * t)),
+                                 200 + 150 * math.sin(t) * (1 + 0.05 * math.sin(40 * t))) for t in turns], close=True)
+        result = self.check(self.write("traced", build), thickness=2.0)
+        self.assertEqual(result.status, "ok")   # its crossings of itself sought too: nothing left unmeasured
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.short_line_run"})
+        (runs,) = result.measurements["short_line_runs"]["items"]   # one finding for the contour, not one a run
+        self.assertEqual(runs["runs"], 80)
+        self.assertEqual(result.measurements["cut_file"]["contour_count"], 1)
+
+        # a long straight side drawn as five thousand lines, crossed twice: found among the pairs that may cross
+        def crossed(msp, _):
+            msp.add_lwpolyline([(0.01 * i + 0.003, 0.0) for i in range(5000)] + [(50, 30), (20, -30), (0, 30)],
+                               close=True)
+        result = self.check(self.write("crossed", crossed), thickness=2.0)
+        self.assertEqual([item["xyz"][:2] for item in result.measurements["self_intersections"]["items"]], [[10.0, 0.0], [35.0, 0.0]])
 
 
 if __name__ == "__main__":

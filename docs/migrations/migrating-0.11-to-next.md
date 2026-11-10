@@ -86,8 +86,8 @@ What to change:
     `sheet.under_kerf`, `sheet.flat_incomplete`, `sheet.flat_overlap`, and `sheet.flat_length` and
     `sheet.flat_width` against the sheet given (`--sheet-size`; against the standard sheet assumed they are
     the rules' warnings); a cut file's `sheet.open_contour`, `sheet.overlapping_curves`,
-    `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop`, `zero_length_entity` and
-    `units_not_set`;
+    `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop` and `zero_length_entity`
+    (a file that declares no units is `NOT CHECKED`, `units_not_set`, until `--units` says them);
   - **the part's own soundness**: `not_watertight` (an open mesh; a part with an open shell or faces
     outside its solids) and `not_sound` (the kernel's validity check fails, or a part's solids share
     volume).
@@ -124,9 +124,10 @@ What to change:
 
 ### The library's checks (tier 2)
 
-`cad.<type>.dfm` takes the same parameters but `units`, which is an STL's alone now: `cad.step.dfm`,
-`cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm`, `cad.glb.dfm` and `cad.dxf.dfm` (and the commands'
-`--units`) no longer take it, where 0.11 took it and refused every value but `mm` -- drop the argument.
+`cad.<type>.dfm` takes the same parameters but `units`, which is an STL's and a DXF's now (a DXF that
+declares none is not checked without it): `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm`
+and `cad.glb.dfm` (and the commands' `--units`) no longer take it, where 0.11 took it and refused every
+value but `mm` -- drop the argument.
 Its result changes as above: `result.status` and `result.reason` are new, `result.ok` is true for `ok`
 alone, and a check the engine did not finish still raises. `strict=True` fails on a warning. Each option
 is taken only as its kind: a count is an `int`, so `samples=2000.0`, which 0.11 read as 2000, is refused; a
@@ -182,7 +183,8 @@ memory cap): run the check again.
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. It is not the drawing checks an export runs (`cad model
 export` of a DXF, unchanged), and reads the file its own way: of those checks' codes it keeps
-`units_not_set` and `zero_length_entity`; an entity drawn twice, the export's `duplicate_entity`, is
+`zero_length_entity`, and `units_not_set` for a file that declares no units (`NOT CHECKED` until `--units`
+gives them, then a warning); an entity drawn twice, the export's `duplicate_entity`, is
 `sheet.overlapping_curves` here (an error: the cutter goes over the line twice), with the outline it doubles
 still read as the part's; a file with nothing to cut, the export's `empty_drawing`, is `no_cut_geometry`
 (`NOT CHECKED`); and a drawing with dimensions, the export's `drawing_document`, is measured as any cut file,

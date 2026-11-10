@@ -48,11 +48,15 @@ the thickness `t`; a shop's tooling and bend table move them):
 - **Reliefs.** Where a flange ends before the sheet's edge, a relief at the bend's end, at least `t`
   wide and reaching past the bend radius, so the bend does not tear.
 - **Cut features.** Slots, notches and tabs at least `t` wide (and wider than the kerf), no longer than
-  five times their width; webs between cut-outs at least `t`.
-- **Hems and channels.** A hem's inside diameter at least `t` and its return `6t`; a channel's base
+  five times their width; webs between cut-outs at least `t` (a grille's bars are one `sheet.web_width`
+  finding, not one for each pair of slots).
+- **Hems and channels.** A hem's inside diameter at least `t` and its return `6t` (a fold whose inside
+  diameter is over `4t` is a U-bend round a radius tool, no hem); a channel's base
   wide enough for the brake's punch between its flanges (the shop's tooling: a check by hand).
-- Stock 0.5 to 6 mm bent (10 mm cut flat) is the recommendation (warnings); past 25 mm it is plate, no
-  sheet shop's work (`sheet.thickness_limit`, an error, text-to-cad's own floor). The material on the
+- Stock 0.5 to 6 mm bent (10 mm cut flat) is the recommendation (warnings); past an inch (25.4 mm) it is
+  plate, no sheet shop's work (`sheet.thickness_limit`, an error, text-to-cad's own floor). A strip is
+  sheet from twice as wide and ten times as long as it is thick; narrower or shorter, it is a bar or a
+  block (`sheet.not_sheet`). The material on the
   part (`part.material =
   metals.mild_steel()` or the alloy's factory: the check reads it); `--thickness` when the person named
   the gauge. `bd_materials` has no sheet process, so the check always takes `--process sheet`.
@@ -76,7 +80,10 @@ face. The options that change the verdicts:
   (`sheet.k_factor_assumed`), and the flat pattern is not a production blank.
 - `--bend-radius`: the shop's inside radius; a bend modelled otherwise is `sheet.bend_radius_differs`.
 - `--kerf` (features narrower are `sheet.under_kerf`) and `--sheet-size`: the shop's largest sheet, an
-  error to pass it; without it a standard 5 x 10 ft sheet is assumed, a warning.
+  error to pass it; without it a standard 5 x 10 ft sheet is assumed, a warning, and a flat no stock
+  plate holds (10 x 40 ft, 3048 x 12192 mm) is an error (`sheet.flat_length_limit`,
+  `sheet.flat_width_limit`, text-to-cad's own floor).
+- `--units` (a DXF's alone): the units a cut file was drawn in, where it declares none or the wrong ones.
 
 The rules are general, no shop's: a shop's gauges, its tooled radius per gauge, its die widths, its
 brake's angles and bend lengths and its smallest and largest parts are compared with the measurements
@@ -88,8 +95,9 @@ model.
 
 The last line is the check's state and its exit status -- `OK` 0, `FAILED` 1 (a finding is an error; with
 `--strict` a warning fails too), `NOT CHECKED` 3 (something was not judged: never a pass), and 2 for a
-command refused -- and a rule's finding is data to edit from (`value`, `limit`, `unit`, `op`, `source`,
-`refs`): [Read the result](../SKILL.md#read-the-result).
+command refused -- and a finding is data to edit from (a rule's `value`, `limit`, `unit`, `op`, `source`
+and `refs`; the faces of a sharp corner, a chamfered edge or a part that is not sheet in `refs` too):
+[Read the result](../SKILL.md#read-the-result).
 
 The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels`, `reliefs`, `hems`,
 `curls`, `holes`, `hole_spacing`, `hole_to_bend`, `notches`, `tabs`, `webs`, `gaps`.
@@ -98,9 +106,10 @@ The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels
   the same wherever it stands. A part mostly sheet is judged, its departures at their refs: a boss, a
   pocket or a closed hem's double thickness `not_sheet` (one finding a feature), chamfered or rounded
   cut edges `edge_break` (a warning), a cone or a torus `formed` (`sheet.formed_surface`); a part
-  that is not sheet (`is_sheet` false: `sheet.not_sheet` says why -- a bar or a block, no face 2.5 times as
-  wide as it is thick; a tube, a closed section; a sheet rolled round with no flat flange, which is
-  rolled, not bent) gets no other sheet verdict. `sharp_bends` are corners joined without a bend
+  that is not sheet (`is_sheet` false: `sheet.not_sheet` says why -- a bar or a block, no face twice as
+  wide and ten times as long as it is thick; a tube, a closed section) gets no other sheet verdict. A sheet rolled round with
+  no flat flange is sheet, rolled, and not unrolled here: `NOT CHECKED` (`measurement_failed` for
+  `bends`), to be checked by hand. `sharp_bends` are corners joined without a bend
   (`sheet.sharp_bend`): nothing past one unfolds.
 - `bends`: `inside_radius_mm`, `angle_deg`, `k_factor` with its source, `bend_allowance_mm`.
 - Distances come in several conventions: `hole_to_bend` carries `distance_tangent_mm` (from where the
@@ -143,10 +152,14 @@ cad dxf dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.
 
 It reads the file as a cutter does -- every entity on a cut layer, a block reference's too, where
 it is placed -- and judges the cut layout: open geometry on a cut layer (`sheet.open_contour`), curves
-cut twice (`sheet.overlapping_curves`), self-intersecting and crossing contours, zero-area loops, a
-piece that falls out of a hole (`sheet.floating_interior`), text or dimensions on a cut layer, a curve
-drawn as short lines, ends a hair apart that it joined (`sheet.joined_gap`, under 0.01 mm), and holes,
-webs and gaps against the thickness. `measurements.cut_file` gives the units, extents and layers.
+cut twice (`sheet.overlapping_curves`: any curve drawn again, lines and arcs that overlap),
+self-intersecting contours, contours that cross or touch (`sheet.crossing_contours`: a hole breaking
+or tangent to the edge), zero-area loops, a piece that falls out of a hole
+(`sheet.floating_interior`), text or dimensions on a cut layer, a curve drawn as short lines, ends a
+hair apart that it joined (`sheet.joined_gap`, under 0.01 mm), and holes, webs and gaps against the
+thickness. `measurements.cut_file` gives the units, extents and layers. A CAD's flat pattern export
+is read by its layer names: bend-extent (tangent) lines and centre marks (Inventor's `IV_TANGENT`,
+`IV_ARC_CENTERS`, a `BEND_EXTENT` layer) are reference, not cuts or bends.
 
 What it could not read is never a pass. A file with no cut curve (an empty one, a drawing of
 dimensions alone) is not checked (`no_cut_geometry`); a cut-layer entity it does not read (a curve
@@ -157,18 +170,21 @@ the file excuses nothing: the cut layers are measured all the same. Then read by
 - **Thickness.** Give `--thickness`: the rules that scale with it (holes, edges, webs, notches, tabs,
   reliefs) are not evaluated without it (`sheet.thickness_unknown`), and an `OK` then judges the
   contours alone.
-- **Units.** With `$INSUNITS` unset or unknown no size is compared with a rule (`units_suspect`), and
-  a declared unit that makes the part implausible (an inch-drawn part declared mm reads 25.4 times
-  small) is said both ways. Compare `cut_file.extents_mm` with the part's expected size; never rescale
-  silently.
+- **Units.** A file that declares no units (`$INSUNITS` unset: every R12 file) is `NOT CHECKED`
+  (`units_not_set`) until `--units mm` (or `cm`, `m`, `in`, `ft`) says what it was drawn in; it is then
+  measured, with a warning that the shop has to be told too. A unit that makes the part implausible
+  (an inch-drawn part declared mm reads 25.4 times small; a drawing over 10 m across) is
+  `units_suspect`. Compare `cut_file.extents_mm` with the part's expected size; never rescale silently.
 - **Kerf.** Say whether the file is drawn to the finished size, with the shop's compensation, or
   already offset (`offset_profile`, `flat_pattern(..., kerf=)`): offsetting twice takes the kerf off
   twice. Take the kerf from the shop for the material and thickness.
 - **Bend lines.** Lines on a bend layer are read as the bends' centre lines (`sheet.bend_lines_read`,
   an info). A flat drawing has no bend radius or angle, so each hole and edge is held to the least any
   bend needs: a hole within `2t` of a bend line (`sheet.hole_to_bend`) and an edge within `t` of one
-  (`sheet.flange_length`) fail whatever the bend. The full distances, the radius and the reliefs are
-  the bent part's check (its STEP): a cut file that passes has not passed them.
+  (`sheet.flange_length`) fail whatever the bend. A window through the bend -- a cutout the line ends
+  at, or is drawn across, reaching `2t` to both sides of it -- ends the bend and is no hole in it. The
+  full distances, the radius and the reliefs are the bent part's check (its STEP): a cut file that
+  passes has not passed them.
 - **What a cutting service needs.** Bend lines on their own named layer when the shop bends; marking
   text as outlines on its own layer when the shop engraves; one part per file unless the shop takes
   nested sheets. On a router an internal corner takes the tool's radius.

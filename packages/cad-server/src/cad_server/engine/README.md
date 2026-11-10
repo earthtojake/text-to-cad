@@ -708,12 +708,13 @@ cad model|xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pb
                 [--angle-limit DEG] [--layer-height H] [--nozzle D] [--samples N] [--candidates]
 cad stl|glb|threemf dfm FILE [--process printing] [printing's options as above] [--units U]
 cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
-                [--sheet-size XxY]
+                [--sheet-size XxY] [--units U]
       ... [--material M] [--json]
                                              the manufacturing check: SRC a file or a document id;
                                              --process, given none, the parts' declared one (a model,
                                              an xbf; a STEP keeps none) or a DXF's sheet; --units an
-                                             STL's alone; exact geometry and a DXF the build123d
+                                             STL's, and a DXF's that declares none (not checked
+                                             without); exact geometry and a DXF the build123d
                                              integration's (findings at face refs, layers), a mesh the
                                              trimesh integration's (at x, y, z); the general
                                              rules' verdicts (no shop's limits) and
