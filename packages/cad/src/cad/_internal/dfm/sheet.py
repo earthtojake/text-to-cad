@@ -682,12 +682,17 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                     f"the bend's inside radius is {value:.4g} mm, the shop's {radius:.4g} mm: the part and its "
                     "flat pattern will come out differently", bend.get("location"),
                     f"model the bend at the shop's {radius:.4g} mm inside radius"))
-    radii = sorted({round(float(bend["inside_radius_mm"]), 3) for bend in bends  # hems and curls: their own tools
-                    if bend.get("kind", "bend") == "bend" and isinstance(bend.get("inside_radius_mm"), (int, float))})
-    if len(radii) > 1:
-        found.append(CheckFinding("info", "sheet.bend_radii_mixed",
-                                  f"the bends use {len(radii)} inside radii ({', '.join(f'{r:g}' for r in radii)} mm)",
-                                  "bends", "one radius for every bend saves tool changes"))
+    mixed: dict[str, set[float]] = {}  # a part's own bends: two parts of two radii mix none
+    for bend in bends:  # hems and curls: their own tools
+        if bend.get("kind", "bend") == "bend" and isinstance(bend.get("inside_radius_mm"), (int, float)):
+            mixed.setdefault(_owner(bend.get("location")), set()).add(round(float(bend["inside_radius_mm"]), 3))
+    for owner, radii in mixed.items():
+        if len(radii) > 1:
+            found.append(CheckFinding(
+                "info", "sheet.bend_radii_mixed",
+                f"{owner.rsplit('/', 1)[-1] or 'the part'}'s bends use {len(radii)} inside radii "
+                f"({', '.join(f'{r:g}' for r in sorted(radii))} mm)", "bends",
+                "one radius for every bend saves tool changes"))
     kerf = resolved.get("kerf")
     if kerf:
         for family, field, what in (("holes", "size_mm", "hole"), ("webs", "width_mm", "web"),

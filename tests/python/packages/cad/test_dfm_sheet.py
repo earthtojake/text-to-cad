@@ -552,6 +552,8 @@ class PerPartTest(unittest.TestCase):
             self.assertIn("2 parts, 1 and 3 mm", result.summary)
             (hole,) = [f for f in result.findings if f.code == "sheet.hole_to_bend"]
             self.assertIn("3 mm is under the 6 mm minimum", hole.message)
+            # each part's one radius is its own: two parts of two radii mix none
+            self.assertNotIn("sheet.bend_radii_mixed", {f.code for f in result.findings})
 
     def test_a_flat_plate_beside_a_bent_bracket_keeps_the_flat_thickness_limit(self) -> None:
         plate = bd.Pos(0, 100, 4) * bd.Box(80, 60, 8)  # 8 mm, flat: within the 10 mm a laser cuts
