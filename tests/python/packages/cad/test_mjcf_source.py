@@ -327,6 +327,19 @@ class Equalities(_Case):
         joints = {joint.name: joint for joint in articulate(model).joints}
         self.assertEqual(("leader", 2.0, 0.1), joints["follower"].mimic)
 
+    def test_a_mimic_is_about_the_refs_whatever_they_are(self) -> None:
+        # MuJoCo's equality is y - y0 = a0 + a1 (x - x0), y0 and x0 the joints' ref: the controls' mimic is (a1, a0).
+        for angle, unit in (("radian", 1.0), ("degree", math.pi / 180)):
+            model, _ = self.model(
+                f'<worldbody><body name="a"><joint name="leader" ref="{0.5 / unit}"/></body>'
+                f'<body name="b"><joint name="follower" ref="{0.2 / unit}"/></body></worldbody>'
+                '<equality><joint joint1="follower" joint2="leader" polycoef="0.1 2 0 0 0"/></equality>',
+                head=f'<compiler angle="{angle}"/>')
+            joints = {joint.name: joint for joint in articulate(model).joints}
+            self.assertEqual("leader", joints["follower"].mimic[0])
+            self.assertAlmostEqual(2.0, joints["follower"].mimic[1])
+            self.assertAlmostEqual(0.1, joints["follower"].mimic[2])
+
     def test_a_polynomial_is_an_info_and_an_unknown_joint_an_error(self) -> None:
         model, findings = self.model(self.BODIES + '<equality><joint joint1="follower" joint2="leader" '
                                                    'polycoef="0 1 1 0 0"/></equality>')

@@ -28,7 +28,8 @@ the CAD Viewer and ``cad mjcf snapshot`` open an MJCF on any device.
   draws them by default; 3 and up are a model's collision geoms and are not visuals; ``articulate``'s
   ``collision`` draws instead the geoms that collide, a ``contype`` or ``conaffinity`` not 0), ``<joint type axis pos range
   limited ref>`` and ``<freejoint>``;
-- ``<equality><joint joint1 joint2 polycoef>``: a linear coupling as a mimic;
+- ``<equality><joint joint1 joint2 polycoef>``: a linear coupling as a mimic ``(leader, a1, a0)`` in
+  control values, MuJoCo's ``y - y0 = a0 + a1 (x - x0)`` being about the joints' ``ref`` already;
 - ``<keyframe><key name qpos>``: each a pose of the model's hinge and slide joints;
 - ``<actuator>``: its actuators counted, for the summary (MuJoCo's ``nu``), none of them read.
 
@@ -93,7 +94,6 @@ _DEFAULT_RGBA = (0.5, 0.5, 0.5, 1.0)
 _ORIENTATIONS = ("quat", "euler", "axisangle", "xyaxes", "zaxis")
 _EPSILON = 1e-12
 #: The tags a default class carries attributes for, of those read here.
-_DEFAULTED = ("geom", "joint", "mesh", "material", "body")
 
 
 class MjcfError(ValueError):
@@ -581,10 +581,10 @@ class _Reader:
             tag = local_name(child.tag)
             if tag == "default":
                 continue
-            if tag in _DEFAULTED or True:  # every tag's attributes are kept; only _DEFAULTED are read later
-                merged = dict(inherited.get(tag, {}))
-                merged.update({key: value for key, value in child.attrib.items() if key != "class"})
-                inherited[tag] = merged
+            # Every tag's attributes are kept; only those a reader asks for by tag are read later.
+            merged = dict(inherited.get(tag, {}))
+            merged.update({key: value for key, value in child.attrib.items() if key != "class"})
+            inherited[tag] = merged
         self.defaults[name] = inherited
         for child in children(element, "default"):
             self._read_default(child, parent=name, top=False)
@@ -1088,12 +1088,10 @@ def articulate(model: MjcfModel, *, collision: bool = False) -> Articulation:
     for follower, leader, multiplier, offset in model.couplings:
         if follower in by_name and leader in by_name and by_name[follower].type in ("revolute", "continuous",
                                                                                      "prismatic"):
-            # MuJoCo's constraint is on qpos; the viewer's control is around ref: follower - ref_f = m (leader -
-            # ref_l) + c, so the offset carries both refs.
-            source_f, source_l = by_name[follower].source, by_name[leader].source
-            ref_f = source_f.ref if source_f else 0.0
-            ref_l = source_l.ref if source_l else 0.0
-            by_name[follower].mimic = (leader, multiplier, offset + multiplier * ref_l - ref_f)
+            # MuJoCo's joint equality is already about the reference configuration, y - y0 = a0 + a1 (x - x0),
+            # with y0, x0 the joints' qpos0 (their ref) and a0, a1 in radians or metres whatever the file's
+            # angle: in control values (qpos - ref) the mimic is (leader, a1, a0), the refs cancelling.
+            by_name[follower].mimic = (leader, multiplier, offset)
 
     poses: dict[str, dict[str, float]] = {}
     for key, values in model.keyframes.items():
