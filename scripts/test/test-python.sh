@@ -17,6 +17,10 @@ set -euo pipefail
 #
 # PATHs narrow the group to the test files at or under them (repo-relative); CI passes
 # the files and directories a change selected.
+#
+# CAD_TEST_SHARD=I/N runs shard I of N (from 1) of each suite's selected files: sorted by
+# path, the k-th (from 0) is shard k%N+1's, so the N shards run every file exactly once,
+# and a shard that none falls to passes. CI splits a long suite across jobs by it.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
