@@ -339,7 +339,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   `width_mm` / `depth_to_width` as for a pocket, `floor` null.
 - **internal_corners** — a pocket's in-plane corners: concave cylinders along the pocket's axis (`radius_mm`)
   and sharp concave edges along it that no tool makes from another side (`radius_mm` 0, `sharp` true,
-  `edge`). `height_mm` (the corner's own extent: the cavity depth there), `depth_mm` (from the part's top),
+  `edge`). A corner's `location` is its cavity's ref (`pocket`), which the cavity's corners share, so one
+  cavity is one finding a rule (`and 3 more at this ref`; the record holds each); `corner` is its own face. `height_mm` (the corner's own extent: the cavity depth there), `depth_mm` (from the part's top),
   `radius_to_depth`, `tool_mm` (largest `--tools` tool <= 2r, else 2r), `reach_ratio` (depth / tool_mm),
   `micro_tool` (that tool under 1 mm),
   `pocket` (its floor's ref; a through cavity's `location`), `folded_edges` (the sharp edges its run makes
@@ -580,7 +581,7 @@ part's size is judged against a general machine's alone (`cnc.part_size`). `--st
 (`cnc.stock_too_small`).
 
 Each finding's message ends with what its item says of itself (`Rule.detail`): `internal_corner_sharp` its
-edge, height and depth below the top; `sharp_internal_edge` its edge, the two faces, the void angle and xyz
+edge, height and depth below the top; a round corner's rules its own face (`corner`) and height; `sharp_internal_edge` its edge, the two faces, the void angle and xyz
 (its fix names the angle); every `walls` and `gaps` rule the face across (`opposite`) and the thinnest point.
 
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`

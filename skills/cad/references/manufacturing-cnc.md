@@ -94,7 +94,8 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
 `turned_diameters`, `bores`, `grooves` and `live_tooling`.
 
 - `internal_corners` are a pocket's in-plane corners: `radius_mm`, `depth_mm`, and `reach_ratio`, the
-  depth over the largest tool that fits. A floor-to-wall root is never a corner: a flat end mill
+  depth over the largest tool that fits. A corner's finding is at its cavity's ref, one a cavity (`and
+  3 more at this ref`), its message naming one corner (`corner`, each item's own face). A floor-to-wall root is never a corner: a flat end mill
   makes it sharp, and a root fillet is optional (it takes a corner-radius or ball tool).
 - `cnc.sharp_internal_edge` is a concave edge no tool of the machine makes; its item's `reason` says
   why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
@@ -165,7 +166,8 @@ tolerances only where function permits them.
 The following numbers are illustrative inputs, not default process limits.
 
 `cnc.internal_corner_radius at plate/face 7: internal corner radius 0.5 mm is under the 1.5 mm
-minimum`, from a check with `--tools 3,6,10`. `cad model inspect "$ID" 'plate/face 7'` shows a cylinder
-of radius 0.5 mm 8 mm deep. Report the corner as fail against the 3 mm tool, and propose a radius of
-at least 1.5 mm, or a smaller tool if the shop has one; reach and holder clearance remain checks of
-their own.
+minimum (...) (the corner plate/face 9, 8 mm tall) (and 3 more at this ref)`, from a check with
+`--tools 3,6,10`. `plate/face 7` is the pocket's floor; `cad model inspect "$ID" 'plate/face 9'` shows
+a cylinder of radius 0.5 mm 8 mm deep, and `measurements.internal_corners` lists the pocket's other
+three. Report the pocket's corners as fail against the 3 mm tool, and propose a radius of at least
+1.5 mm, or a smaller tool if the shop has one; reach and holder clearance remain checks of their own.

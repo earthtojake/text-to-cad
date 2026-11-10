@@ -69,8 +69,18 @@ class BatchedRaysTest(unittest.TestCase):
         return _dfm_cnc_model.Model(_dfm_brep.Part("p", "p", block))
 
     def test_batched_rays_answer_as_each_alone(self) -> None:
+        from unittest import mock
+
+        from cad.build123d import _dfm_cnc_model
+
         rng = np.random.default_rng(5)
         batched, alone = self._model(), self._model()
+        # a batch is as many rays as keep rays x faces under a bound, whatever the part's face count: here 8 a batch
+        self.assertEqual(batched._batch(), 256)
+        patcher = mock.patch.object(_dfm_cnc_model, "BATCH_PAIRS", 100)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.assertEqual(batched._batch(), 8)
         origins = rng.uniform((-40, -30, -25), (40, 30, 25), size=(300, 3))
         ways = rng.normal(size=(300, 3))
         ways /= np.linalg.norm(ways, axis=1)[:, None]
@@ -217,8 +227,12 @@ class PocketsTest(unittest.TestCase):
         self.assertIn("cnc.corner_radius_to_depth", _codes(self.result))
         tight = _check(_part(bd.Box(40, 30, 12) - _pocket(20, 14, 4, 1.0, 6)), tools="3,6")
         found = [f for f in tight.findings if f.code == "cnc.internal_corner_radius"]
-        self.assertEqual(len(found), 4)
+        # the pocket's four corners are one finding, at the pocket: the record holds each
+        self.assertEqual(len(found), 1)
         self.assertIn("under the 1.5 mm minimum", found[0].message)
+        self.assertIn("(and 3 more at this ref)", found[0].message)
+        outcome = next(o for o in tight.measurements["rules"]["outcomes"] if o["rule"] == "cnc.internal_corner_radius")
+        self.assertEqual(len(outcome["failures"]), 4)
 
     def test_a_sharp_corner_is_radius_zero_and_once(self) -> None:
         result = _check(_part(bd.Box(40, 30, 12) - _pocket(10, 10, 4, 0.0, 6)))
@@ -234,10 +248,13 @@ class PocketsTest(unittest.TestCase):
                       found[0].message)
         self.assertIn("4 mm tall", found[0].message)
         self.assertIn("radius of 1.25 mm or more (recommended", found[0].hint)
-        # two corners share a face ref: the fold names the worst one's edge and counts the other
-        named = {c["edge"] for c in corners if any(f"{c['edge']}," in f.message for f in found)}
-        self.assertEqual(len(named), len(found))
-        self.assertEqual(sum(1 + ("1 more at this ref" in f.message) for f in found), 4)
+        # one cavity, one finding: its four corners share the cavity's ref, the finding names one corner's edge
+        # and counts the others; each corner keeps its own edge
+        self.assertEqual(len(found), 1)
+        self.assertEqual({c["location"] for c in corners}, {found[0].location})
+        self.assertEqual(sum(f"{c['edge']}," in found[0].message for c in corners), 1)
+        self.assertIn("(and 3 more at this ref)", found[0].message)
+        self.assertEqual(len({c["edge"] for c in corners}), 4)
         # open on one side and cut from it, the same sharp corner is a side mill's root
         step = bd.Box(40, 30, 12) - bd.Pos(15, 0, 6) * bd.Box(20, 10, 8)
         self.assertNotIn("cnc.internal_corner_sharp", _codes(_check(_part(step))))
@@ -557,7 +574,7 @@ class PartsTest(unittest.TestCase):
         self.assertIn("2 part(s)", result.summary)
         # its refs are the whole part's: the pocket's corner faces resolve in the compound
         for corner in result.measurements["internal_corners"]["items"]:
-            ordinal = int(corner["location"].rsplit(" ", 1)[1])
+            ordinal = int(corner["corner"].rsplit(" ", 1)[1])
             self.assertEqual(both.faces()[ordinal - 1].geom_type, bd.GeomType.CYLINDER)
 
     def test_a_part_of_too_many_faces_is_not_measured_and_said(self) -> None:

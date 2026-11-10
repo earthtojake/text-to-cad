@@ -2284,7 +2284,7 @@ def _fold(model: Model, items: list[dict[str, Any]], corners: list[dict[str, Any
             shape = edges[corner["_edge"] - 1]
             faces = set(edge_of[corner["_edge"]].faces)
         else:
-            ordinal = int(corner["location"].rsplit(" ", 1)[1])
+            ordinal = int(corner["corner"].rsplit(" ", 1)[1])
             shape, faces = model.face(ordinal), {ordinal}
         rounds: dict[int, float] = {}
         smooth = set()
@@ -2655,7 +2655,9 @@ def _corner(model: Model, radius: float, height: float, depth: float, tools: tup
               "reach_ratio": round(depth / tool, 9) if tool else None,
               # a tool under 1 mm across is a micro tool: it reaches less (the rules' own floor)
               "micro_tool": bool(tool and tool < rules_side.MICRO_TOOL_MM - 1e-9),
-              "axis": brep.rounded(axis, 4), "pocket": pocket, "location": location, "faces": faces,
+              # one cavity, one finding a rule: a corner is said at its cavity's ref (``pocket``), which its
+              # other corners share; ``corner`` is its own face (a sharp one's: its edge's first face)
+              "axis": brep.rounded(axis, 4), "pocket": pocket, "corner": location, "location": pocket, "faces": faces,
               "xyz": xyz, "unreached_mm": None, "unreached": "", "_edge": edge}
     if edge is not None:
         corner["edge"] = model.part.ref("edge", edge)

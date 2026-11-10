@@ -40,8 +40,7 @@ HUBS = Source("hubs-cnc", "Protolabs Network (Hubs)", "How to design parts for C
 HUBS_SERVICE = Source("hubs-cnc-service", "Protolabs Network (Hubs)", "CNC machining service: maximum part size",
                       "https://www.hubs.com/cnc-machining/", "2026-11-09")
 #: text-to-cad's own feasibility floors: no publisher's figure. Each such rule's note gives its reason.
-OWN = Source("text-to-cad", "text-to-cad", "its own figure, no publisher's (the rule's note "
-             "gives its reason)", "", "2026-11-09")
+OWN = Source("text-to-cad", "text-to-cad", "its own figure, no publisher's", "", "2026-11-09")
 
 #: Within this share of its area, a face a sample of which no direction reached is still reached: one
 #: sampled point is a few percent of a small face, and a ray grazing an edge is no undercut.
@@ -79,6 +78,8 @@ _MICRO_NOTE = ("text-to-cad's own floor: an end mill under 1 mm across (a micro 
 #: What a failing item says of itself, appended to the message (``Rule.detail``).
 #: ``{unreached}`` is empty, or where some tool reaches part of the edge, the stretch none reaches and its place
 _CORNER_DETAIL = "{edge}, {height_mm:g} mm tall, {depth_mm:g} mm below the top{unreached}"
+#: A round corner's: its own face (the finding is at its cavity's ref, which the cavity's corners share).
+_ROUND_DETAIL = "the corner {corner}, {height_mm:g} mm tall"
 _EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at {xyz}{unreached}"
 _ACROSS_DETAIL = {"walls": "to {opposite} at {xyz}", "gaps": "to {opposite} at {xyz}"}
 
@@ -186,7 +187,8 @@ def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
                       "internal corner radius", given, scale_by="min_tool_mm", when={**_POCKETS, **_TOOLS},
                       item_when={"sharp": False},
                       fix="radius the corner to at least {limit:g} mm, the smallest tool's radius, or add a smaller "
-                          "tool", note="a corner tighter than the smallest end mill's radius is not cut by it"))
+                          "tool", note="a corner tighter than the smallest end mill's radius is not cut by it",
+                      detail=_ROUND_DETAIL))
     return tuple(found)
 
 
@@ -214,37 +216,38 @@ _RULES: tuple[Rule, ...] = (
     Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", TOOL_FLOOR_MM / 2.0, "mm",
          "internal corner radius", "text-to-cad", when={**_POCKETS, **_NO_TOOLS}, item_when={"sharp": False},
          fix="radius the corner to at least {limit:g} mm (no tool is smaller); 1.25 mm or more is recommended",
-         note=_FLOOR_NOTE),
+         note=_FLOOR_NOTE, detail=_ROUND_DETAIL),
     Rule("cnc.internal_corner_small", "internal_corners", "radius_mm", "min", 1.25, "mm",
          "internal corner radius", "hubs-cnc", severity="warning", when={**_POCKETS, **_NO_TOOLS},
          item_when={"sharp": False}, fix="radius the corner to {limit:g} mm or more, so a 2.5 mm end mill cuts it",
+         detail=_ROUND_DETAIL,
          note='"Most machine shops can accurately machine cavities and holes using tools down to 2.5 mm (0.1 '
               'inches) in diameter. Anything below this limit is considered micro-machining."'),
     Rule("cnc.corner_radius_to_depth", "internal_corners", "radius_to_depth", "min", 1.0 / 3.0, "ratio",
          "corner radius to cavity depth", "hubs-cnc", severity="warning", when=_POCKETS,
-         item_when={"sharp": False, "radius_fits": (True, None)},
+         item_when={"sharp": False, "radius_fits": (True, None)}, detail=_ROUND_DETAIL,
          fix="make the corner radius {third_of_depth_mm:g} mm or more, a third of the cavity's {height_mm:g} mm depth",
          note='vertical corner radius "Recommended: ⅓ times cavity depth (or larger)"'),
     Rule("cnc.corner_radius_to_depth", "internal_corners", "radius_to_depth", "min", 1.0 / 3.0, "ratio",
          "corner radius to cavity depth", "hubs-cnc", severity="warning", when=_POCKETS,
-         item_when={"sharp": False, "radius_fits": False},
+         item_when={"sharp": False, "radius_fits": False}, detail=_ROUND_DETAIL,
          fix="a third of the cavity's {height_mm:g} mm depth ({third_of_depth_mm:g} mm) does not fit its "
              "{opening_mm:g} mm width: round the corner to {fits_mm:g} mm at most, or {instead}",
          note='vertical corner radius "Recommended: ⅓ times cavity depth (or larger)"'),
     Rule("cnc.corner_reach", "internal_corners", "reach_ratio", "max", 4.0, "ratio",
          "depth to the diameter of the largest tool that fits the corner", "hubs-cnc", severity="warning",
          when=_POCKETS, fix="a larger corner radius or a shallower cavity: end mills cut 3 to 4 diameters deep",
-         note="end mills typically cut to 3-4 times their diameter"),
+         note="end mills typically cut to 3-4 times their diameter", detail=_ROUND_DETAIL),
     Rule("cnc.corner_reach_limit", "internal_corners", "reach_ratio", "max", 30.0, "ratio",
          "depth to the diameter of the largest tool that fits the corner", "hubs-cnc", when=_POCKETS,
-         item_when={"micro_tool": False},
+         item_when={"micro_tool": False}, detail=_ROUND_DETAIL,
          fix="a larger corner radius or a shallower cavity: 30 diameters is the deepest even special tooling reaches",
          note="up to 30:1 depth to tool diameter with specialized tooling"),
     Rule("cnc.corner_reach_limit", "internal_corners", "reach_ratio", "max", MICRO_REACH, "ratio",
          "depth to the diameter of the largest tool that fits the corner (a micro tool, under 1 mm)",
          "text-to-cad", when=_POCKETS, item_when={"micro_tool": True},
          fix="no {tool_mm:g} mm tool reaches {depth_mm:g} mm: a larger corner radius (0.5 mm takes a 1 mm tool) or "
-             "a shallower cavity, or plan EDM", note=_MICRO_NOTE),
+             "a shallower cavity, or plan EDM", note=_MICRO_NOTE, detail=_ROUND_DETAIL),
     Rule("cnc.pocket_depth_to_width", "pockets", "depth_to_width", "max", 4.0, "ratio",
          "cavity depth to width", "hubs-cnc", severity="warning", when=_POCKETS,
          fix="make the cavity no deeper than {limit:g} times its width", note="recommended cavity depth: 4x width"),
@@ -262,7 +265,7 @@ _RULES: tuple[Rule, ...] = (
               "figure, text-to-cad's reading of it for a width)"),
     # a thin feature that stands tall: no guide's figure and no hard limit, so a warning at any height
     Rule("cnc.tall_feature", "walls", "height_to_thickness", "max", 4.0, "ratio",
-         "height to thickness of a thin standing feature (a wall, a rib, a pin under 5 mm)", "text-to-cad",
+         "height to thickness of a thin standing feature", "text-to-cad",
          severity="warning", item_when={"standing": True},
          fix="it stands {height_mm:g} mm on {thickness_mm:g} mm: shorten it, thicken it, or support it (a rib, a "
              "web to a neighbour); a tall thin feature chatters and bends under the cutter",
@@ -348,10 +351,11 @@ _RULES: tuple[Rule, ...] = (
     # no straight line from outside reaches the face, on a mill or a lathe: it is made only where a disc
     # cutter on a straight shank (a keyseat cutter, a lollipop, a lathe's grooving bar) gets in to it
     Rule("cnc.no_line_of_sight", "access", "no_tool_fraction", "max", ACCESS_TOLERANCE, "share",
-         "share of the face no tool reaches (no straight line from outside, and no disc cutter that fits its "
-         "way in)", "text-to-cad", item_when={"kind": "no_line_of_sight", "part_of": None},
-         fix="no cutter gets to it: open the recess to the outside, widen its way in to the disc that reaches it "
-             "(twice the recess's depth past the opening), or make the part in pieces or plan EDM",
+         "share of the face no tool reaches", "text-to-cad",
+         item_when={"kind": "no_line_of_sight", "part_of": None},
+         fix="no straight line from outside reaches it and no disc cutter that fits its way in does: open the "
+             "recess to the outside, widen its way in to the disc that reaches it (twice the recess's depth past "
+             "the opening), or make the part in pieces or plan EDM",
          detail="{face_count} adjoining face(s): {faces_said}",
          note="text-to-cad's own floor, by geometry: a tool is straight, and a disc on a shank reaches no "
               "further past an opening than the disc that opening lets in"),
