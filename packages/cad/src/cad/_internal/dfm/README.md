@@ -584,11 +584,11 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
 
 - **Thickness.** Each face is sampled by area; an exact ray from each sample, square to the face, crosses
   the material to the next face. The thickness `t` is voted by the skins alone: the rays between a face and
-  the face opposite it (an antiparallel plane, a coaxial cylinder) where the face is at least twice as wide
+  the face opposite it (an antiparallel plane, a coaxial cylinder) where the face is at least 2.5 times as wide
   as the two are apart (`SKIN_WIDTHS`: a plane's outline's smallest rectangle's short side, a cylinder's
   length along its axis -- each face in its own frame, so the same wherever the part stands; text-to-cad's
   own line), the area-weighted modal distance. A tube's two ends, a bar's sides and a block's faces are
-  opposite too and are no skins: a part with none is not sheet (`why`: "no face is 2 times as wide as it is
+  opposite too and are no skins: a part with none is not sheet (`why`: "no face is 2.5 times as wide as it is
   from the face opposite it ... a bar or a block"). Nothing reads the part's axis-aligned box. A planar face
   whose rays mostly reach an antiparallel planar face `t` away is a skin. A coaxial concave/convex cylinder
   pair `t` apart is a bend; a part of such pairs with no flat skin is a closed section (a tube) or, where a

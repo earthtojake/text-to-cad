@@ -93,7 +93,7 @@ The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels
   the same wherever it stands. A part mostly sheet is judged, its departures at their refs: a boss, a
   pocket or a closed hem's double thickness `not_sheet` (one finding a feature), chamfered or rounded
   cut edges `edge_break` (a warning), a cone or a torus `formed` (`sheet.formed_surface`); a part
-  that is not sheet (`is_sheet` false: `sheet.not_sheet` says why -- a bar or a block, no face twice as
+  that is not sheet (`is_sheet` false: `sheet.not_sheet` says why -- a bar or a block, no face 2.5 times as
   wide as it is thick; a tube, a closed section; a sheet rolled round with no flat flange, which is
   rolled, not bent) gets no other sheet verdict. `sharp_bends` are corners joined without a bend
   (`sheet.sharp_bend`): nothing past one unfolds.

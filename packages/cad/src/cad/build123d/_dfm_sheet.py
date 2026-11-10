@@ -59,7 +59,7 @@ _PARALLEL = 0.9995
 #: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
 #: 100 x 8 x 6 mm bar, a block and a tube's two ends are not). Read on each face in its own frame, so the same
 #: wherever the part stands.
-SKIN_WIDTHS = 2.0
+SKIN_WIDTHS = 2.5
 #: A bend this far round or more is a hem (to 185 degrees) or a curl: its mold lines meet at no finite point, so
 #: it has no setback, bend deduction or distance from a mold line.
 HEM_DEG = 175.0
