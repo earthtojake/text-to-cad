@@ -1,9 +1,11 @@
 """Galatea's film: a dark studio, a list of shots, and the cut.
 
-    cad run src/film.py list                              the shots, their clips and lengths
+    cad run src/film.py list                              the cut: its pieces and their lengths
     cad run src/film.py still SHOT [FRAME ...]            frames of a shot, into tmp/film/stills/
     cad run src/film.py shot SHOT [--from N] [--to M] [--step K]     a shot's frames, into tmp/film/SHOT/
-    cad run src/film.py cut [--step K]                    every shot's frames as tmp/film/galatea.mp4
+    cad run src/film.py take sim CLIP.mp4                 a film made elsewhere, as frames in tmp/film/sim/
+    cad run src/film.py take end wake 22                  one rendered frame, held: the end card
+    cad run src/film.py cut [--step K]                    the pieces in order as tmp/film/galatea.mp4
 
     --draft, --preview      at 960 x 540 or 640 x 360 with few samples: for framing, and for the motion
     --again                 render a frame that is there already
@@ -80,50 +82,79 @@ SHOTS = {
     "hero": dict(clip="settle", frames=120, plant="r_foot", lens=45, turn=20,
                  camera=[(0, (-2700, -3500, 760), (0, 20, 900)), (60, (-200, -4420, 1000), (0, 20, 905)),
                          (120, (2500, -3650, 1240), (0, 20, 910))], lights=[(0, ON)]),
-    # Close: the status light on the breastplate, up to the collar and the face.
-    "chest": dict(clip="settle", freeze=110, frames=48, plant="r_foot", lens=85, fstop=4.0, on="chest", turn=20, samples=20,
-                  camera=[(0, (330, -1010, 1370), (0, -95, 1436)), (48, (150, -1080, 1590), (0, -50, 1600))], lights=[(0, ON)]),
-    # Close: the battery hatch and the name on it.
-    "name": dict(clip="settle", freeze=110, frames=48, plant="r_foot", lens=100, fstop=2.8, on="chest", turn=200, samples=20,
-                 camera=[(0, (-330, 640, 1330), (-40, 137, 1285)), (48, (250, 690, 1300), (30, 137, 1280))], lights=[(0, ON)]),
-    # Close: down the leg, from the hip's cap to the knee.
-    "leg": dict(clip="settle", freeze=110, frames=48, plant="r_foot", lens=100, fstop=4.0, on="l_thigh", turn=70, samples=20,
-                camera=[(0, (900, -420, 1010), (150, -10, 915)), (48, (860, -520, 600), (105, -10, 520))], lights=[(0, ON)]),
-    # The skins are wiped away from the head down.
+    # The whole assembly comes apart: every link, every part of each, then the skins off them (the GLB's `explode`).
+    "explode": dict(clip="explode", frames=84, lens=35, turn=-10,
+                    camera=[(0, (-1900, -3000, 1000), (0, 0, 900)), (30, (-2750, -4250, 1500), (0, 0, 1370)),
+                            (84, (-1300, -4900, 1650), (0, 0, 1390))], lights=[(0, ON), (30, OPEN)]),
+    # The mechanism, its skins left off, one joint at a time. The knee: a crank high in the thigh, a pushrod, the horn.
+    "knee": dict(clip="crouch", start=50, frames=44, plant="l_foot", lens=70, fstop=5.6, turn=-110, wipe="off", follow="r_shin",
+                 samples=16, camera=[(0, (-1500, -420, 500), (-82, 0, 520)), (44, (-1440, -200, 600), (-82, 0, 520))],
+                 lights=[(0, OPEN)]),
+    # The ankle: the calf's drive, its crank, the rod down the back of the shin, the gimbal and the roll drive along the foot.
+    "ankle": dict(clip="crouch", start=4, frames=42, plant="l_foot", lens=50, fstop=5.6, turn=150, wipe="off", follow="l_shin",
+                  samples=16, camera=[(0, (800, 780, 330), (100, 20, 230)), (42, (880, 640, 300), (100, 20, 230))],
+                  lights=[(0, OPEN)]),
+    # The hip: three drives whose axes meet at one point.
+    "hip": dict(clip="crouch", start=2, frames=42, plant="l_foot", lens=60, fstop=5.6, turn=150, wipe="off",
+                follow="l_hip_cradle", ride=True, samples=16,
+                camera=[(0, (780, 640, 1000), (95, 20, 920)), (42, (700, 740, 1050), (95, 20, 920))], lights=[(0, OPEN)]),
+    # The waist: a spider between the yoke and the chest, roll behind, pitch at both ends.
+    "waist": dict(clip="bow", start=2, frames=40, plant="l_foot", lens=60, fstop=5.6, turn=170, wipe="off",
+                  follow="lumbar_yoke", ride=True, samples=16,
+                  camera=[(0, (620, 760, 1260), (0, 40, 1150)), (40, (720, 640, 1240), (0, 40, 1150))], lights=[(0, OPEN)]),
+    # The arm: shoulder roll and yaw, the elbow, the wrist, as it waves.
+    "arm": dict(clip="wave", start=2, frames=44, plant="l_foot", lens=50, fstop=5.6, turn=30, wipe="off", samples=16,
+                camera=[(0, (-1150, -1250, 1420), (-250, -40, 1330)), (44, (-1250, -1150, 1470), (-290, -60, 1380))],
+                lights=[(0, OPEN)]),
+    # The hand closes.
+    "hand": dict(clip="grasp", start=6, frames=42, plant="l_foot", lens=100, fstop=4.0, on="l_palm", turn=60, wipe="off",
+                 samples=18, camera=[(0, (760, -500, 860), (212, -5, 790)), (42, (720, -580, 820), (212, -5, 787))],
+                 lights=[(0, OPEN)]),
+    # The neck's three drives and the head's cameras, as it looks about.
+    "neck": dict(clip="look", start=2, frames=36, plant="l_foot", lens=60, fstop=5.6, turn=-20, wipe="off", samples=16,
+                 camera=[(0, (520, -700, 1640), (0, 5, 1585)), (36, (440, -760, 1660), (0, 5, 1590))], lights=[(0, OPEN)]),
+    # All of it at once: the mechanism crouches.
+    "crouch": dict(clip="crouch", speed=1.5, frames=44, plant="l_foot", lens=45, turn=-25, wipe="off", follow="pelvis",
+                   camera=[(0, (1950, -3250, 1050), (0, 0, 880)), (44, (1700, -3000, 900), (0, -20, 860))], lights=[(0, OPEN)]),
+    # The skins are wiped away from the head down (the cut plays this backwards, to dress the robot again).
     "scan": dict(clip="crouch", freeze=0, frames=78, plant="l_foot", lens=45, turn=-25, follow="pelvis",
                  camera=[(0, (2250, -3550, 1150), (0, 0, 900)), (162, (1650, -2950, 900), (0, -20, 860))],
                  lights=[(0, ON), (64, OPEN)], wipe=[(0, 1850), (6, 1850), (66, -40)]),
-    # ... and the mechanism crouches: the camera's move carries on, turning down after it.
-    "crouch": dict(clip="crouch", frames=84, plant="l_foot", lens=45, turn=-25, wipe="off", follow="pelvis",
-                   camera=[(-78, (2250, -3550, 1150), (0, 0, 900)), (84, (1650, -2950, 900), (0, -20, 860))],
-                   lights=[(0, OPEN)]),
-    # Close on a leg from the side as it rises: the knee's crank and pushrod, the calf's drive and its rod.
-    "linkage": dict(clip="crouch", start=50, frames=60, plant="l_foot", lens=70, fstop=5.6, turn=-110, wipe="off", follow="r_shin",
-                    samples=20, camera=[(0, (-1500, -420, 500), (-82, 0, 520)), (60, (-1420, -120, 640), (-82, 0, 520))],
-                    lights=[(0, OPEN)]),
-    # The hand closes and opens.
-    "hand": dict(clip="grasp", start=6, frames=60, plant="l_foot", lens=100, fstop=4.0, on="l_palm", turn=60, samples=20,
-                 camera=[(0, (760, -500, 860), (212, -5, 790)), (60, (700, -620, 800), (212, -5, 785))], lights=[(0, ON)]),
     # It walks toward the camera, which gives ground before it.
-    "walk": dict(clip="walk", loop=True, frames=96, plant="walk", lens=35, blur=True, turn=-15, follow="pelvis",
+    "walk": dict(clip="walk", loop=True, frames=60, plant="walk", lens=35, blur=True, turn=-15, follow="pelvis",
                  camera=[(0, (-1150, -3050, 420), (0, 0, 900)), (96, (-950, -3600, 500), (0, 0, 900))], lights=[(0, ON)]),
-    # It bows; the lights go down on it, and its own stay.
-    "bow": dict(clip="bow", frames=156, plant="l_foot", lens=50, turn=10,
-                camera=[(0, (460, -5350, 1100), (0, -40, 880)), (156, (240, -4800, 1000), (0, -60, 880))],
-                lights=[(0, ON), (102, ON), (126, LOW)], face=[(0, 1.0)], chest=[(0, 1.0)]),
 }
-ORDER = ("wake", "hero", "chest", "name", "leg", "scan", "crouch", "linkage", "hand", "walk", "bow")
-# The title, which fades in over these frames of its shot, and the line under it.
-TITLE = dict(shot="bow", text="G A L A T E A", frames=(118, 136), height=0.045, at=0.76,
-             under="designed, modelled and checked in code with text-to-cad")
-# Lines laid over the picture in the cut, low on the left: (shot, first frame, last frame, words). Each fades in and out.
-CAPTIONS = [
-    ("hero", 28, 110, "1.76 m    57 kg    44 driven joints"),
-    ("scan", 12, 72, "689 parts in 73 links"),
-    ("crouch", 8, 78, "33 RobStride drives, each its maker's own CAD model"),
-    ("linkage", 6, 54, "the knee's drive rides at the hip: a crank, a pushrod, a parallelogram"),
-    ("hand", 6, 54, "six degrees of freedom in each hand"),
+# The cut: (what, frames of it, caption). `what` is a shot, or a folder of frames made elsewhere (the CAD views of
+# `views.py`, the simulation's): tmp/film/<what>/0000.png and on. Frames may run backwards or skip, to play a shot
+# again faster or the other way round.
+def quick(first, last, speed=1.5):
+    """Frames from `first` to `last` (down, if last is lower), every `speed`-th."""
+    count = int(abs(last - first) / speed) + 1
+    return [round(first + (speed if last >= first else -speed) * k) for k in range(count)]
+
+
+CUT = [
+    ("wake", range(8, 54), None),
+    ("hero", range(30, 76), "1.76 m    57 kg    44 driven joints"),
+    ("explode", range(0, 84), "one CAD assembly: 689 parts in 73 links, written as code"),
+    ("knee", range(0, 44), "the knee's drive rides at the hip: a crank, a pushrod, a parallelogram"),
+    ("ankle", range(0, 42), "the ankle: a drive in the calf, a rod down the back of the shin"),
+    ("hip", range(0, 42), "the hip: three drives whose axes meet at one point"),
+    ("waist", range(0, 40), "the waist: yaw, roll and pitch through one centre"),
+    ("arm", range(0, 44), "seven joints an arm"),
+    ("hand", range(0, 42), "six more in each hand"),
+    ("neck", range(0, 36), "33 RobStride drives, each its maker's own CAD model"),
+    ("crouch", range(0, 44), "every pose checked for interference, balance and torque"),
+    ("scan", quick(72, 4), None),
+    ("walk", range(0, 60), None),
+    ("views", None, "the same document as the CAD viewer draws it: solid, parts, x-ray"),
+    ("sim", None, "and in simulation: MuJoCo, built from the same numbers"),
+    ("end", None, None),
 ]
+ORDER = tuple(dict.fromkeys(name for name, _, _ in CUT if name in SHOTS))
+END_FRAMES = 66                # how long the end card is held
+# The title, over the last piece, and the line under it.
+TITLE = dict(text="G A L A T E A", height=0.045, at=0.76, under="designed, modelled and checked in code with text-to-cad")
 
 # The lights: (azimuth from the robot's front toward its left, elevation, distance m, width m, height m, watts, colour).
 LIGHTS = {
@@ -300,13 +331,13 @@ def play(model, shot):
             obj.animation_data_clear()
             obj.matrix_basis = basis
     else:
+        begin, speed = shot.get("start", 0), shot.get("speed", 1.0)
         for obj in animated(model):
             for curve in fcurves(obj):
-                if shot.get("start"):
+                if begin or speed != 1.0:                       # the clip from its frame `start`, `speed` times as fast
                     for key in curve.keyframe_points:
-                        key.co.x -= shot["start"]
-                        key.handle_left.x -= shot["start"]
-                        key.handle_right.x -= shot["start"]
+                        for point in (key.co, key.handle_left, key.handle_right):
+                            point.x = (point.x - begin) / speed
                 if shot.get("loop"):
                     curve.modifiers.new("CYCLES")
                 curve.update()
@@ -452,6 +483,7 @@ def camera_move(scene, model, shot, rest):
     scene.frame_set(0)
     bpy.context.view_layer.update()
     still = carry(shot.get("on"))
+    at_first = carry(shot.get("follow")) if shot.get("follow") else still
     for frame in range(shot["frames"] + 1):
         at = min(max(frame, first), last)
         k = max(i for i, key in enumerate(keys) if key[0] <= at)
@@ -465,12 +497,14 @@ def camera_move(scene, model, shot, rest):
             eye, target = spline(1), spline(2)
         else:
             eye, target = Vector(a[1]).lerp(Vector(b[1]), u), Vector(a[2]).lerp(Vector(b[2]), u)
-        moving = still
+        moving, ride = still, Vector((0, 0, 0))
         if shot.get("follow"):
             scene.frame_set(frame)
             bpy.context.view_layer.update()
             moving = carry(shot["follow"])
-        camera.location, aim.location = still @ mm(eye), moving @ mm(target)
+            if shot.get("ride"):                            # the eye goes where its target goes, and keeps its bearing
+                ride = moving @ mm(target) - at_first @ mm(target)
+        camera.location, aim.location = still @ mm(eye) + ride, moving @ mm(target)
         camera.keyframe_insert("location", frame=frame)
         aim.keyframe_insert("location", frame=frame)
     interpolate(camera, "LINEAR")
@@ -579,27 +613,31 @@ def folder_of(name, quality):
 
 
 def cut(quality, step=1):
-    """Every shot's frames in order as one mp4: in from black, the captions and the title laid over, out to
-    black. With `step`, every step-th frame, played as slowly: a preview's cut."""
+    """The film: the pieces of CUT in order as one mp4, in from black, each with its caption, the title over the
+    last, out to black. A piece whose frames are not there yet is left out and named. With `step`, every step-th
+    frame, played as slowly: a preview's cut."""
     reel = folder_of("reel", quality)
     reel.mkdir(parents=True, exist_ok=True)
     for old in reel.iterdir():
         old.unlink()
-    count, missing, begins = 0, [], {}
-    for name in ORDER:
-        begins[name] = count
-        for frame in range(0, SHOTS[name]["frames"], step):
-            source = folder_of(name, quality) / f"{frame:04d}.png"
-            if not source.exists():
-                missing.append(f"{name} {frame}")
-                continue
+    count, missing, spans = 0, [], []
+    for name, frames, words in CUT:
+        folder = folder_of(name, quality) if name in SHOTS else OUT / name
+        if frames is None:                                  # footage made elsewhere: every frame of it
+            frames = sorted(int(path.stem) for path in folder.glob("[0-9]*.png"))
+        sources = [folder / f"{frame:04d}.png" for frame in list(frames)[::step]]
+        if not sources or not all(source.exists() for source in sources):
+            missing.append(name)
+            continue
+        first = count
+        for source in sources:
             (reel / f"{count:05d}.png").symlink_to(source)
             count += 1
+        spans.append((name, first, count, words))
     if missing:
-        print(f"{len(missing)} frames are not rendered yet (the first: {missing[0]}); the cut has the rest, without its text")
+        print(f"left out, their frames not there yet: {', '.join(missing)}")
     rate = FPS / step
-    seconds, height = count / rate, QUALITY[quality][0][1]
-    at = lambda shot, frame: begins[shot] / rate + frame / FPS            # when a shot's frame plays, seconds
+    (width, height), seconds = QUALITY[quality][0], count / rate
 
     def text(words, size, colour, x, y, alpha, face=FONT):
         """One drawtext step. The words go by a file, so that nothing in them needs escaping."""
@@ -610,22 +648,29 @@ def cut(quality, step=1):
                 f"shadowcolor=0x000000@0.5:shadowx={max(1, round(height / 540))}:shadowy={max(1, round(height / 540))}:"
                 f"alpha='{alpha}':x={x}:y={y}")
 
-    steps = ["fade=t=in:st=0:d=0.4"]
-    if not missing:
-        for shot, first, last, words in CAPTIONS:
-            a, b = at(shot, first), at(shot, last)
-            fade = f"0.85*min(1,min((t-{a:.3f})/0.35,({b:.3f}-t)/0.35))*between(t,{a:.3f},{b:.3f})"
+    steps = [f"scale={width}:{height}:flags=lanczos", "fade=t=in:st=0:d=0.3"]
+    for name, first, last, words in spans:
+        a, b = first / rate, last / rate
+        if words:
+            fade = f"0.9*min(1,min((t-{a:.3f})/0.25,({b:.3f}-t)/0.25))*between(t,{a:.3f},{b:.3f})"
             steps.append(text(words, 0.027, "0xDADCE0", "w*0.06", "h*0.885", fade, FONT_LIGHT))
-        a, b = (at(TITLE["shot"], frame) for frame in TITLE["frames"])
-        rise = f"min(1,max(0,(t-{a:.3f})/{b - a:.3f}))"
+    if spans and spans[-1][0] == CUT[-1][0]:                # the title, over the last piece
+        a = spans[-1][1] / rate
+        rise = f"min(1,max(0,(t-{a + 0.3:.3f})/0.7))"
         steps.append(text(TITLE["text"], TITLE["height"] / 0.727, "0xCDB288", "(w-text_w)/2", f"h*{TITLE['at']}", rise))
         steps.append(text(TITLE["under"], 0.024, "0xDADCE0", "(w-text_w)/2", f"h*{TITLE['at'] + 0.085}", f"0.8*{rise}", FONT_LIGHT))
     steps.append(f"fade=t=out:st={seconds - 0.35:.3f}:d=0.35")
+    # A dark studio is all slow gradients a few levels deep, and an 8-bit encoder flattens them into bands that crawl. A
+    # little grain, which the encoder is told to keep, carries them: without it the wall behind the robot is contour lines.
+    steps.append("noise=alls=2:allf=t")
     film = OUT / ("galatea.mp4" if quality == "final" else f"galatea-{quality}.mp4")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", f"{rate:g}", "-i", str(reel / "%05d.png"), "-vf", ",".join(steps),
-                    "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                    str(film)], check=True)
+                    "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-tune", "grain", "-crf", "17", "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart", str(film)], check=True)
     print(f"wrote {film}: {count} frames, {seconds:.1f} s")
+    at = 0.0
+    for name, first, last, _ in spans:
+        print(f"  {first / rate:5.1f} s  {name}")
 
 
 def main(arguments):
@@ -643,11 +688,12 @@ def main(arguments):
     step = options.get("--step", 1)
     if not words or words[0] == "list":
         total = 0
-        for name in ORDER:
-            shot = SHOTS[name]
-            total += shot["frames"]
-            print(f"{name:8s} {shot['frames']:4d} frames  {shot['frames'] / FPS:4.1f} s   clip {shot.get('clip')}")
-        print(f"{total} frames, {total / FPS:.1f} s")
+        for name, frames, words_ in CUT:
+            used = "all there are" if frames is None else f"{len(list(frames)):3d} frames"
+            total += 0 if frames is None else len(list(frames))
+            what = f"shot, of {SHOTS[name]['frames']} (clip {SHOTS[name].get('clip')})" if name in SHOTS else "footage made elsewhere"
+            print(f"{name:8s} {used:14s} {what}")
+        print(f"{total} frames of shots, {total / FPS:.1f} s, and the footage made elsewhere")
     elif words[0] == "still":
         frames = [int(word) for word in words[2:]] or [0]
         render_frames(words[1], frames, quality, folder_of(f"stills/{words[1]}", quality), "--again" in options)
@@ -655,6 +701,19 @@ def main(arguments):
         last = SHOTS[words[1]]["frames"] - 1
         frames = range(options.get("--from", 0), options.get("--to", last) + 1, step)
         render_frames(words[1], frames, quality, folder_of(words[1], quality), "--again" in options)
+    elif words[0] == "take":                        # footage made elsewhere, as frames beside the shots'
+        folder = OUT / words[1]
+        folder.mkdir(parents=True, exist_ok=True)
+        for old in folder.glob("[0-9]*.png"):
+            old.unlink()
+        if len(words) > 3:                          # take end wake 22: one rendered frame of a shot, held for the end card
+            source = folder_of(words[2], "final") / f"{int(words[3]):04d}.png"
+            for k in range(END_FRAMES):
+                (folder / f"{k:04d}.png").symlink_to(source)
+        else:                                       # take sim clip.mp4: a film's frames
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", words[2], "-vf", f"fps={FPS}", "-start_number", "0",
+                            str(folder / "%04d.png")], check=True)
+        print(f"{len(list(folder.glob('[0-9]*.png')))} frames in {folder}")
     elif words[0] == "cut":
         cut(quality, step)
     else:

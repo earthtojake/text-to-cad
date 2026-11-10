@@ -384,6 +384,20 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     budget. A line saying "for a model with scalar looks, start at 16" would have saved
     me from planning a thirteen-hour render.
 
+38. **`cad run` prints a `view:` link that answers 404.** In a checkout where the viewer's
+    client has not been built, every build still prints `view: http://127.0.0.1:3245/<id>?token=...`,
+    and the page is `Not found`. I wanted footage of the real viewer for a film and found
+    out by fetching the link. The line could say that the client is not built here and
+    name the command that builds it, or leave the link out.
+
+39. **An animation cannot name a link that shares its label with one of its parts.**
+    `animation(...).channel("lumbar_yoke", ...)` is refused: `lumbar_yoke names 2
+    occurrences: lumbar_yoke, lumbar_yoke/lumbar_yoke` (entry 7 again, in a new place).
+    There is no way to write "the one at the top": a path from the assembly is the same
+    string. What works is a glob only that name matches (`lumbar_yok[e]`), because of a
+    glob's matches the outermost is taken. A leading `/`, or taking the shortest path
+    when one match holds the others, would say it plainly.
+
 ## What worked well
 
 - `@memo` on the shared stage: nine models in 90 s, a pose edit in 0.6 s.
@@ -418,3 +432,9 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 - A GLB of the whole robot at 0.08 mm with ten clips exports in 26 to 37 s.
 - `Text` with a font file, extruded and intersected with a layer lofted 0.35 mm outside
   a skin, gives a raised wordmark that follows the surface, in 11 s.
+- The exploded view as an `animation()` on the model: 73 link channels, a radial
+  `.explode` per link and a slide per skin, written in sixty lines, rebuilt in 2.4 s, and
+  there in the GLB as a clip that `cad.blender` plays like any motion.
+- `cad model snapshot --job` with a list of jobs draws the viewer's own display modes
+  (`solid` with the grid, `parts`, `xray`, `exploded`) at any pose from any camera:
+  120 frames of plain CAD footage for the film from one short script, 3.7 s a frame.

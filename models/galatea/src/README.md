@@ -27,7 +27,8 @@ linkages close, and what holding each pose asks of each drive against its datash
 | `renders.py` | none | the presentation stills (posed, close up, and with the skins left off) and the walk as a clip, into `tmp/renders/`, which Git ignores; the clip needs ffmpeg |
 | `review.py` | none | every link alone from four sides, dressed and with its skins off, into `tmp/review/`: what to look at before the whole robot |
 | `sheet.py` | none | the robot, or a region of it by height, from five sides round it in one picture, into `tmp/sheets/`: what a look is judged on |
-| `film.py` | none | the film: a studio, eleven shots and the cut, rendered with Blender from the robot's GLB into `tmp/film/` (below) |
+| `film.py` | none | the film: a studio, its shots and the cut, rendered with Blender from the robot's GLB into `tmp/film/` (below) |
+| `views.py` | none | the robot as the CAD viewer draws it, as frames for the film: solid on the grid, parts exploded, the walk in x-ray |
 | `checks/*.py` | none | drives, interference (and `planted`, the test of it), attachment, balance, linkages, loads |
 
 ```
@@ -41,7 +42,8 @@ cad run src/renders.py hero stride walk      # stills and clips by name; all of 
 ```
 
 A run writes nothing. Files are written on request, into folders Git ignores:
-`cad model export <id> GLB/galatea.glb` carries the ten motions as animation clips.
+`cad model export <id> GLB/galatea.glb` carries the ten motions as animation clips, and
+the exploded view (`lib/show.py`) as an eleventh.
 
 `links()` in `galatea.py` is the one `@memo` stage: all 73 links at the zero pose, which
 the robot and the nine standing models share, so an edit to a pose rebuilds in under a
@@ -266,7 +268,13 @@ Configurations: `ready`, `stride`, `contrapposto`, `reach`, `wave`, `present`, `
 head bowed). Motions: `walk` (one gait cycle of 2 s, the feet treading under a fixed
 pelvis: heel strike, roll-over, heel-off on the toe hinge), `wave`, `bow`, `crouch`,
 `reach`, `poise`, `look` and `grasp`, and the film's two: `wake` (from `rest` to `ready`)
-and `settle` (from `ready` into `contrapposto`). A standing leg is
+and `settle` (from `ready` into `contrapposto`).
+
+One thing moves that is not the mechanism's: `explode`, an animation of the GLB
+(`cad.build123d.animation`, in `lib/show.py`). Every link goes apart up the robot, the
+parts of each away from its middle, then each skin off what it covers, and all come
+back. The document's joints and a STEP know nothing of it; the viewer's playbar and
+`film.py` play it from the GLB. A standing leg is
 posed by where its foot goes (`kin.leg` solves hip, knee and ankle and keeps the sole
 level), so both feet stand on one floor. The pelvis is the mechanism's fixed link, so a
 pose lifts or tilts the feet; `stances.py` sets each posed robot back on the ground.
@@ -285,6 +293,7 @@ pose lifts or tilts the feet; `stances.py` sets each posed robot back on the gro
 | `lib/hardware.py` | screw heads, the actuators (the maker's solids stood in a frame, and the envelopes the checks use for them), their mounting and output patterns, pivot caps, pushrods, pins |
 | `lib/leg.py`, `torso.py`, `arm.py`, `hand.py`, `head.py` | the links, part by part, each with its skin |
 | `lib/rig.py` | joints, couplings, configurations and motions, written on the assembled links |
+| `lib/show.py` | the exploded view, an animation of the GLB: where each link, part and skin goes, and when |
 
 ## Checks
 
@@ -367,26 +376,29 @@ deck, and a render in Cycles showed all three at once.
 
 ## The film
 
-`film.py` is the robot's film: a dark cove, a rig of five lamps, eleven shots and the cut.
-It renders the robot's GLB with Blender's Cycles (the `render` skill; `cad run` gives a
+`film.py` is the robot's film: a dark cove, a rig of lamps, the shots and the cut. It
+renders the robot's GLB with Blender's Cycles (the `render` skill; `cad run` gives a
 script that imports `bpy` its Blender), on the CPU where there is no GPU.
 
 ```
-cad model export <id> GLB/galatea.glb --tolerance 0.08 --angle 8    # 77 MB; again after every change to the model
-cad run src/film.py list                         # the shots: 894 frames, 37 s at 24 a second
-cad run src/film.py still hero 60 --draft        # one frame, 960 x 540, in a few seconds: framing and light
-cad run src/film.py shot hero --preview --step 2 # a shot's motion, small and quick
-cad run src/film.py shot hero                    # its frames, 1600 x 900, into tmp/film/hero/; kept, so a run can be resumed
+cad model export <id> GLB/galatea.glb --tolerance 0.08 --angle 8    # 78 MB; again after every change to the model
+cad run src/film.py list                         # the cut: its pieces and their lengths
+cad run src/film.py still knee 20 --draft        # one frame, 960 x 540, in a few seconds: framing and light
+cad run src/film.py shot knee --preview --step 2 # a shot's motion, small and quick
+cad run src/film.py shot knee                    # its frames, 1600 x 900, into tmp/film/knee/; kept, so a run can be resumed
+cad run src/views.py                             # the plain CAD views, into tmp/film/views/
+cad run src/film.py take end wake 22             # the end card: one rendered frame, held
 cad run src/film.py cut                          # tmp/film/galatea.mp4 (needs ffmpeg)
 ```
 
-The shots: it wakes in the dark (its face lights first); the camera goes round it as it
-settles its weight on one leg; three close ones (the breastplate's light and the collar,
-the name on the hatch, the hip's cap down to the knee); the skins are wiped away from the
-head down and the mechanism crouches, then a leg's linkage close; a hand closes; it walks
-toward the camera; it bows, the studio's lights go down and its own two stay. The cut
-lays a few captions and the title over the frames (ffmpeg's `drawtext`), so the words
-can change without a frame being rendered again.
+The cut is about the model being a CAD file and about its mechanism, and gets inside
+it in four seconds: it wakes; the camera goes round it; the whole assembly comes apart
+(the GLB's `explode`); then the mechanism with its skins left off, a joint at a time
+as it moves (the knee's linkage, the ankle, the hip, the waist, the arm, the hand, the
+neck and the head's cameras), and all of it crouching; the skins are wiped back on and
+it walks; then the same document with no studio at all, as the CAD viewer draws it
+(`views.py`: solid on the grid, parts exploded, the walk in x-ray); then the
+simulation (`../sim/`); the title.
 
 What the script does that the GLB alone does not. The pelvis is the mechanism's fixed
 link, so an exported clip crouches and treads in the air: `plant` moves the whole robot,
@@ -396,13 +408,18 @@ look at stands at the zero pose and ride on a link, so a close-up finds its part
 pose, and a target can follow a link through a shot. Three looks are changed for the
 film's sake: the face shield is drawn as smoked glass (the GLB carries it opaque, and a
 path tracer then shows nothing behind it), the two status lights are keyed, and for the
-wipe every skin gets a shader that is clear above a height, with a lit edge.
+wipe every skin gets a shader that is clear above a height, with a lit edge. A cut's
+piece is a list of a shot's frames, so a rendered shot can be used in part, faster or
+backwards (the wipe is rendered taking the skins off and played putting them on). The
+captions and the title are laid over by ffmpeg, so the words can change without a frame
+being rendered again; a little grain is added last, without which an 8-bit encoder
+turns the studio's dark gradients into bands.
 
 On a machine with four cores and no GPU a frame takes 14 to 30 s at 14 to 20 samples
-with the denoiser, and the film about five hours. Its picture has no texture in it, only
-flat looks and edges, which is what the denoiser is best at: at 8 samples a frame is
-already hard to tell from one at 24. EEVEE does not run there at all (it needs a GPU's
-context), so drafts are Cycles too, at 960 x 540 and 10 samples, 4 to 10 s each.
+with the denoiser. Its picture has no texture in it, only flat looks and edges, which
+is what the denoiser is best at: at 8 samples a frame is already hard to tell from one
+at 24. EEVEE does not run there at all (it needs a GPU's context), so drafts are Cycles
+too, at 960 x 540 and 10 samples, 4 to 10 s each.
 
 ## Not modelled
 

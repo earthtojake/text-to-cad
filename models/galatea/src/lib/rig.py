@@ -8,7 +8,7 @@ pose; the server pairs them by label.
 import build123d as bd
 from cad.build123d import configuration_sequence, gear_pair, mechanism_state
 
-from . import kin
+from . import kin, show
 from .poses import MOTIONS, POSES
 
 
@@ -37,7 +37,7 @@ def animate(robot):
         mechanism_state(robot, name, **pose)
     for name, waypoints, ease in MOTIONS:
         configuration_sequence(robot, name, waypoints, ease=ease)
-    return robot
+    return show.explode(robot)                       # and, for its GLB alone, the exploded view
 
 
 def location(transform):
