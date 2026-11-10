@@ -500,6 +500,11 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(route(module, f"{PACKAGES}/cad_server/test_gone_for_good.py")["changed_tests"], "")
         self.assertEqual(route(module, a_test_in(f"{PACKAGES}/fea"))["changed_tests"], "")
         self.assertEqual(route("VERSION", first)["changed_tests"], first)
+        # ...nor more of them than is a quick answer: that many would be the suite run twice.
+        many = sorted(path.relative_to(REPO_ROOT).as_posix() for path in (REPO_ROOT / PACKAGES / "cad").glob("test_*.py"))
+        self.assertGreater(len(many), selector.CHANGED_FIRST)
+        self.assertEqual(route(module, *many[: selector.CHANGED_FIRST + 1])["changed_tests"], "")
+        self.assertNotEqual(route(module, *many[: selector.CHANGED_FIRST])["changed_tests"], "")
         # What runs first is no part of what was tested: the record's scope is the same.
         self.assertEqual(selector.scope(route(module, first)), selector.scope(route(module)))
 

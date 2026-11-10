@@ -341,14 +341,21 @@ def _heavy(paths: list[str], suite: str) -> list[str]:
 _PACKAGE_TEST = re.compile(rf"{re.escape(PACKAGES_SUITE)}/(?:cad|cad_server|cad_mcp)/(?:.*/)?test[^/]*\.py\Z")
 
 
+# How many test files a change may touch and still have them run before the suite: past it the
+# step is no quick answer but a second run of much of the suite (a change that split six files into
+# eighteen spent five minutes there on Linux and six on Windows before its suites began).
+CHANGED_FIRST = 6
+
+
 def _changed_tests(paths: Iterable[str], packages: list[str]) -> list[str]:
     """The package test files a change itself touches, which their jobs run before the suite: a
     break in a pull request's own new test is reported in a minute or two rather than at the
-    suite's end. None when they are all the selection is (the suite step runs just them)."""
+    suite's end. None when they are all the selection is (the suite step runs just them), and
+    none when there are more than ``CHANGED_FIRST`` of them."""
     changed = sorted({path for path in paths if _PACKAGE_TEST.match(path) and (ROOT / path).exists()})
     selected = [path for path in changed
                 if any(path == chosen or path.startswith(chosen + "/") for chosen in packages)]
-    return [] if selected == packages else selected
+    return [] if selected == packages or len(selected) > CHANGED_FIRST else selected
 
 
 def _shards(count: int) -> str:

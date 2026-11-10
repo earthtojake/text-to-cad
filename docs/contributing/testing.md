@@ -231,7 +231,7 @@ first shard also runs the type check, once a platform because the checker reads
 the `win32` branches on Windows alone, and the package test files the change
 itself touches before the suite, so a break in a pull request's own test (most
 Windows failures are one: a POSIX path, a line ending) reports in a minute or
-two. The UI's tests are two jobs: `js-ui (units)` runs the checks, the type check,
+two (up to six files: more would be much of the suite run twice). The UI's tests are two jobs: `js-ui (units)` runs the checks, the type check,
 the Node tests and Vitest (`test-js.sh --select ui-units`), and `js-ui (browser)`
 the browser specs, one at a time because each renders WebGL in software
 (`--select ui-browser`).
