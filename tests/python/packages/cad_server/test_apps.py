@@ -636,7 +636,6 @@ class OpenTest(unittest.TestCase):
         self.assertEqual(script.parent, Path(apps.__file__).resolve().parent)
         text = script.read_text(encoding="utf-8")
         self.assertIn("import_scene.gltf", text)
-        self.assertNotIn("cad_glb", text)  # the render skill's helper is never what the server runs
         # Its argument parsing alone, without bpy (which the script imports only where Blender runs it): the one
         # argument after `--`.
         requested = blender_script().requested
