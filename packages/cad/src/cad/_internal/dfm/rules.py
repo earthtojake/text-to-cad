@@ -23,8 +23,8 @@ figure that does not apply to the item -- a lone rib has no gap to a neighbour, 
 corner no tool that fits it -- is named in the item's ``not_applicable`` (a list of its fields): the rule asks
 nothing of the item and nothing is missing. Any other missing figure was not measured, which is no verdict
 and never a pass: the rule is ``partial`` (it judged the rest) or ``not_evaluated`` (it judged none), and
-``rule_partly_judged`` names the items, which makes the check not checked (``manufacturing.finish``). A family
-is the same: one a source does not measure by its nature is named in the report's ``not_measured`` (a mesh's
+``rule_partly_judged`` names the items -- once for the items two rules leave unjudged, each a ref of the
+finding where it is one --, which makes the check not checked (``manufacturing.finish``). A family is the same: one a source does not measure by its nature is named in the report's ``not_measured`` (a mesh's
 holes, a cut file's bends: ``{family: why}``), its rules ``not_evaluated`` with that reason and said once
 (``families_not_measured``); one that failed is ``{"error": ...}`` (``measurement_failed``); one a report
 simply lacks, where a rule that applies reads it, was not measured either: the record names it with the rules
@@ -209,19 +209,34 @@ def _items(report: Mapping[str, Any], rule: Rule) -> tuple[list[tuple[int | None
 
 #: A ref in ``cad xbf inspect``'s grammar, as an item names a face, an edge or a vertex: ``plate/edge 17``.
 _REF = re.compile(r"(?:^|/)(vertex|edge|face) \d+$")
+#: An element named in a text, wherever: one ref names one (``_ref``).
+_ELEMENT = re.compile(r"\b(?:vertex|edge|face) \d+")
 _SPECIFIC = {"vertex": 0, "edge": 1, "face": 2}
+
+
+def _ref(text: Any) -> "re.Match[str] | None":
+    """``text`` as a ref -- one element, which it ends on -- or None: words that name several (``plate/face 3 and
+    plate/face 4``, ``face 6, face 7``: an item's figure written out for a message) are no ref, and what is
+    listed as one must resolve as one."""
+    if not isinstance(text, str) or len(_ELEMENT.findall(text)) != 1:
+        return None
+    return _REF.search(text)
 
 
 def _refs(item: Mapping[str, Any]) -> list[str]:
     """Every ref the item names -- in ``location``, ``edge``, ``faces`` or any other field of its own, a ref
-    or a list of them -- the most specific first (a vertex, an edge, a face), each kind in the item's order,
-    its ``location`` before the rest of its kind."""
+    (``_ref``) or a list of them -- the most specific first (a vertex, an edge, a face), each kind in the item's
+    order, its ``location`` before the rest of its kind. Where the item names its part (``holed/face 6``), an
+    element named without one (``face 6``, its short name in the item's words) is no ref: in an assembly it
+    would name a face of every part."""
     found: dict[str, None] = {}
     location = item.get("location")
     for value in (location, *item.values()):
         for text in value if isinstance(value, (list, tuple)) else (value,):
-            if isinstance(text, str) and _REF.search(text):
+            if _ref(text):
                 found.setdefault(text)
+    if any("/" in ref for ref in found):
+        found = {ref: None for ref in found if "/" in ref}
     return sorted(found, key=lambda ref: _SPECIFIC[_REF.search(ref).group(1)])  # type: ignore[union-attr]
 
 
@@ -242,7 +257,7 @@ def _feature(item: Mapping[str, Any], rule: Rule) -> str:
     --, else where it says it is (``_where``)."""
     for key in ("vertex", "edge"):
         named = item.get(key)
-        if isinstance(named, str) and _REF.search(named):
+        if _ref(named):
             return named
     return _where(item, rule)
 
@@ -444,18 +459,28 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                 items=[{"location": location, "value": here[0]["value"], "refs": list(here[0].get("refs") or ())}
                        for location, here in rest], **said))
     outcomes = _one_per_rule(rule_set, context, outcomes, judged)
+    # A rule that did not judge every item it has says so, whatever it made of the rest: a figure that was not
+    # measured is no verdict (one that does not apply is the item's ``not_applicable``, and unsaid). Said once
+    # for the features left unjudged -- by every rule that reads the figure they lack, or another of the same
+    # features -- each of them a ref of the finding where it is one (``refs``), never in its message alone.
+    partly: dict[tuple[str, tuple[str, ...]], list[tuple[dict[str, Any], int]]] = {}
     for outcome in outcomes:
-        # A rule that did not judge every item it has says so, whatever it made of the rest: a figure that was
-        # not measured is no verdict (one that does not apply is the item's ``not_applicable``, and unsaid).
         lacking = outcome.pop("_unread", None) or []
         if lacking:
-            shown_at = ", ".join(lacking[:3]) + (f" and {len(lacking) - 3} more" if len(lacking) > 3 else "")
-            findings.append(CheckFinding(
-                "warning", "rule_partly_judged",
-                f"{outcome['rule']} judged {outcome['evaluated']} of {outcome['evaluated'] + len(lacking)} "
-                f"{outcome['family']}: {len(lacking)} carry no {outcome['field']} ({shown_at}), which was not "
-                f"measured, so the rule gives them no verdict", lacking[0],
-                f"read measurements.{outcome['family']} for them and judge them by hand, or check again"))
+            partly.setdefault((outcome["family"], tuple(dict.fromkeys(lacking))), []).append((outcome, len(lacking)))
+    for (family, places), group in partly.items():
+        shown_at = ", ".join(places[:3]) + (f" and {len(places) - 3} more" if len(places) > 3 else "")
+        tally = {outcome["rule"]: f"{outcome['evaluated']} of {outcome['evaluated'] + items}"
+                 for outcome, items in group}
+        judged_said = (f"{', '.join(tally)} judged {next(iter(tally.values()))}" if len(set(tally.values())) == 1
+                       else ", ".join(f"{rule} judged {count}" for rule, count in tally.items()))
+        fields = ", ".join(dict.fromkeys(outcome["field"] for outcome, _ in group))
+        findings.append(CheckFinding(
+            "warning", "rule_partly_judged",
+            f"{judged_said} {family}: {max(items for _, items in group)} carry no {fields} ({shown_at}), which "
+            f"was not measured, so {'the rule gives' if len(group) == 1 else 'the rules give'} them no verdict",
+            places[0], f"read measurements.{family} for them and judge them by hand, or check again",
+            refs=[place for place in places if _ref(place)]))
     record = {
         "title": rule_set.title, "version": rule_set.version, "note": rule_set.note,
         "context": {key: value for key, value in context.items() if _plain(value)},

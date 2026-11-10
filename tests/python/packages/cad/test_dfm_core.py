@@ -69,6 +69,12 @@ class RulesTest(unittest.TestCase):
         self.assertIn("(and 1 more at this ref)", found[2].message)
         self.assertEqual(([item["value"] for item in found[2].items], found[2].value), ([0.2, 0.4], 0.2))
         self.assertEqual(record["failing"]["error"], {"cnc.sharp": 3})
+        # a ref is one element: an item's words that name several, or one without the part the item names, are
+        # none (in an assembly ``face 6`` is a face of every part)
+        worded = {"radius_mm": 0.0, "location": "asm/p/face 6", "faces": ["asm/p/face 6", "asm/p/face 7"],
+                  "between": "asm/p/face 6 and asm/p/face 7", "leaning": "face 6", "others": "face 6, face 7"}
+        found, _ = evaluate({"corners": {"items": [worded]}}, _set(rule), {})
+        self.assertEqual(found[0].refs, ["asm/p/face 6", "asm/p/face 7"])
         # the record keeps every failure at its item's own place, with its refs (the feature first) and its item
         self.assertEqual([(failure["item"], failure["location"], failure["refs"][0])
                           for failure in record["outcomes"][0]["failures"]],
@@ -199,6 +205,26 @@ class RulesTest(unittest.TestCase):
         twice = Rule("r", "g", "v", "min", 1.0, "mm", "v", "s")
         _, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}]}}, _set(rule, twice), {})
         self.assertEqual((record["outcomes"][0]["status"], record["absent"]), ("passed", {"g": ["r"]}))
+
+    def test_features_left_unjudged_are_said_once_and_are_the_finding_s_refs(self) -> None:
+        """Two rules that read one figure leave the same features unjudged: one finding, naming both rules, the
+        features its ``refs`` (a mesh's place, which is no ref, in its words alone) -- never one finding a rule."""
+        rules = (Rule("cnc.narrow", "pockets", "width_mm", "min", 1.0, "mm", "pocket width", "s"),
+                 Rule("cnc.wide", "pockets", "width_mm", "max", 50.0, "mm", "pocket width", "s", severity="warning"),
+                 Rule("cnc.deep", "pockets", "depth_mm", "max", 9.0, "mm", "pocket depth", "s"))
+        pockets = [{"width_mm": 5.0, "depth_mm": 2.0, "location": "p/face 1"},
+                   {"width_mm": None, "depth_mm": 2.0, "location": "p/face 2"},
+                   {"width_mm": None, "depth_mm": 2.0, "location": "p/face 3", "edge": "p/edge 9"},
+                   {"width_mm": None, "depth_mm": None, "xyz": [1.0, 2.0, 3.0]}]
+        found, record = evaluate({"pockets": {"items": pockets}}, _set(*rules), {})
+        self.assertEqual([(f.code, f.location, f.refs) for f in found],
+                         [("rule_partly_judged", "p/face 2", ["p/face 2", "p/edge 9"]),
+                          ("rule_partly_judged", "1, 2, 3", [])])
+        self.assertEqual(found[0].message, "cnc.narrow, cnc.wide judged 1 of 4 pockets: 3 carry no width_mm "
+                                           "(p/face 2, p/edge 9, 1, 2, 3), which was not measured, so the rules "
+                                           "give them no verdict")
+        self.assertIn("cnc.deep judged 3 of 4 pockets: 1 carry no depth_mm (1, 2, 3)", found[1].message)
+        self.assertEqual(record["partial"], ["cnc.narrow", "cnc.wide", "cnc.deep"])
 
     def test_text_to_cad_s_own_limits_cite_one_source_in_every_table(self) -> None:
         from cad._internal import dfm
@@ -512,6 +538,64 @@ class RefsTest(unittest.TestCase):
             nub = next(part for part in document.parts if part.name == "nub")
             self.assertAlmostEqual(nub.shape.center().X, 5.0, places=6)  # placed where it stands
             self.assertAlmostEqual(nub.shape.center().Y, 20.0, places=6)
+
+    def test_every_ref_of_every_finding_resolves_in_every_process(self) -> None:
+        """What a finding says is a ref is one ``cad step inspect DOC REF`` takes (``refs.resolve_structure``,
+        its resolver): each of its ``refs``, its ``location`` where it names a face, an edge or a vertex, and
+        each ref and place of its overflow ``items`` -- one element each, never a bare ``face 13`` of an
+        assembly's part nor two refs joined in one string. Small parts that fail rules of every process: sharp
+        pockets past the findings shown, a hole through a block's side placed in an assembly beside two tees,
+        a sheet with holes, an embossed text."""
+        import copy
+        import re
+
+        from cad.build123d import _dfm_check
+        from cad.engine import refs
+        from cad.engine.document import Loaded
+
+        plate = bd.Box(60, 40, 10)
+        for k in range(3):
+            plate -= bd.Pos(-20 + 20 * k, 0, 3) * bd.Box(10, 20, 4.01)
+        holed = bd.Box(20, 20, 20) - bd.Rotation(0, 90, 0) * bd.Cylinder(3, 20)
+        tee = bd.Box(10, 10, 20) + bd.Pos(0, 0, 12.5) * bd.Box(40, 40, 5)
+        sheet = bd.Box(60, 40, 2) - bd.Pos(27, 0, 0) * bd.Cylinder(1.0, 2) - bd.Cylinder(0.4, 2)
+        text = bd.Box(60, 20, 5) + bd.Pos(0, 0, 2.5) * bd.extrude(bd.Text("AB", 10), 1)
+        for shape, label in ((plate, "plate"), (holed, "holed"), (tee, "tee"), (sheet, "sheet"), (text, "text")):
+            shape.label = label
+        asm = bd.Compound(label="asm", children=[
+            *(copy.copy(tee).moved(bd.Location((60 * k, 0, 0))) for k in range(2)),
+            copy.copy(holed).moved(bd.Location((0, 80, 0)))])
+        named = re.compile(r"\b(?:face|edge|vertex) \d+")
+        checked = 0
+        with tempfile.TemporaryDirectory() as folder:
+            for shape, processes in ((plate, ("cnc", "molding")), (asm, ("molding", "printing")),
+                                     (sheet, ("sheet", "cnc", "printing")), (text, ("cnc", "sheet", "printing"))):
+                path = Path(folder) / f"{shape.label}.step"
+                bd.export_step(shape, str(path))
+                structure = Loaded(path).structure()
+                for process in processes:
+                    resolved = manufacturing.options("step", process, {})
+                    report = _dfm_check.measure("step", path, process, resolved, False)
+                    result = manufacturing.finish(path, {"process": process, **report}, process, resolved, False)
+                    unresolved: dict[tuple[str, str, str], None] = {}
+                    for finding in result.findings:
+                        given = [("refs", ref) for ref in finding.refs]
+                        given += [("location", str(finding.location))] if named.search(str(finding.location)) else []
+                        for item in finding.items:
+                            given += [("items.refs", ref) for ref in item.get("refs") or ()]
+                            if named.search(str(item.get("location"))):
+                                given.append(("items.location", str(item["location"])))
+                        for field, ref in given:
+                            checked += 1
+                            try:
+                                hits = refs.resolve_structure(structure, ref, path)
+                            except refs.RefError:
+                                hits = []
+                            if len(hits) != 1:
+                                unresolved[(str(finding.code), field, ref)] = None
+                    with self.subTest(part=shape.label, process=process):
+                        self.assertEqual(list(unresolved), [], "(code, field, ref) of each ref that does not resolve")
+        self.assertGreater(checked, 300, "the parts fail rules whose findings carry refs")
 
     def test_a_live_shape_reads_as_its_document_would(self) -> None:
         document = brep.parts_of(self._assembly())
