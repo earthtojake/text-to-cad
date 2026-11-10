@@ -380,9 +380,10 @@ class HarvestTest(_Folder):
                 report = self.channels(more, ok=False)
                 self.assertRegex(report["error"], error)
 
-    def test_a_name_an_assembly_and_a_part_inside_it_share_is_refused_with_paths_that_name_each(self) -> None:
-        # An assembly named after its main part: the bare label is both, and the refusal lists each by a
-        # path that names it alone, from the animation's own assembly.
+    def test_a_shared_name_is_the_assembly_that_holds_the_other_and_siblings_are_refused_by_their_paths(self) -> None:
+        # An assembly named after its main part: the bare label is the assembly, as a glob's outermost match
+        # is. Siblings of one label are refused, each by a path that names it alone, from the animation's own
+        # assembly.
         source = textwrap.dedent("""
             import build123d as bd
             from cad.build123d import animation
@@ -395,14 +396,14 @@ class HarvestTest(_Folder):
                     solid = bd.Pos(x, 0, 0) * bd.Box(10, 10, 10)
                     solid.label = label
                     return solid
-                stem = bd.Compound(children=[part("stem", 0), part("screw", 20)], label="stem")
+                stem = bd.Compound(children=[part("stem", 0), part("screw", 20), part("screw", 40)], label="stem")
                 robot = bd.Compound(children=[part("base", -20), stem], label="bot")
                 animation(robot, "show", duration=2).translation("{name}", by=(0, 0, 5))
                 return robot
             """)
-        report = self.build(source.replace("{name}", "stem"), "bot", ok=False)
-        self.assertIn("stem names 2 occurrences: bot/stem, bot/stem/stem", report["error"])
-        for name in ("bot/stem", "bot/stem/stem"):
+        report = self.build(source.replace("{name}", "screw"), "bot", ok=False)
+        self.assertIn("screw names 2 occurrences: bot/stem/screw.1, bot/stem/screw.2", report["error"])
+        for name in ("stem", "bot/stem", "bot/stem/stem", "bot/stem/screw.2", "*/screw"):
             with self.subTest(name=name):
                 self.build(source.replace("{name}", name), "bot")
 

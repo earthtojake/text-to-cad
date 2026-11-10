@@ -329,10 +329,11 @@ def packet_visibility(value: Any) -> dict[str, list[str]]:
 def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: str) -> frozenset[int]:
     """The instances a picture leaves out: those ``display.hidden``'s refs name, and, where
     ``display.isolated`` is given, every one its refs do not. A ref is a part or an assembly
-    (every part below it), in the refs grammar, or -- a robot's -- the viewer's id of a visual
-    (``link:v1``, every object it draws, or ``link:v1/object/0``, one), as a robot's view names what
-    it hid; one that names nothing, or an element, is refused by name, and so is a choice that
-    leaves nothing to draw."""
+    (every part below it), in the refs grammar, or a glob over the occurrences (``*skin*``,
+    ``*/screw``, ``chest/skin_screw.?``: ``refs.matching``; several in one string, by commas), or --
+    a robot's -- the viewer's id of a visual (``link:v1``, every object it draws, or
+    ``link:v1/object/0``, one), as a robot's view names what it hid; one that names nothing, or an
+    element, is refused by name, and so is a choice that leaves nothing to draw."""
     if not display.get("hidden") and display.get("isolated") is None:
         return frozenset()
     from cad.engine import refs
@@ -350,15 +351,33 @@ def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: s
             if ref in visuals:
                 found.update(visuals[ref])
                 continue
-            try:
-                hits = refs.resolve_structure(structure, ref)
-            except refs.RefError as error:
-                raise SnapshotRefused(f"display.{field}: {error}") from None
-            for hit in hits:
-                if hit.kind is not None:
-                    raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
-                                          "it takes parts and assemblies")
-                found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
+            if isinstance(ref, str) and refs.GLOB & set(ref) and '"' not in ref:  # a quoted label is itself
+                for pattern in (item.strip() for item in ref.split(",")):
+                    if not refs.GLOB & set(pattern):
+                        found.update(named_by(field, pattern))
+                        continue
+                    nodes = refs.glob_structure(structure, pattern)
+                    if not nodes:
+                        raise SnapshotRefused(f"display.{field}: the glob {pattern!r} matches no part or assembly "
+                                              f"of {name}")
+                    found.update(part.payload["instance"] for node in nodes for part in node.parts()
+                                 if "instance" in part.payload)
+                continue
+            found.update(named_by(field, ref))
+        return found
+
+    def named_by(field: str, ref: str) -> set[int]:
+        """The instances one ref of the grammar names: its parts, or every part of its assembly."""
+        found: set[int] = set()
+        try:
+            hits = refs.resolve_structure(structure, ref)
+        except refs.RefError as error:
+            raise SnapshotRefused(f"display.{field}: {error}") from None
+        for hit in hits:
+            if hit.kind is not None:
+                raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
+                                      "it takes parts and assemblies")
+            found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
         return found
 
     every = set(range(len(structure.get("instances") or [])))

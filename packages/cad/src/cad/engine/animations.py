@@ -25,8 +25,9 @@ and ``.scale`` are channels from a start to an end, and ``.explode``, ``.stagger
 
 A part is named as a ref's owner names it (``refs``): a label, ``hand/finger.2``, a path from the
 assembly the animation is on; a name with ``*``, ``?`` or ``[`` is a glob over the occurrences below
-that assembly, matched against each one's label, its segment and its path from it, the outermost of
-a match taken whole. Each name, or each occurrence a glob matches, is one **reference**: its parts
+that assembly, matched against each one's label, its segment and its path from it (``refs.matching``),
+the outermost of a match taken whole, as a name that an assembly and a part inside it share is the
+assembly. Each name, or each occurrence a glob matches, is one **reference**: its parts
 move as one body. A reference's **centre** is the middle of its parts' box as built, as the GLB
 meshes them.
 
@@ -52,7 +53,6 @@ the mechanism lacks), the overlaps and the interpolations. Nothing here imports 
 
 from __future__ import annotations
 
-import fnmatch
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -64,7 +64,6 @@ __all__ = ["ANIMATIONS", "Animation", "AnimationError", "INTERPOLATIONS", "Resol
 ANIMATIONS = "xbf_animations"
 INTERPOLATIONS = ("CUBICSPLINE", "LINEAR", "STEP")
 CHANNEL_PATHS = ("translation", "rotation", "scale")
-_GLOB = set("*?[")
 _ZERO = (0.0, 0.0, 0.0)
 # Which glTF paths a channel writes: a rotation turns a part about a pivot, so it moves it too.
 PATHS = {"translation": ("translation",), "rotation": ("translation", "rotation"), "scale": ("scale",),
@@ -481,13 +480,8 @@ def _resolve(base: Any, ref: str, where: str) -> list[Any]:
     """The occurrences ``ref`` names under ``base`` (see the module), each once, in tree order."""
     from cad.engine import refs
 
-    if _GLOB & set(ref):
-        below = [node for node in base.walk() if node is not base]
-        hits = {id(node) for node in below
-                if fnmatch.fnmatchcase(node.segment, ref) or fnmatch.fnmatchcase(node.label, ref)
-                or fnmatch.fnmatchcase(_relative(base, node), ref)}
-        found = [node for node in below if id(node) in hits
-                 and not any(id(parent) in hits for parent in node.path()[:-1])]
+    if refs.GLOB & set(ref):
+        found = refs.matching(base, ref)
         if not found:
             raise AnimationError(f"{where}: the glob {ref!r} matches no part or assembly of {_shown(base)}")
         return found
@@ -498,7 +492,7 @@ def _resolve(base: Any, ref: str, where: str) -> list[Any]:
     if file is not None or len(selectors) != 1 or selectors[0].owner is None or selectors[0].element is not None:
         raise AnimationError(f"{where}: {ref!r} names one part or assembly, as a ref's owner does (hand/finger.2, "
                              "palm): no element, no document")
-    found = refs.owners(base, selectors[0].owner)
+    found = refs.outermost(refs.owners(base, selectors[0].owner))  # an assembly over a part inside it of its label
     if not found:
         raise AnimationError(f"{where}: {_shown(base)} has no part or assembly {ref}; nearest: "
                              f"{refs._nearest(base, ref)}")

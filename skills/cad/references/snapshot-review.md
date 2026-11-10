@@ -131,12 +131,16 @@ cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
 part refs (an occurrence's path: `lid`, `hand/finger.2`; an assembly hides every part
-below it) the picture leaves out, `display.isolated` the parts it alone draws. A Quick
+below it) the picture leaves out, `display.isolated` the parts it alone draws. A name
+with `*`, `?` or `[` is a glob over every occurrence, matched against its label, its
+numbered segment and its path written with either, so one entry leaves out a kind of
+part wherever it is; a glob that matches nothing is refused. A Quick
 Edit packet given to `--annotation` carries the person's own, which `--display` may
 override:
 
 ```bash
 cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views

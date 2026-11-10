@@ -111,9 +111,10 @@ Helpers compile to channels:
 Parts are named as a ref's owner names them, from the assembly the animation is on: a
 label (`latch`), a path (`feet/foot_1`, `hand/finger.2`), or a glob (`feet/*`,
 `wheel?`). A glob takes its outermost matches, each a part or an assembly of its own.
-A name that fits several occurrences is refused with each one's path: an assembly named after
-its main part (`stem` holding a part `stem`) is the path that starts at the animation's own
-assembly, `bot/stem`, and the part inside it `bot/stem/stem`.
+A glob matches a label, a numbered segment, or a path written with either (`*/screw` is every
+`screw` one level down). A name an assembly shares with a part inside it (`stem` holding a part
+`stem`) is the assembly, and the part is `stem/stem`; a name that fits several siblings is
+refused with each one's path.
 Each name or match moves as one body: an assembly's parts together, about its centre.
 
 Channels compose as a scene graph does. One part's translations add, after its
