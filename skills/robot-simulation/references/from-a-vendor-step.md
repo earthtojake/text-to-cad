@@ -3,12 +3,13 @@
 A vendor's STEP of a robot holds parts and their placements, but no mechanism. Exported as it is
 (`cad step export vendor/arm.step sim/arm.xml`), each of its top-level parts is a body welded to
 the world. To get a robot that moves, write a model that reads the STEP, groups its parts into
-links, puts a joint at each hinge, and declares what a simulator needs. Then export it as MJCF and
-URDF. The steps below go in order, and each names the reference with the detail. The times given
+links, puts a joint at each hinge, and declares the hardware's facts: masses, stops and drive
+limits. Then export it as MJCF and URDF, and write its MuJoCo function: the collision shapes, joint
+dynamics and actuators a simulation chooses. The steps below go in order, and each names the reference with the detail. The times given
 are ranges on a laptop: they grow with the parts' surface area and detail (a few large freeform
 shells cost more than hundreds of small printed parts) and shrink on a faster machine.
 
-Vendor STEPs come in two kinds, and steps 2 to 5 say what each needs:
+Vendor STEPs come in two kinds, and steps 2, 4 and 8 say what each needs:
 
 - **An assembly with its internals**: printed or machined parts, servos or motors with their horns,
   fasteners, boards and cables, often hundreds of parts. A hobby or desktop arm usually comes so.
@@ -33,7 +34,7 @@ and `leaves(tree, paths=True)` gives each part placed where it stands, with its 
 `path[1]` is the top-level component (`Forearm v4:1`, `Servo v2:3`). `inspect --query structure`
 counts the parts; use a throwaway `cad run` script to print each leaf's path, volume, face count
 and bounds once: it maps the STEP faster than reading the inspect output does. Look at the pose the
-vendor drew, too: it may be the controller's zero, or only a pose to ship it in (step 7).
+vendor drew, too: it may be the controller's zero, or only a pose to ship it in (step 6).
 
 **Which way is up.** Many CAD tools draw Y up, and a STEP from one lies on its side in a Z-up
 simulator. No export option turns a robot over: place it in the model. Re-place every leaf with one
@@ -77,7 +78,7 @@ the rules here are for an assembly with its internals:
   parts: the whole solid goes with the link its case is screwed to, and the next link's plate,
   bolted to its output face, goes with the next link. Where the output is bolted to the parent's
   bracket (a servo mounted the other way round), the case is the child's. `ranges` reads such a
-  pair as an output and what turns on it (step 6), so the sweep needs no split. Vendors label
+  pair as an output and what turns on it (step 5), so the sweep needs no split. Vendors label
   parts in their own language, so a horn's label may not say which it is; the geometry does. The
   drive horn is splined onto the shaft, so it has many more cylindrical faces than the idle horn,
   which turns on a plain bore: count `part.faces().filter_by(bd.GeomType.CYLINDER)` on each and
@@ -106,7 +107,7 @@ the rules here are for an assembly with its internals:
   the limb (its height down a leg, its distance out along an arm) and its side (the sign of its
   coordinate across the body), and raise on a leaf that falls in no band. Left and right limbs are
   mirror images, so one joint's measured axis points the other way on the other side: give each side
-  the sign that makes a positive angle the motion you mean (step 7 for the controller's).
+  the sign that makes a positive angle the motion you mean (step 6 for the controller's).
 
 Write the grouping as a table of component name to link (by name and position where names repeat
 across links, above), and raise on any component the table does not name, so that a new revision of the STEP fails loudly instead of dropping a part. A vendor often
@@ -117,7 +118,7 @@ hold empty bodies, leaves with no volume (a placeholder for a part the vendor ne
 as you take the leaves (`if part.volume <= 0: continue`): kept, they weigh nothing (a declared mass
 over them goes to the parts with volume, and one declared on them alone is refused: no volume to
 carry it), and they are only clutter in the links. Put each link in a
-`bd.Compound(children=..., label=...)` and name it for ROS with `link()`. A posed snapshot (step 7)
+`bd.Compound(children=..., label=...)` and name it for ROS with `link()`. A posed snapshot (step 6)
 shows every link moving as one piece. A part left behind or swinging with the wrong link was sorted
 wrong.
 
@@ -170,7 +171,7 @@ Then:
   would swing on a small circle and rub against neighbours it clears by less than that. Write the
   offset in a comment beside the axis.
 - **Pick each direction's sign** so that a positive angle is the motion you mean (lift raises, the
-  jaw opens), or the controller's sign where it is known (step 7). The writers copy the sign and
+  jaw opens), or the controller's sign where it is known (step 6). The writers copy the sign and
   cannot know which way is meant.
 - **Build each joint at the hinge's own frame.** Put the `RevoluteJoint` on the parent link (its
   Compound, or the part that carries the bearing), `bd.RevoluteJoint(name, parent_link,
@@ -223,54 +224,7 @@ the code). Say in the model's docstring which masses are listed and which estima
 `cad model inspect "$ID"` weighs the result. Read its total against the hardware's: the listed
 servos, the printed parts and the rest, each once.
 
-## 5. Collisions
-
-**One plain solid per link:** `collision(part, "decomposed")` on a concave link (a yoke, a clevis,
-a gripper's palm with its slot), the default hull on a convex one (a base, a roll link), and `"none"`
-on a part that runs inside another (a sliding bar inside its guide).
-
-**An assembly with its internals:**
-
-- **Printed parts:** `collision(part, "decomposed")`, so that the pocket a servo sits in stays a
-  pocket. The first export decomposes each part, from a few seconds to about a minute each by its
-  size and detail (minutes for a dozen parts), and says each part on stderr as it is done. The
-  hulls are cached by each part's mesh and options, and only a changed part decomposes again.
-- **Servo cases:** `"box"` on the case's shell leaves (the body and its covers) and `"none"` on the
-  motor, gears and board inside. `collision()` on the servo's assembly applies to every leaf below
-  it, so it would box the internals too.
-- **Fasteners, horns clamped inside a bracket, cables and boards:** `"none"`.
-
-Match labels by pattern while you loop over the leaves, as the `cad` skill's inspection reference
-shows under Opening geometry.
-
-A part that reaches its cap of hulls (16 by default) says so as it is done: `decomposed bracket: 16
-hulls, the cap (max_hulls=16) in 8.1 s`. At the cap, CoACD merged hulls to fit, so some of them
-bridge a concave region. Whether that matters depends on what touches it: look before you change
-anything. Draw the collision geoms, each hull in its own colour, beside the visual snapshot at the
-same pose and camera:
-
-```bash
-cad mjcf snapshot sim/scene.xml tmp/collision.png --display collision --pose home --camera right
-cad mjcf snapshot sim/scene.xml tmp/visual.png --pose home --camera right
-```
-
-A hull that fills a pocket a neighbour moves into, a slot, or the gap between jaws is contact the
-simulator makes and the hardware does not: raise that part's cap (`max_hulls=32`) or lower its
-`threshold=`, and export again. A hull that only rounds over an inside corner nothing reaches does
-not matter, and a part whose shape never matters for contact can take fewer (`max_hulls=8`).
-
-Expect hulls to stand proud of the part. Their corners lie on the part's surface, but their faces
-bridge its concave places, by a few millimetres on a link a few hundred millimetres long, and a
-lower `threshold` or more hulls hardly changes that: the deepest bridge stays, and a fine threshold
-costs tens of times longer. So two links that clear each other by less than that beside a concave
-place (a wrist parked against the upper arm in the drawn pose) overlap at rest as hulls, and
-`cad mjcf validate` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
-the hardware's working range, `exclude(a, b)` them, and say in the model that the simulator lets
-them pass through each other. Where they must still collide, no hull setting clears them: try a
-fitted shape on the convex one of the pair (`"cylinder"`, `"capsule"`), and validate again until the
-warning is gone.
-
-## 6. Stops and drive limits
+## 5. Stops and drive limits
 
 ```bash
 cad run src/arm.py
@@ -290,18 +244,20 @@ links. One that names a part of a link that is not a neighbour means a part is i
 A stop at 0 means the same, unless the vendor drew the arm at that stop: an arm drawn folded flat
 (a forearm resting on its upper arm) has a real stop at 0, which a posed snapshot a few degrees
 the other way confirms. Vendor parts often sit a fraction of a millimetre apart (a moving jaw beside
-the cover of the servo that drives it): such a pair stops a joint only where its contact grows or its
-gap closes to half, and the stop says so (`touching as built`). Check such a stop with a posed
-snapshot at it.
+the cover of the servo that drives it): such a pair stops a joint only where its contact grows on a
+surface that stops the motion, where one part is pushed into the other (a part resting face to face
+on its parent and turned into it stops where it lies), or where its gap closes to half; a pin in its
+bore or a carriage on its rail stops nothing. The stop says so (`touching as built`). Check such a
+stop with a posed snapshot at it.
 
 A motor or a servo drawn as one solid, its case and output together, with the next link bolted to
 that output: the sweep reads the pair as an output and what turns on it, and lists it under the
 joint (`turns on: plate (link2) on motor (link1)`). Neither the output's face nor what of the solid
 lies within the reach of their contact about the axis (a locating boss, a pin, a bolt's seat
-through the face) stops the joint, so it sweeps on to its real stop, and no `exclude()` is needed.
-The case beyond that reach still stops it, as it does the hardware. Where a stop a few degrees out
-still names such a pair `touching as built`, the output carries something past that reach which
-the hardware turns with it: `exclude()` the pair, or split the output from the case in the model.
+through the face) stops the joint, so it sweeps on to its real stop. The case beyond that reach
+still stops it, as it does the hardware. Where a stop a few degrees out still names such a pair
+`touching as built`, the output carries something past that reach which the hardware turns with it:
+split the output from the case in the model, or write the range you read from the hardware.
 
 **A clash and a stop.** A stop is where the child meets its parent, whatever the other joints do;
 a clash, said beside it, is what the joint moves meeting another link in the drawn pose of the
@@ -316,48 +272,30 @@ forearm resting a millimetre into the upper arm it folds onto, a gripper's carri
 rail. `ranges` finds these and lists them under the joint (`overlapping as drawn ... by 180 mm^3,
 1.0 mm deep`). Such a pair stops the joint only where one part is pushed deeper into the other than
 drawn, by 0.6 mm more: its overlap shrinking, or sliding along with the joint, stops nothing, so the
-sweep goes on to the real stop, and no `exclude()` is needed for it. A stop such a pair makes says
-`deeper than drawn (overlapping ..., 1.0 mm deep, as built)`, and lies past the true one by up to
-about that depth: read it against a posed snapshot and the datasheet, and write the narrower. Where it is not the hardware's stop (the jaws still wide apart when the jaw meets
-the cover), set the pair aside in the model and sweep again: the two parts never stop the sweep,
-every other pair of their links still does, and the jaw then stops on the other jaw. A servo's case
-is often several shells (a middle and two covers), and the part that clears one sweeps into the
-next, so set aside the whole case at once: name the servo's assembly, the `bd.Compound` you made of
-its case and internals, or its label, and every part below it goes:
+sweep goes on to the real stop. A stop such a pair makes says `deeper than drawn (overlapping ...,
+1.0 mm deep, as built)`, and lies past the true one by up to about that depth: read it against a
+posed snapshot and the datasheet, and write the narrower.
 
-```python
-exclude(jaw, "jaw_servo")   # the label of the jaw servo's assembly: each shell of its case alike
-```
+Where a stop is not the hardware's (the jaws still wide apart when the jaw meets the cover of the
+servo beside it), the sweep cannot tell: check it with a posed snapshot at the stop, and write the
+range you read from the hardware (the datasheet's travel, or the posed snapshot where the parts
+really meet) instead. A servo's case is often several shells (a middle and two covers), and the
+part that clears one sweeps into the next, so look at the whole case at the stop. The simulator
+collides those parts as the MuJoCo function chooses (step 8), which is where a pair the hardware
+never brings together is set aside.
 
-A label names every node of that label, in every link, and a vendor STEP repeats labels (the same
-bracket in each hip, the same servo in each joint): give the shape instead, `exclude(jaw, jaw_servo)`,
-which names that one alone, and check the export's count (`5 contact excludes (3 declared, 2
-automatic)`) against the pairs you meant.
-
-`exclude()` is one declaration with two effects, and there is no way to have one without the other:
-`ranges` sets the two parts aside, and the MJCF writes a `<contact><exclude>` of their two links, so
-the simulator never collides those links, whole (MuJoCo excludes bodies, not single geoms). That is
-usually what you want. A pair that does not stop the hardware's joint should not stop the
-simulated one either, and the two links are most often a parent and its child (the case on one, the
-part it turns on the other), which MuJoCo already never collides. Where the two links must still
-collide in the simulator, do not exclude them: check that stop with a posed snapshot, and write the
-range you read from the hardware instead.
-
-`--geometry collision` sweeps the collision shapes as MuJoCo collides them, the pairs the MJCF never
-collides set aside (a body and its parent among them): what a joint hits in the simulator before its
-range holds it. Write the stops into `angular_range`, rounded towards zero. A joint found clear all
-the way round has no stop in the parts: give it the actuator's own travel, or make it continuous
+Write the stops into `angular_range`, rounded towards zero. A joint found clear all the way round
+has no stop in the parts: give it the actuator's own travel, or make it continuous
 ([Generate from CAD](../SKILL.md#generate-from-cad)).
 
-Then declare `limits(arm, joint, effort=, velocity=, armature=)` from the actuator's datasheet:
-the stall torque in N*m, and the no-load speed in rad/s at the supply voltage you use. Give both: a
-URDF requires the two, writes 0 for one left out, and a ROS controller reads that 0 as no speed (or
-no torque) allowed; the export names each joint it wrote so. Where the datasheet has no speed (a
-gripper's often has none), give the drive's from its maker, or measure it. The armature
-needs an estimate when the datasheet gives none, and a listing rarely does
-([tuning](mujoco-environment.md#tuning)).
+Then declare `limits(arm, joint, effort=, velocity=)` from the actuator's datasheet: the stall
+torque in N*m, and the no-load speed in rad/s at the supply voltage you use. Give both: a URDF
+requires the two, writes 0 for one left out, and a ROS controller reads that 0 as no speed (or no
+torque) allowed; the export names each joint it wrote so. Where the datasheet has no speed (a
+gripper's often has none), give the drive's from its maker, or measure it. The joint's armature,
+damping and dry friction are the simulation's, in step 8.
 
-## 7. Zero and states
+## 6. Zero and states
 
 A joint's zero is a fact of the hardware: its controller counts from one pose. Make the
 description's zero that pose, so that a joint value means the same in the simulator, in a driver
@@ -365,7 +303,7 @@ and in the vendor's datasheet. The CAD's pose is every joint's zero unless you e
 `--zero <state>`.
 
 **Is the drawn pose the controller's zero?** Vendors often draw a robot at its zero, and their
-published joint ranges tell. Sweep the stops first (step 6), then lay each published range over the
+published joint ranges tell. Sweep the stops first (step 5), then lay each published range over the
 stops found around the drawn pose:
 
 - A range that is one-sided or lopsided around 0 (0 to 150, -10 to 200) puts the zero at or near
@@ -442,10 +380,10 @@ cad model snapshot "$ID" tmp/upright.png --pose upright --camera right
 cad model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
 ```
 
-## 8. Export, validate, compare
+## 7. Export, validate, compare
 
 ```bash
-cad model export "$ID" sim/arm.xml          # --zero <state> only where step 7 re-zeroed
+cad model export "$ID" sim/arm.xml          # --zero <state> only where step 6 re-zeroed
 cad model export "$ID" description/arm.urdf
 cad mjcf validate sim/scene.xml --compile required
 cad urdf validate description/arm.urdf
@@ -455,18 +393,141 @@ cad urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --
 
 `--pose` is in degrees for each format, as for the model, though the files hold radians.
 
-Read each export's summary first: the links, the joints, the mass, the collisions by kind. Then
+Read each export's summary first: the links, the joints, the mass, the collisions. Then
 compare the MJCF snapshot with the URDF snapshot of the same pose and camera. Both files come from
 one model, so the robot must stand the same way and each joint must turn the same way in both. A
 difference is a bug in a writer, whatever the validators say. Report it, and do not ship around it.
 
-## 9. Actuators and Studio
+## 8. The MuJoCo function
 
-The robot's file has no actuators. Add them to `scene.xml`, the person's file, which the export
-writes once ([actuators in the scene](mujoco-environment.md#actuators-in-the-scene)). Then validate
-the scene again and open it for the person:
+The model carries the hardware. What a simulation chooses for it goes in a MuJoCo function in a
+script beside the model: each part's collision shape, each driven joint's armature and damping, and
+a position actuator on every driven joint. It saves the robot's file where the plain export went,
+with its meshes in `assets/` beside it. [MuJoCo environment](mujoco-environment.md#the-mujoco-function)
+has each helper, what `save` does and MuJoCo 4.0.0's traps; read it before writing one.
+
+Name each part by its label path as `cad model inspect "$ID"` prints it (`base_link/screw`,
+`shoulder_servo/case`): a last segment is enough where it names one part, and a name that is
+ambiguous or names no part is refused with the parts there. Several parts of one label in one link
+(its screws) share one path, and `collisions` returns them all.
+
+**Collisions.** Every part collides as its own mesh (its convex hull) until the function chooses
+otherwise.
+
+- **One plain solid per link:** `decompose()` a concave link (a yoke, a clevis, a gripper's palm with
+  its slot), keep the default hull on a convex one (a base, a roll link), and delete the collisions
+  of a part that runs inside another (a sliding bar inside its guide).
+- **Printed parts:** `decompose()`, so that the pocket a servo sits in stays a pocket. The first
+  run decomposes each part, from a few seconds to about a minute each by its size and detail
+  (minutes for a dozen parts), and says each on stderr as it is done. The hulls are cached by each
+  part's mesh and options, and only a changed part decomposes again.
+- **Servo cases:** `fit(s, part, "box")` on each shell of the case (the body and its covers), and
+  delete the collisions of the motor, gears and board inside.
+- **Fasteners, horns clamped inside a bracket, cables and boards:** delete their collisions.
+
+**Joint dynamics and actuators.** Each driven joint takes its armature (the rotor's inertia through
+its gearbox: the datasheet's where it gives one, else an estimate, [tuning](mujoco-environment.md#tuning)
+says how) and a light damping, then a position actuator. The force is already bounded: `limits(effort=)`
+in the model wrote each joint's `actuatorfrcrange`. A coupled follower takes no actuator: its
+equality drives it.
+
+```python
+# src/arm_mujoco.py: the simulator's choices. Run it: cad run src/arm_mujoco.py
+import mujoco
+from cad.mujoco import collisions, decompose, fit, save, spec
+
+from arm import arm
+
+PRINTED = ["upper_arm", "jaw"]                 # concave printed parts: their pockets stay pockets
+CASES = ["shoulder_servo/case"]                # each shell of each servo's case
+NONE = ["base_link/screw", "upper_link/screw"]   # fasteners, a case's internals, cables, boards
+DRIVEN = ["shoulder", "jaw"]                   # every joint an actuator drives (no coupled follower)
+ARMATURE = 0.00625   # kg*m^2: 1e-7 x 250^2, tuned, not measured (the listing gives the ratio, not the rotor)
+
+
+def arm_mujoco() -> mujoco.MjSpec:
+    s = spec(arm())
+
+    for part in PRINTED:
+        decompose(s, part)
+    for part in CASES:
+        fit(s, part, "box")
+    for part in NONE:
+        for geom in collisions(s, part):
+            s.delete(geom)
+
+    for name in DRIVEN:
+        joint = s.joint(name)
+        joint.armature = ARMATURE
+        joint.damping = [0.1, 0, 0]          # N*m*s/rad: light, to steady the integrator
+        servo = s.add_actuator(name=name, target=name, trntype=mujoco.mjtTrn.mjTRN_JOINT)
+        servo.set_to_position(kp=10, dampratio=1, inheritrange=True)   # a start for tuning
+    return s
+
+
+if __name__ == "__main__":
+    save(arm_mujoco(), "sim/arm.xml")
+```
 
 ```bash
+cad run src/arm_mujoco.py
 cad mjcf validate sim/scene.xml --compile required
+```
+
+Where step 6 re-zeroed, the spec counts from the same state: `spec(arm(), zero="<state>")`, as the
+export's `--zero` does. `inheritrange=True` takes each control range from the joint's range. A joint with no range (a
+continuous roll) is refused it when the spec compiles: give its actuator `set_to_position(kp=10,
+dampratio=1)` and `servo.ctrlrange = [-3.1416, 3.1416]` instead. `kp` and `dampratio` are a starting
+point for [tuning](mujoco-environment.md#tuning), not a datasheet value.
+
+**Look at the hulls.** A part that reaches its cap of hulls (16 by default) says so as it is done:
+`decomposed bracket: 16 hulls, the cap (max_hulls=16) in 8.1 s`. At the cap, CoACD merged hulls to
+fit, so some of them bridge a concave region. Whether that matters depends on what touches it: look
+before you change anything. Draw the collision geoms, each hull in its own colour, beside the visual
+snapshot at the same pose and camera:
+
+```bash
+cad mjcf snapshot sim/scene.xml tmp/collision.png --display collision --pose home --camera right
+cad mjcf snapshot sim/scene.xml tmp/visual.png --pose home --camera right
+```
+
+A hull that fills a pocket a neighbour moves into, a slot, or the gap between jaws is contact the
+simulator makes and the hardware does not: raise that part's cap (`decompose(s, part,
+max_hulls=32)`) or lower its `threshold=`, and run the function again. A hull that only rounds over
+an inside corner nothing reaches does not matter, and a part whose shape never matters for contact
+can take fewer (`max_hulls=8`).
+
+Expect hulls to stand proud of the part. Their corners lie on the part's surface, but their faces
+bridge its concave places, by a few millimetres on a link a few hundred millimetres long, and a
+lower `threshold` or more hulls hardly changes that: the deepest bridge stays, and a fine threshold
+costs tens of times longer. So two links that clear each other by less than that beside a concave
+place (a wrist parked against the upper arm in the drawn pose) overlap at rest as hulls, and
+`cad mjcf validate` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
+the hardware's working range, exclude the pair in the function, by the links' body names
+(`s.add_exclude(bodyname1="wrist_link", bodyname2="upper_arm_link")`), with a comment saying the
+simulator lets them pass through each other: MuJoCo excludes bodies whole, not single geoms. Where
+they must still collide, no hull setting clears them: try a fitted shape on the convex one of the
+pair (`"cylinder"`, `"capsule"`), and validate again until the warning is gone.
+
+## 9. Studio
+
+Check that the robot holds its pose under gravity, from a throwaway script (`cad run tmp/hold.py`):
+
+```python
+import mujoco
+
+m = mujoco.MjModel.from_xml_path("sim/scene.xml")
+d = mujoco.MjData(m)
+mujoco.mj_resetDataKeyframe(m, d, m.key("home").id)
+for _ in range(1000):   # 2 s at the default 2 ms step
+    mujoco.mj_step(m, d)
+print(d.qpos)
+```
+
+Each joint should end within a few hundredths of a radian of `home`. A joint that sags is a gain,
+an armature or a force bound to look at ([tuning](mujoco-environment.md#tuning)); one that rings or
+explodes is a model-health warning to clear first. Then open it for the person:
+
+```bash
 cad run mujoco-studio --model sim/scene.xml
 ```

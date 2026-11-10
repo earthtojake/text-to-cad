@@ -13,10 +13,11 @@ robot_state_publisher), an SRDF beside it for MoveIt's planning semantics, and a
 There are two routes to one:
 
 - **Generate it from CAD.** A text-to-cad model that holds the mechanism (build123d joints, mechanism
-  states, couplings), materials, and what each part collides as and which frames it names, is written
-  as an MJCF or a URDF by `cad model export`, or handed to a MuJoCo scene in code by
-  `cad.mujoco.spec`. Frames, limits, masses, inertias and meshes come from the kernel, exactly: the
-  model is the source of truth, and the file is regenerated, never edited.
+  states, couplings), materials and the frames it names is written as an MJCF or a URDF by
+  `cad model export`, or made a `mujoco.MjSpec` by `cad.mujoco.spec`, on which a MuJoCo function
+  makes a simulation's choices (collision shapes, joint dynamics, actuators). Frames, limits, masses,
+  inertias and meshes come from the kernel, exactly: the model is the source of truth, and the file
+  is regenerated, never edited.
 - **Author it by hand.** A robot with no CAD model here, an SRDF (always), a MuJoCo scene, or a file
   that already exists: the `.urdf`, `.srdf` or MJCF `.xml` is the source of truth, written
   and edited directly. The work is constrained kinematic modeling, not XML writing: the risks are
@@ -27,10 +28,11 @@ There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **A robot description from a CAD model** (MJCF or URDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`, `friction()`, `free()` and `link()`, then `cad model export <id> robot.xml` (or `.urdf`, `--zero home` to count the joints from a state). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-two-writers) |
-| **A robot from its vendor STEP** (an arm's downloaded assembly) | Read it, group its parts into links, find each axis from the geometry, then declare, export and compare the MJCF with the URDF. | [From a vendor STEP](references/from-a-vendor-step.md) |
+| **A robot description from a CAD model** (MJCF or URDF) | The model's mechanism, materials, `frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` and `link()`, then `cad model export <id> robot.xml` (or `.urdf`, `--zero home` to count the joints from a state). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-two-writers) |
+| **A robot's MuJoCo file: collision shapes, joint dynamics, actuators** | A MuJoCo function: `spec(model())`, `fit`, `decompose` and `collisions`, MuJoCo's own API, then `save(...)`, run with `cad run`. | [The MuJoCo function](#the-mujoco-function), [MuJoCo environment](references/mujoco-environment.md#the-mujoco-function) |
+| **A robot from its vendor STEP** (an arm's downloaded assembly) | Read it, group its parts into links, find each axis from the geometry, then declare, export and compare the MJCF with the URDF, and write its MuJoCo function. | [From a vendor STEP](references/from-a-vendor-step.md) |
 | **Joint limits from the parts** | `cad model ranges <id>`: each joint swept alone until its parts meet, then the stops written into the joint's range in the model. | [Generate from CAD](#generate-from-cad) |
-| **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each CAD piece, composed with MuJoCo's own `MjSpec` in a script, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
+| **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each piece, composed with MuJoCo's own `MjSpec` in a scene function, saved with `save`, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
 | **Tune a MuJoCo model's physics** | The model-health findings of `cad mjcf validate --compile required`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
 | **Describe a robot's links and joints by hand** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
 | **Add MoveIt planning groups, end effectors, named states, collision pairs** | The URDF's link/joint table, then a `.srdf` beside it and `cad srdf validate`. | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md) |
@@ -61,9 +63,9 @@ nothing beyond the Python standard library; a snapshot and a generated descripti
 kernel. `cad mjcf validate --compile required` and `cad run mujoco-studio` use MuJoCo's headless core
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
-`mujoco` gets the same. A part declared `collision(part, "decomposed")` uses CoACD, `cad[coacd]`
-(one wheel, about 3 MB), which the engine likewise fetches into an environment of its own the first
-time a part is decomposed, and reuses after. `cad <verb> --help` gives the complete current interface.
+`mujoco` gets the same. `decompose()` in a MuJoCo function uses CoACD, `cad[coacd]` (one wheel,
+about 3 MB), which the engine likewise fetches into an environment of its own the first time a part
+is decomposed, and reuses after. `cad <verb> --help` gives the complete current interface.
 
 ## Generate from CAD
 
@@ -78,7 +80,7 @@ mechanism):
   same in the simulator and on the hardware; where none exists yet, build the mechanism at the pose a
   simulator should start from (fingers open, arm straight). A vendor's STEP is often drawn at its
   controller's zero: its published ranges fit the swept stops around the pose drawn (the vendor-STEP
-  recipe's step 7 says how to tell). Where the controller's zero is another pose, name that pose a
+  recipe's step 6 says how to tell). Where the controller's zero is another pose, name that pose a
   mechanism state and export with `--zero <state>`: every body stands as the state poses it, each
   joint counts from there (its limits and the other states shifted with it), and the CAD stays as
   drawn. Where the hardware's stops are the parts meeting, find them from the parts:
@@ -121,45 +123,16 @@ mechanism):
   filled housing), at `at` in the part's own frame, no inertia of its own unless `inertia=(ixx, iyy,
   izz)` (kg*m^2) gives it. A `mass()` above it counts it: the lumps are fixed and the solids make up
   the rest, and a total the lumps reach or pass is refused.
-- **`collision(part, kind)`** says what a simulator collides a part as: `mesh` (the default, which
-  MuJoCo hulls), a `box`, `sphere`, `cylinder` or `capsule` the kernel fits to the part,
-  `decomposed`, or `none`. On an assembly it applies to every part below it that declares none.
-  `decomposed` is for a concave part whose one hull would fill its pocket or the gap between a
-  gripper's jaws: CoACD cuts its mesh into convex hulls, each a collision geom of its own (MJCF and
-  URDF alike, `<part>_hull<i>`), while the visual stays whole. `max_hulls=` caps the count (16 by
-  default, `None` for no limit) and `threshold=` (0.01 to 1, CoACD's 0.05 by default) is the concavity
-  it leaves: smaller cuts finer. A hull's corners lie on the part, but its faces bridge the part's
-  concave places by a few millimetres on a large part, at any threshold: two links that nearly touch
-  there overlap at rest as hulls (the vendor-STEP recipe's step 5 says what to do). The engine fetches `cad[coacd]` on first need; the export is refused,
-  naming the part and the extra, only where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl
-  Linux) or no engine runs to fetch it.
-  The hulls are cached by the part's mesh and options, so only a changed part decomposes again; the
-  first export decomposes every part, from a few seconds to about a minute each by its size and the
-  machine, and says one that reached its cap (CoACD merged hulls to fit): look at the hulls with
-  `cad mjcf snapshot sim/scene.xml tmp/collision.png --display collision`.
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a sensor),
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into (a
   camera mount, a fingertip the simulator addresses), with its own mass and geoms.
-- **`exclude(a, b)`** says two parts (or assemblies) never collide, one given as the shape and the other
-  as the shape or its label. A shape names that shape alone, wherever it is placed, however many parts
-  share its label (a vendor STEP repeats labels: a bracket in each hip); a label names every part at or
-  below a node of that label, in every link. `cad model ranges` sets the same pair aside (one declaration
-  for both, with no form for one alone). The MJCF excludes every
-  jointed pair whose collisions touch at rest by itself, the first joint's on a world-welded base too.
-- **`limits(assembly, joint, effort=, velocity=, armature=, damping=, friction=)`**: a joint's drive
-  limits, N*m or N and rad/s or m/s, the URDF's `<limit>` and MJCF's `actuatorfrcrange`, and
-  its dynamics: the rotor's reflected inertia (kg*m^2, kg), viscous damping (N*m*s/rad, N*s/m) and dry
-  friction (N*m, N), MJCF's `armature`, `damping` and `frictionloss` and URDF's `<dynamics damping
-  friction>` (URDF has no armature: the export's log says it is left out). Without a drive limit a URDF
-  says `effort="0" velocity="0"`, which a ROS controller reads literally; a joint given only one of
-  the two has the other written 0, and the export's log names it. Actuators, gains and contact
-  tuning are the scene's.
-- **`friction(part_or_assembly, coefficient)`** is the contact friction of a part's surface, set where
-  its material is and inherited as one is: a sliding coefficient (MuJoCo keeps its torsional and
-  rolling defaults) or the three. MJCF writes it on the part's collision geoms; URDF has none (said in
-  the export's log). Where none is declared, nothing is written and the simulator's default holds:
-  never invent a coefficient for a material.
+- **`limits(assembly, joint, effort=, velocity=)`**: a joint's drive limits from its datasheet, N*m
+  or N and rad/s or m/s, the URDF's `<limit>` and MJCF's `actuatorfrcrange` (MJCF has no speed
+  bound). Without them a URDF says `effort="0" velocity="0"`, which a ROS controller reads literally;
+  a joint given only one of the two has the other written 0, and the export's log names it. Joint
+  dynamics, actuators and contact are a simulation's choices, made in its
+  [MuJoCo function](#the-mujoco-function).
 - **`free(assembly)`** says the robot is not bolted to the world (a humanoid, a quadruped, a mobile
   base, a part dropped on a table): on the top assembly, its base floats, an MJCF `<freejoint>` (its
   seven values in every key, the base where it stands) and a URDF's root, which floats already. The
@@ -175,16 +148,13 @@ mechanism):
   `body()`. Two links of one name, or one link's parts declaring two, are refused by name.
 
 ```python
-from cad.build123d import body, collision, exclude, frame, free, friction, limits, link, mass, point_mass
+from cad.build123d import body, frame, free, limits, link, mass, point_mass
 
-collision(palm, "box")
 frame(palm, "tcp", bd.Pos(0, 0, 65))   # mm, in the palm's own frame
 body(camera, "camera")                 # fixed to the palm, a body of its own
-exclude(left, right)                   # the fingers touch when closed
-limits(root, "left", effort=2, velocity=1.5, armature=0.002, damping=0.1)   # N*m, rad/s, kg*m^2, N*m*s/rad
+limits(root, "left", effort=2, velocity=1.5)   # N*m, rad/s: the servo's datasheet
 point_mass(palm, 120, bd.Pos(0, 0, 20), name="motor")   # g, mm in the palm's own frame
 mass(palm, 410)                        # g: the palm as weighed, its motor included
-friction(pads, 1.1)                    # the pads' rubber, sliding
 link(palm, "base_link")                # the palm's link, named as ROS names a base
 free(root)                             # on a mobile base: not bolted to the world
 ```
@@ -203,41 +173,83 @@ cad step export vendor/part.step sim/part.xml
 ```
 
 Each robot export says what it wrote after the file's line: its links and how its base stands, its
-joints by kind, its total mass, then its couplings, loops, frames, collisions by kind, the contact
-excludes the file holds (`6 contact excludes (1 declared, 5 automatic)`: yours, and the jointed pairs
-touching at rest), keys and zero; every warning (a link with no mass, a joint left out) is a line of the export's log
-before it. `--json` gives the same as the file row's `robot`. Read it before anything else: a mass of
-0, a link you did not expect or a missing joint is a model to fix.
+joints by kind, its total mass, then its couplings, loops, frames, collisions, the contact excludes
+the file holds (the jointed pairs touching at rest), keys and zero; every warning (a link with no
+mass, a joint left out) is a line of the export's log before it. `--json` gives the same as the file
+row's `robot`. Read it before anything else: a mass of 0, a link you did not expect or a missing
+joint is a model to fix.
 
 An MJCF export to `sim/gripper.xml` writes `sim/scene.xml` beside it when there is none: MuJoCo
 Menagerie's scene, which includes the robot's file and adds a floor, a light and a skybox, so `cad run
 mujoco-studio --model sim/scene.xml` opens it standing on something. The scene is yours to edit
-(actuators, cameras, other bodies); an export never writes over it and says it kept it. The robot's
-file is the one an export writes again. **The generated MJCF has no actuators**: nothing drives or
-holds its joints until the scene adds one per joint, which takes a few lines in `scene.xml`
-([actuators in the scene](references/mujoco-environment.md#actuators-in-the-scene)).
+(solver settings, cameras, other bodies); an export never writes over it and says it kept it.
 
-A generated MJCF is laid out as MuJoCo Menagerie lays out a robot (radians, `meshdir="assets"`,
+A plain export is laid out as MuJoCo Menagerie lays out a robot (radians, `meshdir="assets"`,
 `autolimits`, `implicitfast`, a `visual` class in group 2 that collides with nothing and a
 `collision` class in group 3, explicit `<inertial>`s, a site per frame, a key per state); what each
 format drops is in [Interoperability](references/interoperability.md#one-description-two-writers).
-It holds no floor, light, actuator, sensor or solver setting: those belong to the scene (the
-`scene.xml` written beside it, or your own) and the consumer. A STEP has no mechanism: each of its top-level parts is a body hung fixed from the world. A robot's
-STEP is articulated in a model first ([from a vendor STEP](references/from-a-vendor-step.md)).
-In code, `from cad.mujoco import spec` makes a model call's handle, a build123d shape, a `.step`,
-an `.xbf` or an MJCF path (a Menagerie robot) into a `mujoco.MjSpec`, MuJoCo's own editable model,
-with its files named by absolute path. Everything after that is native MuJoCo: `scene.attach(spec(gripper(), assets="sim/assets"), prefix="gripper/", site=...)`,
-`add_body`, `add_freejoint`, `add_actuator`, `add_key`, `compile()`, `to_file()`. There is no other
-wrapper. [MuJoCo environment](references/mujoco-environment.md) walks through one, with what is
-generated, what the scene decides and what the consumer owns.
+**It holds no chosen collision shape, no joint dynamics and no actuator**: each part collides as its
+own mesh (MuJoCo collides a mesh as its convex hull), and nothing drives or holds its joints. Those
+are a simulation's choices, made in a [MuJoCo function](#the-mujoco-function). A floor, lights,
+solver settings and other robots are the scene's. A plain export needs no MuJoCo. A STEP has no
+mechanism: each of its top-level parts is a body hung fixed from the world. A robot's STEP is
+articulated in a model first ([from a vendor STEP](references/from-a-vendor-step.md)).
 
 - **Never edit a generated file.** A change to a frame, a limit, a mass or a mesh is a change to the
-  model: edit it, run it, export again. What the geometry does not determine (actuators, sensors, a
-  floor, solver settings, a Menagerie arm) goes in the scene script, which rebuilds the scene from
-  the regenerated pieces.
+  model: edit it, run it, export again. A collision shape, a damping or an actuator is a change to
+  the MuJoCo function: edit it and run it again. A floor, solver settings and a Menagerie arm go in
+  the scene.
 - **Check what the kernel cannot know**: that each joint's positive motion is the one intended, and
-  that the collision kinds suit the physics. A generated file can still have its joint signs wrong
+  that the collision shapes suit the physics. A generated file can still have its joint signs wrong
   if the model does.
+
+### The MuJoCo function
+
+The model carries what is true of the machine. What a simulation chooses (each part's collision
+shape, contact friction, excluded pairs, joint armature, damping and dry friction, actuators,
+sensors) goes in a MuJoCo function: a plain Python function, in a script beside the model, that
+makes the robot a `mujoco.MjSpec` with `spec()`, makes those choices on it in MuJoCo's own API and
+returns it. The script's `__main__` saves it:
+
+```python
+# src/gripper_mujoco.py
+import mujoco
+from cad.mujoco import collisions, fit, save, spec
+
+from gripper import gripper
+
+
+def gripper_mujoco() -> mujoco.MjSpec:
+    s = spec(gripper())
+    for part in ("palm", "left", "right"):
+        fit(s, part, "box")                        # the kernel's box of the part's exact solid
+    for geom in collisions(s, "left") + collisions(s, "right"):
+        geom.friction = [1.1, 0.005, 0.0001]       # sliding, torsional, rolling
+    left = s.joint("left")
+    left.armature = 0.002                          # kg*m^2
+    left.damping = [0.1, 0, 0]                     # N*m*s/rad, a 3-vector in MuJoCo 4.0.0
+    grip = s.add_actuator(name="grip", target="left", trntype=mujoco.mjtTrn.mjTRN_JOINT)
+    grip.set_to_position(kp=20, dampratio=1, inheritrange=True)
+    return s
+
+
+if __name__ == "__main__":
+    save(gripper_mujoco(), "sim/gripper.xml")
+```
+
+```bash
+cad run src/gripper_mujoco.py
+cad mjcf validate sim/scene.xml --compile required
+```
+
+`fit`, `decompose` and `collisions` are the only helpers: each names a part by its label path, as
+`cad model inspect` prints it. Everything else (`armature`, `damping`, `frictionloss`,
+`add_exclude`, `add_actuator`, sensors, keys) is MuJoCo's API, used directly. `save` writes the file
+with its meshes in `assets/` beside it, so the folder travels, and a `scene.xml` beside it when there
+is none. This file replaces the plain export: a robot's own file carries its actuators, as a
+Menagerie robot's does. The helpers, what `save` does, and MuJoCo 4.0.0's traps are in
+[MuJoCo environment](references/mujoco-environment.md#the-mujoco-function), with a scene composed
+around it.
 
 ## How the formats fit together
 
@@ -393,7 +405,8 @@ so it is for this computer or a trusted network.
 
 | Change | Check it with |
 | --- | --- |
-| A CAD model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`, `friction()`, `free()` or `link()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
+| A CAD model's mechanism, materials, `frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` or `link()` | Run it, export again (or run its MuJoCo function again), and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
+| A MuJoCo function | Run it, then `cad mjcf validate` on the `scene.xml` beside the file it saved with `--compile required`, and read every warning `save` printed; its collisions in a snapshot (`--display collision`). |
 | A scene script | Run it, then `cad mjcf validate` on the scene it wrote with `--compile required`: every model-health warning cleared or explained; `--pose home` in a snapshot. |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |
@@ -417,8 +430,9 @@ so it is for this computer or a trusted network.
   robot, that mesh units match `scale`, that a planning group matches the task, or that a gain is
   right. Say which validator or smoke test passed, never just that the file
   is valid.
-- Fix the owning file: the CAD model for anything generated, the URDF for hand-written structure,
-  the CAD workflow for a bad mesh export, the scene script for what the scene adds; then re-run the
+- Fix the owning file: the CAD model for anything generated, the MuJoCo function for a simulation's
+  choices, the URDF for hand-written structure, the CAD workflow for a bad mesh export, the scene
+  script for what the scene adds; then re-run the
   check from the top. Report a project-policy failure as policy, not invalidity.
 - A file you write is the robot's model, not an export: show it. Visual review cannot prove
   planning correctness or dynamics; the viewer does not play a simulation. Report which checks ran and which were skipped.

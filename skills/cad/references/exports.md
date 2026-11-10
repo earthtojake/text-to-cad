@@ -258,15 +258,19 @@ contributes:
   couplings as the follower on its leader; mechanism states as MuJoCo keys (a URDF has no named poses);
 - **materials**: each link's mass, centre of mass and inertia, exact, from its solids at their
   densities; a part with no material weighs nothing;
-- **`collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`,
-  `friction()`, `free()` and `link()`** ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)):
-  what each part collides as, the named frames (an MJCF site, a URDF frame link), the parts kept
-  bodies of their own, the pairs that never collide, each joint's drive limits and dynamics, what a
-  part or an assembly weighs and the lumps its CAD leaves out, each surface's contact friction,
-  whether the base floats (an MJCF `<freejoint>`; bolted by default) and each link's name.
+- **`frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` and `link()`**
+  ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)): the named frames (an MJCF
+  site, a URDF frame link), the parts kept bodies of their own, each joint's drive limits, what a
+  part or an assembly weighs and the lumps its CAD leaves out, whether the base floats (an MJCF
+  `<freejoint>`; bolted by default) and each link's name.
+
+Each part collides as its own mesh (MuJoCo collides it as its convex hull; a URDF's `<collision>`
+is the same mesh). Neither file holds a chosen collision shape, contact friction, joint dynamics or
+an actuator: a URDF carries the robot's structure, inertials and limits, and what a simulator
+chooses is made in the simulator.
 
 After each file's `wrote` line the export says what it holds, on stderr: its links and how its base
-stands, its joints by kind and its mass, then its couplings, loops, frames, collisions by kind,
+stands, its joints by kind and its mass, then its couplings, loops, frames, collisions,
 exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
 it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
 robot when there is none (MuJoCo Menagerie's: an `include` of the robot, a floor, a light, a skybox),
@@ -277,9 +281,12 @@ the MJCF stands it.
 
 A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
 top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left
-out of a URDF ([Loops](kinematics.md#loops)); a ball joint in a URDF is refused by name. Never edit the written file: change the model and export again. Composing
-a MuJoCo scene around it in code (`from cad.mujoco import spec`), checking it, tuning it and
-writing the descriptions no model can (an SRDF, a hand-written MJCF) are the `robot-simulation` skill's.
+out of a URDF ([Loops](kinematics.md#loops)); a ball joint in a URDF is refused by name. Never edit the written file: change the model and export again. A
+simulation's choices on the robot (collision shapes, contact friction, excluded pairs, joint
+armature, damping and dry friction, actuators) are made in a MuJoCo function, a script that makes
+the robot an `MjSpec` (`from cad.mujoco import spec`) and saves it; that, composing a MuJoCo scene
+around it, checking it, tuning it and writing the descriptions no model can (an SRDF, a
+hand-written MJCF) are the `robot-simulation` skill's.
 
 ## Other tools
 

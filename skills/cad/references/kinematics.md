@@ -315,59 +315,33 @@ loop's hinge or ball nearest it instead. The closing joint's range is not enforc
 A mechanism exported as a robot description (an MJCF or a URDF:
 [exports](exports.md#robot-descriptions)) takes its links, joints, couplings and states from the
 mechanism and each link's mass from its parts' materials. Declarations from `cad.build123d` say
-the rest, on finished parts, after the last operation, as a material is set:
+the rest of what is true of the machine, on finished parts, after the last operation, as a material
+is set:
 
 ```python
-from cad.build123d import body, collision, exclude, frame, free, friction, limits, link, mass, point_mass
+from cad.build123d import body, frame, free, limits, link, mass, point_mass
 
-collision(arm, "capsule")                   # what a simulator collides it as
-collision(cover, "none")                    # shown, never collides
-collision(jaw, "decomposed", max_hulls=8)   # convex hulls of its mesh (cad[coacd]); its visual whole
 frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own frame (mm)
 body(camera, "camera_mount")                # its own body, fixed to the link it is fastened to
-exclude(camera, "wrist")                    # never collides with the wrist (a shape: that one alone; a label: all of it)
-limits(root, "elbow", effort=27, velocity=6.28,  # the elbow's drive: N*m and rad/s (N, m/s on a slide)
-       armature=0.01, damping=0.4, friction=0.15)  # kg*m^2, N*m*s/rad, N*m (kg, N*s/m, N on a slide)
+limits(root, "elbow", effort=27, velocity=6.28)  # the elbow's drive: N*m and rad/s (N, m/s on a slide)
 point_mass(housing, 85, bd.Pos(0, 0, 12), name="servo")  # g, at a point in the housing's own frame (mm)
 mass(forearm, 310)                          # g: the forearm assembly as weighed, the servo included
-friction(pads, 1.1)                         # the pads' contact friction (sliding), or three values
 link(forearm, "forearm_link")               # the name of the link the forearm's parts make
 free(root)                                  # the base is not bolted to the world (a mobile robot)
 ```
 
-- **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
-  declared; MuJoCo collides it as its convex hull), `box`, `sphere`, `cylinder` or `capsule` (fitted
-  by the kernel to the part's oriented bounding box, a capsule's axis its longest side, a cylinder's
-  the axis the part is turned about where its rim is a round face as wide as the part, or its round
-  faces make a quarter of its surface, a disc's or a pancake motor's short side however thin, else its
-  longest side), `decomposed`, or `none`. On an assembly it is inherited by every part below it that declares
-  none, as a material is; a part's own declaration wins. `decomposed` is for a concave part that must
-  collide as its shape (a pocket, a jaw): CoACD cuts its mesh into convex hulls, each a collision geom
-  `<part>_hull<i>`, while the part stays whole as its visual and in every other export. `max_hulls=`
-  caps the count (16 by default, `None` for no limit), `threshold=` (0.01 to 1, 0.05 by default) is the
-  concavity left, smaller cutting finer. The first export decomposes every such part, from a few
-  seconds to about a minute each by its size and detail and the machine, and says each as it is
-  done, `the cap` where it made as many hulls as `max_hulls` allows (CoACD merged hulls to fit: look
-  at them with `cad mjcf snapshot ... --display collision`). The hulls are cached by the part's mesh and options; a
-  decomposition not in the cache needs CoACD, `cad[coacd]`, which the engine fetches into an
-  environment of its own on first need: the export is refused, naming the part and the extra, only
-  where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl Linux) or no engine runs.
 - **`frame(part, name, location)`** names a frame on a part (a tool tip, a camera mount, a sensor):
   `location` is a `Location` (`Pos`, `Rot`) or a `Plane` in the part's OWN frame, the one its
   geometry is in before `part.location` places it (a `bd.Box` is centred on it unless aligned), so the
   frame moves with the part however a joint or a placement moves it. A frame is a part's, never an
   assembly's; a second frame of one name on a part replaces the first.
 - **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF a link
-  on a fixed joint) where it would merge into its link: its mass, collision and frames go with it.
-- **`exclude(a, b)`**: the two never collide, each a part, an assembly or its label, one of them the shape itself, which keeps the declaration. The other given as a shape names that shape alone, however many parts share its label; given as a label it names every part at or below a node of that label, in every link (MJCF's `<contact><exclude>` of their two bodies; URDF has no word for it). It is the sweep's and the simulator's at once, with no form for one alone. The MJCF excludes each jointed pair touching at rest on its own; declare the rest. `ranges` sets the two parts aside, those two alone: they never stop or clash in its sweep, and every other part of their links still does; on the collision geometry (`--geometry collision`) it sets aside their two links whole, as the MJCF does.
+  on a fixed joint) where it would merge into its link: its mass, meshes and frames go with it.
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
-  label on the assembly or below it, in SI: URDF's `<limit>`, MJCF's `actuatorfrcrange`
-  (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written
-  `effort="0" velocity="0"` in a URDF, which `cad urdf validate` warns a ROS controller reads literally.
-  `armature=` (the rotor's inertia through its gearbox), `damping=` and `friction=` (dry friction) are
-  the joint's dynamics: MJCF's `armature`, `damping` and `frictionloss`, URDF's `<dynamics damping
-  friction>` (URDF has no armature; the export's log says it is left out). Each is a fact of the
-  hardware; an actuator's gains and control range are the simulation's.
+  label on the assembly or below it, in SI, from the drive's datasheet: URDF's `<limit>`, MJCF's
+  `actuatorfrcrange` (MJCF has no speed bound). Declare it after the joint is made. A joint without
+  one is written `effort="0" velocity="0"` in a URDF, which `cad urdf validate` warns a ROS
+  controller reads literally.
 - **`mass(part_or_assembly, grams)`** is what it weighs in all: its solids keep the ratios their
   materials' densities give (one density for all where none of them has a material; a part with no material among parts that have one carries none of the total, and the export says so) and are scaled alike to
   make up `grams`, so the centre of mass and the shape of the inertia stay the geometry's. An inner
@@ -378,11 +352,6 @@ free(root)                                  # the base is not bolted to the worl
   filled housing) at `at`, a `Location` in the part's own frame as a frame's is, with no inertia of
   its own unless `inertia=(ixx, iyy, izz)` (kg*m^2, in `at`'s axes) gives it. Several per part, each
   by name. Every `mass()` above it counts it.
-- **`friction(part_or_assembly, coefficient)`** is a surface's contact friction, set where the
-  material is and inherited as one is (a part's own wins): a sliding coefficient, or MuJoCo's three
-  (sliding, torsional, rolling). MJCF writes it on the part's collision geoms; URDF has none. With
-  none declared, nothing is written and the simulator's default holds; `bd_materials` carries no
-  friction, so never invent one for a material.
 - **`free(part_or_assembly)`**: what it holds is not bolted to the world. On the top assembly, the
   robot's base floats (MJCF a `<freejoint>`, its seven values in every key; a URDF's root floats
   already); in a model with no joints, the one top-level part or assembly it names. A free node none of
@@ -396,6 +365,11 @@ free(root)                                  # the base is not bolted to the worl
 They travel with the part as build123d moves it (a copy, `moved` and `located` keep them), and
 cost nothing until a robot description is exported. A part that declares other ones is a
 prototype of its own in the document.
+
+A simulation's choices are not declared on the model: what a part collides as (each part's own
+mesh unless chosen otherwise), contact friction, pairs that never collide, a joint's armature,
+damping and dry friction, actuators and their gains. Those are made on the exported robot in
+MuJoCo's own API ([exports](exports.md#robot-descriptions) says whose they are).
 
 ## Configuration sequences
 

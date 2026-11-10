@@ -330,9 +330,10 @@ cad step ranges arm.step --step 0.5 --json
   within a millimetre). Every gap is measured to within 0.6 mm over the true one, never under it.
 - **Touching or near as built.** Every pair is read against the as-built pose. Parts touching (a
   horn on its servo), or under 0.3 mm apart, meet only where their contact grows by about 15 mm^2
-  on a surface that stops the motion, not where one slides along the other: contact on a face or a
-  cylinder about a turn's axis (along a slide) stops nothing. Parts a little farther apart (a jaw 0.5 mm from a
-  servo's cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.1 mm
+  on a surface that stops the motion, or where one is pushed into the other (a part resting face to
+  face on its parent and turned into it stops where it lies), not where one slides along the other:
+  a pin in its bore, a carriage on its rail or a link a little too wide for its clevis stops
+  nothing. Parts a little farther apart (a jaw 0.5 mm from a servo's cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.1 mm
   for a 0.5 mm gap), not where it narrows a hair. At a larger clearance the finding lists the
   pairs within it as built, `near as built:`, with the gap as built and at each stop, and a stop
   one of them makes says `closed to 0.2 from 0.5 mm as built`.
@@ -342,9 +343,9 @@ cad step ranges arm.step --step 0.5 --json
   read as an output and what turns on it: neither that face nor what of the solid lies within the
   reach of their contact about the axis (a locating boss, a pin, a bolt's seat through the face)
   stops the joint, and the finding lists the pair, `turns on: plate (link2) on motor (link1)`. The
-  case beyond that reach, and every other part, still stops it. Split the solid, or `exclude()` the
-  pair, only where a stop a few degrees out still names that pair `touching as built`: the output
-  carries something that reaches past its face (an arm, a cam) and that the hardware turns with it.
+  case beyond that reach, and every other part, still stops it. Where a stop a few degrees out still
+  names that pair `touching as built`, the output carries something that reaches past its face (an
+  arm, a cam) and that the hardware turns with it: split the solid in the model.
 - **Overlapping as drawn.** A vendor's simplified parts are often drawn sunk into each other (a link
   a little too wide for its clevis, a carriage drawn inside its rail). Such a pair meets only where
   one is pushed deeper into the other than drawn, by 0.6 mm more, wherever that is: its overlap
@@ -355,21 +356,10 @@ cad step ranges arm.step --step 0.5 --json
 - **Which pair stopped it.** Each stop names the two parts that met one step past it. Read it
   against the geometry before you adopt it (a posed snapshot at the stop). A stop that comes from a
   pair that does not really limit the joint (a vendor's servo cover the jaw clears in the
-  hardware) is set aside with `exclude(a, b)` in the body (a part or an assembly, and another or its
-  label, [kinematics](references/kinematics.md)): those two parts never stop or clash in the sweep, and
-  every other pair of their links still does, so the jaw then stops on the other jaw. The same
-  declaration tells a simulator their two links never collide (MJCF's `<contact><exclude>`, the two
-  links whole): `exclude()` is both, with no sweep-only form. That is usually right, since a pair
-  that does not stop the hardware should not stop the simulation, and the two links are most often a
-  parent and its child, which MuJoCo never collides anyway.
-- **What is tested.** `--geometry parts` (the default) tests each part's own surface: the
-  hardware's stops. `collision` tests what each part declares a simulator collides it as, and sets
-  aside the link pairs the MJCF never collides, as MuJoCo does: a body and its parent (unless the
-  parent is bolted to the world), the pairs touching as built across a joint, and those declared
-  `exclude()`. Its stops are MuJoCo's: a joint whose child never collides with its parent turns
-  until what it moves hits another link, if anything does, and its range is what holds it in the
-  simulator. A part declared `collision(part, "none")` (a fastener in its hole, a servo's
-  internals) is left out either way.
+  hardware) is not the joint's range: write the range you read from the hardware (the datasheet's
+  travel, or a posed snapshot where the parts really meet) instead.
+- **What is tested.** Each part's own surface: the hardware's stops. What a simulator collides a
+  part as is chosen outside the model, and a sweep does not read it.
 - **One joint.** `--joint NAME` sweeps that joint alone (repeat it for several); a name the
   model has no such joint by is refused, naming its joints.
 - **Not swept.** A turn is swept a full turn each way, a slide the document's extent: one clear

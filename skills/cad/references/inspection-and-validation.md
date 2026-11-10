@@ -79,7 +79,7 @@ plate = find_part(step.read("kit.step"), "plate")
 arm_parts = [part for path, part in leaves(step.read("arm.step"), paths=True) if "Forearm" in path[1]]
 ```
 
-A vendor STEP's parts take a simulator's declarations the same way: loop its placed leaves,
+A vendor STEP's parts take a robot's declarations the same way: loop its placed leaves,
 match each label by pattern, declare on the leaf, and build the model from those leaves. A
 declaration on a leaf of `leaves()` is the leaf's own (it is a copy, not the tree's node), so
 the model returns them, grouped into one assembly per link where joints join them:
@@ -89,23 +89,18 @@ from fnmatch import fnmatch
 
 import build123d as bd
 from cad import model, step
-from cad.build123d import body, collision, friction, leaves, mass
+from cad.build123d import body, leaves, mass
 
 
 @model
 def arm():
     parts = []
-    for path, part in leaves(step.read("arm.step"), paths=True):
+    for part in leaves(step.read("arm.step")):
         name = part.label.lower()
-        if fnmatch(name, "*screw*") or fnmatch(name, "*nut*"):
-            collision(part, "none")                  # fasteners: seen, never collided
-        elif fnmatch(name, "servo*case*"):
-            collision(part, "box")                   # a servo case collides as its box
+        if fnmatch(name, "servo*case*"):
             mass(part, 40)                           # the datasheet's grams, not volume x density
         elif fnmatch(name, "*camera*"):
             body(part, "camera")                     # a body of its own, for the camera's frame
-        if any(fnmatch(label.lower(), "*gripper*") for label in path):
-            friction(part, 1.2)                      # everything below the gripper grips
         parts.append(part)
     return bd.Compound(children=parts, label="arm")
 ```

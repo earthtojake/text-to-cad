@@ -2,7 +2,7 @@
 
 Use this reference when writing or editing a MuJoCo model: its compiler settings, default classes, assets, body tree, joints, geoms, actuators, equalities and keyframes. The deliverable is an MJCF document, MuJoCo's XML, with `<mujoco model="...">` at its root, as `.xml` (or `.mjcf`). It describes a model for MuJoCo; it is not a URDF in other words, and not a simulation run: nothing here steps the physics.
 
-A robot that has a CAD model here is not authored by hand: its MJCF is generated from the model (`cad model export <id> robot.xml`), and a scene around it is composed in code with `cad.mujoco.spec` and MuJoCo's own `MjSpec` ([mujoco-environment.md](mujoco-environment.md)). The generated file follows every convention below; edit the model, never the file. What follows is for a model written by hand, and for reading a generated one.
+A robot that has a CAD model here is not authored by hand: its MJCF is generated from the model (`cad model export <id> robot.xml`), its collision shapes, joint dynamics and actuators are chosen in a MuJoCo function with `cad.mujoco.spec` and MuJoCo's own `MjSpec`, and a scene around it is composed in code the same way ([mujoco-environment.md](mujoco-environment.md)). The generated file follows every convention below; edit the model or the function, never the file. What follows is for a model written by hand, and for reading a generated one.
 
 The conventions below are MuJoCo Menagerie's (google-deepmind/mujoco_menagerie), the reference collection of MuJoCo robots; its Franka `panda.xml` is a good one to read beside this.
 
@@ -79,7 +79,7 @@ Defaults are how a model stays short and consistent. Give the robot one class na
 MuJoCo collides every geom unless told not to, so a visual mesh needs `contype="0" conaffinity="0"`. The convention:
 
 - **visual** geoms: `group="2"`, no contacts. Full-detail meshes, materials.
-- **collision** geoms: `group="3"`. Primitives (`box`, `capsule`, `cylinder`, `sphere`) sized from the part, or a coarse convex mesh; name a collision mesh with a `_c` suffix (`link1_c`). MuJoCo hulls every mesh it collides, so a concave visual mesh used for collision collides as its convex hull; a concave part that must keep its pocket collides as several convex meshes, one geom each (a model generated from CAD: `collision(part, "decomposed")`, whose hulls are `<part>_hull<i>`).
+- **collision** geoms: `group="3"`. Primitives (`box`, `capsule`, `cylinder`, `sphere`) sized from the part, or a coarse convex mesh; name a collision mesh with a `_c` suffix (`link1_c`). MuJoCo hulls every mesh it collides, so a concave visual mesh used for collision collides as its convex hull; a concave part that must keep its pocket collides as several convex meshes, one geom each (a model generated from CAD: `decompose()` in its MuJoCo function, whose hulls are `<part>_hull<i>`).
 
 The CAD Viewer and `cad mjcf snapshot` draw groups 0 to 2, as MuJoCo's own viewer does by default, and leave 3 and up out, so a model following this convention shows its visuals and hides its collision geoms. A geom left in group 0 is drawn whether it is meant for collision or not.
 
