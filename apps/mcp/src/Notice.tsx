@@ -1,5 +1,7 @@
 import { english, resolveLocale, translator } from '@cad/ui/i18n';
+import type { Ref } from 'react';
 import { OPEN_IN_VIEWER, unreachableKey } from './host/unreachable.js';
+import type { Refusal } from './host/server';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 
@@ -20,31 +22,34 @@ export function Banner({ message }: { message: string }) {
   </div>;
 }
 
-/** A whole-page message: why CAD cannot show anything, and what to do about it. */
+/** A whole-page message: why CAD cannot show anything, and what to do about it (`notice.css`). */
 export default function Notice({ title, message, details, t = english }: { title: string; message: string; details?: string; t?: Translate }) {
-  return <div className="cad-notice text-ui" role="alert">
-    <div className="flex max-w-md flex-col items-start gap-3">
-      <h1 className="text-base font-medium">{title}</h1>
-      <p className="text-muted-foreground">{message}</p>
-      {details && <details className="w-full text-tiny text-muted-foreground"><summary className="cursor-pointer">{t('alert.details')}</summary><pre className="mt-2 whitespace-pre-wrap break-all select-text">{details}</pre></details>}
+  return <div className="cad-notice" role="alert">
+    <div className="cad-notice-body">
+      <h1 className="cad-notice-title">{title}</h1>
+      <p className="cad-notice-line cad-notice-muted">{message}</p>
+      {details && <details className="w-full text-tiny cad-notice-muted"><summary className="cursor-pointer">{t('alert.details')}</summary><pre className="mt-2 whitespace-pre-wrap break-all select-text">{details}</pre></details>}
     </div>
   </div>;
 }
 
 /**
- * What a card whose chat carries none of its calls to the engine says (`host/channel.ts`), and
- * nothing else: no home, no library, nothing the host said. `page` is the CAD Viewer's page of what
- * the card was asked to show, from its launch, where the engine gave one; `open` follows it through
- * the host, where the host opens links, and returns false where it does not (the link then opens as
- * an ordinary one, in a new window). Said in `t`'s language.
+ * What a card that cannot reach CAD's server says (`Connection.tsx`), and nothing else: no home, no
+ * library, nothing the host or the server said. Its chat carries none of its calls (`host/channel.ts`),
+ * or the server refused them for their capability (`refused`: none, or one from before CAD restarted,
+ * which asks for the model to be shown again). `page` is the CAD Viewer's page of what the card was
+ * asked to show, from its launch, where the engine gave one; `open` follows it through the host, where
+ * the host opens links, and returns false where it does not (the link then opens as an ordinary one,
+ * in a new window). Said in `t`'s language, in the look the shell's notice has too (`notice.css`).
  */
-export function Unreachable({ page, model, open, t = english }: { page: string | null; model: boolean; open?: (url: string) => boolean; t?: Translate }) {
-  const message = t(unreachableKey(Boolean(page), model));
-  return <div className="cad-notice text-ui" role="alert" data-cad-unreachable="">
-    <div className="flex max-w-md flex-col items-start gap-3">
-      <p className="text-foreground">{message}</p>
-      {page ? <a href={page} target="_blank" rel="noopener noreferrer"
-        className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+export function Unreachable({ page, model, refused = null, open, t = english, ref }: {
+  page: string | null; model: boolean; refused?: Refusal | null; open?: (url: string) => boolean; t?: Translate; ref?: Ref<HTMLDivElement>;
+}) {
+  const message = t(unreachableKey(Boolean(page), model, refused));
+  return <div ref={ref} className="cad-notice" role="alert" data-cad-unreachable="">
+    <div className="cad-notice-body">
+      <p className="cad-notice-line">{message}</p>
+      {page ? <a href={page} target="_blank" rel="noopener noreferrer" className="cad-notice-button"
         onClick={event => { if (open?.(page)) event.preventDefault(); }}>{t(OPEN_IN_VIEWER)}</a> : null}
     </div>
   </div>;

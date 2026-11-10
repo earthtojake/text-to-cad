@@ -2,7 +2,7 @@
   "name": "@cad/web",
   "private": true,
   "type": "module",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",

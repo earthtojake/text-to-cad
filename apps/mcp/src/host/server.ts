@@ -2,13 +2,15 @@ import type { LibraryModel } from '@cad/ui/library';
 import type { UpdateNotice } from '@cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
+import { refusalOf } from './unreachable.js';
 
 /**
  * The launch/view protocol this page speaks with `cad-mcp` (its `PROTOCOL`): a launch names a
  * model by its absolute path (`page: viewer`) or the home (`page: home`), and carries what the page
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
  * routes through `cad_http`. Every one of the page's calls carries its app capability (the launch's
- * `dev.texttocad/httpToken`): `cad_http` as a header, `cad_sync` and `cad_capture_reply` as `app`.
+ * `dev.texttocad/httpToken`, or in Cursor its launching tool's: `host/capability.ts`): `cad_http` as a
+ * header, `cad_sync` and `cad_capture_reply` as `app`.
  */
 export const PROTOCOL = 9;
 
@@ -61,8 +63,13 @@ export interface SyncReply {
   catalog?: { revision?: string; error?: string };
 }
 
+/** Why CAD's server refused one of this page's own calls for its capability (`host/unreachable.js`'s `refusalOf`). */
+export type Refusal = 'capability' | 'stale';
+
+/** An answer of CAD's server that says it failed: in its words, and, where it refused the page's capability, why. */
 export class ServerError extends Error {
-  constructor(message: string) { super(message); this.name = 'ServerError'; }
+  readonly refused: Refusal | null;
+  constructor(message: string, refused: Refusal | null = null) { super(message); this.name = 'ServerError'; this.refused = refused; }
 }
 
 /** What a tool result says, in its first text block, or `fallback`. */
@@ -78,7 +85,8 @@ export function readLaunch(result: ToolResult | undefined): Launch | null {
  * CAD's server, as this page calls it through the host. Each call tells `channel` how it went: it came
  * back (the host carries calls), or the host refused it itself (`host/channel.ts`).
  */
-export function createServer(bridge: Pick<Bridge, 'callTool'>, appToken: string, channel?: Pick<Channel, 'answered' | 'refused'>) {
+export function createServer(bridge: Pick<Bridge, 'callTool'>, appToken: string,
+  channel?: Pick<Channel, 'answered' | 'refused' | 'refusedCapability'>) {
   async function call<T>(name: string, args: Record<string, unknown> = {}, options?: CallOptions): Promise<T> {
     let result: ToolResult;
     try {
@@ -87,8 +95,10 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>, appToken: string,
       if (isHostRefusal(error)) channel?.refused();
       throw error;
     }
-    channel?.answered();
-    if (result.isError) throw new ServerError(toolText(result));
+    const refused = refusalOf(result);
+    // A call refused for its capability is no channel: the card cannot reach CAD's server (`Connection.tsx`).
+    if (refused) channel?.refusedCapability(refused); else channel?.answered();
+    if (result.isError) throw new ServerError(toolText(result), refused);
     return (result.structuredContent || {}) as T;
   }
   return {

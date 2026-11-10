@@ -103,6 +103,7 @@ SERVER_REQUIRED=(
   "cad_server/_runtime/plugin/.claude-plugin/marketplace.json"
   "cad_server/_runtime/plugin/.codex-plugin/plugin.json"
   "cad_server/_runtime/plugin/.cursor-plugin/plugin.json"
+  "cad_server/_runtime/plugin/.grok-plugin/plugin.json"
   "cad_server/_runtime/plugin/skills/cad/SKILL.md"
 )
 SHIM_REQUIRED=(
