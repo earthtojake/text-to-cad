@@ -1268,6 +1268,48 @@ class StatesTest(unittest.TestCase):
                                         manufacturing.options("stl", "printing", {}), False)
         self.assertEqual((missing.status, missing.reason), ("not_checked", "invalid_target"))
 
+    def test_a_check_its_caller_measures_is_held_to_a_check_s_limits_from_outside(self) -> None:
+        """A check its caller measures itself (a mesh's, a cut file's, a file's with no engine to reach) is
+        measured in a process of its own, which the caller stops past the engine's limits for a check --
+        whatever call it is in: it is killed from outside -- and says not checked for (``over_time``,
+        ``over_memory``); one whose process exits with no answer is ``process_lost``, one whose measuring raised
+        ``error``, in one line; under its limits it answers what the integration measures."""
+        import os
+        from unittest import mock
+
+        from cad.trimesh import _check
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "block.stl")
+            bd.export_stl(bd.Box(20, 20, 20), path)
+            resolved = manufacturing.options("stl", "printing", {})
+
+            def checked(**environment: str):
+                # how often it looks is the test's: it waits on the look, not on the clock
+                with mock.patch.object(manufacturing, "WATCH_SECONDS", 0.01), mock.patch.dict(os.environ, environment):
+                    return manufacturing.measure("stl", path, "printing", resolved, False)
+
+            late = checked(CAD_ENGINE_CHECK_SECONDS="1e-9")
+            self.assertEqual((late.ok, late.status, late.reason), (False, "not_checked", "over_time"))
+            self.assertIn("over a check's time limit of 1e-09 s", late.findings[0].message)
+            self.assertIn("CAD_ENGINE_CHECK_SECONDS", late.findings[0].message)
+            large = checked(CAD_ENGINE_CHECK_RSS_MB="1e-3")
+            self.assertEqual((large.status, large.reason), ("not_checked", "over_memory"))
+            self.assertIn("CAD_ENGINE_CHECK_RSS_MB", large.findings[0].message)
+            with mock.patch.object(manufacturing, "_CHILD", "raise SystemExit(7)"):
+                lost = checked()
+            self.assertEqual((lost.status, lost.reason), ("not_checked", "process_lost"))
+            self.assertIn("exited (7) before it answered", lost.findings[0].message)
+            with mock.patch.object(manufacturing, "_CHILD", manufacturing._CHILD.replace(
+                    "_child()", "import cad.trimesh._check as c; c.measure = lambda *a: 1 / 0; _child()")):
+                raised = checked()
+            self.assertEqual((raised.status, raised.reason), ("not_checked", "error"))
+            self.assertIn("ZeroDivisionError: division by zero (raised in ", raised.findings[0].message)
+            self.assertEqual(len(raised.findings[0].message.splitlines()), 1)
+            measured = checked(CAD_ENGINE_CHECK_SECONDS="0", CAD_ENGINE_CHECK_RSS_MB="0")  # no limit
+            here = _check.measure("stl", path, "printing", resolved, False)
+            self.assertEqual((measured.status, measured.measurements["mesh"]), ("ok", here["mesh"]))
+
     def test_a_result_holds_its_state(self) -> None:
         from cad.results import CheckFinding, CheckResult
 

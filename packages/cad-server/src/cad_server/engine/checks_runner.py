@@ -42,8 +42,6 @@ import enum
 import os
 import secrets
 import signal
-import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -51,6 +49,7 @@ from typing import Any, Callable
 
 from cad.engine.client import WORKER_STDERR
 from cad.engine.frames import failed_type
+from cad.engine.worker import CHECK_SECONDS, check_limits, resident_of
 
 from cad_server.engine.checks import Checks, Pool, Withdrawn, digest
 from cad_server.engine.supervisor import Gone
@@ -59,7 +58,7 @@ __all__ = ["FAILURES", "SECONDS", "STOPPED", "SUPERSEDED", "Asked", "Limits", "R
            "resident_of"]
 
 # A check measured this long is stopped (``Limits``): ``CAD_ENGINE_CHECK_SECONDS``, by default half an hour.
-SECONDS = 1800.0
+SECONDS = CHECK_SECONDS
 # How often the watchdog looks at the checks measuring (``Runner._watch``).
 WATCH_SECONDS = 1.0
 # How many times a check is asked of its document as it is now because a build replaced it, or its file was
@@ -102,52 +101,6 @@ FAILURES = {
 }
 
 
-def resident_of(pid: int | None) -> float | None:
-    """The resident memory of process ``pid`` now, in MiB, read from outside it (``/proc`` on Linux, the
-    system's own count on Windows, ``ps`` elsewhere); None where the system does not say, which holds a check to
-    no memory limit there."""
-    if not pid:
-        return None
-    try:
-        if sys.platform.startswith("linux"):
-            with open(f"/proc/{pid}/statm", encoding="ascii") as handle:
-                return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 2**20
-        if os.name == "nt":
-            import ctypes
-            from ctypes import wintypes
-
-            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS, as ``worker.resident_mb`` reads its own
-                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
-                            ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
-                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
-                            ("PeakPagefileUsage", ctypes.c_size_t)]
-
-            kernel32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
-            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-            kernel32.OpenProcess.restype = wintypes.HANDLE
-            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-            psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
-            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if not handle:
-                return None
-            try:
-                counters = Counters()
-                counters.cb = ctypes.sizeof(Counters)
-                if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
-                    return None
-                return counters.WorkingSetSize / 2**20
-            finally:
-                kernel32.CloseHandle(handle)
-        said = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
-                              check=False).stdout.split()
-        return int(said[0]) / 1024 if said else None
-    except Exception:  # noqa: BLE001 - a system that will not say holds a check to no memory limit
-        return None
-
-
 class Limits:
     """What one check may take before the engine stops it: ``seconds`` measuring (None: no limit) and
     ``memory()``, its process's resident memory in MiB (None: no limit). ``notes``: what was said of a setting
@@ -159,27 +112,10 @@ class Limits:
 
     @classmethod
     def of_environment(cls, cap: Callable[[], float | None]) -> "Limits":
-        """The daemon's: ``CAD_ENGINE_CHECK_SECONDS`` (by default ``SECONDS``) and ``CAD_ENGINE_CHECK_RSS_MB``
-        (by default ``cap()``, the memory the engine holds all its processes to together,
-        ``CAD_ENGINE_WORKER_RSS_MB``: one check alone never takes it all); ``0`` for no limit."""
-        notes: list[str] = []
-
-        def number(name: str) -> float | None:
-            given = os.environ.get(name, "").strip()
-            if not given:
-                return None
-            try:
-                value = float(given)
-            except ValueError:
-                value = -1.0
-            if value < 0:
-                notes.append(f"{name}={given!r} is no number of zero or more: the default holds")
-                return None
-            return value
-
-        seconds, memory = number("CAD_ENGINE_CHECK_SECONDS"), number("CAD_ENGINE_CHECK_RSS_MB")
-        return cls(SECONDS if seconds is None else (seconds or None),
-                   cap if memory is None else (lambda: memory or None), tuple(notes))
+        """The daemon's (``worker.check_limits``): ``CAD_ENGINE_CHECK_SECONDS`` (by default ``SECONDS``) and
+        ``CAD_ENGINE_CHECK_RSS_MB`` (by default ``cap()``, the memory the engine holds all its processes to
+        together, ``CAD_ENGINE_WORKER_RSS_MB``: one check alone never takes it all); ``0`` for no limit."""
+        return cls(*check_limits(cap))
 
     def status(self) -> dict[str, Any]:
         return {"seconds": self.seconds, "rssMb": self.memory(), **({"notes": list(self.notes)} if self.notes else {})}

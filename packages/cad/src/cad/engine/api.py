@@ -736,7 +736,7 @@ def _outside(measures: dict[str, Any], why: str) -> None:
     if not measures.get("libraries"):
         return  # a command with no kernel measures nothing itself: the process it hands the check to says it
     try:
-        print(f"cad: {why}, so nothing keeps this manufacturing check: measured in this process, it is measured "
+        print(f"cad: {why}, so nothing keeps this manufacturing check: measured by this caller, it is measured "
               "again each time it is asked", file=sys.stderr, flush=True)
     except OSError:
         pass
