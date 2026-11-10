@@ -43,12 +43,15 @@ let nextRobot = 0;
 const picks = vi.hoisted(() => ({ latest: null as null | { enabled: boolean; scene: any; onPick: (hit: unknown, modifiers: { multiSelect: boolean }) => void } }));
 // The scene Preview's own viewport draws, while it is open (`PreviewView.jsx`).
 const previewView = vi.hoisted(() => ({ scene: null as any }));
+// The tools view's runtime, as its viewport hands it the overlays: none until a test puts a camera in it.
+const toolsView = vi.hoisted(() => ({ runtimeRef: null as any }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
   const { createElement, forwardRef: forward, useImperativeHandle: handle, useRef: ref } = await import('react');
   return {
     default: forward(function ShellViewport({ children, preview, scene }: { children?: (viewport: object) => unknown, preview?: boolean, scene?: any }, viewerRef) {
       const runtimeRef = ref(null), hostRef = ref(null), mountRef = ref(null);
       if (preview) previewView.scene = scene ?? null;
+      else toolsView.runtimeRef = runtimeRef;
       handle(viewerRef, () => ({
         prepareViewSettings: async () => {}, presentViewSettings() {}, requestRender() {}, syncSceneBounds() {},
         getPerspective: () => null, captureScreenshotBlob: async () => new Blob(['png'], { type: 'image/png' }),
@@ -83,11 +86,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-async function openRobot({ phone = false } = {}) {
+async function openRobot({ phone = false, payload = robotPayload() } = {}) {
   // The file as the catalog lists it now: a save is a new revision, under a new version of its URL,
   // and the loader reads the server's resolved payload for that revision.
   const id = ++nextRobot;
-  const served = { revision: 1, robot: robotPayload() };
+  const served = { revision: 1, robot: payload };
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://viewer.test');
     if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
@@ -342,6 +345,26 @@ it("Preview draws a robot of its own at the opening pose; the tools view's robot
   await userEvent.setup().click(screen.getByRole('button', { name: 'Exit preview', exact: true }));
   expect(matrix()).toEqual(posed);
   expect(robot.jointField('shoulder').value).toBe('30°');
+  robot.client.dispose();
+});
+
+it('a right press on a link whose name no reference can spell opens the view\'s menu, its Copy reference off', async () => {
+  // Any name is a link's (the server requires one, nothing more); `upper-arm` is no CAD selector.
+  const robot = await openRobot({ payload: JSON.parse(JSON.stringify(robotPayload()).replaceAll('upper_arm', 'upper-arm')) });
+  // The viewport's camera looks straight down onto the upper arm through the middle of the view.
+  const root = picks.latest!.scene.object3D as THREE.Object3D;
+  root.updateMatrixWorld();
+  const camera = new THREE.PerspectiveCamera(30, 1200 / 720, 0.01, 100);
+  camera.position.copy(root.localToWorld(new THREE.Vector3(0.25, 0, 5)));
+  camera.up.copy(new THREE.Vector3(0, 1, 0).transformDirection(root.matrixWorld));
+  camera.lookAt(root.localToWorld(new THREE.Vector3(0.25, 0, 0.2)));
+  const canvas = robot.pane.querySelector<HTMLCanvasElement>('[data-test-viewport] canvas')!;
+  toolsView.runtimeRef.current = { THREE, camera, renderer: { domElement: canvas } };
+  fireEvent.pointerDown(canvas, { button: 2, buttons: 2, clientX: 600, clientY: 360 });
+  fireEvent.pointerUp(canvas, { button: 2, buttons: 0, clientX: 600, clientY: 360 });
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => `${item.textContent}:${item.hasAttribute('data-disabled')}`))
+    .toEqual(['Copy Reference:true', 'Select:false', 'Hide:false', 'Zoom to fit:false', 'Zoom to selection:true']);
   robot.client.dispose();
 });
 

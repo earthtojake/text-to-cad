@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
@@ -21,7 +20,7 @@ const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.
 
 // The harness renders its pane at a fixed CSS size; the spec draws it smaller (a Retina buffer
 // of fewer pixels to paint and digest) and resizes it through these variables. It stays wider
-// than the viewer's mobile breakpoint (720px) throughout, so a resize is only ever a resize.
+// than the viewer's mobile breakpoint (600px, `VIEWER_MOBILE_BREAKPOINT`) throughout, so a resize is only ever a resize.
 const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
 
 async function serveHarness(t) {
@@ -139,7 +138,7 @@ function assertPaintedAtNewSize(record, ratio, settled, label) {
 }
 
 test('a drawing pane resized in one step paints the drawing at its new size in that same frame', async (t) => {
-  const { page, pane, errors } = await serveHarness(t);
+  const { page, errors } = await serveHarness(t);
   await frames(page, 4);
   await installProbe(page);
   const ratio = await page.evaluate(() => window.__dxfProbe.canvas.width / window.__dxfProbe.box.clientWidth);

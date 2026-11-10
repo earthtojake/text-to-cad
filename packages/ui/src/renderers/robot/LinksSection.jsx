@@ -14,8 +14,8 @@ import { useI18n } from "@cad/ui/i18n";
 
 // The robot's kinematic tree, drawn with the Model tree's rows and filter: links nest under
 // their parent link through the joint between them (the row's muted text), and its visuals (or
-// the named objects inside their meshes) are its leaves. One panel of the tool stack, on screen
-// while Select is the tool: **Links**. What is selected is Quick Edit's, as chips whose cards say
+// the named objects inside their meshes) are its leaves. A tab of the view's panel, whatever the
+// tool: **Links**. What is selected is Quick Edit's, as chips whose cards say
 // what the description says of each (`robotReferences.jsx`).
 //
 // Expansion starts at the first real choice. The root opens, and so does a chain of
@@ -113,17 +113,16 @@ function RobotSearchRow({ match, highlighted, cursor, selection, hiddenIds, onVi
 
 /**
  * @param {object} props
- * @param {object | null} props.robot The payload cadgen resolved (`cadgen.robot_payload`): a URDF, an SRDF's paired URDF
+ * @param {object | null} props.robot The payload cadgen resolved (`cad_server.robot_payload`): a URDF, an SRDF's paired URDF
  *   with the SRDF's semantics on it, or an SDF.
  * @param {object[]} props.components `buildRobotParts(...).components`: every visual or named mesh object.
  * @param {{ id: string, link: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
  * @param {string[]} [props.hiddenPartIds] Hidden visual component ids.
  * @param {(ids: string[], visible: boolean) => void} [props.onVisibilityChange] Changes visibility of loaded parts.
  * @param {object} props.selection `useLinkSelection`, with `select`/`selectLink` routed through the Select tool.
- * @param {boolean} [props.active] Whether Select is the tool, which is when the panels show; a hidden tree does not scroll to a selection.
- * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names, by the host path the payload resolved for it.
+ * @param {boolean} [props.active] Whether the tools view is on screen (not Preview); a hidden tree does not scroll to a selection.
  */
-export default function LinksSection({ robot = null, components = EMPTY, parts = EMPTY, selection, active = true, onOpenFile = null, hiddenPartIds = EMPTY, onVisibilityChange }) {
+export default function LinksSection({ robot = null, components = EMPTY, parts = EMPTY, selection, active = true, hiddenPartIds = EMPTY, onVisibilityChange }) {
   const { t } = useI18n();
   const hiddenIds = useMemo(() => new Set(hiddenPartIds), [hiddenPartIds]);
   const tree = useMemo(() => buildRobotTree(robot, { components, parts }), [robot, components, parts]);

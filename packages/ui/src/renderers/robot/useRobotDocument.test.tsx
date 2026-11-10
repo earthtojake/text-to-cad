@@ -62,6 +62,23 @@ it('keeps the robot on screen while a new revision loads, and replaces it when t
   expect(hook.result.current.busy).toBe(false);
 });
 
+it('a file back at the revision on screen while another is loading keeps that robot, no longer busy', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(glb(url))));
+  const resources = createHttpCadResourceProvider();
+  // The second revision's payload never arrives: the file went back before it did.
+  let reads = 0;
+  const robot = client(() => (++reads === 1 ? swing() : new Promise(() => {})));
+  const back = entry('swing.sdf', { hash: 'back', url: 'https://robot-assets.test/back.sdf' });
+  const hook = renderHook(({ current }) => useRobotDocument({ entry: current, client: robot, resources }), { initialProps: { current: back } });
+  await waitFor(() => expect(hook.result.current.robot).not.toBeNull());
+  const before = hook.result.current.robot;
+  hook.rerender({ current: { ...back, hash: 'back-2', url: 'https://robot-assets.test/back.sdf?v=2' } });
+  await waitFor(() => expect(hook.result.current.busy).toBe(true));
+  hook.rerender({ current: back });
+  await waitFor(() => expect(hook.result.current).toMatchObject({ busy: false, progress: null, error: null }));
+  expect(hook.result.current.robot).toBe(before);
+});
+
 it('a mesh that cannot be fetched fails the robot, and an SRDF cadgen could not pair says what it looked for', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404, statusText: 'Not Found' })));
   const resources = createHttpCadResourceProvider();

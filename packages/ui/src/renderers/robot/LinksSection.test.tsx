@@ -58,9 +58,6 @@ const components = [
   { id: 'wrist_link:v1/object/1', name: 'cap', link: 'wrist_link', color: '', triangleCount: 300, vertexCount: 150, sizeMillimetres: [40, 40, 2] },
 ];
 
-const meshPath = (filename: string) => (filename.includes(':') ? '' : `robots/arm/${filename}`);
-const groupNamesByLink = new Map([['shoulder_link', ['manipulator']]]);
-
 // What the scene graph was last asked to draw: the viewport half of a selection. What is selected
 // reads back as Quick Edit's chips (`robotReferences.jsx`); the harness lays each chip's card out
 // flat under "Reference details" (`ItemDetail`, as its popover draws it), with its X.
@@ -69,7 +66,7 @@ const scene = { hasComponent: (id: string) => components.some(component => compo
 const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
 function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload = robot as typeof planned, onOpenFile = undefined as ((path: string) => void) | undefined,
   hiddenPartIds = undefined as string[] | undefined, onVisibilityChange = undefined as ((ids: string[], visible: boolean) => void) | undefined }) {
-  const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
+  const selection = useLinkSelection({ scene, requestRender() {} });
   const observed = {
     ...selection,
     select: (...args: [string, any?]) => { spy.select?.(...args); selection.select(...args); },
@@ -77,7 +74,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
   const resource = { kind: 'workspace-file', path: '/work/arm.urdf' };
-  const describe = useRobotDescribe({ robot: payload, components, selectLink: observed.selectLink, onOpenFile, groupNamesByLink, resource });
+  const describe = useRobotDescribe({ robot: payload, components, selectLink: observed.selectLink, onOpenFile, resource });
   const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, resource, describe });
   const inspect = useRobotInspect({ selection: observed, components, describe });
   return <InspectContext.Provider value={inspect}>
@@ -269,7 +266,7 @@ it('reveals a selected hit with its ancestors expanded when the filter is cleare
 
 it('a viewport pick of a surface selects its link; a named object selects itself, and Shift adds', () => {
   function Viewport() {
-    const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
+    const selection = useLinkSelection({ scene, requestRender() {} });
     return <div>
       <button type="button" onClick={() => selection.pick({ linkName: 'wrist_link', componentId: '' })}>Pick surface</button>
       <button type="button" onClick={() => selection.pick({ linkName: 'wrist_link', componentId: 'wrist_link:v1/object/0' }, { multiSelect: true })}>Pick named</button>
@@ -368,7 +365,7 @@ it('scrolls to a link picked while another tab is open once its tab is shown', (
   const scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this.textContent || ''); });
   Object.assign(Element.prototype, { scrollIntoView });
   function Tabbed({ tab, pick }: { tab: string, pick: string }) {
-    const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
+    const selection = useLinkSelection({ scene, requestRender() {} });
     React.useEffect(() => { if (pick) selection.selectLink(pick); }, [pick]);
     return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<><LinksSection robot={robot} components={components} parts={parts} selection={selection}/>

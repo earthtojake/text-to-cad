@@ -330,12 +330,13 @@ function DxfSurface({ view, data }) {
   // ---- the menu: a secondary tap on the drawing, under Select (`kit/shell/viewMenu.js`'s groups) ----
   // Over an entity: its reference (with what is picked already), Select or Deselect, Hide its layer,
   // then the framing. Over bare paper: Show all layers while any is hidden, and the framing.
+  const frameView = drawingView.frame;
   const frameEntities = useCallback(ids => {
     const drawable = drawingRef.current;
     const boxes = ids.map(id => drawable?.entities?.get(drawingHandleOf(id))?.box).filter(Boolean);
     if (!boxes.length) return;
-    drawingView.frame([Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))]);
-  }, [drawingView]);
+    frameView([Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))]);
+  }, [frameView]);
   const contextMenuItems = shown && toolMode === DXF_TOOL.SELECT ? press => {
     const canvas = canvasRef.current;
     if (!canvas) return null;

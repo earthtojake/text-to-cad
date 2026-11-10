@@ -86,7 +86,11 @@ export function useRobotDocument({ entry, client, resources }) {
   const loadedRef = useRef(state.robot?.revision ?? null);
 
   useEffect(() => {
-    if (loadedRef.current === revision) return undefined;
+    // The revision on screen: a file back at it while another loaded has nothing loading.
+    if (loadedRef.current === revision) {
+      setState(previous => (previous.busy ? { ...previous, busy: false, progress: null } : previous));
+      return undefined;
+    }
     const current = entryRef.current;
     const controller = new AbortController();
     const { signal } = controller;

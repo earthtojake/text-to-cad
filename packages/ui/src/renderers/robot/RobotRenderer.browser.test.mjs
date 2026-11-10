@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
 import { pressInPreview } from '../harness/preview.mjs';
@@ -23,10 +22,10 @@ const payloadFile = name => new URL(`${name.slice(0, name.lastIndexOf('.'))}.${n
 // cadgen's answer for each description: its payload, or the sentence it refuses it with.
 const PAYLOADS = Object.fromEntries(DESCRIPTIONS.filter(name => existsSync(payloadFile(name))).map(name => [name, readFileSync(payloadFile(name), 'utf8')]));
 const REFUSALS = JSON.parse(readFileSync(new URL('refusals.json', FIXTURES), 'utf8'));
-// A chain long enough that a per-pose cost proportional to the robot would show.
 // The strip with Select in hand: a robot's four tools (`robot/tools.js`).
 // The tools that can be in hand; Clip, a popover from its tile, is never one.
 const SELECT_IN_HAND = ['Select:true', 'Pencil:false', 'Shapes:false', 'Measure:false'];
+// A chain long enough that a per-pose cost proportional to the robot would show.
 const CHAIN_LINKS = 30;
 // The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
 // GL (CI's SwiftShader) has fewer pixels to fill and a capture fewer to read.
@@ -82,7 +81,7 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
 });
 
-async function open(t, file, { panel = true } = {}) {
+async function open(t, file) {
   const context = await browser.newContext({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => context.close());
   const page = await context.newPage();
@@ -171,8 +170,6 @@ async function open(t, file, { panel = true } = {}) {
       }, expected, { timeout: 5000 }).then(() => true, () => false);
       if (!read) assert.deepEqual((await robot.pressedRows()).sort(), expected, message);
     },
-    // A selection is React state: it is on screen a render after whatever changed it.
-    waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
     // The view's controls at the strip's end, after its rule: Projection, Display (the mode in hand), then Preview.
     viewControls: () => tools.locator('[data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     // Display: its tile between Projection and Preview, the mode in hand; its menu, the modes and the Grid switch.
@@ -202,7 +199,6 @@ async function open(t, file, { panel = true } = {}) {
       return card;
     },
     position: () => pane.locator('[data-tool-panel][aria-label="Position controls"]'),
-    section: name => pane.getByRole('region', { name, exact: true }),
     settle: () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
     // The viewport's own pixels, without any chrome over them: what a host capture returns.
     async capture() {
@@ -222,13 +218,11 @@ async function open(t, file, { panel = true } = {}) {
     waitCursor: value => page.waitForFunction(wanted => getComputedStyle(
       document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')).cursor === wanted, value),
   };
-  if (panel) {
-    await pane.locator('[aria-busy="false"] canvas').first().waitFor();
-    // Its Links are the view's panel's, opened by their tab.
-    await robot.openSection('Links');
-    await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
-    await robot.settled();
-  }
+  await pane.locator('[aria-busy="false"] canvas').first().waitFor();
+  // Its Links are the view's panel's, opened by their tab.
+  await robot.openSection('Links');
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
+  await robot.settled();
   return robot;
 }
 // Orbit controls re-derive the camera from its spherical form on a repaint: rounding, not motion.
@@ -468,7 +462,7 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   const backdrop = [surface.x + surface.width - 90, surface.y + surface.height / 2];
 
   // Picking Position alone, a press on the model picks nothing: a click on it is the camera's.
-  await page.mouse.click(...onScreen(spots.lift).map((value, index) => value + (index ? 14 : 14)));
+  await page.mouse.click(...onScreen(spots.lift).map(value => value + 14));
   await robot.settle();
   await robot.pressed([]);
   assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);

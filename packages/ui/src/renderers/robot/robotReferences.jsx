@@ -16,10 +16,9 @@ const EMPTY = Object.freeze([]);
  * (`robotComponentItem`). Null for neither.
  *
  * @param {{ robot: object | null, components?: object[], selectLink?: ((name: string) => void) | null,
- *   onOpenFile?: ((path: string) => void) | null, groupNamesByLink?: Map<string, string[]> | null,
- *   resource?: import("@cad/core/prompt").ResourceRef | null }} options
+ *   onOpenFile?: ((path: string) => void) | null, resource?: import("@cad/core/prompt").ResourceRef | null }} options
  */
-export function useRobotDescribe({ robot, components = EMPTY, selectLink = null, onOpenFile = null, groupNamesByLink = null, resource = null }) {
+export function useRobotDescribe({ robot, components = EMPTY, selectLink = null, onOpenFile = null, resource = null }) {
   const { t } = useI18n();
   // A link named in a card can be followed when the Links tree has its row: a frame-only root has none.
   const tree = useMemo(() => (robot ? buildRobotTree(robot, { components }) : null), [robot, components]);
@@ -27,12 +26,12 @@ export function useRobotDescribe({ robot, components = EMPTY, selectLink = null,
     const component = components.find(item => item.id === id);
     if (component) return robotComponentItem(component, t);
     if (!robot || !tree) return null;
-    const facts = robotLinkFacts(robot, id, { groupNamesByLink });
-    if (!facts || !(robot.links || []).some(link => String(link?.name || "") === id)) return null;
+    if (!(robot.links || []).some(link => String(link?.name || "") === id)) return null;
+    const facts = robotLinkFacts(robot, id);
     const hasLinkRow = name => tree.nodesById.has(robotLinkNodeId(name));
     const reference = resource?.kind === "workspace-file" && isLabelSelector(String(id || "")) ? id : "";
     return robotLinkItem(facts, { reference, onOpenFile, onSelectLink: selectLink, hasLinkRow, t });
-  }, [robot, tree, components, selectLink, onOpenFile, groupNamesByLink, resource, t]);
+  }, [robot, tree, components, selectLink, onOpenFile, resource, t]);
 }
 
 /**

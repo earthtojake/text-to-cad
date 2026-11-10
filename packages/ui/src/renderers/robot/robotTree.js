@@ -1,5 +1,5 @@
 /**
- * The Components tab's tree: a robot's kinematic tree, as plain data, from the payload
+ * The Links tab's tree: a robot's kinematic tree, as plain data, from the payload
  * cadgen resolved (`cad_server.robot_payload`: its `links` and `joints` as the description
  * writes them, and its `root`).
  *

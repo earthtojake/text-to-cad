@@ -35,7 +35,7 @@ for (const [name, poses] of [
   test(`${name}: handles read from the scene's matrices are the player's, for any pose`, () => {
     const robot = fixturePayload(name.split(" ")[0]);
     const scene = createRobotScene(THREE, robotOf(robot));
-    const prepared = prepareRobotJointHandles(THREE, robot, scene);
+    const prepared = prepareRobotJointHandles(robot, scene);
     for (const values of poses) {
       scene.setControlValues(values);
       const handles = robotJointHandles(THREE, prepared, scene, values, () => {});
@@ -54,7 +54,7 @@ for (const [name, poses] of [
 test("a robot's handles are its articulation's: one per moving row, a follower's included, in the kit's units, with the limits a slider has", () => {
   const robot = fixturePayload("arm.urdf");
   const scene = createRobotScene(THREE, robotOf(robot));
-  const handles = robotJointHandles(THREE, prepareRobotJointHandles(THREE, robot, scene), scene, { lift: 0.25 }, () => {});
+  const handles = robotJointHandles(THREE, prepareRobotJointHandles(robot, scene), scene, { lift: 0.25 }, () => {});
   assert.deepEqual(handles.map(({ id, kind, unit }) => `${id}:${kind}:${unit}`),
     ["shoulder:revolute:deg", "lift:prismatic:m", "grip:prismatic:m", "grip_mirror:prismatic:m", "nod:revolute:deg"], "no fixed joint; a mimic follower is a row of its own");
   const lift = handles.find(({ id }) => id === "lift");
@@ -67,7 +67,7 @@ test("a robot's handles are its articulation's: one per moving row, a follower's
 test("a four-bar's crank has no handle and no control: its driver's knob moves it, through the curve cadgen sampled", () => {
   const robot = fixturePayload("linkage.urdf");
   const scene = createRobotScene(THREE, robotOf(robot));
-  const handles = robotJointHandles(THREE, prepareRobotJointHandles(THREE, robot, scene), scene, {}, () => {});
+  const handles = robotJointHandles(THREE, prepareRobotJointHandles(robot, scene), scene, {}, () => {});
   assert.deepEqual(handles.map(({ id, kind }) => `${id}:${kind}`), ["output_joint:revolute"]);
   assert.deepEqual(robot.articulation.controls.map(({ id }) => id), ["output_joint"]);
   // At a key of the curve the crank is exactly where cadgen's closed form put it.
@@ -87,7 +87,7 @@ test("a continuous joint has no stops and its drag winds one turn; a child centr
   const handle = free.articulation.handles.find(({ id }) => id === "nod");
   handle.min = handle.max = null;
   const scene = createRobotScene(THREE, robotOf(free));
-  const prepared = prepareRobotJointHandles(THREE, free, scene);
+  const prepared = prepareRobotJointHandles(free, scene);
   const writes = [];
   const handles = robotJointHandles(THREE, prepared, scene, {}, (id, value) => writes.push([id, value]));
   const knob = handles.find(({ id }) => id === "nod");

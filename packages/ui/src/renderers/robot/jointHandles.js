@@ -37,11 +37,10 @@ export function robotPosableHandles(robot) {
  * The per-handle constants of the list: everything that does not change with the pose,
  * computed once per scene.
  *
- * @param {typeof import("three")} THREE
  * @param {object} robot  The payload.
  * @param {ReturnType<typeof import("@cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
  */
-export function prepareRobotJointHandles(THREE, robot, scene) {
+export function prepareRobotJointHandles(robot, scene) {
   const articulation = robot?.articulation || null;
   const prepared = [];
   for (const handle of robotPosableHandles(robot)) {

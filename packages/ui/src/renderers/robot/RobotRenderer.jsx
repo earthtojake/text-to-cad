@@ -127,7 +127,7 @@ function RobotSurface({ view, data }) {
   const shellRef = useRef(null);
   // A highlight recolours links and casts no new shadow: its frame keeps the shadow maps.
   const requestHighlightFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
-  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame, shown: true });
+  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const live = useMemo(() => ({
@@ -160,7 +160,7 @@ function RobotSurface({ view, data }) {
     shellRef.current?.syncSceneBounds();
     shellRef.current?.scheduleStateSave();
   }, []);
-  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored, shown: true });
+  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored });
   // The slices are read when the view is WRITTEN: the pose lives outside React; the hidden ids
   // are React state, both against the payload's revision. Until the robot has loaded there is
   // nothing to say, and what was stored is kept.
@@ -232,7 +232,7 @@ function RobotSurface({ view, data }) {
   previewSceneRef.current = previewScene;
   useLayoutEffect(() => {
     if (!scene || !pose || !robot) { handlesRef.current = NO_HANDLES; return undefined; }
-    const prepared = prepareRobotJointHandles(THREE, robot.robot, scene);
+    const prepared = prepareRobotJointHandles(robot.robot, scene);
     let boundsFrame = 0;
     const readHandles = () => { handlesRef.current = robotJointHandles(THREE, prepared, scene, pose.getSnapshot().values, pose.write); };
     const present = () => {
@@ -284,8 +284,7 @@ function RobotSurface({ view, data }) {
   const poseActive = selectActive && posable && selects(selectFilter, "position");
   const picksLinks = selectActive && selects(selectFilter, "links");
 
-  // Choosing a link or an object under another tool returns to Select first; its Links and the
-  // Reference for what was chosen are Select's panels, so they are then on screen.
+  // Choosing a link or an object under another tool returns to Select first: picking is Select's.
   const toSelect = useCallback(() => selectTool(ROBOT_TOOL.SELECT), [selectTool]);
   const treeSelection = useMemo(() => ({
     ...selection,
@@ -311,7 +310,7 @@ function RobotSurface({ view, data }) {
   const sidebarShown = !shell.previewing;
   const sidebar = <>
     <LinksSection key={modelKey} active={sidebarShown} robot={robot?.robot || null} components={robot?.components}
-      parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} onOpenFile={view.onOpenFile} />
+      parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} />
     {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed>
       <SdfSection info={robot?.robot?.sdf || null} />
     </ToolPanel> : null}
@@ -339,7 +338,9 @@ function RobotSurface({ view, data }) {
   const pickedIds = () => [...selectionRef.current.selectedLinkNames.map(name => `link:${name}`), ...selectionRef.current.selectedComponentIds];
   const contextMenuItems = scene && !shell.previewing && toolMode === ROBOT_TOOL.SELECT ? press => sceneMenuEntries({
     press, viewport: viewportRef.current, scene, selected: pickedIds(), t,
-    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selectedLinkNames, hit.linkName].filter(Boolean))]),
+    // A link whose name no reference can spell is left out, as `copyLinks` leaves it.
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selectedLinkNames, hit.linkName])]
+      .filter(name => isLabelSelector(String(name || "")))),
     onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
     onSelect: (hit, selected) => (hit.componentId ? selection.select(hit.componentId, { multiSelect: selected }) : selection.selectLink(hit.linkName, { multiSelect: selected })),
     viewer: () => shellRef.current?.frame.viewerRef.current || null,
