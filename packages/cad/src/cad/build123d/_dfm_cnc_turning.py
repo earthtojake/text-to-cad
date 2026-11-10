@@ -14,7 +14,8 @@ so), a ``flat`` (one plane along the axis), a ``slot`` (planes along the axis fa
 **Diameters** are the convex coaxial cylinders (diameter, length along the axis); **bores** the holes on the
 axis; **grooves** the coaxial cylinders whose both ends meet planes square to the axis by concave edges: an
 outside (OD) groove's floor is convex, an internal (ID) groove's concave; width along the axis, depth to the
-lower shoulder. The **length** and **largest diameter** are taken over points along every edge and sampled on
+lower shoulder, ``depth_to_width``, and for an internal one the bore its tool enters by (``entry_diameter_mm``:
+the wider of the two bores beside it, the tool's best case) and ``depth_to_entry``. The **length** and **largest diameter** are taken over points along every edge and sampled on
 every face (exact for the planes and cylinders a turned part is made of).
 """
 
@@ -191,15 +192,21 @@ def _groove_floors(model: Model, on: list[int], on_set: set[int], origin: np.nda
         if len(ends) < 2:
             continue
         r = float(s.radius)
+        entry = None
         if s.concave is False:
             shoulders = [float(_radial(model.outline(side), origin, axis).max()) for side in ends.values()]
             depth = min(shoulders) - r
         else:
             shoulders = [float(_radial(model.outline(side), origin, axis).min()) for side in ends.values()]
             depth = r - max(shoulders)
+            entry = 2.0 * max(shoulders)  # the wider of the two bores beside it: the way its tool comes in at best
         if depth <= 1e-6:
             continue
-        found[i] = {"internal": bool(s.concave), "width_mm": round(high - low, 4), "depth_mm": round(depth, 4),
+        width = high - low
+        found[i] = {"internal": bool(s.concave), "width_mm": round(width, 4), "depth_mm": round(depth, 4),
+                    "depth_to_width": round(depth / width, 9) if width > 1e-9 else None,
+                    "entry_diameter_mm": round(entry, 4) if entry else None,
+                    "depth_to_entry": round(depth / entry, 9) if entry and entry > 1e-9 else None,
                     "diameter_mm": round(2 * r, 4), "location": model.ref(i),
                     "faces": [model.ref(i)] + [model.ref(side) for side in ends.values()], "xyz": model.center(i)}
     return found

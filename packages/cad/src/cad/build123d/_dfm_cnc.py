@@ -1,7 +1,9 @@
 """cnc's measurements of exact geometry (``cad._internal.dfm.cnc`` says what they are for).
 
 Each part of the document is measured on its own B-rep (``_dfm_cnc_model.Model``), and every family's items
-say which part and face they are at (``plate/face 7``). Each part is machined in its own frame
+say which part and face they are at (``plate/face 7``). A part that holds several solids is measured solid by
+solid, each a part of its own (``_solids``: a tool machines one piece of stock into one solid); one of more
+faces than ``FACE_BUDGET`` is not measured, and said. Each part is machined in its own frame
 (``_dfm_cnc_model.machine_frame``: the axes its faces' normals and its holes' axes square, never the world's), so
 a part turned in its model reads as drawn: it is measured turned into that frame, every place and direction
 it reports turned back to its own coordinates (``machine.frames`` says each part's). "World axis" below is
@@ -65,7 +67,8 @@ the machine frame's. The families, and how each is measured:
   that is a reported corner's run through a small edge round at its end is folded into that corner
   (``folded_edges``, see ``_fold``), not listed again.
 - ``walls``: the thickness under each face (an exact ray into the material from points sampled on it, to the
-  first face across that faces the other way), the thinnest per face under 5 mm, with the wall's height. The
+  first face across that faces the other way), the thinnest per face under 5 mm, with the wall's height, and
+  whether it is a thin feature that stands (``_standing``: a fin, a rib, a pin, what it stands to). The
   listed items are then refined to the exact minimum distance between the face and the face across
   (``BRepExtrema_DistShapeShape``), kept where that segment runs through the material near square to the
   face. A face across that meets the face at a knife edge is no wall: ``knife_edges`` reports it.
@@ -83,9 +86,13 @@ the machine frame's. The families, and how each is measured:
   and the fixtures they need; the faces no direction
   reaches, and whether any direction at all (a five-axis machine's) would. Five axes try every direction a
   four-axis machine would (each 15 degrees about each world axis) before probing the sphere, so they reach
-  at least what four do. A hole or pocket along no direction the machine has adds its own orientation and
-  clamping (``inclined_directions``).
-- ``voids``: closed cavities inside the material (a solid's inner shells).
+  at least what four do. A face no straight line reaches is tried for a disc cutter on a straight shank
+  (``_disc_reach``): made only where one gets to it through an opening that holds the disc
+  (``disc_reach``, ``no_tool_fraction``); the faces of one recess are one item. A hole is a setup's along
+  its axis alone, whole (``_setup``); a hole or pocket along no direction the machine has adds its own
+  orientation and clamping (``inclined_directions``). The stock's own faces are no setup's
+  (``_stock_faces``): a bare block takes none.
+- ``voids``: closed cavities inside the material (a solid's inner shells); their edges are no other family's.
 - ``stock``: the part's box or ``--stock``, the material removed, the part's size sorted.
 - ``small_features``: the shortest edge, the smallest face, and the faces narrower than half a millimetre.
 - with ``turning`` (``_dfm_cnc_turning``): the axis, how much of the part turns about it, its diameters,
@@ -101,6 +108,7 @@ A figure the geometry does not give is None, never a guess. Lengths are millimet
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from typing import Any, Callable
 
@@ -119,6 +127,10 @@ __all__ = ["measure"]
 
 #: Items a family keeps, worst first; the family counts the rest.
 CAP = 200
+#: A part of more faces than this is not measured, and said (``model``: not measured, never passed): the rays a
+#: check casts grow with the faces, and each costs with the edges of the face it crosses -- a plate of 576 holes
+#: takes most of a minute, one of tens of thousands of faces hours. text-to-cad's own bound.
+FACE_BUDGET = 20000
 WALL_CAP_MM = 5.0
 GAP_CAP_MM = 10.0
 TINY_MM = 0.5
@@ -177,10 +189,43 @@ DISC_POINTS = 24
 SHANK_TRIES = 12
 
 
+@dataclasses.dataclass
+class _Solid(brep.Part):
+    """One solid of a part that holds several: a part of its own to machine (its own stock, frame, setups and
+    access: another solid of the part is no obstacle to its tools), its refs the whole part's (``face_refs``,
+    ``edge_refs``: its ordinals to the part's)."""
+
+    face_refs: tuple[int, ...] = ()
+    edge_refs: tuple[int, ...] = ()
+
+    def ref(self, kind: str, ordinal: int) -> str:
+        table = self.face_refs if kind == "face" else self.edge_refs if kind == "edge" else ()
+        return super().ref(kind, table[ordinal - 1] if 0 < ordinal <= len(table) else ordinal)
+
+
+def _solids(part: brep.Part) -> list[brep.Part]:
+    """``part``, or where it holds several solids each of them as a part of its own (``_Solid``): a tool
+    machines one piece of stock into one solid, so each is judged alone."""
+    solids = part.solids()
+    if len(solids) < 2:
+        return [part]
+    found: list[brep.Part] = []
+    for number, solid in enumerate(solids, start=1):
+        own = _Solid(name=f"{part.name} (solid {number} of {len(solids)})", owner=part.owner, shape=solid,
+                     occurrences=part.occurrences, paths=part.paths, material=part.material)
+        own.face_refs = tuple(part.face_ordinal(face) for face in own.faces())
+        own.edge_refs = tuple(part.edge_ordinal(edge) for edge in own.edges())
+        found.append(own)
+    return found
+
+
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The cnc report of ``document``: facts alone, every family's ``items`` at a ref."""
     if not document.parts:
         raise Unmeasured("no_geometry", "the document has no part to measure")
+    # each solid is a part to machine: a part holding several is judged solid by solid, and said
+    parts = [own for part in document.parts for own in _solids(part)]
+    several = [part for part in document.parts if len(part.solids()) > 1]
     axes = int(options.get("axes") or 3)
     turning = bool(options.get("turning"))
     tools = rules_side.tools(options.get("tools"))
@@ -196,7 +241,8 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     # its own refs and places -- where it is measured as it would be alone, in the same machine frame turned with
     # it (its own frame, read from its geometry, the measured one's moved: a copy turned by a right angle, which
     # the frame's tie to the world reads square again, is a frame of its own, measured anew).
-    copies = brep.copies(document.parts) if len(document.parts) > 1 else {}
+    # (not among the solids of one part: their refs are the whole part's, each its own)
+    copies = brep.copies(parts) if len(parts) > 1 and not several else {}
     model_of: dict[int, int] = {}
     shares: dict[int, dict[str, Any]] = {}
     measured: dict[int, list[int]] = {}  # a geometry's first part's index -> the parts of it measured
@@ -205,9 +251,14 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     lost: dict[int, dict[str, set[int]]] = {}
     missed: dict[int, dict[int, int]] = {}
     owners: list[brep.Part] = []  # per model: the part it stands for (a copy's own, for its refs)
-    for index, part in enumerate(document.parts):
+    for index, part in enumerate(parts):
         checkpoint()
         copy = copies.get(index)
+        if len(part.faces()) > FACE_BUDGET:
+            failed.setdefault("model", f"{part.name}: {len(part.faces())} faces, over the {FACE_BUDGET} a check "
+                              "measures in one part: not measured (check its features in smaller pieces, or "
+                              "without its pattern of fine detail)")
+            continue
         try:
             surfaces = [brep.surface(face) for face in part.faces()]
             # the part is machined in its own frame (``machine_frame``): measured turned into it, every place
@@ -234,9 +285,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             models.append(models[first])
             frames.append(frames[first])  # the frame its items were measured in
             model_of[index] = len(models) - 1
-            framing.append({**own, "copy_of": document.parts[done].owner or document.parts[done].name})
+            framing.append({**own, "copy_of": parts[done].owner or parts[done].name})
             for name, items in families.items():
-                items.extend([{**item, "_model": len(models) - 1, "_copy": (between, document.parts[done], part)}
+                items.extend([{**item, "_model": len(models) - 1, "_copy": (between, parts[done], part)}
                               for item in items if item.get("_model") == first and "_copy" not in item])
             _add_shares(scalars, shares.get(first, {}))
             lost[len(models) - 1] = {name: set(faces) for name, faces in lost.get(first, {}).items()}
@@ -297,13 +348,19 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                     lost[item["_model"]].setdefault(name, set()).update(new)
             items[:CAP] = sorted(items[:CAP], key=_ORDER[name])
             # one wall (or gap) between two faces is one item: each face's ray finds the other
-            pairs: set[tuple[int, frozenset[int]]] = set()
+            pairs: dict[tuple[int, frozenset[int]], dict[str, Any]] = {}
             folded = []
             for item in items:
                 key = (item["_model"], frozenset((item["_face"], item["_opposite"])))
                 if key not in pairs:
-                    pairs.add(key)
+                    pairs[key] = item
                     folded.append(item)
+                elif item.get("standing") and not pairs[key].get("standing"):
+                    # the wall stands where either side does: that side's height is the wall's
+                    kept = pairs[key]
+                    kept.update(standing=True, height_mm=item["height_mm"],
+                                height_to_thickness=round(item["height_mm"] / kept["thickness_mm"], 9)
+                                if kept.get("thickness_mm") else None)
             items = folded
         if name == "gaps":
             # one cavity's width is one item: its narrowest gap, the others named beside it
@@ -337,6 +394,12 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         report["model"] = {"error": failed["model"]}
     report["partial_sections"] = sorted(name for name in failed)
     report["partial"] = bool(failed)
+    for part in several:
+        unintersected.append({
+            "severity": "info", "code": "cnc.solids_judged_apart", "location": part.ref("face", 1),
+            "message": f"{part.owner or part.name} holds {len(part.solids())} separate solids: each is judged as a "
+                       "part of its own (its own stock, setups and tool access), as each is machined",
+            "hint": "export them as an assembly's parts, or fuse them where they are one piece"})
     if unintersected:
         report["findings"] = unintersected
     return report
@@ -391,6 +454,44 @@ def _one_cause(model: Model, index: int, state: dict[str, Any], families: dict[s
             if pair <= faces:
                 item["pocket"] = pocket["floor"] or pocket["location"]
                 break
+    # one recess, one item: the faces no straight tool reaches that share an edge are one feature, judged at
+    # its worst face (the others listed in ``faces``)
+    judged = [item for item in access if item.get("kind") in ("undercut", "no_line_of_sight")
+              and item.get("part_of") is None]
+    by_face = {_ordinal(item["location"]): item for item in judged}
+    seen: set[int] = set()
+    dropped: set[int] = set()
+    for seed in sorted(by_face):
+        if seed in seen:
+            continue
+        group, frontier = [seed], [seed]
+        seen.add(seed)
+        while frontier:
+            for _, other in model.neighbours(frontier.pop()):
+                # (a hole's undercut faces are that hole's, its fix naming its axis; a face no line reaches at
+                # all is its recess's, a bore's wall or not)
+                keys = ("kind",) if by_face[seed]["kind"] == "no_line_of_sight" else ("kind", "hole", "hole_axis")
+                if other in by_face and other not in seen and all(
+                        by_face[other].get(key) == by_face[seed].get(key) for key in keys):
+                    seen.add(other)
+                    group.append(other)
+                    frontier.append(other)
+        members = [by_face[face] for face in sorted(group)]
+        head = max(members, key=lambda item: (item.get("no_tool_fraction") or 0.0,
+                                              item["unreached_fraction"] * item.get("_area", 1.0)))
+        for key in ("unreached_fraction", "unreached_any_direction_fraction", "no_tool_fraction"):
+            if head.get(key) is not None:
+                head[key] = max(item[key] for item in members)
+        if "disc_reach" in head:
+            head["disc_reach"] = all(item["disc_reach"] for item in members)
+        head["faces"] = [item["location"] for item in members][:20]
+        head["face_count"] = len(members)
+        # said by ordinal, the part being the location's: a copy's item is said again at its own refs
+        head["faces_said"] = ", ".join(ref.rsplit("/", 1)[-1] for ref in head["faces"][:8]) + (
+            f" and {len(members) - 8} more" if len(members) > 8 else "")
+        dropped |= {id(item) for item in members if item is not head}
+    if dropped:
+        families["access"][:] = [item for item in families["access"] if id(item) not in dropped]
 
 
 def _ordinal(ref: str) -> int:
@@ -523,6 +624,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     state["void_faces"] = {face for void in voids for face in void["_faces"]}
     state["hole_faces"] = hole_faces | thread_faces
     state["hole_axis"] = {face: ", ".join(f"{v:g}" for v in hole["axis"]) for hole in holes for face in hole["_faces"]}
+    state["holes"] = [(set(hole["_faces"]), unit(hole["axis"])) for hole in holes]
     families.setdefault("voids", []).extend(voids)
     knives = run("knife_edges", lambda: _knife_edges(model, state)) or []
     families.setdefault("knife_edges", []).extend(knives)
@@ -566,7 +668,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     new = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces], was)
     if new:
         lost.setdefault("setups", set()).update(new)
-    if access and sharp is not None and (sharp["made_from"] or sharp["special"]):
+    if access and access["cover"] is not None and sharp is not None and (sharp["made_from"] or sharp["special"]):
         # the setups again, now the sharp edges an end mill makes are known: each needs one of its directions;
         # a special cutter's recess is its own (made along the cutter's axis, which the faces around its way in
         # bring), no face of it asking a direction of its own
@@ -680,11 +782,17 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
     directions that reach them (greedy set cover), and the faces left unreached."""
     axes = state["axes"]
     void_faces = state["void_faces"]
-    stock_faces = set() if state["stock"] else _stock_faces(model)
+    stock_faces = _stock_faces(model, state["stock"])
     faces = [i for i in range(1, model.n + 1)
              if i not in void_faces and i not in stock_faces and i not in state["thread_faces"]]
     if not faces:
-        faces = [i for i in range(1, model.n + 1) if i not in void_faces]
+        # the stock as it comes: no face to cut, no setup (one convention: a face of the stock's own is no
+        # setup's, whether it leaves a pocket's faces to cut or none)
+        largest = model.largest()
+        setup = {"setup_count": 0, "orientation_count": 0, "directions": [], "unreached_area_fraction": 0.0,
+                 "rotary_axis": None, "sampled_points": 0, "part": model.part.name, "location": model.ref(largest),
+                 "xyz": model.center(largest)}
+        return {"items": [], "setup": setup, "directions": directions_for(axes), "rotary": None, "cover": None}
     owner: list[int] = []
     points_l, normals_l, areas_l = [], [], []
     for i in faces:
@@ -723,7 +831,29 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             reach[len(candidates)] = r
             candidates.append(d)
     probes = _probe_directions(model)
+
+    def own_axes(left: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
+        # each face of revolution's own axis, either way, on its points in ``left``: a deep bore's wall sees out
+        # along its axis alone, which a probe of a few hundred directions over the sphere may never try
+        found = []
+        for i in sorted(set(owner_a[left].tolist())):
+            s = model.surface(i)
+            if s.kind in ("cylinder", "cone", "torus") and s.axis is not None:
+                for d in (unit(s.axis), -unit(s.axis)):
+                    idx = np.flatnonzero((owner_a == i) & left)
+                    r = np.zeros(len(points), dtype=bool)
+                    r[idx] = _reach(model, points[idx], normals[idx], d)
+                    if r.any():
+                        found.append((d, r))
+                        left = left & ~r
+        return found
+
     if axes == 5:
+        for d, r in own_axes(residual):
+            if not any(float(d @ known) > SAME for known in candidates):
+                reach[len(candidates)] = r
+                candidates.append(d)
+                residual &= ~r
         # every direction a four-axis machine has, about each world axis, on the points the six miss: five
         # axes reach at least what four do; the sphere's probe then takes what is left
         for axis in np.eye(3):
@@ -749,8 +879,12 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
     # would any direction at all reach the points the machine does not?
     anywhere = reachable_any.copy()
     if axes < 5 and unreached.any():
-        for _, r in _probe(model, points, normals, owner_a, np.flatnonzero(unreached), probes):
+        for _, r in own_axes(unreached):
             anywhere |= r
+        for _, r in _probe(model, points, normals, owner_a, np.flatnonzero(~anywhere), probes):
+            anywhere |= r
+    # and where no straight line does: does a disc cutter on a straight shank get to it (``_disc_reach``)?
+    by_disc = _disc_reach(model, points, normals, owner_a, np.flatnonzero(~anywhere), probes)
     items = []
     for i in faces:
         mask = owner_a == i
@@ -761,13 +895,19 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
         if missed <= 0.0:
             continue
         nowhere = float(areas[mask & ~anywhere].sum()) / total
-        where = points[np.flatnonzero(mask & unreached)[0]]
-        items.append({"unreached_fraction": round(missed, 9), "unreached_any_direction_fraction": round(nowhere, 9),
-                      "kind": "no_line_of_sight" if nowhere > 0 else "undercut",
-                      "hole": i in state.get("hole_axis", {}), "hole_axis": state.get("hole_axis", {}).get(i),
-                      "surface": model.surface(i).kind, "location": model.ref(i), "xyz": brep.rounded(where)})
+        where = points[np.flatnonzero(mask & (~anywhere if nowhere > 0 else unreached))[0]]
+        item = {"unreached_fraction": round(missed, 9), "unreached_any_direction_fraction": round(nowhere, 9),
+                "kind": "no_line_of_sight" if nowhere > 0 else "undercut",
+                "hole": i in state.get("hole_axis", {}), "hole_axis": state.get("hole_axis", {}).get(i),
+                "surface": model.surface(i).kind, "location": model.ref(i), "xyz": brep.rounded(where),
+                "_area": total}
+        if nowhere > 0:
+            # the share of the face neither a straight line nor a disc cutter with a way in reaches
+            share = by_disc.get(i, 0.0)
+            item.update(no_tool_fraction=round(nowhere * (1.0 - share), 9), disc_reach=bool(share >= 1.0))
+        items.append(item)
     cover = {"reach": reach, "areas": areas, "owner": owner_a, "points": points, "normals": normals, "candidates": candidates, "rotary": rotary,
-             "axes": axes, "unreached": unreached}
+             "axes": axes, "unreached": unreached, "holes": state.get("holes") or []}
     return {"items": items, "setup": _setup(model, cover), "directions": candidates, "rotary": rotary,
             "cover": cover}
 
@@ -782,6 +922,28 @@ def _setup(model: Model, cover: dict[str, Any], made_from: dict[int, Needs] | No
     reach, areas, owner = cover["reach"], cover["areas"], cover["owner"]
     candidates = list(cover["candidates"])
     reach = dict(reach)
+    # a hole is drilled whole, along its axis: its faces are a setup's only along it, and from the end that
+    # reaches all of it (a line that grazes part of its wall from another side cuts none of it: a hole at 60
+    # degrees asked three setups of the faces it shows them). One along no direction the machine has is its
+    # own setup (``inclined_directions``); five axes present its axis.
+    drilled = np.zeros(len(areas), dtype=bool)
+    for faces, axis in cover.get("holes") or ():
+        mine = np.isin(owner, list(faces))
+        if not mine.any():
+            continue
+        along = [k for k, c in enumerate(candidates) if abs(float(c @ axis)) > SAME and k in reach]
+        if not along and cover["axes"] >= 5:
+            for d in (axis, -axis):
+                reach[len(candidates)] = _reach(model, cover["points"], cover["normals"], d)
+                along.append(len(candidates))
+                candidates.append(d)
+        if not along:
+            drilled |= mine
+            continue
+        whole = [k for k in along if reach[k][mine].all()]
+        for k in list(reach):
+            if k not in (whole or along):
+                reach[k] = reach[k] & ~mine
     needs: list[set[int]] = []
     for made in (need for needs in (made_from or {}).values() for need in needs):
         if any(float(d @ k) > SAME for d, _ in made for k in known or ()):
@@ -797,8 +959,8 @@ def _setup(model: Model, cover: dict[str, Any], made_from: dict[int, Needs] | No
             need.add(k)
         needs.append(need)
     tiny = 1e-12 * max(1.0, model.area)
-    # a special cutter's recess faces (``recess``) are its: covered from the start
-    given = np.isin(owner, list(recess)) if recess else np.zeros(len(areas), dtype=bool)
+    # a special cutter's recess faces (``recess``) are its, an inclined hole's its own setup's: covered from the start
+    given = (np.isin(owner, list(recess)) if recess else np.zeros(len(areas), dtype=bool)) | drilled
     covered = given.copy()
     met = [False] * len(needs)
     chosen: list[int] = []
@@ -838,6 +1000,125 @@ def _setup(model: Model, cover: dict[str, Any], made_from: dict[int, Needs] | No
             "rotary_axis": brep.rounded(rotary) if rotary is not None else None,
             "sampled_points": int(len(areas)), "part": model.part.name,
             "location": model.ref(largest), "xyz": model.center(largest)}
+
+
+#: A face no straight line reaches is tried for a disc cutter on a straight shank (``_disc_reach``): at this many
+#: of its points at most, along the part's six axes and this many more of its own directions, across the void
+#: from each point this many ways about the shank's axis, from ``DISC_NEAR`` mm off the point outward.
+DISC_PROBED = 4
+DISC_DIRECTIONS = 6
+DISC_TURNS = 12
+DISC_NEAR = 0.02
+
+
+def _disc_reach(model: Model, points: np.ndarray, normals: np.ndarray, owner: np.ndarray, idx: np.ndarray,
+                probes: list[np.ndarray]) -> dict[int, float]:
+    """Per face, the share of its points no straight line reaches (``idx``; ``DISC_PROBED`` of them, spread)
+    that a disc cutter on a straight shank gets to -- a keyseat cutter down a bore, a T-slot cutter through an
+    opening, a lollipop: ``_disc_gets_to`` along the part's axes and its heaviest own directions."""
+    ways = list(WORLD)
+    for d in probes:
+        if len(ways) >= len(WORLD) + DISC_DIRECTIONS:
+            break
+        if not any(float(d @ known) > SAME for known in ways):
+            ways.append(d)
+    by_face: dict[int, list[int]] = {}
+    for index in idx:
+        by_face.setdefault(int(owner[index]), []).append(int(index))
+    found: dict[int, float] = {}
+    for face, mine in by_face.items():
+        picked = [mine[int(k * len(mine) / DISC_PROBED)] for k in range(DISC_PROBED)] if len(mine) > DISC_PROBED else mine
+        reached = 0
+        for index in picked:
+            for k, d in enumerate(ways):
+                if _disc_gets_to(model, points[index], normals[index], d):
+                    reached += 1
+                    ways.insert(0, ways.pop(k))  # the way that worked first, for the face's next point
+                    break
+        found[face] = reached / len(picked)
+    return found
+
+
+def _disc_gets_to(model: Model, p: np.ndarray, n: np.ndarray, d: np.ndarray) -> bool:
+    """Whether a disc cutter on a straight shank along ``d`` gets to the point ``p`` (its face's normal ``n``),
+    by geometry alone, its shank of no breadth: across the void from the point, square to ``d``, an opening is
+    found where lines along ``d`` leave the part (offsets doubling from ``DISC_NEAR``: any opening wide enough
+    holds one); the least disc that reaches the point has its shank at the opening's side nearest the point, its
+    radius the distance between; and that disc gets in where the opening holds it -- lines along ``d`` from its
+    rim, centred in the opening (on the chord across it, and on the chord across that: a bore's axis), leave
+    the part -- and, at the point, touches no material. A round chamber 12 mm in radius behind a 10 mm bore: the
+    disc that reaches its wall is 14 mm across, and does not pass. The travel from the opening to the point is
+    not judged, nor a recess fed from an open side (a straight line reaches into that one)."""
+    seed = np.array([1.0, 0.0, 0.0]) if abs(d[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = unit(np.cross(d, seed))
+    v = np.cross(d, u)
+    start = p + n * LIFT
+    flat = n - d * float(n @ d)
+    turns = np.linspace(0.0, 2.0 * math.pi, DISC_TURNS, endpoint=False)
+    # the face's own way across the void first (a chamber's wall looks at its bore's axis), then all round
+    ways = ([unit(flat)] if float(np.linalg.norm(flat)) > 0.1 else []) + [math.cos(t) * u + math.sin(t) * v for t in turns]
+    none = np.zeros(3)
+
+    def out(point: np.ndarray) -> bool:
+        return model.escapes(point, none, d)
+
+    def side(inside: np.ndarray, outside: np.ndarray) -> np.ndarray:
+        # the opening's side between a place a line along d leaves the part from and one it does not
+        for _ in range(20):
+            if float(np.linalg.norm(outside - inside)) < 1e-3:
+                break
+            middle = 0.5 * (inside + outside)
+            if out(middle):
+                inside = middle
+            else:
+                outside = middle
+        return inside
+
+    def wall(point: np.ndarray, way: np.ndarray) -> np.ndarray:
+        hit = model.first(point, way)
+        return point + way * (hit.distance if hit is not None else model.size)
+
+    for way in ways:
+        if float(way @ n) < -0.01:
+            continue
+        hit = model.first(start, way)
+        span = hit.distance if hit is not None else model.size
+        if span <= 2.0 * DISC_NEAR:
+            continue
+        offsets = DISC_NEAR * 2.0 ** np.arange(int(math.log2(span / DISC_NEAR)) + 1)
+        offsets = offsets[offsets < span - 1e-3]
+        escaped = model.escape_all(start + way * offsets[:, None], np.zeros((len(offsets), 3)), d)
+        if not escaped.any():
+            continue
+        j = int(np.argmax(escaped))
+        inside = start + way * offsets[j]
+        near = side(inside, start + way * (offsets[j - 1] if j else 0.0))
+        shut = np.flatnonzero(~escaped[j:])
+        far = side(inside, start + way * (offsets[j + int(shut[0])] if len(shut) else span))
+        middle = 0.5 * (near + far)
+        across = np.cross(d, way)
+        centre = 0.5 * (side(middle, wall(middle, across)) + side(middle, wall(middle, -across)))
+        for c in (middle, centre):
+            if not out(c):
+                continue
+            reach = float(np.linalg.norm(start - c))
+            toward = (start - c) / max(reach, 1e-12)
+            shank = side(c, start)  # where the shank stands nearest the point
+            radius = float(np.linalg.norm(start - shank))
+            if radius < 0.005:
+                return True
+            # the opening holds the disc (at its limit within the sides' own millimetre-thousandths: it does)
+            round_ = toward if float(np.linalg.norm(toward)) > 0.5 else way
+            other = np.cross(d, round_)
+            rim = np.array([c + (radius - 0.005) * (math.cos(t) * round_ + math.sin(t) * other)
+                            for t in np.linspace(0.0, 2.0 * math.pi, 8, endpoint=False)])
+            if not model.escape_all(rim, np.zeros((len(rim), 3)), d).all():
+                continue
+            ring = np.array([shank + 0.98 * radius * (math.cos(t) * round_ + math.sin(t) * other)
+                             for t in np.linspace(0.0, 2.0 * math.pi, DISC_POINTS, endpoint=False)])
+            if not model.solid(ring).any():
+                return True
+    return False
 
 
 #: Of the points no machine direction reaches, each face's first few are probed over every direction
@@ -933,9 +1214,18 @@ def _try(model: Model, points: np.ndarray, normals: np.ndarray, index: int,
     return False
 
 
-def _stock_faces(model: Model) -> set[int]:
-    """The planar faces on the part's box, facing out of it: the stock's own surface, which no setup cuts
-    when the stock is the part's box."""
+def _stock_faces(model: Model, stock: tuple[float, float, float] | None = None) -> set[int]:
+    """The planar faces on the part's box, facing out of it: the stock's own surface, which no setup cuts where
+    the stock is as long as the part along that axis -- the part's box (no ``--stock``), or a stock given whose
+    side there is the part's (its sides matched to the part's longest first, as its fit is judged: a stock
+    typed as the part's own box changes nothing)."""
+    size = model.box_max - model.box_min
+    close = 1e-6 + 1e-9 * model.size
+    flush = [True, True, True]
+    if stock is not None:
+        order = np.argsort(-size)
+        for axis, side in zip(order, sorted(stock, reverse=True)):
+            flush[int(axis)] = abs(float(side) - float(size[axis])) <= 1e-6 + 1e-6 * float(size[axis])
     found = set()
     for i in range(1, model.n + 1):
         s = model.surface(i)
@@ -943,10 +1233,10 @@ def _stock_faces(model: Model) -> set[int]:
             continue
         n = np.asarray(s.normal)
         for axis in range(3):
-            if abs(n[axis]) > SAME:
+            if abs(n[axis]) > SAME and flush[axis]:
                 plane = float(np.asarray(s.origin)[axis])
                 edge = model.box_max[axis] if n[axis] > 0 else model.box_min[axis]
-                if abs(plane - edge) < 1e-6:
+                if abs(plane - edge) < close:
                     found.add(i)
     return found
 
@@ -1082,12 +1372,62 @@ def _walls(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
     for item in _across(model, state, False, WALL_CAP_MM):
         i = item["_face"]
         thickness = item.pop("distance")
-        height = _height(model, i)
+        standing = _standing(model, i) if _even(model, i, item["_opposite"]) else None
+        height = standing if standing else _height(model, i)
         item.update(thickness_mm=round(thickness, 9), height_mm=round(height, 4) if height else None,
-                    height_to_thickness=round(height / thickness, 4) if height and thickness > 0 else None,
-                    surface=model.surface(i).kind)
+                    height_to_thickness=round(height / thickness, 9) if height and thickness > 0 else None,
+                    standing=bool(standing), surface=model.surface(i).kind)
         items.append(item)
     return items
+
+
+def _even(model: Model, a: int, b: int) -> bool:
+    """Whether the material between two faces is of one thickness: two planes facing apart within ten degrees
+    (a fin's sides; a dovetail's lip, a wedge, is not), or one round pin's own face or faces."""
+    sa, sb = model.surface(a), model.surface(b)
+    if sa.kind == sb.kind == "plane":
+        return float(np.asarray(sa.normal) @ np.asarray(sb.normal)) < -0.985
+    if sa.kind == sb.kind == "cylinder" and sa.concave is False and sb.concave is False:
+        return a == b or (abs(float(unit(sa.axis) @ unit(sb.axis))) > SAME
+                          and abs(float(sa.radius) - float(sb.radius)) < 1e-6 * max(1.0, float(sa.radius)))
+    return False
+
+
+def _standing(model: Model, ordinal: int) -> float | None:
+    """The height a thin feature stands to, or None where the face is no standing feature's: a plane that
+    rises from a concave root edge at one end with no concave edge across its other end (a fin, a rib, a wall
+    beside a pocket -- not a floor, held all round, nor a plate's face), or a convex cylinder with a concave
+    edge at one end alone (a pin, a boss); a root fillet (a tangent concave round) is a root too."""
+    s = model.surface(ordinal)
+
+    def root(edge: Any, other: int) -> bool:
+        if edge.concave and not edge.smooth:
+            return True
+        return bool(edge.smooth and model.surface(other).kind in ("cylinder", "torus") and model.surface(other).concave)
+
+    roots = [edge for edge, other in model.neighbours(ordinal) if other != ordinal and root(edge, other)]
+    if not roots:
+        return None
+    close = 1e-4 + 1e-6 * model.size
+    if s.kind == "plane":
+        base = max(roots, key=lambda edge: edge.length)
+        h = unit(np.cross(np.asarray(s.normal), np.asarray(base.tangent)))
+        at = float(np.asarray(base.midpoint) @ h)
+        low, high = model.extent(ordinal, h)
+        if abs(at - low) > abs(at - high):
+            h, at, (low, high) = -h, -at, (-high, -low)
+        across = [edge for edge in roots if abs(float(np.asarray(edge.tangent) @ h)) < 0.5]
+        if abs(at - low) > close or any(abs(float(np.asarray(edge.midpoint) @ h) - high) < close for edge in across):
+            return None
+        return high - low if high - low > close else None
+    if s.kind == "cylinder" and s.concave is False and s.axis is not None:
+        axis = unit(s.axis)
+        low, high = model.extent(ordinal, axis)
+        ends = [float(np.asarray(edge.midpoint) @ axis) for edge in roots]
+        at_low = any(abs(e - low) < close for e in ends)
+        at_high = any(abs(e - high) < close for e in ends)
+        return high - low if at_low != at_high and high - low > close else None
+    return None
 
 
 def _touching(model: Model, a: int, b: int) -> bool:
@@ -1154,7 +1494,7 @@ def _knife_edges(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
     """Convex edges whose material angle along them falls under ``KNIFE_DEG``: the material thins to nothing
     there. A curved edge's angle is read along it, not at its middle alone (an edge where a cone meets a sphere
     runs from 63 to 42 degrees): ``angle_deg`` the least, ``length_mm`` the stretch under the limit."""
-    skip = state["thread_faces"]
+    skip = state["thread_faces"] | state["void_faces"]
     items = []
     fractions = np.linspace(0.0, 1.0, KNIFE_PROFILE)
     for edge in model.edges:
@@ -1238,10 +1578,14 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
         return found
 
     hole_faces = state["hole_faces"]
+    void_faces = state["void_faces"]
     ways: dict[str, int] = {}
     for edge in model.edges:
         if not edge.concave or edge.smooth:
             continue
+        if edge.faces[0] in void_faces or edge.faces[1] in void_faces:
+            ways["enclosed_void"] = ways.get("enclosed_void", 0) + 1
+            continue  # a closed cavity's own edge: no tool enters it, and the void is the one defect (``voids``)
         if edge.faces[0] in hole_faces and edge.faces[1] in hole_faces:
             ways["drill"] = ways.get("drill", 0) + 1
             continue  # a drill's point, a counterbore's or a countersink's root: the hole's own tool makes it
@@ -1940,7 +2284,7 @@ def _fold(model: Model, items: list[dict[str, Any]], corners: list[dict[str, Any
             shape = edges[corner["_edge"] - 1]
             faces = set(edge_of[corner["_edge"]].faces)
         else:
-            ordinal = int(corner["location"].rsplit(" ", 1)[1])
+            ordinal = int(corner["corner"].rsplit(" ", 1)[1])
             shape, faces = model.face(ordinal), {ordinal}
         rounds: dict[int, float] = {}
         smooth = set()
@@ -2048,6 +2392,7 @@ def _pockets(model: Model, state: dict[str, Any], only: set[int] | None = None) 
                   "depth_from_top_mm": round(top - level, 4),
                   "width_mm": round(width, 4) if width is not None else None,
                   "depth_to_width": round(depth / width, 9) if width else None,
+                  "micro_tool": bool(width and width < rules_side.MICRO_TOOL_MM - 1e-9),
                   "open_boundary_fraction": round(open_length / total, 4),
                   "floor_radius_mm": round(root, 4) if root is not None else None,
                   "axis": brep.rounded(d, 4), "aligned": _allowed({"axes": 3}, d),
@@ -2212,6 +2557,7 @@ def _through(model: Model, state: dict[str, Any], claimed: set[int],
                             "depth_from_top_mm": round(reach, 4),
                             "width_mm": round(width, 4) if width is not None else None,
                             "depth_to_width": round(depth / width, 9) if width else None,
+                            "micro_tool": bool(width and width < rules_side.MICRO_TOOL_MM - 1e-9),
                             "open_boundary_fraction": None, "floor_radius_mm": None,
                             "axis": brep.rounded(way, 4), "aligned": True, "wall_count": len(group), "floor": None,
                             "location": ref, "width_faces": [model.ref(f) for f in pair] if pair else None,
@@ -2307,7 +2653,11 @@ def _corner(model: Model, radius: float, height: float, depth: float, tools: tup
               "third_of_depth_mm": round(max(height, 0.0) / 3.0, 4),
               "tool_mm": round(tool, 4) if tool else None,
               "reach_ratio": round(depth / tool, 9) if tool else None,
-              "axis": brep.rounded(axis, 4), "pocket": pocket, "location": location, "faces": faces,
+              # a tool under 1 mm across is a micro tool: it reaches less (the rules' own floor)
+              "micro_tool": bool(tool and tool < rules_side.MICRO_TOOL_MM - 1e-9),
+              # one cavity, one finding a rule: a corner is said at its cavity's ref (``pocket``), which its
+              # other corners share; ``corner`` is its own face (a sharp one's: its edge's first face)
+              "axis": brep.rounded(axis, 4), "pocket": pocket, "corner": location, "location": pocket, "faces": faces,
               "xyz": xyz, "unreached_mm": None, "unreached": "", "_edge": edge}
     if edge is not None:
         corner["edge"] = model.part.ref("edge", edge)

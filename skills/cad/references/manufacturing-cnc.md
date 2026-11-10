@@ -7,7 +7,8 @@ the same for every process; this is what is particular to milling and turning.
 ## Design it
 
 What a part built for milling has from its first line, so its first check passes or nearly (the
-rules' numbers, general practice from Protolabs Network's guide; `--tools` moves them):
+rules' numbers: general practice from Protolabs Network's guide where it states one, text-to-cad's own
+floor where it does not, each finding saying which; `--tools` moves the tool's):
 
 - **Stock and setups.** Start from the blank (`--stock`, else the part's box) and put the features on
   as few sides as can be: each side a tool must face is a setup, five at most (Hubs: a part rotated
@@ -19,22 +20,38 @@ rules' numbers, general practice from Protolabs Network's guide; `--tools` moves
   internal corner gets a radius -- at least half the smallest end mill (with no `--tools`, 1.25 mm or
   more is recommended), and a third of the cavity's depth where the design allows -- never a sharp
   corner, which no round tool cuts (the error): `part = part.fillet(r, part.edges().filter_by(bd.Axis.Z).filter_by(inside_the_pocket))`
-  after the cut. Depth at most four times the width (a tool reaches three to four diameters). The
-  floor-to-wall root may stay sharp. A hex or an odd-angle socket cannot be milled sharp: give its
-  corners a radius or call out a broach.
+  after the cut. Depth at most four times the width (a tool reaches three to four diameters); past 30
+  widths no tool reaches the floor (an error), and a corner or a slot that takes a tool under 1 mm is
+  made ten of that tool's diameters deep at most (an error past it: a 0.1 mm corner radius 6 mm down
+  is EDM's). The floor-to-wall root may stay sharp. A hex or an odd-angle socket cannot be milled
+  sharp: give its corners a radius or call out a broach.
 - **Holes.** Standard drill diameters (6.8 mm for M8, 4.2 for M5, 6.6 for an M6 clearance; `cnc.drill_size`
-  names the nearest), none under 1 mm (an error), depth at most four diameters -- a counterbore's and a
-  stepped bore's larger step too, each over its own diameter -- and a thread as its tap-drill hole with a
-  callout, not modelled.
+  names the nearest), 1 mm or more (under it a hole is micro-drilled, a warning; under 0.05 mm an
+  error), depth at most four diameters -- a counterbore's and a stepped bore's larger step too, each
+  over its own diameter -- and a thread as its tap-drill hole with a callout, not modelled.
 - **Walls and gaps.** Walls 0.8 mm or more in metal, 1.5 mm in plastic (0.5 / 1.0 are the floor);
-  gaps 2.5 mm or wider (or the smallest tool).
+  gaps 2.5 mm or wider (or the smallest tool). A thin wall, rib or pin (under 5 mm) standing more
+  than four times its thickness chatters as it is cut (`cnc.tall_feature`, a warning): shorten it,
+  thicken it or tie it to a neighbour.
 - **Reach.** Every face seen straight from one of the part's six axis directions (3 axes; its own
   frame, not the world's); no undercut, and a
   T-slot or dovetail, through or blind, or a groove inside a bore (a keyseat cutter's), only where the
-  person planned the cutter (`cnc.special_cutter`, a warning); no closed void.
+  person planned the cutter (`cnc.special_cutter` or `cnc.undercut`, a warning) -- and only as deep
+  past its opening as half the opening is wide, the most a disc that passes the opening reaches: a
+  chamber wider than twice its bore, a cavity behind a vent, a passage that turns a corner inside the
+  part is a face no tool gets to (`cnc.no_line_of_sight`, an error, rounded edges or not). No closed
+  void.
+- **Size.** A part over 2000 mm long is past what a general shop's mill takes (a warning; a lathe's
+  431 mm across and 990 mm long), and over 4000 mm (a lathe's 1000 mm across) past any general
+  machine (an error: make it in pieces).
 - **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
-  as wide as the shop's grooving tool, cross holes square to the axis (through it or beside it); a
-  flat, a keyway or an off-axis hole is live tooling.
+  as wide as the shop's grooving tool and no deeper than five widths, an internal groove no deeper
+  than half the bore its tool enters by (an error past it), the part no longer than ten of its
+  diameters without a steady rest (a warning), cross holes square to the axis (through it or beside
+  it); a flat, a keyway or an off-axis hole is live tooling.
+- **One solid a part.** A part that holds several separate solids is judged solid by solid, each its
+  own stock and setups (`cnc.solids_judged_apart` says so): fuse what is one piece, export the rest
+  as an assembly's parts.
 - The material and the process on the part: `part.material = metals.aluminum(process=machined())`
   (`bd_materials.processes`); `cad model dfm "$ID"` then needs no `--process` or `--material`.
 
@@ -52,15 +69,23 @@ The options that change the verdicts:
   (`cnc.material_assumed`).
 - `--axes 3|4|5` (3 by default): the directions that reach a face, the setups it takes.
 - `--turning`: the part is turned on a lathe. Its axis, diameters, bores, grooves and the off-axis
-  features that need live tooling are measured instead of pockets and corners.
+  features that need live tooling are measured instead of pockets and corners, and judged: the
+  grooves, the part's slenderness and size, its walls, holes and voids, and every face no tool
+  reaches. What turning does not judge -- setups and chucking, a sharp concave edge or a narrow gap
+  off the grooves -- it says (`cnc.turning_not_judged`): check the part without `--turning` for its
+  milled features.
 - `--tools 3,6,10`: the shop's end mill diameters. Corner radius and gap limits then follow the
   smallest; a corner no tool fits leaves its reach unmeasured.
-- `--stock 100x60x25`: the blank, else the part's box.
+- `--stock 100x60x25`: the blank, else the part's box. A face of the stock's own (where the blank is
+  as long as the part) is no setup's to cut, typed or not; a bare block takes none.
 
-The rules are general, no shop's: a shop's machine sizes, lathe capacity and feature limits (its
+The rules are general, no shop's: a shop's own machine sizes, lathe capacity and feature limits (its
 narrowest engraved line, its turned diameters and grooves) are compared with the measurements
-(`stock`, `turning`, `turned_diameters`, `grooves`, `holes`). A mesh is refused: check the STEP or the
-model.
+(`stock`, `turning`, `turned_diameters`, `grooves`, `holes`). An error means no general shop makes
+the part as drawn; a warning that it is made, dearer or less true. A finding's message names its
+source: the guide's, or `text-to-cad` for a floor of its own (its reason in the rule's note,
+`measurements.rules`). A part of over 20000 faces is not measured, and says so. A mesh is refused:
+check the STEP or the model.
 
 ## Read it
 
@@ -69,7 +94,8 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
 `turned_diameters`, `bores`, `grooves` and `live_tooling`.
 
 - `internal_corners` are a pocket's in-plane corners: `radius_mm`, `depth_mm`, and `reach_ratio`, the
-  depth over the largest tool that fits. A floor-to-wall root is never a corner: a flat end mill
+  depth over the largest tool that fits. A corner's finding is at its cavity's ref, one a cavity (`and
+  3 more at this ref`), its message naming one corner (`corner`, each item's own face). A floor-to-wall root is never a corner: a flat end mill
   makes it sharp, and a root fillet is optional (it takes a corner-radius or ball tool).
 - `cnc.sharp_internal_edge` is a concave edge no tool of the machine makes; its item's `reason` says
   why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
@@ -91,7 +117,10 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   end mill's flank's: made, the radius it leaves said (`end_mill_flank`, `deviation_mm`; `cnc.flank_corners`),
   a warning past 0.05 mm (`cnc.flank_corner_residue`, text-to-cad's own figure).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
-  `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot, dovetail or
+  `no_line_of_sight` faces nothing straight reaches -- one item a recess, its faces listed, with
+  `disc_reach` (a disc cutter on a straight shank gets to them through an opening that holds the disc:
+  a warning, `cnc.undercut`) and `no_tool_fraction` (the share no such cutter reaches either: an
+  error, `cnc.no_line_of_sight`) --, `special_cutter` edges only a T-slot, dovetail or
   keyseat cutter makes -- only where its shank finds a way out beside the whole edge, its disc
   clears the part and the disc can get there (a keyseat's down a bore no narrower than it; a T-slot's
   through an opening as wide as it or from a side the slot opens to): a chamber behind a small bore or
@@ -101,7 +130,11 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   the recess is tall (`narrow_opening`) and a profile's obtuse root, which side-milling rounds
   (`obtuse_root`), are warnings.
 - `setups.setup_count` estimates clampings from the reachable directions and the sides square corners
-  are side-milled from (a direction's `sharp_edges`).
+  are side-milled from (a direction's `sharp_edges`); a hole is one setup along its axis, from the
+  end that reaches all of it.
+- `walls` carry `standing` and `height_to_thickness` for a thin feature that rises from a root (a
+  fin, a rib, a pin, a wall beside a pocket); `grooves` (turning) `depth_to_width` and, internal,
+  `entry_diameter_mm` and `depth_to_entry`.
 - `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a
   tap drill, not a callout.
 
@@ -120,8 +153,10 @@ plan. Then check by hand what the check does not measure:
 - Tolerances and surface finish; a T-slot or dovetail cutter's entry path; pockets whose floor is not
   planar (reported through `access` and `walls`); engraved text (seen only as fine faces and narrow
   gaps).
-- Turning: parting and chucking allowances, ID groove depth beyond the bore, a cone's point angle.
-  Rotational symmetry alone does not prove tool access.
+- Turning: parting and chucking allowances, a cone's point angle, a boring bar's reach down a deep
+  bore (judged as a drilled hole's depth). Rotational symmetry alone does not prove tool access.
+- A disc cutter's travel from where it gets in to where it cuts, and a recess fed from an open side
+  that no straight line reaches into.
 
 Separate geometry constraints from cost suggestions. Preserve functional interfaces; suggest relaxed
 tolerances only where function permits them.
@@ -131,7 +166,8 @@ tolerances only where function permits them.
 The following numbers are illustrative inputs, not default process limits.
 
 `cnc.internal_corner_radius at plate/face 7: internal corner radius 0.5 mm is under the 1.5 mm
-minimum`, from a check with `--tools 3,6,10`. `cad model inspect "$ID" 'plate/face 7'` shows a cylinder
-of radius 0.5 mm 8 mm deep. Report the corner as fail against the 3 mm tool, and propose a radius of
-at least 1.5 mm, or a smaller tool if the shop has one; reach and holder clearance remain checks of
-their own.
+minimum (...) (the corner plate/face 9, 8 mm tall) (and 3 more at this ref)`, from a check with
+`--tools 3,6,10`. `plate/face 7` is the pocket's floor; `cad model inspect "$ID" 'plate/face 9'` shows
+a cylinder of radius 0.5 mm 8 mm deep, and `measurements.internal_corners` lists the pocket's other
+three. Report the pocket's corners as fail against the 3 mm tool, and propose a radius of at least
+1.5 mm, or a smaller tool if the shop has one; reach and holder clearance remain checks of their own.
