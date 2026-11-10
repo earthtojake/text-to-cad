@@ -20,11 +20,11 @@ import { schematicColors, schematicItemColor } from "../plot2d/theme.js";
 export const SCHEMATIC_OVERLAY_COLORS = Object.freeze({
   light: Object.freeze({
     selection: "#1f6feb", shadow: "rgba(31, 111, 235, 0.28)", hover: "rgba(31, 111, 235, 0.22)", edge: "#B4B4B4",
-    dim: "rgba(245, 244, 239, 0.72)", draft: "rgba(31, 111, 235, 0.08)", draftEdge: "rgba(31, 111, 235, 0.7)"
+    dim: "rgba(245, 244, 239, 0.72)"
   }),
   dark: Object.freeze({
     selection: "#8dc5ff", shadow: "rgba(141, 197, 255, 0.3)", hover: "rgba(141, 197, 255, 0.24)", edge: "#6B6B6B",
-    dim: "rgba(28, 28, 28, 0.72)", draft: "rgba(141, 197, 255, 0.1)", draftEdge: "rgba(141, 197, 255, 0.75)"
+    dim: "rgba(28, 28, 28, 0.72)"
   })
 });
 // How far a shadow reaches past its ink, in screen pixels, and an ink's least width.
@@ -86,13 +86,12 @@ function ink(ctx, entries, { color, extra = 0, own = false, px, visible, theme }
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ width: number, height: number, x?: number, y?: number }} sheet  The drawn sheet (its paper).
  * @param {{ transform: { scale: number, offsetX: number, offsetY: number }, pixelRatio?: number, width?: number, height?: number,
- *   hovered?: readonly object[], selected?: readonly object[], isolated?: readonly object[], dim?: boolean,
- *   draft?: readonly [number, number, number, number] | null, appearance?: "light" | "dark" }} options
+ *   hovered?: readonly object[], selected?: readonly object[], isolated?: readonly object[], dim?: boolean, appearance?: "light" | "dark" }} options
  *   `hovered`, `selected`, `isolated`: drawn entries (`{ item, kind }`); `dim`: the rest of the sheet stepped back
- *   (a net selected); `draft`: Select's box being dragged, page millimetres.
+ *   (a net selected).
  */
 export function drawSchematicOverlay(ctx, sheet, { transform, pixelRatio = 1, width = 0, height = 0, hovered = [], selected = [], isolated = [],
-  dim = false, draft = null, appearance = "light" }) {
+  dim = false, appearance = "light" }) {
   if (!transform) return;
   const colors = SCHEMATIC_OVERLAY_COLORS[appearance === "dark" ? "dark" : "light"];
   const theme = schematicColors(appearance);
@@ -114,14 +113,6 @@ export function drawSchematicOverlay(ctx, sheet, { transform, pixelRatio = 1, wi
   if (selected.length) {
     ink(ctx, selected, { color: colors.shadow, extra: SHADOW_PX * 2, px, visible });
     ink(ctx, selected, { color: colors.selection, px, visible });
-  }
-  if (draft) {
-    const [x0, y0, x1, y1] = draft;
-    ctx.fillStyle = colors.draft;
-    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    ctx.strokeStyle = colors.draftEdge;
-    ctx.lineWidth = px;
-    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
   }
   ctx.restore();
 }

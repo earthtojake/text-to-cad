@@ -19,7 +19,7 @@ import { applySceneRig, renderWithSceneRig, sceneRigFor } from "../viewer/sceneR
 import { fetchXbfElementFacts, loadXbfDocument, placeXbfFacts, waitForXbfVersion, xbfDocumentSource } from "./xbfDocument.js";
 import { parseXbfLook, xbfLookRig, xbfLookSurface, xbfLookXrayRig, xbfLookXraySurface } from "./xbfLook.js";
 import { XBF_EDGE_CLASS, readXbmPart, xbmTriangleFaceRows, xbmUnmeshedFaces } from "./xbm.js";
-import { createXbfScene, parseXbfElementId, xbfElementId, xbfFaceEdges, xbfFaceOutline, xbfLookParameters } from "./xbfScene.js";
+import { XBF_PICK_PIXELS, createXbfScene, parseXbfElementId, xbfElementId, xbfFaceEdges, xbfFaceOutline, xbfLookParameters } from "./xbfScene.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtures__", "bracket");
 const STRUCTURE = JSON.parse(fs.readFileSync(path.join(FIXTURE, "structure.json"), "utf8"));
@@ -524,6 +524,212 @@ test("picking: a STEP's Select: an edge near the pointer, else the face under it
   document.release();
 });
 
+test("a box takes what is visible in it by a click's rules: what it touches, even in part", async () => {
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
+  const scene = createXbfScene(THREE, document);
+  const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 1000);
+  camera.position.set(0, 0, 100);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  const view = { camera, width: 600, height: 600 };
+  // The view's pixels: ten to the scene's unit, (0, 0) at the top-left.
+  const box = (x0, y0, x1, y1) => ({ left: (x0 + 30) * 10, right: (x1 + 30) * 10, top: (30 - y1) * 10, bottom: (30 - y0) * 10 });
+  const ids = (found, kind) => found.filter(hit => hit.kind === kind).map(hit => hit.id).sort();
+  const ray = (x, y) => new THREE.Ray(new THREE.Vector3(x, y, 100), new THREE.Vector3(0, 0, -1));
+  // A small box on the plate's top, away from every edge: its top face, never the faces behind it.
+  const top = scene.pickElement(ray(-7, 5), view);
+  assert.deepEqual(scene.pickBox(box(-7.5, 4.5, -6.5, 5.5), view), [{ id: top.id, kind: "face", instance: 0, key: top.key, ordinal: top.ordinal }]);
+  // A box over a peg, partly over the plate too: the peg's top and its rim, and the plate's top it touches.
+  const pegTop = scene.pickElement(ray(12, 0), view);
+  const rim = scene.pickElement(ray(12, 2.95), view);
+  const over = scene.pickBox(box(8, -4, 16, 4), view);
+  assert.ok(ids(over, "face").includes(pegTop.id) && ids(over, "edge").includes(rim.id));
+  assert.ok(over.some(hit => hit.kind === "face" && hit.instance === 0), "the plate's top, touched");
+  // Faces alone, edges alone.
+  assert.deepEqual(ids(scene.pickBox(box(8, -4, 16, 4), view, { edges: false }), "edge"), []);
+  assert.deepEqual(ids(scene.pickBox(box(8, -4, 16, 4), view, { faces: false }), "face"), []);
+  // Where an instance's elements cannot be picked, the instance is taken whole where Parts is ticked,
+  // even though only a corner of it lies in the box.
+  const parts = scene.pickBox(box(8, -4, 16, 4), view, { parts: true, elements: new Set() });
+  assert.ok(parts.every(hit => hit.kind === null) && parts.some(hit => hit.id === "i0") && parts.some(hit => hit.id === "i1"));
+  assert.deepEqual(scene.pickBox(box(8, -4, 16, 4), view, { parts: true, elements: new Set([1]) }).filter(hit => hit.kind === null).map(hit => hit.id), ["i0"]);
+  // A hidden instance, or one an isolation dims, is not taken.
+  scene.setHiddenParts(["i1"]);
+  assert.ok(scene.pickBox(box(8, -4, 16, 4), view, { parts: true }).every(hit => hit.instance !== 1));
+  scene.setHiddenParts([]);
+  scene.setFocusedParts(["i1"]);
+  assert.ok(scene.pickBox(box(8, -4, 16, 4), view).every(hit => hit.instance === 1));
+  scene.setFocusedParts([]);
+  // A box over nothing takes nothing.
+  assert.deepEqual(scene.pickBox(box(-29, -29, -28, -28), view, { parts: true }), []);
+  scene.dispose();
+  document.release();
+});
+
+test("a box over a grid of plates seen from the viewer's iso view takes every plate visible in it, a sliver along its side too", async () => {
+  // Thirty-two plates in a grid, as an assembly's are laid out, seen as the CAD Viewer frames them: its
+  // isometric direction, orthographic, in a viewport of 1400 x 864 CSS pixels.
+  const [width, height] = [1400, 864], pitch = [54, 27];
+  const instances = [];
+  for (let row = 0; row < 4; row += 1) for (let column = 0; column < 8; column += 1) {
+    instances.push({ prototype: 0, path: `grid/plate_${row}_${column}`, color: null,
+      matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, column * pitch[0], row * pitch[1], 0, 1] });
+  }
+  const structure = { ...STRUCTURE, prototypes: [PLATE], instances,
+    tree: { name: "grid", children: instances.map((instance, index) => ({ name: instance.path, prototype: 0, instance: index })) } };
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
+  const scene = createXbfScene(THREE, document);
+  const middle = new THREE.Vector3(189, 40.5, 0);
+  const camera = new THREE.OrthographicCamera(-181.44 * (width / height), 181.44 * (width / height), 181.44, -181.44, 0.1, 10000);
+  camera.up.set(0, 0, 1);
+  camera.position.copy(middle).add(new THREE.Vector3(1, -0.78, 0.52).normalize().multiplyScalar(500));
+  camera.lookAt(middle);
+  camera.updateMatrixWorld();
+  const view = { camera, width, height };
+  const ray = new THREE.Raycaster();
+  // What shows in the box, ray by ray, a pixel apart: what a box takes.
+  const shown = (box) => {
+    const ids = new Set();
+    for (let y = box.top; y <= box.bottom; y += 1) {
+      for (let x = box.left; x <= box.right; x += 1) {
+        ray.setFromCamera(new THREE.Vector2((x / width) * 2 - 1, 1 - (y / height) * 2), camera);
+        const id = scene.pick(ray.ray)?.id;
+        if (id) ids.add(id);
+      }
+    }
+    return [...ids].sort();
+  };
+  const taken = box => [...new Set(scene.pickBox(box, view, { parts: true, elements: new Set() }).map(hit => hit.id))].sort();
+  // Boxes whose grid of rays passes over a plate showing only along the box's side, a pixel or two
+  // of its corner, with the plate in front hiding the vertex that pokes in (the one look it once had).
+  for (const [box, sliver] of [[{ left: 281.5, top: 369.6, right: 709.8, bottom: 412.7 }, "i3"],
+    [{ left: 708, top: 587.1, right: 941.9, bottom: 610.4 }, "i15"]]) {
+    const expected = shown(box);
+    assert.ok(expected.includes(sliver), `${sliver} shows in ${JSON.stringify(box)}`);
+    assert.deepEqual(taken(box), expected, JSON.stringify(box));
+  }
+  scene.dispose();
+  document.release();
+});
+
+test("a box's rays meet what three's own raycast meets, to the last tie, through BVHs it builds over the index as it was", async () => {
+  // Ties: the plate twice in one place (two instances met at one distance: three's sort keeps the first), and
+  // two of the plate's triangles laid over two of its top face's (one part's triangles met at one distance:
+  // the first its raycast meets), one before that triangle in the index, one after it.
+  const plate = partBytes(PLATE.key);
+  const mesh = readXbmPart(plate), rows = xbmTriangleFaceRows(mesh);
+  const top = Number(Object.keys(PLATE.faceColors)[0]);
+  const faceOf = triangle => mesh.faces[rows[triangle] * 3];
+  const tops = [...rows.keys()].filter(triangle => faceOf(triangle) === top);
+  const below = [...rows.keys()].findLast(triangle => triangle < tops[0] && faceOf(triangle) !== top);
+  const above = [...rows.keys()].find(triangle => triangle > tops.at(-1) && faceOf(triangle) !== top);
+  for (const [copy, of] of [[below, tops[0]], [above, tops.at(-1)]]) mesh.indices.set(mesh.indices.slice(of * 3, of * 3 + 3), copy * 3);
+  const structure = { ...STRUCTURE, instances: [...STRUCTURE.instances, { ...STRUCTURE.instances[0], path: "bracket/plate again" }] };
+  const scenes = await Promise.all([0, 1].map(async () =>
+    createXbfScene(THREE, await loadXbfDocument(URL_BASE, { fetch: engine({ structure, parts: { [PLATE.key]: plate } }).fetch }))));
+  const [fast, stock] = scenes;
+  const geometries = scene => [...new Set(scene.object3D.children.flatMap(carrier => carrier.children[0].children).filter(object => object.isMesh).map(found => found.geometry))];
+  // The reference: no BVH, ever (three's raycast, every triangle of every mesh).
+  for (const geometry of geometries(stock)) geometry.userData.__bvhSkipped = true;
+  const indices = geometries(fast).map(geometry => geometry.index.array.slice());
+  const above45 = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 1000);
+  above45.position.set(20, -35, 60);
+  above45.lookAt(0, 0, 0);
+  above45.updateMatrixWorld();
+  const overhead = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 1000);
+  overhead.position.set(0, 0, 100);
+  overhead.lookAt(0, 0, 0);
+  overhead.updateMatrixWorld();
+  // A camera among the parts: some of their boxes lie partly behind the eye.
+  const inside = new THREE.PerspectiveCamera(80, 1, 0.01, 1000);
+  inside.position.set(0, -2, 9);
+  inside.lookAt(12, 6, 8);
+  inside.updateMatrixWorld();
+  const boxes = [{ left: 240, top: 250, right: 370, bottom: 350 }, { left: 520, top: 180, right: 640, bottom: 260 }];
+  const cut = [new THREE.Plane(new THREE.Vector3(0.2, 0, -1).normalize(), 9)];
+  const kinds = new Set();
+  const ray = new THREE.Raycaster();
+  let met = 0;
+  for (const planes of [[], cut]) {
+    for (const scene of scenes) scene.setClipPlanes(planes);
+    for (const camera of [overhead, above45, inside]) {
+      const view = { camera, width: 600, height: 600 };
+      // Whole boxes, by every filter, with BVHs and without.
+      for (const box of boxes) {
+        for (const options of [{}, { parts: true, elements: new Set([1, 3]) }]) {
+          const found = fast.pickBox(box, view, options);
+          assert.deepEqual(found, stock.pickBox(box, view, options), JSON.stringify({ box, options, cut: planes.length }));
+          for (const hit of found) kinds.add(hit.kind ?? "part");
+          // Its faces, and it as a part, are behind the first plate's (its edges show with the first's).
+          assert.ok(found.every(hit => hit.instance !== 3 || hit.kind === "edge"), "the plate in the same place is behind the first");
+        }
+      }
+      // A box too small for more than its one ray, all over the view: what it takes is what a click's ray meets
+      // first with three's own raycast -- by part silhouettes, behind the eye, where the cut is, and at the ties
+      // -- and besides it only what such a ray meets at a corner of the box (a silhouette through the box).
+      const metAt = (x, y, meet) => {
+        const found = new Set();
+        for (const [dx, dy] of [[0.01, 0.01], [0.01, -0.01], [-0.01, 0.01], [-0.01, -0.01], [0, 0]]) {
+          ray.setFromCamera(new THREE.Vector2(((x + dx) / 600) * 2 - 1, 1 - ((y + dy) / 600) * 2), camera);
+          const id = meet(ray.ray);
+          if (id) found.add(id);
+        }
+        return found;
+      };
+      const takes = (found, centre, corners, at) => {
+        if (centre) assert.ok(found.includes(centre), at);
+        assert.ok(found.every(id => corners.has(id)), at);
+      };
+      for (let y = 3; y < 600; y += 10) {
+        for (let x = 3; x < 600; x += 10) {
+          const box = { left: x - 0.01, top: y - 0.01, right: x + 0.01, bottom: y + 0.01 };
+          const at = JSON.stringify({ x, y });
+          ray.setFromCamera(new THREE.Vector2((x / 600) * 2 - 1, 1 - (y / 600) * 2), camera);
+          const part = stock.pick(ray.ray)?.id;
+          takes(fast.pickBox(box, view, { parts: true, elements: new Set() }).map(hit => hit.id), part, metAt(x, y, found => stock.pick(found)?.id), at);
+          // (A box passes over a triangle with a corner behind the eye, as it always has: not the inside camera's faces.)
+          if (camera.isOrthographicCamera) {
+            ray.setFromCamera(new THREE.Vector2((x / 600) * 2 - 1, 1 - (y / 600) * 2), camera);
+            const face = stock.pickElement(ray.ray, view, { edges: false })?.id;
+            takes(fast.pickBox(box, view, { edges: false }).map(hit => hit.id), face, metAt(x, y, found => stock.pickElement(found, view, { edges: false })?.id), at);
+          }
+          if (part) met += 1;
+        }
+      }
+    }
+  }
+  assert.ok(met > 5000, "the rays meet the parts");
+  assert.deepEqual([...kinds].sort(), ["edge", "face", "part"]);
+  assert.ok(geometries(fast).every(geometry => geometry.boundsTree), "each part's BVH, built by the box");
+  assert.ok(geometries(stock).every(geometry => !geometry.boundsTree));
+  assert.deepEqual(geometries(fast).map(geometry => geometry.index.array), indices, "over the index as it was: faces are read by triangle");
+  for (const scene of scenes) scene.dispose();
+});
+
+test("a press on the empty space beside a part is off the model as it is drawn, though a click's reach would take the edge", async () => {
+  // Where Box select's box may start (the XBF renderer's `mayStart`): what is drawn under the press, an
+  // edge within its own line's pixels (`edgeDrawn`), not a click's reach.
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
+  const scene = createXbfScene(THREE, document);
+  const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 1000);
+  camera.position.set(0, 0, 100);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  // Ten pixels to the scene's unit; the plate's side at x = -20, seen edge on from above.
+  const view = { camera, width: 600, height: 600 };
+  const at = (x, options) => scene.pickElement(new THREE.Ray(new THREE.Vector3(x, 5, 100), new THREE.Vector3(0, 0, -1)), view,
+    { faces: true, edges: true, parts: true, elements: null, ...options });
+  const drawn = { pixels: XBF_PICK_PIXELS.edgeDrawn };
+  // Four pixels off the plate, over nothing: a click takes its edge; a box starts there.
+  assert.equal(at(-20.4)?.kind, "edge");
+  assert.equal(at(-20.4, drawn), null);
+  // On the edge's line, and on the plate: the model, either way.
+  assert.equal(at(-20.1, drawn)?.kind, "edge");
+  assert.equal(at(-15, drawn)?.instance, 0);
+  scene.dispose();
+  document.release();
+});
+
 test("picking: an edge wins over the face under the pointer only when it is that face's own, as a STEP's", async () => {
   const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
   const scene = createXbfScene(THREE, document);
@@ -693,4 +899,41 @@ test("Explode moves each instance's carrier by the document's tree, and puts it 
 test("a read the engine refuses carries its status: a 404 is a document the engine no longer holds", async () => {
   const gone = async () => new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: { "content-type": "application/json" } });
   await assert.rejects(waitForXbfVersion(`${URL_BASE}`, "v1", { fetch: gone }), error => error.status === 404 && /answered 404 \(not found\)/.test(error.message));
+});
+
+test("Select's Filter: every mix of Faces, Edges and Parts picks and boxes only what it ticks", async () => {
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
+  const scene = createXbfScene(THREE, document);
+  const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 1000);
+  camera.position.set(0, 0, 100);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  const view = { camera, width: 600, height: 600 };
+  const ray = (x, y) => new THREE.Ray(new THREE.Vector3(x, y, 100), new THREE.Vector3(0, 0, -1));
+  const box = (x0, y0, x1, y1) => ({ left: (x0 + 30) * 10, right: (x1 + 30) * 10, top: (30 - y1) * 10, bottom: (30 - y0) * 10 });
+  // The peg's elements open (instance 1), the plate's not (instance 0), as an assembly's Filter picks with
+  // a part's row open: on the peg a face or an edge (the part, where neither is ticked there), on the plate the part.
+  const elements = new Set([1]);
+  const kindOf = hit => (hit ? hit.kind ?? "part" : "nothing");
+  for (const faces of [false, true]) for (const edges of [false, true]) for (const parts of [false, true]) {
+    const options = { faces, edges, parts, elements };
+    const said = JSON.stringify({ faces, edges, parts });
+    const allowed = new Set([...(faces ? ["face"] : []), ...(edges ? ["edge"] : []), ...(parts ? ["part"] : [])]);
+    // A click: the peg's top, its rim, and the plate's top.
+    const pegTop = kindOf(scene.pickElement(ray(12, 0), view, options));
+    const rim = kindOf(scene.pickElement(ray(12, 2.95), view, options));
+    const plate = scene.pickElement(ray(-7, 5), view, options);
+    assert.equal(pegTop, faces ? "face" : parts ? "part" : "nothing", `peg top ${said}`);
+    assert.equal(rim, edges ? "edge" : faces ? "face" : parts ? "part" : "nothing", `rim ${said}`);
+    assert.deepEqual(plate ? [plate.id, plate.kind] : null, parts ? ["i0", null] : null, `plate ${said}`);
+    // A box over both: what it takes is of the kinds ticked, and the plate whole only where Parts is.
+    const taken = scene.pickBox(box(8, -4, 16, 4), view, options);
+    assert.ok(taken.every(hit => allowed.has(kindOf(hit))), `box ${said}: ${taken.map(kindOf)}`);
+    assert.ok(taken.every(hit => !hit.kind || hit.instance === 1), `box ${said}: faces and edges of the open part alone`);
+    assert.equal(taken.some(hit => hit.id === "i0"), parts, `box ${said}: the plate`);
+    if (faces) assert.ok(taken.some(hit => hit.kind === "face"), `box ${said}: a face`);
+    if (edges) assert.ok(taken.some(hit => hit.kind === "edge"), `box ${said}: an edge`);
+  }
+  scene.dispose();
+  document.release();
 });

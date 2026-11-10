@@ -9,13 +9,14 @@
  * nets and the items KiCad names by uuid, and `resolve(selector)` for a schematic reference
  * (`schematicRefs.js`): what it names and the sheets it is on. `createSchematicPage(index, sheet)` is one
  * drawn sheet (a laid-out plot's `sheets[0]`, `plot2d/plot.js`): the drawn items of what a reference
- * names (`itemsOf`, `extent`), the most specific thing under a point (`pick`), the things inside a box
- * (`within`), the sheet symbol under a point (`sheetAt`) and Measure's snap (`snap`). Page millimetres,
+ * names (`itemsOf`, `extent`), the most specific thing under a point (`pick`), the things a box takes
+ * (`pickBox`: what it touches), the sheet symbol under a point (`sheetAt`) and Measure's snap (`snap`). Page millimetres,
  * y down, as the payload's.
  *
  * Importing this module has no environmental effects.
  */
 import { canonicalSheetPath, formatSheetSelector, parseSchematicRefSelector } from "../schematicRefs.js";
+import { boundsTouchBox, boxFromBounds, circleTouchesBox, polygonTouchesBox, polylineTouchesBox, segmentTouchesBox } from "../viewer/boxSelect.js";
 
 const EMPTY = Object.freeze([]);
 const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -105,7 +106,6 @@ const unionBox = (boxes) => {
   return box;
 };
 const inBox = (box, [x, y], reach = 0) => x >= box[0] - reach && x <= box[2] + reach && y >= box[1] - reach && y <= box[3] + reach;
-const insideBox = (inner, outer) => inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
 function segmentDistance([px, py], [ax, ay], [bx, by]) {
   const dx = bx - ax, dy = by - ay;
   const length = dx * dx + dy * dy;
@@ -138,6 +138,32 @@ function inkDistance(item, point) {
   for (let index = 0; index + 1 < pts.length; index += step) best = Math.min(best, segmentDistance(point, pts[index], pts[index + 1]));
   if (item.closed && !item.pairs && pts.length > 2) best = Math.min(best, segmentDistance(point, pts[pts.length - 1], pts[0]));
   return Math.max(0, best - (item.w || 0) / 2);
+}
+
+/**
+ * Whether a box (`boxSelect.js`'s, page millimetres) touches an item's ink, even in part, by what a press
+ * reaches it by (`inkDistance`): a text's box, a filled shape or a small closed outline anywhere over it,
+ * a line at its drawn width.
+ */
+function inkTouchesBox(item, box) {
+  if (!boundsTouchBox(box, item.box)) return false;
+  if (item.t === "text") return true;
+  const half = (item.w || 0) / 2;
+  if (item.t === "circle") {
+    if (!circleTouchesBox(box, item.at[0], item.at[1], item.r + half)) return false;
+    // A ring is missed by a box wholly inside it.
+    const inner = item.w === 0 ? 0 : item.r - half;
+    return item.w === 0 || ![[box.left, box.top], [box.right, box.top], [box.right, box.bottom], [box.left, box.bottom]]
+      .every(([x, y]) => Math.hypot(x - item.at[0], y - item.at[1]) < inner);
+  }
+  const pts = item.pts;
+  if (item.t === "poly" || (item.closed && (item.label || item.role === "pin"))) return polygonTouchesBox(box, pts);
+  if (item.pairs) {
+    const reach = boxFromBounds([box.left - half, box.top - half, box.right + half, box.bottom + half]);
+    for (let index = 0; index + 1 < pts.length; index += 2) if (segmentTouchesBox(reach, pts[index][0], pts[index][1], pts[index + 1][0], pts[index + 1][1])) return true;
+    return false;
+  }
+  return polylineTouchesBox(box, pts, { closed: Boolean(item.closed), radius: half });
 }
 
 /**
@@ -254,19 +280,23 @@ export function createSchematicPage(index, sheet) {
     return { selector: quote(near[0].selector), kind: near[0].filter };
   }
 
-  /** Everything `kinds` takes whose ink lies wholly inside `box` (KiCad's window selection), once each. */
-  function within(box, { kinds = SCHEMATIC_PICK_KINDS } = {}) {
+  /**
+   * What a box under Select (`[minX, minY, maxX, maxY]`) takes of what `kinds` takes, once each: what it
+   * touches, even in part, KiCad's crossing selection -- an item by its ink (`pick`'s), a part by its
+   * body or any of its ink, a sheet by its box.
+   */
+  function pickBox(bounds, { kinds = SCHEMATIC_PICK_KINDS } = {}) {
+    if (!Array.isArray(bounds) || bounds.length < 4 || !bounds.every(Number.isFinite)) return [];
+    const box = boxFromBounds(bounds);
     const wanted = new Set(kinds);
     const found = new Map();
     for (const entry of drawn) {
       const pickEntry = pickOf(entry);
       if (!pickEntry || !wanted.has(pickEntry.filter) || found.has(pickEntry.selector)) continue;
-      // A part is inside when its body is, a sheet when its box is: each is judged by its whole below.
-      if (pickEntry.filter === "symbols" || (pickEntry.filter === "sheets" && entry.item.role !== "pin")) continue;
-      if (insideBox(entry.item.box, box)) found.set(pickEntry.selector, quote(pickEntry.selector));
+      if (inkTouchesBox(entry.item, box)) found.set(pickEntry.selector, quote(pickEntry.selector));
     }
-    if (wanted.has("symbols")) for (const body of bodies) if (body.box && insideBox(body.box, box)) found.set(body.selector, body.selector);
-    if (wanted.has("sheets")) for (const area of sheetBoxes) if (insideBox(area.box, box)) found.set(area.selector, area.selector);
+    if (wanted.has("symbols")) for (const body of bodies) if (boundsTouchBox(box, body.box)) found.set(body.selector, body.selector);
+    if (wanted.has("sheets")) for (const area of sheetBoxes) if (boundsTouchBox(box, area.box)) found.set(area.selector, area.selector);
     return [...found.values()];
   }
 
@@ -299,5 +329,5 @@ export function createSchematicPage(index, sheet) {
     return best;
   }
 
-  return { path, drawn, itemsOf, extent, pick, within, sheetAt, snap };
+  return { path, drawn, itemsOf, extent, pick, pickBox, sheetAt, snap };
 }

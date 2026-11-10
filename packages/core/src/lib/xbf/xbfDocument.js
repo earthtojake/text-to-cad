@@ -260,7 +260,7 @@ export function fetchXbfElementFacts(source, key, kind, ordinal, { fetch: fetchI
 /**
  * How a pick of one face or edge of a part grows, as the engine reads it from the part's shape
  * (`Topology.groups`): each face's tangent group and each edge's chain, by ordinal, a group named
- * by its smallest member. Asked for when Group faces or Group edges first needs it.
+ * by its smallest member. Asked for when Select tangent faces or Select tangent edges first needs it.
  * @returns {Promise<{ faces: Record<string, number>, edges: Record<string, number> }>}
  */
 export function fetchXbfPartGroups(source, key, { fetch: fetchImpl = globalThis.fetch, signal } = {}) {

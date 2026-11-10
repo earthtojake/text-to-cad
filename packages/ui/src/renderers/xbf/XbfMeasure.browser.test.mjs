@@ -47,10 +47,14 @@ test('Measure takes two faces whole and reads them square across; a double-click
   await page.keyboard.press('ControlOrMeta+Shift+KeyZ');
   await row.getByText('⟂ 12.00 mm').waitFor();
 
-  // Select picking Faces (in an assembly, All takes a part whose row is shut whole); from up and off
+  // Select's Filter with Parts unticked, so a press takes faces (in an assembly, with every box ticked, a part
+  // whose row is shut is taken whole); ticking leaves the menu up, and Escape puts it away. From up and off
   // to the front-right, a double-click on the plate's front face.
   await pane.locator('[data-select-filter-trigger]').click();
-  await page.locator('[data-select-filter="faces"]').click();
+  await page.locator('[data-select-filter-row]').click();
+  await page.locator('[data-select-filter="parts"]').click();
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').first().waitFor({ state: 'detached' });
   const oblique = await view({ position: [60, -80, 70], target: [0, 0, 0], up: [0, 0, 1], orthographicHalfHeight: 30 });
   const front = oblique([5, -10, 0]);
   await page.mouse.dblclick(front.x, front.y);
