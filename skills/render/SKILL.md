@@ -40,7 +40,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 `cad run render.py` sees `import bpy` and gives the script cad's blender integration: an
 environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)
