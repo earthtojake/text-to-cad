@@ -770,15 +770,33 @@ holds (its id, or the handle its call returns), so a check script measures the m
 
 ```python
 from cad import model, step
-from cad.build123d import cnc
+from cad.build123d import dfm
 from part import part                                          # a model
 
 model.dfm(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
 step.dfm("bracket.step", process="sheet", material="5052", bend_radius=1.6)
 step.dfm("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
 step.dfm("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
-cnc(shape, turning=True)                                       # a live build123d shape, the same result
+found = dfm(shape, process="cnc", tools=[3, 6])                # a live build123d shape, the same result
+if found.status != "ok":                                       # "ok", "failed" or "not_checked"
+    for finding in found.findings:                             # a rule's verdict: its figure, limit and refs
+        print(finding.code, finding.location, finding.value, finding.limit, finding.unit, finding.refs)
 ```
+
+**Three states.** A check answers one of three (`CheckResult.status`; the command's exit status):
+
+| `status` | exit | what it says |
+| --- | --- | --- |
+| `ok` | 0 | every part was measured and no finding is an error: the part can be made. Warnings are recommendations: it is made, at a cost or a risk |
+| `failed` | 1 | a finding is an error: the part cannot be made by this process as drawn. With `--strict` (`strict=True`), a warning fails it too |
+| `not_checked` | 3 | the check did not judge what it was asked to, so it is no verdict and never a pass: a source that does not read or holds no solid (`document_unreadable`, `mesh_unreadable`, `not_solid`, `document_empty`, a file that is not there: `invalid_target`), a family that could not be measured (`measurement_failed`), faces the kernel failed to intersect rays with (`rays_unintersected`), rules that judged nothing (`rules_none_evaluated`), a report with a figure that is no finite number (`not_finite`). `reason` is the code of the finding that says so |
+
+`ok` is true for `ok` alone. An error found wins over what was not checked: the part fails whatever else
+was not judged, and the line says both. The command exits 3 too for a check that did not run to its end --
+the engine cancelled it for a build of its script, lost its worker or stopped, its environment gave no
+answer, it crashed -- where `--json` is the failure's document with `"status": "not_checked"` and a
+`reason`; a library call raises those. Exit 2 stays the command line's mistake: an option refused by name,
+a file of another type or not there, a document the engine does not hold.
 
 - **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
   points, counterbores, threads), pockets and slots, internal corners against tool radius and depth, sharp
@@ -805,20 +823,37 @@ The measurements are facts and always reported (`measurements`). The verdicts ar
 one table of rules, general practice from published design guides, each rule citing its guide as the
 evidence -- no rule is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
 compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
-`--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is a finding coded by
-its id, at its place, naming its limit and source, with a hint saying what to change; an error is a limit
-the part breaks, a warning a recommendation; every rule's
-outcome, its source and every failure are `measurements["rules"]`, and a figure not measured is never a
-pass. An error fails the check, as does a family that could not be measured (`measurement_failed`).
+`--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is one finding for
+each feature that fails it, coded by its id, at the feature's most specific ref (a corner's edge, not one of
+its two faces), with the verdict as data -- `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`),
+`source` (the guide's publisher and title) and `refs` (every ref the feature names, `location` first) --
+and a hint saying what to change; an error is a limit the part breaks, a warning a recommendation. The
+command says a rule once -- its hint, its source and how many places -- then a short line a place, and its
+last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2
+warning(s); cnc ...; failed: cnc.internal_corner_sharp x4`. Every rule's outcome, its source and every
+failure (with the index of its item in its family) are `measurements["rules"]`, and a figure not measured is
+never a pass: a rule that judged some of its features and not the rest is `partial` and says which
+(`rule_partly_judged`).
+
+**Every part, as it stands.** An assembly's every part is judged, and a part used several times is judged
+each way it stands: the occurrences turned alike are measured once and counted
+(`measurements["bodies"][i]`: `occurrences`, `paths`, `placements_mm`), and one turned another way is
+measured as it stands, at its own refs -- a bracket that prints clean on its back and needs support on its
+side is said at the occurrence on its side. `measurements["document"]` totals every occurrence
+(`occurrence_count`, `solid_count`, `volume_mm3`). A part of several solids says so (`several_solids`), and
+solids that share volume fail every process (`not_sound`).
 `--material` picks a material's limits, and without it the material the parts declare is read
 (`part.material = metals.aluminum()`, when every part agrees: `material_declared`); without `--process`, an
 xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,
 `plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
 `bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
-`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's alone, the
-other types declaring their own; an option of another process, and a value of another kind (`axes=3.7`,
-`turning="no"`), is refused by name, never coerced. Every family, its JSON, every rule with its source and what
-each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
+`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's alone (the other types
+declare their own, and take no such option); an option of another process, a value of another kind
+(`axes=3.7`, `turning="no"`) and a value no machine has (an end mill over 100 mm, an FDM layer taller than
+its nozzle) are refused by name, never coerced -- by the flag on the command line (`--tools`), by the
+parameter in Python (`tools`), where a list of numbers is given as one (`tools=[3, 6]`, `stock=(100, 60,
+25)`) and a material by its name (`"Aluminium 6061"`). Every family, its JSON, every rule with its source and
+what each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
 
 The trimesh integration's functions measure a mesh a program already holds, answering its report as data:
 `cad.trimesh.printing(mesh)` and `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with

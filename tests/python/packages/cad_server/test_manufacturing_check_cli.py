@@ -2,7 +2,8 @@
 printing alone).
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the
-command: its options, its one result shape, its refusals before anything is read, a STEP measured
+command: its options, its one result shape, its exit status (0 ok, 1 failed, 3 not checked, 2 the command
+line's mistake), its refusals before anything is read, a STEP measured
 on its exact geometry through the engine (with no engine and no kernel here, in the base's environment),
 and the run in the environment of the trimesh integration when the command's own environment lacks it.
 """
@@ -117,9 +118,77 @@ class ManufacturingCheckCommand(unittest.TestCase):
         trimesh.Trimesh(box.vertices, box.faces[:-2], process=False).export(opened)
         code, out, _ = _run("stl", str(opened), "--process", "printing", "--json")
         payload = json.loads(out)
-        self.assertEqual((code, payload["ok"]), (1, False), out)
-        self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
+        self.assertEqual((code, payload["ok"], payload["status"], payload["reason"]), (1, False, "failed", None), out)
+        self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "reason", "status", "summary"])
         self.assertIn("not_watertight", [f["code"] for f in payload["findings"] if f["severity"] == "error"])
+        self.assertEqual(sorted(payload["findings"][0]),
+                         ["code", "hint", "items", "limit", "location", "message", "op", "refs", "rule", "severity",
+                          "source", "unit", "value"])
+
+    def test_a_check_that_judged_nothing_is_not_checked_and_exits_three(self) -> None:
+        """Exit 1 says the part fails. A source the check could not measure -- a STEP of a face, a mesh of no
+        triangle, whose every family fails to measure -- fails no rule: it is not checked, exit 3, its reason
+        the code of the finding that says so, with ``--json`` and without."""
+        from build123d import Rectangle, export_step
+
+        face = self.folder / "face.step"
+        export_step(Rectangle(10, 10).face(), str(face))
+        broken = self.folder / "broken.stl"
+        broken.write_bytes(b"solid nothing\nfacet nonsense\n")
+        for document_type, path, reasons in (("step", face, {"not_solid"}),
+                                             ("stl", broken, {"mesh_unreadable", "measurement_failed"})):
+            with self.subTest(document_type=document_type):
+                code, out, _ = _run(document_type, str(path), "--process", "printing", "--json")
+                payload = json.loads(out)
+                self.assertEqual((code, payload["ok"], payload["status"]), (3, False, "not_checked"), out)
+                reason = payload["reason"]
+                self.assertIn(reason, reasons)
+                self.assertEqual(payload["findings"][0]["code"], reason)
+                code, out, _ = _run(document_type, str(path), "--process", "printing")
+                self.assertEqual(code, 3)
+                self.assertRegex(out.splitlines()[-1], rf"^NOT CHECKED .*{path.name}: {reason}\b")
+
+    def test_a_check_the_engine_did_not_finish_is_not_checked_with_its_reason(self) -> None:
+        """An engine that cancelled the check, lost its worker or stopped measured nothing: exit 3, never the 1
+        that says the part fails; ``--json`` is the failure's document with the engine's own reason where its
+        error carries one, and a document the engine does not hold stays the command line's mistake."""
+        from build123d import Box, export_step
+
+        from cad.engine import api, serve
+
+        step = self.folder / "box.step"
+        export_step(Box(20, 20, 15), str(step))
+        cancelled = api.EngineError("the check was cancelled: its script is being built")
+        cancelled.reason = "cancelled"  # type: ignore[attr-defined]
+        for error, reason in ((cancelled, "cancelled"), (api.Stopped(api.STOPPED), "engine_stopped"),
+                              (api.EngineError("the checks process died"), "engine_failed")):
+            with self.subTest(reason=reason), mock.patch.object(api, "check", side_effect=error):
+                reason = getattr(error, "reason", None) or reason  # a release whose errors carry their own
+                code, out, _ = _run("step", str(step), "--process", "printing", "--json")
+                payload = json.loads(out)
+                self.assertEqual((code, payload["ok"], payload["status"], payload["reason"]),
+                                 (3, False, "not_checked", reason), out)
+                self.assertEqual(payload["error"], str(error))
+                code, out, err = _run("step", str(step), "--process", "printing")
+                self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {step}: {reason}"))
+                self.assertIn(str(error), err)
+        with mock.patch.object(api, "check", side_effect=serve.NotHeld("no document is held")):
+            code, out, _ = _run("model", "01234567-89ab-5def-8123-456789abcdef", "--process", "printing", "--json")
+        self.assertEqual((code, json.loads(out)["reason"]), (2, "not_found"))
+
+    def test_strict_fails_on_a_warning(self) -> None:
+        from build123d import Box, export_step
+
+        step = self.folder / "block.step"
+        export_step(Box(40, 30, 15), str(step))
+        argv = (str(step), "--process", "printing", "--technology", "pbf")
+        code, out, _ = _run("step", *argv)
+        self.assertEqual(code, 0)
+        self.assertRegex(out.splitlines()[-1], r"^OK .*block\.step: 1 warning\(s\); printing pbf: ")
+        code, out, _ = _run("step", *argv, "--strict", "--json")
+        payload = json.loads(out)
+        self.assertEqual((code, payload["status"]), (1, "failed"))
+        self.assertIn("(--strict: a warning fails)", payload["summary"])
 
     def test_printing_says_its_findings_then_its_summary(self) -> None:
         code, out, _ = _run("stl", str(self.box), "--process", "printing", "--angle-limit", "30")
@@ -142,17 +211,24 @@ class ManufacturingCheckCommand(unittest.TestCase):
                 found = json.loads(out)
                 self.assertEqual((code, found["ok"], found["reason"]), (2, False, reason))
                 self.assertIn(words, found["error"])
+        # units are an STL's alone: a type that declares its own takes no such flag
         (self.folder / "box.3mf").write_bytes(b"")
         code, out, _ = _run("threemf", str(self.folder / "box.3mf"), "--process", "printing", "--units", "cm", "--json")
-        self.assertEqual(code, 2)
-        self.assertIn("a 3MF declares its unit", json.loads(out)["error"])
+        self.assertEqual((code, json.loads(out)["reason"]), (2, "usage"))
+        self.assertIn("unrecognized arguments: --units cm", json.loads(out)["error"])
+        # a value no machine has is refused before anything is read, and a material is taken by its name
+        code, out, _ = _run("stl", str(self.box), "--process", "printing", "--layer-height", "5", "--json")
+        self.assertEqual((code, json.loads(out)["reason"]), (2, "invalid_argument"))
+        self.assertIn("--layer-height 5 mm is taller than the 0.4 mm nozzle", json.loads(out)["error"])
+        code, out, _ = _run("stl", str(self.box), "--process", "printing", "--material", "PLA filament", "--json")
+        self.assertEqual((code, json.loads(out)["measurements"]["rules"]["context"]["material"]), (0, "pla"), out)
         code, _, err = _run("stl", str(self.folder / "box.glb"), "--process", "printing")
         self.assertEqual(code, 2)
         self.assertIn("box.glb is a glb, not a stl: use cad glb dfm", err)
 
-    def test_a_usage_error_is_argparses_two_and_a_failed_measurement_one(self) -> None:
-        """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one, nor
-        does a file that is not there."""
+    def test_a_usage_error_is_argparses_two(self) -> None:
+        """Exit 1 is a part that fails and exit 3 a check that judged nothing; a misspelled flag never reads as
+        either, nor does a file that is not there."""
         code, _out, err = _run("stl", str(self.box), "--process", "printing", "--not-a-flag")
         self.assertEqual(code, 2)
         self.assertIn("unrecognized arguments: --not-a-flag", err)
@@ -292,8 +368,10 @@ class ModelTest(unittest.TestCase):
             sharp = [f for f in result.findings if f.code == "cnc.internal_corner_sharp"]
             self.assertTrue(sharp, [f.code for f in result.findings])
             self.assertFalse(result.ok)
-            face = cad.model.inspect(ident, sharp[0].location)
-            self.assertEqual(face["kind"], "edge" if " edge " in f" {sharp[0].location} " else "face")
+            # a corner is its edge: the finding is at it, its faces beside it, each a ref inspect resolves
+            self.assertRegex(sharp[0].location, r"plate/edge \d+$")
+            self.assertEqual(cad.model.inspect(ident, sharp[0].location)["kind"], "edge")
+            self.assertEqual([cad.model.inspect(ident, ref)["kind"] for ref in sharp[0].refs[1:3]], ["face", "face"])
             code, out, _ = _run("model", ident, "--process", "cnc", "--json")
             self.assertEqual(code, 1)
             self.assertIn("cnc.internal_corner_sharp", {f["code"] for f in json.loads(out)["findings"]})

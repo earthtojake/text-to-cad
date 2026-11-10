@@ -27,6 +27,15 @@ rule is ``measurements["rules"]``. A shop's own limits are no option here: they 
 measurements (a shop's skill does), and what a person knows of their own shop is a plain option (the
 tools, the bend radius, the sheet, the build volume).
 
+**Three states** (``CheckResult.status``, ``finish``). ``ok``: everything was judged and no finding is an
+error (warnings are recommendations: the part is made, at a cost or a risk). ``failed``: a finding is an
+error -- the part cannot be made by this process as drawn -- or, with ``strict``, a warning. ``not_checked``:
+the check did not judge what it was asked to -- a source that does not read or holds no solid
+(``Unmeasured``), a family that could not be measured (``measurement_failed``), faces the kernel failed to
+intersect rays with (``rays_unintersected``), rules that judged nothing (``rules_none_evaluated``) -- which is
+no verdict and never a pass; ``reason`` is the code of the finding that says so. A failure wins over what
+was not checked: an error found is the part's whatever else was not judged. ``ok`` is True for ``ok`` alone.
+
 Each option belongs to a process (``dfm.<process>.OPTIONS``) or to all (``dfm.COMMON``), and one given to
 another process is refused by name before anything is read, as an option the check does not take would be
 (law 16), and so is a value of another kind (``KINDS``: never coerced, law 17). Each type's ``dfm`` takes the
@@ -43,6 +52,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Literal, get_args
@@ -51,8 +61,8 @@ from cad._internal import dfm
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding, CheckResult
 
-__all__ = ["BREP_TYPES", "DEFAULTS", "KINDS", "OPTIONS", "PROCESSES", "UNITS_MM", "declared", "dfm_for", "finish", "options",
-           "processes_for", "through_engine"]
+__all__ = ["BREP_TYPES", "DEFAULTS", "KINDS", "NOT_CHECKED", "OPTIONS", "PROCESSES", "UNITS_MM", "declared", "dfm_for",
+           "finish", "not_checked", "options", "parameters", "processes_for", "through_engine"]
 
 #: The enumerations ``process``, ``units`` and ``technology`` take, so the command's generated parser takes
 #: their values alone (each flag's choices); each is held to the modules that define it (below).
@@ -125,6 +135,76 @@ def _give_process(document_type: str, why: str = "") -> ArgumentRefused:
                            + (f"{', '.join(named[:-1])} or {named[-1]}" if len(named) > 1 else named[0]))
 
 
+#: The options written out as text (``3,6,10``, ``100x60x25``) that a Python caller may give as numbers: each
+#: with what joins them.
+_SEQUENCES = {"tools": ",", "stock": "x", "build_volume": "x", "sheet_size": "x", "pull": ","}
+
+
+def _spelled(given: dict[str, Any]) -> dict[str, Any]:
+    """``given`` with each option a Python caller gave as numbers (``tools=[3, 6]``, ``stock=(100, 60, 25)``,
+    ``pull=(0, 0, 1)``, one tool as ``tools=6``) written out as the command line writes it, and the material
+    by its name in the table (``_material``). Anything else is as given, for ``_kinds`` to refuse by name."""
+    spelled = dict(given)
+    for name, joint in _SEQUENCES.items():
+        value = spelled.get(name)
+        if name == "tools" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            value = [value]
+        if isinstance(value, (list, tuple)) and value and all(
+                isinstance(part, (int, float)) and not isinstance(part, bool) for part in value):
+            spelled[name] = joint.join(repr(part) for part in value)
+    if isinstance(spelled.get("material"), str):
+        spelled["material"] = _material(spelled["material"])
+    return spelled
+
+
+def _material(name: str) -> str:
+    """The table's name for a material as a person writes it: the name or an alias (``materials.resolve``),
+    or the longest run of its words that is one -- ``Aluminium 6061`` is aluminum, ``stainless steel 304``
+    stainless -- the earliest of the longest. ``ArgumentRefused`` listing the table for none."""
+    from cad._internal.dfm import materials
+
+    try:
+        return str(materials.resolve(name))
+    except ArgumentRefused:
+        words = [word for word in re.split(r"[\s_\-/,]+", name.strip().lower()) if word]
+        for length in range(len(words) - 1, 0, -1):
+            for start in range(len(words) - length + 1):
+                try:
+                    return str(materials.resolve("_".join(words[start:start + length])))
+                except ArgumentRefused:
+                    continue
+        raise
+
+
+#: An end mill over this across (mm) is none a mill holds: a value above it is a mistake of units or a typo
+#: (text-to-cad's own bound: standard end mills end near 50 mm, the widest indexable ones under 100).
+TOOL_MAX_MM = 100.0
+#: A powder or resin machine lays no layer over this (mm; text-to-cad's own bound: SLA, SLS, MJF and metal
+#: powder bed fusion layers are 0.02 to 0.3 mm). FDM's is its nozzle's diameter.
+LAYER_MAX_MM = 0.5
+FDM_NOZZLE_MM = 0.4
+
+
+def _plausible(process: str, resolved: dict[str, Any]) -> None:
+    """``ArgumentRefused`` for a value in range that no machine has, which would judge the part against
+    nothing: an end mill a thousand kilometres across passes every corner, a 5 mm layer every wall."""
+    if process == "cnc" and resolved.get("tools") is not None:
+        widest = max(dfm.module("cnc").tools(resolved["tools"]))
+        if widest > TOOL_MAX_MM:
+            raise ArgumentRefused(f"--tools names an end mill {widest:g} mm across: diameters are in millimetres, "
+                                  f"at most {TOOL_MAX_MM:g}")
+    if process == "printing" and resolved.get("layer_height") is not None:
+        layer = float(resolved["layer_height"])
+        if resolved.get("technology") == "fdm":
+            nozzle = float(resolved.get("nozzle") or FDM_NOZZLE_MM)
+            if layer > nozzle:
+                raise ArgumentRefused(f"--layer-height {layer:g} mm is taller than the {nozzle:g} mm nozzle: an FDM "
+                                      "layer is at most the nozzle's diameter (give --nozzle for a wider one)")
+        elif layer > LAYER_MAX_MM:
+            raise ArgumentRefused(f"--layer-height {layer:g} mm is no {resolved.get('technology')} layer: at most "
+                                  f"{LAYER_MAX_MM:g} mm")
+
+
 def _kinds(given: dict[str, Any], candidates: Any) -> None:
     """Each option given (not None; a flag's False is not given) of its kind (``KINDS``), and ``candidates`` a
     flag: ``ArgumentRefused`` naming the flag else."""
@@ -149,6 +229,7 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     (``BREP_TYPES``) check the one its parts declare, read with the document: what holds for every process
     is checked here (``_preflight``) and None is answered; the integration resolves the rest once it has read
     the parts (``declared``). A mesh refuses it, as a STEP does: its parts' materials are not in it."""
+    given = _spelled(given)
     _kinds(given, candidates)
     if process is None and len(processes_for(document_type)) == 1:
         process = processes_for(document_type)[0]
@@ -180,10 +261,8 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
         raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
     if units != "mm" and document_type in _DECLARED:
         raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
-    from cad._internal.dfm import materials
-
-    materials.resolve(resolved.get("material"))
     module.validate(resolved, document_type)
+    _plausible(process, resolved)
     return resolved
 
 
@@ -201,9 +280,6 @@ def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> N
         if units not in UNITS_MM:
             raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
         raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
-    from cad._internal.dfm import materials
-
-    materials.resolve(given.get("material"))
     return None
 
 
@@ -284,20 +360,44 @@ def _label(source: Any) -> Path:
 
 
 _ORDER = {"error": 0, "warning": 1, "info": 2}
-#: What puts every other figure in doubt, said before the errors whatever its severity: a mesh not watertight
-#: or not sound (its walls, voids and volume are of an open or broken surface), a family that could not be
-#: measured, units that look wrong (every length off by a factor).
-_FIRST = frozenset({"not_watertight", "not_sound", "measurement_failed", "units_suspect"})
+#: The findings that say the check did not judge what it was asked to, whatever their severity: a family that
+#: could not be measured, faces the kernel failed to intersect rays with (what is measured across them is
+#: not), rules that judged nothing. Any of them and the result is ``not_checked``, never ``ok``.
+NOT_CHECKED = frozenset({"measurement_failed", "rays_unintersected", "rules_none_evaluated"})
+#: What puts every other figure in doubt, said before the errors whatever its severity: what was not checked,
+#: a mesh not watertight or not sound (its walls, voids and volume are of an open or broken surface), units
+#: that look wrong (every length off by a factor).
+_FIRST = NOT_CHECKED | {"not_watertight", "not_sound", "units_suspect"}
 
 
-def _failed(path: Path, message: str, code: str) -> CheckResult:
-    return CheckResult(ok=False, path=path, findings=(CheckFinding("error", code, message),))
+def _shown(label: Path) -> Any:
+    from cad._internal.validation_door import display_path
+
+    return display_path(label) if label.is_absolute() else label
+
+
+def not_checked(path: Path, message: str, code: str) -> CheckResult:
+    """The result of a check that judged nothing: ``not_checked``, its ``reason`` the ``code`` of the one
+    finding that says why (``message``) -- a source that does not read or holds no solid, a file that is not
+    there, a check that stopped or failed where it ran."""
+    return CheckResult(ok=False, path=path, findings=(CheckFinding("error", code, message),),
+                       summary=f"NOT CHECKED {_shown(path)}: {code}", status="not_checked", reason=code)
+
+
+_failed = not_checked
+
+
+def _digest(counts: "Counter[str]") -> str:
+    return ", ".join(f"{code} x{count}" for code, count in counts.most_common())
 
 
 def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str, Any],
-           candidates: bool) -> CheckResult:
+           candidates: bool, strict: bool = False) -> CheckResult:
     """The result of a measured ``report``: the measurement's findings, the process's, and the verdicts of its
-    rules, which the report records (``measurements["rules"]``)."""
+    rules, which the report records (``measurements["rules"]``); its state (the module's **Three states**),
+    with ``strict`` failed by a warning too; and its one line, which leads with its state and its counts --
+    features, as the findings count them (``rules.evaluate``'s ``failing``), so the line and the findings
+    agree."""
     from cad._internal.dfm import _common, rules
 
     module = dfm.module(process)
@@ -305,11 +405,22 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
     found: list[CheckFinding] = [*_common.partial_findings(report), *_common.scale_findings(report),
                                  *(CheckFinding(**finding) for finding in report.pop("findings", None) or ()),
                                  *module.findings(report, resolved, candidates)]
+    failing: dict[str, dict[str, int]] = {"error": {}, "warning": {}}
     if not candidates:
         rule_set = module.RULES
         verdicts, record = rules.evaluate(report, rule_set, module.context(report, resolved))
         report["rules"] = record
+        failing = record["failing"]
         found.extend(verdicts)
+        lost = sorted({ref for outcome in record["outcomes"] for ref in outcome.get("unmeasured_faces") or ()})
+        if lost and not any(finding.code == "rays_unintersected" for finding in found):
+            named = ", ".join(lost[:8]) + (f" and {len(lost) - 8} more" if len(lost) > 8 else "")
+            found.append(CheckFinding(
+                "warning", "rays_unintersected",
+                f"the kernel failed to intersect rays with {len(lost)} face(s) ({named}): what the rules judge "
+                f"across them is not measured there", lost[0],
+                "rebuild the faulty face (its surface has a degenerate patch the kernel cannot intersect), "
+                "then check again"))
         if not record["evaluated"] and record["outcomes"]:
             found.append(CheckFinding(
                 "warning", "rules_none_evaluated",
@@ -325,42 +436,44 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
         # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
         json.dumps(report, allow_nan=False)
     except ValueError as error:
-        return _failed(label, f"a measurement was not a finite number, so the report is not JSON: {error}",
-                       "not_finite")
+        return not_checked(label, f"a measurement was not a finite number, so the report is not JSON: {error}",
+                           "not_finite")
     # What puts every figure in doubt first (``_FIRST``, whatever its severity), then errors, warnings, and the
     # facts and assumptions: what a reader acts on comes first.
     found.sort(key=lambda finding: (finding.code not in _FIRST, _ORDER.get(finding.severity, 3)))
-    ok = not any(finding.severity == "error" for finding in found)
-    from cad._internal.validation_door import display_path
-
-    measured = module.summary(report, resolved, candidates)
-    if ok:
-        line = f"OK {display_path(label) if label.is_absolute() else label}: {process} {measured}"
-        rules_record = report.get("rules") or {}
-        if rules_record and not rules_record.get("evaluated") and rules_record.get("outcomes"):
-            line += "; nothing judged: the rules have no limit for this part's context"
-        warned = sum(1 for finding in found if finding.severity == "warning")
-        if warned:
-            line += f" ({warned} warning(s))"
+    # One count, the findings': a rule's failing features (those past the findings shown too), and every
+    # other finding once. What was not checked is counted apart: it is no verdict on the part.
+    counts: dict[str, Counter[str]] = {"error": Counter(failing["error"]), "warning": Counter(failing["warning"])}
+    unchecked: Counter[str] = Counter()
+    for finding in found:
+        if finding.code in NOT_CHECKED:
+            unchecked[str(finding.code)] += 1
+        elif finding.rule is None and finding.severity in counts:
+            counts[finding.severity][str(finding.code)] += 1
+    errors, warnings = sum(counts["error"].values()), sum(counts["warning"].values())
+    status = "failed" if errors or (strict and warnings) else "not_checked" if unchecked else "ok"
+    measured = f"{process} {module.summary(report, resolved, candidates)}"
+    rules_record = report.get("rules") or {}
+    if rules_record and not rules_record.get("evaluated") and rules_record.get("outcomes"):
+        measured += "; nothing judged: the rules have no limit for this part's context"
+    warned = f"{warnings} warning(s)" if warnings else ""
+    if status == "ok":
+        line = f"OK {_shown(label)}: {warned + '; ' if warned else ''}{measured}"
+    elif status == "not_checked":
+        line = f"NOT CHECKED {_shown(label)}: {_digest(unchecked)}{', ' + warned if warned else ''}; {measured}"
     else:
-        # The failed line's digest: what was measured, then each failing rule with its count of failures (the
-        # record's, not the findings shown), then every other error by its code, so one line says what to fix
-        # before the findings are read.
-        failed: Counter[str] = Counter()
-        for outcome in (report.get("rules") or {}).get("outcomes") or ():
-            if outcome.get("status") == "failed":
-                failed[outcome["rule"]] += sum(1 for failure in outcome.get("failures") or ()
-                                               if failure.get("severity", outcome.get("severity")) == "error")
-        failed = Counter({code: count for code, count in failed.items() if count})
-        for finding in found:
-            if finding.severity == "error" and finding.code and finding.code not in failed:
-                failed[finding.code] += 1
-        line = f"{process} {measured}; failed: " + ", ".join(f"{code} x{count}" for code, count in failed.most_common())
-    return CheckResult(ok=ok, path=label, findings=tuple(found), summary=line, measurements=report)
+        # The failed line's digest: the counts, what was measured, then each failing rule and every other error
+        # by its code with its count, so one line says what to fix before the findings are read.
+        failed = counts["error"] if errors else counts["warning"]
+        said = f"{errors} error(s)" + (f", {warned}" if warned else "") + (" (--strict: a warning fails)" if not errors else "")
+        line = (f"FAILED {_shown(label)}: {said}; {measured}; failed: {_digest(failed)}"
+                + (f"; not checked: {_digest(unchecked)}" if unchecked else ""))
+    return CheckResult(ok=status == "ok", path=label, findings=tuple(found), summary=line, measurements=report,
+                       status=status, reason=next(iter(unchecked), None) if status == "not_checked" else None)
 
 
 def measure(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,
-            candidates: bool, given: dict[str, Any] | None = None) -> CheckResult:
+            candidates: bool, given: dict[str, Any] | None = None, strict: bool = False) -> CheckResult:
     """Measure ``source`` with its integration, then ``finish`` it: a B-rep's through the engine, where the
     document is held (``_held``), else in this process (``_here``). With no ``process`` (a B-rep type's, its
     options ``given`` unresolved) the integration reads the document, takes the process its parts declare and
@@ -369,14 +482,14 @@ def measure(document_type: str, source: Any, process: str | None, resolved: dict
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
     if document_type in BREP_TYPES:
-        found = _held(document_type, source, process, resolved, candidates, given, label)
+        found = _held(document_type, source, process, resolved, candidates, given, label, strict=strict)
         if found is not None:
             return found
-    return _here(document_type, source, process, resolved, candidates, given, label)
+    return _here(document_type, source, process, resolved, candidates, given, label, strict)
 
 
 def _here(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
-          given: dict[str, Any] | None, label: Path) -> CheckResult:
+          given: dict[str, Any] | None, label: Path, strict: bool = False) -> CheckResult:
     """``source`` (a path) measured in this process by its integration, and finished."""
     if process is None:
         from cad.build123d._dfm_check import measure_declared
@@ -385,7 +498,7 @@ def _here(document_type: str, source: Any, process: str | None, resolved: dict[s
             process, resolved, report = measure_declared(document_type, source, given or {}, candidates)
         except dfm.Unmeasured as failure:
             return _failed(label, failure.message, failure.code)
-        return finish(label, {"process": process, **report}, process, resolved, candidates)
+        return finish(label, {"process": process, **report}, process, resolved, candidates, strict)
     assert resolved is not None
     if document_type in BREP_TYPES:
         from cad.build123d._dfm_check import measure as measured
@@ -397,11 +510,11 @@ def _here(document_type: str, source: Any, process: str | None, resolved: dict[s
         report = measured(document_type, source, process, resolved, candidates)
     except dfm.Unmeasured as failure:
         return _failed(label, failure.message, failure.code)
-    return finish(label, {"process": process, **report}, process, resolved, candidates)
+    return finish(label, {"process": process, **report}, process, resolved, candidates, strict)
 
 
 def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
-          given: dict[str, Any] | None, label: Path, *, local: bool = True) -> CheckResult | None:
+          given: dict[str, Any] | None, label: Path, *, local: bool = True, strict: bool = False) -> CheckResult | None:
     """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory where the document
     is held -- a model's in its warm worker, a STEP's or an xbf's in the engine's checks process, read once --
     or answered from the result the engine kept for an unchanged document, then finished here.
@@ -424,7 +537,9 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     except api.Unreached as error:
         if is_file:
             return None
-        return _failed(label, f"failed to read the document: {error}", "document_unreadable")
+        # no engine and nothing to measure here instead: its own reason where the engine's client gives one
+        return _failed(label, f"failed to read the document: {error}",
+                       str(getattr(error, "reason", None) or "document_unreadable"))
     except api.Unanswered:
         found = None
     except ValueError as error:
@@ -435,18 +550,18 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
         return _failed(label, f"failed to read the document: {error}", "document_unreadable")
     if found is None or found.get("release") != release():
         return (None if is_file or not local else
-                _exported(document_type, source, process, resolved, candidates, given, label))
+                _exported(document_type, source, process, resolved, candidates, given, label, strict))
     if "refused" in found:
         raise ArgumentRefused(found["refused"])
     if "unmeasured" in found:
         return _failed(label, found["unmeasured"]["message"], found["unmeasured"]["code"])
     measured = found["measured"]
     return finish(label, {"process": measured["process"], **measured["report"]}, measured["process"],
-                  measured["resolved"], candidates)
+                  measured["resolved"], candidates, strict)
 
 
 def through_engine(document_type: str, source: Any, process: str | None, given: dict[str, Any],
-                   candidates: bool) -> CheckResult | None:
+                   candidates: bool, strict: bool = False) -> CheckResult | None:
     """A B-rep's check asked of the engine by a command that holds no kernel: its result, or None where the
     engine measured nothing (none to reach, another release's), which the command runs in the environment of
     the integration (``cad_server.cli.document_types``), never here."""
@@ -454,11 +569,11 @@ def through_engine(document_type: str, source: Any, process: str | None, given: 
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
     resolved = options(document_type, process, given, candidates=candidates)
-    return _held(document_type, source, process, resolved, candidates, given, label, local=False)
+    return _held(document_type, source, process, resolved, candidates, given, label, local=False, strict=strict)
 
 
 def _exported(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,
-              candidates: bool, given: dict[str, Any] | None, label: Path) -> CheckResult:
+              candidates: bool, given: dict[str, Any] | None, label: Path, strict: bool = False) -> CheckResult:
     """A model's document checked as before the engine measured checks: exported by the engine to an xbf in a
     temporary folder, read back and measured here (``_here``). An id the engine does not hold is refused as
     its type; any other failure to export it is the check's ``document_unreadable``."""
@@ -474,7 +589,7 @@ def _exported(document_type: str, source: Any, process: str | None, resolved: di
             if any(kind.__module__ == "cad.engine.serve" and kind.__name__ == "NotHeld" for kind in type(error).__mro__):
                 raise
             return _failed(label, f"failed to read the document: {error}", "document_unreadable")
-        return _here(document_type, written, process, resolved, candidates, given, label)
+        return _here(document_type, written, process, resolved, candidates, given, label, strict)
 
 
 def _declared_material(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
@@ -551,25 +666,37 @@ _SUMMARY = {
     "mesh": "Check a mesh for 3D printing.",
     "cut": "Check a sheet's cut file (a DXF) for laser, waterjet or router cutting: the sheet process.",
 }
+# The exit statuses, in the summary the command's help shows.
+_STATUSES = ("Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, "
+             "something was not judged: never a pass. Exit 2: the command line's mistake.")
+# What the last line and the exit status say, under every type's help.
+_EXITS = """The last line and the exit status are the check's state. OK, exit 0: everything was measured and no
+finding is an error. FAILED, exit 1: a finding is an error (with --strict, a warning too): the part cannot be
+made by this process as drawn. NOT CHECKED, exit 3: the check did not judge what it was asked to -- a source
+that does not read or holds no solid, a family that could not be measured, an engine that stopped -- which
+is no verdict and never a pass. Exit 2: the command line's mistake."""
 _ABOUT = {
     "brep": """A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
 (cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
 from a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source
-and what to change. A rule's feasibility limit broken is an error, as is a family that could not be measured;
-a recommendation is a warning. For a named shop, compare the measurements with its own published limits.
---json carries every measurement and every rule's outcome.""",
+and what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named
+shop, compare the measurements with its own published limits. --json carries every measurement, every rule's
+outcome and each verdict as data (value, limit, unit, refs).
+""" + _EXITS,
     "mesh": """A mesh (STL, 3MF, GLB) is measured as triangles for 3D printing, each finding at x, y, z; CNC
 machining and sheet metal need the exact radii, axes and thicknesses a mesh does not hold, and injection
 molding's draft, undercuts and walls are judged on exact geometry: check the part's STEP or model for them. The measurements are facts; the verdicts are general rules, each from a published design guide and
 no shop's limit, each finding coded by its rule, with the limit, the source and what to change. A rule's
-feasibility limit broken is an error, as is a family that could not be measured; a recommendation is a
-warning. For a named shop, compare the measurements with its own published limits. --json carries every
-measurement and every rule's outcome.""",
+feasibility limit broken is an error; a recommendation is a warning. For a named shop, compare the
+measurements with its own published limits. --json carries every measurement, every rule's outcome and each
+verdict as data (value, limit, unit).
+""" + _EXITS,
     "cut": """Its units, closed contours on the cut layers, curves cut twice (overlapping, crossing, zero-area),
 annotation on a cut layer, curves drawn as short lines, and holes, slots, webs and spacing against the kerf
 and the thickness, judged against general rules, each cited; each finding at a layer and an entity handle.
 A rule's feasibility limit broken is an error, a recommendation a warning; for a named shop, compare the
-measurements with its own published limits. --json carries every measurement and every rule's outcome.""",
+measurements with its own published limits. --json carries every measurement and every rule's outcome.
+""" + _EXITS,
 }
 
 
@@ -606,7 +733,9 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
     """``cad.<document_type>.dfm``'s signature -- the source, the type's processes, and the options of those
     processes alone (a mesh's help offers no ``--axes``) -- and its docstring, built for the type."""
     processes = processes_for(document_type)
-    names = [name for name in KINDS if name in dfm.COMMON or any(name in OPTIONS[process] for process in processes)]
+    # ``units`` is an STL's alone: a type that declares its units takes no option it would refuse every value of
+    names = [name for name in KINDS if (name in dfm.COMMON and (name != "units" or document_type not in _DECLARED))
+             or any(name in OPTIONS[process] for process in processes)]
     ranked = any(process in _RANKED for process in processes)
     # the type's processes, the parser's choices; a mesh's every process, the ones it is not checked for
     # refused by ``options`` with the reason and the fix
@@ -624,43 +753,81 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
                                             annotation=annotation))
     if ranked:
         parameters.append(inspect.Parameter("candidates", keyword, default=False, annotation=bool))
+    parameters.append(inspect.Parameter("strict", keyword, default=False, annotation=bool))
     helps = {"source": _source_help(document_type), "process": _process_help(document_type, processes),
              **{name: _HELP[name] for name in names}}
     if ranked:
         helps["candidates"] = ("rank the candidates instead: " + ", ".join(
             {"molding": "molding the pulls (x, y, z and the part's principal axes)",
              "printing": "printing the orientations"}[process] for process in processes if process in _RANKED) + ".")
+    helps["strict"] = "a warning fails the check too (exit 1): a gate that takes no recommendation broken."
     kind = _kind_of(document_type)
-    doc = "\n\n".join([_SUMMARY[kind], _ABOUT[kind], "\n".join(f"{name}: {text}" for name, text in helps.items())])
+    doc = "\n\n".join([f"{_SUMMARY[kind]} {_STATUSES}", _ABOUT[kind],
+                       "\n".join(f"{name}: {text}" for name, text in helps.items())])
     return inspect.Signature(parameters, return_annotation=CheckResult), doc
+
+
+#: A flag in a refusal's words (``--layer-height``), but inside a command written out (``(cad step dfm ...)``).
+_FLAG = re.compile(r"\((?:cad |a shop)[^)]*\)|--([a-z][a-z-]*[a-z])")
+
+
+def parameters(words: str) -> str:
+    """A refusal's ``words`` as a Python caller reads them: each option by its parameter's name (``tools``,
+    ``layer_height``), not the command line's flag (``--tools``, ``--layer-height``). A command written out in
+    brackets is left as it is."""
+    known = {*KINDS, "process", "candidates", "strict"}
+
+    def named(match: "re.Match[str]") -> str:
+        name = (match.group(1) or "").replace("-", "_")
+        return name if name in known else match.group(0)
+
+    return _FLAG.sub(named, words)
+
+
+def called(document_type: str, signature: inspect.Signature, args: tuple[Any, ...], kwargs: dict[str, Any]) -> CheckResult:
+    """``cad.<document_type>.dfm(*args, **kwargs)``, run: its options resolved, its source measured, its result
+    finished. A refusal names the command line's flags (``ArgumentRefused``), as the options' own words do."""
+    bound = signature.bind(*args, **kwargs)  # TypeError for an option this type's check does not take
+    bound.apply_defaults()
+    given = dict(bound.arguments)
+    source, process, candidates = given.pop("source"), given.pop("process"), given.pop("candidates", False)
+    strict = given.pop("strict", False)
+    from cad._internal.dfm import _common
+
+    _common.require_bool("strict", strict)
+    resolved = options(document_type, process, given, candidates=candidates)
+    if process is None and resolved is not None:
+        process = processes_for(document_type)[0]
+    from cad._internal.document_type import refuse_other
+
+    refuse_other(document_type, source)
+    try:
+        return measure(document_type, source, process, resolved, candidates, given, strict)
+    except ModuleNotFoundError as error:
+        from cad._internal.integrations import missing
+
+        said = missing(error)
+        if said is None:
+            raise
+        raise ModuleNotFoundError(said, name=error.name) from None
 
 
 def dfm_for(document_type: str) -> Any:
     """``cad.<document_type>.dfm``: the manufacturing check, for a source of that type. Its signature is the
     type's (``_signature``): its processes the command's choices, and only their options, so ``cad stl dfm``
-    offers no CNC flag and ``cad dxf dfm`` checks the sheet's cut file given no ``--process``."""
+    offers no CNC flag and ``cad dxf dfm`` checks the sheet's cut file given no ``--process``.
+
+    A Python caller's refusal names the parameter (``tools``, not ``--tools``: ``parameters``); the command
+    calls it with ``_command=True`` -- a keyword of the command's own, in no signature -- and reads its flags."""
     signature, doc = _signature(document_type)
 
-    def dfm(*args: Any, **kwargs: Any) -> CheckResult:
-        bound = signature.bind(*args, **kwargs)  # TypeError for an option this type's check does not take
-        bound.apply_defaults()
-        given = dict(bound.arguments)
-        source, process, candidates = given.pop("source"), given.pop("process"), given.pop("candidates", False)
-        resolved = options(document_type, process, given, candidates=candidates)
-        if process is None and resolved is not None:
-            process = processes_for(document_type)[0]
-        from cad._internal.document_type import refuse_other
-
-        refuse_other(document_type, source)
+    def dfm(*args: Any, _command: bool = False, **kwargs: Any) -> CheckResult:
+        if _command:
+            return called(document_type, signature, args, kwargs)
         try:
-            return measure(document_type, source, process, resolved, candidates, given)
-        except ModuleNotFoundError as error:
-            from cad._internal.integrations import missing
-
-            said = missing(error)
-            if said is None:
-                raise
-            raise ModuleNotFoundError(said, name=error.name) from None
+            return called(document_type, signature, args, kwargs)
+        except ArgumentRefused as refused:
+            raise ArgumentRefused(parameters(str(refused))) from None
 
     dfm.__signature__ = signature  # type: ignore[attr-defined]
     dfm.__annotations__ = {**{name: parameter.annotation for name, parameter in signature.parameters.items()},

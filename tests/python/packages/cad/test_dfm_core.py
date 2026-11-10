@@ -40,11 +40,54 @@ class RulesTest(unittest.TestCase):
                                         {"radius_mm": None, "location": "plate/face 11"}]}}
         found, record = evaluate(report, _set(rule), {})
         self.assertEqual([(f.code, f.location, f.severity) for f in found], [("cnc.corner", "plate/face 7", "error")])
-        self.assertIn("0.5 mm is under the 1 mm minimum (general practice; source: Publisher, Guide)", found[0].message)
+        # the verdict in a line, and as data: nothing is read out of the message
+        self.assertEqual(found[0].message, "internal corner radius 0.5 mm is under the 1 mm minimum")
+        self.assertEqual((found[0].rule, found[0].value, found[0].limit, found[0].unit, found[0].op, found[0].source,
+                          found[0].refs), ("cnc.corner", 0.5, 1.0, "mm", "min", "Publisher, Guide", ["plate/face 7"]))
         self.assertEqual(found[0].hint, "radius it to at least 1 mm")
         outcome = record["outcomes"][0]
         self.assertEqual((outcome["status"], outcome["evaluated"], outcome["unmeasured"]), ("failed", 2, 1))
-        self.assertEqual(record["failed"], ["cnc.corner"])
+        self.assertEqual(outcome["failures"], [{"value": 0.5, "location": "plate/face 7", "xyz": None,
+                                                "refs": ["plate/face 7"], "item": 0}])
+        self.assertEqual((record["failed"], record["failing"]), (["cnc.corner"], {"error": {"cnc.corner": 1},
+                                                                                 "warning": {}}))
+
+    def test_a_feature_is_its_edge_and_one_finding_names_every_ref(self) -> None:
+        """A corner is its edge, not one of the two faces that meet there: two corners of one face are two
+        findings, each at its edge with its faces listed, and the count is the findings'."""
+        rule = Rule("cnc.sharp", "corners", "radius_mm", "min", 1.0, "mm", "corner radius", "s")
+        corners = [{"radius_mm": 0.0, "location": "p/face 7", "faces": ["p/face 7", "p/face 8"], "edge": "p/edge 17",
+                    "pocket": "p/face 11"},
+                   {"radius_mm": 0.0, "location": "p/face 7", "faces": ["p/face 9", "p/face 7"], "edge": "p/edge 23"},
+                   # two samples of one wall are one feature: one finding, the worst, the rest in its items
+                   {"radius_mm": 0.2, "location": "p/face 3"}, {"radius_mm": 0.4, "location": "p/face 3"}]
+        found, record = evaluate({"corners": {"items": corners}}, _set(rule), {})
+        self.assertEqual([(f.location, f.refs) for f in found],
+                         [("p/edge 17", ["p/edge 17", "p/face 7", "p/face 8", "p/face 11"]),
+                          ("p/edge 23", ["p/edge 23", "p/face 7", "p/face 9"]), ("p/face 3", ["p/face 3"])])
+        self.assertIn("(and 1 more at this ref)", found[2].message)
+        self.assertEqual(([item["value"] for item in found[2].items], found[2].value), ([0.2, 0.4], 0.2))
+        self.assertEqual(record["failing"]["error"], {"cnc.sharp": 3})
+        # the record keeps every failure at its item's own place, with its refs (the feature first) and its item
+        self.assertEqual([(failure["item"], failure["location"], failure["refs"][0])
+                          for failure in record["outcomes"][0]["failures"]],
+                         [(0, "p/face 7", "p/edge 17"), (1, "p/face 7", "p/edge 23"), (2, "p/face 3", "p/face 3"),
+                          (3, "p/face 3", "p/face 3")])
+
+    def test_a_rule_scales_by_the_items_own_figure_before_the_contexts(self) -> None:
+        """Parts of several thicknesses: a hole is held to its own part's thickness (the item's ``thickness``),
+        the context's where the item carries none, and a failure says the limit it was held to."""
+        rule = Rule("hole", "holes", "d", "min", 1.0, "mm", "hole", "s", scale_by="thickness")
+        holes = [{"d": 1.5, "thickness": 2.0, "location": "a/face 1"}, {"d": 1.5, "thickness": 1.0, "location": "b/face 1"},
+                 {"d": 1.5, "location": "c/face 1"}]
+        found, record = evaluate({"holes": {"items": holes}}, _set(rule), {"thickness": 3.0})
+        self.assertEqual([(f.location, f.limit) for f in found], [("a/face 1", 2.0), ("c/face 1", 3.0)])
+        self.assertEqual([failure.get("limit") for failure in record["outcomes"][0]["failures"]], [2.0, None])
+        # with no thickness in the context the items that carry one are judged, the rest not
+        found, record = evaluate({"holes": {"items": holes}}, _set(rule), {})
+        self.assertEqual(([f.location for f in found if f.rule], record["outcomes"][0]["status"]),
+                         (["a/face 1"], "failed"))
+        self.assertEqual(record["outcomes"][0]["unmeasured"], 1)
 
     def test_an_angle_is_at_its_limit_to_a_millionth_of_a_degree(self) -> None:
         # a 2 deg wall against a pull typed to nine digits reads 1.99999999
@@ -148,18 +191,29 @@ class RulesTest(unittest.TestCase):
         # a value just under the limit prints the digits that tell them apart
         found, _ = evaluate({"f": {"items": [{"v": 0.999999, "location": "a"}]}}, _set(rule), {})
         self.assertIn("v 0.999999 mm is under the 1 mm minimum", found[0].message)
-        # a pass over some items is not a pass over the rest
-        _, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}, {"v": None, "location": "b"}]}},
-                             _set(rule), {})
+        # a pass over some items is not a pass over the rest: partial, never passed, and said
+        found, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}, {"v": None, "location": "p/face 2"}]}},
+                                 _set(rule), {})
         self.assertEqual((record["outcomes"][0]["status"], record["outcomes"][0]["reason"]),
-                         ("passed", "1 item(s) not measured"))
+                         ("partial", "1 item(s) not measured"))
+        self.assertEqual((record["partial"], record["evaluated"], "_unread" in record["outcomes"][0]), (["r"], 1, False))
+        self.assertEqual([(f.severity, f.code, f.location) for f in found], [("warning", "rule_partly_judged", "p/face 2")])
+        self.assertIn("r judged 1 of 2 f: 1 carry no v (p/face 2)", found[0].message)
+        # faces the kernel failed on are not measured either: partial where the rest passed
+        _, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}], "unmeasured_faces": ["p/face 9"]}},
+                             _set(rule), {})
+        self.assertEqual((record["outcomes"][0]["status"], record["outcomes"][0]["unmeasured_faces"]),
+                         ("partial", ["p/face 9"]))
         # a bool is no scale
         scaled = Rule("r", "f", "v", "min", 1.0, "mm", "v", "s", scale_by="t")
         self.assertIsNone(scaled.limit_for({"t": True}))
         # the failures past those shown: counted where the record lists them, with the fix
         items = [{"v": 0.1, "location": f"p/face {i}"} for i in range(12)]
-        found, _ = evaluate({"f": {"items": items}}, _set(rule), {})
+        found, record = evaluate({"f": {"items": items}}, _set(rule), {})
         self.assertEqual((found[-1].location, found[-1].hint), ("measurements.rules", "raise it to 1"))
+        self.assertEqual((len(found), found[-1].value, [item["location"] for item in found[-1].items]),
+                         (9, None, [f"p/face {i}" for i in range(8, 12)]))
+        self.assertEqual(record["failing"]["error"], {"r": 12})  # every feature, not the findings shown
         # a warning is implied by an error on the same item, not on another that shares its place
         error, warning = Rule("e", "f", "v", "min", 1.0, "mm", "v", "s"), \
             Rule("w", "f", "v", "min", 2.0, "mm", "v", "s", severity="warning")
@@ -288,7 +342,8 @@ class OptionsTest(unittest.TestCase):
                 ("printing", {"samples": 2.5}, "--samples is a whole number"),
                 ("sheet", {"kerf": float("inf")}, "--kerf is a finite number, not inf"),
                 ("sheet", {"thickness": float("nan")}, "--thickness is a finite number"),
-                ("cnc", {"tools": 6}, "--tools is text")):
+                ("cnc", {"tools": True}, "--tools is text"),
+                ("cnc", {"tools": ["3", "6"]}, "--tools is text")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
                 manufacturing.options("step", process, given)
         with self.assertRaisesRegex(ValueError, "--candidates is true or false"):
@@ -365,6 +420,7 @@ class GeometryTest(unittest.TestCase):
         self.assertAlmostEqual(rays.thickness((25, 0, 10), (0, 0, 1)), 20.0, places=6)
         self.assertAlmostEqual(rays.thickness((0, 0, 2), (0, 0, 1)), 12.0, places=6)
         spans = rays.intervals((0, 0, -50), (0, 0, 1))
+        assert spans is not None
         self.assertEqual(len(spans), 1)
         self.assertAlmostEqual(spans[0][1] - spans[0][0], 12.0, places=6)
         self.assertEqual(brep.inside(self.part.shape, [(0, 0, 0), (0, 0, 5), (22, 12, 0)]), [True, False, False])
@@ -612,16 +668,16 @@ class DeclaredProcessTest(unittest.TestCase):
 
         from cad._internal.refused import ArgumentRefused
 
-        # each is the caller's to fix with --process: refused by name (the command's exit 2), never a result
-        with self.assertRaisesRegex(ArgumentRefused, r"machined \(a\), molded \(b\).*give --process"):
+        # each is the caller's to fix with process=: refused by name (the command's exit 2), never a result
+        with self.assertRaisesRegex(ArgumentRefused, r"machined \(a\), molded \(b\).*give process"):
             self._checked(bd.Compound(children=[self._part(metals.aluminum(process=machined()), "a"),
                                                 self._part(plastics.abs_(process=molded()), "b", 60)]))
         for material, said in ((metals.aluminum(process=cast()), r"\(Alu_G6061_T6, cast\) is made by a process no "),
                                (metals.aluminum(), "no part declares one"), (None, "no part declares one")):
-            with self.subTest(said=said), self.assertRaisesRegex(ArgumentRefused, said + ".*give --process cnc, sheet"):
+            with self.subTest(said=said), self.assertRaisesRegex(ArgumentRefused, said + ".*give process cnc, sheet"):
                 self._checked(self._part(material))
         # an option of another process is refused once the declared one is read
-        with self.assertRaisesRegex(ArgumentRefused, "--pull is not cnc's.*the parts declare machined"):
+        with self.assertRaisesRegex(ArgumentRefused, "^pull is not cnc's.*the parts declare machined"):
             self._checked(self._part(metals.aluminum(process=machined())), pull="z")
         # FDM parts whose layer heights differ: the technology's own, and said
         parts = [("a", plastics.pla(process=fdm(layer_height_mm=0.2))), ("b", plastics.pla(process=fdm(layer_height_mm=0.3)))]
@@ -697,10 +753,20 @@ class SummaryTest(unittest.TestCase):
                                                                      for x in (-8, 8) for y in (-5, 5)])
         box.label = "box"
         result = cnc(box, material="aluminum")
-        self.assertFalse(result.ok)
-        self.assertIn("failed: cnc.hole_diameter x4", result.summary)  # every failure, not the findings shown
-        self.assertTrue(result.human_lines()[-1].startswith("FAILED box: "))
-        self.assertIn("cnc.hole_diameter x4", result.human_lines()[-1])
+        self.assertEqual((result.ok, result.status, result.reason), (False, "failed", None))
+        self.assertIn("failed: cnc.hole_diameter x4", result.summary)  # every failing feature
+        # one count: the line's errors are its digest's and the findings'
+        lines = result.human_lines()
+        self.assertRegex(lines[-1], r"^FAILED box: 4 error\(s\)(, \d+ warning\(s\))?; cnc .*failed: cnc.hole_diameter x4$")
+        self.assertEqual(sum(1 for f in result.findings if f.severity == "error"), 4)
+        # the rule's hint and its source once, then a short line a place
+        said = [line for line in lines if "cnc.hole_diameter" in line and line.startswith("error")]
+        self.assertEqual(len(said), 1)
+        self.assertRegex(said[0], r"^error: cnc.hole_diameter, 4 place\(s\)\. Hint: .* Source: .*\.$")
+        places = lines[lines.index(said[0]) + 1:lines.index(said[0]) + 5]
+        self.assertTrue(all(line.startswith("  box/face ") and "0.8 mm is under the 1 mm minimum" in line
+                            for line in places), places)
+        self.assertLess(max(len(line) for line in places), 120)
         # errors come first, then warnings, then the facts
         order = [{"error": 0, "warning": 1, "info": 2}[f.severity] for f in result.findings]
         self.assertEqual(order, sorted(order))
@@ -712,8 +778,13 @@ class SummaryTest(unittest.TestCase):
         self.assertTrue(cnc(block, turning=True).summary.endswith("failed: cnc.no_turning_axis x1"))
         self.assertIn("failed: sheet.not_sheet x1", sheet_metal(block).summary)
         warned = printing(block, technology="pbf")
-        self.assertTrue(warned.ok)
-        self.assertRegex(warned.human_lines()[-1], r"^OK block: printing pbf: .* \(1 warning\(s\)\)$")
+        self.assertEqual((warned.ok, warned.status), (True, "ok"))
+        self.assertRegex(warned.human_lines()[-1], r"^OK block: 1 warning\(s\); printing pbf: ")  # the count leads
+        # strict: a warning fails, and the line says which rule
+        strict = printing(block, technology="pbf", strict=True)
+        self.assertEqual((strict.ok, strict.status), (False, "failed"))
+        self.assertRegex(strict.summary, r"^FAILED block: 0 error\(s\), 1 warning\(s\) \(--strict: a warning fails\); "
+                                         r".*failed: \S+ x1$")
 
 
 class CheckpointTest(unittest.TestCase):
@@ -825,8 +896,8 @@ class ExactRaysTest(unittest.TestCase):
                 self.assertTrue(a[1].IsSame(b[1]))
         for origin, direction in rays[:200]:
             mine, kernel = fast.intervals(origin, direction), plain.intervals(origin, direction)
-            self.assertEqual(len(mine), len(kernel))
-            for (p, q), (r, t) in zip(mine, kernel):
+            self.assertEqual(mine is None, kernel is None)
+            for (p, q), (r, t) in zip(mine or (), kernel or ()):
                 self.assertAlmostEqual(p, r, delta=1e-12 * max(1.0, abs(r)))
                 self.assertAlmostEqual(q, t, delta=1e-12 * max(1.0, abs(t)))
         self.assertTrue(fast.screen.heavy.any())
@@ -1027,9 +1098,12 @@ class CopiesTest(unittest.TestCase):
     PLACES = ((0, 0, 0, 0), (70, 0, 0, 0), (0, 60, 0, 30), (-70, -10, 15, -20))
 
     def _kit(self, shape: bd.Shape) -> bd.Compound:
+        import copy
+
         parts = []
         for index, (x, y, z, turn) in enumerate(self.PLACES):
-            placed = bd.Pos(x, y, z) * bd.Rot(0, 0, turn) * shape
+            # each its own geometry (a deep copy): one shape placed several times is one part's occurrences
+            placed = bd.Pos(x, y, z) * bd.Rot(0, 0, turn) * copy.deepcopy(shape)
             placed.label = f"b{index}"
             parts.append(placed)
         kit = bd.Compound(children=parts)
@@ -1130,6 +1204,291 @@ class CopiesTest(unittest.TestCase):
                                                                                     + np.array([x, y, z]))))
                                         for b in alike]
                                 self.assertLess(min(gaps), 2e-4, (family, a))
+
+
+class StatesTest(unittest.TestCase):
+    """A check has three states (``CheckResult.status``): ok, failed, and not checked -- which is never a pass."""
+
+    def _measured(self) -> tuple[dict, dict]:
+        from cad.build123d import cnc
+
+        block = bd.Box(40, 30, 15) - bd.Pos(0, 0, 5) * bd.Cylinder(4, 5)
+        block.label = "block"
+        result = cnc(block, material="aluminum")
+        self.assertEqual((result.ok, result.status, result.reason), (True, "ok", None))
+        report = {key: value for key, value in result.measurements.items() if key != "rules"}
+        return report, manufacturing.options("step", "cnc", {"material": "aluminum"})
+
+    def _finish(self, report: dict, resolved: dict, **kwargs: bool):
+        import copy
+
+        return manufacturing.finish(Path("block"), copy.deepcopy(report), "cnc", resolved, False, **kwargs)
+
+    def test_a_family_not_measured_is_not_checked_never_ok(self) -> None:
+        report, resolved = self._measured()
+        lost = {**report, "walls": {"error": "the kernel failed"}, "partial_sections": ["walls"]}
+        result = self._finish(lost, resolved)
+        self.assertEqual((result.ok, result.status, result.reason), (False, "not_checked", "measurement_failed"))
+        self.assertEqual(result.findings[0].code, "measurement_failed", "said first")
+        self.assertRegex(result.human_lines()[-1], r"^NOT CHECKED block: measurement_failed x1; cnc ")
+        # faces the kernel failed to intersect rays with: what the rules judge there is not measured
+        rayless = {**report, "holes": {**report["holes"], "unmeasured_faces": ["block/face 3"]}}
+        result = self._finish(rayless, resolved)
+        self.assertEqual((result.status, result.reason), ("not_checked", "rays_unintersected"))
+        self.assertIn("block/face 3", next(f.message for f in result.findings if f.code == "rays_unintersected"))
+        self.assertIn("partial", {o["status"] for o in result.measurements["rules"]["outcomes"]})
+
+    def test_an_error_found_fails_the_part_whatever_else_was_not_checked(self) -> None:
+        report, resolved = self._measured()
+        holes = {**report["holes"], "items": [{**report["holes"]["items"][0], "diameter_mm": 0.01}]}
+        result = self._finish({**report, "holes": holes, "walls": {"error": "x"}, "partial_sections": ["walls"]}, resolved)
+        self.assertEqual((result.status, result.reason), ("failed", None))
+        self.assertRegex(result.summary, r"^FAILED block: \d+ error\(s\).*; not checked: measurement_failed x1$")
+
+    def test_rules_that_judge_nothing_and_a_source_that_does_not_read_are_not_checked(self) -> None:
+        from unittest import mock
+
+        from cad._internal.dfm import cnc as table
+        from cad.build123d import cnc
+
+        report, resolved = self._measured()
+        with mock.patch.object(table, "RULES", RuleSet("cnc", "Test", "1", (
+                Rule("r", "holes", "diameter_mm", "min", {"none": 1.0}, "mm", "hole", "s", by="material_class"),),
+                (SOURCE,))):
+            result = self._finish(report, resolved)
+        self.assertEqual((result.status, result.reason), ("not_checked", "rules_none_evaluated"))
+        self.assertIn("nothing judged", result.summary)
+        face = cnc(bd.Rectangle(10, 10).face())
+        self.assertEqual((face.ok, face.status, face.reason), (False, "not_checked", "not_solid"))
+        self.assertEqual(face.human_lines()[-1], "NOT CHECKED shape: not_solid")
+        missing = manufacturing.measure("stl", str(Path(tempfile.gettempdir()) / "no-such-part.stl"), "printing",
+                                        manufacturing.options("stl", "printing", {}), False)
+        self.assertEqual((missing.status, missing.reason), ("not_checked", "invalid_target"))
+
+    def test_a_result_holds_its_state(self) -> None:
+        from cad.results import CheckFinding, CheckResult
+
+        # given none, the state is ok's (every other check's results): ok or failed
+        self.assertEqual((CheckResult(True, Path("a")).status, CheckResult(False, Path("a")).status), ("ok", "failed"))
+        with self.assertRaises(ValueError):
+            CheckResult(True, Path("a"), status="not_checked")
+        with self.assertRaises(ValueError):
+            CheckResult(False, Path("a"), status="unknown")
+        unchecked = CheckResult(False, Path("a"), (CheckFinding("error", "stopped", "it stopped"),),
+                                status="not_checked", reason="stopped")
+        self.assertEqual(unchecked.human_lines()[-1], "NOT CHECKED a: stopped")
+
+
+class OccurrencesTest(unittest.TestCase):
+    """A part used several times is judged every way it stands: the occurrences turned alike are one part,
+    counted and named, and one turned another way is a part of its own -- from a file and from a live shape
+    alike."""
+
+    def _tees(self) -> bd.Compound:
+        import copy
+
+        tee = bd.Box(10, 10, 20) + bd.Pos(0, 0, 12.5) * bd.Box(40, 40, 5)
+        tee.label = "tee"
+        down = copy.copy(tee).moved(bd.Location((0, 0, 0), (180, 0, 0)))  # cap down: it prints clean
+        up = copy.copy(tee).moved(bd.Location((60, 0, 0)))                # cap up: a mushroom, an overhang
+        again = copy.copy(tee).moved(bd.Location((120, 0, 0)))            # cap up again, moved apart
+        return bd.Compound(label="asm", children=[down, up, again])
+
+    def test_a_file_and_a_live_shape_read_the_same_parts_as_they_stand(self) -> None:
+        asm = self._tees()
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "tees.step"
+            bd.export_step(asm, str(path))
+            for document in (brep.parts_of(asm), brep.read("step", path)):
+                self.assertEqual([(part.owner, part.occurrences, part.paths) for part in document.parts],
+                                 [("asm/tee.1", 1, ("asm/tee.1",)), ("asm/tee.2", 2, ("asm/tee.2", "asm/tee.3"))])
+                np.testing.assert_allclose(document.parts[1].placements, [(0, 0, 0), (60, 0, 0)], atol=1e-9)
+                facts = document.facts()
+                self.assertEqual((facts["part_count"], facts["occurrence_count"], facts["solid_count"]), (2, 3, 3))
+                self.assertAlmostEqual(facts["volume_mm3"], 30000.0, places=3)  # every occurrence's material
+
+    def test_an_occurrence_turned_another_way_is_judged_as_it_stands(self) -> None:
+        from cad.build123d import printing
+
+        asm = self._tees()
+        result = printing(asm)
+        overhangs = [f.location for f in result.findings if f.code == "printing.overhang_angle"]
+        self.assertTrue(overhangs and all(str(where).startswith("asm/tee.2/") for where in overhangs), overhangs)
+        # the same tees with the mushroom first: the verdict is the part's, not its first occurrence's
+        turned = bd.Compound(label="asm", children=list(reversed(asm.children)))
+        self.assertEqual(sorted(f.code for f in printing(turned).findings if f.severity != "info"),
+                         sorted(f.code for f in result.findings if f.severity != "info"))
+
+    def test_a_tilt_of_a_twentieth_of_a_degree_stands_another_way(self) -> None:
+        import copy
+
+        tee = self._tees().children[1]
+        tilted = copy.copy(tee).moved(bd.Location((60, 0, 0), (0.05, 0, 0)))
+        moved = copy.copy(tee).moved(bd.Location((0, 80, 0)))
+        document = brep.parts_of(bd.Compound(label="asm", children=[tee, tilted, moved]))
+        self.assertEqual([part.occurrences for part in document.parts], [2, 1])
+        # parts of one geometry and another material are each their own
+        from bd_materials import metals
+
+        other = copy.copy(tee).moved(bd.Location((0, 160, 0)))
+        other.material = metals.aluminum()
+        self.assertEqual(len(brep.parts_of(bd.Compound(label="asm", children=[tee, other])).parts), 2)
+
+
+class SeveralSolidsTest(unittest.TestCase):
+    def test_several_solids_in_one_part_are_said_alike_in_every_process(self) -> None:
+        import cad.build123d as cb
+
+        apart = bd.Compound([bd.Box(10, 10, 10), bd.Pos(30, 0, 0) * bd.Box(10, 10, 10)])
+        through = bd.Compound([bd.Box(10, 10, 10), bd.Pos(5, 0, 0) * bd.Box(10, 10, 10)])
+        for process in manufacturing.PROCESSES:
+            with self.subTest(process=process):
+                found = {f.code: f for f in cb.dfm(apart, process=process).findings}
+                self.assertEqual(found["several_solids"].severity, "warning")
+                self.assertIn("is 2 solids in one part", found["several_solids"].message)
+                self.assertNotIn("not_sound", found)
+                # solids that share volume are no part: an error in every process
+                result = cb.dfm(through, process=process)
+                unsound = next(f for f in result.findings if f.code == "not_sound")
+                self.assertEqual((result.status, unsound.severity), ("failed", "error"))
+                if process != "printing":  # printing's own solid family says it, by its boolean check
+                    self.assertIn("solids 1 and 2 share 500 mm3", unsound.message)
+
+    def test_the_pairs_compared_are_bounded_and_the_rest_is_said(self) -> None:
+        from unittest import mock
+
+        import cad.build123d as cb
+        from cad.build123d import _dfm_check
+
+        through = bd.Compound([bd.Box(10, 10, 10), bd.Pos(5, 0, 0) * bd.Box(10, 10, 10)])
+        with mock.patch.object(_dfm_check, "_PAIRS", 0):
+            found = {f.code: f for f in cb.dfm(through, process="cnc").findings}
+        self.assertNotIn("not_sound", found)
+        self.assertIn("1 pair(s)", found["solids_not_compared"].message)
+
+
+class IntervalsTest(unittest.TestCase):
+    """``Rays.intervals`` tells each crossing by which way the line passes the face: a tangent touch is no
+    crossing, and a line that touches an edge or a vertex stays on its side."""
+
+    def _spans(self, shape: bd.Shape, origin: tuple, direction: tuple) -> list[tuple[float, float]] | None:
+        found = brep.Rays(shape).intervals(origin, direction)
+        return None if found is None else [(round(a, 6), round(b, 6)) for a, b in found]
+
+    def test_a_tangent_touch_is_no_crossing(self) -> None:
+        torus = bd.Torus(20, 5)
+        self.assertEqual(self._spans(torus, (-50, 0, 0), (1, 0, 0)), [(25.0, 35.0), (65.0, 75.0)])
+        # along the tube's top it only touches, twice: no material, not 40 mm of it across the hole
+        self.assertEqual(self._spans(torus, (-50, 0, 5), (1, 0, 0)), [])
+        # through the tube, grazing its inner equator from inside: one stretch, not cut at the touch
+        self.assertEqual(self._spans(torus, (15, -50, 0), (0, 1, 0)), [(30.0, 70.0)])
+        self.assertEqual(self._spans(bd.Cylinder(10, 20), (10, -50, 0), (0, 1, 0)), [])
+        self.assertEqual(self._spans(bd.Sphere(10), (10, -50, 0), (0, 1, 0)), [])
+        # a pole, where the surface has no normal of its own, is crossed all the same
+        self.assertEqual(self._spans(bd.Sphere(10), (0, 0, -50), (0, 0, 1)), [(40.0, 60.0)])
+        # wherever the part stands: the same lines of the same torus, turned and moved with it
+        turn = bd.Location((7, -3, 11), (31, 47, 59))
+        turned = turn * torus
+        for origin, end, spans in (((-50, 0, 5), (50, 0, 5), []), ((15, -50, 0), (15, 50, 0), [(30.0, 70.0)])):
+            a, b = (np.array(tuple((turn * bd.Pos(*point)).position)) for point in (origin, end))
+            self.assertEqual(self._spans(turned, tuple(a), tuple(b - a)), spans)
+
+    def test_an_edge_or_a_vertex_touched_is_no_crossing_and_one_passed_is_one(self) -> None:
+        box = bd.Box(20, 20, 20)
+        def along(root: float, *tens: int) -> list[tuple[float, float]]:
+            return [(round(tens[0] * math.sqrt(root), 6), round(tens[1] * math.sqrt(root), 6))]
+
+        self.assertEqual(self._spans(box, (0, 0, 20), (1, 0, -1)), [])               # touches an edge
+        self.assertEqual(self._spans(box, (20, 20, 5), (-1, -1, 0.5)), [])           # touches a vertex
+        self.assertEqual(self._spans(box, (-20, 0, -20), (1, 0, 1)), along(2, 10, 30))      # through two edges
+        self.assertEqual(self._spans(box, (-20, -20, -20), (1, 1, 1)), along(3, 10, 30))    # through two vertices
+        # a concave edge touched from inside the material: the line stays inside
+        notched = box - bd.Pos(5, 0, 5) * bd.Box(10, 20, 10)
+        self.assertEqual(self._spans(notched, (10, 0, -10), (-1, 0, 1)), along(2, 0, 20))
+
+    def test_crossings_that_do_not_pair_are_unknown_never_a_guess(self) -> None:
+        rays = brep.Rays(bd.Shell(bd.Box(20, 20, 20).faces()[:5]))  # an open box: a line through its mouth ends inside
+        answers = [rays.intervals((0, 0, 0), direction) for direction in ((1, 0, 0), (0, 1, 0), (0, 0, 1))]
+        self.assertIn(None, answers)
+        self.assertEqual(rays.unpaired, answers.count(None))
+
+
+class PythonCallTest(unittest.TestCase):
+    """The check as Python calls it: numbers given as numbers, a material by its name, a refusal that names the
+    parameter, and a value no machine has refused."""
+
+    def test_numbers_are_given_as_numbers_and_a_material_by_its_name(self) -> None:
+        resolved = manufacturing.options("step", "cnc", {"tools": [6, 3.175], "stock": (100, 60, 25),
+                                                         "material": "Aluminium 6061"})
+        self.assertEqual((resolved["tools"], resolved["stock"], resolved["material"]),
+                         ("6,3.175", "100x60x25", "aluminum"))
+        self.assertEqual(manufacturing.options("step", "cnc", {"tools": 6})["tools"], "6")
+        self.assertEqual(manufacturing.options("step", "molding", {"pull": (0, 0, -1), "material": "abs"})["pull"],
+                         "0,0,-1")
+        for name, material in (("stainless steel 304", "stainless"), ("PA6-GF30", "nylon_gf"), ("ABS", "abs")):
+            self.assertEqual(manufacturing.options("step", "cnc", {"material": name})["material"], material)
+        with self.assertRaisesRegex(ValueError, "--material is one of"):
+            manufacturing.options("step", "cnc", {"material": "cheese board"})
+
+    def test_a_value_no_machine_has_is_refused(self) -> None:
+        for process, given, said in (
+                ("cnc", {"tools": "3,1e9"}, r"--tools names an end mill 1e\+09 mm across.*at most 100"),
+                ("printing", {"layer_height": 5.0}, "--layer-height 5 mm is taller than the 0.4 mm nozzle"),
+                ("printing", {"layer_height": 0.6, "nozzle": 0.5}, "taller than the 0.5 mm nozzle"),
+                ("printing", {"layer_height": 2.0, "technology": "sla"}, "--layer-height 2 mm is no sla layer")):
+            with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
+                manufacturing.options("step", process, given)
+        self.assertEqual(manufacturing.options("step", "printing", {"layer_height": 0.6, "nozzle": 0.8})["nozzle"], 0.8)
+
+    def test_a_python_refusal_names_the_parameter_and_the_command_its_flag(self) -> None:
+        import cad.step
+        import cad.stl
+
+        from cad._internal.refused import ArgumentRefused
+
+        with self.assertRaisesRegex(ArgumentRefused, "^tools is end mill diameters"):
+            cad.step.dfm("part.step", process="cnc", tools="x")
+        with self.assertRaisesRegex(ArgumentRefused, "^layer_height 5 mm is taller"):
+            cad.step.dfm("part.step", process="printing", layer_height=5.0)
+        with self.assertRaisesRegex(ArgumentRefused, "^--tools is end mill diameters"):
+            cad.step.dfm("part.step", process="cnc", tools="x", _command=True)
+        # a command written out in a refusal stays a command
+        with self.assertRaisesRegex(ArgumentRefused, r"\(cad step dfm part.step --process molding"):
+            cad.stl.dfm("part.stl", process="molding")
+        self.assertEqual(manufacturing.parameters("give --process, not --bend-radius (cad x --pull z), --unknown"),
+                         "give process, not bend_radius (cad x --pull z), --unknown")
+
+    def test_units_is_an_stls_alone(self) -> None:
+        import inspect
+
+        import cad
+
+        for document_type in ("step", "xbf", "model", "threemf", "glb", "dxf"):
+            self.assertNotIn("units", inspect.signature(getattr(cad, document_type).dfm).parameters, document_type)
+            with self.assertRaises(TypeError):
+                getattr(cad, document_type).dfm("part", units="in")
+        self.assertIn("units", inspect.signature(cad.stl.dfm).parameters)
+        self.assertTrue(all("strict" in inspect.signature(getattr(cad, kind).dfm).parameters
+                            for kind in ("step", "stl", "dxf")))
+
+    def test_a_live_shape_is_checked_by_one_function_and_what_is_no_shape_is_refused_by_name(self) -> None:
+        import cad.build123d as cb
+        from cad._internal.refused import ArgumentRefused
+
+        block = bd.Box(40, 30, 15)
+        block.label = "block"
+        result = cb.dfm(block, process="cnc", tools=[3, 6], material="aluminium 6061")
+        self.assertEqual((result.status, result.measurements["process"]), ("ok", "cnc"))
+        self.assertEqual(result.summary, cb.cnc(block, tools="3,6", material="aluminum").summary)
+        for shape, said in ((None, "shape is a build123d shape.*not None"), ("block.step", "not a str")):
+            with self.assertRaisesRegex(ArgumentRefused, said):
+                cb.dfm(shape, process="cnc")
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'units'"):
+            cb.dfm(block, process="cnc", units="in")
+        with self.assertRaisesRegex(ArgumentRefused, "^pull is not cnc's"):
+            cb.dfm(block, process="cnc", pull="z")
+        with self.assertRaisesRegex(ArgumentRefused, "^strict is true or false"):
+            cb.dfm(block, process="cnc", strict="yes")
 
 
 if __name__ == "__main__":

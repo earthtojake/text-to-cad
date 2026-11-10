@@ -23,6 +23,16 @@ Every process module has:
 - ``findings(report, resolved, candidates)``: the findings its facts call for, verdicts apart;
 - ``summary(report, resolved, candidates)``: one line of what was measured.
 
+**Not measured.** A check that did not judge what it was asked to is ``not_checked``, never ``ok``
+(``manufacturing.finish``), and a process's measurement says what it did not measure through its report
+alone, three ways: ``Unmeasured(code, message)`` raised for a source nothing can be measured of (no part, no
+closed solid, a file that does not read); a family answered as ``{"error": "..."}`` and named in the
+report's ``partial_sections`` (``measurement_failed``); and a family's ``unmeasured_faces``, the refs of the
+faces the kernel failed to intersect its rays with, where its rules judge nothing (``rays_unintersected``).
+An item that carries no figure for a rule (``None``) is not judged by it: the rule is ``partial`` and says
+so (``rule_partly_judged``, a warning), so a rule that does not apply to some of a family's items says which
+with ``item_when`` rather than leave their figure out.
+
 **Stopping a check.** A check the engine runs can be asked to stop (its worker's ``cancel``): the request
 only sets a flag (``stop``), and the measurement stops at its next ``checkpoint`` -- between parts, families,
 faces and rays, each in the integration's own Python loops -- raising ``Cancelled`` from its own frame, so

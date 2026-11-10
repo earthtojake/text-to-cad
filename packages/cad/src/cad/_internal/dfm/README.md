@@ -68,7 +68,8 @@ and its summary line (`cnc.py`, `sheet.py`, `molding.py`, `printing.py`). Each p
 rules** (`RULES`, a `rules.RuleSet`: versioned, each rule a limit on one measured field with its source,
 `rules.py`), and the checks are **general**: a rule states general practice, and the published design guide
 it cites is the evidence for it, never a target -- no rule is a shop's capability (its gauges, its tooled
-radii, its machines' sizes, its press). Every verdict says so (`general practice; source: ...`), and every
+radii, its machines' sizes, its press). Every verdict names where its limit comes from (its `source`: the
+guide's publisher and title, or text-to-cad's own where no guide states one), and every
 result says the verdicts are no shop's limits (`rules_general`, info). A shop's own limits are compared with
 the measurements, which every result carries (a skill for a named fabrication service does that, reading
 the measurements against the service's own published specs); what a person knows of their own shop is a plain
@@ -101,7 +102,16 @@ Every option has a kind (`manufacturing.KINDS`): a count is an `int` (never a `b
 is refused, not taken as 3), a flag a `bool` (`turning="no"` is refused, not truthy), a length or an angle a
 finite number, a list or a size text. A library call of another kind is refused by name
 (`_common.require_*`), as the command's parser refuses one, before the process's own `validate` judges the
-range.
+range. What the command line writes out as text a Python caller may give as numbers
+(`manufacturing._spelled`: `tools=[3, 6]` or `tools=6`, `stock=(100, 60, 25)`, `build_volume`, `sheet_size`,
+`pull=(0, 0, 1)`), and a material is taken by its name as a person writes it (`_material`: the table's name
+or an alias, else the longest run of its words that is one -- `Aluminium 6061` is aluminum, `stainless steel
+304` stainless). A value in range that no machine has is refused too (`_plausible`): an end mill over 100
+mm across, an FDM layer taller than its nozzle (0.4 mm unless `--nozzle` says), a powder or resin layer over
+0.5 mm -- text-to-cad's own bounds, there because such a value would judge the part against nothing. `units`
+is an STL's alone: a type that declares its units takes no such option. A refusal names the command line's
+flag (`--tools is ...`), and to a Python caller the parameter (`tools is ...`: `manufacturing.parameters`;
+the command calls the same function with `_command=True`, a keyword of its own in no signature).
 
 The options resolve in two steps when the process comes from the parts. `manufacturing.options(type, None,
 ...)`, the type side, refuses what holds for every process before anything is read -- each option's kind, a
@@ -116,27 +126,104 @@ the read.
 
 ## The result
 
-A `cad.results.CheckResult`: `ok` (no error), `findings` (each a severity, a code, a message, a location and,
-for a verdict, a `hint` saying what to change), `summary` and `measurements`, the report:
+A `cad.results.CheckResult`: `status` and `ok`, `reason`, `findings`, `summary` and `measurements`, the
+report.
+
+**Three states** (`status`; `manufacturing.finish`), each the command's exit status:
+
+| `status` | exit | when |
+| --- | --- | --- |
+| `ok` | 0 | every part and family was measured and no finding is an error. Warnings are recommendations: the part is made, at a cost or a risk |
+| `failed` | 1 | a finding is an error -- a rule's feasibility limit broken, a process's own error (`cnc.no_turning_axis`, `sheet.not_sheet`), `not_watertight`, `not_sound` -- or, with `--strict` (`strict=True`), a warning |
+| `not_checked` | 3 | the check did not judge what it was asked to: no verdict, never a pass. `reason` is the code of the finding that says so |
+
+`ok` is true for `ok` alone. What makes a check `not_checked` is one of two things:
+
+- **the whole check**, which measured nothing (`dfm.Unmeasured`, the result's one finding): the source does
+  not read (`document_unreadable`, `mesh_unreadable`), is not there (`invalid_target`; the command refuses
+  one first, exit 2), holds no part with a face (`document_empty`) or no closed solid (`not_solid`), needs
+  exact geometry it has not (`needs_exact_geometry`), or its report holds a figure that is no finite number
+  (`not_finite`);
+- **a part of it** (`manufacturing.NOT_CHECKED`, whatever the finding's severity): a family that could not
+  be measured (`measurement_failed`: the family is `{"error": "..."}` and named in `partial_sections`), faces
+  the kernel failed to intersect rays with (`rays_unintersected`: a family's `unmeasured_faces`, so its rules
+  are `partial` or `not_evaluated` there), or rules that judged nothing at all (`rules_none_evaluated`).
+
+So a process's module marks what it did not measure through the report alone: raise `Unmeasured(code,
+message)` for the whole source, answer `{"error": ...}` for a family and name it in `partial_sections`, or
+list a family's `unmeasured_faces`. An error found wins over what was not checked -- `failed`, exit 1, its
+line saying `; not checked: <code> xN` too: the part fails whatever else was not judged. The command also
+exits 3 for a check that did not run to its end -- the engine cancelled it for a build of its script, lost
+its worker or stopped, the integration's environment gave no answer, the check crashed -- never 1, which
+says the part fails: under `--json` the failure's document, `{"ok": false, "error": ..., "status":
+"not_checked", "reason": ...}`, the reason the engine's own where its error carries one (`error.reason`),
+else `engine_stopped`, `engine_failed`, `engine_unavailable` or `failed`; without, its words on stderr and
+`NOT CHECKED <source>: <reason>` on stdout. A library call raises those as it did. Exit 2 stays the command
+line's mistake.
+
+**A finding** is a severity, a code, a message, a location and a `hint` saying what to change. A rule's
+verdict is one finding for each feature that fails the rule, and carries the verdict as data, so nothing is
+read out of its message:
+
+```
+{"severity": "error", "code": "cnc.internal_corner_sharp", "rule": "cnc.internal_corner_sharp",
+ "message": "sharp vertical corner (no round tool makes it): radius 0 mm is under the 1.5 mm minimum (plate/edge 17, 10 mm tall, 10 mm below the top)",
+ "location": "plate/edge 17", "refs": ["plate/edge 17", "plate/face 7", "plate/face 8", "plate/face 11"],
+ "value": 0.0, "limit": 1.5, "unit": "mm", "op": "min",
+ "source": "Protolabs Network (Hubs), How to design parts for CNC machining",
+ "hint": "Give it a radius of at least 1.5 mm ...", "items": []}
+```
+
+`rule` is the rule's id (None, with `value`, `limit`, `unit`, `op` and `source`, for a finding no rule
+made); `op` is `min` (the figure is at least the limit) or `max`; `location` is the feature's most specific
+ref -- an item's `edge` (or `vertex`) before its `location`, so a corner is its edge and two corners of one
+face are two findings -- and `refs` every ref the item names, `location` first, then the rest (`rules._refs`:
+any field that holds a ref or a list of them). Failures of one rule at one feature are one finding, the
+worst (`and N more at this ref`, each in `items`: `value`, `xyz`). Past eight features of one rule, one more
+finding counts the rest (`value` None, `location` `measurements.rules`, `items` each remaining feature's
+`location`, `value` and `refs`).
+
+**The report** (`measurements`):
 
 ```
 {"process": "cnc", "source": {"type": "step", "measured_as": "brep", "document": "plate"},
- "document": {...}, "bodies": [{"name", "owner", "material", "material_table", "process", "bbox_mm", "volume_mm3", ...}],
+ "document": {"name", "part_count", "occurrence_count", "solid_count", "volume_mm3", "units", "empty_parts"},
+ "bodies": [{"name", "owner", "occurrences", "paths", "placements_mm", "material", "material_table", "process",
+             "bbox_mm", "volume_mm3", ...}],
  "<family>": {"items": [{<fields>, "location": "plate/face 7", "xyz": [x, y, z], "faces": [...]}, ...],
               "count": 12, <scalars>},
  "partial": false, "partial_sections": [],
- "rules": {"title", "version", "note", "context", "evaluated", "failed": [ids], "none_found": [ids],
+ "rules": {"title", "version", "note", "context", "evaluated", "failed": [ids], "partial": [ids],
+           "none_found": [ids], "failing": {"error": {id: n}, "warning": {id: n}},
            "outcomes": [{"rule", "family", "field", "op", "limit", "unit", "severity", "source", "status",
-                         "evaluated", "unmeasured", "failures": [{"value", "location", "xyz"}], "reason",
+                         "evaluated", "unmeasured", "unmeasured_faces",
+                         "failures": [{"value", "location", "xyz", "refs", "item", "limit"}], "reason",
                          "variants"}],
            "sources": [{"id", "publisher", "title", "url", "accessed"}]}}
 ```
 
+A failure's `location` is its item's own, its `refs` every ref the item names, the feature's first (the
+finding's `location`: a corner's edge, where the item's `location` is one of its faces), its `item` the index
+of its item in its family's `items`, and its `limit` is there where it is the item's own (below). `rules.failing` counts the features that fail each rule, by severity, as the
+findings count them -- those past the eight shown too, a failure another finding implies left out: the one
+count a summary says.
+
 - **Locations.** On exact geometry an item's `location` is a ref in `cad xbf inspect`'s grammar -- the
   part's canonical owner and the face's ordinal (`plate/face 7`, `kit/pin.2/face 3`) -- read with the
   engine's own loader, so `cad step inspect FILE REF` and `cad xbf inspect DOC REF` resolve it to the very
-  face; a feature of several faces lists them in `faces`. On a mesh it is `x, y, z` in millimetres. Each
-  part of an assembly is measured once, placed where its first occurrence stands. A part that is another's
+  face; a feature of several faces lists them in `faces`. On a mesh it is `x, y, z` in millimetres.
+- **Every part, every way it stands.** An assembly's every part is measured, and a part used several times
+  -- one geometry, several occurrences: a document's instances of one prototype, a live shape's leaves that
+  share a shape (`Pos(...) * part`) and a material -- is one part for each way it stands
+  (`_dfm_brep._Standing`, in `read`, `of_source` and `parts_of` alike): the occurrences turned alike (their
+  rotations equal to 1e-9, entry for entry: moved apart, never turned against each other) are measured once,
+  where the first of them stands, and counted, named and placed on that part (`bodies[i].occurrences`,
+  `paths`, `placements_mm`: how far each lies from the first); an occurrence turned another way -- a
+  twentieth of a degree is another -- is a part of its own, at its own refs, measured as it stands. So what
+  depends on how a part stands (a print's overhangs against the plate, a molding's draft against the pull) is
+  judged for every occurrence, and nothing is judged for the first alone. `document` totals every occurrence
+  (`occurrence_count`, `solid_count`, `volume_mm3`); a family's own totals are of the parts measured, each
+  with its `occurrences` to count by. A part that is another's
   geometry moved -- an exporter's copies, a pattern written out part by part -- is found by its geometry
   (`_dfm_brep.copies`: its counts and faces' kinds alike, its volume and area the first's to 1e-6, and every
   vertex, each edge at its middle and quarters and each face at the middles and quarters of its parameters where
@@ -170,46 +257,68 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   the fast intersector's on the rest of the line are kept -- never the family: it is counted against the face
   and said (`rays_unintersected`, a warning naming the faces), and every family whose rays it cost names those
   faces (`unmeasured_faces`), so its rules say what was not measured there (below).
-- **A family that failed** is `{"error": "..."}`, named in `partial_sections`, and an error finding
-  (`measurement_failed`); the other families are still reported.
+  `Rays.intervals`, the stretches of a line in the material, tells each crossing by which way the line passes
+  the face there (the direction against the face's outward normal at the crossing): into the material, out of
+  it, or along it -- a tangent touch, within 1e-6 of the surface's plane, which is no crossing (a line along a
+  torus's top passes no material; one that grazes its inner equator from inside stays inside). Crossings at
+  one place (an edge's two faces, a vertex's three) are one entry or one exit where the faces agree and
+  nothing where they disagree (the line touches the edge and stays on its side), and where the places do not
+  alternate entry and exit the answer is None, counted (`Rays.unpaired`): unknown, never a guess. A line that
+  lies in a face's own surface is read by the faces it crosses.
+- **A family that failed** is `{"error": "..."}`, named in `partial_sections`, and said
+  (`measurement_failed`): the check is `not_checked`; the other families are still reported.
 - **Every rule id has one outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
   wall under the family's threshold -- `passed` with `evaluated` 0, reason `none found`, listed in
-  `rules.none_found`; with some items lacking the figure, reason `N item(s) not measured`; with faces the family's
-  rays could not be intersected with -- its `unmeasured_faces` -- each counted in `unmeasured`, named in the
-  outcome's `unmeasured_faces` and its reason, `not_evaluated` where nothing else was judged), `failed` (each
-  failing item's value, place and the limit), `not_evaluated` (the rules
-  give no limit for this material or technology, or the family or the figure was not measured: unverified)
+  `rules.none_found`), `partial` (it judged some of its items and not the rest, which is no pass: items that
+  carry no figure for it, reason `N item(s) not measured` and one `rule_partly_judged` warning naming them;
+  or faces the family's rays could not be intersected with -- its `unmeasured_faces` -- each counted in
+  `unmeasured`, named in the outcome's `unmeasured_faces` and its reason, which makes the check
+  `not_checked`; listed in `rules.partial`), `failed` (each
+  failing item's value, place, refs and item), `not_evaluated` (the rules
+  give no limit for this material or technology, or the family or the figure was not measured -- every item
+  lacks it, or nothing but lost faces: unverified)
   or `not_applicable` (the rule is for another context -- turning, a sheet given, a cut file -- or reads a
   figure this source's items do not carry, which another rule judges). Rules that come in variants by one
   key (`RuleSet.selector`, printing's `technology`) with no variant of a rule id for the part's value leave
   that rule `not_evaluated`, not `not_applicable`: a technology the rules have no figure for is unverified,
-  and a check that evaluated nothing says so (`rules_none_evaluated`, a warning) instead of reading as a
+  and a check that evaluated nothing says so (`rules_none_evaluated`) and is `not_checked`, never a
   pass. A figure that was not
-  measured is never a pass. A rule id that comes in variants -- by the context (a tool given or not), by
+  measured is never a pass. A rule's limit is the context's, times the figure it scales by (`scale_by`): the
+  item's own figure of that name where it carries one (a part's own thickness, among parts of several), else
+  the context's; a failure held to its item's own limit says it (`limit`). A rule id that comes in variants -- by the context (a tool given or not), by
   its items (acute or square corners), a minimum and a maximum of one figure -- answers once
   (`rules._one_per_rule`): the variants that judged are its outcome, merged where several did (`failed` if
   any failed, each item counted once, each failure with its own `op`, `limit` and `severity` where they
   differ, listed in `variants`), a variant that applied but had no limit said in `reason`; where none judged,
   the one not evaluated, else one `not_applicable` (or `not_evaluated` for a selector value the rules lack).
   The record holds every failure; the findings are fewer, what a reader acts on:
-  failures of one rule at one ref are one finding (`and N more at this ref`), a failure on a figure of an
+  failures of one rule at one feature are one finding (`and N more at this ref`), a failure on a figure of an
   item that already fails a rule of higher severity, or of the same severity with a limit further off (the
   recommendation beside the feasibility limit it exceeds; `draft`'s 2 deg beside `draft_min`'s 0.5) is left
   to the record, a feature another finding names as its cause is judged there alone (a process says which:
-  a special cutter's recess, an undercut's trapped faces), at most eight refs of one rule are findings and the rest are
+  a special cutter's recess, an undercut's trapped faces), at most eight features of one rule are findings and the rest are
   counted in one more, at `measurements.rules` with the rule's fix. Findings come in this order: what puts
-  every other figure in doubt first, whatever its severity (`not_watertight`, `not_sound`,
-  `measurement_failed`, `units_suspect`: `manufacturing._FIRST`), then errors, then warnings, then the facts
+  every other figure in doubt first, whatever its severity (what was not checked, `not_watertight`,
+  `not_sound`, `units_suspect`: `manufacturing._FIRST`), then errors, then warnings, then the facts
   and assumptions (info).
 - **Figures are judged as measured.** Every figure a rule reads is kept to 1e-9 in the report and compared
   unrounded; only a message rounds it (four figures, more where value and limit would read alike). A limit is
   its source's number exactly (`molding.thick_section`'s 1 / 0.6, not 1.6667), and the comparison's slack is
   noise alone -- a billionth of the limit, an angle's a millionth of a degree (`rules.ANGLE_TOLERANCE_DEG`: a 2
   deg wall against a pull typed to nine digits reads 1.99999999) -- so a value exactly at its limit passes.
-- **The summary** of a failed check is `<process> <what was measured>; failed: <code> xN, ...`: each rule
-  that failed with its count of error failures (the record's, not the findings shown), then every other
-  error by its code (`cnc.no_turning_axis`, `sheet.not_sheet`, `measurement_failed`). A check that passed
-  says `OK <source>: <process> <what was measured>`, and `(N warning(s))` at its end where it warned.
+- **The summary** is the check's last line, and leads with its state and its counts, which are the
+  findings' (a rule's failing features, `rules.failing`, and every other finding once): `OK <source>:
+  [N warning(s); ]<process> <what was measured>`; `FAILED <source>: E error(s)[, W warning(s)]; <process>
+  <what was measured>; failed: <code> xN, ...[; not checked: <code> xN]` -- each rule that failed with its
+  count, then every other error by its code (`cnc.no_turning_axis`, `sheet.not_sheet`); with `--strict` and
+  no error, `0 error(s), W warning(s) (--strict: a warning fails)` and the warnings' digest; `NOT CHECKED
+  <source>: <code> xN[, W warning(s)]; <process> <what was measured>`, or `NOT CHECKED <source>: <code>`
+  where nothing was measured.
+- **What the command prints** (`CheckResult.human_lines`): the findings, then the summary. A rule's verdicts
+  are said together where the first stands -- `error: <rule>, N place(s). Hint: <what to change>. Source:
+  <guide>.`, the hint and the source once, then `  <ref>: <message>` a place and, past eight, `  and N more`
+  -- so a part with twelve sharp corners reads as one rule and twelve short lines; a lone verdict and every
+  other finding is one line, `<severity>: <code> at <location>: <message> Hint: ...`.
 - **Items** are sorted worst first and capped (a few hundred), with the family's `count`. Every figure is
   finite: the result is JSON (`allow_nan=False`), and a report that is not is `not_finite`.
 - **The material** is `--material`'s, else the one the parts declare (`part.material = metals.aluminum()`, a
@@ -223,17 +332,23 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   each body's `process` is its declared route. Parts that declare different routes are not measured: the
   call is refused (`ArgumentRefused`, exit 2), naming each route and its parts, as one that declares none is.
 - The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target` (the
-  command refuses one first, `not_found`), a document id the engine does not hold its `NotHeld` (the
-  command's `not_found`, exit 2), a
-  document with no part that has a face `document_empty`; a part with no face beside others (an empty
+  command refuses one first, `not_found`, exit 2), a document with no part that has a face
+  `document_empty`: each `not_checked`. A document id the engine does not hold is its `NotHeld` (the
+  command's `not_found`, exit 2). A part with no face beside others (an empty
   label an exporter left) is skipped and said, `empty_parts` (info).
 - **Not a solid.** Exact geometry is a part of material: a part holding no closed solid of any volume -- an
-  open shell, a face, a solid of zero volume -- is refused before anything is measured, `not_solid` (an error,
-  as `document_empty`, its message naming each such part and what to fix), in every process. A part whose
-  solid has an open shell or that holds faces beside its solids is `not_watertight`, and one that fails the
-  kernel's topology check (BRepCheck) `not_sound`: errors in every process, said first (printing's `solid`
-  family judges its own solids' shells and soundness, with the boolean check). A mesh's open body is
-  `not_watertight` too, an error.
+  open shell, a face, a solid of zero volume -- is refused before anything is measured, `not_solid`
+  (`not_checked`, as `document_empty`, its message naming each such part and what to fix), in every process.
+  A part whose solid has an open shell or that holds faces beside its solids is `not_watertight`, and one
+  that fails the kernel's topology check (BRepCheck) `not_sound`: errors in every process, said first
+  (printing's `solid` family judges its own solids' shells and soundness, with the boolean check). A mesh's
+  open body is `not_watertight` too, an error.
+- **Several solids in one part** are said alike in every process (`_dfm_check._several`): `several_solids`,
+  a warning -- a process makes a part of one solid -- and, where two of them share volume (their common over
+  1e-6 of the smaller's), `not_sound`, an error naming the pairs and the volume: interpenetrating solids are
+  no part, their material counted twice. Pairs are compared where their boxes meet, 256 at most
+  (`solids_not_compared`, a warning, where more remain or the kernel cannot finish one); printing's own
+  boolean check finds shared volume, so it is not looked for twice there.
 - **Units.** One test for every process, exact geometry and mesh alike (`_common.units_doubt`): a document
   under 1 mm across, or over 10 m (the largest standard sheet is 3048 x 1524, 3.4 m across; gantry mills and
   large-format printers reach a few metres; none of the four processes makes a 10 m part in one piece), is
@@ -249,8 +364,9 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   molding's frame about the pull) and turns every place back.
 
 The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
-`cad.build123d.cnc(shape)`, `sheet_metal`, `molding`, `printing` (the same `CheckResult`, refs as the
-engine would name its document) and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program holds
+`cad.build123d.dfm(shape, process=..., ...)` -- the same options, the same `CheckResult`, refs as the engine
+would name its document, with no process the one its parts declare (`cnc`, `sheet_metal`, `molding` and
+`printing` are its four processes by name) -- and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program holds
 `cad.trimesh.printing(mesh)`, `orientations` (the report as data).
 
 ## CNC machining

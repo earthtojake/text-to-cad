@@ -5,6 +5,8 @@ Every check -- ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` (``cad.urdf
 the files its solve wrote) -- whether it passed, the file, its findings, each with a severity, a code
 and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
 and the CLI carry the SAME shape: ``cad <type> dfm --json`` is ``dataclasses.asdict`` of the value the library returned.
+A check has three states (``CheckResult.status``): ``ok``, ``failed`` and ``not_checked`` -- it did not judge
+what it was asked to, which is never a pass; ``ok`` is true for the first alone.
 ``ValidationResult`` and ``ValidationIssue``, their 0.10 names, are aliases that take the 0.10 call shapes
 (``ValidationIssue(severity, message, element=, code=, hint=)``, ``ValidationResult(ok, path, issues=,
 summary=)``) and make these.
@@ -18,7 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-__all__ = ["CheckFinding", "CheckResult", "ExportResult", "FeaFace", "FeaPair", "FeaPart", "FeaResult"]
+__all__ = ["STATES", "CheckFinding", "CheckResult", "ExportResult", "FeaFace", "FeaPair", "FeaPart", "FeaResult"]
+
+#: A check's states (``CheckResult.status``).
+STATES = ("ok", "failed", "not_checked")
 
 
 def _display(path: Path | None) -> str:
@@ -53,6 +58,19 @@ class CheckFinding:
     #: ``part``). Empty for a checker that names none.
     #: A list, as its JSON is, so ``dataclasses.asdict`` of a finding equals what the result reports.
     items: list[dict[str, Any]] = field(default_factory=list, compare=False, hash=False)
+    #: A rule's verdict, as data (a manufacturing check's; None and empty for any other finding): the rule's
+    #: id (its ``code``), the figure measured, the limit it is held to, their unit, the comparison (``min``:
+    #: the figure is at least the limit; ``max``: at most) and where the limit comes from (the guide's
+    #: publisher and title, or text-to-cad's own).
+    rule: str | None = None
+    value: float | None = None
+    limit: float | None = None
+    unit: str | None = None
+    op: str | None = None
+    source: str | None = None
+    #: Every ref the finding names, the most specific first (a corner's edge, then its faces): ``location``
+    #: is the first.
+    refs: list[str] = field(default_factory=list, compare=False, hash=False)
 
     @property
     def element(self) -> str | None:
@@ -62,8 +80,49 @@ class CheckFinding:
     def human_line(self) -> str:
         code = f"{self.code}" if self.code else ""
         element = f" at {self.location}" if self.location else ""
+        return f"{self.severity}: {code}{element}: {self.message}{self._advice()}"
+
+    def _advice(self) -> str:
+        """Its hint and, for a rule's verdict, where the limit comes from: said once for a rule's every place."""
         hint = f" Hint: {self.hint}" if self.hint else ""
-        return f"{self.severity}: {code}{element}: {self.message}{hint}"
+        if not self.source:
+            return hint
+        return f"{hint.rstrip('.')}{'.' if hint else ''} Source: {self.source}."
+
+
+def _finding_lines(findings: tuple[CheckFinding, ...]) -> list[str]:
+    """The findings as lines: each on its own (``human_line``), but a rule's verdicts (``rule`` set), which
+    are one per feature -- those of one rule and severity are said together, where the first stands: the
+    rule, how many features, its hint and its source once, then a short line per feature (its place, what
+    was measured), so a part with twelve sharp corners reads as one rule and twelve places. A finding that
+    counts the rest (no ``value``: the features past those shown, in its ``items``) closes its rule's lines."""
+    groups: dict[tuple[str, str], list[CheckFinding]] = {}
+    order: list[Any] = []
+    for finding in findings:
+        if finding.rule is None:
+            order.append(finding)
+            continue
+        key = (finding.severity, finding.rule)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(finding)
+    lines: list[str] = []
+    for entry in order:
+        if isinstance(entry, CheckFinding):
+            lines.append(entry.human_line())
+            continue
+        places = [finding for finding in groups[entry] if finding.value is not None]
+        more = sum(len(finding.items) or 1 for finding in groups[entry] if finding.value is None)
+        if len(places) == 1 and not more:
+            lines.append(places[0].human_line())
+            continue
+        first = groups[entry][0]
+        lines.append(f"{first.severity}: {first.rule}, {len(places) + more} place(s).{first._advice()}")
+        lines.extend(f"  {finding.location or '-'}: {finding.message}" for finding in places)
+        if more:
+            lines.append(f"  and {more} more (--json: measurements.rules lists every one)")
+    return lines
 
 
 @dataclass(frozen=True)
@@ -79,6 +138,21 @@ class CheckResult:
     #: What the check measured, by family, as plain data (a manufacturing check's draft, undercuts,
     #: walls, ...); empty for a check that measures nothing.
     measurements: dict[str, Any] = field(default_factory=dict)
+    #: The check's state, one of ``STATES``: ``ok`` (everything was judged and nothing fails), ``failed``
+    #: (a finding fails it) or ``not_checked`` (it did not judge what it was asked to -- stopped, a source
+    #: that does not read, a part or a family not measured -- which is no verdict and never a pass). ``ok``
+    #: is True for ``ok`` alone; given none, it is ``ok``'s: ``ok`` or ``failed``.
+    status: str = ""
+    #: Why it is ``not_checked``: the code of the finding that says so (``cancelled``, ``not_solid``,
+    #: ``measurement_failed``). None in the other states.
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            object.__setattr__(self, "status", "ok" if self.ok else "failed")
+        if self.status not in STATES or self.ok != (self.status == "ok"):
+            raise ValueError(f"a check's status is one of {', '.join(STATES)} and ok is true for ok alone, "
+                             f"not status {self.status!r} with ok {self.ok!r}")
 
     @property
     def issues(self) -> tuple[CheckFinding, ...]:
@@ -86,9 +160,14 @@ class CheckResult:
         return self.findings
 
     def human_lines(self) -> list[str]:
-        lines = [finding.human_line() for finding in self.findings]
+        lines = _finding_lines(self.findings)
         if self.ok:
             lines.append(self.summary or f"OK {_display(self.path)}")
+        elif self.summary.startswith(("FAILED ", "NOT CHECKED ")):
+            lines.append(self.summary)  # a check that words its own last line (a manufacturing check's)
+        elif self.status == "not_checked":
+            tail = f"; {self.summary}" if self.summary else ""
+            lines.append(f"NOT CHECKED {_display(self.path)}: {self.reason or 'nothing was judged'}{tail}")
         else:
             blocking = sum(1 for finding in self.findings if finding.severity == "error")
             tail = f"; {self.summary}" if self.summary else ""
@@ -283,6 +362,7 @@ class FeaResult(CheckResult):
         return cls(ok=bool(data["ok"]), path=Path(data["path"]),
                    findings=tuple(CheckFinding(**finding) for finding in data.get("findings") or ()),
                    summary=str(data.get("summary") or ""), measurements=dict(data.get("measurements") or {}),
+                   status=str(data.get("status") or ""), reason=data.get("reason"),
                    occurrence=str(data.get("occurrence") or ""),
                    written=tuple(Path(path) for path in data.get("written") or ()),
                    contact_tolerance_mm=data.get("contact_tolerance_mm"),

@@ -8,8 +8,16 @@ in its grammar (``plate/face 7``; ``bracket/face 3`` in a document of one part, 
 handle) is measured where the engine holds it, in the kernel process that holds it (``of_source``): a
 model's document in its script's warm worker, a file's or a document's no warm worker holds in the engine's
 checks process, each as its reader read it -- nothing exported, written or read again. A live shape
-(``cad.build123d.cnc(shape)``) is read by its labels, as the engine would name its document. Each part is
-measured once, placed where its first occurrence stands; its other occurrences are counted.
+(``cad.build123d.cnc(shape)``) is read by its labels, as the engine would name its document.
+
+**Every occurrence as it stands.** A part used several times is one ``Part`` for each way it stands
+(``_Standing``): the occurrences turned alike -- moved apart, never turned against each other -- are one
+``Part``, placed where the first of them stands, the others counted (``occurrences``), named (``paths``) and
+placed (``placements``: how far each lies from the first); an occurrence turned another way is a ``Part`` of
+its own, at its own refs, measured as it stands. So what depends on how a part stands -- a print's overhangs,
+a molding's draft against the pull -- is judged for every occurrence, what does not is measured once per
+geometry by the processes that read it so (``copies``), and a total counts ``occurrences``
+(``Document.facts``). A live shape's leaves that share one geometry are read the same way (``parts_of``).
 
 **Never the held shapes themselves.** A check meshes faces (``BRepMesh``), which writes a triangulation
 into the shape it meshes: on the document the engine holds, the next check would find the last one's
@@ -45,18 +53,24 @@ __all__ = ["Document", "Edge", "Part", "Rays", "Sample", "Surface", "edges", "in
 
 # Two faces meeting at an edge within this many degrees of each other are tangent: a fillet's join.
 SMOOTH_DEG = 1.0
+#: A line passes a face along it -- a tangent touch, no crossing -- where its direction lies within this of
+#: the surface's plane there (the cosine of its angle to the normal: about 6e-5 degrees).
+TANGENT = 1e-6
 
 
 @dataclass
 class Part:
-    """One part of a document: its geometry placed where its first occurrence stands, its canonical owner
-    (the ref's text before ``/face N``) and its faces in their ordinals' order (1-based)."""
+    """One part of a document as it stands one way: its geometry placed where the first occurrence that stands
+    so does, its canonical owner (the ref's text before ``/face N``) and its faces in their ordinals' order
+    (1-based). ``occurrences`` counts the occurrences that stand so (turned alike, moved apart), ``paths``
+    names each and ``placements`` says how far each lies from the first (millimetres; the first's is zero)."""
 
     name: str
     owner: str
     shape: Any                       # a build123d Shape, placed
     occurrences: int = 1
     paths: tuple[str, ...] = ()
+    placements: tuple[tuple[float, float, float], ...] = ((0.0, 0.0, 0.0),)
     face_names: dict[int, str] = field(default_factory=dict)
     material: Any = None             # the part's declared material (a bd_materials FinishedMaterial), or None
     _faces: list[Any] | None = field(default=None, repr=False)
@@ -126,6 +140,7 @@ class Part:
         box = self.shape.bounding_box()
         declared = getattr(self.material, "name", None)
         return {"name": self.name, "owner": self.owner, "occurrences": self.occurrences,
+                "paths": list(self.paths), "placements_mm": [rounded(shift, 4) for shift in self.placements],
                 "material": str(declared) if declared else None, "material_table": materials.declared(self.material),
                 "process": processes.route(getattr(self.material, "process", None)),
                 "bbox_mm": [round(box.size.X, 4), round(box.size.Y, 4), round(box.size.Z, 4)],
@@ -146,9 +161,14 @@ class Document:
     empty: list[str] = field(default_factory=list)
 
     def facts(self) -> dict[str, Any]:
+        """What a report says of the whole document: ``part_count`` the parts measured (one for each way a
+        geometry stands), and its totals over every occurrence -- ``occurrence_count``, ``solid_count``,
+        ``volume_mm3``: a part used four times is four parts' material."""
         return {"name": self.name, "part_count": len(self.parts),
-                "occurrence_count": sum(part.occurrences for part in self.parts), "units": "mm",
-                "empty_parts": list(self.empty)}
+                "occurrence_count": sum(part.occurrences for part in self.parts),
+                "solid_count": sum(part.occurrences * len(part.solids()) for part in self.parts),
+                "volume_mm3": round(sum(part.occurrences * float(part.shape.volume) for part in self.parts), 4),
+                "units": "mm", "empty_parts": list(self.empty)}
 
 
 # --- reading ---------------------------------------------------------------------------------------------
@@ -174,6 +194,51 @@ def _copied(shape: Any) -> Any:
     return BRepBuilderAPI_Copy(shape, True, True).Shape()
 
 
+#: Two occurrences stand alike when their rotations agree to this, entry for entry (about 6e-8 degrees): any
+#: more and the second is measured as it stands -- an occurrence tilted a twentieth of a degree is another.
+SAME_ORIENTATION = 1e-9
+
+
+def _placement(matrix: Any) -> tuple[np.ndarray, np.ndarray]:
+    """The rotation (3 x 3, any mirror or scale with it) and the shift of a column-major 4x4 matrix
+    (``Instance.matrix``)."""
+    m = np.asarray(matrix, dtype=float).reshape(4, 4).T
+    return m[:3, :3].copy(), m[:3, 3].copy()
+
+
+def _placement_of(shape: Any) -> tuple[np.ndarray, np.ndarray]:
+    """The rotation and the shift a ``TopoDS_Shape`` is placed by (its location's)."""
+    trsf = shape.Location().Transformation()
+    return (np.array([[trsf.Value(row, column) for column in (1, 2, 3)] for row in (1, 2, 3)]),
+            np.array([trsf.Value(row, 4) for row in (1, 2, 3)]))
+
+
+class _Standing:
+    """A document's parts as they stand (the module's **Every occurrence as it stands**): one ``Part`` for each
+    way a geometry stands, in the order their first occurrences come."""
+
+    def __init__(self) -> None:
+        self.parts: list[Part] = []
+        self._stood: dict[Any, list[tuple[np.ndarray, np.ndarray, Part]]] = {}
+
+    def add(self, geometry: Any, rotation: np.ndarray, shift: np.ndarray, path: str, make: Any) -> None:
+        """One occurrence of ``geometry`` (a key its occurrences share), placed by ``rotation`` and ``shift``:
+        counted on the part that stands so already, else a part of its own (``make()``)."""
+        for stood, first, part in self._stood.get(geometry, ()):
+            if np.allclose(rotation, stood, rtol=0.0, atol=SAME_ORIENTATION):
+                part.occurrences += 1
+                part.paths += (path,)
+                part.placements += (tuple(float(v) for v in shift - first),)
+                return
+        part = make()
+        self._stood.setdefault(geometry, []).append((rotation, shift, part))
+        self.parts.append(part)
+
+    def document(self, name: str, source: str | None = None) -> Document:
+        empty = [part.owner or part.name for part in self.parts if not part.faces()]
+        return Document(name=name, parts=[part for part in self.parts if part.faces()], source=source, empty=empty)
+
+
 def _loaded(loaded: Any, copy: bool = False) -> Document:
     import build123d as bd
 
@@ -181,27 +246,22 @@ def _loaded(loaded: Any, copy: bool = False) -> Document:
 
     structure = loaded.structure()
     root = refs.structure_tree(structure)
-    first: dict[int, Part] = {}
-    order: list[Part] = []
+    standing = _Standing()
     for node in root.parts():
         checkpoint()
         payload = node.payload
         prototype = int(payload["prototype"])
         path = refs.path_text(root, node)
-        if prototype in first:
-            first[prototype].occurrences += 1
-            first[prototype].paths += (path,)
-            continue
         proto = loaded.prototypes[prototype]
         instance = loaded.instances[int(payload["instance"])]
-        placed = bd.Shape.cast((_copied(proto.shape) if copy else proto.shape).Moved(_trsf(instance.matrix)))
-        part = Part(name=proto.name, owner=refs.owner_text(root, node), shape=placed, paths=(path,),
-                    face_names=dict(proto.face_names), material=getattr(proto, "material", None))
-        first[prototype] = part
-        order.append(part)
-    empty = [part.owner or part.name for part in order if not part.faces()]
-    return Document(name=loaded.name, parts=[part for part in order if part.faces()], source=str(loaded.path),
-                    empty=empty)
+
+        def make(proto: Any = proto, instance: Any = instance, node: Any = node, path: str = path) -> Part:
+            placed = bd.Shape.cast((_copied(proto.shape) if copy else proto.shape).Moved(_trsf(instance.matrix)))
+            return Part(name=proto.name, owner=refs.owner_text(root, node), shape=placed, paths=(path,),
+                        face_names=dict(proto.face_names), material=getattr(proto, "material", None))
+
+        standing.add(prototype, *_placement(instance.matrix), path, make)
+    return standing.document(loaded.name, str(loaded.path))
 
 
 def read(document_type: str, source: Any) -> Document:
@@ -283,34 +343,31 @@ def of_source(source: Any, keep: str | None = None) -> Document:
     structure = source.structure
     pristine = _pristine(source, keep)
     root = refs.structure_tree(structure)
-    first: dict[int, Part] = {}
-    order: list[Part] = []
+    standing = _Standing()
     for node in root.parts():
         checkpoint()
         payload = node.payload
         prototype = int(payload["prototype"])
         path = refs.path_text(root, node)
-        if prototype in first:
-            first[prototype].occurrences += 1
-            first[prototype].paths += (path,)
-            continue
         proto = structure["prototypes"][prototype]
         instance = structure["instances"][int(payload["instance"])]
-        # A copy of the part read back, which this check may mesh: the kept one is never measured.
-        shape = _copied(pristine[proto["key"]])
-        placed = bd.Shape.cast(shape.Moved(_trsf(instance["matrix"])))
-        part = Part(name=proto["name"], owner=refs.owner_text(root, node), shape=placed, paths=(path,),
-                    face_names={int(key): text for key, text in (proto.get("faceNames") or {}).items()},
-                    material=material_from_json(proto.get("material")))
-        first[prototype] = part
-        order.append(part)
-    empty = [part.owner or part.name for part in order if not part.faces()]
-    return Document(name=structure["name"], parts=[part for part in order if part.faces()], empty=empty)
+
+        def make(proto: Any = proto, instance: Any = instance, node: Any = node, path: str = path) -> Part:
+            # A copy of the part read back, which this check may mesh: the kept one is never measured.
+            placed = bd.Shape.cast(_copied(pristine[proto["key"]]).Moved(_trsf(instance["matrix"])))
+            return Part(name=proto["name"], owner=refs.owner_text(root, node), shape=placed, paths=(path,),
+                        face_names={int(key): text for key, text in (proto.get("faceNames") or {}).items()},
+                        material=material_from_json(proto.get("material")))
+
+        standing.add(prototype, *_placement(instance["matrix"]), path, make)
+    return standing.document(structure["name"])
 
 
 def parts_of(shape: Any, name: str | None = None) -> Document:
     """A live build123d shape's parts, read by its labels as the engine would name its document: each leaf
-    of its compound tree a part, placed where it stands."""
+    of its compound tree a part, placed where it stands -- and, as a document's occurrences are, the leaves
+    that share one geometry (one shape placed several times, ``Pos(...) * part``) and one material one part
+    for each way they stand, the rest counted (``_Standing``)."""
     import build123d as bd
 
     from cad.engine import refs
@@ -331,14 +388,24 @@ def parts_of(shape: Any, name: str | None = None) -> Document:
     if not tree["name"]:
         tree["name"] = name or ""
     root = refs.structure_tree({"tree": tree})
-    parts = []
+    standing = _Standing()
+    shared: list[tuple[Any, Any]] = []  # each geometry seen, with its material: a leaf's key is its index
     for node in root.parts():
         leaf, where = leaves[int(node.payload["prototype"])]
         placed = leaf if where is None or node is root else bd.Shape.cast(leaf.wrapped.Located(where.wrapped))
-        parts.append(Part(name=node.label, owner=refs.owner_text(root, node), shape=placed,
-                          paths=(refs.path_text(root, node),), material=getattr(leaf, "material", None)))
-    empty = [part.owner or part.name for part in parts if not part.faces()]
-    return Document(name=tree["name"], parts=[part for part in parts if part.faces()], empty=empty)
+        material = getattr(leaf, "material", None)
+        geometry = next((index for index, (other, its) in enumerate(shared)
+                         if its is material and placed.wrapped.IsPartner(other)), len(shared))
+        if geometry == len(shared):
+            shared.append((placed.wrapped, material))
+        path = refs.path_text(root, node)
+
+        def make(placed: Any = placed, node: Any = node, path: str = path, material: Any = material) -> Part:
+            return Part(name=node.label, owner=refs.owner_text(root, node), shape=placed, paths=(path,),
+                        material=material)
+
+        standing.add(geometry, *_placement_of(placed.wrapped), path, make)
+    return standing.document(tree["name"])
 
 
 # --- copies ----------------------------------------------------------------------------------------------
@@ -1396,6 +1463,9 @@ class Rays:
             low, high = box.CornerMin(), box.CornerMax()
             self.boxes[index] = (low.X(), low.Y(), low.Z(), high.X(), high.Y(), high.Z())
         self._intersectors: dict[int, Any] = {}
+        self._props: dict[int, Any] = {}
+        #: The lines whose crossings ``intervals`` could not pair into stretches of material (it answered None).
+        self.unpaired = 0
         self.screen = Screen(self.faces, size)
 
     def _candidates(self, o: np.ndarray, d: np.ndarray, start: float, end: float) -> tuple[np.ndarray, np.ndarray]:
@@ -1423,7 +1493,10 @@ class Rays:
         return found
 
     def _crossings(self, origin: Iterable[float], direction: Iterable[float], start: float, end: float,
-                   nearest: bool) -> list[tuple[float, int]]:
+                   nearest: bool, senses: list[int] | None = None) -> list[tuple[float, int]]:
+        """Every crossing between ``start`` and ``end`` (``nearest``: the first alone), nearest first: its
+        distance and its face's index. ``senses``, a list given empty, is filled with which way the line
+        passes each (``_sense``), in the same order."""
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
 
         checkpoint()  # a ray at a time: a check asked to stop stops between rays
@@ -1437,6 +1510,7 @@ class Rays:
             return []
         line = gp_Lin(gp_Pnt(*o), gp_Dir(*d))
         found: list[tuple[float, int]] = []
+        passed: dict[tuple[float, int], int] = {}
         for index, entry in zip(candidates, entries):
             if nearest and found and entry > found[0][0]:
                 break
@@ -1448,10 +1522,37 @@ class Rays:
                 w = float(intersector.WParameter(k))
                 if start <= w <= end:
                     found.append((w, int(index)))
+                    if senses is not None:
+                        passed[found[-1]] = self._sense(int(index), d, float(intersector.UParameter(k)),
+                                                        float(intersector.VParameter(k)))
             if nearest and found:
                 found = [min(found)]
         found.sort()
+        if senses is not None:
+            senses.extend(passed[crossing] for crossing in found)
         return found
+
+    def _sense(self, index: int, direction: np.ndarray, u: float, v: float) -> int:
+        """Which way a line along ``direction`` passes the face ``index`` at ``(u, v)``: 1 into the material
+        (against the face's outward normal), -1 out of it, 0 along it -- a tangent touch, within
+        ``TANGENT`` of the surface's own plane there. A point where the surface has no normal (a cone's
+        apex, a sphere's pole) is read a millionth of the face's parameters toward its middle."""
+        from OCP.BRepGProp import BRepGProp_Face
+        from OCP.BRepTools import BRepTools
+        from OCP.gp import gp_Pnt, gp_Vec
+
+        props = self._props.get(index)
+        if props is None:
+            props = self._props[index] = BRepGProp_Face(self.faces[index])
+        point, normal = gp_Pnt(), gp_Vec()
+        props.Normal(u, v, point, normal)
+        if normal.Magnitude() <= 1e-12:
+            u0, u1, v0, v1 = BRepTools.UVBounds_s(self.faces[index])
+            props.Normal(u + 1e-6 * ((u0 + u1) / 2.0 - u), v + 1e-6 * ((v0 + v1) / 2.0 - v), point, normal)
+            if normal.Magnitude() <= 1e-12:
+                return 0
+        along = float(np.dot(direction, _xyz(normal))) / normal.Magnitude()
+        return 0 if abs(along) <= TANGENT else (-1 if along > 0.0 else 1)
 
     def hits(self, origin: Iterable[float], direction: Iterable[float], start: float = 0.0,
              end: float = 1e9) -> list[tuple[float, Any]]:
@@ -1477,14 +1578,52 @@ class Rays:
         return None if hit is None else hit[0]
 
     def intervals(self, origin: Iterable[float], direction: Iterable[float], tolerance: float = 1e-6
-                  ) -> list[tuple[float, float]]:
-        """The stretches of the whole line through ``origin`` along ``direction`` that lie in the material,
-        from its crossings taken in pairs (a closed solid's), as distances from ``origin``."""
-        crossings: list[float] = []
-        for distance, _ in self._crossings(origin, direction, -1e9, 1e9, False):
-            if not crossings or distance - crossings[-1] > tolerance:
-                crossings.append(distance)
-        return [(crossings[i], crossings[i + 1]) for i in range(0, len(crossings) - 1, 2)]
+                  ) -> list[tuple[float, float]] | None:
+        """The stretches of the whole line through ``origin`` along ``direction`` that lie in the material of
+        a closed solid, as distances from ``origin`` -- or None where they cannot be told.
+
+        Each crossing is told by which way the line passes the face there (``_sense``): into the material,
+        out of it, or along the surface -- a tangent touch, which is no crossing: a line that grazes a
+        torus's top passes no material, and one that grazes its inner equator from inside stays inside.
+        Crossings within ``tolerance`` of each other are one place (an edge's two faces, a vertex's three):
+        one entry where every face there is passed inward, one exit where outward, and nothing where the
+        faces disagree -- the line touches the edge and stays on its side, outside or inside. The stretches
+        are those from an entry to the exit after it. Where the places do not alternate so -- two entries
+        running, a line that ends inside (an open shell, a crossing the kernel lost), a place where the
+        kernel finds the line along one face while it crosses another -- the answer is None, counted in
+        ``unpaired``: unknown, never a guess a wall or a gap is measured from. A line that lies in a face's
+        own surface, where the kernel finds no crossing of that face, is read by the faces it does cross."""
+        senses: list[int] = []
+        crossings = self._crossings(origin, direction, -1e9, 1e9, False, senses)
+        places: list[tuple[float, list[int]]] = []
+        for (distance, _), sense in zip(crossings, senses):
+            if places and distance - places[-1][0] <= tolerance:
+                places[-1][1].append(sense)
+            else:
+                places.append((distance, [sense]))
+        found: list[tuple[float, float]] = []
+        entered: float | None = None
+        for distance, passed in places:
+            crossed = {sense for sense in passed if sense}
+            if not crossed:
+                continue  # a tangent touch alone: the line stays on its side
+            if len(crossed) == 2:
+                continue  # an edge or a vertex touched: faces passed both ways, the line stays on its side
+            if 0 in passed:
+                self.unpaired += 1
+                return None  # it crosses one face where it runs along another: on the boundary
+            if (1 in crossed) == (entered is not None):
+                self.unpaired += 1
+                return None  # two entries, or two exits, running: a crossing is missing
+            if entered is None:
+                entered = distance
+            else:
+                found.append((entered, distance))
+                entered = None
+        if entered is not None:
+            self.unpaired += 1
+            return None
+        return found
 
 
 #: The least angle along a curved edge is refined to this many degrees' change (golden-section search).

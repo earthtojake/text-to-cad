@@ -1,7 +1,7 @@
 """The manufacturing check of exact geometry: what ``cad.<type>.dfm(source, process=...)`` runs for a
 STEP, an xbf or a document the engine holds, once its options are resolved (``cad._internal.manufacturing``)
 -- in the engine's kernel process that holds the document (``held``), or in this process where no engine
-can be reached (``measure``) -- and what ``cad.build123d.cnc(shape)`` and its siblings run for a live shape.
+can be reached (``measure``) -- and what ``cad.build123d.dfm(shape, process=...)`` runs for a live shape.
 
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
@@ -22,7 +22,7 @@ import numpy as np
 from cad._internal.dfm import Cancelled, checkpoint, stop  # what the engine's worker stops a check by
 from cad.build123d import _dfm_brep
 
-__all__ = ["Cancelled", "checked", "checkpoint", "held", "measure", "measure_declared", "stop"]
+__all__ = ["Cancelled", "checked", "checkpoint", "dfm", "held", "measure", "measure_declared", "stop"]
 
 
 #: A solid of less volume than this fraction of its box's diagonal cubed holds no material: zero volume.
@@ -51,13 +51,67 @@ def _closed_solids(part: _dfm_brep.Part) -> tuple[list[Any], list[Any], int]:
     return closed, opened, max(0, len(part.faces()) - in_solids)
 
 
+#: Solids of one part share volume where their common is over this share of the smaller's volume.
+_OVERLAP = 1e-6
+#: The pairs of one part's solids whose common is computed, at most: each a boolean of the kernel's.
+_PAIRS = 256
+
+
+def _several(part: _dfm_brep.Part, name: str, closed: list[Any], process: str) -> list[dict[str, Any]]:
+    """What a part of several solids says, alike in every process: ``several_solids`` (a warning: a process
+    makes one solid a part, so the solids are judged as the process's module reads them, together or each on
+    its own, and the part is not one piece), and ``not_sound`` (an error) where two of them share volume --
+    interpenetrating solids are no part: its volume, walls and reach are of material counted twice. A pair is
+    compared where their boxes meet, ``_PAIRS`` pairs at most (said where more remain). Printing's own
+    ``solid`` family finds shared volume with its boolean check, so it is not looked for twice."""
+    from cad.build123d import _geometry
+
+    where = part.ref("face", 1)
+    found = [{"severity": "warning", "code": "several_solids", "location": where,
+              "message": f"{name} is {len(closed)} solids in one part: a process makes a part of one solid",
+              "hint": "fuse them into one solid (`a + b` in build123d) if they are one piece, or make each its own "
+                      "part (its own label in an assembly)"}]
+    if process == "printing":
+        return found
+    boxes = [solid.bounding_box(optimal=False) for solid in closed]
+    low = np.array([[box.min.X, box.min.Y, box.min.Z] for box in boxes])
+    high = np.array([[box.max.X, box.max.Y, box.max.Z] for box in boxes])
+    pairs = [(i, j) for i in range(len(closed)) for j in range(i + 1, len(closed))
+             if bool(np.all(low[i] <= high[j]) and np.all(low[j] <= high[i]))]
+    shared: list[str] = []
+    unknown = max(0, len(pairs) - _PAIRS)
+    for i, j in pairs[:_PAIRS]:
+        checkpoint()
+        try:
+            common = float(_geometry.overlap_volume(closed[i], closed[j]))
+        except Exception:  # noqa: BLE001 - a boolean the kernel cannot finish is no verdict on the pair
+            unknown += 1
+            continue
+        if common > _OVERLAP * min(abs(float(closed[i].volume)), abs(float(closed[j].volume))):
+            shared.append(f"solids {i + 1} and {j + 1} share {common:.6g} mm3")
+    if shared:
+        named = "; ".join(shared[:4]) + (f" and {len(shared) - 4} more pair(s)" if len(shared) > 4 else "")
+        found.append({"severity": "error", "code": "not_sound", "location": where,
+                      "message": f"{name}'s solids interpenetrate ({named}): its material is counted twice there, "
+                                 "so its figures are in doubt",
+                      "hint": "fuse them into one solid (`a + b` in build123d), or cut one from the other"})
+    if unknown:
+        found.append({"severity": "warning", "code": "solids_not_compared", "location": where,
+                      "message": f"{unknown} pair(s) of {name}'s solids were not compared for shared volume "
+                                 f"(over {_PAIRS} pairs whose boxes meet, or a boolean the kernel could not finish)",
+                      "hint": "make each solid its own part, or fuse them, then check again"})
+    return found
+
+
 def _integrity(document: _dfm_brep.Document, process: str) -> list[dict[str, Any]]:
     """``Unmeasured("not_solid")`` where a part holds no closed solid of any volume -- an open shell, a face, a
     solid of zero volume: no process makes a part of no material, and every figure of one would be of a
     surface. Else the findings that put every figure in doubt, errors in every process: ``not_watertight``
     (a solid with an open shell, or faces beside the solids that no solid holds) and ``not_sound`` (the
-    kernel's topology check fails). Printing's own ``solid`` family judges its solids' shells and soundness
-    (with the boolean check), so for printing only the faces beside the solids are said here."""
+    kernel's topology check fails, or a part's solids interpenetrate) -- and, of a part of several solids,
+    ``several_solids`` (``_several``), said alike in every process. Printing's own ``solid`` family judges its
+    solids' shells and soundness (with the boolean check), so for printing only the faces beside the solids
+    and the count of solids are said here."""
     from cad._internal.dfm import Unmeasured, checkpoint
     from cad.build123d import _geometry
 
@@ -73,6 +127,8 @@ def _integrity(document: _dfm_brep.Document, process: str) -> list[dict[str, Any
             refused.append(f"{name} ({what}, {abs(float(part.shape.volume)):g} mm3)")
             continue
         where = part.ref("face", 1)
+        if len(closed) > 1:
+            found.extend(_several(part, name, closed, process))
         if opened or loose:
             said = ", ".join(([f"{len(opened)} solid(s) with an open shell or no volume"] if opened else [])
                              + ([f"{loose} face(s) outside any solid"] if loose else []))
@@ -212,65 +268,93 @@ def held(source: Any, check: dict[str, Any], read: Any = None, keep: str | None 
 
 
 def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidates: bool = False,
-            name: str | None = None) -> Any:
+            name: str | None = None, strict: bool = False) -> Any:
     """The check of a live build123d shape, as a ``CheckResult``: its options resolved as a STEP's are, its
     findings at refs of the document the engine would make of it. With no ``process``, the one its parts
-    declare (``manufacturing.declared``)."""
+    declare (``manufacturing.declared``). ``ArgumentRefused`` naming the parameter for what is no shape, and
+    for an option's value (a Python caller's words: ``manufacturing.parameters``)."""
     from cad._internal import manufacturing
-    from cad._internal.dfm import Unmeasured
+    from cad._internal.dfm import Unmeasured, _common
+    from cad._internal.refused import ArgumentRefused
 
-    if process is None:
-        # A live shape keeps its parts' materials, as a model's document does (a STEP does not): read as a model's.
-        manufacturing.options("model", None, given, candidates=candidates)
-        document = _dfm_brep.parts_of(shape, name=name)
-        label = Path(document.name or "shape")
-        try:
-            process, resolved, measured = _declared(document, "step", given, candidates, "shape")
-        except Unmeasured as failure:
-            return manufacturing._failed(label, failure.message, failure.code)
-        return manufacturing.finish(label, {"process": process, **measured}, process, resolved, candidates)
-    resolved = manufacturing.options("step", process, given, candidates=candidates)
+    if not hasattr(getattr(shape, "wrapped", None), "ShapeType"):
+        raise ArgumentRefused(f"shape is a build123d shape (a Part, a Solid, a Compound of labelled parts), not "
+                              f"{'None' if shape is None else 'a ' + type(shape).__name__}")
+    try:
+        _common.require_bool("strict", strict)
+        if process is None:
+            # A live shape keeps its parts' materials, as a model's document does (a STEP does not): read as a
+            # model's.
+            manufacturing.options("model", None, given, candidates=candidates)
+            document = _dfm_brep.parts_of(shape, name=name)
+            label = Path(document.name or "shape")
+            try:
+                process, resolved, measured = _declared(document, "step", given, candidates, "shape")
+            except Unmeasured as failure:
+                return manufacturing.not_checked(label, failure.message, failure.code)
+            return manufacturing.finish(label, {"process": process, **measured}, process, resolved, candidates,
+                                        strict)
+        resolved = manufacturing.options("step", process, given, candidates=candidates)
+    except ArgumentRefused as refused:
+        raise ArgumentRefused(manufacturing.parameters(str(refused))) from None
     assert resolved is not None
     document = _dfm_brep.parts_of(shape, name=name)
     label = Path(document.name or "shape")
     try:
         report = {"process": process, **_measured(document, "shape", process, resolved, candidates)}
     except Unmeasured as failure:
-        return manufacturing._failed(label, failure.message, failure.code)
-    return manufacturing.finish(label, report, process, resolved, candidates)
+        return manufacturing.not_checked(label, failure.message, failure.code)
+    return manufacturing.finish(label, report, process, resolved, candidates, strict)
+
+
+def dfm(shape: Any, *, process: str | None = None, candidates: bool = False, strict: bool = False,
+        **options: Any) -> Any:
+    """The manufacturing check of a live build123d ``shape`` (a part, or an assembly's every part), as
+    ``cad.step.dfm`` checks a file: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing`` -- with
+    none, the one the parts declare (``part.material = metals.aluminum(process=machined())``) -- and the
+    options are that process's, by the names ``cad.step.dfm`` takes (``tools=[3, 6]``, ``pull="z"``,
+    ``technology="sla"``); ``candidates`` ranks molding's pulls or printing's orientations instead, and
+    ``strict`` fails the check on a warning too. A ``CheckResult``: its ``status`` (``ok``, ``failed``,
+    ``not_checked``), its findings at refs (``plate/face 7``), each rule's verdict with its figure and its
+    limit, and its ``measurements``, the report. ``TypeError`` for an option no process takes."""
+    from cad._internal import manufacturing
+
+    unknown = sorted(set(options) - set(manufacturing.KINDS) | ({"units"} & set(options)))
+    if unknown:
+        raise TypeError(f"dfm() got an unexpected keyword argument {unknown[0]!r}")
+    return checked(shape, process, options, candidates=candidates, strict=strict)
 
 
 def cnc(shape: Any, *, material: str | None = None, axes: int | None = None,
-        turning: bool = False, tools: str | None = None, stock: str | None = None) -> Any:
-    """CNC machining's check of ``shape`` (a build123d ``Shape``; an assembly's every part): a ``CheckResult``
-    whose findings are at refs (``plate/face 7``) and whose ``measurements`` is the report -- the options are
-    ``cad.step.dfm``'s for ``process="cnc"``."""
+        turning: bool = False, tools: Any = None, stock: Any = None, strict: bool = False) -> Any:
+    """CNC machining's check of ``shape``: ``dfm(shape, process="cnc", ...)``."""
     return checked(shape, "cnc", {"material": material, "axes": axes, "turning": turning,
-                                  "tools": tools, "stock": stock})
+                                  "tools": tools, "stock": stock}, strict=strict)
 
 
 def sheet_metal(shape: Any, *, material: str | None = None,
                 thickness: float | None = None, k_factor: float | None = None, bend_radius: float | None = None,
-                kerf: float | None = None, sheet_size: str | None = None) -> Any:
-    """Sheet metal's check of ``shape``, as ``cnc``'s (``process="sheet"``)."""
+                kerf: float | None = None, sheet_size: Any = None, strict: bool = False) -> Any:
+    """Sheet metal's check of ``shape``: ``dfm(shape, process="sheet", ...)``."""
     return checked(shape, "sheet", {"material": material, "thickness": thickness,
                                     "k_factor": k_factor, "bend_radius": bend_radius, "kerf": kerf,
-                                    "sheet_size": sheet_size})
+                                    "sheet_size": sheet_size}, strict=strict)
 
 
-def molding(shape: Any, *, material: str | None = None, pull: str | None = None,
+def molding(shape: Any, *, material: str | None = None, pull: Any = None,
             wall_limit: float | None = None, zero_tol: float | None = None, cavities: int | None = None,
-            candidates: bool = False) -> Any:
-    """Injection molding's check of ``shape``, as ``cnc``'s (``process="molding"``)."""
+            candidates: bool = False, strict: bool = False) -> Any:
+    """Injection molding's check of ``shape``: ``dfm(shape, process="molding", ...)``."""
     return checked(shape, "molding", {"material": material, "pull": pull,
                                       "wall_limit": wall_limit, "zero_tol": zero_tol, "cavities": cavities},
-                   candidates=candidates)
+                   candidates=candidates, strict=strict)
 
 
 def printing(shape: Any, *, material: str | None = None, technology: str | None = None,
-             build_volume: str | None = None, angle_limit: float | None = None, layer_height: float | None = None,
-             nozzle: float | None = None, candidates: bool = False) -> Any:
-    """3D printing's check of ``shape``, as ``cnc``'s (``process="printing"``)."""
+             build_volume: Any = None, angle_limit: float | None = None, layer_height: float | None = None,
+             nozzle: float | None = None, candidates: bool = False, strict: bool = False) -> Any:
+    """3D printing's check of ``shape``: ``dfm(shape, process="printing", ...)``."""
     return checked(shape, "printing", {"material": material, "technology": technology,
                                        "build_volume": build_volume, "angle_limit": angle_limit,
-                                       "layer_height": layer_height, "nozzle": nozzle}, candidates=candidates)
+                                       "layer_height": layer_height, "nozzle": nozzle}, candidates=candidates,
+                   strict=strict)
