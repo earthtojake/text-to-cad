@@ -40,7 +40,7 @@ on:
     branches:
       - main
       - build-test
-    # GitHub matches these against the first 300 files a push changes; Version Check refuses a
+    # GitHub matches these against the first 300 files a push changes; Test's version check refuses a
     # release pull request that changes more (scripts/release/check-pr-version.sh).
     paths:
       - VERSION
