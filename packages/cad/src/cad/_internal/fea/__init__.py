@@ -5,8 +5,8 @@
 study's numbers or the model's own;
 :mod:`.mesh` turns a STEP occurrence (or an assembly's glued parts) into tetrahedra through netgen, every B-rep face
 kept under its cad ordinal; :mod:`.static` solves it through CalculiX (:mod:`.solve`, :mod:`cad.calculix`) and reads
-the answer; :mod:`.checks` says what an engineer would of it; :mod:`.outputs` writes the ``.fea`` result (the ``fea``
-document type, ``cad.fea``) and the VTU;
+the answer; :mod:`.checks` says what an engineer would of it; :mod:`.outputs` writes the result's files (``result.glb``,
+``result.vtu``, the pictures);
 :mod:`.run` is the orchestration the operation calls: a study's setup, or its solve.
 
 Everything numeric imports lazily, inside the functions that need it, so that ``cad <type> solve --help`` and the

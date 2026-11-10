@@ -222,6 +222,8 @@ class EngineTelemetryTest(unittest.TestCase):
                 return error
             raise AssertionError("not refused")
 
+        # A side of 0 is a size given, refused as any side out of range is, and never the default.
+        self.assertEqual(str(refused(lambda: parse_size(0, 600, None))), "an image side is 16 to 8192 pixels, not 0")
         source = (self.tmp / "secret.xbf", self.tmp / "out.png")
         (self.tmp / "secret.xbf").touch()
         cases = [

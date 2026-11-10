@@ -3,7 +3,7 @@ file written, a size, a measure.
 
 A model's run says them in its own process -- ``python model.py`` reports each model its program's own call
 built (``model.Model.__call__``: ``reported``), and a program's own ``export()`` each file it wrote
-(``written``) -- and the ``cadgen`` command says the same words for its verbs (``cad_server.engine.cli``), so a
+(``written``) -- and the ``cad`` command says the same words for its verbs (``cad_server.engine.cli``), so a
 person reads one vocabulary whichever ran it.
 """
 

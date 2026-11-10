@@ -97,7 +97,7 @@ from cad.engine.kernel.bounds import box_limits, optimal_box
 # BRepMesh_Status bits, as the mesher's GetStatusFlags reports them.
 _MESH_FLAGS = ((1, "Failure"), (2, "ReMesh"), (4, "SelfIntersectingWire"), (8, "UserBreak"))
 
-from cad.engine.mesh_format import (ANGULAR, BOUNDARY, CLASS_NAMES, DEVIATION, FEATURE, HEADER, MAGIC, NONMANIFOLD, SEAM, TANGENT, TESSELLATION, VERSION, Mesh)
+from cad.engine.mesh_format import (ANGULAR, BOUNDARY, CLASS_NAMES, DEVIATION, FEATURE, HEADER, MAGIC, NONMANIFOLD, SEAM, TANGENT, TESSELLATION, Mesh)
 
 
 def deflection(shape: Any) -> float:

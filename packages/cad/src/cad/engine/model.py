@@ -51,13 +51,11 @@ from cad.engine.ids import canonical, check_name, model_id
 __all__ = ["KINDS", "Memo", "Model", "Output", "Target", "configuration_sequence", "dxf", "glb", "mechanism_state", "memo",
            "model", "paint", "read_step", "read_xbf", "step", "stl", "threemf", "xbf", "models_in"]
 
-# The suffix each output kind writes, and the default file name's.
+# The suffix each output kind writes.
 SUFFIXES = {"xbf": ".xbf", "step": ".step", "glb": ".glb", "stl": ".stl", "threemf": ".3mf", "dxf": ".dxf"}
 _ACCEPTED = {"xbf": (".xbf",), "step": (".step", ".stp"), "glb": (".glb",), "stl": (".stl",), "threemf": (".3mf",),
              "dxf": (".dxf",)}
 KINDS = tuple(SUFFIXES)
-# The default folder for an xbf requested by a build flag without a path.
-XBF_FOLDER = "XBF"
 
 _CONTEXT = threading.local()
 # Every model defined since a build began, by its identity (``script::function``): a body
@@ -68,11 +66,11 @@ _MODELS: dict[str, "Model"] = {}
 
 @dataclass(frozen=True)
 class Output:
-    """One file a model declares: its kind and path (None requests the CLI default), and an STL's
-    or a 3MF's own mesh tolerance in mm (None: the engine's)."""
+    """One file a model declares: its kind and path, and an STL's or a 3MF's own mesh tolerance in
+    mm (None: the engine's)."""
 
     kind: str
-    out: str | None
+    out: str
     tolerance: float | None = None
 
 
@@ -86,9 +84,7 @@ class Target:
 
 
 def check_output(kind: str, out: Any, where: str) -> None:
-    """A path a decorator or a flag gives for ``kind``: a string ending in the kind's suffix."""
-    if out is None:
-        return
+    """A path a decorator gives for ``kind``: a string ending in the kind's suffix."""
     if not isinstance(out, (str, os.PathLike)) or not os.fspath(out):
         raise TypeError(f"{where} takes a path")
     if Path(out).suffix.lower() not in _ACCEPTED[kind]:
@@ -97,10 +93,10 @@ def check_output(kind: str, out: Any, where: str) -> None:
 
 def _told(error: BaseException, said: str | None = None) -> None:
     """A failed build the program's own call reported (its model's frames and the ``failed`` line,
-    ``cli._reported``), or a call the engine never served (none runs and none can start, a sandbox's
+    ``said.reported``), or a call the engine never served (none runs and none can start, a sandbox's
     refusal, its port held) whose one line is ``said``: raised as ever, so a caller may catch it,
     and, left uncaught, ending the program with status 1 and nothing more said than ``said`` on
-    stderr, as a ``cadgen`` verb says it -- not a traceback of this process's client code."""
+    stderr, as a ``cad`` verb says it -- not a traceback of this process's client code."""
     error._told = True  # type: ignore[attr-defined]
     error._said = said  # type: ignore[attr-defined]
     hook = sys.excepthook
@@ -271,9 +267,7 @@ class Model:
             raise error
         return api.Document(self.name, self.script, built.models[0], Path.cwd())
 
-    def _path(self, kind: str, out: Any) -> Path:
-        if out is None:
-            out = Path(XBF_FOLDER) / f"{self.name}.xbf" if kind == "xbf" else Path(self.name + SUFFIXES[kind])
+    def _path(self, out: str) -> Path:
         path = Path(out)
         if not path.is_absolute():
             path = self.script.parent / path
@@ -282,14 +276,13 @@ class Model:
     def targets(self) -> list[tuple[str, Path]]:
         """Each declared output as ``(kind, path)``, the xbf first, then the derived files
         in the order the decorators are written; a relative path is relative to the
-        script's folder, and an output with no path is its default (``XBF/<function>.xbf``,
-        ``<function><suffix>``) beside the script."""
+        script's folder."""
         return [(target.kind, target.path) for target in self.plan()]
 
     def plan(self) -> list[Target]:
         """The files a build of this model writes: what its decorators declare (law 10), the
         xbf first, then the derived files in the order the decorators are written."""
-        return [Target(output.kind, self._path(output.kind, output.out), output.tolerance)
+        return [Target(output.kind, self._path(output.out), output.tolerance)
                 for output in sorted(self.outputs, key=lambda output: output.kind != "xbf")]
 
     # --- the verbs, through the daemon (``cad.engine.api``) -----------------------------
@@ -604,7 +597,7 @@ def mechanism_state(assembly: Any, name: str, **values: Any) -> Any:
 
 
 def configuration_sequence(assembly: Any, name: str, waypoints_or_fn: Any = None, *, sweep: Any = None,
-                           duration: Any = None, ease: str = "cubic", **removed: Any) -> Any:
+                           duration: Any = None, ease: str = "cubic") -> Any:
     """Name a configuration sequence of an assembly's mechanism (AP242's
     ``interpolated_configuration_sequence``), by joint label: waypoints ``[(t, pose), ...]``
     (``t`` in seconds from 0, ``pose`` a mechanism state's name or ``{joint: value}``, the rest
@@ -622,8 +615,7 @@ def configuration_sequence(assembly: Any, name: str, waypoints_or_fn: Any = None
     moves the build: the model is as its joints connect it. Returns ``assembly``."""
     from cad.engine import mechanism
 
-    return mechanism.configuration_sequence(assembly, name, waypoints_or_fn, sweep=sweep, duration=duration, ease=ease,
-                                            **removed)
+    return mechanism.configuration_sequence(assembly, name, waypoints_or_fn, sweep=sweep, duration=duration, ease=ease)
 
 
 def animation(assembly: Any, name: str, *, duration: Any) -> Any:
@@ -693,7 +685,7 @@ def read_xbf(path: Any) -> Any:
     named, coloured and given its materials (painted faces too) as the document has them,
     each element named as the document names it. Its mechanism and configurations are not
     imported: a part is a part. Read once per worker and held, keyed by the file's bytes, as
-    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cadgen
+    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cad step
     export vendor.step vendor.xbf``) and read the xbf."""
     global _READ_XBF
     if _READ_XBF is None:
@@ -1019,7 +1011,7 @@ def check_result(model: Model, result: Any) -> None:
 
 
 # Keep the public decorator and the implementation module one identity, even
-# after an explicit import of cad.engine.model (as with engine.materials).
+# after an explicit import of cad.engine.model.
 import sys as _sys
 from types import ModuleType as _ModuleType
 

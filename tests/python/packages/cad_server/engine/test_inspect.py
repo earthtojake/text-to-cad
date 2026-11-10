@@ -153,6 +153,14 @@ class SummaryTest(unittest.TestCase):
         self.assertIn(frames[-1]["detail"], ("base", "arm"))
         self.assertFalse((self.folder / "hinge.ran").exists(), "nothing ran the script")
 
+        # The handle a model call returns is inspected as its id is.
+        probe = ("import json, hinge\nfrom cad import model\nhandle = hinge.hinge()\n"
+                 "found = model.inspect(handle, query='structure')['summary']\n"
+                 "print(json.dumps([handle.id, found['materials']]))\n")
+        handled = self.run_("-c", probe)
+        self.assertEqual(handled.returncode, 0, handled.stderr)
+        self.assertEqual(json.loads(handled.stdout.splitlines()[-1]), [ident, structure["materials"]])
+
         # Inspected now, the hinge's next build has the part it changed measured once its worker
         # settles, before anyone asks: the longer arm's facts are in before the next inspection.
         measured = self.facts()

@@ -47,7 +47,7 @@ from pathlib import Path
 from stat import S_ISREG
 from typing import Any, Callable
 
-from cad.engine.ids import canonical, file_id
+from cad.engine.ids import canonical
 
 __all__ = ["BuildError", "build", "load_script"]
 
@@ -207,11 +207,9 @@ class _FirstPartyFromSource(importlib.abc.MetaPathFinder):
                     break
             for finder in finders:
                 method = getattr(finder, "find_spec", None)
-                if method is None:  # Python 3.11 also admits legacy import finders
-                    loader = finder.find_module(fullname, path)
-                    spec = importlib.util.spec_from_loader(fullname, loader) if loader else None
-                else:
-                    spec = method(fullname, path, target)
+                if method is None:
+                    continue
+                spec = method(fullname, path, target)
                 if spec is None:
                     continue
                 if type(spec.loader) is importlib.machinery.SourceFileLoader and spec.origin:
@@ -1135,7 +1133,7 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
         # What the bodies made stays the memo's, as a replay would keep it: an edit after
         # any number of these builds replays all it leaves alone.
         memo.keep(name)
-    # Said once, by the run line its report makes (``cli._describe``): ``took ... nothing ran``.
+    # Said once, by the run line its report makes (``said.describe``): ``took ... nothing ran``.
     report = {"ok": True, "model": f"{shown}::{model.name}",
               "memo": {"hits": 0, "misses": 0, "uncached": 0, "bodies_run": 0, "bodies_skipped": 0,
                        "bodies_loaded": found["bodies"]},

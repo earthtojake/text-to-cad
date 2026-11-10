@@ -22,8 +22,9 @@ The engine counts nothing. After each build, ``export`` and ``snapshot`` it call
 function in ``observers``, in the verb's thread, with one plain dict of what the verb did
 (``_facts``): kinds, counts, times, the warm worker's part, and an error's type and frames --
 never a name, a path or a message of the person's but the frames' files as Python has them. An
-observer that raises is passed over, and the verb returns or raises as it would have. cadgen's
-telemetry is one, appended by cadgen's own ``__init__`` (law 3: nothing here imports it).
+observer that raises is passed over, and the verb returns or raises as it would have. The
+server's telemetry is one, appended by its commands (``cad_server._internal.engine_telemetry``;
+law 3: nothing here imports it).
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ import sys
 import threading
 import time
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
@@ -284,7 +285,7 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
         print(f"  id: {ident}")
         if report["url"]:
             print(f"  view: {report['url']}")
-        sys.stdout.flush()  # read now, as a model call's report is (``cli._reported``)
+        sys.stdout.flush()  # read now, as a model call's report is (``said.reported``)
     return Document(name, Path(scope), report, Path.cwd(), shape=shape)
 
 
@@ -774,8 +775,6 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
 def serve(source: Any, port: int = 0) -> Served:
     """Serve a document (``.xbf``, ``.step``, or a document id the engine holds) from the daemon;
     its page's URL, ``/<id>``."""
-    from cad.engine.addresses import key
-
     path = _document(source, "serve")
     answer = _ask({"op": "serve", "path": str(path), "port": port})
     return Served(answer["url"], answer["port"])
@@ -788,7 +787,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     with its canonical ``ref``, its occurrence's ``path`` and, of a model's document, ``made_by``
     (a file names no model); a part or an assembly
     its volume and its mass: each part's volume times its material's density, summed
-    (``cli.weighed``), its world bounds and a part's placement (``_placed``). One answer per selector (a list for several). Without ``ref``, the build
+    (``said.weighed``), its world bounds and a part's placement (``_placed``). One answer per selector (a list for several). Without ``ref``, the build
     closure the xbf holds (``previous``): its engine, libraries, source, modules, inputs and
     key, read from the file alone. A ref that names nothing, or several things, is refused by
     name (``refs.RefError``). No query builds a missing model or writes its declared
@@ -822,6 +821,8 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
 
     from cad.engine.addresses import key, parts, split
 
+    if isinstance(source, Document):
+        source = source.id
     named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
@@ -1116,7 +1117,7 @@ def stop() -> bool:
 #     verb      "build", "export" or "snapshot"
 #     ok        it did all it was asked
 #     seconds   its wall time here
-#     program   ``python model.py`` asked (``model._run_as_program``)
+#     program   ``python model.py`` asked (``Model.__call__``, ``_CONTEXT.program``)
 #     models    each model a build reported, or the one an export or a snapshot of a script built first:
 #               {ok, cached (its xbf taken whole: ``cache.used``), children (models it called), parts,
 #               files (the kinds it wrote or kept)}

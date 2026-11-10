@@ -187,7 +187,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
    which the server's commands append.
 4. **A model's document is XCAF; files are explicit.** *Every document.* A model's document is
-   XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
+   XCAF: a live model holds an XCAF document; `@xbf` serializes it as native BinXCAF.
    It holds: units in millimetres,
    prototypes and instances with placements, a name on every part and instance, colours and
    materials per part and per painted face, element names on face, edge and vertex labels, and

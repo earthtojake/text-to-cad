@@ -22,8 +22,8 @@ caller) of this shape::
 A load may also be a body load, with no faces: ``{"type": "gravity", "vector_g": [0, 0, -1]}`` or ``{"type":
 "acceleration", "vector_g": [5, 0, 0]}`` (in g).
 
-Face references are the engine's refs, as the viewer copies them (``bracket/face 17``, or after the document's path, ``/work/bracket.step#bracket/face 17``); ``cad fea
-faces`` lists them. A ``force`` is the TOTAL force on its faces, spread as a uniform traction. A ``pressure`` acts
+Face references are the engine's refs, as the viewer copies them (``bracket/face 17``, or after the document's path, ``/work/bracket.step#bracket/face 17``); ``cad <type>
+solve`` with no study lists them. A ``force`` is the TOTAL force on its faces, spread as a uniform traction. A ``pressure`` acts
 along the inward normal (positive pushes on the surface). Every check here is stdlib-only and runs before the kernel
 or the solver is imported, so a malformed study fails in milliseconds with a message that names the field.
 """
@@ -62,7 +62,7 @@ CHECK_KEYS = {
 DEFAULT_CHECKS = ({"kind": "stress"},)
 #: Faces this close (or closer) count as touching, unless the study says otherwise (``contact_tolerance_mm``).
 CONTACT_TOLERANCE_MM = 0.1
-#: Standard gravity, mm/s^2 (operators.G0_MM_S2, kept here so parsing imports no numerics).
+#: Standard gravity, mm/s^2, kept here so parsing imports no numerics.
 G0_MM_S2 = 9806.65
 
 

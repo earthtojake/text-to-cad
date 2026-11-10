@@ -27,7 +27,7 @@ from typing import Any, Literal, get_args
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckResult
 
-__all__ = ["DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "dfm_for", "options"]
+__all__ = ["OPTIONS", "PROCESSES", "UNITS_MM", "dfm_for", "options"]
 
 #: The processes a check measures for.
 Process = Literal["molding", "printing"]
@@ -43,7 +43,6 @@ OPTIONS: dict[str, dict[str, Any]] = {
     "molding": {"pull": "z", "units": "mm", "wall_limit": 45.0, "zero_tol": 0.05},
     "printing": {"units": "mm", "samples": 2000, "angle_limit": 45.0},
 }
-DEFAULTS = {name: value for given in OPTIONS.values() for name, value in given.items()}
 # The types that declare their own units, read as millimetres: a units option is the STL's alone.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
              "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",

@@ -3,7 +3,7 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 
 - ``.xbf``, ``.step``: a document, served by the engine (the daemon, so its meshes are the ones
   the viewer and every build share, or with ``daemon=False`` a server in this process; a model's own
-  document, which ``Model.snapshot`` and ``cadgen.snapshot(model, ...)`` draw, from its worker's
+  document, which ``Document.snapshot`` and ``cad.model.snapshot(handle, ...)`` draw, from its worker's
   memory over its one mesh cache), meshed there and drawn from those meshes (``render/service.py``).
 - ``.stl``, ``.3mf``, ``.glb``: a mesh file, read by its reader (``formats/``: numpy, zip and XML,
   OCCT's glTF reader) into a structure and part buffers as a document's are, with the viewer's
@@ -639,13 +639,13 @@ def parse_pose(value: str | None) -> Any:
 
 @refusing("size")
 def parse_size(width: int | None, height: int | None, profile: str | None) -> tuple[int, int]:
-    if profile and (width or height):
+    if profile and (width is not None or height is not None):
         raise SnapshotRefused("--size-profile names a size; give it, or --width and --height, not both")
     if profile:
         if profile not in SIZE_PROFILES:
             raise SnapshotRefused(f"--size-profile {profile!r} is not one of {', '.join(SIZE_PROFILES)}")
         return SIZE_PROFILES[profile]
-    size = (width or DEFAULT_SIZE[0], height or DEFAULT_SIZE[1])
+    size = (DEFAULT_SIZE[0] if width is None else width, DEFAULT_SIZE[1] if height is None else height)
     for side in size:
         if not 16 <= side <= MAX_SIDE:
             raise SnapshotRefused(f"an image side is 16 to {MAX_SIDE} pixels, not {side}")
@@ -824,7 +824,7 @@ def draw(source: Any, out: Path, *, display: Any = None, camera: Any = None, gri
          pose: Any = None, width: int | None = None, height: int | None = None,
          size_profile: str | None = None, annotation: Any = None, measurements: Any = None) -> dict[str, Any]:
     """A build's document (an ``export.Source``, in this process's memory) drawn into ``out``:
-    a model's picture (``Model.snapshot``). Served from memory over the process's mesh
+    a model's picture (``Document.snapshot``). Served from memory over the process's mesh
     cache, so nothing the build meshed is meshed again."""
     shown, framed, size = options(display, camera, grid, width, height, size_profile)
     path = source.path or Path(out).with_suffix(".xbf")
@@ -1203,7 +1203,7 @@ def draw_pictures(pictures: list[tuple[Path, Path, Still]], *, daemon: bool = Tr
     render process warm for each file, or in this process, each file served once for all its
     pictures. All or nothing: every picture is drawn into a staged file beside its output, and
     the staged files are moved over the outputs only once every one is drawn. A picture that
-    fails leaves every output as it was and removes only the staged files (``_staged``). Where
+    fails leaves every output as it was and removes only the staged files (``atomic_replace.staging``). Where
     each picture is goes to ``progress`` (``snapshot``'s frames)."""
     with contextlib.ExitStack() as stages:  # each picture's staging folder, gone with the job
         staged = []

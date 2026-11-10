@@ -1540,7 +1540,7 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
     from OCP.TopExp import TopExp
     from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
-    # A document no file holds yet (code built with no --xbf) has the version "0-0".
+    # A document no file holds yet (a model that declares no xbf) has the version "0-0".
     path = Path(path).resolve() if path is not None else None
     try:
         stat = path.stat() if path is not None else None

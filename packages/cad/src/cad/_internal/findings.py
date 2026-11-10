@@ -2,7 +2,7 @@
 
 :class:`FindingsReport` is what a validator BUILDS while it walks a document:
 findings split by severity, extended across checkers, deduplicated at the end.
-It is not what a caller receives — :class:`cad.results.ValidationResult` is
+It is not what a caller receives — :class:`cad.results.CheckResult` is
 the typed line protocol every ``validate`` verb answers with, and
 :mod:`cad._internal.validation_door` converts one into the other.
 

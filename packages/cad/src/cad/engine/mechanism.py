@@ -158,7 +158,6 @@ KINDS: dict[str, tuple[str, tuple]] = {
                                      ("deg", "lower_limit_yaw", "upper_limit_yaw"))),
 }
 _BY_ENTITY = {entity: kind for kind, (entity, _dofs) in KINDS.items()}
-_STRING_KEYS = ("schema", "angle_unit", "length_unit", "entity")
 
 
 class KinematicsError(ValueError):
@@ -585,8 +584,6 @@ def posed(assembly: Any, state: Any) -> Any:
             raise KinematicsError(f"posed() was given {transferred}'s .shape, which carries its parts and not its "
                                   f"joints: pass the handle the model call returns, posed({transferred}(), {pose!r})")
     values, _named = resolve(kinematics, pose)
-    if kinematics is None:
-        return made
     now = link_worlds(kinematics, values)
     then = link_worlds(kinematics, {label: _as_tuple(value) for label, value in kinematics["asBuilt"].items()})
     moved = {tuple(path): now[at] @ np.linalg.inv(then[at])

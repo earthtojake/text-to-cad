@@ -40,7 +40,6 @@ import enum
 import functools
 import hashlib
 import importlib.machinery
-import importlib.util
 import inspect
 import os
 import sys
@@ -110,10 +109,8 @@ def _files(name: str) -> list[tuple[str, Path]]:
             else:
                 method = getattr(finder, "find_spec", None)
                 if method is None:
-                    loader = finder.find_module(dotted, locations)
-                    spec = importlib.util.spec_from_loader(dotted, loader) if loader else None
-                else:
-                    spec = method(dotted, locations, None)
+                    continue
+                spec = method(dotted, locations, None)
             if spec is not None:
                 break
         if spec is None:

@@ -23,7 +23,7 @@ and 12. Measuring every part exactly took 5.5 s on tom and 8.2 s on juno.
 
 The daemon keeps each document's facts beside its record, and in the registry's, and says the
 build's against the last (``delta``): each fact now, and what it was when it changed; a first build
-has nothing to compare. The CLI prints it under the run line (``cli._describe``).
+has nothing to compare. The CLI prints it under the run line (``said.describe``).
 An edit that keeps every one of those -- a hole's size, a thickness, a fillet -- is still said: the
 facts keep each part's geometry key (``shapes``: the digest the build keyed the part by, shortened,
 and how many occurrences have it) and, per key, a digest of its parts' colours and materials
@@ -56,7 +56,7 @@ _PIECES = 4
 
 
 def _shown(value: float) -> float:
-    """A measure as the run line prints it (``cli._number``): four significant figures below a
+    """A measure as the run line prints it (``said.number``): four significant figures below a
     thousand, whole above. Bounds are compared so, so a change too small to print is none."""
     return float(f"{value:.4g}") if abs(value) < 1000 else float(round(value))
 

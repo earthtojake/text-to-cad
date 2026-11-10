@@ -46,7 +46,7 @@ WINDOWS = os.name == "nt"
 # the state folder (the port it rolled to) goes by the same name.
 NAME = "engine"
 # The version an installation that cannot know its own name runs as (a development install's
-# ``<version>-dev.<time>``, set by its launcher and the ``cadgen`` command): the name its records
+# ``<version>-dev.<time>``, set by its launcher and the ``cad`` command): the name its records
 # and its engine's ``status`` give it (``installation``).
 INSTALLATION_ENV = "CAD_INSTALLATION_VERSION"
 # What a worker's environment must share with a request's for the request to use it: what shapes
@@ -563,7 +563,7 @@ def _home_prefix() -> str:
 def installation() -> str:
     """The version this installation runs as -- the one name its client, its daemon and its workers
     all go by (``status``, its bytecode): ``CAD_INSTALLATION_VERSION`` when it names one (the
-    ``cadgen`` command sets it for a development install, which reports its release's version), else
+    ``cad`` command sets it for a development install, which reports its release's version), else
     the version this environment is registered as (``registered``: a dev environment's
     ``python model.py`` run directly), else the release declared beside this code
     (``previous.version``)."""

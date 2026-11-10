@@ -161,7 +161,7 @@ def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = F
     return owner.ref, tuple(faces)
 
 
-# `fea parts` also lists pairs this far apart that the tolerance leaves unbonded,
+# The setup also lists pairs this far apart that the tolerance leaves unbonded,
 # so a near miss is something the agent reads rather than something that is missing.
 _NEAR_MISS_MM = 1.0
 
