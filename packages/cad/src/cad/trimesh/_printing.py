@@ -1480,7 +1480,8 @@ def _knife_facts(mesh: trimesh.Trimesh, options: dict, zones: list[_Knife] | Non
 def _build_volume_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
     from cad._internal.dfm import printing as rules
 
-    return mo.build_fit(mesh.bounds[0], mesh.bounds[1], rules.machine_volume(options))
+    return mo.build_fit(mesh.bounds[0], mesh.bounds[1], rules.machine_volume(options),
+                        np.asarray(mesh.vertices, dtype=float))
 
 
 def _wall_minimum(options: dict) -> float | None:

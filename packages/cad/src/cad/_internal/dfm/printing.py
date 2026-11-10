@@ -109,8 +109,9 @@ BUILD_VOLUMES: dict[str, tuple[tuple[float, float, float], str]] = {
     "fdm": ((200, 200, 200), "hubs-geometry"), "sla": ((145, 145, 175), "hubs-geometry"),
     "sls": ((300, 300, 300), "hubs-geometry"), "mjf": ((380, 285, 380), "hubs-geometry"),
     "pbf": ((250, 150, 150), "hubs-geometry")}
-#: The largest machine the same page lists per technology, mm ("up to ..."; MJF's one machine): a part no
-#: orientation of which fits it is made by no machine of the technology -- ``printing.build_volume``'s error
+#: The largest machine the same page lists per technology, mm ("up to ..."; MJF's one machine): a part that
+#: fits it lying no way (on any side, turned any way on the bed: ``meshops_printing.lie``) is made by no machine
+#: of the technology -- ``printing.build_volume``'s error
 #: where no ``build_volume`` is given, as the typical machine is its warning.
 LARGEST_VOLUMES: dict[str, tuple[float, float, float]] = {
     "fdm": (900, 600, 900), "sla": (1500, 750, 500), "sls": (750, 550, 550), "mjf": (380, 285, 380),
@@ -356,17 +357,17 @@ def _general() -> tuple[Rule, ...]:
     # given: over the typical machine assumed (no printer of the user's) is a warning that names it; over the
     # largest machine the same page lists, in every orientation, no machine of the technology makes it: an error.
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
-                    "part size over the build volume (best axis orientation)", rows["fit"],
+                    "part size over the build volume (lying the best way in it)", rows["fit"],
                     "split the part, or print it on a larger machine", when={"machine_given": True},
                     detail="against the {machine} mm machine given")
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
-                    "part size over the build volume (best axis orientation)",
+                    "part size over the build volume (lying the best way in it)",
                     [(*row[:3], "warning", row[4]) for row in rows["fit"]],
                     "give the machine it prints on (--build-volume XxYxZ), or split the part",
                     when={"machine_given": False, "beyond_largest": False},
                     detail="against an assumed typical {technology} machine, {machine} mm: give --build-volume")
     found += _rules("printing.build_volume", "build_volume", "largest_fill_ratio", "max", "ratio",
-                    "part size over the largest machine listed (best axis orientation)", rows["fit"],
+                    "part size over the largest machine listed (lying the best way in it)", rows["fit"],
                     "split the part into pieces a machine holds (--build-volume XxYxZ checks one)",
                     when={"machine_given": False, "beyond_largest": True},
                     detail="the largest {technology} machine the guide lists is {largest} mm, a typical one {machine} mm")

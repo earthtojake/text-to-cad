@@ -32,7 +32,7 @@ from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG  # every process's: a
 
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
-           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "CHORD_CAP_DEG", "SPREADS", "Smooth", "edge_pairs", "joined", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
+           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "CHORD_CAP_DEG", "SPREADS", "Smooth", "edge_pairs", "joined", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "hull", "lie", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
            "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
            "voxels", "wall_support"]
 
@@ -546,7 +546,8 @@ def _wall_steps(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.nd
         turned = np.where(keep[:, None], turned / np.maximum(length, 1e-300)[:, None], m[go])
         way = d[go] - turned * np.einsum("ij,ij->i", d[go], turned)[:, None]
         way /= np.maximum(np.linalg.norm(way, axis=1, keepdims=True), 1e-300)
-        c[go] = np.where(on[:, None], q + m[go] * ((up - down) / 2.0)[:, None], q)
+        with np.errstate(invalid="ignore"):  # a ray that met nothing is infinitely far: not ``on``
+            c[go] = np.where(on[:, None], q + m[go] * ((up - down) / 2.0)[:, None], q)
         m[go[on]], d[go[on]] = turned[on], way[on]
         left[go] -= step
         kind[go[on & (left[go] <= 1e-9 * spacing)]] = WALL
@@ -1377,36 +1378,159 @@ def _within_hull(point: np.ndarray, supports: np.ndarray, tolerance: float) -> b
 # --- the build volume -------------------------------------------------------------------------------------
 
 
-def fit(box: np.ndarray, volume: np.ndarray) -> tuple[float, tuple[int, int, int]]:
-    """The part's box in the build volume in the best of the axis orientations: the largest of its sides
-    over the volume's (at most 1 fits), and which of the box's axes lies along the volume's X, Y and Z."""
-    from itertools import permutations
-
-    best = (math.inf, (0, 1, 2))
-    for order in permutations(range(3)):
-        ratio = max(float(box[order[k]]) / float(volume[k]) for k in range(3))
-        best = min(best, (ratio, order))
-    return best
+#: The turns about its upright a part is tried at in a build volume, degrees apart (and at every direction of
+#: its outline's edges, where a box-like part lies flush), then twice more closely about the best.
+TURN_STEP_DEG = 0.25
+#: A fill ratio this near 1 is 1: the fit of a part exactly as large as the volume, read at a turn of a few
+#: ten-thousandths of a degree off its own.
+FIT_EPS = 1e-6
 
 
-def build_fit(lo: np.ndarray, hi: np.ndarray, machine: dict[str, Any]) -> dict[str, Any]:
-    """The build-volume family of a part whose box is ``lo``..``hi`` in ``machine`` (``volume_mm``, ``origin``;
-    ``largest_mm`` where the volume is a typical machine assumed: the largest of the technology's, and whether
-    the part fits that in some axis orientation)."""
+def _widths(outline: np.ndarray, turns: np.ndarray) -> np.ndarray:
+    """The width of the 2D ``outline`` along each direction ``turns`` (radians)."""
+    across = outline @ np.stack([np.cos(turns), np.sin(turns)], axis=0)
+    return across.max(axis=0) - across.min(axis=0)
+
+
+#: The flat sides of a part's hull, the largest first, it is stood on to try its fit (``hull``).
+HULL_SIDES = 12
+
+
+def hull(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The corners of the convex hull of ``points`` and the outward normals of its ``HULL_SIDES`` largest flat
+    sides (its triangles in one plane together) -- all a fit reads of a part (``lie``). scipy's, where it is
+    installed (both integrations bring it) and the points have a hull; else the points themselves, at most
+    20 000 spread over them, and no sides."""
+    points = np.asarray(points, dtype=float).reshape(-1, 3)
+    try:
+        from scipy.spatial import ConvexHull
+
+        found = ConvexHull(points)
+    except Exception:  # noqa: BLE001 - no scipy, or points in one plane: qhull refuses them
+        some = points if len(points) <= 20000 else points[np.linspace(0, len(points) - 1, 20000).round().astype(int)]
+        return some, np.zeros((0, 3))
+    corners = points[found.simplices]
+    area = 0.5 * np.linalg.norm(np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0]), axis=1)
+    sides, of = np.unique(np.round(found.equations[:, :3], 6), axis=0, return_inverse=True)
+    largest = np.argsort(-np.bincount(of.ravel(), weights=area, minlength=len(sides)))[:HULL_SIDES]
+    return points[found.vertices], sides[largest]
+
+
+def _uprights(points: np.ndarray, sides: np.ndarray | None = None) -> list[tuple[str, np.ndarray]]:
+    """The directions a part is stood up along to try its fit: the three axes it is drawn on, the normals of
+    its hull's largest flat ``sides`` (a box tilted in space lies flat on its own faces) and its points' three
+    principal axes (a rod's own length), where they are others."""
+    found = [("x", np.array([1.0, 0.0, 0.0])), ("y", np.array([0.0, 1.0, 0.0])), ("z", np.array([0.0, 0.0, 1.0]))]
+    own = [("a side of its hull", np.asarray(side, dtype=float)) for side in (sides if sides is not None else ())]
+    if len(points) >= 3:
+        _, _, axes = np.linalg.svd(points - points.mean(axis=0), full_matrices=False)
+        own += [("its own axis", axis) for axis in axes]
+    for name, axis in own:
+        length = float(np.linalg.norm(axis))
+        if length > 1e-9 and all(abs(float(axis @ other)) < length * (1.0 - 1e-9) for _, other in found):
+            found.append((name, axis / length))
+    return found
+
+
+#: Uprights spread over the half sphere that a part fitting no other way is tried along (``lie``): a rod longer
+#: than a bed's diagonal still fits from one corner of the volume to the one opposite.
+TILTED_UPRIGHTS = 150
+
+
+def lie(points: np.ndarray, volume: np.ndarray | None = None, sides: np.ndarray | None = None) -> dict[str, Any]:
+    """How the part of ``points`` (its hull's corners are enough; ``sides``, its hull's largest flat sides'
+    normals: ``hull``) lies smallest: stood up along each of ``_uprights`` and turned about it (``TURN_STEP_DEG``, its outline's edge directions, and closer about the
+    best), its tightest box (``box_mm``, the three sides, the longest first) and, given a build ``volume``, the
+    least over those ways and the volume's three uprights of the largest of its sizes over the volume's
+    (``fill_ratio``: at most 1 fits; ``upright`` and ``turn_deg`` say how it lies) -- a printer's bed has no
+    preferred diagonal, and a rod longer than the bed's side fits across its corners. A part that fits none of
+    those ways is tried tilted too (``TILTED_UPRIGHTS``), so one said not to fit fits no way found."""
+    points = np.asarray(points, dtype=float).reshape(-1, 3)
+    tight: list[Any] = [math.inf, [0.0, 0.0, 0.0]]
+    best: list[Any] = [math.inf, "z", 0.0, 2]
+
+    def stood(name: str, up: np.ndarray) -> None:
+        """The part stood up along ``up``: its tightest box so, and its best fit in the volume."""
+        seed = np.array([1.0, 0.0, 0.0]) if abs(up[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        e1 = np.cross(up, seed)
+        e1 /= np.linalg.norm(e1)
+        e2 = np.cross(up, e1)
+        if name == "z":
+            e1, e2 = np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])  # its turn is the turn about the plate's axis
+        height = float(np.ptp(points @ up))
+        flat = np.stack([points @ e1, points @ e2], axis=1)
+        outline = _hull(flat) if len(flat) > 3 else flat
+        edges = np.roll(outline, -1, axis=0) - outline
+        along = np.arctan2(edges[:, 1], edges[:, 0]) % math.pi
+        turns = np.unique(np.concatenate([np.radians(np.arange(0.0, 180.0, TURN_STEP_DEG)), along,
+                                          (along + math.pi / 2.0) % math.pi]))
+
+        def least(measure: Callable[[np.ndarray, np.ndarray], np.ndarray]) -> tuple[float, float]:
+            """The least of ``measure(width, width a quarter turn on)`` over the turns, and its turn."""
+            tried, span = turns, math.radians(TURN_STEP_DEG)
+            for _closer in range(3):
+                values = measure(_widths(outline, tried), _widths(outline, tried + math.pi / 2.0))
+                k = int(values.argmin())
+                value, turn = float(values[k]), float(tried[k])
+                tried, span = turn + np.linspace(-span, span, 41), span / 20.0
+            return value, turn
+
+        area, turn = least(lambda w, d: w * d)
+        if area * height < tight[0]:
+            sides = [height, float(_widths(outline, np.array([turn]))[0]),
+                     float(_widths(outline, np.array([turn + math.pi / 2.0]))[0])]
+            tight[:] = [area * height, sorted(sides, reverse=True)]
+        for upright in range(3) if volume is not None else ():
+            a, b = [k for k in range(3) if k != upright]
+            ratio, turn = least(lambda w, d: np.maximum(w / float(volume[a]), d / float(volume[b])))
+            ratio = max(ratio, height / float(volume[upright]))
+            if ratio < best[0] - 1e-12:
+                best[:] = [ratio, name, math.degrees(turn) % 180.0, upright]
+
+    for name, up in _uprights(points, sides):
+        stood(name, up)
+    if volume is not None and best[0] > 1.0 + FIT_EPS:
+        # no way on a side: tilted, uprights spread evenly over the half sphere (a golden spiral)
+        k = np.arange(TILTED_UPRIGHTS) + 0.5
+        height, turn = k / TILTED_UPRIGHTS, k * math.pi * (3.0 - math.sqrt(5.0))
+        ring = np.sqrt(1.0 - height ** 2)
+        for up in np.stack([ring * np.cos(turn), ring * np.sin(turn), height], axis=1):
+            stood("tilted", up)
+            if best[0] <= 1.0:
+                break
+    found: dict[str, Any] = {"box_mm": tight[1]}
+    if volume is not None:
+        ratio = 1.0 if abs(best[0] - 1.0) <= FIT_EPS else best[0]
+        found.update(fill_ratio=ratio, upright=best[1], turn_deg=best[2], volume_upright="xyz"[best[3]])
+    return found
+
+
+def build_fit(lo: np.ndarray, hi: np.ndarray, machine: dict[str, Any], points: np.ndarray | None = None) -> dict[str, Any]:
+    """The build-volume family of a part whose box is ``lo``..``hi`` and whose surface holds ``points`` (any
+    that hold its hull's corners; the box's where none) in ``machine`` (``volume_mm``, ``origin``; ``largest_mm`` where the
+    volume is a typical machine assumed: the largest of the technology's, and whether the part fits that): how
+    it fits lying the best way (``lie``: stood on any side or on its own axes, turned about its upright), which
+    does not turn with how the part stands -- and its longest dimension, the longest side of its tightest box."""
     volume = np.array(machine["volume_mm"], dtype=float)
-    box = np.asarray(hi, dtype=float) - np.asarray(lo, dtype=float)
-    ratio, order = fit(box, volume)
+    lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
+    box = hi - lo
+    if points is None or not len(points):
+        points = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
+    points, sides = hull(points)
+    lying = lie(points, volume, sides)
     placed = max(float(box[k]) / float(volume[k]) for k in range(3))
     largest: dict[str, Any] = {"largest_volume_mm": None, "largest_fill_ratio": None, "fits_largest": None}
     if machine.get("largest_mm"):
-        most = fit(box, np.array(machine["largest_mm"], dtype=float))[0]
+        most = lie(points, np.array(machine["largest_mm"], dtype=float), sides)["fill_ratio"]
         largest = {"largest_volume_mm": [float(v) for v in machine["largest_mm"]],
-                   "largest_fill_ratio": round(most, JUDGED), "fits_largest": bool(most <= 1.0 + 1e-9)}
+                   "largest_fill_ratio": round(most, JUDGED), "fits_largest": bool(most <= 1.0)}
     return {**largest, "volume_mm": [float(v) for v in volume], "volume_origin": machine["origin"],
-            "bbox_mm": [round(float(v), 4) for v in box], "fill_ratio": round(ratio, JUDGED),
-            "fits": bool(ratio <= 1.0 + 1e-9), "as_placed_fill_ratio": round(placed, 4),
-            "best_axes": ",".join("xyz"[k] for k in order), "max_dimension_mm": round(float(box.max()), JUDGED),
-            "location": "build_volume", "xyz": [round(float(v), 4) for v in (np.asarray(lo) + np.asarray(hi)) / 2.0]}
+            "bbox_mm": [round(float(v), 4) for v in box], "tight_box_mm": [round(v, 4) for v in lying["box_mm"]],
+            "fill_ratio": round(lying["fill_ratio"], JUDGED), "fits": bool(lying["fill_ratio"] <= 1.0),
+            "as_placed_fill_ratio": round(placed, 4), "upright": lying["upright"],
+            "turn_deg": round(lying["turn_deg"], 4), "volume_upright": lying["volume_upright"],
+            "max_dimension_mm": round(float(lying["box_mm"][0]), JUDGED),
+            "location": "build_volume", "xyz": [round(float(v), 4) for v in (lo + hi) / 2.0]}
 
 
 def sections(grid: Grid, ceiling: float = 12.0) -> dict[str, Any]:

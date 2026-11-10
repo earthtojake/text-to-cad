@@ -1528,7 +1528,9 @@ def _trapped(ctx: Context) -> dict[str, Any]:
 
 
 def _build_volume(ctx: Context) -> dict[str, Any]:
-    return mo.build_fit(ctx.lo, ctx.hi, rules.machine_volume(ctx.options))
+    """How the document fits the build volume lying the best way (``meshops_printing.build_fit``), read on its
+    triangulation's hull: the fit does not turn with how the parts stand."""
+    return mo.build_fit(ctx.lo, ctx.hi, rules.machine_volume(ctx.options), ctx.mesh()[0])
 
 
 def _bed(ctx: Context) -> dict[str, Any]:

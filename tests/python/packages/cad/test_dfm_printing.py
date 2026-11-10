@@ -582,11 +582,19 @@ class TrappedTest(unittest.TestCase):
 
 
 class PlateTest(unittest.TestCase):
-    def test_the_build_volume_in_the_best_axis_orientation(self) -> None:
-        bar = bd.Box(250, 20, 10, align=A)
+    def test_the_build_volume_lying_the_best_way(self) -> None:
+        # a 250 mm bar lies across the corners of a 200 x 200 bed, turned 45 deg -- smallest on its 10 mm side
+        fit = check(bd.Box(250, 20, 10, align=A), "bar").measurements["build_volume"]
+        self.assertEqual((fit["fits"], fit["upright"], fit["turn_deg"], fit["volume_mm"]),
+                         (True, "y", 45.0, [200.0, 200.0, 200.0]))
+        self.assertAlmostEqual(fit["fill_ratio"], (250 + 10) / math.sqrt(2) / 200, places=6)
+        self.assertEqual((fit["as_placed_fill_ratio"], fit["max_dimension_mm"]), (1.25, 250.0))
+        # a 400 mm one fits no way, not from corner to corner of the volume (346 mm)
+        bar = bd.Box(400, 20, 10, align=A)
         result = check(bar, "bar")
         fit = result.measurements["build_volume"]
-        self.assertEqual((fit["fill_ratio"], fit["fits"], fit["volume_mm"]), (1.25, False, [200.0, 200.0, 200.0]))
+        self.assertFalse(fit["fits"])
+        self.assertGreater(fit["fill_ratio"], 1.1)
         # against a typical machine assumed, a warning that names it; against the machine given, an error
         assumed = next(f for f in result.findings if f.code == "printing.build_volume")
         self.assertEqual(assumed.severity, "warning")
@@ -594,21 +602,46 @@ class PlateTest(unittest.TestCase):
         given = check(bar, "bar", build_volume="200x200x200")
         self.assertEqual([f.severity for f in given.findings if f.code == "printing.build_volume"], ["error"])
         self.assertFalse(given.ok)
-        self.assertTrue(check(bar, "bar", build_volume="100x100x300").measurements["build_volume"]["fits"])
+        self.assertTrue(check(bar, "bar", build_volume="100x100x450").measurements["build_volume"]["fits"])
         self.assertTrue(check(bar, "bar", build_volume="900x600x900").ok, "an industrial FDM machine")
 
     def test_a_part_past_the_largest_machine_listed_is_an_error(self) -> None:
         # no machine given: over the typical machine is a warning (give yours), over the largest the guide lists
-        # in every orientation is no part any machine of the technology makes -- one finding either way
+        # lying every way is no part any machine of the technology makes -- one finding either way. A bed has
+        # no preferred diagonal: a 950 mm rod lies across the 900 x 600 bed's corners (1081 mm), a 1300 mm one
+        # from a corner of the volume to the one opposite (1407 mm), a 1500 mm one no way
         for length, severity, said in ((850, "warning", "an assumed typical fdm machine"),
-                                       (950, "error", "the largest fdm machine the guide lists is 900 x 600 x 900")):
+                                       (950, "warning", "an assumed typical fdm machine"),
+                                       (1300, "warning", "an assumed typical fdm machine"),
+                                       (1500, "error", "the largest fdm machine the guide lists is 900 x 600 x 900")):
             result = check(bd.Box(length, 20, 10, align=A), "bar")
             [found] = [f for f in result.findings if f.code == "printing.build_volume"]
-            self.assertEqual(found.severity, severity)
+            self.assertEqual(found.severity, severity, length)
             self.assertIn(said, found.message)
             self.assertEqual(result.ok, severity == "warning")
             self.assertEqual(result.measurements["build_volume"]["fits_largest"], severity == "warning")
         self.assertTrue(check(bd.Box(950, 20, 10, align=A), "bar", build_volume="1000x500x500").ok)
+
+    def test_the_fit_does_not_turn_with_how_the_part_stands(self) -> None:
+        # a 370 x 280 x 5 plate in MJF's 380 x 285 x 380: it fits flat however it is turned about the plate's
+        # axis or tilted in space, its length (the longest side of its tightest box) is 370 either way, and a
+        # cube exactly the volume's size fits it at any tilt
+        plate = bd.Box(370, 280, 5, align=A)
+        odd = bd.Axis((0, 0, 0), (1, 2, 3))
+        for name, shape in (("flat", plate), ("turned", plate.rotate(bd.Axis.Z, 45)),
+                            ("turned oddly", plate.rotate(bd.Axis.Z, 12.3456)), ("tilted", plate.rotate(odd, 37))):
+            result = check(shape, "plate", technology="mjf")
+            fit = result.measurements["build_volume"]
+            with self.subTest(way=name):
+                self.assertNotIn("printing.build_volume", codes(result))
+                self.assertTrue(fit["fits"])
+                self.assertAlmostEqual(fit["max_dimension_mm"], 370.0, delta=1e-3)
+                self.assertEqual([f.value for f in result.findings if f.code == "printing.warp_length"],
+                                 [fit["max_dimension_mm"]])
+        cube = bd.Box(200, 200, 200, align=A)
+        for shape in (cube, cube.rotate(bd.Axis.Z, 30), cube.rotate(odd, 37)):
+            fit = measured.measure(brep.parts_of(shape, "cube"), {**rules.OPTIONS, "technology": "fdm"}, False)["build_volume"]
+            self.assertEqual((fit["fill_ratio"], fit["fits"]), (1.0, True))
 
     def test_bed_contact_and_warping(self) -> None:
         result = check(bd.Box(150, 40, 3, align=A), "flat", material="abs")

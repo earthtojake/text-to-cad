@@ -133,10 +133,11 @@ def hollows():
 
 
 def bar():
-    """400 mm long: no technology's typical machine holds it, and the powder beds warp it."""
+    """700 mm long: no technology's typical machine holds it, lying any way (MJF's 380 x 285 x 380 is 608 mm
+    from corner to corner), and the powder beds warp it."""
     planted = [("printing.build_volume", ALL, (0, 0, 3), 5.0),
                ("printing.warp_length", ("sls", "mjf"), (0, 0, 3), 5.0)]
-    return _doc("bar", bd.Box(400, 20, 6, align=A)), planted, planted
+    return _doc("bar", bd.Box(700, 20, 6, align=A)), planted, planted
 
 
 def assembly():
