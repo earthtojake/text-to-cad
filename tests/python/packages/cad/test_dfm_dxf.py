@@ -212,6 +212,18 @@ class CutFileTest(unittest.TestCase):
         tight = self.check(path, thickness=2.0, kerf=0.9)
         self.assertIn("sheet.under_kerf", self.codes(tight))  # the 0.8 mm hole is narrower than the beam
 
+    def test_a_grilles_bars_are_webs_judged_once(self) -> None:
+        def build(msp, _):
+            _plate(msp, 140, 120)
+            for i in range(17):   # slots 4 mm wide, 1.5 mm bars between them
+                x = 20 + 5.5 * i
+                msp.add_lwpolyline([(x, 10), (x + 4, 10), (x + 4, 110), (x, 110)], close=True)
+        result = self.check(self.write("grille", build), thickness=3.0)
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.web_width"})
+        (finding,) = [f for f in result.findings if f.code == "sheet.web_width"]
+        self.assertIn("(between 17 cutouts)", finding.message)
+        self.assertEqual(result.measurements["hole_spacing"]["items"], [])
+
     def test_a_notch_a_tab_and_a_bend_layer(self) -> None:
         def build(msp, document):
             document.layers.add("BEND")

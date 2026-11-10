@@ -159,7 +159,8 @@ def _holes(source: Source, *, diameter: float | None, diameter_severity: str = "
         rules.append(_r("hole_spacing", "hole_spacing", "distance_mm", "min", spacing, "mm",
                         "hole-to-hole distance (edge to edge)", source, scale_by="rule_thickness_mm", severity="warning",
                         note="holes closer than this can deform or break during forming or bending (a best "
-                             "practice for laser cutting, a recommendation)",
+                             "practice for laser cutting, a recommendation); between a round hole and its "
+                             "nearest hole -- the bar between two cutouts is web_width's",
                         fix="space the holes at least {limit:.3g} mm apart, edge to edge"))
     return tuple(rules)
 
@@ -278,8 +279,9 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
                 edge_note="holes should be at least the sheet's thickness from the edge (a recommendation)"),
         _r("web_width", "webs", "width_mm", "min", 1.0, "mm", "material between cuts", source,
            scale_by="rule_thickness_mm", severity="warning",
-           fix="leave at least {limit:.3g} mm of material between the cuts",
-           note="Hubs's hole-to-edge minimum, applied to any web of material between two cut edges"),
+           fix="leave at least {limit:.3g} mm of material between the cuts", detail="{said}",
+           note="Hubs's hole-to-edge minimum, applied to any web of material between two cut edges: a neck of "
+                "the outline, the bar between two cutouts (a grille's slots)"),
     )
 
 

@@ -1844,6 +1844,8 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
     for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
         if nearest is not None:
             key = (min(i, nearest[1]), max(i, nearest[1]))
+            if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
+                continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
             pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
                                    "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
     spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
@@ -1872,7 +1874,10 @@ def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float
 def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thickness: float | None,
                       locate: Callable[[Any], tuple[str, list[float]]]) -> dict[str, list[dict]]:
     """Notches, tabs, webs and gaps of a flat outline (``loops``: outer loops labelled ``outer``, holes
-    ``hole``), each located by ``locate`` (a flat point to a ref and a point)."""
+    ``hole``), each located by ``locate`` (a flat point to a ref and a point). A web is the narrowest material
+    within an outline (a neck), or the bar between a cutout that is no round hole and the cutout nearest it
+    (a grille's slots, two windows side by side): the bars of one width are one item, with how many cutouts
+    they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
     outer = [loop for loop in loops if loop.label == "outer"]
@@ -1893,7 +1898,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             if a != b or loops[a].label != "outer":
                 continue  # between two contours: hole_to_edge and hole_spacing measure it
             ref, xyz = locate(width.start)
-            webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
+            webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz, "said": "a neck of the outline",
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
             # across a hole its least width is the hole's size (``holes.size_mm``) but where it necks in: a gap
@@ -1904,6 +1909,20 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             ref, xyz = locate(width.start)
             gaps.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "between": "one contour" if a == b else "two contours"})
+    cutouts = [loop for loop in loops if loop.label == "hole" and loop.circle is None]
+    bars: dict[int, tuple[dict[str, Any], set[int]]] = {}
+    for k, found in enumerate(plane.nearest(cutouts)):
+        if found is None:
+            continue
+        if round(found[0] * 1000) not in bars:
+            _, start, end = plane.distance(cutouts[k], cutouts[found[1]])
+            ref, xyz = locate(start)
+            bars[round(found[0] * 1000)] = ({"width_mm": _r(found[0]), "location": ref, "xyz": xyz,
+                                             "across": [_r(float(v)) for v in (*start, *end)]}, set())
+        bar, between = bars[round(found[0] * 1000)]
+        between.update((k, found[1]))
+        bar.update(cutouts=len(between), said=f"between {len(between)} cutouts")
+    webs.extend(bar for bar, _ in bars.values())
     return {"notches": notches, "tabs": tabs, "webs": webs, "gaps": gaps}
 
 

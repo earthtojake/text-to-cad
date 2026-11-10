@@ -352,6 +352,29 @@ class HoleTest(unittest.TestCase):
             self.assertAlmostEqual(failed(result, "sheet.hole_spacing")[0]["value"], 2.0, places=3)
 
 
+class GrilleTest(unittest.TestCase):
+    def test_a_grilles_bars_are_webs_judged_once(self) -> None:
+        t = 3.0
+
+        def grille(pitch: float) -> bd.Part:
+            plate = bd.Pos(0, 0, t / 2) * bd.Box(140, 120, t)
+            for i in range(17):  # slots 4 mm wide: 16 bars between them, pitch - 4 mm each
+                plate -= bd.Pos(-8 * pitch + i * pitch, 0, t / 2) * bd.Box(4, 100, 3 * t)
+            plate.label = "grille"
+            return plate
+
+        # bars half the thickness wide: one feature, one finding -- not one for each pair of slots
+        thin = checked(grille(5.5))
+        self.assertEqual(verdicts(thin), [("warning", "sheet.web_width")])
+        (finding,) = [f for f in thin.findings if f.code == "sheet.web_width"]
+        self.assertIn("1.5 mm is under the 3 mm recommended minimum (between 17 cutouts)", finding.message)
+        (web,) = [item for item in items(thin.measurements, "webs") if "cutouts" in item]
+        self.assertEqual((web["width_mm"], web["cutouts"]), (1.5, 17))
+        self.assertEqual(items(thin.measurements, "hole_spacing"), [])
+        # bars over the thickness and under the two a pair of round holes is asked: a grille as grilles are made
+        self.assertEqual(verdicts(checked(grille(8.0))), [])
+
+
 class ReliefTest(unittest.TestCase):
     def test_a_missing_relief_and_one_present(self) -> None:
         bare = measured(tabbed(label="bare"))

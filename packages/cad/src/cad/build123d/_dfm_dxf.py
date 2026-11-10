@@ -929,8 +929,8 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                                                                "centre line"})
         pairs: dict[tuple[int, int], dict] = {}
         for k, found in enumerate(plane.nearest([loops[h] for h in mine])):
-            if found is not None:
-                d, g = found
+            if found is not None and "round" in (records[k]["kind"], records[found[1]]["kind"]):
+                d, g = found  # (the bar between two cutouts is a web: ``_outline_features``)
                 pairs.setdefault((min(k, g), max(k, g)), {
                     "distance_mm": round(d, 4), "location": records[k]["location"],
                     "other": records[g]["location"], "xyz": records[k]["xyz"]})
