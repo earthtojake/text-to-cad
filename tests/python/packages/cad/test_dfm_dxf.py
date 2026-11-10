@@ -479,9 +479,10 @@ class CutFileTest(unittest.TestCase):
 
     # --- bend lines ----------------------------------------------------------------------------------------
 
-    def bent_plate(self, name: str, holes=(), bend_x=50.0, split=None, turn=0.0):
-        """A 100 x 60 plate with a bend line at ``bend_x`` (in two, either side of ``split``, a y range) and
-        round ``holes`` (x, y, diameter), the whole drawing turned ``turn`` degrees about a point off it."""
+    def bent_plate(self, name: str, holes=(), bend_x=50.0, split=None, turn=0.0, across=None):
+        """A 100 x 60 plate with a bend line at ``bend_x`` (in two, either side of ``split``, a y range, a window
+        cut there; ``across``: the window cut and the line drawn across it) and round ``holes`` (x, y, diameter),
+        the whole drawing turned ``turn`` degrees about a point off it."""
         c, s = math.cos(math.radians(turn)), math.sin(math.radians(turn))
 
         def at(x, y):
@@ -492,9 +493,9 @@ class CutFileTest(unittest.TestCase):
             msp.add_lwpolyline([at(0, 0), at(100, 0), at(100, 60), at(0, 60)], close=True)
             for y0, y1 in ([(0, split[0]), (split[1], 60)] if split else [(0, 60)]):
                 msp.add_line(at(bend_x, y0), at(bend_x, y1), dxfattribs={"layer": "BEND"})
-            if split:  # a window across the bend line
-                msp.add_lwpolyline([at(bend_x - 7, split[0]), at(bend_x + 7, split[0]), at(bend_x + 7, split[1]),
-                                    at(bend_x - 7, split[1])], close=True)
+            for y0, y1 in filter(None, (split, across)):  # a window across the bend line
+                msp.add_lwpolyline([at(bend_x - 7, y0), at(bend_x + 7, y0), at(bend_x + 7, y1), at(bend_x - 7, y1)],
+                                   close=True)
             for x, y, d in holes:
                 msp.add_circle(at(x, y), d / 2)
         return self.check(self.write(name, build), thickness=2.0)
@@ -554,6 +555,13 @@ class CutFileTest(unittest.TestCase):
         self.assertTrue(result.ok, [f.human_line() for f in result.findings])
         self.assertEqual(result.measurements["hole_to_bend"]["items"], [])
         self.assertEqual(result.measurements["cut_file"]["bend_line_count"], 2)
+        # and so does the one line drawn straight across the window, as a draughtsman draws it: the window
+        # reaches 7 mm, over 2 t, to both sides of the line (a 5 mm hole on the line stays a hole in the bend)
+        for turn in (0.0, 37.0):
+            result = self.bent_plate(f"bend_across{turn}", across=(27, 33), turn=turn)
+            self.assertTrue(result.ok, [f.human_line() for f in result.findings])
+            self.assertEqual(result.measurements["hole_to_bend"]["items"], [])
+            self.assertEqual(result.measurements["cut_file"]["bend_line_count"], 1)
 
     # --- bounded -------------------------------------------------------------------------------------------
 

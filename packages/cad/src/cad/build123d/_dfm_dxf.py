@@ -34,7 +34,8 @@ measured in the plane with ``cad._internal.sheet_plane``, as the flat pattern of
 (``_dfm_sheet``): each part's size, holes (diameter, slot width), hole-to-edge and hole-to-hole distances
 (edge to edge), notches, tabs, the narrowest web of material and the narrowest gap. A bend layer's lines
 are read as the bends' centre lines: each hole's distance to the nearest (``hole_to_bend``; a line that
-ends on a cutout's edge ends there, the cutout a window or a relief at the bend's end, no hole beside it)
+ends on a cutout's edge ends there, the cutout a window or a relief at the bend's end, no hole beside it, and
+so does one drawn across a cutout that reaches ``WINDOW_T`` thicknesses to both sides of it)
 and each line's distance to the outline either side of it (``flanges``).
 """
 
@@ -66,6 +67,12 @@ _SAME = 1e-4          # mm: two points this close are one as drawn (a copy of a 
 #: resolution, and an inch file rounded to four decimals leaves ends 0.0025 mm apart. A gap between ``_SAME`` and
 #: this is closed and said (``joined_gaps``); a wider one is open geometry.
 _JOIN = 0.01
+#: A cutout a bend line is drawn across is a window through the bend -- the bend ends at it -- where it reaches
+#: this many thicknesses to both sides of the line; short of that it is a hole in the bend. text-to-cad's own
+#: reading of a drawing that holds no bend radius: a 90 degree bend's tangent lines lie (pi / 4)(r + K t) either
+#: side of its centre line, under 2 t for any inside radius up to 2 t, so such a cutout takes the bend's whole
+#: width away.
+WINDOW_T = 2.0
 #: Block references nested deeper than this are not exploded (a block that holds itself would never end).
 _NESTED = 16
 
@@ -595,6 +602,23 @@ def _ends_on(line: _Piece, loop: plane.Loop) -> bool:
     return False
 
 
+def _window(line: _Piece, loop: plane.Loop, thickness: float | None) -> bool:
+    """Whether a cutout the bend line meets reaches ``WINDOW_T`` thicknesses to both sides of it: a window
+    through the bend, drawn across or not. With no thickness given nothing says so."""
+    if thickness is None:
+        return False
+    a, b = line.points[0], line.points[-1]
+    along = (b - a) / max(float(np.linalg.norm(b - a)), 1e-300)
+    normal = np.array([-along[1], along[0]])
+    if loop.circle is not None:
+        offset = float((np.array(loop.circle[:2]) - a) @ normal)
+        reach = (loop.circle[2] + offset, loop.circle[2] - offset)
+    else:
+        across = (loop.points - a) @ normal
+        reach = (float(across.max()), -float(across.min()))
+    return min(reach) >= WINDOW_T * float(thickness) * (1.0 - 1e-9)
+
+
 def _flanges(line: _Piece, outline: plane.Loop, others: list[_Piece]) -> list[dict[str, Any]]:
     """A bend line's flange either side of it: how far the outline (or the next bend line) lies from the
     line, square to it, the least along the line and the length half of it reaches, read at 11 stations on
@@ -891,10 +915,11 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                       "xyz": [round(float(v), 4) for v in (*loop.centroid(), 0.0)]}
             records.append(record)
             families["holes"].append(record)
-            # the nearest bend line that does not end on this cutout's edge (one that does ends there: the cutout
-            # is the bend's end, a window or a relief)
+            # the nearest bend line that does not end at this cutout: one that ends on its edge (the cutout is the
+            # bend's end, a window or a relief), or is drawn across a cutout wide enough to be a window
             near = [(plane.distance(loop, _line(line))[0], line) for line in bends]
-            near = [(d, line) for d, line in near if d > _JOIN or not _ends_on(line, loop)]
+            near = [(d, line) for d, line in near
+                    if d > _JOIN or not (_ends_on(line, loop) or _window(line, loop, thickness))]
             if near:
                 d, line = min(near, key=lambda found: found[0])
                 record["in_bend"] = d <= _SAME
