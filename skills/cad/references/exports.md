@@ -179,7 +179,9 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   written opaque at alpha 1, so another renderer refracts the part and does not also fade it; to fade
   one too, give its PBR `opacity` below 1 (a translucent `part.color` is not read as a fade).
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
-  and materials through the materials extension.
+  and materials through the materials extension. A 3MF draws no transmission, so a transmissive
+  material's colour is written at its preview alpha (`transmission=1` gives `0.3`), or at its PBR
+  `opacity` below 1, whatever `part.color`'s alpha; the 3MF of the model and the 3MF of its GLB agree.
 - **STL**: binary, every placed triangle, in millimetres.
 - **xbf**: of a model, or of a STEP (converting a vendor file).
 - **DXF**: of a planar document only (a 2D drawing); a solid is refused.

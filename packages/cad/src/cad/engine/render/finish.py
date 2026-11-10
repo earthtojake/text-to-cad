@@ -19,7 +19,7 @@ material in every look.
   metallic, roughness, IOR, emission (colour times strength) and alpha. What OCCT's raster has no
   term for is approximated: a clear coat is drawn as the base's roughness eased toward the coat's
   (``COAT_ROUGHNESS``), anisotropy is dropped, and transmission is drawn as what draws none draws it:
-  the part at its preview alpha, once (``formats/gltf.py``'s ``preview_alpha`` of its PBR ``opacity``:
+  the part at its preview alpha, once (``formats/gltf.py``'s ``drawn_alpha``: ``preview_alpha`` of its PBR ``opacity``,
   ``max(0.15, 1 - 0.7 transmission)`` unless that fades it below 1), over the base colour tinted by
   the transmission colour -- as the viewer's looks without transmission and a 3MF draw it. OCCT's roughness is ``0.01 + 0.99 n`` of the normalized ``n`` it is given, so it is
   given ``(r - 0.01) / 0.99`` for three's ``r``.
@@ -227,15 +227,14 @@ def finish(rgba: Any, material: dict[str, Any] | None) -> dict[str, Any]:
         roughness += (target - roughness) * COAT_ROUGHNESS * coat
     transmission = float(material.get("transmission") or 0.0)
     if transmission > 0:
-        from cad.engine.formats.gltf import preview_alpha
+        from cad.engine.formats.gltf import drawn_alpha
 
         tint = material.get("attenuationColor") or (1.0, 1.0, 1.0)
         colour = tuple(c * float(t) for c, t in zip(colour, tint))
         # Drawn with no transmission, so at its preview, once: its PBR fade where it has one, else the
         # alpha build123d's setter infers from the transmission. Its colour's alpha is that inference
-        # already, or a value that cannot be told from one, so it is not applied again (``preview_alpha``).
-        opacity = material.get("opacity")
-        alpha = preview_alpha(1.0 if opacity is None else min(float(opacity), 1.0), transmission)
+        # already, or a value that cannot be told from one, so it is not applied again (``drawn_alpha``).
+        alpha = drawn_alpha(alpha, material)
     strength = float(material.get("emissiveIntensity") if material.get("emissiveIntensity") is not None else 1.0)
     emission = tuple(float(value) * strength for value in (material.get("emissive") or (0.0, 0.0, 0.0)))
     return {"color": colour, "alpha": alpha, "metallic": float(material.get("metalness") or 0.0),

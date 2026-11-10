@@ -35,7 +35,7 @@ import numpy as np
 # The container's constants as the engine's GLB writer declares them.
 from cad.engine.export.glb import BIN_CHUNK, JSON_CHUNK, MAGIC
 
-__all__ = ["GltfError", "Part", "Read", "look_extensions", "material_of", "preview_alpha", "read_gltf"]
+__all__ = ["GltfError", "Part", "Read", "drawn_alpha", "look_extensions", "material_of", "preview_alpha", "read_gltf"]
 
 _COMPONENTS = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}
 _WIDTHS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT2": 4, "MAT3": 9, "MAT4": 16}
@@ -223,6 +223,19 @@ def preview_alpha(alpha: float, transmission: float) -> float:
     authored ``opacity``. The viewer's is ``previewOpacity.js``'s ``previewOpacity``; the OCCT still's
     (``render/finish.py``) is this one, of the look's PBR ``opacity``."""
     return round(max(0.15, 1.0 - 0.7 * transmission), 4) if alpha >= 1.0 and transmission > 0 else alpha
+
+
+def drawn_alpha(alpha: float, values: dict[str, Any]) -> float:
+    """A look's alpha where no transmission is drawn (an OCCT still, a 3MF's colour), of its colour's
+    ``alpha`` and its PBR values as the document holds them (``material["pbr"]["values"]``): the colour's
+    alpha for a look with no transmission; for a transmissive one, which fades only by its PBR
+    ``opacity``, ``preview_alpha`` of that opacity, its colour's alpha ignored -- build123d's inference
+    already, or a value that cannot be told from one (``export/glb.py``'s ``_alpha``)."""
+    transmission = float(values.get("transmission") or 0.0)
+    if transmission <= 0:
+        return float(alpha)
+    opacity = values.get("opacity")
+    return preview_alpha(1.0 if opacity is None else min(float(opacity), 1.0), transmission)
 
 
 def material_of(entry: dict[str, Any]) -> dict[str, Any]:

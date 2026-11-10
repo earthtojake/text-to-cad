@@ -1,5 +1,5 @@
 {
-  "about": "A transmissive look is one fade. previewOpacity.test.js holds previewOpacity.js and the viewer's xbf look to these numbers; the engine's test_materials.py holds formats/gltf.py's preview_alpha, export/glb.py's _alpha, threejs_materials' interpolate_color and the OCCT still's finish to the same ones.",
+  "about": "A transmissive look is one fade. previewOpacity.test.js holds previewOpacity.js and the viewer's xbf look to these numbers; the engine's test_materials.py holds formats/gltf.py's preview_alpha, export/glb.py's _alpha, threejs_materials' interpolate_color, the OCCT still's finish and the 3MF an xbf exports (export/threemf.py: its colour's alpha byte, displayAlpha, whatever the colour's own alpha) to the same ones.",
   "previewCases": [
     { "why": "a transmissive look at alpha 1 previews as build123d's setter infers", "alpha": 1, "transmission": 0.6, "preview": 0.58 },
     { "why": "a clear lens", "alpha": 1, "transmission": 1, "preview": 0.3 },
@@ -11,10 +11,10 @@
     { "why": "no transmission, faded: the alpha as it is", "alpha": 0.4, "transmission": 0, "preview": 0.4 }
   ],
   "lookCases": [
-    { "why": "PMMA: opaque in a GLB, 0.58 where no transmission is drawn", "opacity": null, "transmission": 0.6, "transmitted": 1, "preview": 0.58 },
-    { "why": "a clear LED lens", "opacity": null, "transmission": 1, "transmitted": 1, "preview": 0.3 },
-    { "why": "an opacity of 1 is no fade", "opacity": 1, "transmission": 1, "transmitted": 1, "preview": 0.3 },
-    { "why": "an author's fade is the alpha either way", "opacity": 0.5, "transmission": 0.6, "transmitted": 0.5, "preview": 0.5 },
-    { "why": "an author's fade on clear glass", "opacity": 0.2, "transmission": 1, "transmitted": 0.2, "preview": 0.2 }
+    { "why": "PMMA: opaque in a GLB, 0.58 where no transmission is drawn", "opacity": null, "transmission": 0.6, "transmitted": 1, "preview": 0.58, "displayAlpha": "94" },
+    { "why": "a clear LED lens", "opacity": null, "transmission": 1, "transmitted": 1, "preview": 0.3, "displayAlpha": "4C" },
+    { "why": "an opacity of 1 is no fade", "opacity": 1, "transmission": 1, "transmitted": 1, "preview": 0.3, "displayAlpha": "4C" },
+    { "why": "an author's fade is the alpha either way", "opacity": 0.5, "transmission": 0.6, "transmitted": 0.5, "preview": 0.5, "displayAlpha": "80" },
+    { "why": "an author's fade on clear glass", "opacity": 0.2, "transmission": 1, "transmitted": 0.2, "preview": 0.2, "displayAlpha": "33" }
   ]
 }

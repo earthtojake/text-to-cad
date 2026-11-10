@@ -215,7 +215,9 @@ def _alpha(rgba: tuple, values: Any) -> float:
     and fades only by its PBR ``opacity``. Its colour's alpha there says nothing the file should repeat:
     build123d's material setter infers a preview from the transmission when the material is assigned
     (``PbrProperties.interpolate_color``: ``transmission=1`` gives 0.3), a renderer applying both would draw
-    the part refractive and most of it absent, and nothing tells that value from a colour set by hand."""
+    the part refractive and most of it absent, and nothing tells that value from a colour set by hand. What
+draws no transmission draws this alpha's preview (``formats/gltf.py``'s ``preview_alpha``, ``drawn_alpha``):
+``packages/core``'s ``previewOpacity.parity.json`` holds the two, and the viewer's and the 3MF's, to one set of cases."""
     if not values.transmission:
         return float(rgba[3])
     return 1.0 if values.opacity is None else min(float(values.opacity), 1.0)

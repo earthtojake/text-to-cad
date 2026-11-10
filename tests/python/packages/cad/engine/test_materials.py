@@ -59,6 +59,28 @@ def assembly():
 '''
 
 
+def threemf_alphas(looks):
+    """The alpha bytes of the colours a 3MF writes for parts of these ``(rgba, material)`` looks, one
+    triangle each, through the writer itself (``export/threemf.py``)."""
+    import numpy as np
+    from types import SimpleNamespace
+    from cad.engine.export import Placed, View, threemf
+    from cad.engine.mesh_format import Mesh
+
+    empty = np.zeros((0, 4), np.uint32)
+    triangle = Mesh(np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], np.float32), None, np.arange(3, dtype=np.uint32),
+                    np.array([[1, 0, 3]], np.uint32), empty, np.zeros((0, 3), np.float32), np.zeros((0, 4), np.float32))
+    prototypes = [{"key": f"k{at}", "name": f"p{at}", "color": list(rgba), "material": document.material_json(material)}
+                  for at, (rgba, material) in enumerate(looks)]
+    source = SimpleNamespace(structure={"prototypes": prototypes}, meshes={item["key"]: triangle for item in prototypes})
+    view = View(source, "case", [Placed(at, np.eye(4), [f"p{at}"], None) for at in range(len(looks))], {}, [])
+    with tempfile.TemporaryDirectory(prefix="threemf-alpha-") as folder:
+        path = Path(folder) / "case.3mf"
+        threemf.write(view, path)
+        model = zipfile.ZipFile(path).read("3D/3dmodel.model").decode()
+    return [colour[-2:] for colour in re.findall(r'displaycolor="([^"]+)"', model)]
+
+
 class MaterialsTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="native-materials-")
@@ -214,6 +236,51 @@ class MaterialsTest(unittest.TestCase):
                                            case["preview"], places=9, msg="a still")
                 self.assertEqual(preview_alpha(case["transmitted"], case["transmission"]), case["preview"],
                                  "what reads the GLB and draws no transmission")
+                self.assertEqual("%02X" % round(case["preview"] * 255), case["displayAlpha"])
+                for alpha in (1.0, case["preview"], 0.3):
+                    self.assertEqual(threemf_alphas([((1.0, 1.0, 1.0, alpha), look)]), [case["displayAlpha"]],
+                                     f"a 3MF written from the xbf, colour alpha {alpha}")
+        self.assertEqual(threemf_alphas([((0.5, 0.5, 0.5, 0.4), metals.brass()), ((1.0, 1.0, 1.0, 0.4), None)]),
+                         ["66", "66"], "no transmission: the colour's own alpha, as before")
+
+    def test_a_3mf_from_the_xbf_and_from_its_glb_draw_a_transmissive_part_at_one_alpha(self):
+        """A colour's alpha set by hand on a transmissive look is not the 3MF's: the xbf's 3MF and the 3MF of
+        its GLB give the same bytes, the preview of the look's PBR ``opacity`` (``formats/gltf.py``'s
+        ``drawn_alpha``); a look with no transmission keeps its colour's alpha."""
+        script = self.folder / "panes.py"
+        script.write_text(textwrap.dedent('''
+            import build123d as bd
+            from bd_materials import metals, plastics
+            from cad import glb, xbf
+            from cad.build123d import materials
+
+            def pane(label, at, material, color=None):
+                part = bd.Box(10, 10, 2).moved(bd.Location((at, 0, 0)))
+                part.label, part.material = label, material
+                if color is not None:
+                    part.color = bd.Color(*color)  # after the material: the colour's alpha set by hand
+                return part
+
+            @xbf("panes.xbf")
+            @glb("panes.glb")
+            def panes():
+                faded = plastics.pmma(opacity=0.4)
+                faded.pbr = faded.pbr.override(opacity=0.5)
+                return bd.Compound(label="panes", children=[
+                    pane("pmma", 0, plastics.pmma(opacity=0.4), (0.2, 0.4, 0.8, 0.9)),
+                    pane("lens", 20, materials.led_lens(), (1.0, 1.0, 1.0, 0.8)),
+                    pane("faded", 40, faded, (1.0, 1.0, 1.0, 0.9)),
+                    pane("brass", 60, metals.brass(), (0.5, 0.5, 0.5, 0.4))])
+        '''), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["panes"], cwd=self.folder)[0]["ok"])
+        direct, converted = self.folder / "direct.3mf", self.folder / "converted.3mf"
+        export.translate(self.folder / "panes.xbf", None, direct)
+        export.translate(self.folder / "panes.glb", None, converted)
+        colours = [re.findall(r'displaycolor="([^"]+)"', zipfile.ZipFile(path).read("3D/3dmodel.model").decode())
+                   for path in (direct, converted)]
+        self.assertEqual(colours[0], colours[1])
+        self.assertEqual([colour[-2:] for colour in colours[0]], ["94", "4C", "80", "66"],
+                         "PMMA at 0.58, a clear lens at 0.3, an author's opacity 0.5, brass at its colour's 0.4")
 
     def test_a_still_draws_a_clear_lens_at_its_preview_and_a_faded_one_at_its_own_fade(self):
         from cad.build123d import materials

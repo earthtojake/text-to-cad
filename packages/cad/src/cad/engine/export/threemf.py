@@ -3,7 +3,9 @@
 An object per prototype (its mesh at the prototype's frame) and a build item per
 placement (the object at the placement's transform). Looks go through the 3MF materials
 extension: one base material per look (named by the part's material, else its colour),
-its display colour the look's colour in sRGB, and a metallic display property per base
+its display colour the look's colour in sRGB -- its alpha, for a transmissive look, the one a 3MF's
+reader draws without transmission (``formats/gltf.py``'s ``drawn_alpha``: the preview of its PBR
+``opacity``, its colour's alpha ignored, as a GLB of it converted gives) -- and a metallic display property per base
 (``pbmetallicdisplayproperties``: the material's metallicness and roughness, a matte one
 for a look without a material). An object's default look is its part's; a painted face's
 triangles name their own (``pid``/``p1``). A placement whose own colour is not its part's
@@ -22,6 +24,7 @@ from xml.sax.saxutils import escape, quoteattr
 
 from cad.engine.export import ZIP_DATE, within
 from cad.engine.export.mesh import groups, meshes
+from cad.engine.formats.gltf import drawn_alpha
 
 __all__ = ["write"]
 
@@ -96,6 +99,7 @@ def write(view: Any, path: Path) -> None:
         name = given["material"]["name"] if given is not None else f"colour {at + 1}"
         if given is not None:
             given = given["pbr"]["values"]
+            rgba = (*rgba[:3], drawn_alpha(rgba[3], given))
             metallic.append(f'<m:pbmetallic name={quoteattr(name)} metallicness="{given.get("metalness", 0.0):.6g}" '
                             f'roughness="{given.get("roughness", 0.5):.6g}"/>')
         else:

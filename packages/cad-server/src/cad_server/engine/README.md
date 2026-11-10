@@ -2674,8 +2674,9 @@ the document holds only the colour's value, and an inferred preview cannot be to
 by hand, or a preview left from the transmission before a later `pbr.override`). What draws no
 transmission draws the preview instead, once: the same inference, `max(0.15, 1 - 0.7 * transmission)`, or
 the author's fade (`formats/gltf.py`'s `preview_alpha`, the viewer's `previewOpacity.js`), in the viewer's
-Flat, X-ray and Parts, an OCCT still of an xbf or a GLB (`render/finish.py`), and the colour of a 3MF
-converted from a GLB. Native assignments,
+Flat, X-ray and Parts, an OCCT still of an xbf or a GLB (`render/finish.py`), and the colour of a 3MF,
+written from an xbf or converted from a GLB (`export/threemf.py`; both through `formats/gltf.py`'s
+`drawn_alpha`, so the two give the same bytes). Native assignments,
 inheritance and copying follow build123d; a child whose inherited value has already been
 read can retain that cached value, so assign assembly materials before reading children.
 

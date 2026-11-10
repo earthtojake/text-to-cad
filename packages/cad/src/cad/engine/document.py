@@ -189,7 +189,9 @@ def _material(value: Any) -> Any:
 
 
 def material_color(material: Any) -> tuple:
-    """The native PBR base colour as the document's linear RGBA."""
+    """The native PBR base colour as the document's linear RGBA, its alpha the look's PBR ``opacity`` (1
+    where it has none). A transmissive look's too: its alpha is what a GLB writes (``export/glb.py``'s
+    ``_alpha``), and what draws no transmission previews it (``formats/gltf.py``'s ``drawn_alpha``)."""
     from cad.engine.colors import srgb_to_linear
 
     values = material.pbr.values
