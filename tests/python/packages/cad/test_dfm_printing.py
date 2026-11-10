@@ -26,6 +26,19 @@ from cad._internal.dfm import printing as rules
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_printing as measured
 
+
+def _dfm(path, process: str = "printing", candidates: bool = False, **given):
+    """A mesh's check measured in this process and finished as the public call finishes it. These tests are of
+    the measurement: ``cad.stl.dfm`` measures in a process of its own, held to a check's limits -- a second a
+    check, and out of a test's reach to patch."""
+    resolved = manufacturing.options("stl", process, given, candidates=candidates)
+    found = manufacturing._measured_here({"type": "stl", "source": str(path), "process": process,
+                                          "resolved": resolved, "candidates": candidates})
+    if "unmeasured" in found:
+        return manufacturing.not_checked(Path(path), found["unmeasured"]["message"], found["unmeasured"]["code"])
+    return manufacturing.finish(Path(path), {"process": process, **found["measured"]["report"]}, process,
+                                found["measured"]["resolved"], candidates)
+
 A = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 
 
@@ -260,7 +273,7 @@ class KnifeZoneTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / f"{name}.stl"
             bd.export_stl(shape, str(path), tolerance=0.01)
-            return check(shape, name), cad.stl.dfm(path, process="printing")
+            return check(shape, name), _dfm(path, process="printing")
 
     @staticmethod
     def wall_failures(result) -> list[tuple[str, float, list]]:
@@ -327,7 +340,7 @@ class KnifeZoneTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "rod.stl"
             bd.export_stl(rod, str(path), tolerance=0.01, angular_tolerance=0.1)
-            result = cad.stl.dfm(str(path), process="printing", technology="fdm")
+            result = _dfm(str(path), process="printing", technology="fdm")
         self.assertEqual(self.wall_failures(result), [])
         self.assertIn("printing.knife_edge", codes(result))
 
@@ -709,7 +722,7 @@ class TurnedOnThePlateTest(unittest.TestCase):
                 shape = bd.Rot(0, 0, turn) * part
                 path = Path(folder) / f"tee{turn}.stl"
                 bd.export_stl(shape, str(path))
-                seen[turn] = (read(check(shape, "tee")), read(cad.stl.dfm(path, process="printing")))
+                seen[turn] = (read(check(shape, "tee")), read(_dfm(path, process="printing")))
         for turn, paths in seen.items():
             for at, (base, turned) in enumerate(zip(seen[0], paths)):
                 with self.subTest(turn=turn, path=("brep", "mesh")[at]):
@@ -936,7 +949,7 @@ class MeshopsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "drained.stl"
             bd.export_stl(tunnel(8.0) + bd.Pos(50, 0, 0) * drained, str(path), tolerance=0.01)
-            result = cad.stl.dfm(path, process="printing", technology="sla")
+            result = _dfm(path, process="printing", technology="sla")
         report = result.measurements
         bridge = near(result, "bridges", (0, 0, 6), 12.0, kind="bridge")
         self.assertAlmostEqual(bridge["length_mm"], 8.0, delta=0.05)

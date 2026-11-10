@@ -2,7 +2,7 @@
 
 """3D printing's planted-defect corpus: parts built with known defects -- and clean controls -- checked for
 every technology (each STEP read and measured once, its rules judged per technology; one of them through
-``cad.step.dfm`` too, the same verdicts) and a mesh path through ``cad.stl.dfm``, each rule's verdicts
+``cad.step.dfm`` too, the same verdicts) and the mesh path (measured in this process), each rule's verdicts
 compared with the construction: which rules must fire, where, and that nothing else does.
 
 The ground truth is here, beside the parts: each planted defect is (rule id, the technologies whose
@@ -33,6 +33,19 @@ from cad._internal import manufacturing
 from cad._internal import meshops_printing as mo
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_printing as measured
+
+
+def _dfm(path, process: str = "printing", candidates: bool = False, **given):
+    """A mesh's check measured in this process and finished as the public call finishes it. These tests are of
+    the measurement: ``cad.stl.dfm`` measures in a process of its own, held to a check's limits -- a second a
+    check, and out of a test's reach to patch."""
+    resolved = manufacturing.options("stl", process, given, candidates=candidates)
+    found = manufacturing._measured_here({"type": "stl", "source": str(path), "process": process,
+                                          "resolved": resolved, "candidates": candidates})
+    if "unmeasured" in found:
+        return manufacturing.not_checked(Path(path), found["unmeasured"]["message"], found["unmeasured"]["code"])
+    return manufacturing.finish(Path(path), {"process": process, **found["measured"]["report"]}, process,
+                                found["measured"]["resolved"], candidates)
 
 A = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 TOP = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX)
@@ -303,7 +316,7 @@ class CorpusTest(unittest.TestCase):
                 stl = folder / f"{name}-{label}.stl"
                 bd.export_stl(document, str(stl), tolerance=tolerance, angular_tolerance=0.5 if label == "coarse" else 0.1)
                 for technology in (("fdm", "sla") if label == "fine" else ("fdm",)):
-                    result = cad.stl.dfm(stl, process="printing", technology=technology, samples=SAMPLES)
+                    result = _dfm(stl, process="printing", technology=technology, samples=SAMPLES)
                     self.assertFalse(result.measurements.get("partial"), result.measurements.get("partial_sections"))
                     tally.score(f"{name}-{label}", result, planted, technology)
         print(f"\nprinting corpus, meshes ({time.monotonic() - started:.1f} s)\n{tally.table()}", file=sys.stderr)
@@ -432,7 +445,7 @@ class ParityTest(unittest.TestCase):
         exact = checked(shape, "printing", {"technology": technology, "samples": SAMPLES})
         path = Path(self.folder.name) / f"{name}-{tolerance}.stl"
         bd.export_stl(shape, str(path), tolerance=tolerance, angular_tolerance=angular)
-        mesh = cad.stl.dfm(path, process="printing", technology=technology, samples=SAMPLES)
+        mesh = _dfm(path, process="printing", technology=technology, samples=SAMPLES)
         for result in (exact, mesh):
             self.assertFalse(result.measurements.get("partial"), (name, result.measurements.get("partial_sections")))
         return exact, mesh
