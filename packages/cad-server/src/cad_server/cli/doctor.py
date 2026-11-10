@@ -1,8 +1,8 @@
 """``cad doctor`` — set the server up and report it: register the installation, write the ``cad``
 command, start the engine, and say what this device runs.
 
-The skills' one-time step (``uvx ... --from cad-server==<version> cad doctor``), and the repair
-command. On a device where no installation is current it registers this one
+The repair command the skills name (``cad doctor --check`` explains a failure, ``cad doctor`` repairs
+it). On a device where no installation is current it registers this one
 (``<state>/installations/<version>.json``) and makes it current (``cad_server._internal.installations``);
 on one where an installation is, it registers nothing. It writes the proxy, ``~/.local/bin/cad``
 (on Windows ``cad.exe``, with the Python it runs by), through which the skills run the server, and says what it found: each written, already right, or a

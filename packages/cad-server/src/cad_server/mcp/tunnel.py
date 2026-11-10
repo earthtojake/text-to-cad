@@ -127,11 +127,20 @@ def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]
     return reply
 
 
+def _tuned(app):
+    """``app``, its renders and reads holding a call briefly and asking the page to come back (the
+    module docstring): whether the tunnel made it or was handed it."""
+    app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
+    app.boards.hold_seconds, app.boards.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
+    app.engine_documents.hold_seconds, app.engine_documents.retry_ms = ENGINE_HOLD_SECONDS, ENGINE_RETRY_MS
+    return app
+
+
 class ViewerTunnel:
     """The viewer backend every view of this server shares, made when the first one asks."""
 
     def __init__(self, *, recents=None, analytics=None, clock=time.monotonic, app=None) -> None:
-        self._app = app
+        self._app = _tuned(app) if app is not None else None
         self._recents = recents
         self._analytics = analytics
         self._lock = threading.Lock()
@@ -151,10 +160,7 @@ class ViewerTunnel:
                     app.recents = self._recents
                 # The server's recorder: a person's answer on a card here is the CAD app's.
                 app.analytics, app.consent_by = self._analytics, "app"
-                app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
-                app.boards.hold_seconds, app.boards.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
-                app.engine_documents.hold_seconds, app.engine_documents.retry_ms = ENGINE_HOLD_SECONDS, ENGINE_RETRY_MS
-                self._app = app
+                self._app = _tuned(app)
             return self._app
 
     # What a view watches, answered on its sync (``cad_sync``) rather than as requests of its own.

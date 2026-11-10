@@ -464,6 +464,13 @@ class UnreadableDrawings(DrawingFixture):
                 build_drawing_payload(path)
         self.assertIn("hologram", str(caught.exception))
 
+    def test_a_coordinate_that_is_not_a_finite_number_names_the_repair(self) -> None:
+        for value in (float("nan"), float("inf")):
+            with self.subTest(value=value):
+                path = self.write_drawing(f"{value}.dxf", lambda doc, msp: msp.add_line((0, 0), (value, 1)))
+                with self.assertRaisesRegex(DrawingReadError, "not a finite number.*degenerate geometry"):
+                    encode_drawing_payload(build_drawing_payload(path))
+
 
 class EntitiesNameWhatDrew(DrawingFixture):
     """Every primitive names its modelspace entity by handle, and ``entities`` says what each is."""

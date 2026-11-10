@@ -109,6 +109,15 @@ class SidebarViewsTest(unittest.TestCase):
         self.assertEqual(serving.take('gone'), [])
         self.assertFalse(asking.answer('expired-request', {'png': 'late'}))
 
+    def test_a_sidebars_capture_error_is_its_answer_not_a_silence(self):
+        from cad_server.mcp.sidebar import SidebarViews
+        registry = views.ViewRegistry()
+        serving, asking = SidebarViews(registry), SidebarViews(registry)
+        serving.publish('side-1', model='/a.step', state=None, touched=True)
+        _answer_next(registry, 'side-1', lambda event: serving.answer(event['requestId'], {'error': 'WebGL context lost'}))
+        self.assertEqual(asking.ask('side-1', timeout=5), {'error': 'WebGL context lost'})
+        self.assertIsNone(asking.ask('nobody', timeout=0.1))
+
 
 if __name__ == "__main__":
     unittest.main()

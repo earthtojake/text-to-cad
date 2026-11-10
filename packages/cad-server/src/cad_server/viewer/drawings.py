@@ -15,8 +15,8 @@ read, so an answer is always the payload of the bytes it is held by. Every DXF
 is drawn this one way, one a model wrote and a vendor's alike.
 Statuses, in the order they are decided:
 
-* no ``?file=``, a ref that is not an absolute path, or one that does not end in
-  ``.dxf`` -> 400 (this route draws drawings; a caller aiming an ``.step`` at it
+* no file (the document's id names none), a ref that is not an absolute path,
+  or one that does not end in ``.dxf`` -> 400 (this route draws drawings; a caller aiming an ``.step`` at it
   has made a mistake worth reading).
 * no such file -> 404, like the asset route.
 * an unreadable or damaged DXF -> ``DrawingReadError`` (a ``ValueError``) ->

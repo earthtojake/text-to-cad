@@ -6,7 +6,7 @@ authority and re-percent-encodes part of ASCII. ``urllib.parse.urlsplit`` does
 none of that, so routing on ``urlsplit().path`` would send
 ``/api/v1/../etc/passwd`` into the ``/api/`` dispatch instead of the SPA,
 and would miss ``/api\\v1\\server`` entirely. Every behaviour below is pinned by
-``tests_server/golden/golden.json``.
+``tests/python/packages/cad_server/viewer/golden/golden.json``.
 
 Byte handling: ``BaseHTTPRequestHandler`` hands us a request line decoded as
 latin-1, so each character stands for one byte. ``target_from_request_line``

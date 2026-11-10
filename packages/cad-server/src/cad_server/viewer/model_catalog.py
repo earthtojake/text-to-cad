@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from cad.engine.client import request
-from cad.engine.ids import is_id
 
 
 def held(ident: str) -> tuple[dict | None, str, str]:
@@ -17,20 +16,12 @@ def held(ident: str) -> tuple[dict | None, str, str]:
     return answer["model"], "", ""
 
 
-def entry(value: str) -> dict | None:
-    """The catalog row of the model document ``value`` (its id) while the engine holds it; None for
-    anything else. The row's ``file`` is the id: a model has no file to browse (``sourcePath``), and
-    its name menu's Files opens where the explorer was last, else the person's home folder; nothing
-    reads the script. Its ``hash`` is the build the engine holds (its ``version``), so a page that
-    shows the model hears a rebuild as it hears a file written again: its picture is taken again."""
-    if not is_id(value):
-        return None
-    model, _why, _state = held(value)
-    return None if model is None else row(value, model)
-
-
 def row(value: str, model: dict) -> dict:
-    """The catalog row of the model document ``value`` the engine holds as ``model`` (``held``)."""
+    """The catalog row of the model document ``value`` the engine holds as ``model`` (``held``). The
+    row's ``file`` is the id: a model has no file to browse (``sourcePath``), and its name menu's
+    Files opens where the explorer was last, else the person's home folder; nothing reads the script.
+    Its ``hash`` is the build the engine holds (its ``version``), so a page that shows the model hears
+    a rebuild as it hears a file written again: its picture is taken again."""
     built = model.get("version") or model.get("builtAt")
     return {"id": value, "file": value, "name": model["source"]["name"], "sourcePath": None,
             "kind": "xbf", "sourceFormat": "model", "url": "",

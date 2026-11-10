@@ -71,6 +71,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import math
 import random
 import threading
 from pathlib import Path
@@ -385,11 +386,14 @@ def _rounded(value):
     An int serialises shorter than the same float (``5`` vs ``5.0``) and is
     exact, which matters when a drawing carries a million of them. ``-0.0`` is
     folded to ``0`` so a value that differs only in sign of zero cannot make
-    two payloads for the same drawing differ byte for byte.
+    two payloads for the same drawing differ byte for byte. A non-finite value
+    stays as it is, for ``encode_drawing_payload`` to refuse.
     """
     number = round(float(value), _COORDINATE_DECIMALS)
     if number == 0.0:
         return 0
+    if not math.isfinite(number):
+        return number
     integral = int(number)
     return integral if integral == number else number
 
@@ -441,10 +445,13 @@ def _polygon(vertices, extent):
 
 
 def _linear(value):
-    """One coefficient of a text transform's linear part, rounded finer than a coordinate."""
+    """One coefficient of a text transform's linear part, rounded finer than a coordinate; a
+    non-finite one as it is (``_rounded``)."""
     number = round(float(value), _LINEAR_DECIMALS)
     if number == 0.0:
         return 0
+    if not math.isfinite(number):
+        return number
     integral = int(number)
     return integral if integral == number else number
 

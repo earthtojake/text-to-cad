@@ -1,5 +1,5 @@
 """The CAD server: the device's one daemon that builds, keeps and serves documents, the CAD Viewer's and
-the CAD app's servers on its listener, every verb of the ``cadgen`` command, the environments its kernel
+the CAD app's servers on its listener, every verb of the ``cad`` command, the environments its kernel
 processes run in, the installations and the one that is current, and telemetry.
 
 It imports the library's (``cad``) kernel-free modules and never the CAD kernel: the kernel lives in the

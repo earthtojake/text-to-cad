@@ -10,8 +10,8 @@ Python's default:
 * ``base36``                 lowercase ``0-9a-z``, no padding, no stdlib support.
 
 Every one is pinned against Node's own expressions by
-``tests_server/golden/golden.json``. Do not "simplify" any of them without
-regenerating that fixture and watching it fail.
+``tests/python/packages/cad_server/viewer/golden/golden.json``. Do not
+"simplify" any of them without regenerating that fixture and watching it fail.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ class UriError(ValueError):
     """Raised where JavaScript raises ``URIError``.
 
     ``decodeURIComponent`` throws on a malformed escape, on overlong UTF-8 and
-    on a lone surrogate, and callers depend on that throw: ``serve_dist`` maps
-    it to 400 "Bad request" and the tess-cache route maps it to a 403 refusal.
+    on a lone surrogate, and ``serve_dist`` depends on that throw: it maps it
+    to 400 "Bad request".
     ``urllib.parse.unquote`` raises for none of the three.
     """
 

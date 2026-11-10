@@ -1,4 +1,4 @@
-"""``python -m cad_server.cli`` — the same dispatcher the ``cadgen`` console script runs."""
+"""``python -m cad_server.cli`` — the same dispatcher the ``cad`` console script runs."""
 
 from __future__ import annotations
 

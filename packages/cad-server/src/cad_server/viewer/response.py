@@ -9,7 +9,7 @@ responses but not others. The header set on the wire is part of the contract:
   no-store`` and an explicit ``content-length``; ``content-type`` appears only
   when truthy. ``send_bytes`` and ``stream_file`` add the caller's
   ``extra_headers`` (the raw-file routes' sandbox, ``http_app.RAW_FILE_HEADERS``).
-* ``send_empty`` (the tess 403/404/204 and the method-not-allowed 405) carries
+* ``send_empty`` (the routes' 204s and the method-not-allowed 405) carries
   ONLY ``content-length: 0`` — no content-type, no cache-control.
 * NO ``Access-Control-*`` header is ever emitted, on any route, at any status.
   Their absence is what makes the same-origin policy block cross-origin reads

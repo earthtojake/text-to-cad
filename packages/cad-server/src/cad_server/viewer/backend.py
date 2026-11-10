@@ -1,7 +1,7 @@
 """Files by absolute path: the one rule every route applies to a file it is named, and the gate on
 the bytes the asset route sends.
 
-There is no served directory. Every ``?file=`` -- and every path in a request's body -- names a
+There is no served directory. Every ``?path=`` -- and every path in a request's body -- names a
 file by its ABSOLUTE path, anywhere on this machine, and anything else is refused with a 400: a
 relative file a launch names is read from the launch's folder before it is registered. Nothing is
 refused for WHERE it is: no root, no containment, and no rule about hidden folders on the way to a

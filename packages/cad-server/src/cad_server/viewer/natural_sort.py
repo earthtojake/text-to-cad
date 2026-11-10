@@ -10,7 +10,8 @@ precision integers, and leading zeros are invisible.
 
 None of that is typed here. ``collation.json`` beside this module is DERIVED by
 running the real collator over the whole Unicode repertoire
-(``tests_server/golden/gen_golden.mjs``), and this file is a table walker:
+(``tests/python/packages/cad_server/viewer/golden/gen_golden.mjs``), and this
+file is a table walker:
 
 * ``ignorableRanges``  codepoints with no primary weight, found by asking the
   collator whether ``"m" + ch + "m"`` compares equal to ``"mm"``. This is NOT the
@@ -43,10 +44,11 @@ name with an invisible character between two digits.
 
 RESIDUE
 -------
-None known. ``tests_server/test_parity.py`` sorts a generated adversarial corpus
-— realistic CAD names, every ignorable-between-digits case, the whole Arabic
-presentation-forms block, and 2000 random codepoints across all planes — and
-asserts the order matches V8 exactly, plus a full 160,000-pair sign matrix. If a
+None known. ``tests/python/packages/cad_server/viewer/test_parity.py`` sorts a
+generated adversarial corpus — realistic CAD names, every
+ignorable-between-digits case, the whole Arabic presentation-forms block, and
+2000 random codepoints across all planes — and asserts the order matches V8
+exactly, plus a full 160,000-pair sign matrix. If a
 future Unicode/ICU version introduces a divergence, that test is where it
 surfaces; record it here rather than loosening the assertion.
 """

@@ -41,9 +41,6 @@ src/cad_server/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
-  kicad/                 # a KiCad schematic's electrical rules check and exports (`cad kicad_sch
-                         #   erc|export`: schematic), by the kicad integration's kicad-cli, headless
-                         #   in private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once

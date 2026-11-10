@@ -1,8 +1,8 @@
 """Open a viewer page in the person's browser without its token on any command line.
 
-The page's URL carries a link, a credential for a day, and a browser (or the launcher that starts
-it) is given its URL as an argument, which other local users may read in the process list. So the browser is
-given a file instead: a page of one redirect to the URL, written owner-only (0600) in the engine's
+The page's URL carries a link, a credential good until the token is rotated, and a browser (or
+the launcher that starts it) is given its URL as an argument, which other local users may read in
+the process list. So the browser is given a file instead: a page of one redirect to the URL, written owner-only (0600) in the engine's
 own folder, which is this user's alone (``places.folder_refusal``). It is removed after
 ``KEEP_SECONDS`` by a thread of the process that wrote it, and any one older than that by the
 next open, should that process have exited first."""

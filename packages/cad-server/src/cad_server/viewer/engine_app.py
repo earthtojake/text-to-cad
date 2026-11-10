@@ -69,7 +69,7 @@ def standing(master, kind, value):
 
 
 # What a page load without a credential this engine admits is answered with (``EngineApp._refused``):
-# a link past its day says so (``LINK_EXPIRED_PAGE``); any other -- none, or one the token never
+# a link that expired says so (``LINK_EXPIRED_PAGE``); any other -- none, or one the token never
 # signed, from before ``cad server --rotate-token`` -- that this browser cannot open CAD yet
 # (``TOKEN_NEEDED_PAGE``). Each speaks to a person and names the one thing to do: no command.
 _PAGE_HEAD = (
@@ -451,7 +451,7 @@ class EngineApp:
     def _refused(self, request, response, expired=False):
         """A request without a credential this engine admits: refused, 403, whatever it asks for -- a
         route, a page or an asset. A page load is told why in a static page of a few lines (no script,
-        no asset, nothing of the person's), never raw JSON: a link past its day that it ``expired``
+        no asset, nothing of the person's), never raw JSON: a link whose expiry has passed that it ``expired``
         (``LINK_EXPIRED_PAGE``), else that this browser cannot open CAD yet (``TOKEN_NEEDED_PAGE``). An
         expired link followed from another site is first asked again from this origin, so the browser
         sends the session it holds (SameSite=Strict withholds it from the other site's navigation),

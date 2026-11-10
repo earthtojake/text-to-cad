@@ -9,9 +9,9 @@ that it tells the server on its session whether the page opened (``OPENED``): th
 open in the person's browser only once told it opened, so after a failed open the next ``cad_show`` opens
 it again.
 
-The page's URL carries a link, a credential for a day, and a browser (or the launcher that starts it) is
-given its URL as an argument, which other local users may read in the process list. So the browser is
-given a file instead: a page of one redirect to the URL, written owner-only (0600) in the engine folder,
+The page's URL carries a link, a credential good until the token is rotated, and a browser (or the
+launcher that starts it) is given its URL as an argument, which other local users may read in the
+process list. So the browser is given a file instead: a page of one redirect to the URL, written owner-only (0600) in the engine folder,
 which is this user's alone (``engine.folder_refusal``), and removed after ``KEEP_SECONDS``.
 """
 from __future__ import annotations

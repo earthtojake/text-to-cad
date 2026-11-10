@@ -4,8 +4,8 @@ Two kinds of command. A document type's: ``cad <document_type> <operation> <file
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
 (``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). And the
 commands that are no document's: the engine's process control (``serve``, ``status``, ``stop``,
-``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
-``doctor``, ``plugin``, ``viewer``, ``telemetry``).
+``delete``, ``server``), ``run``, and the installation's (``requirement``, ``setup``, ``update``,
+``update auto``, ``uninstall``, ``doctor``, ``plugin``, ``viewer``, ``telemetry``).
 
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the

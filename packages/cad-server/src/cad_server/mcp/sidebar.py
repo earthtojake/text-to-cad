@@ -46,7 +46,8 @@ class SidebarViews:
         self.registry.post([view_id], event)
 
     def ask(self, view_id, *, timeout=10.0):
+        """The view's reply to a capture; its error as ``{"error": ...}``; None when it did not answer."""
         try:
             return self.registry.ask(view_id, 'capture', timeout=timeout)
-        except NoAnswer:
-            return None
+        except NoAnswer as failure:
+            return {'error': str(failure)} if failure.reason == 'view_error' else None
