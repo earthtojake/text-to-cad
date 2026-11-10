@@ -304,4 +304,18 @@ for written in exported.step exported.stl; do
 done
 echo "   wrote a STEP and an STL from the document"
 
+# A manufacturing check's measuring modules ship in the library's wheel and run in the engine's checks
+# processes: one left out of the wheel, or one that resolves only beside the repo, fails here and nowhere else.
+step "Check the part for each process"
+for process in cnc sheet molding printing; do
+  status=0
+  "$PROXY" step dfm models/probe.step --process "$process" >"$WORK/dfm-$process.log" 2>&1 || status=$?
+  # A verdict either way (a cube is no sheet): 0 or 1. 2 is the command refused, 3 a check that did not run.
+  case "$status" in
+    0|1) ;;
+    *) cat "$WORK/dfm-$process.log" >&2; fail "$COMMAND step dfm --process $process exited $status" ;;
+  esac
+done
+echo "   a verdict for cnc, sheet, molding and printing"
+
 printf '\nInstalled-mode checks passed.\n'

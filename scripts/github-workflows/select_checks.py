@@ -195,18 +195,22 @@ def _shim_change(path: str) -> Select:
 
 
 # The manufacturing checks: their type side (cad._internal.dfm and the check's signature, manufacturing),
-# their exact measurements (the build123d integration's _dfm_* modules) and their mesh measurements (the
-# trimesh integration) are imported by the 3D types' `dfm` and by the engine's worker, which measures a B-rep's
-# check where it holds the document (cad.engine.worker._check), and by nothing else. A change to them reaches
-# the tests that name them, the engine's check among them, and those that read every command (the generated
-# command lines). A change to the engine reaches them too: ENGINE_CODE below.
+# their exact measurements (the build123d integration's _dfm_* modules, and the numpy geometry they measure
+# with: molding's, a sheet's plane, a print's mesh) and their mesh measurements (the trimesh integration) are
+# imported by the 3D types' `dfm` and by the engine's worker, which measures a B-rep's check where it holds
+# the document (cad.engine.worker._check), and by nothing else. A change to them reaches the tests that name
+# them, the engine's check among them, and those that read every command (the generated command lines) -- and
+# the packaging job, which checks them from a built wheel (their imports are the build123d extra's). A change
+# to the engine reaches them too: ENGINE_CODE below.
 DFM_CODE = (f"{LIBRARY_SRC}/_internal/dfm/**", f"{LIBRARY_SRC}/_internal/manufacturing.py",
-            f"{LIBRARY_SRC}/_internal/meshops_*.py", f"{LIBRARY_SRC}/build123d/_dfm_*.py", f"{LIBRARY_SRC}/trimesh/**")
+            f"{LIBRARY_SRC}/_internal/molding_geometry.py", f"{LIBRARY_SRC}/_internal/sheet_plane.py",
+            f"{LIBRARY_SRC}/_internal/meshops_printing.py", f"{LIBRARY_SRC}/build123d/_dfm_*.py",
+            f"{LIBRARY_SRC}/trimesh/**")
 _NAMES_DFM = r"\bdfm|_dfm|manufactur|trimesh|\bunfold\b|DOCUMENT_TYPES"
 
 
 def _dfm_change(path: str) -> Select:
-    return select(cadgen=_cadgen_tests_naming(_NAMES_DFM, ()))
+    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_DFM, ()))
 
 
 # The engine (cad.engine, and the server's half, cad_server.engine) is no leaf: every build,
