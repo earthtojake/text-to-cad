@@ -224,7 +224,7 @@ where those files ship, so these scripts are what produces them.
   everything. `--paths` prints the selection for a list of paths; `--light` prints the
   light contracts `static` runs on every change.
   Called by `test.yml`'s first job and its `static` job; held to the tree by
-  `tests/python/global/test_ci_workspace_selection.py`. See `CONTRIBUTING.md#ci`.
+  `tests/python/global/test_ci_workspace_selection.py`. See `docs/contributing/testing.md`.
 - `ci_gate.py` — the one required check, `CI`: given every `test.yml` job's result
   (`NEEDS`, the workflow's `toJSON(needs)`), fails when the selection did not run, a job
   failed, or one was cancelled or timed out, unless a newer push superseded the pull

@@ -115,7 +115,8 @@ which points both at the checkout.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
 - `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
-  `docs/contributing/`: [writing a skill](docs/contributing/writing-a-skill.md),
+  `docs/contributing/`: [testing](docs/contributing/testing.md) (the rules, adding a test or a CI
+  job, a red run), [writing a skill](docs/contributing/writing-a-skill.md),
   [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
@@ -308,7 +309,7 @@ when touching shared surfaces or before handoff:
   flag and only when the change reaches it: `scripts/github-workflows/select_checks.py`
   maps every changed path to the tests that read it, and the Python jobs run just
   those files. A test that reads a new kind of path gets a rule there
-  ([CONTRIBUTING.md#ci](CONTRIBUTING.md#ci)); an unknown path, `VERSION`, `packages/core`, the
+  ([docs/contributing/testing.md](docs/contributing/testing.md#ci)); an unknown path, `VERSION`, `packages/core`, the
   lockfiles and the test machinery run everything, as do a manual dispatch and the
   nightly run. `main` requires one check, `CI`, which fails when any job did, so a
   job is added, renamed or sharded without a branch-protection change.
