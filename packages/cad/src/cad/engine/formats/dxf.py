@@ -177,7 +177,7 @@ def _pairs(path: Path) -> list[tuple[int, str]]:
     data = path.read_bytes()
     if data.startswith(b"AutoCAD Binary DXF"):
         raise DxfError(f"{path.name} is a binary DXF; the stills read ASCII DXF")
-    text = data.decode("utf-8", errors="replace") if b"\xef\xbb\xbf" in data[:3] or _utf8(data) \
+    text = data.decode("utf-8-sig", errors="replace") if b"\xef\xbb\xbf" in data[:3] or _utf8(data) \
         else data.decode("cp1252", errors="replace")
     rows = text.splitlines()
     pairs = []
@@ -677,7 +677,7 @@ class _Reader:
             name = str(entity.get(2, "")).strip()
             block = self.blocks.get(name.upper())
             if block is None or depth > MAX_BLOCK_DEPTH:
-                self.drawing.skipped[kind] += block is None
+                self.drawing.skipped[kind if block is None else f"{kind} nested past {MAX_BLOCK_DEPTH} blocks"] += 1
                 return
             base, members = block
             layer = str(entity.get(8, "0")).strip()

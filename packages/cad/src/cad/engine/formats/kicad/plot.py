@@ -69,6 +69,7 @@ from cad.engine.formats.kicad.board_index import (
     FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_id, item_layers, layer_of, locked, net_of,
     net_table, pad_pieces, points_of, read_index, zone_outline,
 )
+from cad.engine.formats.kicad.board_index import _filled, _hidden, _stroke_width  # the readers' own: a hidden item, a fill, a stroke's width
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
 from cad.engine.formats.kicad.dimensions import dimension_shapes
 from cad.engine.formats.kicad.geometry import XY, area, box, hull, inside, pen_outlines, polygon_distance, rotate, union
@@ -213,27 +214,6 @@ class _Sheet:
 
     def label(self, layer: str, item: dict, tier: str = "label") -> None:
         self.add(layer, item, (), tier)
-
-
-def _stroke_width(node: list) -> float:
-    stroke = sexpr.find(node, "stroke")
-    if stroke is not None:
-        return sexpr.number(sexpr.value(stroke, "width"), 0.0)
-    return sexpr.number(sexpr.value(node, "width"), 0.0)
-
-
-def _filled(node: list) -> bool:
-    fill = sexpr.find(node, "fill")
-    if fill is None or len(fill) < 2:
-        return False
-    value = fill[1]
-    if isinstance(value, list):  # KiCad 6: (fill (type solid))
-        value = sexpr.value(fill, "type")
-    return str(value) in ("yes", "solid")
-
-
-def _hidden(node: list) -> bool:
-    return str(sexpr.value(node, "hide", "")) == "yes" or any(isinstance(atom, Sym) and atom == "hide" for atom in node[1:])
 
 
 def _flag(node: list, name: str) -> bool:
@@ -903,12 +883,10 @@ def _checked(path: Path) -> Path:
     return path
 
 
-def _read(path: Path) -> tuple[bytes, bytes]:
-    """The board's bytes and its project's (empty for none): everything the payload reads."""
+def _read(path: Path) -> bytes:
+    """The board's bytes."""
     try:
-        data = path.read_bytes()
-        project = path.with_suffix(".kicad_pro")
-        return data, project.read_bytes() if project.is_file() else b""
+        return path.read_bytes()
     except OSError as error:
         raise PlotError(f"{path.name} could not be read ({error.strerror or error}): check that it exists and this user can read it") from None
 
@@ -971,7 +949,7 @@ def build_plot(path: Path | str, data: bytes | None = None) -> dict:
     refill of them, ``poured``), read beside the same project and named the same."""
     path = _checked(Path(path))
     if data is None:
-        data, _project = _read(path)
+        data = _read(path)
     return _build(path, _tree(path, data))
 
 

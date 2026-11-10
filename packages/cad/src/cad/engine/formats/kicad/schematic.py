@@ -403,7 +403,6 @@ class SchematicIndex:
     no_connects: tuple[NoConnect, ...]
     bus_entries: tuple[BusEntry, ...]
     nets: tuple[Net, ...]
-    texts: tuple[dict, ...] = ()
     #: The parsed files, by resolved path: the plot draws from the same trees.
     trees: Mapping[Path, list] = field(default_factory=dict, repr=False)
     lib_symbols: Mapping[Path, Mapping[str, LibSymbol]] = field(default_factory=dict, repr=False)
@@ -630,7 +629,6 @@ class _Reader:
         self.labels: list[Label] = []
         self.no_connects: list[NoConnect] = []
         self.bus_entries: list[BusEntry] = []
-        self.texts: list[dict] = []
         self.warnings: list[str] = []
         self.page_numbers: dict[str, str] = {}
 
@@ -776,10 +774,14 @@ class _Union:
         self.parent: dict[Any, Any] = {}
 
     def find(self, item: Any) -> Any:
-        parent = self.parent.setdefault(item, item)
-        if parent != item:
-            parent = self.parent[item] = self.find(parent)
-        return parent
+        # A loop, not recursion: a net joined by a thousand power symbols is a chain that deep.
+        parent = self.parent
+        root = parent.setdefault(item, item)
+        while parent[root] != root:
+            root = parent[root]
+        while parent[item] != root:
+            parent[item], item = root, parent[item]
+        return root
 
     def join(self, a: Any, b: Any) -> None:
         a, b = self.find(a), self.find(b)
@@ -814,10 +816,9 @@ def _pin_name(pin: Pin, alone: bool) -> str:
     return f"Net-({pin.ref}-{function or 'Pad' + pin.number})"
 
 
-def resolve_nets(index: _Reader) -> tuple[dict[int, str], list[Net], list[str]]:
+def resolve_nets(index: _Reader) -> tuple[dict[int, str], list[Net]]:
     """The nets of the hierarchy read into ``index`` (the module doc's steps): the net of every item,
-    keyed by ``id()``; the nets; and what could not be resolved."""
-    warnings: list[str] = []
+    keyed by ``id()``; and the nets."""
     union = _Union()
     by_sheet: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
     for wire in index.wires:
@@ -1004,7 +1005,7 @@ def resolve_nets(index: _Reader) -> tuple[dict[int, str], list[Net], list[str]]:
     for junction in index.junctions:
         if item_net.get(id(junction)) is None:
             item_net[id(junction)] = net_of_node.get(union.find(("junction", "bus", id(junction))))
-    return item_net, built, warnings
+    return item_net, built
 
 
 @dataclass(frozen=True)
@@ -1279,7 +1280,7 @@ def read_schematic_index(path: Path | str) -> tuple[SchematicIndex, list[str]]:
         # A file outside its project's hierarchy is a root of its own.
         reader = _Reader(sheet.resolve())
         reader.read()
-    item_net, nets, warnings = resolve_nets(reader)
+    item_net, nets = resolve_nets(reader)
 
     def named(items: Iterable) -> list:
         return [_with_net(item, item_net.get(id(item))) for item in items]
@@ -1314,7 +1315,7 @@ def read_schematic_index(path: Path | str) -> tuple[SchematicIndex, list[str]]:
         sheets=tuple(sheets), symbols=tuple(symbols), wires=tuple(named(reader.wires)),
         junctions=tuple(named(reader.junctions)), labels=tuple(labels), no_connects=tuple(reader.no_connects),
         bus_entries=tuple(reader.bus_entries), nets=tuple(nets), trees=reader.trees, lib_symbols=reader.libraries)
-    return index, [*reader.warnings, *warnings]
+    return index, list(reader.warnings)
 
 
 def _with_net(item, net: str | None):

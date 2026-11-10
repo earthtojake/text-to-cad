@@ -2,7 +2,7 @@
 
 :func:`read_index` reads a saved ``.kicad_pcb`` into its parts (footprints, with their fields and outlines), pads,
 tracks, vias, pours, unplated holes, ``Edge.Cuts`` outline, nets, texts, dimensions,
-graphics and its stack-up (its layers' colours and copper finish, as the file names them), from the file alone: no KiCad runs. :func:`read_board` (``pcb.read_board``) answers
+graphics and its stack-up (its layers' colours and copper finish, as the file names them), from the file alone: no KiCad runs. :func:`read_board` (``cad.kicad_pcb.read``) answers
 board references (:mod:`cad.engine.formats.kicad.refs`) against that index:
 ``board.resolve("#U3.9")`` is pad 9 of U3, where it is, its net, and its part;
 ``board.resolve("#track:<uuid>")`` the track KiCad saved with that uuid (an item's
@@ -1588,7 +1588,10 @@ def read_index(text: str | list, *, project: Path | None = None, graphics: bool 
             if head == "segment":
                 points = [sexpr.pair(sexpr.find(node, "start")), sexpr.pair(sexpr.find(node, "end"))]
             else:
-                points = arc_points(*(sexpr.pair(sexpr.find(node, key)) for key in ("start", "mid", "end")))
+                ends = [sexpr.pair(sexpr.find(node, key)) for key in ("start", "mid", "end")]
+                if None in ends:
+                    continue
+                points = arc_points(*ends)
             if None in points:
                 continue
             net = net_of(node, table)

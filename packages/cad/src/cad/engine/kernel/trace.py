@@ -184,7 +184,7 @@ def _frame_map(shape: Any, topabs: Any) -> Any:
 
 __all__ = ["FOLD_LENGTH", "Feature", "Trace", "identifier", "operation_name"]
 
-# A derivation longer than this many characters is folded (``cad_ref_syntax``): long enough
+# A derivation longer than this many characters is folded: long enough
 # for a made atom and a step or two, short enough for a STEP file and a prompt.
 FOLD_LENGTH = 48
 # Further sources (history) and lower elements (forward pass) a step lists, as FreeCAD does.

@@ -91,6 +91,18 @@ class TheNets(SchematicFixture):
         bus = [wire for wire in view.wires if wire.kind == "bus" and wire.sheet == "/"]
         self.assertEqual({wire.net for wire in bus}, {"/D[0..1]"})
 
+    def test_a_net_of_more_power_symbols_than_python_recurses_reads(self) -> None:
+        count = 1200
+        grounds = " ".join(
+            f'(symbol (lib_id "power:GND") (at {at(200 + index % 40, 100 + index // 40)[0]:g} '
+            f'{at(200 + index % 40, 100 + index // 40)[1]:g} 0) (unit 1) (uuid "5c4e0000-0000-4000-8001-{index:012d}") '
+            f'(property "Reference" "#PWR{1000 + index}" (at 0 0 0)) (property "Value" "GND" (at 0 0 0)) (pin "1"))'
+            for index in range(count))
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-grounds-") as folder:
+            view = read_schematic(with_on_root(write_schematic(Path(folder)), grounds))
+        self.assertEqual(sum(symbol.power for symbol in view.symbols), count + sum(symbol.power for symbol in self.view.symbols))
+        self.assertEqual({net.name: {f"{pin.ref}.{pin.number}" for pin in net.pins} for net in view.nets}["GND"], NETS["GND"])
+
 
 def _wire(start: tuple[float, float], end: tuple[float, float], uuid: str) -> str:
     """A wire between two points in grid steps, as KiCad writes one."""

@@ -31,7 +31,6 @@ import os
 import shutil
 import struct
 import tempfile
-import textwrap
 import unittest
 import zipfile
 from pathlib import Path
@@ -875,6 +874,26 @@ class DxfTest(FixtureTest):
         self.assertGreater(len(outline), 40, "the bulge drawn as an arc")
         tab = [points for points, _pen in drawing.lines if len(points) == 2 and np.allclose(points[0], (60, 32))]
         np.testing.assert_allclose(tab[0][1], (57, 38), atol=1e-9)  # the block's line turned 90 degrees at (60, 32)
+
+    def test_a_byte_order_mark_is_not_part_of_the_first_group_code(self) -> None:
+        plain, marked = self.folder / "plain.dxf", self.folder / "marked.dxf"
+        plain.write_text(DXF, encoding="ascii")
+        marked.write_bytes(b"\xef\xbb\xbf" + DXF.encode("ascii"))
+        self.assertEqual(len(formats.read(marked).lines), len(formats.read(plain).lines))
+
+    def test_an_insert_nested_past_the_deepest_block_is_counted_by_name(self) -> None:
+        from cad.engine.formats.dxf import MAX_BLOCK_DEPTH
+
+        deepest = MAX_BLOCK_DEPTH + 4
+        blocks = "".join(f"0\nBLOCK\n2\nB{at}\n10\n0\n20\n0\n0\nINSERT\n8\n0\n2\nB{at + 1}\n10\n0\n20\n0\n0\nENDBLK\n"
+                         for at in range(deepest))
+        blocks += f"0\nBLOCK\n2\nB{deepest}\n10\n0\n20\n0\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n1\n21\n1\n0\nENDBLK\n"
+        path = self.folder / "nested.dxf"
+        path.write_text(f"0\nSECTION\n2\nBLOCKS\n{blocks}0\nENDSEC\n0\nSECTION\n2\nENTITIES\n"
+                        "0\nINSERT\n8\n0\n2\nB0\n10\n0\n20\n0\n0\nENDSEC\n0\nEOF\n", encoding="ascii")
+        drawing = formats.read(path)
+        self.assertEqual(drawing.lines, [])
+        self.assertEqual(drawing.skipped, {f"INSERT nested past {MAX_BLOCK_DEPTH} blocks": 1})
 
     def test_a_spline_of_fit_points_is_the_cubic_cad_programs_make(self) -> None:
         """Through every fit point, ezdxf's ``fit_points_to_cad_cv`` -- the curve the viewer's

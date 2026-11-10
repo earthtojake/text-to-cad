@@ -392,6 +392,18 @@ class OlderBoardTest(unittest.TestCase):
         self.assertTrue(view.at(115, 90).on_board)
         self.assertFalse(view.at(118, 82).on_board)
 
+    def test_an_arc_track_short_of_its_mid_is_left_out_by_the_index_and_the_plot(self) -> None:
+        text = """(kicad_pcb (version 20241229) (generator "pcbnew")
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (segment (start 0 0) (end 1 0) (width 0.2) (layer "F.Cu") (net 0))
+          (arc (start 0 0) (end 1 1) (width 0.2) (layer "F.Cu") (net 0)))"""
+        self.assertEqual([track.arc for track in read_index(text).tracks], [False])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "hand.kicad_pcb"
+            path.write_text(text, encoding="utf-8")
+            build_plot(path)
+
 
 if __name__ == "__main__":
     unittest.main()

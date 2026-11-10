@@ -317,6 +317,18 @@ class DrawingChecksTest(unittest.TestCase):
         modelspace.add_line((20, 5), (30, 5), dxfattribs={"layer": "SCORE_BEND"})
         self.assertEqual(self.codes(document), {"open_cut_profile"}, "open geometry on a bend layer is allowed")
 
+    def test_an_elliptical_arc_s_ends_join_the_chain_and_a_whole_ellipse_is_closed(self) -> None:
+        document = self.document()
+        modelspace = document.modelspace()
+        modelspace.add_ellipse((0, 0), major_axis=(10, 0), ratio=0.5, start_param=0, end_param=3.141592653589793,
+                               dxfattribs={"layer": "CUT"})
+        self.assertEqual(self.codes(document), {"open_cut_profile"})
+        modelspace.add_line((-10, 0), (10, 0), dxfattribs={"layer": "CUT"})
+        self.assertEqual(self.codes(document), set())
+        modelspace.add_ellipse((30, 0), major_axis=(10, 0), ratio=0.5, dxfattribs={"layer": "CUT"})
+        modelspace.add_circle((60, 0), 5, dxfattribs={"layer": "CUT"})
+        self.assertEqual(self.codes(document), set())
+
     def test_units_degenerate_entities_duplicates_and_an_empty_drawing_are_errors(self) -> None:
         document = self.document(units=0)
         modelspace = document.modelspace()

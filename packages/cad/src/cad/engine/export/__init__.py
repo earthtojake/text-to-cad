@@ -29,8 +29,8 @@ animation of the same name, baked by forward kinematics (``export/motion.py``), 
 them the xbf carries, so a GLB exported from the xbf is the build's own. STEP, STL and 3MF ignore both. A
 DXF is drawn from a planar document alone (``export/dxf.py``): a 3D one is refused.
 
-Every file is written to a temporary file beside its target and moved over it; a DXF only
-when its bytes change.
+Every file is written to a temporary file beside its target and moved over it, each only when
+its bytes change.
 
 Importing this package imports no kernel: a kind's writer loads on its first use.
 """
@@ -63,10 +63,6 @@ class Kind:
     suffixes: tuple[str, ...]
     writer: str
     atomic: bool = True
-
-    @property
-    def suffix(self) -> str:
-        return self.suffixes[0]
 
     def write(self, view: "View", path: Path) -> None:
         module, _sep, function = self.writer.partition(":")

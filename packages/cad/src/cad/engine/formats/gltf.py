@@ -1,6 +1,6 @@
 """A GLB read with numpy alone, no kernel: its scene's mesh nodes, each mesh's triangles and the
 materials its primitives wear, in the viewer's frame. What a conversion reads a GLB as
-(``export/mesh_source.py``); the stills read one through OCCT (``glb.py``).
+(``export/mesh_file.py``); the stills read one through OCCT (``glb.py``).
 
 - **Frame**: as the viewer places a GLB (``glbMeshData.js``): a node's placement is the product of
   the nodes' down the scene, its numbers glTF's Y-up metres turned Z up and times 1000, so

@@ -96,7 +96,6 @@ _HEX = r"[0-9A-Fa-f]+(?:-[0-9A-Fa-f]+)*"
 _PART_RE = re.compile(rf"({_REF})")
 _PAD_RE = re.compile(rf"({_REF})\.({_PAD})")
 _NET_RE = re.compile(rf"net:({_QUOTED}|{_BARE_NET})(?:{_POINT})?", re.DOTALL)
-_POINT_RE = re.compile(_POINT)
 _SPOT_RE = re.compile(rf"({_LAYER})?{_POINT}(?:\.\.x({_NUMBER})y({_NUMBER}))?")
 _ITEM_RE = re.compile(rf"({'|'.join(ITEM_KINDS)}):({_HEX}(?:/{_HEX})?)")
 _LAYER_RE = re.compile(_LAYER)

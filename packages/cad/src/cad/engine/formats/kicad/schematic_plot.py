@@ -615,6 +615,6 @@ def _canonical(path: str) -> str:
 def schematic_payload_bytes(path: Path | str, *, sheets: Sequence[str] | None = None, index: bool = True,
                             read: tuple[SchematicIndex, list[str]] | None = None, drawing_sheet: bool = False) -> bytes:
     """The payload as compact JSON bytes, as the viewer's route answers it (``build_schematic_plot``'s
-    ``sheets``, ``index``, ``read`` and ``drawing_sheet``, which the route never asks for)."""
+    ``sheets``, ``index``, ``read`` and ``drawing_sheet``)."""
     return json.dumps(build_schematic_plot(path, sheets=sheets, index=index, read=read, drawing_sheet=drawing_sheet),
                       separators=(",", ":"), ensure_ascii=False).encode("utf-8")

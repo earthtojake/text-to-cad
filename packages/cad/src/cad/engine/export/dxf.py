@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import math
 import re
 import threading
 from dataclasses import dataclass
@@ -447,6 +448,10 @@ def _open_endpoints(entity: Any) -> tuple[tuple[float, float], tuple[float, floa
         return (_point(entity.dxf.start), _point(entity.dxf.end))
     if kind == "ARC":
         return (_point(entity.start_point), _point(entity.end_point))
+    if kind == "ELLIPSE":
+        if abs(abs(entity.dxf.end_param - entity.dxf.start_param) - 2 * math.pi) < 1e-9:
+            return None
+        return (_point(entity.start_point), _point(entity.end_point))
     if kind == "SPLINE":
         try:
             if bool(entity.closed):
@@ -587,7 +592,7 @@ def validate_drawing_document(document: Any, *, drawing: bool | None = None) -> 
                                                f"open LWPOLYLINE on cut layer {layer!r}; close it or move it to a "
                                                "bend/engrave/reference layer"))
             continue
-        if kind in {"CIRCLE", "ELLIPSE"}:
+        if kind == "CIRCLE":
             continue
         ends = _open_endpoints(entity)
         if ends is not None:

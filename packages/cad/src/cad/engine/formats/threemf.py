@@ -311,7 +311,8 @@ def read_3mf(path: Path) -> Model:
                 return made[key]
             body = blocks[name][int(_children(element, "mesh")[0].get("cadgen-block"))]
             start, end = body.find(b"<triangles"), body.rfind(b"</triangles")
-            vertices_body, triangles_body = (body[:start], body[start:end]) if start >= 0 else (body, b"")
+            # The triangles inside their wrapper, whose own tag would read as the first triangle's.
+            vertices_body, triangles_body = (body[:start], body[body.find(b">", start) + 1:end]) if start >= 0 else (body, b"")
             try:
                 points = _table(vertices_body, b"vertex", (b"x", b"y", b"z"), np.float64)
                 if b"p1" in triangles_body or b"pid" in triangles_body:  # optional attributes: one at a time
