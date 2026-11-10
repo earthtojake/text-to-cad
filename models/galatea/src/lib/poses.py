@@ -268,10 +268,12 @@ def _leg(pose, s):
     return {f"{s}_{name}": pose[f"{s}_{name}"] for name in (*LEG_CONTROLS, "toe")}
 
 
-# How long the weight takes to go over one foot, s. It cannot hurry: the pelvis travels 126 mm, and while it
-# slows the floor's push stands ahead of the centre of mass by the braking times the height over gravity, 30 mm
-# when the shift takes 1.5 s. The foot it arrives over is 60 mm wide and its ankle's roll drive steers the push
-# 24 mm either side of its axis, so a quick shift goes on over the outside of the foot. In 3 s it is 8 mm.
+# How long the weight takes to go over one foot, s. The pelvis travels 126 mm, and while it slows the floor's
+# push stands ahead of the centre of mass by the braking times the height over gravity: 30 mm when the shift
+# takes 1.5 s, 8 mm when it takes 3. The foot it arrives over is 60 mm wide and its ankle's roll drive steers the
+# push 24 mm either side of its axis: the quick shift leaves the centre of pressure 11 mm inside the sole's edge,
+# the slow one 19 (`checks/balance.py`). That is as much as a path can answer for. What drives that give under
+# their load then make of it is the simulation's to say (`sim/README.md`).
 SHIFT = 3.0
 POISE_AT = _placement(POSES["poise"], "l")          # the pelvis over the left foot
 POISE_CLEAR = 40.0                                  # how high the right foot goes straight up as its leg begins to fold, mm

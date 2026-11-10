@@ -27,7 +27,11 @@ the point about which the links' weights and their accelerations (each link a po
 at its centre, its acceleration the second difference of its path over STEP either side)
 have no moment, and it must stay PRESSURE inside what is down. A weight shift onto one
 foot in a second and a half balanced at every instant by its centre of mass and put the
-centre of pressure 11 mm from the sole's edge, which the simulation went over.
+centre of pressure 11 mm from the sole's edge; in three seconds it is 19.
+
+This is what a path can answer for: that a robot which follows it exactly stands. Drives
+that give under their load do not follow it exactly, and what comes of that is the
+simulation's to say.
 
 The gait is trodden under a fixed pelvis and is reported, not held to any of this.
 """

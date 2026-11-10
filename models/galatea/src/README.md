@@ -41,7 +41,7 @@ with its pelvis held.
 ```
 cad run src/vendor.py                        # once: RobStride's five STEP files, 53 MB, into vendor/ (Git keeps no CAD file)
 cad run src/galatea.py                       # about three minutes cold; a pose or a motion changed 1.5 s; unchanged 0.1 s
-cad run src/stances.py                       # the nine poses: the first builds the robot, the rest take 2 s each
+cad run src/stances.py                       # the nine poses: the first builds the robot, the rest take 12 s each
 cad run src/fit.py                           # every skin against its mechanism
 cad run src/checks/interference.py --poses   # and the other checks, below
 cad run src/sheet.py waist 1040 1300         # a region from five sides in one picture
@@ -299,11 +299,11 @@ Where a foot is re-placed, the weight goes first. `poise` carries the pelvis 126
 the left foot with both feet down, lifts the right foot straight up, sole level, and
 folds the leg as it clears the floor; `settle` carries the weight over the right foot,
 lifts the left 16 mm, sets it down 67 mm ahead and 48 mm nearer, and only then eases
-into contrapposto and shares the weight out. The shift takes three seconds, and cannot
-hurry: while the body is braked the floor's push stands ahead of the centre of mass, by
-the braking times the height over gravity, and the foot it arrives over is 60 mm wide.
-In a second and a half that is 30 mm, and the simulation went on over the outside of
-the foot.
+into contrapposto and shares the weight out. The shift takes three seconds: while the
+body is braked the floor's push stands ahead of the centre of mass, by the braking
+times the height over gravity, and the foot it arrives over is 60 mm wide. In a second
+and a half that lead is 30 mm and leaves the centre of pressure 11 mm inside the sole's
+edge; in three it is 8 mm and leaves 19.
 
 `checks/balance.py` holds every motion but the gait to all of this, followed in time on
 the foot it never moves: a foot that is down does not move (the most is 0.05 mm, the
@@ -311,10 +311,17 @@ sampling's), no sole goes below the floor, the centre of mass stays at least 20 
 inside what is down, and the centre of pressure (the links' weights and accelerations,
 each link a point mass) at least 15. The squat's least are 62 and 60 mm, the bow's 76
 and 62, the reach's 70 and 66; on one foot `poise` has 27 and 19 and `settle` 27 and 24.
-What the checks do not say is that position drives alone will keep the robot on one
-foot: its ankle's roll drive steers the push 24 mm either side of its axis and no
-further, so standing on one leg is a matter of balance with feedback, which is not in
-this model (`../sim/README.md` has what the simulation makes of each motion).
+What the checks do say is that a robot which follows the path exactly stands. What
+they do not say is that drives will follow it. In the simulation every motion on two
+feet is followed and stands (`../sim/README.md`), and the two that stand on one foot
+are not: the loaded leg's servos give under the weight as it arrives (the leg 1.7 mm
+short, the pelvis a degree over), the centre of mass ends 7 mm outside the ankle's axis
+where the path has it 16 mm inside, and the ankle's roll drive, which steers the push
+24 mm either side of its axis and no further, cannot make that up. With drives that
+hold their angle under load (stiffer loops, or the load's torque fed ahead), an ankle
+roll loop stiffer than the 484 N m/rad at which the robot topples over it, and half the
+pace, the simulation does stand on one leg, with nothing in hand. Balance with feedback
+is what would give it margin, and that is not in this model.
 
 One thing moves that is not the mechanism's: `explode`, an animation of the GLB
 (`cad.build123d.animation`, in `lib/show.py`), in two stages with a hold after each.
@@ -435,6 +442,8 @@ cad run src/film.py still knee 20 --draft        # one frame, 960 x 540, in a fe
 cad run src/film.py shot knee --preview --step 2 # a shot's motion, small and quick
 cad run src/film.py shot knee                    # its frames, 1600 x 900, into tmp/film/knee/; kept, so a run can be resumed
 cad run src/views.py                             # the plain CAD views, into tmp/film/views/
+cad run sim/run.py --film crouch                 # the simulation's clip, tmp/sim/film_clip.mp4 (../sim/README.md)
+cad run src/film.py take sim tmp/sim/film_clip.mp4   # its frames, into tmp/film/sim/
 cad run src/film.py take end wake 22             # the end card: one rendered frame, held
 cad run src/film.py cut                          # tmp/film/galatea.mp4 (needs ffmpeg)
 ```
@@ -447,7 +456,8 @@ as it moves (the knee's linkage, the ankle, the hip, the waist, the arm, the han
 neck and the head's cameras), and all of it crouching; the skins are wiped back on and
 it walks; then the same document with no studio at all, as the CAD viewer draws it
 (`views.py`: solid on the grid, parts exploded, the walk in x-ray); then the
-simulation (`../sim/`); the title.
+simulation (`../sim/`): MuJoCo's own picture of the robot let go over a floor, landing
+and squatting on its own feet, the floor's push drawn at its soles; the title.
 
 What the script does that the GLB alone does not. The pelvis is the mechanism's fixed
 link, so an exported clip crouches and treads in the air: `plant` moves the whole robot,
