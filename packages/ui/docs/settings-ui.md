@@ -1624,9 +1624,10 @@ icon.
 after an update to a release with notes, never on a new person's first run, over the home or a
 file's view once its renderer is up (never a loading page, nor while the host's own notice covers
 the view). It is the stock shadcn Dialog (`primitives/dialog.jsx`, on the `text-ui` scale, no corner
-X): the release's title, its items as a list, each a bold title and a sentence or two in the
-muted text, and one primary button, **Got it**, which has the focus. The button, Escape and a press
-outside each close it and keep it seen for every view of the person's; nothing else is offered.
+X): the release's title, its items as a list, each a bold title and, in the muted text, a few words on
+what the feature is for, then one short example prompt in quotation marks (never a command), and
+one primary button, **Got it**, which has the focus. The button, Escape and a press outside each
+close it and keep it seen for every view of the person's; nothing else is offered.
 
 ## Naming the page
 

@@ -343,11 +343,11 @@ export default {
   "whatsNew.gotIt": "Got it",
   "whatsNew.title": "What's New (v{version})",
   "whatsNew.0.11.boards.title": "KiCad.",
-  "whatsNew.0.11.boards.body": "Design PCBs with KiCad: “Design a 9-key macropad with USB-C and a rotary encoder, route it, and show me the board in 3D.”",
+  "whatsNew.0.11.boards.body": "Design circuit boards with KiCad: “Design a 9-key macropad PCB.”",
   "whatsNew.0.11.blender.title": "Blender.",
-  "whatsNew.0.11.blender.body": "Render images and videos of a model with Blender, from a Python script: `cad run render.py`.",
+  "whatsNew.0.11.blender.body": "Render images and videos of your models with Blender: “Render a turntable video of this part.”",
   "whatsNew.0.11.mujoco.title": "MuJoCo.",
-  "whatsNew.0.11.mujoco.body": "Export a robot model as a MuJoCo description and a URDF: `cad model export <id> robot.xml robot.urdf`.",
+  "whatsNew.0.11.mujoco.body": "Simulate your CAD robots in MuJoCo: “Export this robot arm for MuJoCo.”",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
