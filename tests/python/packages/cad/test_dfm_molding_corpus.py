@@ -29,13 +29,6 @@ from cad.build123d import _dfm_brep
 Box3 = tuple[tuple[float, float, float], tuple[float, float, float]]
 EVERYWHERE: Box3 = ((-1e6, -1e6, -1e6), (1e6, 1e6, 1e6))
 
-# The rules this corpus judges: every one it plants, and the ones a clean part must not trip.
-JUDGED = ("molding.draft_min", "molding.draft", "molding.undercut", "molding.undercut_unreleasable",
-          "molding.wall_min", "molding.wall_max", "molding.thick_section", "molding.wall_transition",
-          "molding.rib_thickness", "molding.rib_height", "molding.boss_wall", "molding.inside_corner_radius",
-          "molding.part_length", "molding.part_width", "molding.projected_area")
-
-
 # --- the parts ---------------------------------------------------------------------------------------------
 
 
@@ -167,6 +160,35 @@ def tray_ribs():
     return part
 
 
+def rib_into_wall():
+    """A clean box (2 deg) with a square-ended rib run 0.1 mm into its drafted walls: buried at the floor, a
+    hair off the walls above it, the gap opening along the pull -- a crevice, no undercut."""
+    box = bd.extrude(bd.Rectangle(60, 40), 30, taper=-2) - \
+        bd.Pos(0, 0, 2) * bd.extrude(bd.Rectangle(56, 36), 28, taper=-2)
+    return box + bd.Pos(0, 0, 5) * bd.Box(1.2, 36.2, 6)
+
+
+SLOTS_X = (-25.0, 5.0, 30.0)
+
+
+def housing():
+    """A 120 x 80 x 30 housing, 2 mm walls drafted 2 deg: three ribs across and two along (1.2 mm, 0.6 of the
+    wall), crossing each other and run into the walls; two cored bosses; three slots through its +y wall, which
+    one slide along +y forms."""
+    up = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
+    part = bd.extrude(bd.Rectangle(120, 80), 30, taper=-2) - \
+        bd.Pos(0, 0, 2) * bd.extrude(bd.Rectangle(116, 76), 28, taper=-2)
+    for x in (-40.0, 0.0, 40.0):
+        part += bd.Pos(x, 0, 2) * bd.Box(1.2, 76, 8, align=up)
+    for y in (-20.0, 20.0):
+        part += bd.Pos(0, y, 2) * bd.Box(116, 1.2, 8, align=up)
+    for x in (-20.0, 20.0):
+        part += bd.Pos(x, 0, 2) * (bd.Cylinder(3, 8, align=up) - bd.Cylinder(1.3, 8, align=up))
+    for x in SLOTS_X:
+        part -= bd.Pos(x, 40, 18) * bd.Box(1.5, 10, 8)
+    return part
+
+
 def assembly():
     """Two parts: ``plain`` (no draft) and ``drafted`` (3 deg), side by side."""
     plain = bd.Pos(-30.0, 0.0, 0.0) * bd.Box(20.0, 20.0, 10.0, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -206,6 +228,7 @@ CORNER: Box3 = _box((1.0, 1.0, -0.5), (3.0, 3.0, 20.5))
 INNER_EDGES: list[Box3] = [_box((-29, -19, 1), (29, 19, 21))]
 HOOKS: list[Box3] = [_box((-26.0, -5.0, -11.0), (-20.0, 5.0, 1.0)), _box((20.0, -5.0, -11.0), (26.0, 5.0, 1.0))]
 TRAY_RIBS: list[Box3] = [_box((-11.5, -13, 1.5), (-8.5, 13, 7.5)), _box((8.5, -13, 1.5), (11.5, 13, 7.5))]
+SLOTS: list[Box3] = [_box((x - 1.5, 37.0, 13.0), (x + 1.5, 42.0, 23.0)) for x in SLOTS_X]
 
 CASES = [
     Case("clean_tray", tray, absent=CLEAN),
@@ -262,6 +285,13 @@ CASES = [
                                       "molding.thick_section", "molding.wall_min", "molding.wall_max")),
     Case("assembly", assembly, expect={"molding.draft_min": [_box((-40.5, -10.5, -0.5), (-19.5, 10.5, 10.5))]},
          absent=("molding.undercut",)),
+    # nothing planted that traps: a rib's end a hair off a drafted wall failed this part on two samples
+    Case("rib_into_wall", rib_into_wall, absent=("molding.undercut", "molding.undercut_unreleasable",
+                                                 "molding.rib_thickness", "molding.wall_min", "molding.wall_max")),
+    # every rib's end a crevice, every crossing a rib standing on the floor, every slot the one slide's
+    Case("housing", housing, expect={"molding.undercut": SLOTS},
+         absent=("molding.undercut_unreleasable", "molding.rib_thickness", "molding.wall_min", "molding.wall_max",
+                 "molding.draft_zero")),
     Case("tiny_block", lambda: bd.Box(1.0, 1.0, 0.6, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)),
          expect={"molding.draft_min": [EVERYWHERE], "molding.wall_min": [EVERYWHERE]}, absent=("molding.undercut",)),
     # 2 x 1 m: a press's and a mold's size are a shop's, compared with the measurements: no general rule fails it
@@ -375,6 +405,19 @@ class MoldingCorpusTest(unittest.TestCase):
         false = [found for tally in self.tallies.values() for found in tally.false]
         self.assertEqual(false, [])
 
+    def test_the_verdict_is_the_floors_alone(self) -> None:
+        """OK: nothing a general shop sends back (warnings: made, at a cost). FAILED: a floor broken -- a feature
+        nothing releases, a wall deeper than 10 mm with no draft at all (the brackets' 20 mm legs, the tray's
+        walls), a section over twice the resin's recommended maximum (a 10 mm block or pad in ABS). Every other
+        part of the corpus, whatever it is warned of, is OK."""
+        failed = {name: sorted({finding.code for finding in result.findings if finding.severity == "error"})
+                  for name, result in self.results.items() if not result.ok}
+        self.assertEqual(failed, {
+            "sealed_void": ["molding.draft_zero", "molding.undercut_unreleasable", "molding.wall_too_thick"],
+            "undrafted_tray": ["molding.draft_zero"], "sharp_bracket": ["molding.draft_zero"],
+            "round_bracket": ["molding.draft_zero"], "thick_pad": ["molding.wall_too_thick"],
+            "assembly": ["molding.wall_too_thick"]})
+
     def test_every_part_measured_whole(self) -> None:
         for name, result in self.results.items():
             with self.subTest(part=name):
@@ -396,6 +439,12 @@ class MoldingCorpusTest(unittest.TestCase):
                 self.assertLess(hole["stroke_mm"], 2.3)
         result = self.results["snap_lip"]
         self.assertEqual(release("snap_lip", LIP), ["lifter"])
+        # three slots, three features, one slide: a part's side actions are its distinct directions
+        housed = self.results["housing"].measurements["undercuts"]
+        self.assertEqual({(item["release"], tuple(item["side_actions"])) for item in housed["items"]},
+                         {("side_action", ("+y",))})
+        self.assertEqual((housed["undercut_count"], housed["side_action_count"], housed["unreleasable_count"]), (3, 1, 0))
+        self.assertGreater(housed["crevice_count"], 0)
 
     def test_the_parting_and_the_clamp(self) -> None:
         clean = self.results["clean_tray"].measurements

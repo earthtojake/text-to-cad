@@ -888,7 +888,26 @@ refused: its chords misread draft (a 2 deg cone's read 1.998), its regions merge
 joins, and its tessellation folds and slivers read as undercuts -- check the STEP or the model. A part of one
 solid is measured in its own frame about the pull (its long direction in the parting plane along the plane's
 first axis; `frame` says the turn), and every place and side action is reported in the world: a part turned
-about the pull in its model reads the same figures.
+about the pull in its model reads the same figures. Moved, or turned any way with its pull, it is the same
+part and reads the same verdict.
+
+**The pull.** `--pull` not given is `z`, and the result says so (`pull_given` false; the summary's "the default
+pull"). The part is measured along the pull as given, never along one the check prefers: a part that stands
+tilted against the pull is measured tilted. But every check of one part of one solid asks whether another pull
+does better (`pull_check`, below), and warns, naming it (`pull_better`).
+
+**The verdict.** A warning is a recommendation of a published guide broken: the part is made, at a cost or a
+risk. An error is a floor: the part cannot be molded as drawn, or a general shop sends it back --
+
+- a feature nothing releases (`molding.undercut_unreleasable`): geometry, no opinion;
+- no draft at all on a wall or a rib deeper than 10 mm (`molding.draft_zero`);
+- a wall under half the resin's recommended minimum or over twice its recommended maximum; with no resin of
+  the table named, outside every resin's recommended range (`molding.wall_too_thin`, `molding.wall_too_thick`).
+
+The last two are **text-to-cad's own floors**: the guides recommend (0.5 to 2 deg of draft, a wall range by
+resin) and state no limit, so each floor cites `text-to-cad` as its source, never a publisher, and its rule's
+note says what it rests on (`DRAFT_FLOOR_DEPTH_MM`, `WALL_FLOOR_SHARE`, `WALL_CEILING_MULTIPLE` in
+`molding.py`). A shop's own limits are read against the measurements.
 
 On the B-rep a face's surface is its kernel type, and a B-spline or Bezier face that IS a plane, cylinder,
 cone, sphere or torus (within a millionth of its size, 1e-4 mm at most: `_dfm_brep.surface`) is read as that
@@ -900,54 +919,64 @@ their fillets, ribs and bosses unrecognised.
 
 | family | what | how | items (fields the rules read in **bold**) |
 |---|---|---|---|
-| `draft` | each wall face's draft along the pull and the way it opens | B-rep: plane exact, cylinder/cone with axis along the pull exact (0 / half-angle), other faces the least over points sampled ON the surface and along its edges (a round tangent to a wall square to the pull reaches 0 on that edge, which no sample inside it lands on) | `location`, **`draft_deg`**, `area_mm2`, **`opens`** (`+pull`, `-pull`, `none` = zero draft, `split` = the parting line crosses it), `surface`, `exact`, `depth_mm`, `xyz`, `feature` (`wall`; `rib`/`snap`: a rib's side, judged by `molding.rib_draft`; `undercut`: a face an undercut traps, formed by its release, judged by the undercut rules) |
-| `undercuts` | trapped features and what releases them | points on every face shot along the way their face opens (zero-draft: both ways); blocked = trapped; a point on another solid of the same part (two solids touching, not fused) is no surface and never trapped; touching trapped faces = one group, split where its trapped points lie apart (three sample spacings): two snaps under one lid are two features. Release: rays along 8 slide directions in the parting plane + the feature's mean lateral normal + each tilted 45 deg (angled slide); fewest slides covering it (each point assigned to its shortest stroke); else a lifter (short lateral move then a pull, stroke <= 1/4 part size); else a collapsible core (each point freed radially, no common direction); else `none`. Depth (`meshops_molding.interference`; against the pull at 48 of the feature's tested points, against a slide at all of them, searched up to 0.2 mm -- past it, "more than"; a pull only ranked, not chosen, has no depth against it): per point the least offset square to a way out (its normal's part square to it, or 8 round it) from which a ray along the way leaves the part, the material between bent past; `depth_mm` against the straight pull for every feature (`depth_limited` where 1/4 part size frees none), `slide_depth_mm` against the best slide for one nothing releases. A feature `depth_mm` at most `BUMP_OFF_MM` (0.1 mm, text-to-cad's own figure: Protolabs gives none) deep, or one nothing releases whose lip against a slide is, is `bump_off` (`bump_off_over` the pull or a slide, `interference_mm`) | `location` (the mostly-trapped face), `faces`, **`trapped_area_mm2`**, `kind` (external/internal), **`release`** (side_action/lifter/collapsible_core/bump_off/none), `leaning` (its faces), **`depth_mm`**, `slide_depth_mm`, `interference_mm`, `side_actions` (`+x`, ...), `side_action_count`, `angled`, **`stroke_mm`**, **`height_mm`** (along pull), **`width_mm`**, `blocked_by`; scalars: `candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `collapsible_core_count`, `bump_off_count`, `unreleasable_count`, ..., `trapped_faces` (the faces it mostly traps) |
+| `draft` | each wall face's draft along the pull and the way it opens | B-rep: plane exact, cylinder/cone with axis along the pull exact (0 / half-angle), other faces the least over points sampled ON the surface and along its edges (a round tangent to a wall square to the pull reaches 0 on that edge, which no sample inside it lands on) | `location`, **`draft_deg`**, `area_mm2`, **`opens`** (`+pull`, `-pull`, `none` = zero draft, `split` = the parting line crosses it), `surface`, `exact`, `depth_mm`, **`zero_draft_depth_mm`** (how far along the pull it runs with no draft: its whole depth where its draft is one figure, else the span of its points that read none -- a dome's rim, tangent to the pull along a line, has none), `xyz`, `feature` (`wall`; `rib`/`snap`: a rib's side, judged by `molding.rib_draft`; `undercut`: a face an undercut traps, formed by its release, judged by the undercut rules) |
+| `undercuts` | trapped features and what releases them | points on every face shot along the way their face opens (zero-draft: both ways); blocked = trapped -- but a point whose own normal meets another face within three ray offsets (0.03 mm at most) stands in a **crevice** and is never trapped: stepped off its face to cast its rays it lands in the other face's material (a rib's square end run 0.1 mm into a drafted wall read trapped both ways and unreleasable); the crevices are said (`crevices`). A point on another solid of the same part (two solids touching, not fused) is no surface and never trapped; touching trapped faces = one group, split where its trapped points lie apart (three sample spacings): two snaps under one lid are two features. Release (`meshops_molding.classify_undercut`), the first that holds: (1) plain slides -- the feature's **own directions** in the parting plane (a bore's axis, a slot's run where two of its planes meet, a pocket floor's normal: exact, where the grid is not) and eight round the plane -- the fewest covering it, four at most; among slides freeing as many points, the one whose points are nearest their way out of the part's box (a hole through the -x wall is the -x slide's, though a ray along +x leaves through the hole opposite); (2) with an angled slide: one of its own directions up to 45 deg out of the plane (`angled`); (3) a lifter (a short lateral move then a pull, stroke <= 1/4 part size); (4) a collapsible core (each point freed so, no common direction); (5) a slide guessed at 45 deg to the plane (`angled`); else `none`. One read `none` on fewer than 12 trapped points is sampled again four times as densely beside them and classified on those: under two trapped, it was a sample's reading and is dropped (`unconfirmed_count`). `kind` is the geometry's, whatever releases it: `external` where a third of its points have a straight line out of the part along a plain slide or one of its own directions, else `internal`. A slide's `stroke_mm` clears its points one way along the pull (a slide stands in one half: the way that asks less) and runs on to the end of each face it serves where that lies within two sample spacings of the face's deepest point. Depth (`meshops_molding.interference`; against the pull at 48 of the feature's tested points, against a slide at all of them, searched up to 0.2 mm -- past it, "more than"; a pull only compared, not chosen, has no depth against it): per point the least offset square to a way out from which a ray along the way leaves the part, the material between bent past; `depth_mm` against the straight pull (`depth_limited` where 1/4 part size frees none), `slide_depth_mm` against the best slide for one nothing releases. A feature `depth_mm` at most `BUMP_OFF_MM` (0.1 mm, text-to-cad's own figure: Protolabs gives none) deep, or one nothing releases whose lip against a slide is, is `bump_off` (`bump_off_over` the pull or a slide, `interference_mm`) | `location` (the mostly-trapped face), `faces`, **`trapped_area_mm2`**, **`unreleasable_area_mm2`** (the area where `release` is none, 0 where it is released, no figure where it was not searched: not measured), `kind` (external/internal), **`release`** (side_action/lifter/collapsible_core/bump_off/none/unknown), `leaning` (its faces), `depth_mm`, `slide_depth_mm`, `interference_mm`, `side_actions` (`+x`, ...), `side_action_count`, `angled`, **`stroke_mm`**, `height_mm` (along pull), `width_mm`, `blocked_by`, `trapped_faces` (the faces it mostly traps), `confirmed_points`; scalars: `candidate_area_mm2`, `undercut_count`, **`side_action_count`** and `side_action_directions` (the part's distinct slide directions, within a degree: three slots along +y are one side action), `lifter_count`, `collapsible_core_count`, `bump_off_count`, `unreleasable_count`, `unsearched_count`, `unconfirmed_count`, `crevice_count`, `crevice_area_mm2`, `crevices` (each `faces` [a, b], `area_mm2`, `gap_under_mm`, `xyz`) |
 | `touching` | solids of one part that touch without being fused | each sampled point stepped off its face classified in the part's other solids (in or on: a contact); parts of 2 to 24 solids | `location`, `part`, `solids` [i, j], `faces`, `contact_area_mm2`, `xyz` (present only where some touch) |
 | `thickness` | the wall: nominal, thin, thick, transitions | rolling ball: at each sampled point the diameter of the largest ball tangent there that no surface triangle cuts into (exact per triangle: corners, edges, insides; a needle's inside -- a triangle narrower than a thousandth of its longest side, a tall corner strip's tessellation, whose plane is its corners' rounding -- left to its edges: one held a 0.015 mm ball under a 2 mm wall), capped by the exact ray straight through. Points whose ball is held by a face across a convex edge read low and are left out of medians; a narrow face -- most of its balls so held (rib top, plate end) -- takes its broad neighbours' wall, a face merely narrow reads its own. The 32 thinnest faces are then refined to the exact least distance to a face across (`BRepExtrema_DistShapeShape`; the faces whose box comes nearer than the face's least sampled wall, not its neighbours or a face sharing a corner), where the segment leaves the face within 45 deg of its inward normal, the face across looks on along it and a ray along it meets that face first: a 0.6 mm wall between two samples (a cut grazing a drafted corner) reads 0.6, never its neighbours' 2. The faces whose thickest sampled ball reaches 1.2 x nominal and is under the thick-section limit -- where the verdict could turn -- (32 at most) have that thickest refined over the face: a pattern search over its own (u, v) from its two thickest samples, their trials solved together against the face's neighbourhood, a step halved where none gains 1% of nominal, settled at a hundredth of the face's span or once a ball reaches the limit, trials strictly inside the face and no ball held across a convex edge of it, solved as the samples are -- four alike blind-hole floors read their true 4.0 in every placement (sampled: 2.6 to 3.1, the thick-section count 2 to 5) | `location`, **`thickness_mm`** (area median, or the refined least where thinner), `min_mm` (p10, or the refined least), `refined`, `max_mm`, **`ratio_to_nominal`** (max / nominal), `thin_ratio`, **`feature`** (`wall`, or `rib`/`snap`/`boss`: a feature's face, judged by its own rules, not the wall's range), `xyz` (the thickest point); scalars `nominal_mm` (area median of the faces' walls), `min_mm`, `max_mm`, `ratio_max_nominal`, `thick_sections` (> 1.5 x nominal) |
 | `transitions` | abrupt changes of wall | read on the stepped side (`meshops_molding.steps`): two flat faces facing the same way at two offsets, joined by a chain of at most three faces none parallel to them (a pad's side, a chamfer, a fillet), whose walls differ by a quarter of the nominal or more and by about their offset (one face behind both: not a rib's top, not a wall's rim); its run is the chain's reach across, square to the faces, from one seam to the other. A free-form face no step takes in: the rolling ball's steepest pair of points within four sample spacings whose walls differ by half the nominal (`basis` `ball`) | `location` (the chain's first face), **`transition_ratio`** (run over the change: a vertical step 0, a chamfer its run over its rise), `min_mm` and `max_mm` (the two walls), `change_mm`, `length_mm` (the run), `basis` (`step` or `ball`), `xyz`, `at_xyz` (a point on each seam) |
-| `ribs` | thin slabs standing on a wall | two opposite planar faces (within 12 deg) whose inward rays come out of each other, both meeting one base plane at a concave edge or a concave fillet, height >= thickness, length >= 1.5 x thickness; base = the plane it is shortest from. Its ends (faces joining both sides, no wider than the rib) are its roots too: their fillets are the rib's, not corners, and `base_fillet_mm` is the least of sides' and ends'. A rib a trapped face touches (one of its own, or one beside them no larger than its side, not its base) is a snap arm, the face its barb. | **`kind`** (`rib`, `snap`), `barb`, **`thickness_ratio`** (root / base wall), **`height_ratio`** (height / wall), **`height_to_thickness`**, **`base_fillet_ratio`** (fillet / rib), **`base_fillet_wall_ratio`**, **`gap_to_thickness`**, **`gap_to_wall`** (gap = median ray to the next face), **`draft_deg`**, `thickness_mm`, `height_mm`, `length_mm`, `base_fillet_mm` |
+| `ribs` | thin slabs standing on a wall | two opposite planar faces (within 12 deg) whose inward rays come out of each other, both meeting one base plane at a concave edge or a concave fillet, height >= thickness, length >= 1.5 x thickness; base = the plane it is shortest from, but never another slab's side where there is another base: ribs that cross stand on the floor, not on each other (two 4.8 mm apart and 6 tall read the crossing rib's 1.2 mm as their wall). Its ends (faces joining both sides, no wider than the rib) are its roots too: their fillets are the rib's, not corners, `base_fillet_mm` is the least of sides' and ends', `draft_deg` the least of sides' and ends', and in `draft` they are the rib's faces (`feature` rib), judged once with it. A rib a trapped face touches (one of its own, or one beside them no larger than its side, not its base) is a snap arm, the face its barb. | **`kind`** (`rib`, `snap`), `barb`, `ends`, **`thickness_ratio`** (root / base wall), **`height_ratio`** (height / wall), **`height_to_thickness`**, **`base_fillet_ratio`** (fillet / rib), **`base_fillet_wall_ratio`**, **`gap_to_thickness`**, **`gap_to_wall`** (gap = median ray to the next face), **`draft_deg`**, `thickness_mm`, **`height_mm`**, `length_mm`, `base_fillet_mm` |
 | `bosses` | cylindrical stands, cored or solid | a convex cylinder, or a cone drafted 5 deg or less, standing on a plane square to its axis (concave edge or fillet), with the largest coaxial concave cylinder or cone inside it reaching half its height; radii at the base | `od_mm`, `id_mm`, `boss_wall_mm` (R - r, or 2R solid), **`wall_ratio`** (boss wall / base wall), `od_to_id`, `height_mm`, `height_to_od`, **`base_fillet_mm`** (its root's: 0 sharp), `hole_floor_above_base_mm` |
 | `corners` | internal corners | every concave edge with no fillet (radius 0, `edge` ref) and every concave fillet with two tangent joins: a cylinder's or torus's radius, a free-form blend's from its curvature at its middle (concave where its sampled normals turn toward each other); rib (sides and ends) and boss roots excluded | `radius_mm`, `sharp`, **`ratio_to_wall`** (radius / thinner wall meeting there), `wall_mm`, `edge`, `angle_deg` |
 | `projection` | area along the pull | the part triangulated (each triangle naming its face), projected, cells covered on a raster 2000 across the part | per part: **`projected_area_mm2`**, `area_error_mm2` (half the outline's cells), `raster_resolution_mm`, `depth_along_pull_mm`, `span_major_mm`, `span_minor_mm`, `volume_mm3` |
 | `envelope` | size against a mold | from the projection and the parting | per part: **`span_major_mm`**, **`span_minor_mm`**, **`depth_along_pull_mm`**, **`depth_from_parting_mm`**, `volume_mm3` |
 | `parting` | flat parting plane? | outline pieces within 3 cells of the projection's OUTER outline (a hole through the part along the pull is a shut-off: its rim is no parting line): edges where a +pull face meets a -pull face, zero-draft walls (the line may run anywhere up them), curved faces turning through the pull (sphere centre, horizontal cylinder axis, ...); undercut faces left out (a slide forms them). Flat when every edge/turn is level at one height every wall spans | scalars `flat_parting_possible`, `parting_plane_height_mm`, `parting_plane_range_mm`, `depth_above_mm`, `depth_below_mm`, `depth_from_parting_mm`, `off_plane_count`; items: `kind`, `low_mm`, `high_mm`, `on_plane` |
 | `clamp` | clamp force estimate (added by the type side) | area (in2) x factor (tons/in2, Moldminds by resin; unknown: 2-5, estimated at 3) x cavities x 1.15 | per part `tons`, `tons_low`, `tons_high`, `kN`, `tonnes`; `factor_source` |
-| `pulls` (`--candidates`) | x, y, z and the principal axes ranked (`molding.ranked`: fewest unreleasable, least undercut area, fewest side actions, least zero-draft area -- areas within a hundredth of the largest wall tie -- then the most draft at its least, a flat parting first); `pull_check` holds the same where the pull looks wrong (below), for the hint | the families above per axis (fewer samples) | `undercut_candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `unreleasable_count`, `zero_draft_wall_area_mm2`, `min_wall_draft_deg`, `flat_parting`, `projected_area_mm2`, `depth_from_parting_mm` |
+| `pulls` (`--candidates`) | x, y, z and the principal axes that are the part's own (one whose moment another shares is any direction of their plane -- a cube's three, a round part's two -- and is left out) ranked (`molding.ranked`: fewest unreleasable, least undercut area, fewest side actions, least zero-draft area -- areas within a hundredth of the largest wall tie -- then the most draft at its least, a flat parting first) | the families above per axis (fewer samples) | `undercut_candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `unreleasable_count`, `zero_draft_wall_area_mm2`, `min_wall_draft_deg`, `flat_parting`, `projected_area_mm2`, `depth_from_parting_mm` |
+| `pull_check` | does another pull do better than the one measured? (one part of one solid; an assembly's parts each open their own way) | `chosen` is the report's own figures for the measured pull -- one reading of it, never a second. x, y, z and the principal axes are read on the same sampled points, each only as far as it can still do better (`molding.dominates`: no worse in features nothing releases, trapped area, actions, zero-draft wall and a flat parting -- areas within a hundredth of the wall tie -- and better in one): its draft first (no ray), then what it traps, then what releases that, then its parting (`measured`: draft, trapped, released, full). A pull nothing can beat -- nothing trapped, no wall without draft, a flat parting -- reads no other pull at all | `chosen`, `candidates` (each `pull`, `axis` in the world, `measured`, the figures read so far), `better` (the name of the first that does better as `ranked` ranks them, or null), `note` |
 
 Kept from today's report: `draft` scalars (`wall_area_mm2`, `zero_draft_wall_area_mm2`, `largest_zero_draft_faces`,
 `min_wall_draft`, `wall_draft_histogram_mm2`, `wall_area_by_opening_mm2`, ...), `undercuts` scalars
 (`candidate_area_mm2`, `largest_candidate_faces`; `unintersected_rays` and
 its note where the kernel failed to intersect a ray with a face -- that crossing is not found, the family is
-measured all the same), `projection`, `scale`. Fact findings: `zero_draft_walls`,
-`undercut_candidates` (now with feature counts; both **info** sums of what the rules judge per face and per
-feature, each naming the rule that judges it -- warnings only where they say the pull may be the wrong one),
+measured all the same), `projection`, `scale`, `pull_given`. Fact findings: `zero_draft_walls` and
+`undercut_candidates` (both **info**: sums of what the rules judge per face and per feature, each naming the
+rule that judges it; the second counts the part's side actions by direction),
+`pull_better` (warning: another pull does better than the one measured, named with its axis and both pulls'
+figures, the hint its `--pull`; it says where the measured pull was the default),
+`crevices` (info: where two faces stand closer than steel can stand between them -- the samples that met one
+say where one is, not every one there is; no undercut),
+`undercuts_unsearched` (warning: features whose release the part's ray budget did not reach; the unreleasable
+rule counts them not measured),
+`occurrences_measured_once` (warning: a part that occurs several times in the document is measured where its
+first occurrence stands; one turned another way against the pull is not judged -- check the part alone),
 `solids_touching` (warning: names the part's solids that touch and says to fuse them; their contact is
 left out of draft and undercuts, and the part's `several_bodies` is then not said),
 `rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (also for a multi-part document, and a
-warning for a part of several solids: they shadow each other), `zero_draft_walls` and `undercut_candidates`
-(their hints: when half the wall area or more reads zero draft, or a quarter of the surface or more is
-trapped -- an engineering trigger, no source's -- the pull may be the wrong one; on one part of one solid the
-pulls are then ranked, `pull_check` (the cost of a `--candidates` run), and the hint names the one it ranks first),
-`stepped_parting` (new, warning), `resin_unknown` (info), `clamp_estimate` (info), `thickness_unmeasured`.
+warning for a part of several solids: they shadow each other),
+`stepped_parting` (warning), `resin_unknown` (info), `clamp_estimate` (info), `thickness_unmeasured`.
 
 ### Rules (each rule's id is the finding's code)
 
 Sources, each cited as the evidence for general practice: Hubs `https://www.hubs.com/guides/injection-molding/`;
 Protolabs design guidelines
-`https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/`;
+`https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/` (its wall
+and draft tables read again on 2026-11-10: every row as below);
 Protolabs uniform-wall tip `https://www.protolabs.com/resources/design-tips/improving-part-design-with-uniform-wall-thickness/`;
 Xometry ribs `https://www.xometry.com/resources/injection-molding/plastic-ribs-for-injection-molding-design/`;
-Moldminds clamp calculator `https://moldminds.com/clamp-force-calculator/` (all accessed 2026-11-03; the
-rules' version 2026-11-08).
+Moldminds clamp calculator `https://moldminds.com/clamp-force-calculator/` (the others accessed 2026-11-03; the
+rules' version 2026-11-10). A floor no guide states cites `text-to-cad` (its own feasibility floor, no
+published guide's): its message never names a publisher as the source of text-to-cad's number.
 
 | rule id | field | limit (severity; source) |
 |---|---|---|
-| `molding.draft_min` | draft_deg min, a wall's face (a rib's sides are `rib_draft`'s, a face an undercut traps its release's) | 0.5 warning (Protolabs' table: "VERTICAL FACES 0.5°", "MOST SITUATIONS 2°"; only its shut-off and texture rows are labelled MINIMUM, so it is a recommendation) |
+| `molding.draft_zero` | draft_deg min `--zero-tol` (0.05), a wall's face that runs over 10 mm along the pull with no draft (`zero_draft_depth_mm`), and a rib over 10 mm tall, judged once as a rib | **error**; text-to-cad's own floor: the guides recommend draft and say what none does (Hubs: "Parts with vertical walls (and no draft angle) are most prone to drag marks"), none gives a depth under which none is accepted |
+| `molding.draft_min` | draft_deg min, a wall's face (a rib's sides and ends are `rib_draft`'s, a face an undercut traps its release's) | 0.5 warning (Protolabs' table: "VERTICAL FACES 0.5°", "MOST SITUATIONS 2°"; only its shut-off and texture rows are labelled MINIMUM, so it is a recommendation) |
 | `molding.draft` | draft_deg min, a wall's face, as draft_min | 2 warning (Hubs "A minimum draft angle of 2° is recommended."; Protolabs "Most situations: 2°"; Hubs' 1-2 deg is a textured face's extra) |
-| `molding.undercut` | trapped area, release side_action/lifter/core; says its leaning faces and depth against the pull | warning (Hubs) |
+| `molding.undercut` | trapped area, release side_action/lifter/core (or not searched); says its leaning faces, what releases it and the stroke | warning (Hubs) |
 | `molding.undercut_bump_off` | trapped area, release bump_off; says the lip's depth | warning (Protolabs' bumpoff tip: a flexible resin, TPE, unfilled PE or PP, over a ramped or rounded leading edge; the 0.1 mm depth is text-to-cad's own figure) |
-| `molding.undercut_unreleasable` | trapped area, release none; says its depth against the pull and its best slide, over 0.1 mm | error |
+| `molding.undercut_unreleasable` | unreleasable_area_mm2, release none (or not searched: not measured); says its depth against the pull and its best slide, over 0.1 mm | **error** |
 | `molding.wall_min` / `wall_max` | thickness_mm (the face's wall, `feature` wall: a junction's thickest point is thick_section's) by `--material` | the wall table by resin (Protolabs), warning |
+| `molding.wall_too_thin` / `wall_too_thick` | the same figure | **error**; text-to-cad's own floors: under 0.5 of the resin's recommended minimum, over 2 times its recommended maximum; with no resin of the table named, under the least minimum of any resin (0.508 mm) or over the greatest maximum (25.4 mm) |
 | `molding.thick_section` | ratio_to_nominal max 1/0.6 | warning (Protolabs 40-60%) |
 | `molding.wall_transition` | `transitions`.transition_ratio min 3 | warning (Hubs) |
 | `molding.rib_thickness` | thickness_ratio max 0.6 | warning (Xometry) |
@@ -966,19 +995,34 @@ its shot volume and its side actions' travel are a shop's, read against the meas
 
 The wall table by resin (Protolabs', in inches, converted to mm): ABS 0.045-0.140, acetal 0.030-0.120, acrylic 0.025-0.500,
 LCP 0.030-0.120, nylon 0.030-0.115, PC 0.040-0.150, polyester (PBT, PETG) 0.025-0.125, PE 0.030-0.200,
-PP 0.035-0.150, PS 0.035-0.150 PPS 0.020-0.180, polyurethane 0.080-0.750, long-fiber reinforced 0.075-1.000 (HDPE and LDPE read polyethylene's row).
+PP 0.035-0.150, PS 0.035-0.150, PPS 0.020-0.180, polyurethane 0.080-0.750, long-fiber reinforced 0.075-1.000 (HDPE and LDPE read
+polyethylene's row; PBT and PETG its "Polyester" row). A resin with no row (PC/ABS, TPU, glass-filled nylon,
+PEEK) has no range: `resin_unknown` says its walls are not judged by resin, and only the no-resin floors apply.
+
+A figure at its limit is at it, not past it: a ratio a rule reads (a corner's radius over its wall, a rib's
+thickness over the wall it stands on, a section over the nominal wall) is of lengths at the precision they are
+measured to, a micron -- a 1 mm fillet on a wall that reads 2.00001 is a ratio of 0.5, Hubs' limit, not 0.499997.
 
 ### What it cannot measure
 
 - A mesh at all (STL, 3MF, GLB): refused, check its STEP or model. A free-form fillet's radius is read at its
   middle (a variable one reads one figure).
 - Texture draft (no texture option), tall-feature extra draft (Hubs +1 deg / 25 mm over 50 mm), shut-off
-  draft (3 deg), stripping undercuts (lead angle, 5% of diameter), a snap's barb, living-hinge proportions,
+  draft (3 deg) -- the rule set's note says they are not judged --, stripping undercuts (lead angle, 5% of
+  diameter), a snap's barb, living-hinge proportions,
   threads, boss OD against a screw (no screw size), gating, weld lines, filling, cooling, warpage, shrinkage.
+- The pull is the one given: a part tilted against it is measured tilted (a square box a degree off the pull
+  reads its walls drafted a degree, half of them the wrong way). `pull_better` names a pull that does better
+  where one of those compared does; the part's own axis is not looked for beyond them.
+- A part that occurs several times in a document is measured once, where its first occurrence stands
+  (`occurrences_measured_once`); an occurrence turned another way against the pull is not judged.
 - The undercut test samples points (2400 per part, at least 12 a face): a feature smaller than the point
-  spacing can be missed; the lifter stroke is capped at a quarter of the part; an undercut freed only by a
-  slide in a direction other than the 25 tried reads `none`.
-- A side action's travel is to where the pull clears, not including the slide's own clearance.
+  spacing can be missed; the lifter stroke is capped at a quarter of the part; a slide is tried along the
+  feature's own directions (its cylinders' axes, its planes' normals and the lines they meet along), eight
+  round the parting plane and, last, those tilted 45 deg: a free-form pocket that opens along none of them reads
+  `none`. A crevice is found where a sample meets one, not everywhere one is.
+- A side action's travel is to where its points clear the part one way along the pull, not including the
+  slide's own clearance.
 - A component model whose contacts are fused into one solid with its housing (a KiCad connector) reads its
   pins as walls and ribs and its contact slots as undercuts: check the housing alone. Contacts kept as their
   own solids are said (`several_bodies`).
@@ -991,8 +1035,12 @@ Each face's points are chosen by area before they are mapped to the surface, abo
 read at a fixed number of points whatever the face count (a small face of a part of thousands takes its broad
 neighbours' wall); rays along one direction look up a grid of the faces' box shadows. The undercut release search
 spends at most 200000 rays a part, largest features first; a feature left over reads release `unknown`, is counted
-in `unsearched_count` and is still judged by `molding.undercut`. Between world-axis slides freeing about as many
-points (within a fiftieth), the first in the candidates' order is taken, +x before +y. Each part's projection
+in `unsearched_count`, is still judged by `molding.undercut`, and is counted not measured by
+`molding.undercut_unreleasable` (`undercuts_unsearched` says so). Among slides freeing about as many points
+(within a fiftieth) and as near their way out (within a tenth), the first in the order they are tried is taken,
++x before +y. The pull check reads the other pulls on the points already sampled, each only as far as it can
+still do better: nothing for a pull no other can beat, a draft pass (no ray) for one whose candidates leave
+more wall without draft. Each part's projection
 raster is read for its parting line as soon as it is made and dropped: an assembly's rasters held together were
 half of a 107-part check's 1.9 GB.
 

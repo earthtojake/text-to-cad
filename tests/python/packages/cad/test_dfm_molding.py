@@ -136,11 +136,42 @@ class DraftTest(unittest.TestCase):
             face = _face(result, bd.Box(20, 20, 10), failure["location"])
             self.assertAlmostEqual(abs(face.normal_at().Z), 0.0, places=9)
         # Protolabs' 0.5 deg is a recommendation ("VERTICAL FACES 0.5"; only its shut-off and texture rows are
-        # minimums): a warning, so zero draft alone does not fail the check.
-        self.assertTrue(result.ok)
-        self.assertEqual({f.severity for f in result.findings if f.code == "molding.draft_min"}, {"warning"})
+        # minimums): a warning, so zero draft on a wall this shallow does not fail the check.
+        self.assertEqual({f.severity for f in result.findings if "draft" in f.code and f.code.startswith("molding.")},
+                         {"warning"})
         hint = next(f.hint for f in result.findings if f.code == "molding.draft_min")
         self.assertIn("+z back into the material above the parting line", hint)
+
+    def test_no_draft_at_all_fails_a_deep_wall_and_a_tall_rib_and_says_whose_floor_it_is(self) -> None:
+        # An open box with square walls, 2 mm thick: 8 mm deep it is warned (the guides' recommendation), 20 mm
+        # deep it cannot be sent to a shop as drawn. The floor is text-to-cad's own: no guide is cited for it.
+        def box(depth: float) -> Any:
+            return bd.Box(40, 30, depth, align=BOTTOM) - bd.Pos(0, 0, 2) * bd.Box(36, 26, depth, align=BOTTOM)
+
+        shallow = _check(box(8))
+        self.assertTrue(shallow.ok, shallow.summary)
+        self.assertIn("molding.draft_min", {f.code for f in shallow.findings})
+        deep = _check(box(20))
+        self.assertFalse(deep.ok)
+        floors = [f for f in deep.findings if f.code == "molding.draft_zero"]
+        self.assertEqual(({f.severity for f in floors}, len(floors)), ({"error"}, 8))   # four outside, four inside
+        self.assertIn("source: text-to-cad", floors[0].message)
+        self.assertNotRegex(floors[0].message, "Protolabs|Hubs|Xometry")
+        self.assertRegex(floors[0].message, r"(18|20) mm deep along the pull, over 10 mm")
+        # the recommendation is left to the record where the floor says it: one finding a face
+        self.assertFalse({f.location for f in floors} & {f.location for f in deep.findings if f.code == "molding.draft_min"})
+        (rule,) = {rule.note for rule in type_side.RULES.rules if rule.id == "molding.draft_zero"}
+        self.assertTrue(rule.startswith("text-to-cad's own floor"))
+        # a rib is judged once, as a rib: 12 mm tall with no draft, one error at it and none at its faces
+        ribbed = _check(bd.extrude(bd.Rectangle(60, 40), 2, taper=3) + bd.Pos(0, 0, 2) * bd.Box(1.2, 30, 12, align=BOTTOM))
+        (rib,) = [f for f in ribbed.findings if f.code == "molding.draft_zero"]
+        self.assertIn("rib 12 mm tall", rib.message)
+        self.assertNotIn("molding.rib_draft", {f.code for f in ribbed.findings})
+        # a dome 15 mm deep is tangent to the pull along its rim: no draft there, on a line -- no depth without it
+        dome = _check(bd.Sphere(15) - bd.Sphere(13) - bd.Pos(0, 0, -20) * bd.Box(60, 60, 40))
+        self.assertEqual({item["zero_draft_depth_mm"] for item in dome.measurements["draft"]["items"]}, {0.0})
+        self.assertNotIn("molding.draft_zero", {f.code for f in dome.findings})
+        self.assertTrue(dome.ok, dome.summary)
 
 
 class UndercutTest(unittest.TestCase):
@@ -150,9 +181,104 @@ class UndercutTest(unittest.TestCase):
         (item,) = result.measurements["undercuts"]["items"]
         self.assertEqual((item["kind"], item["release"], item["side_actions"]), ("external", "side_action", ["+x"]))
         self.assertEqual(_dfm_brep.surface(_face(result, part, item["location"])).kind, "cylinder")
-        self.assertGreater(item["stroke_mm"], 1.5)   # through the 2 mm wall
+        # the pin travels the whole wall (2 mm at 3 deg: 2.003 across, and the bore's own lean), not as far as the
+        # deepest sampled point happens to lie
+        self.assertGreaterEqual(item["stroke_mm"], 2.0)
+        self.assertLess(item["stroke_mm"], 2.5)
         self.assertAlmostEqual(item["height_mm"], 4.0, delta=0.3)
-        self.assertIn("molding.undercut", {f.code for f in result.findings})
+        (said,) = [f for f in result.findings if f.code == "molding.undercut"]
+        self.assertIn("released by a side action along +x", said.message)
+        self.assertNotIn("deep against the pull", said.message)   # a bump-off's figure, no hole's
+
+    def test_holes_through_both_walls_are_two_slides_and_three_slots_in_one_wall_are_one(self) -> None:
+        # A ray along +x from the -x wall's hole leaves through the hole opposite: the slide is the one whose way
+        # out is the shorter. And a part's side actions are its distinct slide directions, not its features.
+        through = _check(_tray() - bd.Pos(0, 0, 10) * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 200)).measurements["undercuts"]
+        self.assertEqual(sorted(tuple(item["side_actions"]) for item in through["items"]), [("+x",), ("-x",)])
+        self.assertEqual((through["side_action_count"], sorted(through["side_action_directions"])), (2, ["+x", "-x"]))
+        slotted = _tray()
+        for x in (-15, 0, 15):
+            slotted -= bd.Pos(x, 20, 10) * bd.Box(4, 8, 4)
+        result = _check(slotted)
+        slots = result.measurements["undercuts"]
+        self.assertEqual([item["side_actions"] for item in slots["items"]], [["+y"]] * 3)
+        self.assertEqual((slots["undercut_count"], slots["side_action_count"], slots["side_action_directions"]),
+                         (3, 1, ["+y"]))
+        (summed,) = [f for f in result.findings if f.code == "undercut_candidates"]
+        self.assertIn("3 feature(s): 1 side action(s) (+y)", summed.message)
+
+    def test_a_slot_takes_one_slide_along_its_run_though_the_part_s_frame_is_a_hair_off_it(self) -> None:
+        # One slot off-centre in a long box: the part's own frame stands 0.08 deg off its walls, the eight slides
+        # round the parting plane with it, and +y leaned against the slot's sides by more than --zero-tol and was
+        # refused -- a second slide, along the noise of the sampled normals' mean, made up the points it left. The
+        # slot's own run (square to its faces' normals) is tried first, exactly.
+        box = bd.extrude(bd.Rectangle(120, 80), 30, taper=-2) - \
+            bd.Pos(0, 0, 2) * bd.extrude(bd.Rectangle(116, 76), 28, taper=-2)
+        result = _check(box - bd.Pos(-50, 40, 18) * bd.Box(1.5, 10, 8))
+        self.assertNotEqual(result.measurements["frame"]["rotation_about_pull_deg"] % 90.0, 0.0)
+        (item,) = result.measurements["undercuts"]["items"]
+        self.assertEqual((item["release"], item["side_actions"], item["angled"]), ("side_action", ["+y"], False))
+        self.assertGreaterEqual(item["stroke_mm"], 2.07)   # the wall, across
+        self.assertLess(item["stroke_mm"], 2.5)
+
+    def test_a_hole_off_the_grid_takes_a_slide_along_its_own_axis(self) -> None:
+        # 20 deg off x in the parting plane: a plain slide along the bore. 25 deg out of the plane: an angled one.
+        for turn, angled in ((bd.Rot(0, 0, 20), False), (bd.Rot(0, 25, 0), True)):
+            part = _tray() - bd.Pos(30, 0, 10) * turn * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 14)
+            result = _check(part)
+            (item,) = result.measurements["undercuts"]["items"]
+            self.assertEqual((item["release"], item["kind"], item["angled"]), ("side_action", "external", angled), turn)
+            (way,) = item["side_actions"]
+            axis = (turn * bd.Pos(1, 0, 0)).position
+            self.assertAlmostEqual(float(np.array([float(v) for v in way.split(",")]) @ np.array([axis.X, axis.Y, axis.Z])),
+                                   1.0, places=3)
+            self.assertTrue(result.ok)
+
+    def test_a_cavity_wider_below_its_mouth_is_an_inside_undercut_and_the_pull_check_agrees(self) -> None:
+        # A box tapered the wrong way: its inside walls are trapped behind its mouth. No slide reaches them from
+        # beside the part (the rays that leave it tilt out through the mouth: no side action's), and the report's
+        # two readings of the pull are one.
+        part = bd.extrude(bd.Rectangle(60, 40), 30, taper=2) - bd.Pos(0, 0, 2) * bd.extrude(bd.Rectangle(56, 36), 28, taper=2)
+        result = _check(part)
+        (item,) = result.measurements["undercuts"]["items"]
+        self.assertEqual((item["kind"], item["release"], item["side_actions"]), ("internal", "collapsible_core", []))
+        chosen = result.measurements["pull_check"]["chosen"]
+        self.assertEqual((chosen["undercut_count"], chosen["side_action_count"], chosen["lifter_count"],
+                          chosen["unreleasable_count"]), (1, 0, 1, 0))
+        self.assertEqual(chosen["undercut_candidate_area_mm2"], result.measurements["undercuts"]["candidate_area_mm2"])
+
+    def test_a_rib_s_end_a_hair_off_a_drafted_wall_is_a_crevice_not_an_undercut(self) -> None:
+        # A square-ended rib run 0.1 mm into walls drafted 2 deg: buried at the floor, a hair off the wall above
+        # it, the gap opening along the pull. A sample on the rib's end, stepped off it to cast its rays, landed in
+        # the wall's material, read trapped both ways and freed by nothing: the part failed on two samples.
+        box = bd.extrude(bd.Rectangle(60, 40), 30, taper=-2) - bd.Pos(0, 0, 2) * bd.extrude(bd.Rectangle(56, 36), 28, taper=-2)
+        result = _check(box + bd.Pos(0, 0, 5) * bd.Box(1.2, 36.2, 6))
+        undercuts = result.measurements["undercuts"]
+        self.assertEqual((undercuts["undercut_count"], undercuts["candidate_area_mm2"]), (0, 0.0))
+        self.assertTrue(result.ok, result.summary)
+        self.assertEqual(undercuts["crevice_count"], 2)   # the rib's two ends
+        (said,) = [f for f in result.findings if f.code == "crevices"]
+        self.assertEqual(said.severity, "info")
+        self.assertEqual(len(undercuts["crevices"][0]["faces"]), 2)
+
+    def test_a_feature_nothing_releases_is_read_again_on_denser_points_before_it_fails_the_part(self) -> None:
+        from unittest import mock
+
+        from cad.build123d import _dfm_molding
+
+        void = bd.Box(20, 20, 20) - bd.Sphere(5)
+        # every feature made to rest on "few" points: the void is sampled again, and still nothing releases it
+        with mock.patch.object(_dfm_molding, "_CONFIRM_UNDER", 10 ** 6):
+            read = _check(void).measurements["undercuts"]
+            self.assertEqual((read["unreleasable_count"], read["unconfirmed_count"]), (1, 0))
+            self.assertGreaterEqual(read["items"][0]["confirmed_points"], _dfm_molding._CONFIRM_POINTS)
+            # ... and where the denser points are not trapped it was a sample's reading: no feature, no error
+            empty = (np.zeros((0, 3)), np.zeros((0, 3)))
+            with mock.patch.object(_dfm_molding, "_denser", return_value=empty):
+                result = _check(void)
+        read = result.measurements["undercuts"]
+        self.assertEqual((read["undercut_count"], read["unconfirmed_count"], read["candidate_area_mm2"]), (0, 1, 0.0))
+        self.assertNotIn("molding.undercut_unreleasable", {f.code for f in result.findings})
 
     def test_an_external_groove_needs_two_slides(self) -> None:
         part = bd.Cylinder(15, 20) - (bd.Cylinder(16, 4) - bd.Cylinder(12, 4))
@@ -178,6 +304,7 @@ class UndercutTest(unittest.TestCase):
             self.assertIn(f"{item['leaning']} leaning", finding.message)
             if inset == 0.5:
                 self.assertEqual(codes, {("warning", "molding.undercut_bump_off")}, pull)
+                # external by its geometry: slides reach the groove from beside the part
                 self.assertEqual((item["release"], item["kind"]), ("bump_off", "external"))
                 self.assertLessEqual(item["interference_mm"], type_side.BUMP_OFF_MM)
                 self.assertIn("resin's flexibility", finding.message)
@@ -195,6 +322,20 @@ class UndercutTest(unittest.TestCase):
         groove = bd.Cylinder(15, 20) - bd.Cylinder(6, 20) - bd.Cylinder(8, 3)
         (item,) = _check(groove).measurements["undercuts"]["items"]
         self.assertEqual(item["release"], "collapsible_core")
+
+    def test_an_undercut_whose_release_was_not_searched_is_not_measured_never_passed(self) -> None:
+        from unittest import mock
+
+        from cad.build123d import _dfm_molding
+
+        part = _tray() - bd.Pos(30, 0, 10) * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 12)
+        with mock.patch.object(_dfm_molding, "_RELEASE_RAYS", 0):   # the part's release budget, spent
+            result = _check(part)
+        (item,) = result.measurements["undercuts"]["items"]
+        self.assertEqual((item["release"], item["unreleasable_area_mm2"]), ("unknown", None))
+        outcome = next(o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "molding.undercut_unreleasable")
+        self.assertEqual((outcome["status"], outcome["unmeasured"]), ("not_evaluated", 1))
+        self.assertIn(("warning", "undercuts_unsearched"), {(f.severity, f.code) for f in result.findings})
 
     def test_a_sealed_void_is_released_by_nothing(self) -> None:
         result = _check(bd.Box(20, 20, 20) - bd.Sphere(5))
@@ -292,6 +433,13 @@ class ThicknessTest(unittest.TestCase):
         self.assertAlmostEqual(thickness["nominal_mm"], 3.0, places=3)
         for item in thickness["items"]:
             self.assertAlmostEqual(item["thickness_mm"], 3.0, delta=0.15, msg=item["location"])
+
+    def test_a_part_under_a_micron_is_measured_whole(self) -> None:
+        # drawn in metres and read as millimetres: its lengths are under the micron a sampled length is good to,
+        # and are kept as they are (rounded to it they were 0, and every ratio of them a division by it)
+        tiny = _check(bd.Box(0.0005, 0.00025, 0.00001) + bd.Pos(0, 0, 0.00001) * bd.Box(0.00002, 0.0002, 0.00002))
+        self.assertEqual(tiny.measurements["partial_sections"], [])
+        self.assertEqual(tiny.findings[0].code, "units_suspect")
 
     def test_a_pad_is_a_thick_section_and_a_step_an_abrupt_transition(self) -> None:
         plate = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
@@ -437,6 +585,18 @@ class FeaturesTest(unittest.TestCase):
             self.assertAlmostEqual(rib["base_fillet_mm"], 0.4, places=4)
             self.assertAlmostEqual(rib["gap_mm"], 20 - 1.2, delta=0.02)
 
+    def test_ribs_that_cross_stand_on_the_wall_not_on_each_other(self) -> None:
+        # Two ribs 4.8 mm apart, 6 tall, crossed by a third: the stretch between them is nearer the crossing rib's
+        # sides than the floor, and read their 1.2 mm as the wall it stands on (a ratio of 1, a warning).
+        part = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
+        for x in (-3.0, 3.0):
+            part += bd.Pos(x, 0, 2 + 3) * bd.Box(1.2, 40, 6)
+        result = _check(part + bd.Pos(0, 0, 2 + 3) * bd.Box(40, 1.2, 6))
+        ribs = result.measurements["ribs"]["items"]
+        self.assertEqual(len(ribs), 7)
+        self.assertEqual({(rib["wall_mm"], rib["thickness_ratio"], rib["height_mm"]) for rib in ribs}, {(2.0, 0.6, 6.0)})
+        self.assertNotIn("molding.rib_thickness", {f.code for f in result.findings})
+
     def test_a_boss_its_core_and_its_wall_against_the_plate(self) -> None:
         plate = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
         part = plate + bd.Pos(0, 0, 2) * bd.Cylinder(4, 8, align=BOTTOM) - bd.Pos(0, 0, 2) * bd.Cylinder(1.5, 8, align=BOTTOM)
@@ -522,6 +682,22 @@ class FeaturesTest(unittest.TestCase):
         (corner,) = _check(rounded).measurements["corners"]["items"]
         self.assertEqual((corner["radius_mm"], corner["sharp"], corner["ratio_to_wall"]), (1.5, False, 0.75))
 
+    def test_a_ratio_is_of_lengths_as_measured_so_a_radius_at_the_limit_is_at_it(self) -> None:
+        # A sampled wall is good to a micron: one that reads 2.00001 (a filleted shell's did) under a 1 mm fillet
+        # is a ratio of 0.5, at Hubs' limit -- not 0.499997 and a warning.
+        from unittest import mock
+
+        from cad.build123d import _dfm_molding
+
+        profile = bd.Polygon((0, 0), (30, 0), (30, 2), (2, 2), (2, 30), (0, 30), align=None)
+        sharp = bd.extrude(profile, 20)
+        edge = [e for e in sharp.edges() if abs(e.center().X - 2) < 1e-6 and abs(e.center().Y - 2) < 1e-6]
+        with mock.patch.object(_dfm_molding, "_face_wall", return_value=2.00001):
+            result = _check(sharp.fillet(1.0, edge))
+        (corner,) = result.measurements["corners"]["items"]
+        self.assertEqual((corner["wall_mm"], corner["ratio_to_wall"]), (2.0, 0.5))
+        self.assertNotIn("molding.inside_corner_radius", {f.code for f in result.findings})
+
     def test_a_corner_s_place_is_its_part_s_whatever_the_turn(self) -> None:
         # a square cup's sharp inside corners sit between walls of one area: each at the same face however the
         # cup is turned (the findings, one per face, then count alike)
@@ -585,10 +761,49 @@ class CandidatesAndPartsTest(unittest.TestCase):
                  "wall_area_mm2": 5000.0, "min_wall_draft_deg": 9.0}]
         self.assertEqual([row["pull"] for row in type_side.ranked(rows)], ["z", "x", "y"])
 
-    def test_a_cup_modelled_along_x_says_which_pull_ranks_first(self) -> None:
+    def test_a_cup_modelled_along_x_is_told_x_does_better(self) -> None:
         cup = bd.Rot(0, 90, 0) * (bd.Cone(20, 18, 20, align=BOTTOM) - bd.Pos(0, 0, 3) * bd.Cone(18, 16, 17, align=BOTTOM))
-        (trapped,) = [f for f in _check(cup, pull="z").findings if f.code == "undercut_candidates"]
-        self.assertIn("--candidates ranks x first", trapped.hint)
+        result = _check(cup, pull="z")
+        (said,) = [f for f in result.findings if f.code == "pull_better"]
+        self.assertEqual(said.severity, "warning")
+        self.assertIn("along x (1,0,0)", said.message)
+        self.assertIn("--pull 1,0,0", said.hint)
+        self.assertNotIn("the default", said.message)   # z was given
+        self.assertEqual(result.measurements["pull_check"]["better"], "x")
+
+    def test_a_part_tilted_off_the_default_pull_is_told_its_own_axis(self) -> None:
+        # A clean tray turned 37 deg off the axes and checked with no --pull: along z a fifth of its surface is
+        # trapped and no wall reads zero draft -- under both of the triggers that once asked whether the pull was
+        # right. Every check asks now, and names the pull that does better: the tray's own axis.
+        turn = bd.Rotation(20, 30, 0)
+        result = _check(turn * _tray())
+        (said,) = [f for f in result.findings if f.code == "pull_better"]
+        self.assertIn("the default, z: none was given", said.message)
+        self.assertIn("(the default pull)", result.summary)
+        check = result.measurements["pull_check"]
+        better = next(row for row in check["candidates"] if row["pull"] == check["better"])
+        own = (turn * bd.Pos(0, 0, 1)).position
+        self.assertAlmostEqual(abs(float(np.array(better["axis"]) @ np.array([own.X, own.Y, own.Z]))), 1.0, places=3)
+        self.assertEqual((better["undercut_candidate_area_mm2"], better["zero_draft_wall_area_mm2"]), (0.0, 0.0))
+        # along its own axis, given: nothing is trapped and no wall is without draft, so no other pull is read
+        given = _check(turn * _tray(), pull=",".join(f"{value:.12g}" for value in (own.X, own.Y, own.Z)))
+        self.assertNotIn("pull_better", {f.code for f in given.findings})
+        self.assertEqual(given.measurements["pull_check"]["candidates"], [])
+        self.assertNotIn("the default pull", given.summary)
+
+    def test_a_pull_does_better_only_where_it_is_no_worse_anywhere(self) -> None:
+        chosen = {"wall_area_mm2": 5000.0, "undercut_candidate_area_mm2": 400.0, "side_action_count": 1,
+                  "zero_draft_wall_area_mm2": 0.0, "flat_parting": True}
+        clean = {**chosen, "undercut_candidate_area_mm2": 0.0, "side_action_count": 0, "measured": "full"}
+        self.assertTrue(type_side.dominates(clean, chosen))
+        self.assertFalse(type_side.dominates(chosen, clean))
+        # less trapped, but a wall without draft the measured pull has not: no better, and a tie is none
+        self.assertFalse(type_side.dominates({**clean, "zero_draft_wall_area_mm2": 900.0}, chosen))
+        self.assertFalse(type_side.dominates({**clean, "flat_parting": False}, chosen))
+        self.assertFalse(type_side.dominates({**chosen, "undercut_candidate_area_mm2": 420.0}, chosen))
+        # a pull only screened (its figures not all read) is never the one named
+        self.assertIsNone(type_side.better_pull(chosen, [{**clean, "measured": "trapped"}]))
+        self.assertEqual(type_side.better_pull(chosen, [clean | {"pull": "x"}])["pull"], "x")
 
     def test_two_solids_touching_are_said_to_be_fused_and_their_contact_is_no_undercut(self) -> None:
         pair = bd.Compound([bd.Box(10, 10, 10), bd.Pos(10, 0, 0) * bd.Box(10, 10, 10)])
@@ -619,6 +834,25 @@ class CandidatesAndPartsTest(unittest.TestCase):
         self.assertEqual({failure["location"].split("/face")[0] for failure in failed["failures"]}, {"plain"})
         self.assertEqual(len(result.measurements["projection"]["items"]), 2)
         self.assertIn("several_bodies", {f.code for f in result.findings})
+        self.assertNotIn("pull_check", result.measurements)   # each part opens its own way: no one pull to compare
+
+    def test_a_part_that_occurs_twice_is_said_to_be_measured_once(self) -> None:
+        # A STEP holds a part's geometry once, placed where its first occurrence stands: the second, turned on its
+        # side against the pull, is not the part that was measured -- said, never skipped in silence. (A live
+        # shape's two children are two parts, each measured where it stands.)
+        clip = bd.extrude(bd.Rectangle(20, 20), 3, taper=3)
+        clip.label = "clip"
+        other = bd.Pos(40, 0, 0) * bd.Rot(90, 0, 0) * clip
+        other.label = "clip"
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "pair.step"
+            bd.export_step(bd.Compound(label="pair", children=[clip, other]), str(path))
+            result = cad.step.dfm(path, process="molding", material="abs")
+        (body,) = result.measurements["bodies"]
+        self.assertEqual(body["occurrences"], 2)
+        (said,) = [f for f in result.findings if f.code == "occurrences_measured_once"]
+        self.assertEqual((said.severity, said.location), ("warning", body["owner"]))
+        self.assertIn("occurs 2 times", said.message)
 
     def test_a_step_reads_as_its_live_shape(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -632,32 +866,51 @@ class CandidatesAndPartsTest(unittest.TestCase):
 
 
 class OrientationTest(unittest.TestCase):
-    def test_a_turn_about_the_pull_keeps_the_verdict_and_the_figures(self) -> None:
-        # A tray with a pad and a side window, off-centre: turned about the pull in its model, it is measured in
-        # its own frame (``frame``), so its walls, its undercut and its findings read the same.
-        part = _tray() + bd.Pos(-10, 5, 2) * bd.Box(12, 8, 3, align=BOTTOM) - bd.Pos(0, 20, 10) * bd.Box(10, 6, 4)
+    def test_the_verdict_and_the_figures_do_not_turn_with_the_part_s_placement(self) -> None:
+        # A tray with a pad, a side window and a deep undrafted rib (an error), off-centre. Turned about the pull
+        # in its model it is measured in its own frame (``frame``); moved, turned any way or tilted a third of a
+        # degree off the axes with its pull, it is the same part: its verdict, its findings and its figures hold.
+        part = _tray() + bd.Pos(-10, 5, 2) * bd.Box(12, 8, 3, align=BOTTOM) - bd.Pos(0, 20, 10) * bd.Box(10, 6, 4) + \
+            bd.Pos(12, -4, 2) * bd.Box(1.2, 12, 12, align=BOTTOM)
 
-        def read(shape: Any) -> tuple:
-            result = _check(shape)
+        def read(shape: Any, pull: str | None = None) -> tuple:
+            result = _check(shape, pull=pull)
             m = result.measurements
             codes = sorted((f.severity, f.code) for f in result.findings if f.severity != "info")
+            (window,) = m["undercuts"]["items"]
             return (result.ok, codes, m["thickness"]["nominal_mm"], m["thickness"]["max_mm"],
-                    m["undercuts"]["candidate_area_mm2"], m["draft"]["wall_area_mm2"], m["undercuts"]["items"])
+                    m["undercuts"]["candidate_area_mm2"], m["draft"]["wall_area_mm2"], window)
 
-        ok, codes, nominal, thick, trapped, walls, items = read(part)
-        for turn in (30.0, 90.0, -117.0):
-            got = read(bd.Rot(0, 0, turn) * part)
-            self.assertEqual((ok, codes), got[:2], turn)
+        ok, codes, nominal, thick, trapped, walls, window = read(part)
+        self.assertFalse(ok)
+        self.assertIn(("error", "molding.draft_zero"), codes)
+        self.assertEqual((window["release"], window["side_actions"]), ("side_action", ["+y"]))
+        placements = [(bd.Rot(0, 0, 30.0), None), (bd.Rot(0, 0, -117.0), None), (bd.Pos(250, -40, 1000), None),
+                      (bd.Rot(0.3, 0, 0), "tilted"), (bd.Rot(23, -37, 61), "turned")]
+        def turned(place: Any, x: float, y: float, z: float) -> np.ndarray:
+            moved = (place * bd.Pos(x, y, z)).position - place.position
+            return np.array([moved.X, moved.Y, moved.Z])
+
+        def way_of(name: str) -> np.ndarray:
+            if "," in name:
+                found = np.array([float(value) for value in name.split(",")])   # as said, to three places
+                return found / np.linalg.norm(found)
+            return np.eye(3)["xyz".index(name[1])] * (1.0 if name[0] == "+" else -1.0)
+
+        for place, pulled in placements:
+            pull = ",".join(f"{value:.15g}" for value in turned(place, 0, 0, 1)) if pulled else None
+            got = read(place * part, pull)
+            self.assertEqual((ok, codes), got[:2], place)
             for want, have in zip((nominal, thick, walls), (got[2], got[3], got[5])):
-                self.assertAlmostEqual(want, have, delta=1e-3 * max(1.0, abs(want)), msg=turn)
+                self.assertAlmostEqual(want, have, delta=1e-3 * max(1.0, abs(want)), msg=place)
             # the trapped area is sampled: a rectangle's mesh takes either diagonal, and its samples follow it
-            self.assertAlmostEqual(trapped, got[4], delta=0.05 * trapped, msg=turn)
-            # the window's place, turned back into the world
-            here = np.asarray(got[6][0]["xyz"])
-            angle = math.radians(turn)
-            there = np.array([[math.cos(angle), -math.sin(angle), 0], [math.sin(angle), math.cos(angle), 0],
-                              [0, 0, 1]]) @ np.asarray(items[0]["xyz"])
-            self.assertLess(float(np.linalg.norm(here - there)), 0.5, turn)
+            self.assertAlmostEqual(trapped, got[4], delta=0.05 * trapped, msg=place)
+            # the window's place and its slide, in the world the part stands in
+            there = (place * bd.Pos(*window["xyz"])).position
+            self.assertLess(float(np.linalg.norm(np.asarray(got[6]["xyz"]) - np.array([there.X, there.Y, there.Z]))),
+                            0.5, place)
+            (slide,) = got[6]["side_actions"]
+            self.assertGreater(float(way_of(slide) @ turned(place, 0, 1, 0)), 0.9999, place)
 
 
 class RulesTest(unittest.TestCase):
@@ -676,21 +929,23 @@ class RulesTest(unittest.TestCase):
         self.assertFalse({"projection", "envelope"} & judged)
         self.assertGreater(panel.measurements["projection"]["projected_area_mm2"], 390000)
 
-    def test_the_rules_recommend_two_degrees_and_a_zero_draft_pull_points_at_candidates(self) -> None:
+    def test_the_rules_recommend_two_degrees_and_a_block_s_zero_draft_is_no_wrong_pull(self) -> None:
         (draft,) = [rule for rule in type_side.RULES.rules if rule.id == "molding.draft"]
         self.assertEqual(draft.limit, 2.0)
         self.assertIn("Most situations: 2", draft.note)
         for taper, warned in ((-1, True), (-2, False)):
             flared = bd.extrude(bd.Rectangle(40, 30), 20, taper=taper)
             self.assertEqual("molding.draft" in {f.code for f in _check(flared).findings}, warned)
-        box = bd.Box(40, 30, 20)
-        (zero,) = [f for f in _check(box).findings if f.code == "zero_draft_walls"]
-        self.assertIn("--candidates", zero.hint)
-        drafted_box = _check(bd.extrude(bd.Rectangle(40, 30), 20, taper=2) - bd.Pos(0, 0, 4) * bd.Box(4, 4, 8))
-        (zero,) = [f for f in drafted_box.findings if f.code == "zero_draft_walls"]
-        self.assertNotIn("--candidates", zero.hint)
-        # a sum of what molding.draft_min judges face by face: a fact, unless it says the pull looks wrong
+        # a square block along its shortest side: every wall reads zero draft, and no other pull does better
+        box = _check(bd.Box(40, 30, 20))
+        (zero,) = [f for f in box.findings if f.code == "zero_draft_walls"]
+        # a sum of what molding.draft_min and molding.draft_zero judge face by face: a fact
         self.assertEqual(zero.severity, "info")
+        self.assertNotIn("pull_better", {f.code for f in box.findings})
+        self.assertIsNone(box.measurements["pull_check"]["better"])
+        # a cube's principal axes are any three: the kernel's pick (its diagonals) is no pull to offer
+        cube = _check(bd.Box(40, 40, 40)).measurements["pull_check"]
+        self.assertEqual(([row["pull"] for row in cube["candidates"]], cube["better"]), (["x", "y"], None))
 
     def test_a_limit_is_compared_unrounded(self) -> None:
         (thick,) = [rule for rule in type_side.RULES.rules if rule.id == "molding.thick_section"]
@@ -729,8 +984,33 @@ class RulesTest(unittest.TestCase):
 
     def test_a_thin_wall_for_the_resin(self) -> None:
         thin = bd.extrude(bd.Rectangle(40, 30), 0.8, taper=3)
-        self.assertIn("molding.wall_min", {f.code for f in _check(thin, material="abs").findings})
+        warned = _check(thin, material="abs")
+        self.assertIn(("warning", "molding.wall_min"), {(f.severity, f.code) for f in warned.findings})
+        self.assertTrue(warned.ok)   # under ABS's recommended 1.14 mm, over half of it: made, at a cost
         self.assertNotIn("molding.wall_min", {f.code for f in _check(thin, material="nylon").findings})
+
+    def test_a_wall_far_outside_the_resin_s_range_fails_and_with_no_resin_one_outside_every_range(self) -> None:
+        def plate(thickness: float) -> Any:
+            return bd.extrude(bd.Rectangle(40, 30), thickness, taper=3)
+
+        def errors(shape: Any, material: str | None) -> set[str]:
+            return {f.code for f in _check(shape, material=material).findings if f.severity == "error"}
+
+        # 0.4 mm: under half of ABS's 1.14 mm minimum; within PPS's range down to 0.51 less than half short; and
+        # under every resin's minimum, which is all that can be said with no resin named
+        self.assertEqual(errors(plate(0.4), "abs"), {"molding.wall_too_thin"})
+        self.assertEqual(errors(plate(0.4), "pps"), set())
+        self.assertEqual(errors(plate(0.4), None), {"molding.wall_too_thin"})
+        # 8 mm: over twice ABS's 3.56 mm maximum; inside acrylic's range; inside some resin's, none named
+        self.assertEqual(errors(plate(8.0), "abs"), {"molding.wall_too_thick"})
+        self.assertEqual(errors(plate(8.0), "pmma"), set())
+        self.assertEqual(errors(plate(8.0), None), set())
+        self.assertEqual(errors(plate(30.0), None), {"molding.wall_too_thick"})   # over every resin's 25.4 mm
+        floor = next(f for f in _check(plate(0.4), material="abs").findings if f.code == "molding.wall_too_thin")
+        self.assertIn("source: text-to-cad", floor.message)   # ours: half of Protolabs' recommendation, said as that
+        self.assertIn("0.5 of Protolabs' recommended minimum for abs", floor.message)
+        # the recommendation is left to the record beside the floor: one finding a face
+        self.assertNotIn("molding.wall_min", {f.code for f in _check(plate(0.4), material="abs").findings})
 
 
 
