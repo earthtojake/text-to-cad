@@ -329,7 +329,8 @@ def rendered(description: Description, assets: str = "assets", *, touching: list
     pairs ``contact.touching`` found of it, found here where None. ``owners``, where given, is filled with what
     was written of each part, by its occurrence path (``Visual.path``): its ``body``, its ``visuals`` and
     ``collisions`` (geom names), its ``placement`` in the body (the visual's frame, metres) and its mesh's
-    ``key`` in the description (``cad.mujoco``'s helpers find a part's geoms by it)."""
+    ``key`` in the description (``cad.mujoco``'s helpers find a part's geoms by it), and ``count``, how many
+    parts share the path (siblings of one label: their geoms all listed, the placement and key the last one's)."""
     for closure in description.closures:
         if closure.kind in ("prismatic", "cylindrical"):
             raise ExportRefused(f"{description.name}: joint {closure.name!r} closes the loop through "
@@ -547,6 +548,7 @@ class _Writer:
             if owned is not None:
                 owned["placement"] = frame @ np.asarray(visual.geometry.placement, dtype=float)
                 owned["key"] = visual.geometry.mesh
+                owned["count"] += 1
             # A painted part is a geom per look, as the viewer draws its faces (``Visual.drawn``), each drawn and not
             # weighed (a link with no inertial is weighed by its geoms: a look's surface would weigh as a shell).
             weighed = None if not visual.looks else "0"
@@ -583,7 +585,7 @@ class _Writer:
         if self.owners is None or not path:
             return None
         return self.owners.setdefault(path, {"body": body, "visuals": [], "collisions": [], "placement": np.eye(4),
-                                             "key": None})
+                                             "key": None, "count": 0})
 
     def _shape(self, geometry: Geometry) -> list[tuple[str, str | None]]:
         size = [float(value) for value in geometry.size]

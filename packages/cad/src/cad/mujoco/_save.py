@@ -13,10 +13,13 @@ computer), so the file alone would not travel. ``save`` writes the folder MuJoCo
   framed at zero), never written over. A scene function's spec, which has its floor, gets none.
 
 **It works on a copy.** The spec handed in is left as it was, its files still named where they are, so a
-scene that attaches a robot's spec after saving it compiles as it did before (``MjSpec.copy``). The copy's
+scene that attaches a robot's spec after saving it compiles as it did before (``MjSpec.copy``). The copy is
+made one spec (``_flat``: compiled to MuJoCo's text and read back), so a scene's attached robots are saved with
+it: a child's files resolve against the child's own folders, which the copy's ``meshdir`` does not reach. Its
 files are named bare, its folders set (``meshdir`` and ``texturedir`` ``assets``, ``modelfiledir`` the folder
 it is staged in), and it is compiled before anything is moved into place: MuJoCo's ``ValueError``, in its own
-words, is raised for a spec it refuses, and nothing is written.
+words, is raised for a spec it refuses, and nothing is written. A spec a scene has attached is refused by name
+(``_parts.attached``): it is the scene's now, and MuJoCo 4.0.0 crashes compiling it.
 
 **What it removes.** As an export does (``mjcf``'s ``place``): the files are staged beside ``path`` and moved
 in only where their bytes changed, and the files the last ``save`` (or export) of ``path`` wrote into
@@ -58,9 +61,10 @@ def save(spec: Any, path: str | Path) -> Path:
         raise ValueError(f"save writes an MJCF: name the file {target.stem}.xml, not {target.name}")
     from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
     from cad.engine.export.mjcf import SCENE, _stale
-    from cad.mujoco._spec import _rooted
+    from cad.mujoco._parts import attached
 
-    made = _rooted(spec.copy())
+    attached(spec, "save")
+    made = _flat(mujoco, spec)
     files = _files(made)
     target.parent.mkdir(parents=True, exist_ok=True)
     folder = target.parent / "assets"
@@ -97,6 +101,17 @@ def save(spec: Any, path: str | Path) -> Path:
         print(line)
     print(f"wrote {target}")
     return target
+
+
+def _flat(mujoco: Any, spec: Any) -> Any:
+    """``spec`` as one spec of its own, every file named by its absolute path: a copy with its own files rooted
+    (``_rooted``), compiled to MuJoCo's text and read back. An attached child's meshes and textures are resolved
+    against the child's own folders when the spec compiles, never the parent's, so a copy whose ``meshdir`` is set
+    would not find them; read back from text, they are the spec's own, and ``meshdir`` reaches every one. The
+    compile is the spec's check too: MuJoCo's ``ValueError`` for a spec it refuses, before anything is written."""
+    from cad.mujoco._spec import _rooted
+
+    return _rooted(mujoco.MjSpec.from_string(_rooted(spec.copy()).to_xml()))
 
 
 def _files(made: Any) -> dict[str, tuple[str, list[Any]]]:

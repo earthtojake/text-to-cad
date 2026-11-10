@@ -283,8 +283,10 @@ last segment, or any trailing run of them, is enough where it names one part (`l
 `left_servo/case`). A label that names two is refused with their full paths, and one that names
 none with the parts there. A part placed several times (one servo in each joint) is named once per
 occurrence by its path. Several parts of one label in one link share one path: `collisions` returns
-them all (a link's screws at once), so `fit` only a part whose path is its own. Never name a part
-by a generated geom name (`left_collision`): the writer's rules make those.
+them all (a link's screws at once), and `fit` and `decompose`, which work on one solid, refuse the
+path and say how many parts share it. Give those parts distinct labels in the model, or set their
+geoms through `collisions`. Never name a part by a generated geom name (`left_collision`): the
+writer's rules make those.
 
 **A spec read from an `.xml`** (a Menagerie robot, an export) has no solids and no label paths: its
 parts are its meshes, named by mesh name (`spec("sim/arm.xml")` names the palm `palm`), and a
@@ -305,10 +307,9 @@ refused in MuJoCo's words, and nothing is written. A relative path is taken agai
 directory.
 
 **Make every choice before a scene attaches the robot.** `scene.attach(s, ...)` consumes `s`: its
-bodies, joints and geoms become the scene's, under the prefix, and `s` no longer finds them. After
-it, `fit` fails, `collisions` finds nothing, and `save(s, ...)` crashes the Python process (MuJoCo
-4.0.0). So a robot's function makes all its choices, and is saved if its own file is wanted, before
-a scene attaches it.
+bodies, joints and geoms become the scene's, under the prefix. After it, `save`, `fit`,
+`decompose` and `collisions` each refuse `s` by name. So a robot's function makes all its choices,
+and is saved if its own file is wanted, before a scene attaches it.
 
 **MuJoCo 4.0.0's traps.** Each checked on 4.0.0:
 
@@ -438,9 +439,10 @@ What each step does, and the traps:
   and texture absolutely and clears the spec's own folders: load a Menagerie robot through `spec()`
   too, never `MjSpec.from_file`. A saved scene that cannot find a mesh fails `cad mjcf validate`
   with `mesh_file_not_found`.
-- **`save` makes the folder travel.** It copies every file the scene names, the Panda's included,
-  into `sim/assets/` beside `sim/pick.xml` and names each there, so the folder loads on another
-  computer. A scene has a floor of its own, so `save` writes no `scene.xml` beside it.
+- **`save` makes the folder travel.** It copies every file the scene names, the attached robots'
+  included, into `sim/assets/` beside `sim/pick.xml` and names each there (two files of one name
+  become two, the second `_2`), so the folder loads on another computer. A scene has a floor of its
+  own, so `save` writes no `scene.xml` beside it.
   `to_file` alone would leave this computer's paths in the file, and `to_zip` writes the XML into a
   zip without the mesh files it names: neither ships a scene.
 - **`attach`** copies the child into the scene under a `prefix`, at a `frame` (a placement in the

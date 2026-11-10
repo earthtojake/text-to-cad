@@ -1,11 +1,12 @@
 """A MuJoCo function (``cad.mujoco``): a robot's spec made with ``spec``, the simulator's choices made on it in
 MuJoCo's own API and by the helpers that find a part by its label path (``collisions``, ``fit``), and the spec
 written by ``save`` as a folder that travels. The toy hinge a person writes -- a model and a MuJoCo function, two
-files -- run as written; a capsule fitted to the arm equal to the one a collision declared on the model writes; the
-saved folder loaded after it is moved; the spec handed to ``save`` still attachable after it; the meshes a
-previous save wrote and this one does not name removed, and nothing else; ``scene.xml`` written once and never
-over, and none beside a spec with a floor of its own; a body weighed by its collision told so once; and what is
-no spec, no part, two parts or no solid refused by name. Each in a fresh temporary folder, its
+files -- run as written; the capsule ``fit`` makes of the arm, the kernel's fit of its solid; the saved folder
+loaded after it is moved; the spec handed to ``save`` still attachable after it; the meshes a previous save wrote
+and this one does not name removed, and nothing else; ``scene.xml`` written once and never over; a scene of two
+robots and a floor saved whole, with no ``scene.xml`` beside it; a body weighed by its collision told so once; and
+what is no spec, no part, two parts, several parts on one path, no solid or a robot a scene attached refused by
+name. Each in a fresh temporary folder, its
 cache a folder of its own."""
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from unittest import mock
 import mujoco
 import numpy as np
 
-from cad.mujoco import collisions, fit, save, spec
+from cad.mujoco import collisions, decompose, fit, save, spec
 
 # The toy of the MuJoCo function's design: a model with only the hardware's facts, and a MuJoCo function with the
 # simulator's choices, which saves the robot's file.
@@ -90,8 +91,8 @@ if __name__ == "__main__":
     save(hinge_mujoco(), "mujoco/hinge.xml")
 """
 
-# What ``collision(arm, "capsule")`` on the model writes for the toy's arm today (the MJCF export's geom
-# ``arm_collision``): its size, its place and its turn in the arm's body.
+# The capsule the kernel fits to the toy's arm (its oriented bounding box: 120 x 20 x 10 mm), as MuJoCo holds the
+# geom ``arm_collision``: its size, its place and its turn in the arm's body.
 CAPSULE = {"size": (0.01, 0.05, 0.0), "pos": (-0.005, 0.06, 0.0), "quat": (0.5, -0.5, -0.5, -0.5)}
 
 
@@ -166,7 +167,7 @@ class MuJoCoFunctionTest(unittest.TestCase):
         self.assertAlmostEqual(float(data.qpos[0]), 1.0, delta=0.01)
         self.assertEqual(mujoco.MjModel.from_xml_path(str(moved / "scene.xml")).nmesh, 2)
 
-    def test_fit_makes_the_declared_capsule_and_collisions_finds_a_part_by_its_label_path(self) -> None:
+    def test_fit_makes_the_kernel_s_capsule_and_collisions_finds_a_part_by_its_label_path(self) -> None:
         made = self.hinge()
         [mesh] = collisions(made, "hinge/arm")
         self.assertEqual((mesh.name, mesh.type), ("arm_collision", mujoco.mjtGeom.mjGEOM_MESH))
@@ -222,9 +223,24 @@ class MuJoCoFunctionTest(unittest.TestCase):
                          ["wheel_collision", "wheel_collision_2"])
         with self.assertRaisesRegex(ValueError, "this spec was read from an MJCF, which holds meshes and no solids"):
             fit(read, "wheel", "cylinder")
-        # A part read from a mesh file has no solid either, refused as a declared collision is.
+        # A part read from a mesh file has no solid either: the kernel fits nothing to it.
         with self.assertRaisesRegex(DescriptionError, "part 'scan' is a mesh: no box is fitted to it without its B-rep"):
             kernel_fit(None, "scan", "box")
+        # Sibling parts of one label share a path: collisions answers all their geoms, and fit and decompose, which
+        # work on one solid, refuse it.
+        plate = bd.Box(60, 60, 5)
+        plate.label = "plate"
+        screws = [bd.Pos(x, 0, 5) * bd.Cylinder(3, 10) for x in (-20, 20)]
+        for screw in screws:
+            screw.label = "screw"
+        rig = spec(bd.Compound(children=[plate, *screws], label="rig"))
+        self.assertEqual([geom.name for geom in collisions(rig, "screw")], ["screw_collision", "screw_collision_2"])
+        for helper in (lambda: fit(rig, "screw", "box"), lambda: decompose(rig, "screw")):
+            with self.assertRaisesRegex(ValueError, r"'rig/screw': 2 parts share this path \(siblings of one label\), "
+                                                    r"and .* works on one solid: give the parts distinct labels in the "
+                                                    r"model, or set their geoms' type and size with MuJoCo's API through "
+                                                    r"collisions\(spec, 'rig/screw'\)"):
+                helper()
 
     def test_save_copies_the_spec_and_removes_only_the_meshes_its_last_save_wrote(self) -> None:
         made = self.hinge()
@@ -283,19 +299,60 @@ class MuJoCoFunctionTest(unittest.TestCase):
             fit(made, "block", "capsule")
         self.assertEqual(again, [], "once per body")
 
-    def test_a_spec_with_a_floor_of_its_own_is_a_scene_and_gets_no_scene_beside_it(self) -> None:
-        made = self.hinge()
-        made.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1, 1, 0.1])
-        said = self.saved(made, "pick/pick.xml")
+    def test_a_scene_of_attached_robots_is_saved_whole_and_a_robot_it_attached_is_refused(self) -> None:
+        import build123d as bd
+
+        def robot(size: float) -> mujoco.MjSpec:
+            block = bd.Box(size, 20, 10)
+            block.label = "block"
+            return spec(bd.Compound(children=[block], label="arm"))  # one model name: one mesh file name
+
+        # A vendor's robot read from its MJCF, a texture on its link.
+        vendor = self.folder / "vendor" / "link.xml"
+        (vendor.parent / "meshes").mkdir(parents=True)
+        self.saved(robot(30), "first/arm.xml")
+        shutil.copy(self.folder / "first" / "assets" / "arm_block.stl", vendor.parent / "meshes" / "link.stl")
+        (vendor.parent / "meshes" / "grid.png").write_bytes(_png_1x1())
+        vendor.write_text('<mujoco model="link"><compiler meshdir="meshes" texturedir="meshes"/>'
+                          '<asset><mesh name="link" file="link.stl"/><texture name="grid" type="2d" file="grid.png"/>'
+                          '<material name="checker" texture="grid"/></asset><worldbody><body name="link">'
+                          '<geom type="mesh" mesh="link" material="checker"/></body></worldbody></mujoco>',
+                          encoding="utf-8")
+        children = {"left/": robot(40), "right/": robot(50), "vendor/": spec(vendor)}
+        scene = mujoco.MjSpec()
+        scene.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1, 1, 0.1])
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Attach conflict", UserWarning)
+            for at, (prefix, child) in enumerate(children.items()):
+                scene.attach(child, prefix=prefix, frame=scene.worldbody.add_frame(pos=[0.2 * at, 0, 0.1]))
+            said = self.saved(scene, "sim/pick.xml")
+        # A scene has its floor: no scene.xml beside it. Two meshes of one file name are two files.
         self.assertNotIn("scene.xml", said)
-        self.assertEqual(sorted(path.name for path in (self.folder / "pick").iterdir()), ["assets", "pick.xml"])
+        self.assertEqual(sorted(path.name for path in (self.folder / "sim" / "assets").iterdir()),
+                         [".pick.xml.meshes", "arm_block.stl", "arm_block_2.stl", "grid.png", "link.stl"])
+        moved = self.folder / "moved"
+        shutil.move(self.folder / "sim", moved)
+        model = mujoco.MjModel.from_xml_path(str(moved / "pick.xml"))
+        self.assertEqual((model.nmesh, model.ntex), (3, 1))
+        widths = sorted(round(float(max(model.geom_aabb[model.geom(f"{side}block").id][3:])) * 2, 6)
+                        for side in ("left/", "right/"))
+        self.assertEqual(widths, [0.04, 0.05], "each robot its own mesh")
+        # A robot the scene attached is the scene's now: each helper refuses it, before anything compiles it.
+        attached = children["left/"]
+        for helper in (lambda: save(attached, "again/arm.xml"), lambda: collisions(attached, "block"),
+                       lambda: fit(attached, "block", "box"), lambda: decompose(attached, "block")):
+            with self.assertRaisesRegex(ValueError, r"this MjSpec was attached to a scene \(scene.attach\), which took "
+                                                    r"its bodies, geoms and meshes: make a robot's choices .* and save "
+                                                    r"it before a scene attaches it"):
+                helper()
+        self.assertFalse((self.folder / "again").exists())
 
     def test_a_spec_mujoco_refuses_is_refused_in_its_words_and_nothing_is_written(self) -> None:
         made = self.hinge()
         made.geom("arm").meshname = "missing"
         with self.assertRaisesRegex(ValueError, "missing"):
             save(made, "broken/hinge.xml")
-        self.assertEqual(list((self.folder / "broken").iterdir()), [])
+        self.assertFalse((self.folder / "broken").exists(), "refused before its folder is made")
 
 
 if __name__ == "__main__":

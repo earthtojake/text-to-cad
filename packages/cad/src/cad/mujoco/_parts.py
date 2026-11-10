@@ -20,6 +20,13 @@ of a weak dictionary (``SOURCES``) whose value is what the helpers need, and goe
 A spec made another way (``MjSpec.from_file``, a ``copy()``) has no remembered parts and is refused by
 name. Each helper keeps the record up to date: the geoms it adds are the part's collisions after it.
 
+**Several parts on one path.** Sibling parts of one label share a label path: ``collisions`` answers all their
+geoms, and ``fit`` and ``decompose``, which work on one solid, refuse the path, saying how many parts share it.
+
+**A spec a scene attached.** ``scene.attach(s, ...)`` takes ``s``'s bodies and geoms into the scene, and MuJoCo
+4.0.0 crashes the process compiling a copy of ``s`` after. Every helper, and ``save``, refuses such a spec by name
+before anything compiles (``attached``: its ``parent`` is the scene): a robot's choices and its save come first.
+
 **A body weighed by its collision.** A part with no density and no declared mass has no ``<inertial>``: MuJoCo
 weighs its body from its geoms, so ``fit`` or ``decompose`` on it changes its mass and inertia. Each says so once
 per body, as a Python warning (``UserWarning``) at the call, naming how to stop it (a material with a density, or
@@ -49,7 +56,7 @@ import numpy as np
 
 from cad.engine.hulls import MAX_HULLS
 
-__all__ = ["SOURCES", "collisions", "decompose", "fit", "remember_document", "remember_mjcf"]
+__all__ = ["SOURCES", "attached", "collisions", "decompose", "fit", "remember_document", "remember_mjcf"]
 
 #: The primitives ``fit`` makes: a geom of each kind of MuJoCo's.
 PRIMITIVES = ("box", "sphere", "cylinder", "capsule")
@@ -73,6 +80,7 @@ class Part:
     mesh: str = ""  # the stem its hull meshes are named by: its mesh's name
     triangles: tuple[np.ndarray, np.ndarray] | None = None  # its mesh (metres), a document's
     solid: bytes | None = None  # its B-rep, a document's
+    count: int = 1  # how many parts of the document share its path (siblings of one label): their geoms all its
 
 
 @dataclass
@@ -99,7 +107,8 @@ def remember_document(made: Any, description: Any, owners: dict[str, dict[str, A
         mesh = description.meshes.get(key) if key is not None else None
         parts[path] = Part(path, path.rsplit("/", 1)[-1], owned["body"], np.asarray(owned["placement"], dtype=float),
                            list(owned["collisions"]), list(owned["visuals"]), mesh.name if mesh is not None else "",
-                           (mesh.positions, mesh.triangles) if mesh is not None else None, solids.get(key))
+                           (mesh.positions, mesh.triangles) if mesh is not None else None, solids.get(key),
+                           max(int(owned.get("count") or 1), 1))
     SOURCES[made] = Source(description.name, True, parts)
     return made
 
@@ -130,11 +139,31 @@ def _source(spec: Any, said: str) -> Source:
 
     if not isinstance(spec, mujoco.MjSpec):
         raise TypeError(f"{said} takes the mujoco.MjSpec cad.mujoco.spec made, not {type(spec).__name__}")
+    attached(spec, said)
     found = SOURCES.get(spec)
     if found is None:
         raise ValueError(f"{said}: this MjSpec was not made by cad.mujoco.spec (MjSpec.from_file, a copy, a new "
                          "spec), so its parts are not known: make it with spec(model_or_file)")
     return found
+
+
+def attached(spec: Any, said: str) -> None:
+    """Refuse a spec a scene has attached (``scene.attach``): its bodies, geoms and assets are the scene's now,
+    renamed under its prefix, and MuJoCo 4.0.0 cannot compile it (``to_xml``, ``compile``), or crashes the process
+    compiling a copy of it. Known by its ``parent``, the scene, which MuJoCo sets on attaching and nothing else sets:
+    read before anything that compiles."""
+    if spec.parent is not None:
+        raise ValueError(f"{said}: this MjSpec was attached to a scene (scene.attach), which took its bodies, geoms and "
+                         "meshes: make a robot's choices (fit, decompose, collisions) and save it before a scene "
+                         "attaches it, or attach a spec made again")
+
+
+def _one(part: Part, said: str) -> None:
+    """Refuse a path several parts share where a helper works on one solid (``fit``, ``decompose``)."""
+    if part.count > 1:
+        raise ValueError(f"{said} {part.path!r}: {part.count} parts share this path (siblings of one label), and "
+                         f"{said} works on one solid: give the parts distinct labels in the model, or set their geoms' "
+                         f"type and size with MuJoCo's API through collisions(spec, {part.path!r})")
 
 
 def _part(source: Source, part: Any, said: str) -> Part:
@@ -196,6 +225,7 @@ def fit(spec: Any, part: str, kind: str) -> list[Any]:
         raise ValueError(f"fit {kind!r}: a primitive is one of {', '.join(PRIMITIVES)}"
                          + ("; decompose(spec, part) cuts a part into convex hulls" if kind == "decomposed" else ""))
     found = _part(source, part, "fit")
+    _one(found, "fit")
     if not source.document:
         raise ValueError(f"fit {found.path!r}: this spec was read from an MJCF, which holds meshes and no solids, and "
                          f"a {kind} is fitted to a part's exact solid: make the spec from the model, its STEP or its "
@@ -238,6 +268,7 @@ def decompose(spec: Any, part: str, *, max_hulls: int | None = MAX_HULLS, thresh
     source = _source(spec, "decompose")
     options = hulling.options(max_hulls, threshold)
     found = _part(source, part, "decompose")
+    _one(found, "decompose")
     if source.document:
         if found.triangles is None:
             raise ValueError(f"decompose {found.path!r}: the part has no mesh to cut")
