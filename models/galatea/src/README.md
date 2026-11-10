@@ -448,8 +448,8 @@ cad run src/film.py take end wake 22             # the end card: one rendered fr
 cad run src/film.py cut                          # tmp/film/galatea.mp4 (needs ffmpeg)
 ```
 
-The cut is about the model being a CAD file and about its mechanism, and gets inside
-it in three seconds: it wakes; the camera goes round it and, in the same shot, the
+The cut is 39 seconds, about the model being a CAD file and about its mechanism, and
+gets inside it in three: it wakes; the camera goes round it and, in the same shot, the
 whole assembly comes apart (the GLB's `explode`: links and skins, a hold, then all 689
 pieces, a longer hold); then the mechanism with its skins left off, a joint at a time
 as it moves (the knee's linkage, the ankle, the hip, the waist, the arm, the hand, the
@@ -471,8 +471,10 @@ wipe every skin gets a shader that is clear above a height, with a lit edge. A c
 piece is a list of a shot's frames, so a rendered shot can be used in part, faster or
 backwards (the wipe is rendered taking the skins off and played putting them on). The
 captions and the title are laid over by ffmpeg, so the words can change without a frame
-being rendered again; a little grain is added last, without which an 8-bit encoder
-turns the studio's dark gradients into bands.
+being rendered again. A caption is a few words, because a close-up is on the screen for
+a second and a half, and stands on a dark plate, because half the shots have a lit
+floor where it stands and pale words are lost on it. A little grain is added last,
+without which an 8-bit encoder turns the studio's dark gradients into bands.
 
 On a machine with four cores and no GPU a frame takes 14 to 30 s at 14 to 20 samples
 with the denoiser. Its picture has no texture in it, only flat looks and edges, which

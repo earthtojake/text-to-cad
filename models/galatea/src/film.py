@@ -652,14 +652,16 @@ def cut(quality, step=1):
     rate = FPS / step
     (width, height), seconds = QUALITY[quality][0], count / rate
 
-    def text(words, size, colour, x, y, alpha, face=FONT):
-        """One drawtext step. The words go by a file, so that nothing in them needs escaping."""
+    def text(words, size, colour, x, y, alpha, face=FONT, plate=False):
+        """One drawtext step. The words go by a file, so that nothing in them needs escaping. With `plate`, a dark
+        plate lies under them: a caption is pale, and half the shots have a lit floor where it stands."""
         page = reel / f"text{len(list(reel.glob('text*.txt')))}.txt"
         page.write_text(words)
         font = f"fontfile={face}:" if Path(face).exists() else ""
         shadow = "" if colour == "0x2A2E35" else (f"shadowcolor=0x000000@0.5:shadowx={max(1, round(height / 540))}:"
                                                   f"shadowy={max(1, round(height / 540))}:")
-        return (f"drawtext={font}textfile={page}:expansion=none:fontsize={round(size * height)}:fontcolor={colour}:{shadow}"
+        under = f"box=1:boxcolor=0x0A0C10@0.55:boxborderw={round(0.014 * height)}:" if plate else ""
+        return (f"drawtext={font}textfile={page}:expansion=none:fontsize={round(size * height)}:fontcolor={colour}:{shadow}{under}"
                 f"alpha='{alpha}':x={x}:y={y}")
 
     steps = [f"scale={width}:{height}:flags=lanczos", "fade=t=in:st=0:d=0.3"]
@@ -669,7 +671,7 @@ def cut(quality, step=1):
             a, b = (first + begin / step) / rate, (first + min(finish / step, last - first)) / rate
             fade = f"0.9*min(1,min((t-{a:.3f})/0.25,({b:.3f}-t)/0.25))*between(t,{a:.3f},{b:.3f})"
             ink = "0x2A2E35" if name in ON_LIGHT else "0xDADCE0"            # dark words on the viewer's light page
-            steps.append(text(line, 0.027, ink, "w*0.06", "h*0.885", fade, FONT_LIGHT))
+            steps.append(text(line, 0.027, ink, "w*0.06", "h*0.885", fade, FONT_LIGHT, plate=name not in ON_LIGHT))
     if spans and spans[-1][0] == CUT[-1][0]:                # the title, over the last piece
         a = spans[-1][1] / rate
         rise = f"min(1,max(0,(t-{a + 0.3:.3f})/0.7))"
