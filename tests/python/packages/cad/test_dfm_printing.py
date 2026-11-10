@@ -26,6 +26,19 @@ from cad._internal.dfm import printing as rules
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_printing as measured
 
+
+def _dfm(path, process: str = "printing", candidates: bool = False, **given):
+    """A mesh's check measured in this process and finished as the public call finishes it. These tests are of
+    the measurement: ``cad.stl.dfm`` measures in a process of its own, held to a check's limits -- a second a
+    check, and out of a test's reach to patch."""
+    resolved = manufacturing.options("stl", process, given, candidates=candidates)
+    found = manufacturing._measured_here({"type": "stl", "source": str(path), "process": process,
+                                          "resolved": resolved, "candidates": candidates})
+    if "unmeasured" in found:
+        return manufacturing.not_checked(Path(path), found["unmeasured"]["message"], found["unmeasured"]["code"])
+    return manufacturing.finish(Path(path), {"process": process, **found["measured"]["report"]}, process,
+                                found["measured"]["resolved"], candidates)
+
 A = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 
 
@@ -34,6 +47,11 @@ def check(shape, name: str, **options):
     result = cad.build123d.printing(shape, **options)
     json.dumps(result.measurements, allow_nan=False)
     return result
+
+
+def _labelled(shape, name: str):
+    shape.label = name
+    return shape
 
 
 def items(result, family: str, **match) -> list[dict]:
@@ -180,7 +198,82 @@ class UnsampledFaceTest(unittest.TestCase):
         self.assertNotIn("measurement_failed", codes(result))
 
 
+class ClassifiedAlikeTest(unittest.TestCase):
+    """A pin, a slot, a clearance and a skin are the same thing on exact geometry as on a mesh."""
+
+    def test_a_pin_is_a_wall_joined_on_one_side(self) -> None:
+        # 0.5 mm across: under FDM's wall minimum, which is its floor (a mesh reads it so); the pins' rule adds
+        # its guide's own figure
+        pin = bd.Box(20, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Cylinder(0.25, 10, align=A)
+        result = check(pin, "pin")
+        failed = {f.code: f.severity for f in result.findings if f.rule}
+        self.assertEqual(failed, {"printing.wall_unsupported": "error", "printing.pin_diameter": "warning"})
+        wall = min(items(result, "wall_thickness"), key=lambda item: item["thickness_mm"])
+        self.assertAlmostEqual(wall["thickness_mm"], 0.5, delta=1e-6)
+        self.assertEqual((wall["supported"], wall["joined_sides"]), (False, 1))
+
+    def test_what_lies_between_two_solids_of_one_part_is_a_clearance(self) -> None:
+        pair = bd.Compound([bd.Box(10, 10, 10, align=A), bd.Pos(10.2, 0, 0) * bd.Box(10, 10, 10, align=A)])
+        result = check(pair, "pair", technology="sls")
+        self.assertEqual(result.measurements["gaps"]["items"], [], "no slot of one body")
+        (between,) = items(result, "clearances")
+        self.assertAlmostEqual(between["distance_mm"], 0.2, delta=1e-6)
+        self.assertEqual(between["parts"], ["pair (solid 1)", "pair (solid 2)"])
+        self.assertEqual({f.code: f.severity for f in result.findings if f.rule}, {"printing.clearance": "warning"})
+        self.assertIn("several_solids", codes(result))
+
+    def test_a_v_groove_is_a_slot_only_where_its_flanks_face_each_other(self) -> None:
+        # a thread's 60 deg V, 0.5 mm across its root: its flanks look past each other -- a notch, no slot; the
+        # same root between flanks 20 deg apart is a slot
+        def grooved(angle: float):
+            half = 0.25 + 3 * math.tan(math.radians(angle / 2))
+            groove = bd.extrude(bd.make_face(bd.Polyline((-0.25, 0), (0.25, 0), (half, 3), (-half, 3), (-0.25, 0))), 20)
+            return bd.Box(30, 20, 10, align=A) - bd.Pos(0, 10, 7) * bd.Rotation(90, 0, 0) * groove
+
+        self.assertEqual(check(grooved(60), "thread", technology="sls").measurements["gaps"]["items"], [])
+        (slot,) = items(check(grooved(20), "slot", technology="sls"), "gaps")
+        self.assertAlmostEqual(slot["gap_mm"], 0.5, delta=0.02)
+
+    def test_fdm_s_two_beads_are_a_standing_wall_s_and_a_skin_is_judged_by_its_layers(self) -> None:
+        def tray(floor: float):
+            return bd.Box(40, 30, 10, align=A) - bd.Pos(0, 0, floor) * bd.Box(36, 26, 10, align=A)
+
+        # a 0.6 mm floor is three 0.2 mm layers: no wall of two beads, and no failure; so is its STL's
+        result = check(tray(0.6), "tray")
+        floor = min(items(result, "wall_thickness"), key=lambda item: item["thickness_mm"])
+        self.assertEqual((floor["thickness_mm"], floor["lying"]), (0.6, True))
+        self.assertEqual([f.code for f in result.findings if f.rule], [])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "tray.stl"
+            bd.export_stl(tray(0.6), str(path), tolerance=0.01)
+            self.assertEqual([f.code for f in _dfm(path).findings if f.rule], [])
+        # one layer alone is a recommendation, under a layer the floor; a standing wall of 0.6 mm fails as before
+        for thickness, rule, severity in ((0.3, "printing.skin_layers", "warning"), (0.15, "printing.skin_layer", "error")):
+            found = [(f.code, f.severity) for f in check(tray(thickness), "tray").findings if f.rule]
+            self.assertEqual(found, [(rule, severity)], thickness)
+        fin = bd.Box(30, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Box(20, 0.6, 8, align=A)
+        self.assertEqual([(f.code, f.severity) for f in check(fin, "fin").findings if f.rule],
+                         [("printing.wall_unsupported", "error")])
+        self.assertEqual([f.code for f in check(tray(0.6), "tray", technology="sls").findings if f.rule],
+                         ["printing.wall_supported"], "the other technologies' minima are of every wall")
+
+
 class BoundedSoundnessTest(unittest.TestCase):
+    def test_a_part_past_the_self_intersection_check_s_budget_is_not_checked_and_named_once(self) -> None:
+        from unittest import mock
+
+        plates = bd.Compound(children=[_labelled(bd.Pos(30 * k, 0, 0) * bd.Box(20, 20, 3, align=A), "plate")
+                                       for k in range(4)], label="rack")
+        self.assertGreaterEqual(measured.SOUND_FACES, 1000, "a part of a few hundred faces is checked in full")
+        with mock.patch.object(measured, "SOUND_FACES", 12):  # two plates' faces: the other two are past it
+            result = check(plates, "rack")
+        self.assertEqual([item["check"] for item in result.measurements["solid"]["items"]],
+                         ["boolean", "boolean", "topology", "topology"])
+        (said,) = [f for f in result.findings if f.code == "measurement_failed"]
+        self.assertIn("plate (x2) had no self-intersection looked for", said.message)
+        self.assertEqual((result.status, result.ok), ("not_checked", False))
+        self.assertEqual(check(plates, "rack").status, "ok")
+
     """The boolean check's face/face search is bounded: a part with a large free-form face is checked edges
     against faces (``check`` boolean_edges, said in the item), a self-intersection through an edge still found."""
 
@@ -260,7 +353,7 @@ class KnifeZoneTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / f"{name}.stl"
             bd.export_stl(shape, str(path), tolerance=0.01)
-            return check(shape, name), cad.stl.dfm(path, process="printing")
+            return check(shape, name), _dfm(path, process="printing")
 
     @staticmethod
     def wall_failures(result) -> list[tuple[str, float, list]]:
@@ -327,7 +420,7 @@ class KnifeZoneTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "rod.stl"
             bd.export_stl(rod, str(path), tolerance=0.01, angular_tolerance=0.1)
-            result = cad.stl.dfm(str(path), process="printing", technology="fdm")
+            result = _dfm(str(path), process="printing", technology="fdm")
         self.assertEqual(self.wall_failures(result), [])
         self.assertIn("printing.knife_edge", codes(result))
 
@@ -582,11 +675,19 @@ class TrappedTest(unittest.TestCase):
 
 
 class PlateTest(unittest.TestCase):
-    def test_the_build_volume_in_the_best_axis_orientation(self) -> None:
-        bar = bd.Box(250, 20, 10, align=A)
+    def test_the_build_volume_lying_the_best_way(self) -> None:
+        # a 250 mm bar lies across the corners of a 200 x 200 bed, turned 45 deg -- smallest on its 10 mm side
+        fit = check(bd.Box(250, 20, 10, align=A), "bar").measurements["build_volume"]
+        self.assertEqual((fit["fits"], fit["upright"], fit["turn_deg"], fit["volume_mm"]),
+                         (True, "y", 45.0, [200.0, 200.0, 200.0]))
+        self.assertAlmostEqual(fit["fill_ratio"], (250 + 10) / math.sqrt(2) / 200, places=6)
+        self.assertEqual((fit["as_placed_fill_ratio"], fit["max_dimension_mm"]), (1.25, 250.0))
+        # a 400 mm one fits no way, not from corner to corner of the volume (346 mm)
+        bar = bd.Box(400, 20, 10, align=A)
         result = check(bar, "bar")
         fit = result.measurements["build_volume"]
-        self.assertEqual((fit["fill_ratio"], fit["fits"], fit["volume_mm"]), (1.25, False, [200.0, 200.0, 200.0]))
+        self.assertFalse(fit["fits"])
+        self.assertGreater(fit["fill_ratio"], 1.1)
         # against a typical machine assumed, a warning that names it; against the machine given, an error
         assumed = next(f for f in result.findings if f.code == "printing.build_volume")
         self.assertEqual(assumed.severity, "warning")
@@ -594,21 +695,46 @@ class PlateTest(unittest.TestCase):
         given = check(bar, "bar", build_volume="200x200x200")
         self.assertEqual([f.severity for f in given.findings if f.code == "printing.build_volume"], ["error"])
         self.assertFalse(given.ok)
-        self.assertTrue(check(bar, "bar", build_volume="100x100x300").measurements["build_volume"]["fits"])
+        self.assertTrue(check(bar, "bar", build_volume="100x100x450").measurements["build_volume"]["fits"])
         self.assertTrue(check(bar, "bar", build_volume="900x600x900").ok, "an industrial FDM machine")
 
     def test_a_part_past_the_largest_machine_listed_is_an_error(self) -> None:
         # no machine given: over the typical machine is a warning (give yours), over the largest the guide lists
-        # in every orientation is no part any machine of the technology makes -- one finding either way
+        # lying every way is no part any machine of the technology makes -- one finding either way. A bed has
+        # no preferred diagonal: a 950 mm rod lies across the 900 x 600 bed's corners (1081 mm), a 1300 mm one
+        # from a corner of the volume to the one opposite (1407 mm), a 1500 mm one no way
         for length, severity, said in ((850, "warning", "an assumed typical fdm machine"),
-                                       (950, "error", "the largest fdm machine the guide lists is 900 x 600 x 900")):
+                                       (950, "warning", "an assumed typical fdm machine"),
+                                       (1300, "warning", "an assumed typical fdm machine"),
+                                       (1500, "error", "the largest fdm machine the guide lists is 900 x 600 x 900")):
             result = check(bd.Box(length, 20, 10, align=A), "bar")
             [found] = [f for f in result.findings if f.code == "printing.build_volume"]
-            self.assertEqual(found.severity, severity)
+            self.assertEqual(found.severity, severity, length)
             self.assertIn(said, found.message)
             self.assertEqual(result.ok, severity == "warning")
             self.assertEqual(result.measurements["build_volume"]["fits_largest"], severity == "warning")
         self.assertTrue(check(bd.Box(950, 20, 10, align=A), "bar", build_volume="1000x500x500").ok)
+
+    def test_the_fit_does_not_turn_with_how_the_part_stands(self) -> None:
+        # a 370 x 280 x 5 plate in MJF's 380 x 285 x 380: it fits flat however it is turned about the plate's
+        # axis or tilted in space, its length (the longest side of its tightest box) is 370 either way, and a
+        # cube exactly the volume's size fits it at any tilt
+        plate = bd.Box(370, 280, 5, align=A)
+        odd = bd.Axis((0, 0, 0), (1, 2, 3))
+        for name, shape in (("flat", plate), ("turned", plate.rotate(bd.Axis.Z, 45)),
+                            ("turned oddly", plate.rotate(bd.Axis.Z, 12.3456)), ("tilted", plate.rotate(odd, 37))):
+            result = check(shape, "plate", technology="mjf")
+            fit = result.measurements["build_volume"]
+            with self.subTest(way=name):
+                self.assertNotIn("printing.build_volume", codes(result))
+                self.assertTrue(fit["fits"])
+                self.assertAlmostEqual(fit["max_dimension_mm"], 370.0, delta=1e-3)
+                self.assertEqual([f.value for f in result.findings if f.code == "printing.warp_length"],
+                                 [fit["max_dimension_mm"]])
+        cube = bd.Box(200, 200, 200, align=A)
+        for shape in (cube, cube.rotate(bd.Axis.Z, 30), cube.rotate(odd, 37)):
+            fit = measured.measure(brep.parts_of(shape, "cube"), {**rules.OPTIONS, "technology": "fdm"}, False)["build_volume"]
+            self.assertEqual((fit["fill_ratio"], fit["fits"]), (1.0, True))
 
     def test_bed_contact_and_warping(self) -> None:
         result = check(bd.Box(150, 40, 3, align=A), "flat", material="abs")
@@ -676,7 +802,7 @@ class TurnedOnThePlateTest(unittest.TestCase):
                 shape = bd.Rot(0, 0, turn) * part
                 path = Path(folder) / f"tee{turn}.stl"
                 bd.export_stl(shape, str(path))
-                seen[turn] = (read(check(shape, "tee")), read(cad.stl.dfm(path, process="printing")))
+                seen[turn] = (read(check(shape, "tee")), read(_dfm(path, process="printing")))
         for turn, paths in seen.items():
             for at, (base, turned) in enumerate(zip(seen[0], paths)):
                 with self.subTest(turn=turn, path=("brep", "mesh")[at]):
@@ -857,7 +983,7 @@ class MeshopsTest(unittest.TestCase):
         self.assertEqual(set(np.unique(labels)), {-2, -1, 0}, "material, air that is no cavity, the cavity")
 
     def test_a_wall_s_support_is_read_off_the_wall(self) -> None:
-        # the walk from the wall's thinnest place: where it runs into the part, and on how many sides
+        # the outline of the wall's thin region: where it runs into the part, and on how many sides
         def read(shape, point, normal, thickness: float) -> tuple:
             V, F, _ = brep.triangles(shape, 0.05)
             caster = mo.Caster(V, F)
@@ -869,7 +995,7 @@ class MeshopsTest(unittest.TestCase):
                 return distance, normals
 
             found = mo.wall_support(cast, np.array(point, dtype=float), np.array(normal, dtype=float), thickness)
-            self.assertEqual(found["unread_directions"], 0, found)
+            self.assertEqual(found["unread_links"], 0, found)
             return found["supported"], found["joined_sides"]
 
         base = bd.Box(30, 20, 2, align=A)
@@ -886,21 +1012,37 @@ class MeshopsTest(unittest.TestCase):
         skin = bd.Box(30, 30, 30) - bd.Pos(0, 0, 3.3) * bd.Sphere(11)
         self.assertEqual(read(skin, (0, 0, 15), (0, 0, 1), 0.7), (True, 2), "a skin over a cavity: all round")
         self.assertEqual(read(bd.Box(20, 20, 0.5), (1, 2, 0.25), (0, 0, 1), 0.5), (False, 0), "a plate alone: none")
+        pin = base + bd.Pos(0, 0, 2) * bd.Cylinder(0.25, 10, align=A)
+        self.assertEqual(read(pin, (0.25, 0, 7), (1, 0, 0), 0.5), (False, 1), "a pin on its foot: one side")
+        cup = bd.Cylinder(10, 20, align=A) - bd.Pos(0, 0, 2) * bd.Cylinder(9.3, 20, align=A)
+        self.assertEqual(read(cup, (10, 0, 12), (1, 0, 0), 0.7), (True, 2), "a cup's wall: its floor all round")
+        # the land a 90 deg countersink leaves round a hole, 0.6 mm: joined to the plate round its whole rim,
+        # whichever of its faces it is read from and whichever side of the hole
+        land = bd.Box(30, 20, 3, align=A) - bd.Cylinder(1.7, 3, align=A) - bd.Pos(0, 0, 0.6) * bd.Cone(1.7, 4.1, 2.4, align=A)
+        for x in (1.75, -1.75):
+            self.assertEqual(read(land, (x, 0, 0), (0, 0, -1), 0.65), (True, 2), "a countersink's land, from below")
+        slope = np.array([-1.0, 0.0, 1.0]) / math.sqrt(2.0)
+        self.assertEqual(read(land, (1.9, 0, 0.8), slope, 0.8 * math.sqrt(2.0) / 2.0), (True, 2), "from its cone")
 
     def test_the_mesh_check_answers_the_same_families(self) -> None:
         drained = TrappedTest.sealed - bd.Pos(0, 0, -1) * bd.Cylinder(2.5, 5, align=A)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "drained.stl"
             bd.export_stl(tunnel(8.0) + bd.Pos(50, 0, 0) * drained, str(path), tolerance=0.01)
-            result = cad.stl.dfm(path, process="printing", technology="sla")
+            result = _dfm(path, process="printing", technology="sla")
         report = result.measurements
         bridge = near(result, "bridges", (0, 0, 6), 12.0, kind="bridge")
         self.assertAlmostEqual(bridge["length_mm"], 8.0, delta=0.05)
         hollow = items(result, "trapped_volumes")[0]
         self.assertEqual((hollow["sealed"], hollow["escape_holes"]), (False, 1))
         self.assertAlmostEqual(hollow["min_wall_mm"], 3.0, delta=0.05)
-        self.assertNotIn("holes", report, "a mesh has no axis: holes are exact geometry's")
-        self.assertEqual(outcome(result, "printing.hole_diameter")[0]["status"], "not_evaluated")
+        # a mesh holds no cylinder: its holes up to the gaps' reach are the gaps whose rays cross a round hole
+        # (the 5 mm drain is past it, and no hole here); its pins and details are exact geometry's
+        self.assertEqual((report["holes"]["items"], report["holes"]["read_below_mm"]), ([], 3.0))
+        self.assertEqual(outcome(result, "printing.hole_diameter")[0]["status"], "passed")
+        self.assertEqual(sorted(report["not_measured"]), ["details", "pins"])
+        self.assertEqual(outcome(result, "printing.pin_diameter")[0]["status"], "not_evaluated")
+        self.assertIn("not judged on a mesh: holes over 3 mm as holes", result.summary)
         json.dumps(report, allow_nan=False)
 
     def test_a_sliver_is_sampled_along_its_length_and_spans_read_far_from_the_origin(self) -> None:

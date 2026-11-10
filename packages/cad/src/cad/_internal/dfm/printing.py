@@ -54,6 +54,9 @@ HORIZONTAL_HOLE_MM = 10.0
 #: What a finding on an assembly measured: the parts as printed together, where they stand.
 IN_PLACE = ("the check measures the parts as printed together, in place (print-in-place); a part printed on its "
             "own is checked by its own id")
+#: What a mesh's result says of the families it does not hold (``summary``): its pins are walls, judged by the
+#: wall rules, and its holes are read up to the gaps' reach (a larger hole's crown is an overhang).
+MESH_UNREAD = {"pins": "pins' own minima (a pin is judged as a wall)", "details": "embossed and engraved details"}
 #: Materials that warp on an FDM plate (shrinking as they cool): a long flat contact is a risk.
 WARP_PRONE = ("abs", "nylon", "nylon_gf", "pc", "pc_abs", "pp", "peek", "pei", "pom", "pbt")
 
@@ -109,8 +112,9 @@ BUILD_VOLUMES: dict[str, tuple[tuple[float, float, float], str]] = {
     "fdm": ((200, 200, 200), "hubs-geometry"), "sla": ((145, 145, 175), "hubs-geometry"),
     "sls": ((300, 300, 300), "hubs-geometry"), "mjf": ((380, 285, 380), "hubs-geometry"),
     "pbf": ((250, 150, 150), "hubs-geometry")}
-#: The largest machine the same page lists per technology, mm ("up to ..."; MJF's one machine): a part no
-#: orientation of which fits it is made by no machine of the technology -- ``printing.build_volume``'s error
+#: The largest machine the same page lists per technology, mm ("up to ..."; MJF's one machine): a part that
+#: fits it lying no way (on any side, turned any way on the bed: ``meshops_printing.lie``) is made by no machine
+#: of the technology -- ``printing.build_volume``'s error
 #: where no ``build_volume`` is given, as the typical machine is its warning.
 LARGEST_VOLUMES: dict[str, tuple[float, float, float]] = {
     "fdm": (900, 600, 900), "sla": (1500, 750, 500), "sls": (750, 550, 550), "mjf": (380, 285, 380),
@@ -120,6 +124,11 @@ LARGEST_VOLUMES: dict[str, tuple[float, float, float]] = {
 #: "wall thickness depends on nozzle diameter and how well passes fuse together").
 COMMON_NOZZLE_MM = 0.4
 NOZZLE_BEADS = 2.0
+#: FDM's skins lying in the layer plane (a wall whose faces lie within 45 deg of it: ``lying``) are laid layer on
+#: layer: under ``SKIN_LAYERS_MIN`` layers one is not laid at all (the floor, an error), under ``SKIN_LAYERS``
+#: it is one layer alone (a recommendation). text-to-cad's own: no guide states a figure for them.
+SKIN_LAYERS_MIN = 1.0
+SKIN_LAYERS = 2.0
 
 # --- the rules ----------------------------------------------------------------------------------------------
 # Each rule: (technology, limit, source, severity) rows of one figure. One Rule per source (a rule cites one
@@ -190,8 +199,11 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
     ``wall_thickness.items[].supported``, read off the wall on both paths), each with its variant for a wall at
     the limit within a mesh's accuracy (a warning) and, for FDM with ``--nozzle`` given, two beads of that
     nozzle in place of Hubs's 0.8 mm. A wall whose support could not be read (``supported`` None) is judged as
-    supported -- and, between the two minima, said: it fails if it is free."""
+    supported -- and, between the two minima, said: it fails if it is free. FDM's figure is a standing wall's,
+    laid bead beside bead: a skin lying in the layer plane (``lying``: a tray's floor, a living hinge) is laid
+    layer on layer and judged by its layers (``printing.skin_layer``, ``printing.skin_layers``)."""
     found: list[Rule] = []
+    standing = {"lying": (False, None)}
     unread = "wall thickness (whether it is supported could not be read: judged as supported)"
     for rid, what, rows, joined, fix, note in (
             ("printing.wall_supported", "supported wall thickness", supported, True, _FIX_WALL,
@@ -206,16 +218,18 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
             kept = [(tech, limit, source, "warning" if near else severity, said) for tech, limit, source, severity, said in rows]
             mended = fix + ("; or check the exact model (a STEP or the model): the mesh cannot tell" if near else "")
             # FDM's figure is two beads of the common nozzle: its verdicts say the nozzle assumed
-            for chosen, assumed in (([row for row in kept if row[0] != "fdm"], ""),
-                                    ([row for row in kept if row[0] == "fdm"],
-                                     f"assuming the common {COMMON_NOZZLE_MM:g} mm nozzle: give --nozzle for another")):
-                found += _rules(rid, "wall_thickness", "thickness_mm", "min", "mm", what, chosen, mended, item_when, note,
+            for chosen, assumed, which in (
+                    ([row for row in kept if row[0] != "fdm"], "", item_when),
+                    ([row for row in kept if row[0] == "fdm"],
+                     f"assuming the common {COMMON_NOZZLE_MM:g} mm nozzle: give --nozzle for another",
+                     {**item_when, **standing})):
+                found += _rules(rid, "wall_thickness", "thickness_mm", "min", "mm", what, chosen, mended, which, note,
                                 when={"technology": tuple(row[0] for row in chosen), "nozzle_given": False},
                                 detail="; ".join(part for part in (_AT_LIMIT if near else "", assumed) if part))
             found.append(Rule(
                 rid, "wall_thickness", "thickness_mm", "min", {"fdm": NOZZLE_BEADS}, "mm", what, OWN.id,
                 severity="warning" if near else "error", by="technology", scale_by="nozzle",
-                when={"technology": "fdm", "nozzle_given": True}, item_when=item_when, fix=mended,
+                when={"technology": "fdm", "nozzle_given": True}, item_when={**item_when, **standing}, fix=mended,
                 note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): text-to-cad's own scaling of Hubs's 0.8 "
                      f"mm, two beads of the common {COMMON_NOZZLE_MM:g} mm nozzle",
                 detail=(_AT_LIMIT + "; " if near else "") + f"{NOZZLE_BEADS:g} beads of the {{nozzle:g}} mm nozzle given"))
@@ -225,8 +239,21 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
                     "wall thickness, were it unsupported (whether it is could not be read)",
                     [(tech, limit, source, "warning", said) for tech, limit, source, _, said in free],
                     "thicken it to at least {limit:g} mm, or check the exact model (a STEP or the model), which "
-                    "tells whether the wall is joined on two sides", {"supported": None},
+                    "tells whether the wall is joined on two sides", {"supported": None, "between_minima": True},
                     when={"technology": tuple(row[0] for row in free), "nozzle_given": False})
+    # FDM lays a skin that lies in the layer plane layer on layer: one thinner than a layer is not laid at all
+    # (the floor), one of a single layer has no second to tie its beads (the recommendation). text-to-cad's
+    # own figures: the guides' wall minimum is of standing walls ("depends on nozzle diameter").
+    for rid, layers, severity, said in (
+            ("printing.skin_layer", SKIN_LAYERS_MIN, "error", "a skin thinner than one layer is not laid at all"),
+            ("printing.skin_layers", SKIN_LAYERS, "warning", "a skin of one layer alone has no second to tie its beads")):
+        found.append(Rule(
+            rid, "wall_thickness", "thickness_mm", "min", {"fdm": layers}, "mm",
+            "thickness of a skin lying in the layer plane", OWN.id, severity=severity, by="technology",
+            scale_by="layer_height", when={"technology": "fdm"}, item_when={"lying": True},
+            fix="thicken it to at least {limit:g} mm, or print finer layers (--layer-height)",
+            note=f"text-to-cad's own: {said}; FDM's two-bead wall minimum is a standing wall's",
+            detail=f"{layers:g} layer(s) of {{layer_height:g}} mm"))
     return found
 
 
@@ -351,22 +378,23 @@ def _general() -> tuple[Rule, ...]:
                         "smallest escape hole of a cavity", diameter, "open it to at least {limit:g} mm",
                         {"escape_at_limit": (False, None)}, detail=detail)
     found += _rules("printing.hollow_wall", "trapped_volumes", "min_wall_mm", "min", "mm",
-                    "wall around a hollow", rows["hollow"], "thicken the hollow's wall to at least {limit:g} mm")
+                    "wall around a hollow", rows["hollow"], "thicken the hollow's wall to at least {limit:g} mm",
+                    {"wall_at_limit": (False, None)})
     # The machine given (--build-volume) is the printer's: a part over it is not made, an error. With none
     # given: over the typical machine assumed (no printer of the user's) is a warning that names it; over the
     # largest machine the same page lists, in every orientation, no machine of the technology makes it: an error.
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
-                    "part size over the build volume (best axis orientation)", rows["fit"],
+                    "part size over the build volume (lying the best way in it)", rows["fit"],
                     "split the part, or print it on a larger machine", when={"machine_given": True},
                     detail="against the {machine} mm machine given")
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
-                    "part size over the build volume (best axis orientation)",
+                    "part size over the build volume (lying the best way in it)",
                     [(*row[:3], "warning", row[4]) for row in rows["fit"]],
                     "give the machine it prints on (--build-volume XxYxZ), or split the part",
                     when={"machine_given": False, "beyond_largest": False},
                     detail="against an assumed typical {technology} machine, {machine} mm: give --build-volume")
     found += _rules("printing.build_volume", "build_volume", "largest_fill_ratio", "max", "ratio",
-                    "part size over the largest machine listed (best axis orientation)", rows["fit"],
+                    "part size over the largest machine listed (lying the best way in it)", rows["fit"],
                     "split the part into pieces a machine holds (--build-volume XxYxZ checks one)",
                     when={"machine_given": False, "beyond_largest": True},
                     detail="the largest {technology} machine the guide lists is {largest} mm, a typical one {machine} mm")
@@ -527,15 +555,26 @@ def _at_limit(report: dict[str, Any], resolved: dict[str, Any]) -> None:
       does not put it under the limit is not measured (None), never a pass."""
     walls = _ok(report.get("wall_thickness"))
     rule_of = {True: "printing.wall_supported", False: "printing.wall_unsupported", None: "printing.wall"}
+    least = _limits("printing.wall_supported", resolved, "error", True)
+    most = _limits("printing.wall_unsupported", resolved, "error", False)
     for item in walls.get("items") or ():
         chord, value = item.get("chord_mm"), item.get("thickness_mm")
+        if isinstance(value, (int, float)) and item.get("supported") is None and "between_minima" not in item:
+            # between the two minima: it passes if it is supported and fails if it is free
+            item["between_minima"] = bool(least) and bool(most) and min(least) <= value < max(most)
         if not isinstance(chord, (int, float)) or not isinstance(value, (int, float)) or "at_limit" in item:
             continue
         limits = _limits(rule_of[item.get("supported")], resolved, "error", item.get("supported"))
         under = [limit for limit in limits if value < limit]
         item["at_limit"] = bool(under) and all(limit <= value + chord for limit in under)
     limits = _limits("printing.escape_hole_diameter", resolved)
+    hollow = _limits("printing.hollow_wall", resolved)
     for item in _ok(report.get("trapped_volumes")).get("items") or ():
+        # a mesh's wall round a hollow under the limit by no more than its chords stand off the surface: at it
+        wall, chord = item.get("min_wall_mm"), item.get("min_wall_chord_mm")
+        if isinstance(wall, (int, float)) and isinstance(chord, (int, float)) and "wall_at_limit" not in item:
+            under = [limit for limit in hollow if wall < limit]
+            item["wall_at_limit"] = bool(under) and all(limit <= wall + chord for limit in under)
         value, slack = item.get("min_escape_hole_mm"), item.get("escape_hole_uncertainty_mm")
         if value is None and item.get("escape_holes") == 0:
             not_applicable(item, "min_escape_hole_mm")  # a sealed cavity has no hole to size: escape_holes' to judge
@@ -547,6 +586,15 @@ def _at_limit(report: dict[str, Any], resolved: dict[str, Any]) -> None:
             continue
         item["escape_at_limit"] = bool(under) and isinstance(slack, (int, float)) and \
             all(limit <= value + slack for limit in under)
+    # A clearance the measurement's budget cut short (``exact`` false) is the least it found, and may be less by
+    # its ``uncertainty_mm``: where a limit lies between the two, the rule cannot tell and the distance is not
+    # measured (None; kept as ``distance_at_most_mm``) -- never a pass.
+    limits = _limits("printing.clearance", resolved)
+    for item in _ok(report.get("clearances")).get("items") or ():
+        value, slack = item.get("distance_mm"), item.get("uncertainty_mm")
+        if item.get("exact") is False and isinstance(value, (int, float)) and isinstance(slack, (int, float)) and \
+                any(value - slack < limit <= value for limit in limits):
+            item.update(distance_mm=None, distance_at_most_mm=value)
 
 
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
@@ -578,8 +626,18 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       + "; ".join(repairs) + ". A slicer may read the file as it is differently",
                                       "mesh", "export it again from the model, or repair the file"))
         if (mesh.get("body_count") or 0) > 1:
-            found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: each is "
-                                      "measured on its own, their clearances between", "mesh"))
+            # as a STEP's part of several solids is said (a mesh names no parts: its bodies are one part's)
+            found.append(CheckFinding("warning", "several_solids", f"the mesh is {mesh['body_count']} separate "
+                                      "bodies: a process makes a part of one solid; each is measured on its own, "
+                                      "their clearances between", "mesh",
+                                      "join them into one body (a union) if they are one piece; parts printed "
+                                      "together in place are checked so"))
+        for body in mesh.get("self_intersecting") or ():
+            found.append(CheckFinding("error", "not_sound", f"the surface passes through itself (body "
+                                      f"{body['body'] + 1}: {body['columns']} of {body['of']} lines up through it "
+                                      "enter material they are already in): a slicer may fill it wrongly, and its "
+                                      "volume counts the doubled part twice", where(body.get("xyz")),
+                                      "repair the mesh (a union of its own surface), or export it again"))
         overlap = _ok(report.get("gaps")).get("overlap")
         if overlap:
             found.append(CheckFinding("warning", "mesh_overlap", f"faces lie on faces {overlap['gap_mm']:g} mm apart "
@@ -599,24 +657,25 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       f"({', '.join(item.get('issues') or ['invalid'])}{on}): a slicer may "
                                       "misread it",
                                       item.get("location"), "rebuild the faulty feature; export the STEP again"))
-    # A soundness check that ran bounded is said, never read as a full pass: past the boolean check's budget a
-    # part has its topology checked alone, and a part with a large free-form face its edges against faces alone.
+    # A soundness check that ran bounded is said, never read as a full pass. A part with a large free-form face
+    # has its edges checked against its faces alone: a weaker check, said (a warning). A part past the boolean
+    # check's budget of faces had no self-intersection looked for at all: that is not checked.
     bounded = {"boolean_edges": [], "topology": []}
     for item in solid.get("items") or ():
         if item.get("sound") and item.get("check") in bounded:
             bounded[item["check"]].append(item)
-    if bounded["boolean_edges"] or bounded["topology"]:
-        said = []
-        if bounded["boolean_edges"]:
-            said.append(f"{_names(bounded['boolean_edges'])} had its self-intersections checked edges against faces "
-                        "alone (a free-form face of over 2000 control points): two faces crossing inside both, no "
-                        "edge of either meeting the other, are not found")
-        if bounded["topology"]:
-            said.append(f"{_names(bounded['topology'])} had its topology checked alone (the boolean check's budget, "
-                        "200 faces, spent): a self-intersection is not found")
-        first = (bounded["boolean_edges"] or bounded["topology"])[0]
-        found.append(CheckFinding("warning", "soundness_bounded", "; ".join(said), first.get("location"),
-                                  "check the parts in the slicer (or one at a time) where a self-intersection matters"))
+    if bounded["boolean_edges"]:
+        found.append(CheckFinding(
+            "warning", "soundness_bounded", f"{_names(bounded['boolean_edges'])} had its self-intersections checked "
+            "edges against faces alone (a free-form face of over 2000 control points): two faces crossing inside "
+            "both, no edge of either meeting the other, are not found", bounded["boolean_edges"][0].get("location"),
+            "check the part in the slicer where a self-intersection matters"))
+    if bounded["topology"]:
+        found.append(CheckFinding(
+            "error", "measurement_failed", f"solid was not measured in full: {_names(bounded['topology'])} had no "
+            f"self-intersection looked for (the check's budget of {solid.get('sound_budget_faces') or 'its'} faces "
+            "was spent on the parts before it; its topology alone was checked)", bounded["topology"][0].get("location"),
+            "check the parts one at a time (each by its own id), or in the slicer"))
     # Several parts, every occurrence one (a part of several solids is ``several_solids``, said alike in every
     # process where the document is read).
     if (solid.get("part_count") or 0) > 1:
@@ -627,6 +686,14 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     for item in crossing[:8]:
         names = item.get("parts") or [f"body {index + 1}" for index in item.get("bodies") or ()]
         shared = f" ({item['overlap_mm3']:g} mm3 shared)" if item.get("overlap_mm3") else ""
+        if item.get("inside") is not None:
+            # a body wholly in another's material: nothing of it shows, and the volume given counts it once
+            other = next(index for index in item["bodies"] if index != item["inside"])
+            found.append(CheckFinding(
+                "warning", "bodies_intersect", f"body {item['inside'] + 1} ({item.get('inside_volume_mm3'):g} mm3) "
+                f"lies wholly inside body {other + 1}'s material: a slicer prints them as one, and the volume given "
+                "counts it once", where(item.get("xyz")), "remove the inner body, or join them into one (a union)"))
+            continue
         found.append(CheckFinding(
             "warning", "bodies_intersect", f"{' and '.join(str(name) for name in names) or 'two bodies'} pass "
             f"through each other{shared}: a slicer may join them or fill the overlap twice, and the volume given is "
@@ -637,6 +704,24 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                   "each other (measurements.clearances lists every one)", "clearances"))
     if candidates:
         return found
+    # What a family's budget left unread is not measured, and the check is not checked: said as a family that
+    # failed is.
+    unread = _ok(report.get("bridges")).get("spans_not_measured")
+    if unread:
+        found.append(CheckFinding("error", "measurement_failed", f"bridges was not measured in full: {unread} flat "
+                                  "overhang(s) have no span read (the check's budget for spans was spent on the "
+                                  "larger ones), so printing.bridge_length and printing.cantilever_length give "
+                                  "them no verdict", "bridges", "check the part's exact geometry (its STEP or its "
+                                  "model), or a mesh with fewer separate flat undersides"))
+    for item in _ok(report.get("clearances")).get("items") or ():
+        if item.get("distance_at_most_mm") is not None:
+            names = item.get("parts") or [f"body {index + 1}" for index in item.get("bodies") or ()]
+            most = item["distance_at_most_mm"]
+            found.append(CheckFinding(
+                "info", "clearance_bounded", f"the clearance between {' and '.join(str(name) for name in names)} is "
+                f"between {max(0.0, most - item['uncertainty_mm']):g} and {most:g} mm: the check's budget was spent "
+                "before the least was found, and a limit lies between the two", item.get("location") or where(item.get("xyz")),
+                "check the parts' exact geometry (their STEP or model), or a mesh of fewer triangles"))
     overhangs = _ok(report.get("overhangs"))
     parts = (solid.get("part_count") or 0) if solid else (mesh.get("body_count") or 0)
     if (overhangs.get("down_facing_area_below_limit_mm2") or 0) > 0:
@@ -716,12 +801,22 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
     body = _ok(report.get("mesh")) or _ok(report.get("solid"))
     overhangs, walls = _ok(report.get("overhangs")), _ok(report.get("wall_thickness"))
     support = _ok(report.get("support_volume"))
+    # what a mesh does not hold is said in the line itself: an OK of a mesh is of what a mesh can be judged by
+    unread = [MESH_UNREAD.get(family, family) for family in report.get("not_measured") or {}]
+    reach = _ok(report.get("holes")).get("read_below_mm")
+    if reach is not None:
+        unread.insert(0, f"holes over {reach:g} mm as holes (their crowns are judged as overhangs)")
+    aside = f"; not judged on a mesh: {', '.join(unread)} (check the STEP or the model for them)" if unread else ""
     return (f"{resolved['technology']}: {mm(body.get('volume_mm3'))} mm3, {body.get('body_count')} body(ies); overhangs "
             f"under {mm(overhangs.get('angle_limit_used_deg'))} deg {mm(overhangs.get('down_facing_area_below_limit_mm2'))} "
             f"mm2; walls min {mm(walls.get('min_mm'))}, p05 {mm(walls.get('p05_mm'))}, median {mm(walls.get('median_mm'))} "
-            f"mm; support ~{mm(support.get('estimated_support_volume_mm3'))} mm3")
+            f"mm; support ~{mm(support.get('estimated_support_volume_mm3'))} mm3{aside}")
 
 
 def _names(items: list[dict[str, Any]]) -> str:
-    names = [str(item.get("part")) for item in items]
+    """The items' parts, each name once with how many of them bear it: ``plate (x27), lid``."""
+    counted: dict[str, int] = {}
+    for item in items:
+        counted[str(item.get("part"))] = counted.get(str(item.get("part")), 0) + 1
+    names = [name + (f" (x{count})" if count > 1 else "") for name, count in counted.items()]
     return ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")

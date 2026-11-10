@@ -2,7 +2,7 @@
 
 """3D printing's planted-defect corpus: parts built with known defects -- and clean controls -- checked for
 every technology (each STEP read and measured once, its rules judged per technology; one of them through
-``cad.step.dfm`` too, the same verdicts) and a mesh path through ``cad.stl.dfm``, each rule's verdicts
+``cad.step.dfm`` too, the same verdicts) and the mesh path (measured in this process), each rule's verdicts
 compared with the construction: which rules must fire, where, and that nothing else does.
 
 The ground truth is here, beside the parts: each planted defect is (rule id, the technologies whose
@@ -30,8 +30,22 @@ import numpy as np
 
 import cad
 from cad._internal import manufacturing
+from cad._internal import meshops_printing as mo
 from cad.build123d import _dfm_brep as brep
 from cad.build123d import _dfm_printing as measured
+
+
+def _dfm(path, process: str = "printing", candidates: bool = False, **given):
+    """A mesh's check measured in this process and finished as the public call finishes it. These tests are of
+    the measurement: ``cad.stl.dfm`` measures in a process of its own, held to a check's limits -- a second a
+    check, and out of a test's reach to patch."""
+    resolved = manufacturing.options("stl", process, given, candidates=candidates)
+    found = manufacturing._measured_here({"type": "stl", "source": str(path), "process": process,
+                                          "resolved": resolved, "candidates": candidates})
+    if "unmeasured" in found:
+        return manufacturing.not_checked(Path(path), found["unmeasured"]["message"], found["unmeasured"]["code"])
+    return manufacturing.finish(Path(path), {"process": process, **found["measured"]["report"]}, process,
+                                found["measured"]["resolved"], candidates)
 
 A = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 TOP = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX)
@@ -65,6 +79,7 @@ def features():
     planted = [
         ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
         ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
+        ("printing.wall_unsupported", ALL, (-5, 12, 6), 3.0),  # the pin: a wall joined at its foot alone
         ("printing.pin_diameter", ("fdm", "sla", "sls", "mjf", "pbf"), (-5, 12, 6), 3.0),  # FDM: Xometry's 1 mm
         ("printing.pin_aspect", ("pbf",), (-5, 12, 6), 3.0),
         ("printing.hole_diameter", ("fdm", "sla", "sls", "pbf"), (-5, -12, 2), 3.0),
@@ -75,12 +90,13 @@ def features():
         ("printing.gap", ALL, (25, 0, 4), 5.0),
     ]
     # a mesh's walls are read as exact geometry's are, their support off the wall itself; it has no axes: the
-    # pin is a thin wall joined at its foot alone, the hole a gap, the steps not measured
+    # pin is a thin wall joined at its foot alone (as on exact geometry, less the pins' own rule), the hole the
+    # gap whose rays cross a round hole, the steps not measured
     mesh = [
         ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
         ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
         ("printing.wall_unsupported", ALL, (-5, 12, 6), 3.0),
-        ("printing.gap", ALL, (-5, -12, 2), 3.0),
+        ("printing.hole_diameter", ("fdm", "sla", "sls", "pbf"), (-5, -12, 2), 3.0),
         ("printing.gap", ALL, (10, 10, 2.5), 7.0),
         ("printing.gap", ALL, (25, 0, 4), 5.0),
     ]
@@ -132,10 +148,11 @@ def hollows():
 
 
 def bar():
-    """400 mm long: no technology's typical machine holds it, and the powder beds warp it."""
+    """700 mm long: no technology's typical machine holds it, lying any way (MJF's 380 x 285 x 380 is 608 mm
+    from corner to corner), and the powder beds warp it."""
     planted = [("printing.build_volume", ALL, (0, 0, 3), 5.0),
                ("printing.warp_length", ("sls", "mjf"), (0, 0, 3), 5.0)]
-    return _doc("bar", bd.Box(400, 20, 6, align=A)), planted, planted
+    return _doc("bar", bd.Box(700, 20, 6, align=A)), planted, planted
 
 
 def assembly():
@@ -301,7 +318,7 @@ class CorpusTest(unittest.TestCase):
                 stl = folder / f"{name}-{label}.stl"
                 bd.export_stl(document, str(stl), tolerance=tolerance, angular_tolerance=0.5 if label == "coarse" else 0.1)
                 for technology in (("fdm", "sla") if label == "fine" else ("fdm",)):
-                    result = cad.stl.dfm(stl, process="printing", technology=technology, samples=SAMPLES)
+                    result = _dfm(stl, process="printing", technology=technology, samples=SAMPLES)
                     self.assertFalse(result.measurements.get("partial"), result.measurements.get("partial_sections"))
                     tally.score(f"{name}-{label}", result, planted, technology)
         print(f"\nprinting corpus, meshes ({time.monotonic() - started:.1f} s)\n{tally.table()}", file=sys.stderr)
@@ -322,6 +339,14 @@ def _cone(angle: float):
     return bd.Cone(5, 5 + 10 / math.tan(math.radians(angle)), 10, align=A)
 
 
+def _facet(angle: float):
+    """A block whose underside steps out in two flat faces: one 55 deg from the plate, then one ``angle`` from it
+    (400 mm2) -- two planes that meet at less than a mesh's face angle, neither a chord of the other."""
+    first, second = 10 / math.tan(math.radians(55)), 10 / math.tan(math.radians(angle))
+    return bd.extrude(bd.Plane.XZ * bd.Polygon((0, 0), (10, 0), (10 + first, 10), (10 + first + second, 20),
+                                               (10 + first + second, 25), (0, 25), align=None), -20)
+
+
 def _primitives() -> dict:
     """name: (shape, technology, the verdicts its construction calls for, whether its coarse STL is read too).
     One defect each, or none."""
@@ -331,11 +356,26 @@ def _primitives() -> dict:
         "cube": (bd.Box(15, 15, 15, align=A), "fdm", [], False),
         "fin": (bd.Box(16, 16, 4, align=A) + bd.Pos(0, 0, 4) * bd.Box(0.7, 16, 8, align=A), "sla",
                 [("printing.wall_unsupported", error)], False),                    # 0.7: over 0.5, under 1.0
+        # two holes countersunk 90 deg to a 0.6 mm land: joined to the plate all round, a supported wall (SLA's
+        # 0.5) at both holes and on both paths
+        "lands": (bd.Box(40, 30, 2.2, align=A) - bd.Pos(-12, 0, 0) * bd.Cylinder(1.6, 10)
+                  - bd.Pos(12, 0, 0) * bd.Cylinder(1.6, 10) - bd.Pos(-12, 0, 0.6) * bd.Cone(1.6, 3.2, 1.6, align=A)
+                  - bd.Pos(12, 0, 0.6) * bd.Cone(1.6, 3.2, 1.6, align=A), "sla", [], False),
         "thinbox": (bd.Box(16, 16, 16, align=A) - bd.Pos(0, 0, 0.5) * bd.Box(15.4, 15.4, 16, align=A), "sla",
                     [("printing.wall_supported", error)], False),                  # 0.3 walls joined on three sides
         "wedge44": (_wedge(44), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)], False),
         "wedge45": (_wedge(45), "fdm", [], False),
         "wedge46": (_wedge(46), "fdm", [], False),
+        # a flat overhang well under the limit, beside a face it meets at under a mesh's face angle: an overhang
+        # on both paths, never "at the limit" (a wedge's meets the plate's face, a facet's a 55 deg one)
+        **{f"wedge{angle}": (_wedge(angle), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)],
+                             False) for angle in (25, 30)},
+        **{f"facet55_{angle}": (_facet(angle), "fdm", [("printing.overhang_angle", warning)], False)
+           for angle in (25, 30, 35, 40)},
+        # a 1 mm plate with a 30 deg tip: the tip's edge is 1 mm long, shorter than its sliver is deep -- a knife
+        # on both paths, never a wall of nothing
+        "arrow": (bd.extrude(bd.Polygon((0, -6), (30, -6), (30 + 6 / math.tan(math.radians(15)), 0), (30, 6), (0, 6),
+                                        align=None), 1), "fdm", [("printing.knife_edge", warning)], False),
         "cone43": (_cone(43), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)], True),
         "cone45": (_cone(45), "fdm", [], True),
         "tee": (bd.Box(5, 5, 16, align=A) + bd.Pos(0, 0, 16) * bd.Box(24, 5, 2, align=A), "sla",
@@ -371,13 +411,29 @@ class ParityTest(unittest.TestCase):
     mesh cannot tell an angle from its limit (its chords turn as far as the angle stands off it) it says so
     (``mesh_at_limit``) in place of that verdict, and gives no other."""
 
-    def alike(self, mesh, exact: list[tuple[str, str]], why: str) -> None:
-        """The STL's verdicts are exact geometry's, but for an angle it says it could not judge."""
-        found = self.verdicts(mesh)
-        if found != exact:
-            self.assertFalse(set(found) - set(exact), f"{why}: a verdict exact geometry does not give")
-            self.assertLessEqual(set(exact) - set(found), _ANGLES, f"{why}: a verdict the STL does not give")
-            self.assertIn("mesh_at_limit", [finding.code for finding in mesh.findings], why)
+    def alike(self, mesh, exact, why: str) -> None:
+        """The STL's verdicts are exact geometry's (``exact``, its result), but for an angle the mesh says it
+        could not judge -- and it may say so only of an angle that stands within the tolerance it states of the
+        limit, which is never more than the mesh's chords turn an angle by (``CHORD_CAP_DEG``)."""
+        found, wanted = self.verdicts(mesh), self.verdicts(exact)
+        if found == wanted:
+            return
+        self.assertFalse(set(found) - set(wanted), f"{why}: a verdict exact geometry does not give")
+        dropped = set(wanted) - set(found)
+        self.assertLessEqual(dropped, _ANGLES, f"{why}: a verdict the STL does not give")
+        self.assertIn("mesh_at_limit", [finding.code for finding in mesh.findings], why)
+        # how far under its limit each dropped verdict's angle stands on exact geometry, and the band the mesh states
+        measured = exact.measurements
+        off = {"printing.overhang_angle": [finding.limit - finding.value for finding in exact.findings
+                                           if finding.code == "printing.overhang_angle"],
+               "printing.knife_edge": [measured["knife_edges"]["knife_below_deg"] - item["angle_deg"]
+                                       for item in measured["knife_edges"]["items"]]}
+        stated = {"printing.overhang_angle": mesh.measurements["overhangs"]["at_limit_tolerance_deg"],
+                  "printing.knife_edge": mesh.measurements["knife_edges"]["at_limit_tolerance_deg"]}
+        for rule, _severity in dropped:
+            self.assertLessEqual(stated[rule], mo.CHORD_CAP_DEG + 0.05, f"{why}: {rule}'s stated tolerance")
+            self.assertLessEqual(max(off[rule]), stated[rule], f"{why}: {rule} dropped {max(off[rule]):g} deg under "
+                                 f"its limit, past the {stated[rule]:g} deg the mesh states")
 
     @staticmethod
     def verdicts(result) -> list[tuple[str, str]]:
@@ -391,7 +447,7 @@ class ParityTest(unittest.TestCase):
         exact = checked(shape, "printing", {"technology": technology, "samples": SAMPLES})
         path = Path(self.folder.name) / f"{name}-{tolerance}.stl"
         bd.export_stl(shape, str(path), tolerance=tolerance, angular_tolerance=angular)
-        mesh = cad.stl.dfm(path, process="printing", technology=technology, samples=SAMPLES)
+        mesh = _dfm(path, process="printing", technology=technology, samples=SAMPLES)
         for result in (exact, mesh):
             self.assertFalse(result.measurements.get("partial"), (name, result.measurements.get("partial_sections")))
         return exact, mesh
@@ -400,7 +456,7 @@ class ParityTest(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory(prefix="dfm-printing-parity-")
         self.addCleanup(self.folder.cleanup)
 
-    def test_a_dozen_primitives_read_alike_as_step_and_as_stl(self) -> None:
+    def test_the_primitives_read_alike_as_step_and_as_stl(self) -> None:
         started, checks = time.monotonic(), 0
         odd = bd.Axis((0, 0, 0), (1, 2, 3))
         turned_z = ("thinbox", "wedge45", "cone45")
@@ -414,14 +470,14 @@ class ParityTest(unittest.TestCase):
                     self.assertEqual(self.verdicts(exact), sorted(expected), "exact geometry")
                     if label == "fine":
                         self.assertEqual(self.verdicts(mesh), sorted(expected), "the STL")
-                    self.alike(mesh, sorted(expected), "the STL")
+                    self.alike(mesh, exact, "the STL")
             placed = [verdict for verdict in expected if verdict[0].startswith(_PLACED)]
             for way, axis in ((("about z", bd.Axis.Z),) if name in turned_z else ()) + \
                     ((("about an odd axis", odd),) if name in turned_odd else ()):
                 exact, mesh = self.both(shape.rotate(axis, 37), f"{name}-turned", technology, 0.01, 0.1)
                 checks += 2
                 with self.subTest(part=name, turned=way):
-                    self.alike(mesh, self.verdicts(exact), "both paths, turned")
+                    self.alike(mesh, exact, "both paths, turned")
                     if axis is bd.Axis.Z:  # the plate's own axis: nothing of the part changes
                         self.assertEqual(self.verdicts(exact), sorted(expected))
                     self.assertEqual([v for v in self.verdicts(exact) if v[0].startswith(_PLACED)], sorted(placed),
