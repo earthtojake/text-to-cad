@@ -8,7 +8,7 @@ import type { ReactNode, SVGProps } from "react";
  * construction (muted) and what the feature adds (the brand blue; a finding is the destructive red).
  *
  * The strokes draw themselves in once, as a tile first scrolls into view (`FeaturesReveal`, the
- * `feature-*` rules in app/globals.css): `Draw` strokes trace in, `Late` ones after them, `Fade`
+ * `feature-*` rules in app/globals.css): `Draw` strokes trace in, `late` ones after them, `Fade`
  * shapes and labels (dashed lines, text, fills) fade in. Reduced motion shows them drawn.
  */
 
@@ -50,25 +50,16 @@ const accent = "text-brand";
 const flag = "text-destructive";
 const label = { fontSize: 9, fontFamily: "var(--font-mono)", stroke: "none", fill: "currentColor" } as const;
 
-// The bracket in isometric: plate, wall and the hole through the plate, as scripts/gen made the
-// path data (x right-down, y left-down, z up; 60 x 40 x 44 mm).
-function IsoBracket({ size }: { size: "large" | "small" }) {
-  const p =
-    size === "large"
-      ? {
-          outline: "M131.7 138.4 L178.5 111.5 L178.5 52 L108.3 11.5 L103.6 14.3 L103.6 68.3 L61.5 92.5 L61.5 98 Z",
-          creases: "M61.5 92.5 L131.7 133.1 M131.7 133.1 L131.7 138.4 M131.7 133.1 L173.8 108.8 M173.8 108.8 L173.8 54.8 M103.6 68.3 L173.8 108.8 M103.6 14.3 L173.8 54.8",
-          hole: "M106.4 103.3 A6.6 3.8 0 1 1 119.6 103.3 A6.6 3.8 0 1 1 106.4 103.3 Z",
-          inner: "M108.4 106 A6.6 3.8 0 0 1 117.6 106",
-          axis: "M113 84.5 L113 125",
-        }
-      : {
-          outline: "M148.2 121.7 L181.1 102.7 L181.1 60.9 L131.8 32.4 L128.5 34.3 L128.5 72.3 L98.9 89.3 L98.9 93.2 Z",
-          creases: "M98.9 89.3 L148.2 117.8 M148.2 117.8 L148.2 121.7 M148.2 117.8 L177.8 100.8 M177.8 100.8 L177.8 62.8 M128.5 72.3 L177.8 100.8 M128.5 34.3 L177.8 62.8",
-          hole: "M130.4 97 A4.7 2.7 0 1 1 139.8 97 A4.7 2.7 0 1 1 130.4 97 Z",
-          inner: "M131.8 98.9 A4.7 2.7 0 0 1 138.4 98.9",
-          axis: "M135.1 83.7 L135.1 112.2",
-        };
+// The bracket in isometric: plate, wall and the hole through the plate (x right-down, y left-down,
+// z up; 60 x 40 x 44 mm).
+function IsoBracket() {
+  const p = {
+    outline: "M131.7 138.4 L178.5 111.5 L178.5 52 L108.3 11.5 L103.6 14.3 L103.6 68.3 L61.5 92.5 L61.5 98 Z",
+    creases: "M61.5 92.5 L131.7 133.1 M131.7 133.1 L131.7 138.4 M131.7 133.1 L173.8 108.8 M173.8 108.8 L173.8 54.8 M103.6 68.3 L173.8 108.8 M103.6 14.3 L173.8 54.8",
+    hole: "M106.4 103.3 A6.6 3.8 0 1 1 119.6 103.3 A6.6 3.8 0 1 1 106.4 103.3 Z",
+    inner: "M108.4 106 A6.6 3.8 0 0 1 117.6 106",
+    axis: "M113 84.5 L113 125",
+  };
   return (
     <>
       <g className={ink}>
@@ -77,13 +68,11 @@ function IsoBracket({ size }: { size: "large" | "small" }) {
         <Draw d={p.hole} strokeWidth={1} />
         <Draw d={p.inner} strokeWidth={0.8} />
       </g>
-      {size === "large" ? (
-        <g className={accent}>
-          <Fade late>
-            <path d={p.axis} strokeWidth={1} strokeDasharray="5 2 1 2" />
-          </Fade>
-        </g>
-      ) : null}
+      <g className={accent}>
+        <Fade late>
+          <path d={p.axis} strokeWidth={1} strokeDasharray="5 2 1 2" />
+        </Fade>
+      </g>
     </>
   );
 }
@@ -91,7 +80,7 @@ function IsoBracket({ size }: { size: "large" | "small" }) {
 function PartsArt() {
   return (
     <Sheet view="52 4 136 142">
-      <IsoBracket size="large" />
+      <IsoBracket />
     </Sheet>
   );
 }

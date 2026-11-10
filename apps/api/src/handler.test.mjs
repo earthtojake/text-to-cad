@@ -466,7 +466,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 9 }, // a schema no release sends
+    { ...BATCH, schema: 99 }, // a schema no release sends
     { ...BATCH, schema: '3' },
     { ...SCHEMA_2, process: 'app' }, // each schema's own fields, and only those
     { ...SCHEMA_1, channel: 'claude-github' },

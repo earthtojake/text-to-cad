@@ -380,7 +380,7 @@ diff content: a comment in a module selects what the module's code would.
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the print3d and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
-| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
+| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 | KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip, the board's and schematic's edits and a plan routed in a board's edit (viewing and drawing a board need no KiCad and are the package suites') |
 | fea | The stress study's code (the library's `_internal/fea`, `calculix/` and `netgen/`, `results.py`, the type's binding and the runner of one operation; the server's `cli/document_types.py` and `_internal/integration_env.py`), the library's `pyproject.toml`, the engine and shared modules a study reads a document, finds CalculiX and writes its result through (`engine/document.py`, `refs.py`, `kernel/bounds.py`, `executables.py`, `export/glb.py`, `build.py`, the stills of a GLB its pictures are (`formats/glb.py`, `snapshot.py`), `_internal/atomic_replace.py`, `programs.py`, the server's `cli_from_function.py`), `tests/python/packages/fea`, `test-fea.sh` | `tests/python/packages/fea` (`test-fea.sh`), Linux only, with the netgen and calculix integrations installed (`cad[netgen,calculix]`, netgen pinned to 6.2.2608, the version the accuracy margins were measured with, and cad-ccx 2.23.0 from PyPI): the study's parse, checks and materials, the solves against hand calculations, assemblies, the results folder and its pictures (under Xvfb), and the command through the runner of one operation; about 2 minutes (230 tests in 76 s locally), under a 15-minute timeout. No package job collects the suite |
@@ -715,9 +715,9 @@ on every push:
   `test_package_boundaries.py` hold the same law.
 
 Every pin of the release's own in the tree — the four `pyproject.toml`s, the plugin server
-configs and each skill's launch command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
+configs and the installers' fallback release — names `VERSION` (the skills name none). `scripts/release/bump-version.sh` stamps them with the
 bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
-skill pin equals `VERSION` — so a stale pin fails the `Version Check` job.
+pin equals `VERSION` — so a stale pin fails the `Version Check` job.
 
 The `Test` workflow runs on PRs against `main` and pushes to it, selecting
 the jobs each change can break ([CI](#ci)); a push whose tree its pull request
@@ -734,7 +734,7 @@ metadata derived from `VERSION`, asserted by the separate `Version Check` job
 
 A pull request that changes `VERSION` is a release: merging it starts `Publish
 Release`, which uploads the release's four projects to PyPI and only then moves the branches
-installers follow, so the canonical repo version, the skill pins, the Git tag,
+installers follow, so the canonical repo version, the pins, the Git tag,
 the PyPI wheels and the GitHub Release all describe one commit. Normal
 development PRs leave `VERSION` alone. A PR that touches release state must keep
 `VERSION`, the derived metadata and the pins valid; `Test`'s Version Check job
@@ -760,7 +760,7 @@ Where the built things live instead:
 - **The wheel** is the release artifact. `Publish Release` bundles, builds the
   wheel and sdist, asserts the wheel carries `_runtime/`, installs and
   exercises it, keeps the distribution as a workflow artifact, uploads it to
-  PyPI (the install channel every skill pins against), and attaches that same
+  PyPI (the install channel every pin resolves against), and attaches that same
   wheel and sdist to the GitHub Release as the provenance copy of what shipped.
 - **The plugin ZIP** (`cad-openai-plugin-<version>.zip`) is the plugin in the
   layout OpenAI's plugin submission portal takes. It is built from the release
@@ -1144,8 +1144,8 @@ release the moment it can be installed (Vercel's edge keeps a reply an hour, whi
 `Publish Release` purges once the install branches carry the release), and no release
 deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The install
 branches" above): a store's copy (the Claude or OpenAI directory, the Cursor
-Marketplace) and Gemini's extension never check and are never told, since their
-store or Gemini updates them. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every
+Marketplace) never checks and is never told, since its
+store updates it. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every
 change to `apps/api` on `main`) needs the project's PostHog settings in Vercel, which
 `/v1/health` checks (`apps/api/README.md`).
 

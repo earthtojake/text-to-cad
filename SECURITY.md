@@ -77,8 +77,8 @@ credentials:
   so the session cookie never rides a cross-origin read. A link in a URL, the
   cookie, your own token and `/mcp` get no CORS headers.
 
-**The credentials are the boundary.** Whoever holds the token, a link within its
-day, or a session cookie can read any CAD file on your machine by its path, list
+**The credentials are the boundary.** Whoever holds the token, a link (until you rotate
+the token), or a session cookie can read any CAD file on your machine by its path, list
 folders, export, and use every Viewer action. So keep links private: treat a
 link, and the address of an open CAD page, as you would a password for your
 files on this computer. Do not bind

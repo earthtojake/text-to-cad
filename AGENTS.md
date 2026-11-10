@@ -120,7 +120,8 @@ which points both at the checkout.
   `docs/migrations/`: the hand-migration guides between releases
   ([0.10 to next, a draft](docs/migrations/migrating-0.10-to-next.md),
   [0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
-  [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
+  [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md),
+  [to OpenCascade 8](docs/migrations/migrating-to-opencascade-8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in

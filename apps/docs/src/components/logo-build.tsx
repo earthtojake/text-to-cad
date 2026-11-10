@@ -15,7 +15,7 @@ type LogoBuildProps = {
   replayable?: boolean;
 };
 
-/** A brand mark that builds itself in, as a CAD model is made (`scripts/brand/animate-logos.mjs`):
+/** A brand mark that builds itself in, as a CAD model is made:
  * sketched on a grid, extruded, its counters cut and its corners chamfered. The animation is
  * the SVG's own SMIL, so it plays once without script; readers who prefer reduced motion get
  * the static mark until they ask for a replay. */

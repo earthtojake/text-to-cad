@@ -14,7 +14,7 @@ import { agents } from "@/lib/content";
  * is a light glyph on a black square, drawn as a luminance mask over the text colour: the square
  * vanishes into the page and the glyph takes the theme's foreground. Not a blend mode: Safari on iOS
  * paints a scroller's contents in a layer of their own, so a blend there never meets the page's
- * colour and the black squares show. The logos are not links: Install, below, covers them all; their
+ * colour and the black squares show. The logos are not links: Install, above, covers them all; their
  * names are the captions under them, so the pictures themselves say nothing to a screen reader.
  */
 const DRIFT_SECONDS = 110;

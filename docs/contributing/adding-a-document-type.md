@@ -22,7 +22,7 @@ where a command or a program first needs it.
       one-line summary, its extensions (the first the one a written file takes), its MIME type, how it
       is viewed (`document`, `mesh`, `drawing`, `robot`, `plot`), the content it carries, its
       operations (`export` and `snapshot`, shared by every type that has them; `inspect`; or one named
-      for what it does: `dfm`, `drc`, `erc`, `validate`; each with the integration it needs),
+      for what it does: `dfm`, `solve`, `drc`, `erc`, `validate`; each with the integration it needs),
       whether it has a reader, and whether its files are made by a producer (a decorator) or changed in place
       by an edit (`Edit`: `<type>.edit`, a `with` block), never both. `wire` only if a released protocol already spells it
       otherwise; a new type never needs one.

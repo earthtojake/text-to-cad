@@ -12,8 +12,8 @@
  *
  * Each instance keeps what it last read for a few minutes, and keeps answering it while PyPI fails. With
  * nothing read yet and PyPI failing, there is no feed (`null`): the handler answers 503, which a released
- * the server takes as a check that failed -- silently, keeping the feed it last read, and trying again an hour
- * day. `fetch` is handed in, so the tests need no network.
+ * server takes as a check that failed -- silently, keeping the feed it last read, and trying again an hour
+ * later. `fetch` is handed in, so the tests need no network.
  */
 
 export const INDEX = 'https://pypi.org/simple/cadgen/';

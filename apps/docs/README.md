@@ -200,7 +200,7 @@ in once, as its tile first scrolls into view (`features-reveal.tsx` and the `fea
 already on screen, nothing moves. No image file: nothing to regenerate, nothing heavy.
 
 The grid is two columns from a tablet up and one on a phone, one tile per feature in `features`'s
-order (six: three rows of two). A new feature is an entry in `features` and in the README's list and
+order (seven: three rows of two, then one). A new feature is an entry in `features` and in the README's list and
 a drawing in `feature-art.tsx`.
 
 ## Social previews

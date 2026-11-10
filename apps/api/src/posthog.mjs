@@ -1,5 +1,5 @@
 /**
- * The store over PostHog (cadgen's telemetry: usage counts now, crash reports to come). Every row a batch
+ * The store over PostHog (cadgen's telemetry: usage counts and crash reports). Every row a batch
  * makes (`events.mjs`) becomes one PostHog event (`EVENTS`), with the install id as its distinct id, the
  * batch's context and the row's counts as properties, and the country the host placed the request in beside
  * them: never the IP address, nor anything finer. PostHog's own lookup of where an event came from is off
@@ -93,7 +93,7 @@ export function propertiesOf(row, country) {
 }
 
 /**
- * A row as one PostHog event. A row with an id (schema 5's and 6's, `events.mjs`: `idOf`) is sent under it as the event's
+ * A row as one PostHog event. A row with an id (schema 5 on, `events.mjs`: `idOf`) is sent under it as the event's
  * `uuid`, and at its batch's time (`at`, the sender's clock): PostHog takes events with the same uuid, event,
  * distinct id and timestamp as one (they are de-duplicated as its tables merge), so a batch sent again -- its
  * sender never heard it was taken -- is the same events again, not more counts, however long after. Every earlier

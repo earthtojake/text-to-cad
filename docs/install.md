@@ -33,7 +33,7 @@ checksum. It:
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
-   there. On a computer 0.8 was set up on, it then moves what 0.10 keeps of 0.8's state
+   there. On a computer 0.8 was set up on, it then moves what this release keeps of 0.8's state
    folder into its own, once: your telemetry answer and language, the documents' records
    and Recents, and 0.8's setup receipt
    ([Migrating from 0.8](migrations/migrating-0.8-to-0.10.md), item 5).
@@ -41,10 +41,10 @@ checksum. It:
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
 5. Stops 0.8's server, where 0.8 is installed, with that installation's own
-   `cadgen stop`, and says what it stopped: 0.10 never talks to anything of 0.8's itself.
+   `cadgen stop`, and says what it stopped: this release never talks to anything of 0.8's itself.
    An app still running the 0.8 plugin goes on with 0.8 alone until it restarts (step 11
    lists the apps to restart); a 0.8 server it starts again keeps CAD's port (3245, or
-   `CAD_ENGINE_PORT`), and 0.10's serves on the next free port, and says so.
+   `CAD_ENGINE_PORT`), and this release's serves on the next free port, and says so.
 6. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
    Windows `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
    `cad-launcher`), as the CAD server does when it starts.

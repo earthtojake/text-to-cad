@@ -161,7 +161,6 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --text-label: 11px;
-  --text-ui: 13px;
   --text-heading: 22px;
 }
 

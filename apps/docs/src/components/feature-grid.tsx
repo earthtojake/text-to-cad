@@ -12,7 +12,7 @@ import { siteConfig } from "@/lib/site";
  * Two columns from a tablet up, one on a phone.
  */
 
-// Each tile's picture height. Six tiles in two columns from a tablet up, one on a phone.
+// Each tile's picture height. Seven tiles in two columns from a tablet up, one on a phone.
 const PICTURE = "h-48 lg:h-60";
 
 // A summary's links, written as markdown (`[text](href)`, as the README says them): a path in the
