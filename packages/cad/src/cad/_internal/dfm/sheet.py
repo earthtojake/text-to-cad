@@ -52,6 +52,15 @@ PROTOLABS = Source("protolabs-sheet", "Protolabs", "Sheet metal fabrication desi
 XOMETRY = Source("xometry-sheet", "Xometry", "Sheet metal fabrication service (design guidelines)",
                  "https://www.xometry.com/capabilities/sheet-metal-fabrication/", ACCESSED)
 
+#: The source of a rule that is text-to-cad's own (no guide states it), said as such in every verdict of it.
+OWN = Source("text-to-cad-own", "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
+             "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
+             ACCESSED)
+#: Past this a part is plate, no sheet shop's work (mm): text-to-cad's own floor -- sheet lasers and press brakes
+#: in general service stop near an inch of steel, and thicker plate is flame-, plasma- or waterjet-cut and
+#: machined. Hubs recommends 10 mm at most for laser cutting and 6 for bending (``thickness_max``, warnings).
+PLATE_MM = 25.0
+
 # --- tables the rules read through ``context`` ------------------------------------------------------------
 
 #: Hubs's K-factor chart, air bending: (inside radius up to 1 t, 1 to 3 t, over 3 t) per hardness.
@@ -207,6 +216,12 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
         _r("thickness_max", "parts", "thickness_mm", "max", 10.0, "mm", "sheet thickness", source,
            item_when={"is_sheet": True, "bent": False}, severity="warning",
            fix="laser cut sheet no thicker than {limit:g} mm", note="recommended for laser cutting: 0.5 to 10 mm"),
+        _r("thickness_limit", "parts", "thickness_mm", "max", PLATE_MM, "mm", "sheet thickness", OWN,
+           item_when={"is_sheet": True},
+           fix="plate over {limit:g} mm is not cut on a sheet laser or bent on a press brake: check it as a "
+               "machined part (--process cnc), or make it of thinner sheet",
+           note="text-to-cad's own floor: sheet lasers and press brakes in general service stop near 25 mm (an "
+                "inch) of steel; thicker plate is flame-, plasma- or waterjet-cut and machined"),
         _r("thickness_min", "parts", "thickness_mm", "min", 0.5, "mm", "sheet thickness", source,
            item_when={"is_sheet": True}, severity="warning", fix="use sheet at least {limit:g} mm thick",
            note="recommended: at least 0.5 mm"),
@@ -251,7 +266,7 @@ def _guarded(rule_set: RuleSet) -> RuleSet:
 
 
 RULES = _guarded(RuleSet(
-    "sheet", "text-to-cad general rules", "2026-11-08", _RULES, (HUBS, PROTOLABS, XOMETRY),
+    "sheet", "text-to-cad general rules", "2026-11-10", _RULES, (HUBS, PROTOLABS, XOMETRY, OWN),
     note="general practice from published sheet metal design guides, no shop's limits: Hubs's bending and laser "
          "rules, the uniform-thickness, notch, tab and hem rules of Protolabs' guide, a standard 5 x 10 ft sheet "
          "unless --sheet-size names the shop's; a shop's gauges, tooled radii, dies and part sizes are compared "
@@ -642,9 +657,13 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
     bends = _items(report, "bends")
     if len(parts) > 1:
         # each part's own thickness: a document of a 1 mm and a 3 mm part is not "sheet 1 mm"
-        thicknesses = sorted({part["thickness_mm"] for part in parts if isinstance(part.get("thickness_mm"), (int, float))})
-        return (f"{len(parts)} parts, {' and '.join(mm(value) for value in thicknesses) or '-'} mm, "
+        sheets = [part for part in parts if part.get("is_sheet", True)]
+        thicknesses = sorted({part["thickness_mm"] for part in sheets if isinstance(part.get("thickness_mm"), (int, float))})
+        others = f", {len(parts) - len(sheets)} not sheet" if len(sheets) < len(parts) else ""
+        return (f"{len(parts)} parts, {' and '.join(mm(value) for value in thicknesses) or '-'} mm{others}, "
                 f"{len(bends)} bend(s)")
+    if parts and not parts[0].get("is_sheet", True):
+        return "not one sheet"
     thickness = parts[0].get("thickness_mm") if parts else None
     flat = (f", flat {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
             if parts and parts[0].get("flat_length_mm") is not None else "")

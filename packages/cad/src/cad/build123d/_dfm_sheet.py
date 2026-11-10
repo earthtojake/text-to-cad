@@ -51,6 +51,11 @@ FAMILIES = ("parts", "not_sheet", "sharp_bends", "bends", "flanges", "channels",
             "hole_spacing", "hole_to_bend", "notches", "tabs", "webs", "gaps")
 ITEM_CAP = 300
 _PARALLEL = 0.9995
+#: A sheet's skin is at least this many times as wide as the sheet is thick (text-to-cad's own line, for which
+#: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
+#: 100 x 8 x 6 mm bar, a block and a tube's two ends are not). Read on each face in its own frame, so the same
+#: wherever the part stands.
+SKIN_WIDTHS = 2.0
 #: A bend this far round or more is a hem (to 185 degrees) or a curl: its mold lines meet at no finite point, so
 #: it has no setback, bend deduction or distance from a mold line.
 HEM_DEG = 175.0
@@ -490,6 +495,7 @@ class _Analysis:
         self.joggles: list[dict[str, Any]] = []
         self.overlap = 0.0
         self.sheet_fraction = 0.0
+        self.block = False                        # no face a skin's width against its opposite: a bar, a block
         self._boxes: tuple[np.ndarray, np.ndarray] | None = None
 
     def ref(self, ordinal: int) -> str:
@@ -528,12 +534,36 @@ class _Analysis:
                     found.append(_Hit(sample.area, hit[0], self.part.face_ordinal(hit[1]), sample.point))
             self.hits[ordinal] = found
 
+    def _width(self, a: int) -> float:
+        """How wide face ``a`` is, in its own frame: a plane's outline's smallest rectangle's short side, a
+        cylinder's length along its axis."""
+        surface = self.surfaces[a - 1]
+        points = np.array([(p.X, p.Y, p.Z) for edge in self.faces[a - 1].outer_wire().edges()
+                           for p in (edge.position_at(float(u)) for u in np.linspace(0.0, 1.0, 9))])
+        if surface.kind == "cylinder":
+            return float(np.ptp(points @ np.array(surface.axis)))
+        u = _perpendicular(np.array(surface.normal))
+        return plane.min_rectangle(np.column_stack([points @ u, points @ np.cross(surface.normal, u)]))[1]
+
     def classify(self) -> None:
-        planar = [(h.distance, h.area) for a, hs in self.hits.items() for h in hs
-                  if h.distance is not None and h.face and self._opposite(a, h.face) and self.surfaces[a - 1].kind == "plane"]
-        if not planar:
-            planar = [(h.distance, h.area) for a, hs in self.hits.items() for h in hs
-                      if h.distance is not None and h.face and self._opposite(a, h.face)]
+        # The votes for the thickness: every ray between a face and the face opposite it -- an antiparallel
+        # plane, a coaxial cylinder (a bend's, a rolled part's) -- that is a skin's, the face ``SKIN_WIDTHS``
+        # times as wide as the two are apart. A tube's ends, a bar's sides and a block's faces are opposite too,
+        # and are no sheet's skins.
+        opposite = {a: [h for h in hs if h.distance is not None and h.face and self._opposite(a, h.face)]
+                    for a, hs in self.hits.items()}
+        opposite = {a: hs for a, hs in opposite.items() if hs}
+        widths = {a: self._width(a) for a in opposite}
+        planar = [(h.distance, h.area) for a, hs in opposite.items() for h in hs
+                  if widths[a] >= SKIN_WIDTHS * h.distance * (1.0 - 1e-9)]
+        if not planar and opposite:
+            # no skin: the facts are read as before, off the opposite faces there are, and the part is not sheet
+            widest = max(opposite, key=lambda a: (widths[a], self.areas[a - 1]))
+            apart = float(np.median([h.distance for h in opposite[widest]]))
+            self.why = (f"no face is {SKIN_WIDTHS:g} times as wide as it is from the face opposite it (the widest "
+                        f"is {widths[widest]:.4g} mm wide and {apart:.4g} mm across): a bar or a block, not sheet")
+            self.block = True
+            planar = [(h.distance, h.area) for hs in opposite.values() for h in hs]
         if not planar:
             self.why = "no face lies opposite another a constant distance across"
             across = [(round(h.distance, 3), h.area) for a, hs in self.hits.items() for h in hs
@@ -666,6 +696,23 @@ class _Analysis:
                 centre = self.faces[a - 1].center()
                 point = np.array([centre.X, centre.Y, centre.Z])
             self._not_sheet(a, kind, local, max(deviation, tol), point, self.areas[a - 1])
+
+    def rolled(self) -> str:
+        """Why a part with no flat skin whose cylinders are a thickness apart is no brake part: a closed
+        section (a tube), or a sheet rolled round with no flat flange -- "" for any other part."""
+        if self.skins or not self.bend_faces:
+            return ""
+        t = float(self.thickness)
+        inside = min(float(self.surfaces[a - 1].radius) for a in self.bend_faces)
+        axis = np.array(self.surfaces[min(self.bend_faces) - 1].axis)
+        # open where a face along the axis joins the inside to the outside: a slit's wall, the sheet's two ends
+        slit = any(self.surfaces[a - 1].kind != "plane" or abs(float(np.dot(self.surfaces[a - 1].normal, axis))) < _PARALLEL
+                   for a in self.edge_set)
+        if slit:
+            return (f"a {t:.4g} mm sheet rolled to a {inside:.4g} mm inside radius with no flat flange: rolled "
+                    "(on plate rolls), not bent on a brake, and not unfolded here")
+        return (f"a closed section, a tube of {t:.4g} mm wall and {inside:.4g} mm inside radius: no flat blank "
+                "bends into it")
 
     def _step(self, a: int, thickness: float, tol: float) -> tuple[str, float, np.ndarray] | None:
         """For a face standing square on a skin beside it (a plane square to it, a cylinder about its normal):
@@ -1798,22 +1845,16 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     analysis.probe()
     analysis.classify()
     t = analysis.thickness
-    size = part.shape.bounding_box().size  # once: the optimal box of a large part costs seconds
-    box = sorted([size.X, size.Y, size.Z])
     largest = max(analysis.skins, key=lambda a: analysis.areas[a - 1]) if analysis.skins else 1
     item: dict[str, Any] = {
         "name": part.name, "thickness_mm": _r(t), "given_thickness_mm": options.get("thickness"),
         "sheet_area_fraction": _r(analysis.sheet_fraction), "skin_faces": len(analysis.skins),
-        "not_sheet_faces": len(analysis.not_sheet), "bent": False, "box_mm": [_r(v) for v in box[::-1]],
-        "box_short_mm": _r(box[1]), "location": part.ref("face", largest),
+        "not_sheet_faces": len(analysis.not_sheet), "bent": False, "location": part.ref("face", largest),
     }
-    is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5
-    if t is not None and is_sheet:
-        if t > 0.25 * box[1]:
-            is_sheet = False
-            analysis.why = f"its {t:.4g} mm thickness is no sheet's against its {box[1]:.4g} mm width"
-    elif t is not None:
-        analysis.why = analysis.why or f"only {100 * analysis.sheet_fraction:.0f}% of its area is a {t:.4g} mm sheet"
+    is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5 and not analysis.block
+    if t is not None and not is_sheet:
+        analysis.why = analysis.why or analysis.rolled() or \
+            f"only {100 * analysis.sheet_fraction:.0f}% of its area is a {t:.4g} mm sheet"
     item["is_sheet"] = is_sheet
     if analysis.why:
         item["why"] = analysis.why
@@ -1822,10 +1863,24 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
 
     def settle() -> None:
         # the facts stay; a part that is not sheet, or a round a sharp_bends item names, gets no thickness verdict
+        # one feature, one place: faces off the thickness that touch (a pocket's floor and walls, a boss's top
+        # and side) share the ref of the one furthest off it, each keeping its own (``face``)
+        off = {record["face"]: record for record in analysis.not_sheet
+               if record["kind"] in ("thicker", "thinner", "unpaired")}
+        features = _Sets()
+        for a in off:
+            features.add(a)
+            for b in analysis.neighbors[a]:
+                if b in off:
+                    features.join(a, b)
+        for group in features.groups():
+            worst = max(group, key=lambda a: (off[a]["deviation_mm"] or 0.0, -a))
+            for a in group:
+                off[a]["location"] = analysis.ref(worst)
         for record in analysis.not_sheet:
             if not is_sheet or record.get("face") in analysis.explained:
                 record["judged"] = None
-            record.pop("face", None)
+            record["face"] = analysis.ref(record["face"])
 
     screens, listed = [analysis.rays.screen], [analysis.rays.faces]
     # the faces the reading's own rays failed on (its skins, its thickness) are not measured in any family

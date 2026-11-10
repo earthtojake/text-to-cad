@@ -235,5 +235,31 @@ class CorpusTest(unittest.TestCase):
         self.assertEqual(problems, [])
 
 
+    def test_every_part_reads_the_same_wherever_it_stands(self) -> None:
+        """No verdict turns with the part's placement: each corpus part, live, as built, turned 37 degrees about
+        a skew axis and moved, and tilted a third of a degree off its axes, fails the same rules as often."""
+        from cad import build123d as cb
+
+        def verdicts(shape: bd.Shape, options: dict) -> list[tuple[str, int]]:
+            result = cb.sheet_metal(shape, **options)
+            counts: dict[str, int] = {}
+            for code, _, _ in _events(result):
+                counts[code] = counts.get(code, 0) + 1
+            return sorted(counts.items())
+
+        problems = []
+        for case in corpus():
+            label = getattr(case.shape, "label", "")
+            as_built = verdicts(case.shape, case.options)
+            for name, axis, degrees, move in (("turned", (1, 2, 3), 37.0, (13.3, -7.1, 4.4)),
+                                              ("tilted", (1, 0.3, 0.2), 0.3, (0, 0, 0))):
+                moved = case.shape.rotate(bd.Axis((0, 0, 0), axis), degrees).translate(move)
+                moved.label = label
+                found = verdicts(moved, case.options)
+                if found != as_built:
+                    problems.append(f"{case.name} {name}: {found} != {as_built}")
+        self.assertEqual(problems, [])
+
+
 if __name__ == "__main__":
     unittest.main()
