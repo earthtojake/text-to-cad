@@ -124,8 +124,8 @@ def fuse_fuzzy(shapes, fuzzy: float = 1e-3):
 
 def sound(shape) -> bool:
     """Geometry gate for the big castings: OCCT-valid, BOP-valid, one or more
-    positive-volume solids, closed shells per OCCT (the tool `cadgen step inspect
-    validate` runs the authoritative version of this after export)."""
+    positive-volume solids, closed shells per OCCT (the tool `cad step inspect`
+    runs the authoritative version of this after export)."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
     from OCP.BRep import BRep_Tool
 

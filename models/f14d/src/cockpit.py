@@ -5,7 +5,7 @@ stance, which `f14d.py` calls in its body. A `@memo` function: an edit that does
 not reach its code replays it from the worker's memory instead of running it.
 """
 
-from cad import memo
+from cad.build123d import memo
 
 from lib import cockpit as cockpit_lib
 

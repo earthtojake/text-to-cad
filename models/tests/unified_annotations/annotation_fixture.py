@@ -4,7 +4,7 @@ from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
 
 from cad import model
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 import math
 

@@ -9,7 +9,7 @@ exports the two STEPs it reads.
 | `l_bracket.py` | — | L-bracket with gussets and a filleted transition (`lib/part_common.safe_fillet`) |
 | `electronics_enclosure_base.py` | — | Open-top enclosure with rounded corners and standoffs |
 | `basic_shape_mating_test_fixture.py` | — | Seven parts and a sub-assembly seated on a base plate by build123d joints |
-| `electronics_enclosure_base_import.py` | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` (its `__main__` exports them) | The enclosure's and the fixture's STEP read back with `read_step` |
+| `electronics_enclosure_base_import.py` | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` (its `__main__` exports them) | The enclosure's and the fixture's STEP read back with `step.read` |
 | `electronics_enclosure_base_drawing.py` | `PDF/electronics_enclosure_base_drawing.pdf` | **Engineering drawing** (`@eng_drawing`) of the enclosure, calling its model: three views with hidden lines and centre marks, measured dimensions, hole callouts, title block. Build the enclosure first. |
 | `cam_follower_roller.py` | — | Cam follower roller with central bearing bore and rounded outer profile (Steel 4140) |
 | `centrifugal_impeller.py` | — | Single solid centrifugal impeller (Aluminum 6061-T6) |
@@ -35,8 +35,9 @@ exports the two STEPs it reads.
 | `square_mounting_block.py` | — | Square mounting block with a vertical through-hole and two side clearance holes (Aluminum 6061-T6) |
 | `stepped_shaft_keyway.py` | — | Stepped shaft with keyway (Steel 4140) |
 | `t_slot_slider_block.py` | — | T-slot slider block with central channel, side relief cuts, and mounting holes (Aluminum 6061-T6) |
+| `hinged_box_showcase.py` | — | Hinged box: a revolute hinge, two configurations, the `open_close` motion and the `showcase` GLB animation |
 
-The 24 parts after the first five are the old project's, ported as they were: `@step`
+The 24 parts from `cam_follower_roller.py` to `t_slot_slider_block.py` are the old project's, ported as they were: `@step`
 became `@model`, `build123d` is imported directly, and the two that also declared STL,
 3MF and GLB keep those decorators, alone: this corpus's example of declared files, a print
 part whose STL, 3MF and GLB every run writes (`../STL/`, `../3MF/`, `../GLB/`, gitignored). Their shared builders are `lib/simple_model_library.py` (the
@@ -79,6 +80,6 @@ engine builds (a replay when current) and hands back as a shape, and takes every
 dimension's constants from the model module. Its PDF (`../PDF/`, gitignored) carries no
 date: an unchanged drawing writes the same bytes.
 
-`electronics_enclosure_base_import.py` keeps the drawing's old read: `read_step` of
+`electronics_enclosure_base_import.py` keeps the drawing's old read: `step.read` of
 the enclosure's STEP, plus a read of the fixture's STEP to exercise an imported
 assembly's names and colours.

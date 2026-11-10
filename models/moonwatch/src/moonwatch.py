@@ -23,7 +23,7 @@ and nothing else: the exploded clips move no joint.
 The four old clips keep their names: `running` (the escapement's 8 beats) is a
 motion, a function of time over the escapement and the two trains; `reveal`,
 `showcase` and `grand_tour`, which take the watch apart while the escapement runs,
-are GLB animations (`cad.gltf`): the escapement and the trains posed at every
+are GLB animations (`cad.build123d`): the escapement and the trains posed at every
 key, each part or group the old clips moved translated along its own vector, the
 movement's tiers fanned, carried by its flip, and the movement rising out of the case
 and flipping bridge-side-up about its own centre. A GLB of the watch carries all
@@ -37,8 +37,7 @@ import math
 
 import build123d as bd
 from cad import model
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
-from cad.gltf import animation
+from cad.build123d import animation, configuration_sequence, gear_pair, mechanism_state
 
 import chrono_works
 import keyless_works

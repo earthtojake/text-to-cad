@@ -32,7 +32,7 @@ Which skin cutters the airframe applies is decided in ``src/airframe.py``.
 
 Nothing about the aircraft articulates, so it has no mechanism.  The staged
 teardown is the GLB's: ``teardown`` and ``explodedHold`` are animations
-(``cad.gltf``) moving every system (the airframe too) and, on top, the part
+(``cad.build123d``) moving every system (the airframe too) and, on top, the part
 groups the wings' and the aft section's second act separates.  It is one model,
 ``f14d``; STEP, GLB, STL and 3MF are written from its document on demand, and a GLB
 export bakes the two animations into clips.
@@ -44,7 +44,7 @@ import math
 import re
 
 from cad import model
-from cad.gltf import animation
+from cad.build123d import animation
 
 import build123d as bd
 

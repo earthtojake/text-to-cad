@@ -279,7 +279,7 @@ The following could not be sourced from any official or reliable public document
 - **Current payload-to-orbit detail** — UG25 says mass-to-orbit data "available upon request"; only marketing max-expendable figures are public.
 - **"13.9 m" fairing** — not found in any official source; unsupported third-party figure.
 
-Source-access caveats carried from the underlying reports: `forum.nasaspaceflight.com`, `forum.kerbalspaceprogram.com`, `forum.cosmoquest.org`, the ResearchGate figure page, GlobalSpec full text, and the Smithsonian NASM page were Cloudflare/robot-blocked to automated fetch (cited as pointers or via search-index snippets only); `spacelaunchreport.com` and `astronautix.com` were offline and not cited for values; the live spacex.com Falcon Heavy page is JS-rendered and was verified via archive captures and mirrors. Local extracted text of the official User's Guide (research artifact): `/private/tmp/claude-501/-Users-jakefitzgerald-robots-text-to-cad--claude-worktrees-reverent-hodgkin-5d1bb8/c1c63e8b-fd13-4694-bd14-77a418fe5d0d/scratchpad/users-guide.txt`.
+Source-access caveats carried from the underlying reports: `forum.nasaspaceflight.com`, `forum.kerbalspaceprogram.com`, `forum.cosmoquest.org`, the ResearchGate figure page, GlobalSpec full text, and the Smithsonian NASM page were Cloudflare/robot-blocked to automated fetch (cited as pointers or via search-index snippets only); `spacelaunchreport.com` and `astronautix.com` were offline and not cited for values; the live spacex.com Falcon Heavy page is JS-rendered and was verified via archive captures and mirrors.
 
 ---
 

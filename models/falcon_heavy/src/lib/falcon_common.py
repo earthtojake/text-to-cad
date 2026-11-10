@@ -16,7 +16,7 @@ Coordinates: vehicle centerline = Z, first-stage Merlin nozzle exit plane
 
 from __future__ import annotations
 
-from cad import memo
+from cad.build123d import memo
 
 from math import cos, radians, sin
 

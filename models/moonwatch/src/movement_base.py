@@ -6,7 +6,7 @@ plate's bridge-side surface.
 """
 
 import build123d as bd
-from cad import memo
+from cad.build123d import memo
 
 from lib import materials
 from lib import mvt_base as M

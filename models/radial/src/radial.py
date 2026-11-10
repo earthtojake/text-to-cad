@@ -17,7 +17,8 @@ A GLB exported from the model carries all three as clips.
 
 from __future__ import annotations
 
-from cad import memo, xbf
+from cad import xbf
+from cad.build123d import memo
 
 from lib import (
     accessory as accessory_lib,

@@ -10,7 +10,8 @@ import build123d as bd
 from bd_materials import FinishedMaterial, glass, metals
 from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
-from cad import model, paint
+from cad import model
+from cad.build123d import paint
 
 
 def coating(name, **values):

@@ -1,8 +1,8 @@
-"""Full motorbike assembly: the one model here, every part composed by CALLING it.
+"""Full motorbike assembly: every part composed by CALLING it.
 
-Each part is a plain function in a sibling file, called inside this body: the
-bike is one body and one xbf, and the kernel memo caches the parts' kernel calls
-(a `@memo` per part saves under 0.1 s, so none carries one). Every part is
+Each part is a `@model` in a sibling file, called inside this body: it builds as a
+child of this run and has a page of its own (no `@memo` per part: it saves under
+0.1 s). Every part is
 authored in the BIKE frame (see `lib/spec.py`), so the assembly composes at
 identity and still
 records the functional relationships as native build123d joints on
@@ -35,7 +35,7 @@ OCCURRENCE ORDER IS FROZEN — top to bottom below.
 from __future__ import annotations
 
 from cad import model
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 import build123d as bd
 

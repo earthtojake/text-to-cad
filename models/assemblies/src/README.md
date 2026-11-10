@@ -25,7 +25,7 @@ cad model snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the 
 | `mars_rover_concept/mars_rover_concept.py` | `mars_rover_concept` | Mars rover on terrain: 28 joints, 1 coupling, 4 configurations, 3 motions and an animation |
 | `mechanical_iris_aperture/mechanical_iris_aperture.py` | `mechanical_iris_aperture` | Labeled mechanical iris aperture |
 | `miniature_spiral_staircase/miniature_spiral_staircase.py` | `miniature_spiral_staircase` | Labeled miniature spiral staircase |
-| `motorcycle_fidgets/motorcycle_{helmet,seat,shock,wheel}_fidget.py` | `motorcycle_*_fidget` | Four Cherry MX switch fidgets; the group shares `lib/mx_switch_socket.py` and `lib/color.py` |
+| `motorcycle_fidgets/motorcycle_{helmet,seat,shock,wheel}_fidget.py` | `motorcycle_*_fidget` | Four Cherry MX switch fidgets; the group shares `lib/mx_switch_socket.py` |
 | `motorcycle_shock_absorber/motorcycle_shock_absorber.py` | `motorcycle_shock_absorber` | Coilover damper; the rod rides a linear joint, `damper_stroke` |
 | `pelican_riding_bicycle/pelican_riding_bicycle.py` | `pelican_riding_bicycle` | Pelican riding a bicycle |
 | `photo_coffee_cup/photo_coffee_cup.py` | `photo_coffee_cup` | Photo-inspired takeaway coffee cup |

@@ -34,8 +34,7 @@ lives in `src/lib/`.
 | mirror_left.py       | part model               | Left bar-end mirror at `handlebar.MIRROR_MOUNT_LEFT` (a constant from another file: tracked by value) |
 | mirror_right.py      | part model               | Its mirror image at `handlebar.MIRROR_MOUNT_RIGHT` — its own part, because a reflection is new geometry |
 
-Build from `src/`: `python motorbike.py`. A part script
-defines no model and builds nothing on its own. No imported sources — every
+Build from `src/`: `python motorbike.py`. No imported sources — every
 artifact is generated.
 
 ## `src/lib/` — shared code, no models

@@ -3,7 +3,7 @@
 > **Educational, non-functional public-source reconstruction. Not suitable for manufacture, propulsion, testing, or operational engineering.**
 
 Captured from the live compound trees; the generator script that produced this
-file has been retired (see README.md). The part counts below are the current
+file has been retired (see `src/README.md`). The part counts below are the current
 occurrence counts — `cad model inspect <id>` (a model's, as its run prints it) or
 `cad step inspect STEP/<model>.step` re-derives them from a built document or an export.
 Numbered repeats are collapsed with `_NN` and a count. Labels carry their
@@ -327,7 +327,7 @@ geometry status (`__photogrammetric`, `__schematic`, `__decorative`,
 - `fairing_half_seam_270deg__photogrammetric`
 - `fairing_base_ring__schematic`
 
-## `src/falcon_heavy_cutaway.py` — 2164 parts
+## `falcon_heavy_cutaway` (`src/falcon_heavy.py`) — 2164 parts
 
 ### center_core_group (693 parts)
 
@@ -659,7 +659,7 @@ geometry status (`__photogrammetric`, `__schematic`, `__decorative`,
 - `payload_placeholder__educational`
 - `separation_interface_block__schematic__no_internals`
 
-## `src/falcon_heavy_exploded.py` — 2144 parts
+## `falcon_heavy_exploded` (`src/falcon_heavy.py`) — 2144 parts
 
 ### center_core_group (693 parts)
 

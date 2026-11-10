@@ -11,7 +11,8 @@ functions: each model that shows them makes its own.
 
 import copy
 
-from cad import memo, model
+from cad import model
+from cad.build123d import memo
 
 import build123d as bd
 

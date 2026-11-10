@@ -3,7 +3,7 @@
 World datums; palm-facing +Z. The fifth ray is procedural; the single-body main frame is a validated native integration input.
 Rounded load paths remain peripheral to the open tendon fan-out corridors.
 """
-from cad import read_step
+from cad import step
 
 import build123d as bd
 
@@ -137,7 +137,7 @@ def make_palm_frame_bodies(mcp_support_plane=None,thumb_support_plane=None):
     if mp!=tuple(MCP_PALM_SUPPORT_PLANES) or tp!=tuple(CMC_PALM_SUPPORT_PLANES):
         raise ValueError('Frozen palm integration geometry uses the current asymmetric layout support planes')
     path=Path(__file__).resolve().parents[2]/'STEP'/'imported'/'palm_frame_integration.step'
-    assembly=read_step(path)
+    assembly=step.read(path)
     bodies=list(assembly.children)
     if len(bodies)!=1 or any(len(b.solids())!=1 for b in bodies):
         raise ValueError('Expected one connected main-palm solid')

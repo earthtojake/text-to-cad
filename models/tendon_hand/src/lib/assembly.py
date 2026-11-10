@@ -46,21 +46,21 @@ def integration_bodies(palm_baseline=False):
     bodies=[]
     def add(shape,frame,system,kind): bodies.append(Body(shape,frame,system,kind))
     if palm_baseline:
-        from cad import read_step
+        from cad import step
         from pathlib import Path
         source=Path(__file__).resolve().parents[2]/'STEP/palm_frame_review.step'
         def leaves(node):
             if node.label=='fifth_metacarpal_cupping_truss':return []
             return [leaf for child in node.children for leaf in leaves(child)] if node.children else [node]
-        main_parts=leaves(read_step(source))
+        main_parts=leaves(step.read(source))
     else:main_parts=make_palm_frame_bodies()
     for part in main_parts:
         kind='fastener' if 'screw' in part.label or 'washer' in part.label else 'frame'
         add(part,'wrist_flexion','palm',kind)
-    from cad import read_step
+    from cad import step
     from pathlib import Path
     little_source=Path(__file__).resolve().parents[2]/'STEP/palm_little_review.step'
-    little_parts=list(read_step(little_source).children)
+    little_parts=list(step.read(little_source).children)
     if len(little_parts)!=1:raise ValueError('Expected one validated fifth-metacarpal body')
     add(little_parts[0],'palm_cup','palm','frame')
     add(make_wrist_fixed_fork(),'forearm','wrist','frame')
@@ -120,31 +120,31 @@ def integration_bodies(palm_baseline=False):
     for body in bodies:
         if body.system in fan_locations:body.shape=fan_locations[body.system]*body.shape
     # These mount factories already return assembled, fanned geometry.
-    from cad import read_step
+    from cad import step
     from pathlib import Path
     guide_source=Path(__file__).resolve().parents[2]/'STEP/phalanx_guide_mounts_review.step'
     def guide_leaves(node):
         return [leaf for child in node.children for leaf in guide_leaves(child)] if node.children else [node]
-    guide_parts=guide_leaves(read_step(guide_source))
+    guide_parts=guide_leaves(step.read(guide_source))
     if len(guide_parts)!=112:raise ValueError('Expected112 separately captured finger guide-mount bodies')
     for shape in guide_parts:
         system=next(f.name for f in FINGERS if shape.label.startswith(f.name+'_'))
         frame=system+('_pip' if '_pip_outlet_' in shape.label else '_mcp_flexion')
         add(shape,frame,system,'guide_mount')
     forearm_source=Path(__file__).resolve().parents[2]/'STEP/forearm_mount_system_review.step'
-    forearm_parts=guide_leaves(read_step(forearm_source))
+    forearm_parts=guide_leaves(step.read(forearm_source))
     if len(forearm_parts)!=110:raise ValueError('Expected110 validated forearm frame and guide bodies')
     for shape in forearm_parts:
         add(shape,'forearm','forearm','guide_mount' if any(k in shape.label for k in ('jaw','comb','guide','screw','bridge','portal')) else 'frame')
     step_root=forearm_source.parent
-    hardware_parts=guide_leaves(read_step(step_root/'joint_hardware_review.step'))
+    hardware_parts=guide_leaves(step.read(step_root/'joint_hardware_review.step'))
     if len(hardware_parts)!=104:raise ValueError('Expected104 validated shaft, bearing and retaining-ring bodies')
     for shape in hardware_parts:
         joint=next(j for j in JOINTS if shape.label.startswith(j.name+'_'))
         kind='bushing' if shape.label.endswith('_bushing') else 'retaining_ring' if shape.label.endswith('_retaining_ring') else 'shaft'
         add(shape,joint.parent if kind=='bushing' else joint.name,joint.system,kind)
     for filename,count in [('palm_guide_mounts_review.step',67),('thumb_cmc_mounts_review.step',24),('fixed_outlet_mounts_review.step',80),('actuator_fasteners_review.step',824),('yaw_reaction_mounts_review.step',64),('forearm_housing_review.step',42),('thumb_downstream_mounts_review.step',42),('wrist_guide_mounts_review.step',30)]:
-        parts=guide_leaves(read_step(step_root/filename))
+        parts=guide_leaves(step.read(step_root/filename))
         if len(parts)!=count:raise ValueError(f'{filename}: expected {count} validated bodies, found {len(parts)}')
         for shape in parts:
             if filename.startswith('palm_'):frame,system='wrist_flexion','palm'
@@ -168,7 +168,7 @@ def integration_bodies(palm_baseline=False):
     for shape,frame,system,kind in fingernail_bodies():add(shape,frame,system,kind)
     from lib.fingertip_pad import fingertip_pad_bodies
     for shape,frame,system,kind in fingertip_pad_bodies():add(shape,frame,system,kind)
-    drive_parts=guide_leaves(read_step(step_root/'drive_terminal_placements.step'))
+    drive_parts=guide_leaves(step.read(step_root/'drive_terminal_placements.step'))
     if len(drive_parts)!=336:raise ValueError(f'Expected336 driven terminal and capstan bond bodies, found{len(drive_parts)}')
     for shape in drive_parts:
         if shape.label.endswith('_capstan_terminal_bond_line'):

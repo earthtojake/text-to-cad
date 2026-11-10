@@ -4,7 +4,7 @@
 
 Engine source: the vendored parametric library `src/lib/merlin_common.py` (reduced decorative detail for instancing; cluster-fit exit 960 mm — see DIMENSIONS.md). The upstream `models/renders/merlin1d/` package is no longer in this repo, so the vendored copy is the source of truth here. Octaweb pattern: 8 outer engines on a 1290 mm circle + 1 center per core, outer turbopumps oriented tangentially.
 
-Captured from the assembly; the generator script that produced this table has been retired (see README.md). Re-derive the same placements from a built artifact with `cadgen step inspect refs STEP/falcon_heavy.step`.
+Captured from the assembly; the generator script that produced this table has been retired (see `src/README.md`). Re-derive the same placements from a built artifact with `cad step inspect STEP/falcon_heavy.step`.
 
 | # | Instance | X (mm) | Y (mm) | Z exit (mm) |
 |---|---|---|---|---|
