@@ -15,6 +15,7 @@ from pathlib import Path
 import build123d as bd
 from bd_materials import FinishedMaterial, glass, metals, plastics
 from bd_materials.core import Range
+from bd_materials.processes import Process, fdm, machined
 from threejs_materials import PbrProperties
 from PIL import Image
 
@@ -446,6 +447,42 @@ class MaterialsTest(unittest.TestCase):
                    for path in (direct, converted)]
         self.assertEqual(colours[0], colours[1])
         self.assertEqual(colours[0][0][-2:], "94", "alpha 0.58")
+
+    def test_declared_process_survives_json_xbf_and_reader(self):
+        plate, clip = bd.Box(40, 30, 3), bd.Box(10, 5, 8).moved(bd.Location((60, 0, 0)))
+        plate.label, clip.label = "plate", "clip"
+        plate.material = metals.aluminum(process=machined())
+        clip.material = plastics.petg(process=fdm(layer_height_mm=0.2))
+        for shape in (plate, clip):
+            with self.subTest(part=shape.label):
+                encoded = json.loads(json.dumps(document.material_json(shape.material)))
+                self.assertEqual(encoded["process"]["process"], shape.material.process.process.value)
+                restored = document.material_from_json(encoded)
+                self.assertEqual(restored.process, shape.material.process)
+                self.assertEqual(restored.pbr.to_dict(), shape.material.pbr.to_dict())
+                self.assertEqual(document.material_key(restored), document.material_key(shape.material))
+        self.assertEqual(document.material_json(clip.material)["process"]["pitch_mm"], 0.2)
+        loaded = self.roundtrip(bd.Compound(children=[plate, clip], label="pair"))
+        processes = {part.name: part.material.process for part in loaded.prototypes}
+        self.assertEqual(processes, {"plate": machined(), "clip": fdm(layer_height_mm=0.2)})
+        self.assertEqual(processes["clip"].process, Process.FDM)
+        read = {child.label: child.material.process for child in reader.read_xbf(self.folder / "test.xbf").children}
+        self.assertEqual(read, {"plate": machined(), "clip": fdm(layer_height_mm=0.2)})
+        # STEP carries name, density and colour: a STEP read holds a material with no process.
+        export.translate(export.Source.read(self.folder / "test.xbf"), "step", self.folder / "test.step")
+        step = reader.read_step(self.folder / "test.step")
+        self.assertEqual({child.label: child.material.process for child in step.children},
+                         {"plate": None, "clip": None})
+
+    def test_material_without_a_process_writes_no_key_and_reads_none(self):
+        encoded = document.material_json(metals.aluminum())
+        self.assertNotIn("process", encoded)
+        self.assertIsNone(document.material_from_json(json.loads(json.dumps(encoded))).process)
+        encoded = document.material_json(metals.aluminum(process=machined()))
+        del encoded["process"]  # as a document written before processes were kept
+        self.assertIsNone(document.material_from_json(encoded).process)
+        self.assertEqual(document.material_key(document.material_from_json(encoded)),
+                         document.material_key(metals.aluminum()))
 
     def test_future_material_document_format_is_refused_and_current_format_reloads(self):
         from OCP.Standard import Standard_GUID

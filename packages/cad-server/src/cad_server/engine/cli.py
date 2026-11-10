@@ -996,12 +996,22 @@ def status_text(answer: dict[str, Any]) -> str:
     if answer.get("waiting"):
         waiting = answer["waiting"]
         lines.append(f"  waiting  {waiting} build{'' if waiting == 1 else 's'}, first come first served")
+    checks = answer.get("checks") or {}
+    for row in checks.get("running") or []:
+        # A manufacturing check under way: what, of which document, where, for how long, and whether anyone waits.
+        named = Path(str(row["file"])).name if row.get("file") else str(row.get("document"))
+        where = "waiting for its process" if row.get("waiting") else f"in {row.get('where')}"
+        lines.append(f"  check    {row.get('process') or 'its declared process'} of {named} {where} · "
+                     f"{_span(row.get('seconds'))}" + ("" if row.get("attached", True) else " · its caller gone"))
+    if checks.get("pool", {}).get("note"):
+        lines.append(f"  checks   {checks['pool']['note']}")
     retired = answer.get("retired") or []
     if retired:
         now = time.time()
         # A worker's retirement names its script; a render process's its document's renderer.
         lines.append("retired: " + " · ".join(
-            (f"{Path(str(row['script'])).name}" if "script" in row else f"{Path(str(row.get('document'))).name}'s renderer")
+            (f"{Path(str(row['script'])).name}" if "script" in row else "the checks process" if "process" in row
+             else f"{Path(str(row.get('document'))).name}'s renderer")
             + f" ({row['reason']}) {_span(now - row['at'])} ago" for row in retired))
     serving = answer.get("serving")
     if serving:

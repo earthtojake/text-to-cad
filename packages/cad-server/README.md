@@ -119,11 +119,18 @@ person's own.
 document's mechanism alone against its parts and says where each stops and which parts meet, writing nothing (the
 library's `cad.<type>.ranges`), run in this process where its environment holds the kernel, else in the
 installation's base.
-A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
-molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
-support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
-in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the
-engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`).
+A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf
+dfm SRC --process cnc|sheet|molding|printing`, and `cad dxf dfm FILE --process sheet` of a cut file) is
+the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
+STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
+`trimesh` integration, and judged against general rules, each cited (no shop's limits), every measurement
+and every rule's outcome under `--json`. A B-rep's (a model, a STEP, an xbf) is the engine's: measured in one
+of its checks processes -- a file read once, a model from the bytes the engine holds, never in the model's worker
+-- and kept by the document's version, beside the engine's cache, so the same check of an unchanged
+document measures nothing, after a restart too. Where the
+engine measures nothing (none to reach, another release's), and for a mesh and a DXF, it runs in this process where
+its environment holds the type's integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
+run` makes a program's: `_internal/integration_env.py`).
 An MJCF, a MuJoCo model, has `cad mjcf validate MODEL.xml [--compile auto|required|never]` (its structure,
 defaults, bodies, joints, geoms and mesh references, then MuJoCo's compiler, the `mujoco` integration's:
 `auto` where this environment holds it, `required` in the environment of `cad[mujoco]` the engine makes

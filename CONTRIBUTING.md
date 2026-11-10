@@ -185,7 +185,11 @@ build runs the new code. Never stop one you did not start.
 The engine's switches are environment variables, never script options (the
 engine's README, **The engine server and its workers** and **Body retention**):
 `CAD_ENGINE_WORKERS`, `CAD_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
-retires a worker), `CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
+retires a worker), `CAD_ENGINE_CHECKS` (how many checks processes measure manufacturing checks at once:
+by default half the cores, one to four; a value is held to one to the cores, and the engine says so in `cad
+status`), `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB` (what one check may take before the engine
+stops it: half an hour, and the workers' memory cap, by default; `0` for no limit),
+`CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
 **Document lifetime**), `CAD_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
 tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
 `0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CAD_ENGINE_MEMO=0` (no memo
@@ -377,7 +381,7 @@ diff content: a comment in a module selects what the module's code would.
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's (the trimesh integration's manufacturing measurements among them), the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
+| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's (the manufacturing checks' measurements, the build123d integration's and the trimesh integration's, among them), the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |

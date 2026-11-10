@@ -30,7 +30,7 @@ TYPES = {
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
-    "dxf": ("snapshot",),
+    "dxf": ("snapshot", "dfm"),
     "urdf": ("snapshot", "validate"),
     "srdf": ("snapshot", "validate"),
     "sdf": ("snapshot", "validate"),
@@ -90,7 +90,7 @@ class TheCommandTable(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
         from cad_server.cli.document_types import OPERATIONS
 
-        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": ["--process", "printing"]}
+        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": []}
         for document_type, operation in sorted(OPERATIONS):
             entry = TYPES_TABLE[document_type]
             if not entry.has_file:
@@ -103,7 +103,10 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual((code, out, err), (2, "", f"cad {document_type} {operation}: no such file: {missing}\n"))
                 code, out, err = _run([document_type, operation, missing, *extra, "--json"])
                 self.assertEqual((code, err), (2, ""))
-                self.assertEqual(json.loads(out), {"ok": False, "error": f"no such file: {missing}", "reason": "not_found"})
+                # a manufacturing check's answers all carry the state, a command-line mistake's too
+                state = {"status": "usage"} if operation == "dfm" else {}
+                self.assertEqual(json.loads(out),
+                                 {"ok": False, "error": f"no such file: {missing}", "reason": "not_found", **state})
         code, _, err = _run(["urdf", "validate", "robot.txt"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.txt is not a urdf file: cad urdf takes .urdf\n"))
         # An .xml is MJCF's: refused by the type it is, before anything runs.

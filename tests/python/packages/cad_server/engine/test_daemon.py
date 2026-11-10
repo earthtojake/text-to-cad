@@ -764,6 +764,25 @@ class WindowsTokenFirstTest(unittest.TestCase):
                 mock.patch.object(places, "WINDOWS", True), self.assertRaisesRegex(ConnectionError, "denies"):
             client._connect(port_file)
 
+    def test_a_stopping_engine_s_port_file_refused_as_it_is_removed_is_gone_not_denied(self) -> None:
+        # Windows refuses every open of a file pending deletion until its last handle closes: the
+        # port file of an engine told to stop, refused past the ladder, is going (CI run 42841031724,
+        # ``api.stop``'s wait said the system denied the engine). A living engine's is still denied.
+        from unittest import mock
+
+        from cad.engine import client, places
+
+        folder = Path(tempfile.mkdtemp(prefix="eng-port-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        port_file = folder / "x.port"
+        port_file.write_text("1234 ab\n", encoding="utf-8")
+        gone = places.Endpoint(port_file, folder / "x.lock")  # its lock let go and removed
+        with mock.patch.object(client.time, "sleep"), mock.patch.object(places, "WINDOWS", True), \
+                mock.patch.object(Path, "read_text", side_effect=PermissionError(13, "Permission denied")):
+            self.assertTrue(client.wait_gone(endpoint=gone))
+            with self.assertRaisesRegex(ConnectionError, "denies"):
+                client._answering(port_file)
+
     def test_the_client_s_request_carries_its_token_and_is_served_after_its_hello(self) -> None:
         import socket
         import threading

@@ -95,9 +95,19 @@ def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
 
 def revision(report: dict[str, Any]) -> str:
     """A model document's recorded revision: its closure's key (the same code, the same revision, in
-    any process), else a token of this build's own."""
+    any process), else a token of this build's own (``durable``: false)."""
     key = (report.get("closure") or {}).get("key")
-    return str(key) if key else f"t{secrets.token_hex(8)}"
+    return str(key) if key else f"{_TOKEN}{secrets.token_hex(8)}"
+
+
+# What starts a revision that is a build's own token (``revision``), never a closure's key (hexadecimal).
+_TOKEN = "t"
+
+
+def durable(recorded: Any) -> bool:
+    """Whether a recorded revision outlives the engine: a closure's key, the same in any process, never a
+    build's own token (``revision``)."""
+    return isinstance(recorded, str) and bool(recorded) and not recorded.startswith(_TOKEN)
 
 
 class Models:
@@ -161,7 +171,7 @@ class Models:
                     # stands, no page fetches it again and an export of it is still the one displayed.
                     # Anything else is a new generation.
                     same = (old is not None and old.get("worker") is worker and old.get("revision") == recorded
-                            and not recorded.startswith("t"))
+                            and durable(recorded))
                     version = old["version"] if same else secrets.token_hex(8)
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
                                            "program": program or (old or {}).get("program") or source["script"],

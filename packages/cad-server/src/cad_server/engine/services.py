@@ -19,18 +19,27 @@ with the daemon's environment and the engine's X display, and no bytecode writte
 kept, its last lines said when it is gone. It does not count toward the count cap, is retired for
 memory before any worker, and its retirements are listed in ``status`` by its document.
 
-Their ranks give the order memory is shed in, today's: the standby (0), then render processes (1),
-then the workers no page watches (2), and a watched worker (3) only when no other is left.
+``CHECKS``: the checks processes, warm kernel processes that measure every manufacturing check
+(``checks_runner.Runner``), one per slot of the daemon's pool (``checks.Pool``: ``checks``, ``checks-2``, ...),
+each measuring one check at a time: the worker's program, in the base, with the daemon's environment, so it
+always runs the server's own library. They do not count toward the count cap, so a check never retires a
+person's idle warm worker for its slot; they hold nothing of anyone's, so nothing is drained and one a check is
+stopped in is killed, and an idle one is retired for memory with the render processes.
+
+Their ranks give the order memory is shed in, today's: the standby (0), then render processes and the checks
+processes (1), then the workers no page watches (2), and a watched worker (3) only when no other is left.
 """
 
 from __future__ import annotations
+
+from dataclasses import replace
 
 from cad.engine.places import RESTARTS
 from cad.engine.worker import KERNEL_NOTICE, KERNEL_PATIENCE
 
 from cad_server.engine.supervisor import Service, Standby, Words
 
-__all__ = ["RENDER", "SERVICES", "WORKER"]
+__all__ = ["CHECKS", "RENDER", "SERVICES", "WORKER"]
 
 WORKER = Service(
     name="worker",
@@ -79,4 +88,23 @@ RENDER = Service(
     ready_seconds=120.0,
 )
 
-SERVICES = (WORKER, RENDER)
+CHECKS = replace(
+    WORKER,
+    name="checks",
+    env="daemon",
+    interpreter="environment",
+    cwd="inherit",
+    key="id",
+    binding=(),
+    words=Words(unstarted="the checks process did not start",
+                exited="the checks process exited ({code}) during a manufacturing check",
+                broken="{error}"),
+    counted=False,
+    rank=1,
+    watched_rank=None,
+    noted=("process", "checks"),
+    drain=False,
+    standby=None,
+)
+
+SERVICES = (WORKER, RENDER, CHECKS)

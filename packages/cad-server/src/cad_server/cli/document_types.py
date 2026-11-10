@@ -9,9 +9,19 @@ wrote; ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (eac
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
-check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
-<id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
-environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A B-rep
+check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
+``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
+a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
+mesh's (STL, 3MF, GLB) the trimesh integration's, for printing (molding, CNC and sheet are judged on exact
+geometry: a mesh asked for one is refused with the check to run instead). A B-rep's is the engine's: asked
+from here, measured in the kernel process that holds the document. A DXF's and a mesh's run here when this
+environment holds its integration, else in the environment that does -- for build123d the installation's
+base, for trimesh the one the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``) --
+and a call refused there is the command line's mistake as it is here (exit 2). The check's exit status is
+its state (``_verdict``): 0 ok, 1 failed (an error, or with ``--strict`` a warning), 3 not checked -- nothing
+was judged, or not all of it: a source that does not read or holds no solid, a family that could not be
+measured, an engine that stopped or failed, a check that crashed -- and 2 the command line's mistake, as ever.
+A B-rep
 type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
 the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
 DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
@@ -44,6 +54,7 @@ import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from cad.registry import DOCUMENT_TYPES, by_extension, help_text
 
@@ -170,7 +181,7 @@ def _mjcf_validate(argv: list[str], prog: str) -> int:
     return emit(invoke, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=verbose)
 
 
-# --- a 3D type's manufacturing check: the trimesh integration's ---------------------------------------
+# --- a 3D type's manufacturing check, and a DXF's: build123d's for a B-rep and a DXF, trimesh's for a mesh ---
 
 
 def pull_value(argv: list[str]) -> list[str]:
@@ -188,33 +199,164 @@ def pull_value(argv: list[str]) -> list[str]:
     return out
 
 
+#: The exit status of a manufacturing check that did not judge what it was asked to (``_verdict``).
+NOT_CHECKED = 3
+# What a check's failure is not checked for, by the type that raised it, where it carries no ``reason`` of
+# its own (the engine's errors do, from the release that gave them one).
+_UNCHECKED = (("cad.engine.api", "Stopped", "engine_stopped"), ("cad.engine.api", "EngineError", "engine_failed"))
+
+
+def _mistake(failure: Any, *, prog: str, as_json: bool) -> int:
+    """The command line's mistake said by a manufacturing check, and its exit status (2): as every command
+    says one (``cli_errors.write``), its ``--json`` document with ``"status": "usage"`` -- so each answer of the
+    command, a result's, a check that did not run to its end and this, holds its state in the one field."""
+    import json
+
+    from cad_server._internal import cli_errors
+
+    if not as_json:
+        return cli_errors.write(failure, prog=prog, as_json=False)
+    print(json.dumps({**cli_errors.document(failure), "status": "usage"}, separators=(",", ":")), flush=True)
+    return failure.status
+
+
+def _stated(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """A manufacturing check's ``parser``, whose ``--json`` document of a command line it refuses -- an option
+    it does not take, a source of another type, a file that is not there -- says its state too (``_mistake``)."""
+    said = parser.fail  # type: ignore[attr-defined]
+
+    def fail(failure: Any, *, as_json: bool) -> None:
+        if as_json:
+            parser.exit(_mistake(failure, prog=parser.prog, as_json=True))
+        said(failure, as_json=False)
+
+    parser.fail = fail  # type: ignore[attr-defined]
+    return parser
+
+
+def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: str) -> int:
+    """A manufacturing check run and said, and its exit status, which is its state: 0 ``ok``, 1 ``failed``
+    (the part: an error finding, or with ``--strict`` a warning), 3 ``not_checked`` -- the result's own
+    (a source that does not read, a family not measured), or the check did not run to its end: the engine
+    stopped, cancelled it or lost its worker, its environment gave no answer, it crashed. Never 1 for those:
+    1 says the part fails. Under ``--json`` such a failure is the contract's document with ``"status":
+    "not_checked"`` and its ``reason`` -- the engine's own (``error.reason``) where it gives one --; without,
+    one line on stderr (``<prog>: NOT CHECKED (<reason>): <its words>``: no part failed, so nothing there says
+    FAILED, and no frame of the command's is named) and ``NOT CHECKED <source>: <reason>`` on stdout. The
+    command line's mistake (a value refused by name, a document the engine does not hold) stays exit 2, its
+    ``--json`` document's ``status`` ``usage`` (``_mistake``)."""
+    import json
+
+    from cad_server._internal import cli_errors
+    from cad_server._internal.cli_from_function import _report_crash, result_lines, result_payload
+
+    try:
+        result = invoke()
+    except Exception as error:  # noqa: BLE001 - the CLI boundary: report, do not traceback
+        _report_crash(error)
+        failure = cli_errors.classify(error)
+        if failure.status == cli_errors.USAGE:
+            return _mistake(failure, prog=prog, as_json=as_json)
+        reason = getattr(error, "reason", None)
+        if not isinstance(reason, str) or not reason:
+            reason = next((code for module, name, code in _UNCHECKED
+                           if any(kind.__module__ == module and kind.__name__ == name for kind in type(error).__mro__)),
+                          failure.reason)
+        if as_json:
+            print(json.dumps({**cli_errors.document(failure), "status": "not_checked", "reason": reason},
+                             separators=(",", ":")), flush=True)
+        else:
+            # What stopped it, in its own words; a failure of no class the command knows says its type too.
+            unknown = reason == "failed" and not type(error).__module__.startswith("cad_server.")
+            words = f"{type(error).__name__}: {failure}" if unknown else str(failure)
+            print(f"{prog}: NOT CHECKED ({reason}): {words}", file=sys.stderr, flush=True)
+            print(f"NOT CHECKED {source}: {reason}", flush=True)
+        return NOT_CHECKED
+    if as_json:
+        print(json.dumps(result_payload(result), separators=(",", ":")))
+    else:
+        for line in result_lines(result):
+            print(line)
+    return {"ok": 0, "failed": 1}.get(getattr(result, "status", ""), NOT_CHECKED)
+
+
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> dfm --process molding|printing``: the library's manufacturing check (``cad.<type>.dfm``),
-    run here when this environment holds the trimesh integration, else in the environment that holds it
-    (``cad_server._internal.integration_env``), its options refused here first, before one is made."""
+    """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
+    type's -- cnc, sheet, molding or printing for a B-rep, printing for a mesh, sheet for a DXF.
+    A B-rep's (a model, an xbf, a STEP) is asked of the engine, which measures it in the kernel process that
+    holds the document (``cad.engine.api.check``). Where the engine measures nothing (none to reach, another
+    release's), and for a DXF and a mesh, it runs here when this environment holds the type's integration
+    (build123d for a B-rep and a DXF, trimesh for a mesh), else in the environment that holds it
+    (``cad_server._internal.integration_env``), its options refused here first, before one is made. An xbf or a model given no ``--process`` is checked for the one
+    its parts declare: the options every process shares are refused here, the rest in the integration once
+    it has read the document, a refusal there said as one here (``integration_env.Refused``: exit 2). A STEP
+    keeps no process, so one given none is refused here."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad_server._internal import integration_env
 
         argv = pull_value(argv)
+        refused = _exact_only(document_type, argv)
+        if refused is not None:
+            # Molding, CNC and sheet on a mesh: refused with the reason and the check to run instead, whatever else
+            # is given -- another process's flags (``--pull``, ``--axes``) are not this mistake's to name.
+            from cad._internal.manufacturing import options
+            from cad._internal.refused import ArgumentRefused
+            from cad_server._internal import cli_errors
+
+            try:
+                options(document_type, refused, {})
+            except ArgumentRefused as error:
+                return _mistake(cli_errors.classify(error), prog=prog, as_json="--json" in argv)
         target = (f"cad.{document_type}", "dfm")
-        integration = "trimesh"
+        integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
         if integration_env.carries(integration):
-            return _checked(document_type, target, argv, prog)
+            return _checked_here(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
 
     return run
 
 
+def _checked_here(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
+    """The check run in this process, which holds its integration: the library's function, called as the
+    command calls it (``_command``: its refusals name the flags), its exit status the check's (``_verdict``)."""
+    from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                        _verb, generated_parser)
+
+    parser = _stated(_present(_typed(generated_parser(target, prog=prog), document_type, target[1],
+                                     _first_parameter(target))))
+    parsed = parser.parse_args(argv)
+    function = _verb(target)
+    positional, keywords = _call_arguments(function, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+    return _verdict(lambda: function(*positional, _command=True, **keywords), prog=prog,
+                    as_json=bool(getattr(parsed, JSON_FLAG_DEST)), source=str(positional[0]))
+
+
+def _exact_only(document_type: str, argv: list[str]) -> str | None:
+    """The process ``--process`` names (its last, as argparse reads it) where it is one a mesh type is never checked
+    for (molding, CNC and sheet are judged on exact geometry), else None -- a B-rep's, a DXF's, a help asked for."""
+    from cad._internal.manufacturing import BREP_TYPES, CUT_TYPES, PROCESSES, processes_for
+
+    if document_type in (*BREP_TYPES, *CUT_TYPES) or "-h" in argv or "--help" in argv:
+        return None
+    named = None
+    for index, token in enumerate(argv):
+        if token == "--process" and index + 1 < len(argv):
+            named = argv[index + 1]
+        elif token.startswith("--process="):
+            named = token.partition("=")[2]
+    return named if named in PROCESSES and named not in processes_for(document_type) else None
+
+
 def _checked_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str],
                        prog: str) -> int:
-    from cad._internal.manufacturing import options
+    from cad._internal.manufacturing import BREP_TYPES, options, through_engine
     from cad.results import CheckFinding, CheckResult
     from cad_server._internal import integration_env
     from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
-                                                        _verb, emit, generated_parser)
+                                                        _verb, generated_parser)
 
-    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
+    parser = _stated(_typed(generated_parser(target, prog=prog), document_type, target[1], "source"))
     parsed = parser.parse_args(argv)
     positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
 
@@ -222,15 +364,27 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
         print(f"{prog}: {line}", file=sys.stderr, flush=True)
 
     def measured() -> CheckResult:
-        given = {name: value for name, value in keywords.items() if name not in ("process", "candidates")}
+        given = {name: value for name, value in keywords.items() if name not in ("process", "candidates", "strict")}
+        # No --process on a model or an xbf: the shared options are refused here, the process's in the
+        # integration, which reads the document, takes its parts' declared process and resolves the rest for it;
+        # what it refuses comes back with its reason (``integration_env.Refused``), the command line's mistake.
         options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
+        if document_type in BREP_TYPES:
+            # A B-rep's check is the engine's, measured where it holds the document. Only where it measured
+            # nothing -- none to reach, another release's -- is it this environment's to send elsewhere.
+            found = through_engine(document_type, positional[0], keywords.get("process"), given,
+                                   bool(keywords.get("candidates")), bool(keywords.get("strict")))
+            if found is not None:
+                return found
         python = integration_env.environment(integration, said)
-        found = integration_env.call(python, document_type, target[1], [str(value) for value in positional], keywords)
+        found = integration_env.call(python, document_type, target[1], [str(value) for value in positional],
+                                     {**keywords, "_command": True})
         return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
                            findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
-                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {},
+                           status=str(found.get("status") or ""), reason=found.get("reason"))
 
-    return emit(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
+    return _verdict(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), source=str(positional[0]))
 
 
 # --- a B-rep type's stress study: read by the kernel, meshed by netgen, solved by CalculiX ------------------
@@ -724,7 +878,7 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
         elif _name in _ENGINE_SOURCES:
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
-        elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
+        elif _name == "dfm" and getattr(_entry.operation(_name), "family", None) == "manufacturing":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
         elif _name == "solve" and getattr(_entry.operation(_name), "integration", None) == "calculix":
             OPERATIONS[(_entry.id, _name)] = _solve(_entry.id)

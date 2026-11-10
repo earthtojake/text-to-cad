@@ -346,6 +346,8 @@ export default {
   "whatsNew.0.11.boards.body": "Design PCBs with KiCad: “Design a 9-key macropad with USB-C and a rotary encoder, route it, and show me the board in 3D.”",
   "whatsNew.0.11.updates.title": "Updates install themselves.",
   "whatsNew.0.11.updates.body": "Patch releases install in the background and switch in when nothing is running. Turn it off with `cad update auto off`.",
+  "whatsNew.0.11.checks.title": "Manufacturing checks.",
+  "whatsNew.0.11.checks.body": "Check whether a part can be CNC machined, made from sheet metal, injection molded or 3D printed: `cad step dfm part.step --process molding`.",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",

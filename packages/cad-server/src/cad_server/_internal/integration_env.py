@@ -1,13 +1,15 @@
 """An operation the ``cad`` command runs where the integration it needs is installed.
 
-A 3D type's ``dfm`` is the trimesh integration's (``cad.registry``): the library measures the mesh
-with trimesh; a B-rep type's ``solve`` reads the document with the kernel, meshes it with netgen and solves it with
-CalculiX, so it runs where all three are (``cad[build123d,calculix,netgen]``: calculix's registry entry names the
-others ``alongside``); a KiCad board's ``drc``, a schematic's ``erc`` and their ``export`` are the kicad integration's, run by
-kicode's kicad-cli. The command's own environment -- the server's installation -- holds the library without
-it, so the operation runs in the environment of that integration instead: ``cad[<integration>]`` at
-the installation's release, made once by the device's engine outside any sandbox and used again, as
-``cad run`` makes a program's (``cad_server._internal.extras``: offline first, from uv's cache). Its
+A type's manufacturing ``dfm`` is its integration's (``cad.registry``): a mesh's, trimesh's; a model's, a STEP's,
+an xbf's and a DXF's, build123d's; a B-rep type's ``solve`` reads the document with the kernel, meshes it with
+netgen and solves it with CalculiX, so it runs where all three are (``cad[build123d,calculix,netgen]``:
+calculix's registry entry names the others ``alongside``); a KiCad board's ``drc``, a schematic's ``erc`` and
+their ``export`` are the kicad integration's, run by kicode's kicad-cli. The command's own environment -- the
+server's installation -- holds the library without them, so the operation runs in the environment of that
+integration instead: for build123d alone, the installation's base, the environment the engine's kernel
+processes run in (``base``); for another, ``cad[<integration>]`` at the installation's release, made once by the
+device's engine outside any sandbox and used again, as ``cad run`` makes a program's
+(``cad_server._internal.extras``: offline first, from uv's cache). Its
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
@@ -29,7 +31,9 @@ import subprocess
 from collections.abc import Callable
 from typing import Any, Union
 
-__all__ = ["Failed", "call", "carries", "environment", "found", "made"]
+from cad_server._internal.cli_errors import REASONS, Failure
+
+__all__ = ["Failed", "Refused", "call", "carries", "environment", "found", "made"]
 
 # The library's runner of one operation (``cad._internal.operation``).
 RUNNER = "cad._internal.operation"
@@ -51,6 +55,16 @@ def _names(integration: Integrations) -> tuple[str, ...]:
 
 class Failed(RuntimeError):
     """The operation's environment could not be made, or its runner gave no answer: said in one line."""
+
+
+class Refused(Failed, Failure):
+    """The operation refused its call in the integration's process -- an argument refused by name, a document
+    the engine does not hold -- said by the reason the runner gave (``invalid_argument``, ``not_found``): the
+    command line's mistake, exit 2, as the same call refused in this process is. A ``Failure`` the command's
+    report says as it is, and a ``Failed`` still to a caller that catches those."""
+
+    def __init__(self, words: str, reason: str) -> None:
+        Failure.__init__(self, words, reason)
 
 
 def carries(integration: Integrations) -> bool:
@@ -90,8 +104,14 @@ def environment(integration: Integrations, told: Callable[[str], None], *, engin
 
     try:
         installation = base.Installation.here()
-        found = extras.ensure(installation, extras.integration_spec(installation, _names(integration)),
-                              told=told, engine=engine)
+        names = _names(integration)
+        if names == (base.EXTRA,):  # the kernel's own: the base the engine's kernel processes run in
+            found = base.ensure(installation, told=told, engine=engine)
+            if found is None:
+                raise base.Refused("the CAD kernel's environment could not be made")
+        else:
+            found = extras.ensure(installation, extras.integration_spec(installation, names), told=told,
+                                  engine=engine)
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None
     return found.python
@@ -126,7 +146,8 @@ def made(integration: str, told: Callable[[str], None]) -> str:
 
 def call(python: str, document_type: str, operation: str, args: list[Any], kwargs: dict[str, Any]) -> dict[str, Any]:
     """``cad.<document_type>.<operation>(*args, **kwargs)`` run by ``python`` (``RUNNER``): its result as
-    data. The operation's own failure is raised as a ``Failed`` in its words."""
+    data. The operation's own failure is raised as a ``Failed`` in its words; a refusal of its call, with
+    the reason the runner gave it (``cad._internal.operation.REASONS``), as a ``Refused`` of that reason."""
     request = json.dumps({"type": document_type, "operation": operation, "args": args, "kwargs": kwargs})
     try:
         done = subprocess.run([python, "-P", "-m", RUNNER], input=request, stdout=subprocess.PIPE, stderr=None,
@@ -141,5 +162,8 @@ def call(python: str, document_type: str, operation: str, args: list[Any], kwarg
     if not isinstance(answer, dict) or not ({"result", "error"} & set(answer)):
         raise Failed(f"the {document_type} {operation} gave no answer (its Python exited {done.returncode})")
     if "error" in answer:
+        reason = answer.get("reason")
+        if isinstance(reason, str) and REASONS.get(reason) == 2:  # the caller's mistake, never the work's
+            raise Refused(str(answer["error"]), reason)
         raise Failed(str(answer["error"]))
     return answer["result"]

@@ -29,9 +29,9 @@ NAMESPACES = {
                       "posed", "animation", "memo", "paint", "GeometryError", "GeometryIssue", "ClosestPoints",
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
-                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", "collision", "frame",
-                      "leaves", "body", "exclude", "limits", "mass", "point_mass", "friction", "free", "link",
-                      "materials"),
+                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", "dfm", "cnc",
+                      "sheet_metal", "molding", "printing", "unfold", "collision", "frame", "leaves", "body",
+                      "exclude", "limits", "mass", "point_mass", "friction", "free", "link", "materials"),
 }
 # The namespaces' public submodules, offered with their names and imported on first use.
 SUBMODULES = {"cad.build123d": ("materials",)}
@@ -104,7 +104,7 @@ class RootExports(unittest.TestCase):
     def test_each_namespace_is_exactly_its_declared_names(self):
         import importlib
 
-        from cad.build123d import _flatten, _geometry, _leaves
+        from cad.build123d import _dfm_check, _dfm_sheet, _flatten, _geometry, _leaves
         from cad.engine import declarations, mechanism, model
         from cad.engine.formats.kicad import board_index, geometry, summary
 
@@ -115,7 +115,9 @@ class RootExports(unittest.TestCase):
                    "mass": declarations, "point_mass": declarations, "friction": declarations,
                    "free": declarations, "link": declarations,
                    **{name: _geometry for name in _geometry.__all__},
-                   **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)}}
+                   **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)},
+                   **{name: _dfm_check for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
+                   "unfold": _dfm_sheet}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)
             self.assertEqual(sorted(names), sorted(module.__all__))
