@@ -10,7 +10,8 @@ on a part's B-rep and the exact rays it casts (``cad.build123d._dfm_molding``), 
   stepped side (two parallel faces at two offsets, the chain between them), ``transitions`` the rolling ball's
   pairs where no such faces are (a free-form face);
 - ``classify_undercut``: what releases a trapped feature -- side actions (how many, which way, how far),
-  a lifter, a collapsible core, or nothing -- from rays the caller casts;
+  a lifter, a collapsible core, or nothing -- from rays the caller casts along ``slide_directions`` (the
+  feature's own first), and whether it is the part's outside's or its inside's;
 - ``parting``: whether one flat parting plane takes the part's outline, and at what height.
 
 A ``cast(origins, directions)`` is the caller's: the distance to the first surface each ray meets, ``inf``
@@ -28,8 +29,8 @@ import numpy as np
 from cad._internal.dfm import checkpoint
 
 __all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "lateral_directions",
-           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster", "steps", "transitions",
-           "weighted_median", "weighted_quantile"]
+           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster",
+           "slide_directions", "steps", "transitions", "weighted_median", "weighted_quantile"]
 
 Cast = Callable[[np.ndarray, np.ndarray], np.ndarray]
 

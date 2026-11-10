@@ -533,6 +533,16 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             pair.get("location"), "fuse them into one solid (`a + b` in build123d) before checking, or check each "
                                    "solid as its own part"))
     for body in bodies:
+        if isinstance(body, dict) and (body.get("occurrences") or 1) > 1:
+            # Said, never skipped in silence: the document gives a part's geometry where its first occurrence
+            # stands, so an occurrence turned another way against the pull is not the part that was measured.
+            found.append(CheckFinding(
+                "warning", "occurrences_measured_once",
+                f"{body.get('owner') or body.get('name')} occurs {body['occurrences']} times and is measured once, where "
+                f"its first occurrence stands: an occurrence turned another way against the pull is not judged",
+                body.get("owner") or body.get("name") or "bodies",
+                "check the part on its own, along the pull its mold opens along"))
+    for body in bodies:
         if isinstance(body, dict) and (body.get("solid_count") or 0) > 1 and \
                 (body.get("owner") or body.get("name")) not in touched:
             found.append(CheckFinding(

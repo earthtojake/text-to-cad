@@ -318,6 +318,20 @@ class UndercutTest(unittest.TestCase):
         (item,) = _check(groove).measurements["undercuts"]["items"]
         self.assertEqual(item["release"], "collapsible_core")
 
+    def test_an_undercut_whose_release_was_not_searched_is_not_measured_never_passed(self) -> None:
+        from unittest import mock
+
+        from cad.build123d import _dfm_molding
+
+        part = _tray() - bd.Pos(30, 0, 10) * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 12)
+        with mock.patch.object(_dfm_molding, "_RELEASE_RAYS", 0):   # the part's release budget, spent
+            result = _check(part)
+        (item,) = result.measurements["undercuts"]["items"]
+        self.assertEqual((item["release"], item["unreleasable_area_mm2"]), ("unknown", None))
+        outcome = next(o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "molding.undercut_unreleasable")
+        self.assertEqual((outcome["status"], outcome["unmeasured"]), ("not_evaluated", 1))
+        self.assertIn(("warning", "undercuts_unsearched"), {(f.severity, f.code) for f in result.findings})
+
     def test_a_sealed_void_is_released_by_nothing(self) -> None:
         result = _check(bd.Box(20, 20, 20) - bd.Sphere(5))
         (item,) = result.measurements["undercuts"]["items"]
@@ -808,6 +822,25 @@ class CandidatesAndPartsTest(unittest.TestCase):
         self.assertEqual({failure["location"].split("/face")[0] for failure in failed["failures"]}, {"plain"})
         self.assertEqual(len(result.measurements["projection"]["items"]), 2)
         self.assertIn("several_bodies", {f.code for f in result.findings})
+        self.assertNotIn("pull_check", result.measurements)   # each part opens its own way: no one pull to compare
+
+    def test_a_part_that_occurs_twice_is_said_to_be_measured_once(self) -> None:
+        # A STEP holds a part's geometry once, placed where its first occurrence stands: the second, turned on its
+        # side against the pull, is not the part that was measured -- said, never skipped in silence. (A live
+        # shape's two children are two parts, each measured where it stands.)
+        clip = bd.extrude(bd.Rectangle(20, 20), 3, taper=3)
+        clip.label = "clip"
+        other = bd.Pos(40, 0, 0) * bd.Rot(90, 0, 0) * clip
+        other.label = "clip"
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "pair.step"
+            bd.export_step(bd.Compound(label="pair", children=[clip, other]), str(path))
+            result = cad.step.dfm(path, process="molding", material="abs")
+        (body,) = result.measurements["bodies"]
+        self.assertEqual(body["occurrences"], 2)
+        (said,) = [f for f in result.findings if f.code == "occurrences_measured_once"]
+        self.assertEqual((said.severity, said.location), ("warning", body["owner"]))
+        self.assertIn("occurs 2 times", said.message)
 
     def test_a_step_reads_as_its_live_shape(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

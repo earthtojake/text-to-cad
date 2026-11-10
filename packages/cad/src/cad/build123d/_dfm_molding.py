@@ -8,9 +8,11 @@ Every part of the document is measured along the pull on its B-rep, each finding
   way it opens: ``+pull`` (released by the half withdrawing along the pull), ``-pull``, ``none`` (zero
   draft, either half) or ``split`` (the face turns through the pull: the parting line crosses it);
 - **undercuts**: points sampled on every face shot along the way the face opens with exact rays; a point
-  the part blocks is trapped (a zero-draft one only when both ways are blocked). Trapped faces that touch
-  are one group, split where its trapped points lie apart (two snaps under one lid are two features); what
-  releases each is found by more rays (``meshops_molding.classify_undercut``);
+  the part blocks is trapped (a zero-draft one only when both ways are blocked), but one in a crevice
+  (``_CREVICE``: another face a hair off it), which is said as that. Trapped faces that touch are one group,
+  split where its trapped points lie apart (two snaps under one lid are two features); what releases each is
+  found by more rays (``meshops_molding.classify_undercut``, along the feature's own directions first:
+  ``_own_directions``), one nothing releases read again on denser points before it is said (``_denser``);
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
   it), the nominal wall (the area-weighted median), each face's thin and thick readings (``feature``: a rib's
   or a boss's face, else wall), the thinnest faces refined to the exact least distance to a face across
