@@ -153,13 +153,6 @@ export function boardRowOwners(index, selector) {
   return onNet && resolved.item.net ? [`net:${resolved.item.net}`] : [];
 }
 
-/** The rows above a node, outermost first, to open so the node shows. */
-export function boardTreeAncestors(tree, id) {
-  const chain = [];
-  for (let parent = tree.parents.get(id); parent; parent = tree.parents.get(parent)) chain.unshift(parent);
-  return chain;
-}
-
 /**
  * What a selector picks, in detail (`describeBoardPick`'s `related`): a part's pads, each its number,
  * its pin's name and its net; a net's pads, each its part and number; a pad, its part's. Null for

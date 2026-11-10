@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createBoardIndex } from "@cad/core/lib/board2d/boardIndex.js";
-import { boardDetail, boardRowOwners, boardTreeAncestors, boardTreeNodeIds, buildBoardTree, partKind } from "./boardTree.js";
+import { boardDetail, boardRowOwners, boardTreeNodeIds, buildBoardTree, partKind } from "./boardTree.js";
 import { boardReferenceId, describeBoardReference } from "./boardFacts.js";
 
 const square = (cx, cy, w, h) => [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
@@ -39,7 +39,7 @@ test("a board whose footprints record no sheet is its parts in blocks by kind; i
   assert.deepEqual(tree.nets.roots[1].children, []);
   const loose = tree.nets.roots[2];
   assert.deepEqual([loose.id, loose.kind, loose.children.map((node) => node.label)], ["group:unconnected", "group", ["unconnected-(U1-NC-Pad4)"]]);
-  assert.deepEqual(boardTreeAncestors(tree.nets, "net:unconnected-(U1-NC-Pad4)"), ["group:unconnected"]);
+  assert.equal(tree.nets.parents.get("net:unconnected-(U1-NC-Pad4)"), "group:unconnected");
   // The Parts' search reads each part with its pads: a pin of two pads is one, saying its pin's name and net.
   const u1 = tree.partsSearch[0].children[0];
   assert.deepEqual(u1.children.map((node) => [node.label, node.detail, node.pick, node.selectionId]), [["2", "VO · VIN", "#U1.2", "U1.2"], ["4", "NC · unconnected-(U1-NC-Pad4)", "#U1.4", "U1.4"]]);
@@ -58,7 +58,7 @@ test("a board whose footprints record their schematic sheets is its parts in tho
   assert.deepEqual(tree.parts.roots.map((node) => [node.id, node.label, node.detail]),
     [["sheet:power", "power", "2"], ["sheet:regulator", "regulator", "1"], ["sheet:", "Other", "1"]]);
   assert.deepEqual(tree.parts.roots[0].picks, ["#C2", "#C10"]);
-  assert.deepEqual(boardTreeAncestors(tree.parts, "part:U1"), ["sheet:regulator"]);
+  assert.equal(tree.parts.parents.get("part:U1"), "sheet:regulator");
   // The search finds a part by its value, footprint name and MPN, and a net by its name.
   assert.deepEqual(tree.parts.nodesById.get("part:C10").searchAliases, ["1u", "C_0603"]);
 });

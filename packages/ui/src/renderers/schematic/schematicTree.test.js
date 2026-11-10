@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { createSchematicIndex } from "@cad/core/lib/schematic2d/schematicIndex.js";
-import { buildSchematicTree, buildSheetTree, schematicDetail, schematicRowOwners, schematicTreeNodeIds, sheetOfSelector } from "./schematicTree.js";
+import { buildSchematicTree, buildSheetTree, schematicDetail, schematicRowOwners, schematicTreeNodeIds } from "./schematicTree.js";
 
 const PAYLOAD = JSON.parse(fs.readFileSync(new URL("./__fixtures__/schematic.plot.json", import.meta.url), "utf8"));
 const index = createSchematicIndex(PAYLOAD.schematic);
@@ -38,6 +38,4 @@ test("the Hierarchy is the root and the sheets it places, each its page", () => 
   const tree = buildSheetTree(index);
   assert.deepEqual(tree.roots.map(node => [node.path, node.label, node.detail, node.children.map(child => [child.path, child.label, child.detail])]),
     [["/", "divider", "1", [["/Load/", "Load", "2"]]]]);
-  assert.equal(sheetOfSelector("#sheet:Load"), "/Load/");
-  assert.equal(sheetOfSelector("#R1"), null);
 });

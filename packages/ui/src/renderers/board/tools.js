@@ -18,9 +18,7 @@ export const BOARD_TOOL_MODES = createToolModes({
   modes: Object.fromEntries(Object.values(BOARD_TOOL).map(mode => [mode, {}]))
 });
 
-export {
-  BOARD_DEFAULT_FILTER, BOARD_FILTER_GRID, BOARD_LOCKED, BOARD_SELECT_KINDS, boardFilterAll, boardPickKinds, boardWorkingLayer, readBoardFilter
-} from "./boardPick.js";
+export { BOARD_DEFAULT_FILTER, boardPickKinds, boardWorkingLayer, readBoardFilter } from "./boardPick.js";
 
 /** What a host command a board cannot carry out is told. */
 export const BOARD_NO_CAMERA = "This board is drawn flat and head on (2D): it has no camera to pose. "

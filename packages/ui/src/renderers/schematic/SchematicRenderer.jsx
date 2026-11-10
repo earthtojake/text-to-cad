@@ -5,8 +5,9 @@ import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
 import { appThemeColors } from "@cad/core/lib/appTheme.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
-import { boardPlanProjection, planToSheet } from "@cad/core/lib/plot2d/index.js";
+import { boardPlanProjection, marksInPlan, planToSheet } from "@cad/core/lib/plot2d/index.js";
 import { drawSchematicOverlay } from "@cad/core/lib/schematic2d/schematicOverlay.js";
+import { formatBoardRefSelector } from "@cad/core/lib/boardRefs.js";
 import { buildSchematicRefToken, canonicalSheetPath, parseSchematicRefSelector, splitSchematicRefSelectors } from "@cad/core/lib/schematicRefs.js";
 import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
@@ -48,8 +49,8 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  *
  * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
  * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
- * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
- * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
+ * again), on the app's neutral grey round the sheet. KiCad's drawing sheet (its frame and title block) is
+ * drawn, as the route sends it. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
  * (`SchematicSection.jsx`, a board's list rules, the picked part's or net's pins under them) and, for a
  * schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
  * Navigator: a press shows that sheet, the way back up from one entered); a double-click on a sheet
@@ -131,8 +132,6 @@ function SchematicSurface({ view, data }) {
   const { toolMode, selectTool, annotating, measuring, annotation, measure } = tools;
   const [filter, setFilter] = useState(SCHEMATIC_SELECT_KINDS);
   const changeFilter = useCallback(next => { setFilter(readSchematicFilter(next)); selectTool(SCHEMATIC_TOOL.SELECT); }, [selectTool]);
-  // The sheet as KiCad draws it: no page edge, in the theme (`usePlotView`'s `colorScheme`).
-  const drawView = null;
 
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -181,7 +180,7 @@ function SchematicSurface({ view, data }) {
       isolated: entries(isolationRef.current.resolved), hovered: entries(hovered.slice(0, 1)), selected: entries(selected),
       dim: selected.some(item => item.kind === "net"), draft: draftRef.current });
     const session = annotationRef.current;
-    drawAnnotationMarks(ctx, session.items, { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
+    drawAnnotationMarks(ctx, marksInPlan(session.items, null), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
   }, []);
 
   const annotationSurface = useMemo(() => plotAnnotationSurface({
@@ -366,8 +365,9 @@ function SchematicSurface({ view, data }) {
     return { tap, hover, drag, doubleTap, pickAt, sheetUnder };
   }, [annotationSurface, requestPaint, showSheet]);
 
+  // The sheet as KiCad draws it: no page edge (`usePlotView`'s `drawView`, its default), in the theme (its `colorScheme`).
   const plotView = usePlotView({
-    plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, overlay,
+    plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, overlay,
     onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag, onDoubleTap: handlers.doubleTap
   });
   viewRef.current = plotView;
@@ -492,7 +492,7 @@ function SchematicSurface({ view, data }) {
     const id = hit.selector, selected = now.selected.includes(id), resolved = index.resolve(id);
     const copyText = path ? buildSchematicRefToken({ path, selectors: [...new Set([...now.selected, id])] }) : "";
     const ownNet = resolved && resolved.kind !== "net" ? String(resolved.net || "") : "";
-    const netId = ownNet ? index.resolve(`#net:${ownNet}`)?.selector || "" : "";
+    const netId = ownNet ? index.resolve(formatBoardRefSelector({ kind: "net", net: ownNet }))?.selector || "" : "";
     const isolatable = resolved?.kind === "part" || resolved?.kind === "net";
     return menuGroups(
       referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
@@ -509,7 +509,6 @@ function SchematicSurface({ view, data }) {
   const chromeHidden = document.loading || failed;
   const selectMenu = <SchematicSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
-  const toolRow = row;
   // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then, for more than one sheet, the
   // Hierarchy; under them, what is picked in detail.
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
@@ -536,7 +535,7 @@ function SchematicSurface({ view, data }) {
     <FlatViewFrame surface={SCHEMATIC_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
       updating={document.updating} updateStatus={{ pending: true, label: t("schematic.text.updating_schematic") }} tools={index ? strip : []}
-      toolRow={index ? toolRow : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      toolRow={index ? row : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
       zoom={zoom} inspect={inspect}>

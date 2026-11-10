@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@cad/core/client';
+import { annotationMarkOnScreen } from '@cad/core/lib/drawing2d/marks.js';
 import { pageToScreen } from '@cad/core/lib/plot2d/plot.js';
 import { exportChoices } from '../../export/formats.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
@@ -28,26 +29,36 @@ vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
     drawPlotImages: (_ctx: unknown, _layout: unknown, { transform }: { transform: any }) => { frames.push({ ...transform }); }
   };
 });
+// The ink the overlay paints, with the transform it is painted under.
+const inked = vi.hoisted(() => [] as Array<{ marks: any[]; transform: any }>);
+vi.mock('@cad/core/lib/drawing2d/marks.js', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, drawAnnotationMarks: (_ctx: unknown, marks: any[], { transform }: { transform: any }) => { inked.push({ marks, transform: { ...transform } }); } };
+});
 
 const noop = () => {};
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const context2d = new Proxy({}, { get: (_target, key) => (key === 'canvas' ? undefined : key === 'measureText' ? (text: string) => ({ width: text.length * 7 }) : noop), set: () => true });
 let reads: string[] = [];
+// What the backend serves: the committed payload, unless a test renames something in it.
+let fixture: typeof SCHEMATIC = SCHEMATIC;
 const DESTINATION = { kind: 'clipboard', available: true };
 
 /** What the route answers for `?sheet=` and `index=0`: the one page, with or without the hierarchy's index. */
 function sheetPayload(url: URL) {
   const sheet = url.searchParams.get('sheet') || '/';
-  const page = SCHEMATIC.sheets.find(one => one.path === sheet);
+  const page = fixture.sheets.find(one => one.path === sheet);
   if (!page) return json({ error: `divider.kicad_sch has no sheet ${sheet}` }, 400);
-  const { schematic, ...rest } = SCHEMATIC;
+  const { schematic, ...rest } = fixture;
   return json({ ...rest, sheets: [page], ...(url.searchParams.get('index') === '0' ? {} : { schematic }) });
 }
 
 beforeEach(() => {
   frames.length = 0;
   drawn.length = 0;
+  inked.length = 0;
   reads = [];
+  fixture = SCHEMATIC;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (handle: number) => clearTimeout(handle));
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }));
@@ -306,5 +317,39 @@ it("a note on a pick hands over the view and its sheet, and no references: light
   const request = promptFiles.create.mock.calls[0][0] as any;
   expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: true } })]);
   expect(request).not.toHaveProperty('references');
+  view.dispose();
+});
+
+it('ink drawn with the Pencil is painted where it was drawn, on the sheet under the pointer', async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  await user.click(within(pane.querySelector<HTMLElement>('[data-cad-toolbar]')!).getByRole('button', { name: /^Pencil/ }));
+  const surface = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-cad-annotation-overlay]'); expect(found).not.toBeNull(); return found!; });
+  const from = point([60, 40]), to = point([90, 40]);
+  fireEvent.pointerDown(surface, from);
+  fireEvent.pointerMove(surface, to);
+  fireEvent.pointerUp(surface, to);
+  // The overlay paints the mark kept on the sheet: back on the screen, it lies along the stroke drawn.
+  const { marks, transform } = await waitFor(() => { const last = inked.at(-1); expect(last?.marks).toHaveLength(1); return last!; });
+  const ys = annotationMarkOnScreen(marks[0], transform).points.map((at: { y: number }) => at.y);
+  expect(Math.min(...ys)).toBeCloseTo(from.clientY, 0);
+  expect(Math.max(...ys)).toBeCloseTo(from.clientY, 0);
+  view.dispose();
+});
+
+it("the menu over a wire isolates its net, a net whose name needs quoting too", async () => {
+  // MID renamed to a name with a space, as a local net on a sheet named so is: its selector is quoted.
+  fixture = JSON.parse(JSON.stringify(SCHEMATIC).replaceAll('"/MID"', '"/Mid Point"'));
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  await zoomIn(pane);
+  const right = { ...point([124, 64.77]), button: 2, pointerId: 3 };
+  fireEvent.pointerDown(canvasOf(pane), right);
+  fireEvent.pointerUp(canvasOf(pane), right);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toContain('Isolate /Mid Point');
   view.dispose();
 });

@@ -9,7 +9,6 @@ import { english } from "@cad/ui/i18n";
  * plus what the row selects (`pick`, its reference; a block's `picks`, every part in it) and a muted `detail`.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
-import { parseSchematicRefSelector } from "@cad/core/lib/schematicRefs.js";
 import { describeSchematicReference, schematicReferenceId } from "./schematicFacts.js";
 
 // One collator for every comparison (natural order: C2 before C10).
@@ -42,14 +41,19 @@ function indexTree(roots) {
   return { roots, nodesById, parents };
 }
 
-// Each part's pins, in natural order.
+// Each part's pins, in natural order: built once an index (an index is a revision's, and never changes),
+// so describing a part reads its own pins, not the whole schematic's again.
+const PINS = new WeakMap();
 function pinsByPart(index) {
+  const kept = PINS.get(index);
+  if (kept) return kept;
   const pinsOf = new Map();
   for (const pin of index.pins.values()) {
     if (!pinsOf.has(pin.part)) pinsOf.set(pin.part, []);
     pinsOf.get(pin.part).push(pin);
   }
   for (const pins of pinsOf.values()) pins.sort((a, b) => naturalCompare(a.number, b.number));
+  PINS.set(index, pinsOf);
   return pinsOf;
 }
 
@@ -149,12 +153,6 @@ export function buildSheetTree(index) {
   });
   const roots = index.order.filter((path) => !index.sheets.get(path)?.parent || !index.sheets.has(index.sheets.get(path).parent)).map(node);
   return indexTree(roots);
-}
-
-/** Whether a selector names a sheet (`#sheet:/Load/`): its path, else null. */
-export function sheetOfSelector(selector) {
-  const parsed = parseSchematicRefSelector(selector);
-  return parsed?.kind === "sheet" ? parsed.sheet : null;
 }
 
 /**

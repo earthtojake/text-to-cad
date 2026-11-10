@@ -37,9 +37,9 @@ import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
  * The contract — `{ mode, side, poured, layers, active, others, zones, tracks }` — is core's, shared
  * with `cad <type> snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
  */
-export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
+export { readBoardDisplay };
 
-export const BOARD_MODE_OPTIONS = Object.freeze([
+const BOARD_MODE_OPTIONS = Object.freeze([
   Object.freeze({ value: "board", labelKey: "board.text.board" }),
   Object.freeze({ value: "copper", labelKey: "board.text.copper" }),
   Object.freeze({ value: "assembly", labelKey: "board.text.assembly" }),
@@ -53,10 +53,10 @@ const CONTROL_CLASS = "!h-6 w-full min-w-0";
 const ROW_CLASS = "h-auto min-h-6";
 
 /** What the layers but the active one are, as Others names them. */
-export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({ value, labelKey: `board.text.others_${value}` })));
+const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({ value, labelKey: `board.text.others_${value}` })));
 
 /** The mode on screen, or Custom, as Preset names it. */
-export function boardDisplayChoice(display, sheet) {
+function boardDisplayChoice(display, sheet) {
   if (boardDisplayIsCustom(display, sheet)) return { value: CUSTOM, labelKey: "board.text.custom" };
   return BOARD_MODE_OPTIONS.find(option => option.value === display.mode) || BOARD_MODE_OPTIONS[0];
 }
@@ -89,7 +89,7 @@ function Opacity({ id, label, name, value, onChange }) {
  * (choosing a preset goes back to it).
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void, t?: Function }} options
  */
-export function boardPresetMode({ display, sheet, onChange, t = english }) {
+function boardPresetMode({ display, sheet, onChange, t = english }) {
   const choice = boardDisplayChoice(display, sheet);
   const options = BOARD_MODE_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey) }));
   if (choice.value === CUSTOM) options.push({ value: CUSTOM, label: t("board.text.custom"), disabled: true });
@@ -152,12 +152,12 @@ const SolidGlyph = textGlyphIcon("3D");
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
  *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,
  *   onSide?: ((side: "top" | "bottom") => void) | null, projection?: { value: string, onChange(value: string): void } | null,
- *   disabled?: boolean, boundary?: HTMLElement | null, t?: Function }} options
+ *   disabled?: boolean, t?: Function }} options
  *   `onSide`: what choosing a side does where it is more than the Display's (a 3D view turns its camera to it).
  *   `projection`: the 3D camera's, while the board is in 3D; null in 2D, which has none.
  */
 export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
-  disabled = false, boundary = null, t = english }) {
+  disabled = false, t = english }) {
   const below = display.side === "bottom";
   const flip = () => { const next = below ? "top" : "bottom"; if (onSide) onSide(next); else onChange({ ...display, side: next }); };
   const solid = dimension === "3d";
@@ -178,7 +178,7 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
         disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} />
     }] : []),
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled,
-      tile: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection} icon={SolidModeIcon} />,
+      tile: <DisplayPopover disabled={disabled} mode={presets} projection={projection} icon={SolidModeIcon} />,
       submenu: () => <DisplayMenuItems mode={presets} projection={projection} /> }
   ];
 }
