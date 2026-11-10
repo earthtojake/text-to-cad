@@ -56,9 +56,9 @@ where a command or a program first needs it.
 - [ ] **Tests**, at the cheapest level that exercises the real path: the reader and the checks on
       fixtures the test builds in a temporary folder (never `models/`), the command's refusals, a
       renderer unit. Every test is reached by a runner under `scripts/test/` and a `test.yml` job.
-- [ ] **CI selection.** A test that reads a new kind of path gets a rule in
-      `scripts/github-workflows/select_checks.py`; `tests/python/global/test_ci_workspace_selection.py`
-      checks the table against the tree.
+- [ ] **CI selection.** A test in a suite's folder runs with that suite; a kind of path no rule in
+      `scripts/github-workflows/select_checks.py` names runs everything until it has one
+      ([testing](testing.md#ci)).
 - [ ] **Docs to touch**: the library README's **Definitions** (the list of ids) and its shape of the
       package, the engine README's **CLI**, the server README's **Commands**, the skill that teaches
       the type, the README and the docs site's homepage (`apps/docs/src/lib/content.ts`) if they list

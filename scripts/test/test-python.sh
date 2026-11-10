@@ -17,6 +17,10 @@ set -euo pipefail
 #
 # PATHs narrow the group to the test files at or under them (repo-relative); CI passes
 # the files and directories a change selected.
+#
+# CAD_TEST_SHARD=I/N runs shard I of N (from 1) of each suite's selected files: sorted by
+# path, the k-th (from 0) is shard k%N+1's, so the N shards run every file exactly once,
+# and a shard that none falls to passes. CI splits a long suite across jobs by it.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
@@ -48,9 +52,18 @@ esac
 
 failed_suites=()
 
+# A suite in which a file hung (unittest_files.py's HUNG_EXIT, 3) ends the run even so: what hung
+# one suite's file likely hangs the next's, and each would wait out its guard to the job's timeout.
 run_suite() {
+  local status=0
   if [ "$KEEP_GOING" -eq 1 ]; then
-    run_python_unittest "$@" || failed_suites+=("$1")
+    run_python_unittest "$@" || status=$?
+    if [ "$status" -eq 3 ]; then
+      printf '\n==> A FILE HUNG in: %s. No further suite runs.\n' "$1" >&2
+      exit 1
+    elif [ "$status" -ne 0 ]; then
+      failed_suites+=("$1")
+    fi
   else
     run_python_unittest "$@"
   fi
