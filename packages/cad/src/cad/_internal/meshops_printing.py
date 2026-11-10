@@ -32,7 +32,7 @@ from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG  # every process's: a
 
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
-           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "SPREADS", "Smooth", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
+           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "CHORD_CAP_DEG", "SPREADS", "Smooth", "edge_pairs", "joined", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
            "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
            "voxels", "wall_support"]
 
@@ -94,6 +94,14 @@ _COORDINATE_NOISE = 4.0 * 2.0 ** -23
 #: exact normals: the spread itself held 66 to 100 % of the triangles, twice it every one (but the poles of the
 #: coarsest sphere). ``tests``: a 45 deg cone's every triangle reads 45 within its tolerance, fine and coarse.
 SPREADS = 2.0
+#: A reading's tolerance is at most this many degrees (text-to-cad's own cap): what a curved surface's chords
+#: turn an angle by. A cone meshed in 8 segments reads its 45 deg 2.3 deg off, in 13 (0.5 rad of angular
+#: deflection) 0.9; a mesh coarser than that says less of its surface than the cap allows, and its angles are
+#: judged as its triangles stand.
+CHORD_CAP_DEG = 3.0
+#: Triangles joined by an edge their normals turn across by under this many degrees (and the edge's own
+#: ``noise``) lie in one plane: a flat face's tessellation, or one chord of a curved face's.
+COPLANAR_DEG = 0.01
 
 
 @dataclass
@@ -103,21 +111,29 @@ class Smooth:
     the triangles round it that are the triangle's own surface -- and each triangle's ``noise``, degrees: what
     its coordinates' own spacing can turn its normal by (their size over its least height).
 
-    A triangle is a chord of the surface: its normal turns from the surface's by about half the turn to its
-    neighbours, so an angle read off it is the surface's only to within that. Every comparison of a triangle's
-    angle with a limit reads the same angle off the corners' normals too, and takes ``SPREADS`` times the
-    difference (and the noise) as the reading's tolerance (``within``): nothing on a plane, a degree on a
-    cone's chords -- whose triangles read 44.3 to 45.4 deg where the cone is 45, every one of them at 45."""
+    A triangle of a curved surface is a chord of it: its normal turns from the surface's by about half the turn
+    to its neighbours, so an angle read off it is the surface's only to within that. Every comparison of a
+    triangle's angle with a limit reads the same angle off the corners' normals too, and takes ``SPREADS`` times
+    the difference, at most ``CHORD_CAP_DEG``, and the noise as the reading's tolerance (``within``): a degree on
+    a cone's chords -- whose triangles read 44.3 to 45.4 deg where the cone is 45, every one of them at 45.
+
+    A triangle of a flat face (``flat``) is no chord: its normal is the face's, exactly, whatever the face beside
+    it -- a 30 deg face that meets a 55 deg one reads 30 --, so its corners' normals are its own and its
+    tolerance is its noise alone. A plane (the triangles joined across edges with no turn, ``COPLANAR_DEG``) is
+    a chord only where the surface runs on past it on two sides: the faces beside it (within ``within_deg``)
+    turn from it opposite ways, as the chords either side of a chord do; a face with such a neighbour on one
+    side alone, or none, is flat."""
 
     normals: np.ndarray     # (m, 3) each triangle's own
     corners: np.ndarray     # (m, 3, 3) the surface's at each of its corners
     noise: np.ndarray       # (m,) degrees
+    flat: np.ndarray | None = None  # (m,) a flat face's triangle: no chord
 
     def within(self, read: np.ndarray, smoothed: np.ndarray, triangles: Any) -> np.ndarray:
         """The tolerance, degrees, of the angles ``read`` off ``triangles``' own normals, given the same angles
         ``smoothed`` (read off their corners' normals; (n, k): the most of the k counts): see the class."""
         spread = np.abs(np.asarray(smoothed, dtype=float).reshape(len(read), -1) - np.asarray(read)[:, None]).max(axis=1)
-        return SPREADS * spread + self.noise[triangles]
+        return np.minimum(SPREADS * spread, CHORD_CAP_DEG) + self.noise[triangles]
 
     def slopes(self, turned: np.ndarray | None = None) -> np.ndarray:
         """Each triangle's tolerance on its angle from horizontal (``angles``), the mesh turned by the rotation
@@ -148,51 +164,114 @@ _SMOOTH_ROUND = 256
 _SMOOTH_PAIRS = 2_000_000
 
 
+def edge_pairs(F: np.ndarray) -> np.ndarray:
+    """The pairs of triangles (k, 2) that share an edge: an edge of two triangles once, one of more (a mesh
+    not a manifold there) as its triangles in turn."""
+    F = np.asarray(F, dtype=np.int64)
+    if not len(F):
+        return np.zeros((0, 2), dtype=np.int64)
+    ends = np.sort(np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]]), axis=1)
+    key = ends[:, 0] * (int(F.max()) + 1) + ends[:, 1]
+    order = np.argsort(key, kind="stable")
+    same = key[order][1:] == key[order][:-1]
+    owner = order % len(F)
+    return np.stack([owner[:-1][same], owner[1:][same]], axis=1)
+
+
+def joined(count: int, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Each of ``count`` nodes' component (the least node in it) under the links ``a[k] -- b[k]``: labels
+    spread to the least across every link, then each to its label's own, until none changes."""
+    labels = np.arange(count, dtype=np.int64)
+    if not len(a):
+        return labels
+    while True:
+        least = np.minimum(labels[a], labels[b])
+        before = labels.copy()
+        np.minimum.at(labels, a, least)
+        np.minimum.at(labels, b, least)
+        while True:
+            hop = labels[labels]
+            if np.array_equal(hop, labels):
+                break
+            labels = hop
+        if np.array_equal(labels, before):
+            return labels
+
+
+def _flat(normals: np.ndarray, noise: np.ndarray, pairs: np.ndarray, within_deg: float) -> np.ndarray:
+    """Which triangles are a flat face's, no chord of a curved one (``Smooth``): those of a plane none of whose
+    neighbouring faces within ``within_deg`` turn from it opposite ways."""
+    count = len(normals)
+    if not len(pairs):
+        return np.ones(count, dtype=bool)
+    a, b = pairs[:, 0], pairs[:, 1]
+    turn = np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", normals[a], normals[b]), -1.0, 1.0)))
+    level = turn <= COPLANAR_DEG + noise[a] + noise[b]
+    plane = joined(count, a[level], b[level])
+    beside = ~level & (turn < within_deg)
+    own = normals[plane]  # a plane's normal: its first triangle's (every one's, to the noise)
+    # the way each neighbouring face turns from the plane, a unit vector in it: summed over a plane's
+    # neighbours they cancel where the faces turn opposite ways and add up where they turn one way
+    owners, ways = [], []
+    for near, far in ((a[beside], b[beside]), (b[beside], a[beside])):
+        way = normals[far] - own[near] * np.einsum("ij,ij->i", normals[far], own[near])[:, None]
+        owners.append(plane[near])
+        ways.append(way / np.maximum(np.linalg.norm(way, axis=1, keepdims=True), 1e-300))
+    owner, way = np.concatenate(owners), np.vstack(ways)
+    total = np.stack([np.bincount(owner, weights=way[:, k], minlength=count) for k in range(3)], axis=1)
+    links = np.bincount(owner, minlength=count)
+    chord = (links > 0) & (np.linalg.norm(total, axis=1) < 0.75 * links)
+    return ~chord[plane]
+
+
 def smooth(V: np.ndarray, F: np.ndarray, within_deg: float = 30.0) -> Smooth:
     """``Smooth`` of a mesh: each triangle's corners' normals the mean of the triangles round the corner whose
     own normals turn from the triangle's by under ``within_deg`` (its surface's, not an edge's other side, nor
     the next face round a mitre), each weighed by the angle it takes up at the corner -- so a surface cut into
-    triangles either way reads the same."""
+    triangles either way reads the same --, and a flat face's triangle's (``Smooth.flat``) its own."""
     V, F = np.asarray(V, dtype=float), np.asarray(F, dtype=int)
     tri = V[F]
     normals, areas = frame(V, F)
     if not len(tri):
-        return Smooth(normals, np.zeros((0, 3, 3)), np.zeros(0))
+        return Smooth(normals, np.zeros((0, 3, 3)), np.zeros(0), np.zeros(0, dtype=bool))
     edges = [tri[:, (k + 1) % 3] - tri[:, k] for k in range(3)]
     lengths = [np.linalg.norm(edge, axis=1) for edge in edges]
+    height = 2.0 * areas / np.maximum(np.maximum.reduce(lengths), 1e-300)
+    noise = np.minimum(np.degrees(_COORDINATE_NOISE * float(np.abs(tri).max()) / np.maximum(height, 1e-300)), 90.0)
+    flat = _flat(normals, noise, edge_pairs(F), within_deg)
     corner = np.empty((len(tri), 3))
     for k in range(3):
         cosine = np.einsum("ij,ij->i", edges[k], -edges[(k + 2) % 3]) / \
             np.maximum(lengths[k] * lengths[(k + 2) % 3], 1e-300)
         corner[:, k] = np.arccos(np.clip(cosine, -1.0, 1.0))
     # the triangles round each vertex, and the angle each takes up there
-    flat = F.ravel()
-    order = np.argsort(flat, kind="stable")
-    first = np.searchsorted(flat[order], np.arange(len(V) + 1))
+    at = F.ravel()
+    order = np.argsort(at, kind="stable")
+    first = np.searchsorted(at[order], np.arange(len(V) + 1))
     round_face, round_angle = order // 3, corner.ravel()[order]
-    count = np.diff(first)[flat]
+    count = np.diff(first)[at]
     taken = np.minimum(count, _SMOOTH_ROUND)
-    summed = np.zeros((len(flat), 3))
+    summed = np.zeros((len(at), 3))
     alike = math.cos(math.radians(within_deg))
     ends = np.cumsum(taken)
     begin = 0
-    while begin < len(flat):
+    while begin < len(at):
         stop = max(begin + 1, int(np.searchsorted(ends, (ends[begin - 1] if begin else 0) + _SMOOTH_PAIRS)))
         rows = np.repeat(np.arange(begin, stop), taken[begin:stop])
         nth = np.arange(len(rows)) - np.repeat(ends[begin:stop] - taken[begin:stop] - (ends[begin - 1] if begin else 0),
                                                taken[begin:stop])
         # a corner of more triangles than are read: every (count / taken)-th of them
-        pick = first[flat[rows]] + (nth * count[rows]) // taken[rows]
+        pick = first[at[rows]] + (nth * count[rows]) // taken[rows]
         other = round_face[pick]
         keep = np.einsum("ij,ij->i", normals[rows // 3], normals[other]) > alike
         weighed = normals[other[keep]] * round_angle[pick[keep]][:, None]
         for axis in range(3):
-            summed[:, axis] += np.bincount(rows[keep], weights=weighed[:, axis], minlength=len(flat))
+            summed[:, axis] += np.bincount(rows[keep], weights=weighed[:, axis], minlength=len(at))
         begin = stop
     summed /= np.maximum(np.linalg.norm(summed, axis=1, keepdims=True), 1e-300)
-    height = 2.0 * areas / np.maximum(np.maximum.reduce(lengths), 1e-300)
-    noise = np.degrees(_COORDINATE_NOISE * float(np.abs(tri).max()) / np.maximum(height, 1e-300))
-    return Smooth(normals, summed.reshape(-1, 3, 3), np.minimum(noise, 90.0))
+    corners = summed.reshape(-1, 3, 3)
+    corners[flat] = normals[flat][:, None, :]
+    return Smooth(normals, corners, noise, flat)
 
 
 # --- rays -------------------------------------------------------------------------------------------------

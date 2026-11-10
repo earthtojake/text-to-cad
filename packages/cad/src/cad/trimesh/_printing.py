@@ -308,7 +308,8 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
         "area_floor_mm2": mo.OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor,
         # under the limit by no more than the mesh's own angular deflection there: at the limit, not judged
         "at_limit_area_mm2": round(float(areas[near].sum()), 2),
-        "at_limit_tolerance_deg": round(float(angle_limit - surface_angle[near].min()), 4) if near.any() else 0.0,
+        # how far those triangles' angles may be off the surface's (``Smooth.slopes``): at most ``CHORD_CAP_DEG``
+        "at_limit_tolerance_deg": round(float(_smooth(mesh).slopes()[near].max()), 4) if regions and near.any() else 0.0,
         "method": "regions of down-facing triangles under the angle limit off the plate (but a region none of whose "
                   "triangles is under it by more than the mesh's chords turn from the surface there: at the limit); "
                   "one under area_floor_mm2, "
