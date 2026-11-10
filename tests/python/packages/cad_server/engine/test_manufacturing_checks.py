@@ -1517,7 +1517,12 @@ class RunnerTest(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
         engine = Engine(limits=Limits(3600.0, lambda: 100.0), resident=lambda _pid: 99.0)
-        self.assertIn("checked", engine.check(self.file())["done"])
+        engine.holding = True
+        under = engine.ask(self.file())
+        _until(self, lambda: [process.rss for process in engine.processes.values()] == [99.0],
+               "its memory, read from outside, is what the supervisor counts for it")
+        engine.let_go()
+        self.assertIn("checked", under.result(self)["done"])
         self.assertEqual(engine.killed, [])
 
         engine = Engine(limits=Limits(None, lambda: 100.0), resident=lambda _pid: 512.0)

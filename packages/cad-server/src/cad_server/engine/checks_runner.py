@@ -501,7 +501,9 @@ class Runner:
     def _watch(self) -> None:
         """The watchdog, alive while a check measures: each one past a check's time limit, or whose process
         holds more than a check's memory limit (read from outside the process, so one inside a kernel call that
-        never returns is seen all the same), is stopped."""
+        never returns is seen all the same), is stopped. What it read is the process's memory as the supervisor
+        counts it (``Process.rss``) from then on, so the engine's memory rule and the pool's room go by what a
+        measuring process holds now, not by what it said after its last check."""
         while True:
             now = time.time()
             with self.lock:
@@ -514,6 +516,8 @@ class Runner:
             for asked, pid, since in measuring:
                 resident = self.resident(pid) if memory is not None else None
                 with self.lock:
+                    if resident is not None and asked.state is State.MEASURING:
+                        asked.process.rss = resident
                     if seconds is not None and now - since > seconds:
                         self._stop(asked, State.OVER_TIME, seconds=now - since, limit=seconds)
                     elif memory is not None and resident is not None and resident > memory:

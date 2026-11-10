@@ -1101,7 +1101,7 @@ that fails its rules:
   default) or `CAD_ENGINE_CHECK_RSS_MB` resident in its process (by default the engine's memory cap), `0` for no
   limit -- which a watchdog reads every second from outside the process (`/proc`, `ps`, the system's count on
   Windows; where the system says no memory, the time limit alone), so a kernel call that never returns is stopped
-  all the same;
+  all the same, and the engine's memory rule counts what a measuring process holds now;
 - `process_lost`: its checks process exited under it (one the system killed: usually for memory, and said so);
   the check is not run again, and the next starts a fresh process;
 - `no_kernel`: no checks process could be started;
