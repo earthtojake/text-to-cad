@@ -149,11 +149,17 @@ class CutFileTest(unittest.TestCase):
     def test_a_cut_file_with_no_thickness_says_its_rules_waited(self) -> None:
         def build(msp, _):
             _plate(msp)
-            msp.add_circle((20, 20), 3)
+            msp.add_circle((20, 20), 0.25)   # half a millimetre across: under any sheet's thickness
         result = self.check(self.write("bare", build))
         (waited,) = [f for f in result.findings if f.code == "sheet.thickness_unknown"]
         self.assertEqual(waited.severity, "warning")
         self.assertIn("hole_to_edge", waited.message)
+        # not evaluated is not evaluated: no rule ran on a thickness nobody gave
+        self.assertNotIn("sheet.hole_diameter", self.codes(result))
+        outcomes = {o["rule"]: o["status"] for o in result.measurements["rules"]["outcomes"]}
+        self.assertEqual((outcomes["sheet.hole_diameter"], outcomes["sheet.hole_to_edge"]),
+                         ("not_evaluated", "not_evaluated"))
+        self.assertNotIn("rule_thickness_mm", result.measurements["holes"]["items"][0])
         self.assertIn("no --thickness", result.summary)  # an OK that does not read as a pass of them
 
     def test_inch_geometry_declared_in_millimetres_is_suspect(self) -> None:

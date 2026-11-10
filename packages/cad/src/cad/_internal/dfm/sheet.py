@@ -320,6 +320,16 @@ def validate(resolved: dict[str, Any], document_type: str) -> None:
     sheet_size(resolved.get("sheet_size"))
 
 
+def _notch_min(thickness: float) -> float:
+    """A notch's least width: the greater of the thickness and 0.04 in (Protolabs)."""
+    return max(thickness, 1.016)
+
+
+def _tab_min(thickness: float) -> float:
+    """A tab's least width: the greater of twice the thickness and 0.126 in (Protolabs)."""
+    return max(2.0 * thickness, 3.2)
+
+
 #: The families whose rules scale with the sheet's thickness.
 _SCALED_FAMILIES = ("bends", "flanges", "reliefs", "hems", "holes", "hole_spacing", "hole_to_bend", "notches", "tabs",
                     "webs")
@@ -335,12 +345,12 @@ def _scales(report: dict[str, Any], resolved: dict[str, Any]) -> float | None:
         for item in _items(report, family):
             own = given if given is not None else item.get("thickness_mm")
             if not isinstance(own, (int, float)) or isinstance(own, bool):
-                continue
+                continue  # a cut file's, with no --thickness: no scale, and its rules are not evaluated
             item["rule_thickness_mm"] = float(own)
             if family == "notches":
-                item["notch_min_mm"] = max(float(own), 1.016)
+                item["notch_min_mm"] = _notch_min(float(own))
             elif family == "tabs":
-                item["tab_min_mm"] = max(2.0 * float(own), 3.2)
+                item["tab_min_mm"] = _tab_min(float(own))
     if given is not None:
         return float(given)
     return next((float(part["thickness_mm"]) for part in _items(report, "parts")
@@ -362,8 +372,7 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     found["sheet_given"] = given is not None
     found["sheet_long_mm"], found["sheet_short_mm"] = given or DEFAULT_SHEET
     if thickness is not None:
-        found["notch_min_mm"] = max(thickness, 1.016)
-        found["tab_min_mm"] = max(2.0 * thickness, 3.2)
+        found["notch_min_mm"], found["tab_min_mm"] = _notch_min(thickness), _tab_min(thickness)
     return found
 
 
@@ -486,7 +495,8 @@ def _thickness_unknown(report: dict[str, Any], resolved: dict[str, Any]) -> list
         return []
     rule_set = RULES
     without = context(report, resolved)
-    given = context(report, {**resolved, "thickness": 1.0})
+    # the same context with a thickness in it: read here alone, never written on the items (``_scales``)
+    given = {**without, "rule_thickness_mm": 1.0, "notch_min_mm": _notch_min(1.0), "tab_min_mm": _tab_min(1.0)}
     waiting = sorted({rule.id for rule in rule_set.rules if isinstance(report.get(rule.family), dict)
                       and rule.applies(given) and rule.limit_for(given) is not None
                       and (not rule.applies(without) or rule.limit_for(without) is None)})
