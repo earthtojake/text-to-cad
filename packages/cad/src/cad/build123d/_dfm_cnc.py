@@ -249,7 +249,6 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     models: list[Model] = []
     frames: list[np.ndarray] = []
     framing: list[dict[str, Any]] = []
-    unintersected: list[dict[str, Any]] = []
     # A part that is another's geometry moved (``brep.copies``: an instance turned any way, machining being
     # orientation-free) is measured once, in the first's machine frame moved with it: the first's items said
     # again at its own refs and places. Solids of parts that hold several are copies only where their faces
@@ -300,10 +299,8 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                               for item in items if item.get("_model") == first and "_copy" not in item])
             _add_shares(scalars, shares.get(first, {}))
             lost[len(models) - 1] = {name: set(faces) for name, faces in lost.get(first, {}).items()}
+            missed[len(models) - 1] = dict(missed.get(first, {}))
             owners.append(part)
-            said = brep.unintersected_said(part, missed.get(first, {}))
-            if said:
-                unintersected.append(said)
             continue
         try:
             surfaces = [brep.surface(face) for face in part.faces()]
@@ -335,9 +332,6 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                       lost[len(models) - 1])
         shares[len(models) - 1] = _minus(_shares(scalars), totals)
         missed[len(models) - 1] = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces])
-        said = brep.unintersected_said(part, missed[len(models) - 1])
-        if said:
-            unintersected.append(said)
         for name, items in families.items():
             for item in items[before.get(name, 0):]:
                 item.setdefault("_model", len(models) - 1)
@@ -365,6 +359,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                 new = brep.failed_ordinals(model.part, [model.screen], [model.screen.faces], was)
                 if new:
                     lost[item["_model"]].setdefault(name, set()).update(new)
+                    counts = missed.setdefault(item["_model"], {})
+                    for ordinal, count in new.items():
+                        counts[ordinal] = counts.get(ordinal, 0) + count
             items[:CAP] = sorted(items[:CAP], key=_ORDER[name])
             # one wall (or gap) between two faces is one item: each face's ray finds the other
             pairs: dict[tuple[int, frozenset[int]], dict[str, Any]] = {}
@@ -413,6 +410,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         report["model"] = {"error": failed["model"]}
     report["partial_sections"] = sorted(name for name in failed)
     report["partial"] = bool(failed)
+    # each part's faces the kernel failed to intersect a ray with, the walls' and gaps' exact distances' too
+    unintersected = [said for said in (brep.unintersected_said(part, missed.get(m, {}))
+                                       for m, part in enumerate(owners)) if said]
     if unintersected:
         report["findings"] = unintersected
     return report
@@ -3002,7 +3002,8 @@ def _small(model: Model) -> dict[str, Any]:
 
 
 #: The families each of ``_measure_part``'s steps measures (a step not listed measures its own name's).
-_RAN = {"holes": ("holes", "counterbores"), "access": ("access", "setups"), "sharp_edges": ("sharp_edges", "access"),
+_RAN = {"holes": ("holes", "counterbores"), "access": ("access", "setups"),
+        "sharp_edges": ("sharp_edges", "access", "setups"),  # its made_from directions rebuild the setups
         "pockets": ("pockets", "internal_corners"),
         "turning": ("turned_diameters", "bores", "grooves", "live_tooling")}
 _FAMILIES = ("holes", "counterbores", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",

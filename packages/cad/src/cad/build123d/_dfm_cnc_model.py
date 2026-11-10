@@ -49,6 +49,11 @@ SOLID_RAY = np.array([0.2672612419124244, 0.5345224838248488, 0.8017837257372732
 SOLID_RAYS = (SOLID_RAY, SOLID_RAY[[2, 0, 1]], SOLID_RAY[[1, 2, 0]])
 #: How far off its face a ray starts, so it does not hit the face it leaves.
 LIFT = 1e-3
+#: A ray's nearest crossing with another face's this near along it (mm) is on the edge between them
+#: (``Model._cast``): which of the two it crossed, so the normal there, is in doubt.
+SAME_EDGE = 1e-6
+#: A point this near a face (mm) is on the part's boundary, which is not its material (``Model.solid``).
+ON_BOUNDARY = 1e-6
 #: The sample budget: about ``SAMPLE_SCALE * sqrt(faces)`` points shared over the faces by area, at most
 #: ``SAMPLE_CAP``, every face at least one and at most ``FACE_SAMPLES``: the rays cast grow with the faces'
 #: count once (one point each), not with the part's area or its triangulation.
@@ -364,6 +369,7 @@ class Hit:
     distance: float
     face: int          # the ordinal of the face hit, 0 for one the part does not know
     normal: np.ndarray  # its outward normal there
+    edge: bool = False  # met on an edge (within the kernel's tolerance): which face, so its normal, is in doubt
 
 
 class Model:
@@ -742,10 +748,12 @@ class Model:
 
     def _cast(self, origin: Iterable[float], direction: Iterable[float], skip: float, end: float,
               nearest: bool, given: tuple[np.ndarray, np.ndarray] | None = None
-              ) -> tuple[float, int, float, float] | None:
+              ) -> tuple[float, int, float, float, bool] | None:
         """The ray's nearest crossing (or, with ``nearest`` False, any crossing): its distance, the face's
-        index and the (u, v) on it. Each face the ray's line could cross, by its box, is intersected exactly
-        (``IntCurvesFace_Intersector``), nearest box first, until no nearer crossing can follow."""
+        index, the (u, v) on it and whether it is on an edge -- on its face's boundary, or another face crossed
+        as near (``SAME_EDGE``), as a line through an edge crosses both its faces. Each face the ray's line could
+        cross, by its box, is intersected exactly (``IntCurvesFace_Intersector``), nearest box first, until no
+        nearer crossing can follow."""
         gp_Dir, gp_Lin, gp_Pnt = _gp()  # noqa: N806 - the kernel's names
 
         o = np.asarray(origin if isinstance(origin, np.ndarray) else list(origin), dtype=float)
@@ -759,20 +767,25 @@ class Model:
         if not len(candidates):
             return None
         line = gp_Lin(gp_Pnt(*o), gp_Dir(*d))
-        best: tuple[float, int, float, float] | None = None
+        best: tuple[float, int, float, float, bool] | None = None
         for index, entry in zip(candidates, entries):
-            if best is not None and entry > best[0]:
+            if best is not None and entry > best[0] + SAME_EDGE:
                 break
             intersector = self._intersector(int(index))
-            intersector.Perform(line, skip, end if best is None else best[0])
+            intersector.Perform(line, skip, end if best is None else best[0] + SAME_EDGE)
             if not intersector.IsDone():
                 continue
             for k in range(1, intersector.NbPnt() + 1):
                 w = float(intersector.WParameter(k))
                 if w < skip or w > end:
                     continue
+                # two faces crossed at one place: an edge's
+                beside = best is not None and abs(w - best[0]) <= SAME_EDGE and int(index) != best[1]
                 if best is None or w < best[0]:
-                    best = (w, int(index), float(intersector.UParameter(k)), float(intersector.VParameter(k)))
+                    best = (w, int(index), float(intersector.UParameter(k)), float(intersector.VParameter(k)),
+                            intersector.on_boundary(k) or beside)
+                elif beside:
+                    best = (*best[:4], True)
             if best is not None and not nearest:
                 return best
         return best
@@ -783,12 +796,12 @@ class Model:
         found = self._cast(origin, direction, skip, end, True)
         if found is None:
             return None
-        distance, index, u, v = found
+        distance, index, u, v, edge = found
         try:
             _, normal = brep.point_normal(self.faces[index], u, v)
         except Exception:  # noqa: BLE001
             normal = np.zeros(3)
-        return Hit(distance, index + 1, normal)
+        return Hit(distance, index + 1, normal, edge)
 
     def blocked(self, origin: Iterable[float], direction: Iterable[float], skip: float = 1e-4) -> bool:
         """Whether the ray crosses any face beyond ``skip``."""
@@ -896,21 +909,23 @@ class Model:
                 if hit is None:
                     found.append(None)
                     continue
-                distance, face, u, v = hit
+                distance, face, u, v, edge = hit
                 try:
                     _, normal = brep.point_normal(self.faces[face], u, v)
                 except Exception:  # noqa: BLE001
                     normal = np.zeros(3)
-                found.append(Hit(distance, face + 1, normal))
+                found.append(Hit(distance, face + 1, normal, edge))
         return found
 
     def solid(self, points: np.ndarray) -> np.ndarray:
         """Whether each point lies in the part's material (on its boundary is not): the first face a ray from it
         meets looks away from it (the ray leaving the material there), by the model's own ray cast along one
-        oblique direction; a ray that meets a face nearly edge-on is cast again along the next of ``SOLID_RAYS``,
-        and one that meets a face at once (on the boundary), or edge-on along all three, is classified exactly
-        instead (one classifier kept). A solid classifier costs 40 to 400 ms a point on a freeform part, a ray a
-        fraction of one."""
+        oblique direction; a ray that meets a face nearly edge-on, or on an edge (``Hit.edge``: the line may pass
+        from one face to the next there, so the normal says nothing), is cast again along the next of
+        ``SOLID_RAYS``, and one that meets a face at once (a point on the boundary: the ray is cast from just
+        behind it, ``ON_BOUNDARY``, so the face it stands on is met), or doubtful along all three, is classified
+        exactly instead (one classifier kept). A solid classifier costs 40 to 400 ms a point on a freeform part, a
+        ray a fraction of one."""
         points = np.asarray(points, dtype=float).reshape(-1, 3)
         found = np.zeros(len(points), dtype=bool)
         if not len(points):
@@ -919,16 +934,16 @@ class Model:
         for ray in SOLID_RAYS:
             if not grazing:
                 break
-            hits = self.first_all(points[grazing], np.tile(ray, (len(grazing), 1)), skip=1e-7)
+            hits = self.first_all(points[grazing], np.tile(ray, (len(grazing), 1)), skip=-ON_BOUNDARY)
             still = []
             for k, hit in zip(grazing, hits):
                 if hit is None:
                     continue  # it leaves the part: outside
                 facing = float(np.asarray(hit.normal) @ ray)
-                if hit.distance < 1e-6:
+                if abs(hit.distance) <= ON_BOUNDARY:
                     doubtful.append(k)  # on the boundary, or all but: the classifier's (on is not in)
-                elif abs(facing) < 0.05:
-                    still.append(k)  # met edge-on: told along the next ray
+                elif hit.edge or abs(facing) < 0.05:
+                    still.append(k)  # met on an edge or edge-on: told along the next ray
                 else:
                     found[k] = facing > 0.0
             grazing = still
@@ -942,7 +957,7 @@ class Model:
             from OCP.TopAbs import TopAbs_IN
 
             for k in doubtful:
-                self._classifier.Perform(gp_Pnt(*(float(v) for v in points[k])), 1e-6)
+                self._classifier.Perform(gp_Pnt(*(float(v) for v in points[k])), ON_BOUNDARY)
                 found[k] = self._classifier.State() == TopAbs_IN
         return found
 

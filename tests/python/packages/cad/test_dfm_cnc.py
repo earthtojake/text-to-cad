@@ -112,6 +112,26 @@ class BatchedRaysTest(unittest.TestCase):
             expected.append(classifier.State() == TopAbs_IN)
         np.testing.assert_array_equal(model.solid(points), expected)
 
+    def test_a_point_whose_ray_meets_an_edge_or_that_lies_on_a_face_is_classified_as_the_kernel_does(self) -> None:
+        # A grid of whole millimetres over a part drawn in whole millimetres: rays from it pass exactly through
+        # edges (from inside an open slot, one leaves through the slot wall's top edge, which reads as material by
+        # that wall's normal), and a fifth of its points lie on a face (the boundary: not in the material).
+        from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+        from OCP.gp import gp_Pnt
+        from OCP.TopAbs import TopAbs_IN
+
+        from cad.build123d import _dfm_brep, _dfm_cnc_model
+
+        block = bd.Box(20, 12, 12) - bd.Pos(0, 0, 3) * bd.Box(6, 20, 6) - bd.Pos(6, 2, -3) * bd.Cylinder(2, 20)
+        model = _dfm_cnc_model.Model(_dfm_brep.Part("p", "p", block))
+        points = np.mgrid[-10:10.5:1.0, -6:6.5:1.0, -6:6.5:1.0].reshape(3, -1).T
+        classifier = BRepClass3d_SolidClassifier(block.wrapped)
+        expected = []
+        for point in points:
+            classifier.Perform(gp_Pnt(*point), 1e-6)
+            expected.append(classifier.State() == TopAbs_IN)
+        np.testing.assert_array_equal(model.solid(points), expected)
+
 
 class HolesTest(unittest.TestCase):
     @classmethod

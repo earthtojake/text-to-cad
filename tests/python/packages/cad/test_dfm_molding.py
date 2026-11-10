@@ -454,6 +454,51 @@ class UndercutTest(unittest.TestCase):
         self.assertIn("not measured at 1 face(s)", outcomes["molding.wall_min"]["reason"])
         self.assertGreaterEqual(outcomes["molding.wall_min"]["unmeasured"], 1)
 
+    def test_a_face_lost_only_while_the_pulls_are_ranked_is_said_once_for_the_part(self) -> None:
+        """A bar drafted along x, molded along z, has a doubtful pull, so the part's own pulls are ranked
+        (``pull_check``, which reads what x traps): a face the kernel fails on there alone is the part's one
+        ``rays_unintersected``, naming it, and the pulls' too."""
+        from unittest import mock
+
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector as Real
+        from OCP.Standard import Standard_Failure
+
+        from cad.build123d import _dfm_molding
+
+        bar = bd.extrude(bd.Plane.YZ * bd.Rectangle(40, 20), amount=60, taper=5)
+        bar.label = "bar"
+        side = max(bar.faces(), key=lambda face: face.center().Y)
+        ranking = {"now": False}
+
+        class Failing:
+            def __init__(self, face: Any, tolerance: float) -> None:
+                self.inner, self.side = Real(face, tolerance), face.IsPartner(side.wrapped)
+
+            def Perform(self, *args: Any) -> None:  # noqa: N802 - the kernel's name
+                if self.side and ranking["now"]:
+                    raise Standard_Failure("")
+                self.inner.Perform(*args)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self.inner, name)
+
+        check = _dfm_molding._pull_check
+
+        def ranked(*args: Any, **kwargs: Any) -> Any:
+            ranking["now"] = True
+            try:
+                return check(*args, **kwargs)
+            finally:
+                ranking["now"] = False
+
+        with mock.patch("OCP.IntCurvesFace.IntCurvesFace_Intersector", Failing), \
+                mock.patch.object(_dfm_molding, "_pull_check", ranked):
+            result = _check(bar)
+        said = [f for f in result.findings if f.code == "rays_unintersected"]
+        self.assertEqual(len(said), 1, [f.message for f in said])
+        self.assertIn(" face(s) of bar (", said[0].message)
+        self.assertEqual(result.measurements["pull_check"]["unmeasured_faces"], [said[0].location])
+
     def test_a_family_not_measured_fails_the_check_and_never_raises(self) -> None:
         from unittest import mock
 

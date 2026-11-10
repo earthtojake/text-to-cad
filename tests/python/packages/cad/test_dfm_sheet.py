@@ -215,6 +215,20 @@ class TurnedTest(unittest.TestCase):
             for a, b in zip(turned[2:-1], drawn[2:-1]):
                 self.assertAlmostEqual(a, b, delta=1e-3 * max(1.0, abs(b)))
 
+    def test_a_plate_is_the_same_sheet_however_it_stands(self) -> None:
+        # a scalloped strip 9 mm wide and 2 thick, its faces' widths read in their own frames, never a world box's;
+        # and a plate whose top face lies exactly half over a step: a skin wherever it stands, its share of rays
+        # across counted (a sum of its samples' equal areas read 0.4999999 placed the last way: one skin, 18% sheet)
+        strip = bd.Pos(0, 0, 1) * bd.Box(40, 9, 2)
+        for x in (-10, 0, 10):
+            strip -= bd.Pos(x, 4.5, 0) * bd.Cylinder(1.5, 6)
+        stepped = bd.Pos(0, 0, 1) * bd.Box(40, 10, 2) + bd.Pos(-10, 0, -1) * bd.Box(20, 10, 2)
+        for shape in (strip.clean(), stepped.clean()):
+            for turn in (bd.Rot(0, 0, 0), bd.Rot(0, 0, 45), bd.Rot(45, 0, 0), bd.Pos(7, -3, 11) * bd.Rot(23, -37, 61)):
+                (part,) = items(measured(turn * shape), "parts")
+                self.assertTrue(part["is_sheet"], (turn, part.get("why")))
+                self.assertEqual((part["skin_faces"], part["thickness_mm"]), (2, 2.0), turn)
+
 
 class UnfoldTest(unittest.TestCase):
     """The flat pattern against lengths computed by hand: flanges from their tangent lines plus each bend's

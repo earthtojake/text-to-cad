@@ -318,15 +318,20 @@ count a summary says.
   kernel's classifier accepts at the boundary in millimetres along the surface's finer direction, plus three
   walks' deflections) the full one is cast too, and its crossings the fast one lacks are added. The full
   intersector answers differently on different stretches of one line, so neither's crossings are dropped for the
-  other's. What this keeps: every crossing on the face that the kernel's own intersector finds on the whole line
+  other's; one crossing both find (up to 1e-5 mm apart along the line on a torus, `SAME_CROSSING`) is taken once,
+  so a count of crossings counts it once, on the face's boundary where either puts it there. Each crossing says
+  whether the kernel put it on the boundary (within its tolerance of an edge or a vertex). What this keeps: every
+  crossing on the face that the kernel's own intersector finds on the whole line
   (rays grazing a free-form face's edges: none lost); within the boundary's tolerance band, beyond the trim, a
   crossing is accepted as the kernel accepts it on that stretch, which may differ from its answer on the whole
   line by its tolerance. A face is read once; one whose triangulation cannot be read is not screened, and the
   full intersector answers for its whole line. A ray the kernel cannot intersect with a face (`Standard_Failure`
-  on a degenerate patch), or a stretch of it near the boundary it does not finish, loses that crossing alone --
-  the fast intersector's on the rest of the line are kept -- never the family: it is counted against the face
-  and said (`rays_unintersected`, a warning naming the faces), and every family whose rays it cost names those
-  faces (`unmeasured_faces`), so its rules say what was not measured there (below).
+  on a degenerate patch), or a stretch of it near the boundary it does not finish (or the whole line, where the
+  fast intersector failed on it and the full one does not finish), loses that crossing alone -- the fast
+  intersector's on the rest of the line are kept -- never the family: it is counted against the face and said
+  (`rays_unintersected`, a warning naming the faces: one a part, whatever casts lost it -- CNC's walls' and gaps'
+  exact distances, measured after its families, and molding's pull check included), and every family whose rays
+  it cost names those faces (`unmeasured_faces`), so its rules say what was not measured there (below).
   `Rays.intervals`, the stretches of a line in the material, tells each crossing by which way the line passes
   the face there (the direction against the face's outward normal at the crossing): into the material, out of
   it, or along it -- a tangent touch, within 1e-6 of the surface's plane, which is no crossing (a line along a
@@ -626,8 +631,10 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   bore it meets by a convex edge seen along it (a groove inside a bore), else a T-slot cutter, where beside
   every station the cutter's shank (0.5 mm about its axis) leaves the part along the direction from some
   place across the void and the disc that reaches the station from there touches no material short of the
-  edge's own ends, slid back along the edge where it passes them (the shank travels along the edge: an 8 mm
-  port in a wall is no way to a 25 mm corner; an edge shorter than the disc is no run for one); a dovetail
+  edge's own ends (each point of its rim told in or out by the first face an oblique ray from it meets, a ray
+  met on an edge or edge-on told along another, the kernel's solid classifier where all three are in doubt; a
+  point on a face is not in the material), slid back along the edge where it passes them (the shank travels
+  along the edge: an 8 mm port in a wall is no way to a 25 mm corner; an edge shorter than the disc is no run for one); a dovetail
   cutter of any acute angle likewise, its floor a plane square to one of the part's axes (45 and 60 degrees
   are standard; another, Parker's 66, is a cutter ground to it, the special cutter's finding naming the
   angle). The disc must get there, by geometry alone (the least disc that reaches the station from the
@@ -882,7 +889,9 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   two ends, a grille's webs, a bar's sides and a block's faces are opposite too and are no skins: a part with
   none is not sheet (`why`: "no face is 2 times as wide and 10 times as long as it is from the face opposite
   it ... a bar or a block"). Nothing reads the part's axis-aligned box. A planar face
-  whose rays mostly reach an antiparallel planar face `t` away is a skin. A coaxial concave/convex cylinder
+  at least half of whose rays reach an antiparallel planar face `t` away is a skin, its rays counted (its samples
+  share its area equally: summed, a face exactly half across read under half or not by the last bits of its
+  area, which a move changes). A coaxial concave/convex cylinder
   pair `t` apart is a bend; a part of such pairs with no flat skin is a closed section, a tube (not sheet,
   named at its real wall), or, where a face along the axis joins inside to outside (a slit), a sheet rolled
   with no flat flange: sheet (`parts.rolled`), which this check does not unroll, so its `bends` are not

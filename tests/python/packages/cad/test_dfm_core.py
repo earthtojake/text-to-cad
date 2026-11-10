@@ -1071,6 +1071,67 @@ class ExactRaysTest(unittest.TestCase):
         self.assertEqual([intersector.WParameter(k) for k in range(1, intersector.NbPnt() + 1)], crossings)
         self.assertEqual(rays.screen.failed, {index: 1})
 
+    def test_a_ray_the_fast_intersector_fails_on_and_the_full_does_not_finish_is_counted(self) -> None:
+        from unittest import mock
+
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+        from OCP.Standard import Standard_Failure
+
+        heavy = mock.patch.object(brep, "HEAVY_EDGES", 1)
+        heavy.start()
+        self.addCleanup(heavy.stop)
+        rays = brep.Rays(_lofted())
+        index = int(np.flatnonzero(rays.screen.heavy)[0])
+        intersector = rays._intersector(index)
+
+        class Raises:
+            def Perform(self, *args: object) -> None:  # noqa: N802 - the kernel's name
+                raise Standard_Failure("the kernel failed")
+
+        class Unfinished:
+            def Perform(self, *args: object) -> None:  # noqa: N802
+                pass
+
+            def IsDone(self) -> bool:  # noqa: N802
+                return False
+
+        intersector._fast, intersector._full = Raises(), Unfinished()
+        intersector.Perform(gp_Lin(gp_Pnt(0.0, -50.0, 12.0), gp_Dir(0.0, 1.0, 0.0)), 0.0, 1e9)
+        self.assertFalse(intersector.IsDone())
+        self.assertEqual(rays.screen.failed, {index: 1})
+
+    def test_one_crossing_found_by_both_intersectors_is_taken_once_and_keeps_the_boundary(self) -> None:
+        # the fast and the full intersector put one crossing of a torus up to 1e-5 apart: a consumer counting
+        # crossings counts it once, and the full one's word that it is on the boundary is kept
+        from OCP.TopAbs import TopAbs_IN, TopAbs_ON
+
+        intersector = brep.Rays(bd.Box(10, 10, 10))._intersector(0)
+
+        class Found:
+            def __init__(self, *points: tuple[float, object]) -> None:
+                self.points = points
+
+            def NbPnt(self) -> int:  # noqa: N802 - the kernel's names
+                return len(self.points)
+
+            def WParameter(self, k: int) -> float:  # noqa: N802
+                return self.points[k - 1][0]
+
+            def UParameter(self, k: int) -> float:  # noqa: N802
+                return 0.0
+
+            def VParameter(self, k: int) -> float:  # noqa: N802
+                return 0.0
+
+            def State(self, k: int) -> object:  # noqa: N802
+                return self.points[k - 1][1]
+
+        intersector._points = []
+        intersector._take(Found((30.0, TopAbs_IN), (40.0, TopAbs_IN)))
+        intersector._take(Found((30.000007, TopAbs_ON), (35.0, TopAbs_IN)), within=(0.0, 1e9), besides=2)
+        self.assertEqual([intersector.WParameter(k) for k in range(1, intersector.NbPnt() + 1)], [30.0, 40.0, 35.0])
+        self.assertEqual([intersector.on_boundary(k) for k in range(1, 4)], [True, False, False])
+
     def test_a_heavy_face_whose_triangulation_cannot_be_read_is_read_once(self) -> None:
         from unittest import mock
 
@@ -1151,6 +1212,31 @@ class ExactRaysTest(unittest.TestCase):
                 said = [finding for finding in result.findings if finding.code == "rays_unintersected"]
                 self.assertEqual(len(said), 1, [finding.code for finding in result.findings])
                 self.assertIn("tray/face 1", said[0].message)
+
+    def test_a_face_the_kernel_fails_on_only_in_a_wall_s_exact_distance_is_said(self) -> None:
+        # the walls' and gaps' exact distances (``_refine``) are measured after every part's families: a ray they
+        # lose is the part's own finding too, naming the part (not only the family's ``unmeasured_faces``, which
+        # the check would say for the part only where no other part's rays were lost)
+        from unittest import mock
+
+        import cad.build123d as cb
+        from cad.build123d import _dfm_cnc
+
+        shape = bd.Box(30, 20, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 6) - bd.Pos(10, 0, 0) * bd.Rot(0, 20, 0) * \
+            bd.Cylinder(2, 30)
+        shape.label = "tray"
+        refine = _dfm_cnc._refine
+
+        def failing(model: object, item: dict, outward: bool) -> None:
+            screen = model.screen  # type: ignore[attr-defined]
+            screen.failed[0] = screen.failed.get(0, 0) + 1  # as a ray the kernel failed on counts itself
+            refine(model, item, outward)  # type: ignore[arg-type]
+
+        with mock.patch.object(_dfm_cnc, "_refine", failing):
+            result = cb.cnc(shape, material="aluminum")
+        (said,) = [finding for finding in result.findings if finding.code == "rays_unintersected"]
+        self.assertIn(said.location, result.measurements["walls"]["unmeasured_faces"])
+        self.assertIn(" face(s) of tray (", said.message)
 
 
 def _bracket() -> bd.Shape:
@@ -1376,7 +1462,9 @@ class StatesTest(unittest.TestCase):
         whatever call it is in: it is killed from outside -- and says not checked for (``over_time``,
         ``over_memory``); one whose process exits with no answer is ``process_lost``, one whose measuring raised
         ``error``, in one line; under its limits it answers what the integration measures. The process ends
-        with its caller: once the pipe its caller holds is closed it is gone, measuring for no one."""
+        with its caller: once the pipe its caller holds is closed it is gone, measuring for no one; its standard
+        input is not that pipe but the null device (on Windows a read of the pipe held the integration's imports
+        until the caller went: a check that never answered)."""
         import json
         import os
         import subprocess
@@ -1407,7 +1495,7 @@ class StatesTest(unittest.TestCase):
             self.assertEqual((lost.status, lost.reason), ("not_checked", "process_lost"))
             self.assertIn("exited (7) before it answered", lost.findings[0].message)
             with mock.patch.object(manufacturing, "_CHILD", manufacturing._CHILD.replace(
-                    "_child()", "import cad.trimesh._check as c; c.measure = lambda *a: 1 / 0; _child()")):
+                    "_child()", "import cad.trimesh._check as c, os; c.measure = lambda *a: 1 / len(os.read(0, 1)); _child()")):
                 raised = checked()
             self.assertEqual((raised.status, raised.reason), ("not_checked", "error"))
             self.assertIn("ZeroDivisionError: division by zero (raised in ", raised.findings[0].message)

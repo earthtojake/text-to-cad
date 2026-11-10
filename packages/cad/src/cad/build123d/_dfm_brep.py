@@ -914,6 +914,9 @@ def freeform(face: Any) -> bool:
 #: A free-form face of this many edges or more is heavy (``heavy``), and a B-spline of this many control points.
 HEAVY_EDGES = 48
 HEAVY_POLES = 4000
+#: Two crossings of one face this near along a ray (mm) are one: the fast and the full intersector put one crossing
+#: up to 1e-5 apart (a torus's, near its trim), and a consumer counting crossings must count it once.
+SAME_CROSSING = 1e-5
 
 
 def heavy(face: Any) -> bool:
@@ -1160,10 +1163,15 @@ class Intersector:
     edges. So a ray is cast with the fast one, and with the full one too where its line passes within reach of the
     edges' polylines (``Screen.boundaries``: the triangulation's, widened by its deflection and every edge's and
     vertex's tolerance), whose crossings the fast one lacks are added (``Perform``); a face with no polylines to
-    read is always cast with the full one."""
+    read is always cast with the full one.
+
+    Each crossing carries whether the kernel put it on the face's boundary (``on_boundary``: within its tolerance
+    of an edge or a vertex, where the line may pass from this face to its neighbour, so which face it crossed --
+    and the normal there -- is the boundary's to say, not this face's)."""
 
     def __init__(self, face: Any, tolerance: float, screen: "Screen | None" = None, index: int = -1) -> None:
         from OCP.IntCurvesFace import IntCurvesFace_Intersector
+        from OCP.TopAbs import TopAbs_ON
 
         self.face = face
         self.tolerance = tolerance
@@ -1174,11 +1182,12 @@ class Intersector:
         if self._fast is not None:
             self._fast.SetUseBoundToler(False)
         self._full: Any = None if free else IntCurvesFace_Intersector(face, tolerance)
-        self._points: list[tuple[float, float, float]] = []
+        self._points: list[tuple[float, float, float, bool]] = []
         self._done = False
         from OCP.Standard import Standard_Failure
 
         self._failure = Standard_Failure  # read once: a ray's import of it cost a fifth of a cast
+        self._on = TopAbs_ON
 
     def _near_boundary(self, line: Any, start: float, end: float) -> list[tuple[float, float]]:
         """The stretches of the ray -- the line between ``start`` and ``end`` -- that pass within reach of the
@@ -1253,7 +1262,7 @@ class Intersector:
         loses its own crossings only, never the rest of the ray's; it is counted against the face
         (``Screen.failed``), which the check says, never a family lost to it."""
         Standard_Failure = self._failure  # noqa: N806 - the kernel's name
-        self._points: list[tuple[float, float, float]] = []
+        self._points = []
         self._done = False
         if self._fast is None:
             # any face but a heavy one: the kernel's intersector alone, as it answers
@@ -1266,16 +1275,18 @@ class Intersector:
                 return
             if full.IsDone():
                 self._done = True
-                self._points = [(float(full.WParameter(k)), float(full.UParameter(k)), float(full.VParameter(k)))
-                                for k in range(1, full.NbPnt() + 1)]
+                on = self._on
+                self._points = [(float(full.WParameter(k)), float(full.UParameter(k)), float(full.VParameter(k)),
+                                 full.State(k) == on) for k in range(1, full.NbPnt() + 1)]
                 if len(self._points) > 1:
                     self._points.sort()
             return
+        raised = False
         try:
             self._fast.Perform(line, start, end)
             fast = self._fast.IsDone()
         except Standard_Failure:
-            fast = False
+            fast, raised = False, True
         if fast:
             self._done = True
             self._take(self._fast)
@@ -1288,7 +1299,7 @@ class Intersector:
             from OCP.IntCurvesFace import IntCurvesFace_Intersector
 
             self._full = IntCurvesFace_Intersector(self.face, self.tolerance)
-        have = [w for w, _, _ in self._points]
+        have = len(self._points)  # the fast one's crossings: the full one's same crossings are not taken again
         lost = 0
         for low, high in stretches:
             try:
@@ -1297,8 +1308,9 @@ class Intersector:
                 lost += 1
                 continue
             if not self._full.IsDone():
-                # a stretch near the boundary (the fast one done) not finished is a crossing that may be lost
-                lost += int(self._done)
+                # a stretch near the boundary (the fast one done) not finished is a crossing that may be lost, as
+                # is the whole ray where the fast one failed on it
+                lost += int(self._done or raised)
                 continue
             if (low, high) == (start, end):
                 self._done = True
@@ -1307,17 +1319,24 @@ class Intersector:
             self._screen.failed[self._index] = self._screen.failed.get(self._index, 0) + lost
         self._points.sort()
 
-    def _take(self, intersector: Any, within: tuple[float, float] | None = None,
-              besides: list[float] | None = None) -> None:
-        """The intersector's crossings (it is done), those ``within`` a stretch alone, and none ``besides`` a
-        crossing already taken (the same crossing found by the other intersector, within its tolerance)."""
+    def _take(self, intersector: Any, within: tuple[float, float] | None = None, besides: int = 0) -> None:
+        """The intersector's crossings (it is done), those ``within`` a stretch alone, and none that is one of the
+        first ``besides`` crossings already taken (the same crossing found by the other intersector: within
+        ``SAME_CROSSING`` along the line, which the two put up to 1e-5 apart on a torus), that one said on the
+        boundary where this one is."""
+        on = self._on
         for k in range(1, intersector.NbPnt() + 1):
             w = float(intersector.WParameter(k))
             if within is not None and not within[0] <= w <= within[1]:
                 continue
-            if besides and any(abs(w - h) <= self.tolerance + 1e-9 * abs(w) for h in besides):
+            state = intersector.State(k) == on
+            same = [j for j in range(besides) if abs(w - self._points[j][0]) <= SAME_CROSSING + 1e-9 * abs(w)]
+            if same:
+                if state:
+                    for j in same:
+                        self._points[j] = (*self._points[j][:3], True)
                 continue
-            self._points.append((w, float(intersector.UParameter(k)), float(intersector.VParameter(k))))
+            self._points.append((w, float(intersector.UParameter(k)), float(intersector.VParameter(k)), state))
 
     def IsDone(self) -> bool:  # noqa: N802
         return self._done
@@ -1333,6 +1352,10 @@ class Intersector:
 
     def VParameter(self, k: int) -> float:  # noqa: N802
         return self._points[k - 1][2]
+
+    def on_boundary(self, k: int) -> bool:
+        """Whether the ``k``-th crossing is on the face's boundary, within the kernel's tolerance of an edge."""
+        return self._points[k - 1][3]
 
 
 def failures(screens: Iterable["Screen"]) -> list[dict[int, int]]:

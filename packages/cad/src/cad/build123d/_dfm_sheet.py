@@ -633,16 +633,17 @@ class _Analysis:
         self.thickness = thickness
         self.tolerance = tol = _tolerance(thickness)
 
+        # a face's samples share its area equally (``_samples``), so its shares are counted, exactly: summed areas
+        # put a face half across at 0.4999999 or 0.5 by the last bits of its area, which a move changes
         share: dict[int, float] = {}
         pair_area: dict[tuple[int, int], float] = {}
         for a, hs in self.hits.items():
-            sampled = sum(h.area for h in hs) or 1.0
-            good = 0.0
+            good = 0
             for h in hs:
                 if h.distance is not None and h.face and abs(h.distance - thickness) <= tol and self._opposite(a, h.face):
-                    good += h.area
+                    good += 1
                     pair_area[(a, h.face)] = pair_area.get((a, h.face), 0.0) + h.area
-            share[a] = good / sampled
+            share[a] = good / (len(hs) or 1)
         for (a, b), value in pair_area.items():
             sampled = sum(h.area for h in self.hits[a]) or 1.0
             if value >= 0.02 * sampled:
@@ -731,7 +732,7 @@ class _Analysis:
                 worst = max(valid, key=lambda h: abs(h.distance - thickness))
                 local, deviation, point = worst.distance, abs(worst.distance - thickness), worst.point
                 facing = [h for h in valid if h.face and self._opposite(a, h.face)]
-                if facing and sum(h.area for h in facing) >= 0.5 * sum(h.area for h in hs):
+                if facing and 2 * len(facing) >= len(hs):  # counted, as share is
                     kind = "thicker" if worst.distance > thickness else "thinner"
             else:
                 # no ray of it crosses the part: by its own size (never its box in the world, which turns with it)
@@ -908,9 +909,8 @@ class _Analysis:
             if self.surfaces[a - 1].kind not in ("cone", "torus", "sphere", "bspline", "revolution") or \
                     a in paired or a in self.countersinks or a in self.edge_set or a in self.breaks:
                 continue
-            sampled = sum(h.area for h in hs) or 1.0
-            across = sum(h.area for h in hs if h.distance is not None and abs(h.distance - thickness) <= tol)
-            if across >= 0.5 * sampled:
+            across = sum(1 for h in hs if h.distance is not None and abs(h.distance - thickness) <= tol)
+            if hs and 2 * across >= len(hs):  # counted, as share is
                 self.formed.add(a)
 
     def _largest_circle(self, ordinal: int) -> float:
