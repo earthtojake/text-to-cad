@@ -146,14 +146,23 @@ class _Fast:
 
 
 class _Budget:
-    """What a release search may still spend (``_RELEASE_RAYS``, ``_RELEASE_SECONDS``): true while some is left."""
+    """What a release search may still spend (``_RELEASE_RAYS``, ``_RELEASE_SECONDS``): true while some is left.
+    Its seconds run only while a search does (``searching``): finding what is trapped, which no budget cuts
+    short, is none of them."""
 
     def __init__(self) -> None:
         self.rays = _RELEASE_RAYS
-        self.until = time.monotonic() + _RELEASE_SECONDS
+        self.seconds = _RELEASE_SECONDS
+        self._since: float | None = None
+
+    def searching(self, running: bool) -> None:
+        if self._since is not None:
+            self.seconds -= time.monotonic() - self._since
+        self._since = time.monotonic() if running else None
 
     def __bool__(self) -> bool:
-        return self.rays > 0 and time.monotonic() < self.until
+        spent = time.monotonic() - self._since if self._since is not None else 0.0
+        return self.rays > 0 and self.seconds - spent > 0.0
 
 
 def _safe(fn: Any, *args: Any) -> Any:
@@ -711,14 +720,18 @@ def _half_depth(face: _FaceDraft, low: float, high: float, pull: np.ndarray, par
     return best
 
 
+#: The directions round the pull a face's width is read along: its widest is within 0.12% of the true one, so a
+#: wall reads its own width however the part is turned.
+_WIDTH_WAYS = np.linspace(0.0, math.pi, 32, endpoint=False)
+
+
 def _width_across(geo: _Geometry, ordinal: int, pull: np.ndarray) -> float:
-    """The face's greatest extent square to the pull (mm): the farthest apart two of its points lie there -- its
-    vertices and its edges' points, and its samples up to 400 points in all (a face's corners first, so a flat
-    wall reads its own width however the part is turned)."""
+    """The face's greatest extent square to the pull (mm): of its vertices, its edges' points and its samples,
+    the widest of ``_WIDTH_WAYS``."""
     u, v = ops.basis(pull)
-    points = geo.vertices(ordinal)[:400]
-    flat = np.stack([points @ u, points @ v], axis=1)
-    return float(np.sqrt(((flat[:, None, :] - flat[None, :, :]) ** 2).sum(axis=2).max()))
+    points = geo.vertices(ordinal)
+    spans = np.stack([points @ u, points @ v], axis=1) @ np.stack([np.cos(_WIDTH_WAYS), np.sin(_WIDTH_WAYS)])
+    return float((spans.max(axis=0) - spans.min(axis=0)).max())
 
 
 def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pulls: np.ndarray | list[np.ndarray],
@@ -1136,6 +1149,7 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
     # The largest features first: a part of hundreds of them (a connector's contacts) spends its release
     # budget on the largest, and says which it did not search ("unknown").
     features = _features(geo, trapped)
+    budget.searching(True)
     found: list[tuple] = []   # per feature kept: its item, its mask, its release, the points it was read on
     for mine in sorted(features, key=lambda mask: -float(geo.weights[mask].sum())):
         group = sorted({int(face) for face in geo.owner[mine]})
@@ -1194,6 +1208,7 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
             if fields["release"] == "side_action":
                 slides.extend(np.asarray(vector, dtype=float) for vector in release["vectors"])
         items.append(item)
+    budget.searching(False)
     groups = [sorted({int(face) for face in geo.owner[mask]}) for mask in kept]
     in_group = np.isin(geo.owner, [face for group in groups for face in group])
     trapped_mask = np.logical_or.reduce(kept) if kept else np.zeros(len(geo.points), dtype=bool)
@@ -2642,10 +2657,18 @@ def _own_pulls(geo: _Geometry, but: tuple[np.ndarray, ...] = ()) -> list[tuple[s
     part's surface lies from its mass (an open box: toward its mouth), so the same part names the same pull
     however it is turned, and is named by the world's axis where it runs along one (``x``), else by what gives
     it (``face0``: the direction of most area; ``principal0``)."""
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
     named: list[tuple[str, np.ndarray]] = []
-    centre = geo.part.shape.center()
-    lean = (geo.points * geo.weights[:, None]).sum(axis=0) / max(float(geo.weights.sum()), 1e-12) - \
-        np.array([centre.X, centre.Y, centre.Z])
+    try:
+        props = GProp_GProps()
+        BRepGProp.VolumeProperties_s(geo.part.shape.wrapped, props)
+        centre = props.CentreOfMass()
+        lean = (geo.points * geo.weights[:, None]).sum(axis=0) / max(float(geo.weights.sum()), 1e-12) - \
+            np.array([centre.X(), centre.Y(), centre.Z()])
+    except Exception:  # noqa: BLE001 - no centre of mass: each direction its largest component up
+        lean = np.zeros(3)
 
     def offer(name: str, unit: np.ndarray, apart: float = 1.5e-4) -> None:
         # one within a degree of one offered is the same, and so is a principal axis within a degree of a pull of
@@ -2772,14 +2795,15 @@ def _candidates(geos: list[_Geometry], wall_limit: float, zero_tol: float) -> di
             "candidates": rows}
 
 
-def _own_pull(geo: _Geometry, pull: np.ndarray, wall_limit: float, zero_tol: float
+def _own_pull(geo: _Geometry, pull: np.ndarray, wall_limit: float, zero_tol: float, budget: _Budget
               ) -> tuple[np.ndarray, dict[str, Any] | None]:
     """The pull one part of an assembly is judged along, and its ``pull_check``: the assembly's ``pull`` unless
     one of the part's own does better for it (``_pull_check``) -- an assembly's parts lie as they are assembled,
-    not as each is molded, so one pull is rarely every part's."""
+    not as each is molded, so one pull is rarely every part's. ``budget``: the parts' release searches along
+    the assembly's pull share one (what each finds is kept for its report: ``_Geometry._undercut``)."""
     if len(geo.part.solids()) != 1:
         return pull, None
-    pulled = _pulled([geo], [pull], wall_limit, zero_tol, _Budget())[0]
+    pulled = _pulled([geo], [pull], wall_limit, zero_tol, budget)[0]
     if "error" in pulled["draft"] or "error" in pulled["undercuts"]:
         return pull, None
     check = _safe(_pull_check, geo, pull, pulled, wall_limit, zero_tol)
@@ -2803,7 +2827,8 @@ def measure(document: _dfm_brep.Document, options: dict[str, Any], candidates: b
     else:
         pull = ops.pull_vector(options.get("pull") or DEFAULT_PULL)
         if len(geos) > 1:
-            own = [_own_pull(geo, pull, wall_limit, zero_tol) for geo in geos]
+            budget = _Budget()
+            own = [_own_pull(geo, pull, wall_limit, zero_tol, budget) for geo in geos]
             pulls = [axis / (np.linalg.norm(axis) or 1.0) for axis, _check in own]
             report = _families(geos, pulls, wall_limit, zero_tol, [check for _axis, check in own])
             report["pulls"] = [{"part": geo.part.owner or geo.part.name, "axis": [_r(v) for v in axis],

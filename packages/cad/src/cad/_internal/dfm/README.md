@@ -1184,7 +1184,8 @@ every hole is a feature to release -- minutes, then hours; a crossing within the
 face's edge is the neighbouring face's.
 
 The search for what releases the trapped features spends, on one pull over every part, at most 200000 rays
-and 45 seconds (`_RELEASE_RAYS`, `_RELEASE_SECONDS`), largest features first, and spends them on verdicts
+and 45 seconds of searching (`_RELEASE_RAYS`, `_RELEASE_SECONDS`; finding what is trapped is none of them: no
+budget cuts it short), largest features first, and spends them on verdicts
 before figures: first every feature is asked what releases it (a ray a point along each slide), one nothing
 releases read in full at once (it fails the part: no budget cuts it short); then, while the budget lasts, the
 released features' strokes and depths (`figures_measured` false where it ran out: the feature keeps its

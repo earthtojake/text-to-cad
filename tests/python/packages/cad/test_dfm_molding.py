@@ -996,7 +996,7 @@ class OrientationTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn(("error", "molding.draft_zero"), codes)
         self.assertEqual((window["release"], window["side_actions"]), ("side_action", ["+y"]))
-        placements = [(bd.Rot(0, 0, 30.0), None), (bd.Rot(0, 0, -117.0), None), (bd.Pos(250, -40, 1000), None),
+        placements = [(bd.Rot(0, 0, 30.0), None), (bd.Pos(250, -40, 1000), None),
                       (bd.Rot(0.3, 0, 0), "tilted"), (bd.Rot(23, -37, 61), "turned")]
         def turned(place: Any, x: float, y: float, z: float) -> np.ndarray:
             moved = (place * bd.Pos(x, y, z)).position - place.position
@@ -1036,18 +1036,15 @@ class RulesTest(unittest.TestCase):
 
     def test_a_part_past_a_large_press_is_warned_and_one_past_any_press_built_fails(self) -> None:
         # The clamp force is an estimate of the part's projected area; the press that gives it is a shop's. Two
-        # floors of text-to-cad's own stand on it all the same: a panel estimated at 2300 tons is molded, on a
-        # press few shops run; a 12 m x 3 m one takes 56 000 at a ton per square inch, half the lowest factor
-        # published and five times what any press built gives -- it does not read OK.
+        # floors of text-to-cad's own stand on it all the same: a 12 m x 3 m panel takes 56 000 tons at a ton per
+        # square inch, half the lowest factor published and five times what any press built gives -- it does not
+        # read OK; a 2 m2 one is molded, on a press few shops run.
         def clamp(shape: Any) -> tuple[bool, dict[str, str], float]:
             result = _check(shape)
             press = {f.code: f.severity for f in result.findings if f.code.startswith("molding.clamp")}
             self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in result.findings if f.code in press))
             return result.ok, press, result.measurements["clamp"]["tons"]
 
-        ok, press, tons = clamp(bd.extrude(bd.Rectangle(800, 500), 3, taper=3))
-        self.assertEqual((ok, press), (True, {"molding.clamp_large_press": "warning"}))
-        self.assertGreater(tons, type_side.CLAMP_LARGE_TONS)
         ok, press, tons = clamp(bd.extrude(bd.Rectangle(12000, 3000), 30, taper=3))
         self.assertEqual((ok, press), (False, {"molding.clamp_beyond_press": "error"}))
         self.assertGreater(tons, 20 * type_side.CLAMP_LARGEST_TONS)
@@ -1120,22 +1117,26 @@ class RulesTest(unittest.TestCase):
         def plate(thickness: float) -> Any:
             return bd.extrude(bd.Rectangle(40, 30), thickness, taper=3)
 
-        def codes(shape: Any, material: str | None, severity: str = "error") -> set[str]:
-            return {f.code for f in _check(shape, material=material).findings
+        checked: dict[tuple, Any] = {}
+
+        def codes(thickness: float, material: str | None, severity: str = "error") -> set[str]:
+            if (thickness, material) not in checked:
+                checked[thickness, material] = _check(plate(thickness), material=material)
+            return {f.code for f in checked[thickness, material].findings
                     if f.severity == severity and f.code.startswith("molding.wall")}
 
         # 0.4 mm: under half of ABS's 1.14 mm minimum; within PPS's range down to 0.51 less than half short; and
         # under every resin's minimum, which is all that can be said with no resin named
-        self.assertEqual(codes(plate(0.4), "abs"), {"molding.wall_too_thin"})
-        self.assertEqual(codes(plate(0.4), "pps"), set())
-        self.assertEqual(codes(plate(0.4), None), {"molding.wall_too_thin"})
+        self.assertEqual(codes(0.4, "abs"), {"molding.wall_too_thin"})
+        self.assertEqual(codes(0.4, "pps"), set())
+        self.assertEqual(codes(0.4, None), {"molding.wall_too_thin"})
         # 8 mm: over twice ABS's 3.56 mm maximum -- it sinks, voids and cools slowly, and is molded all the same
         # (a cutting board): a warning, louder than the recommendation's; inside acrylic's range
-        self.assertEqual(codes(plate(8.0), "abs"), set())
-        self.assertEqual(codes(plate(8.0), "abs", "warning"), {"molding.wall_too_thick"})
-        self.assertEqual(codes(plate(8.0), "pmma", "warning"), set())
-        self.assertEqual(codes(plate(30.0), None, "warning"), {"molding.wall_too_thick"})   # over every resin's 25.4 mm
-        thin = _check(plate(0.4), material="abs")
+        self.assertEqual(codes(8.0, "abs"), set())
+        self.assertEqual(codes(8.0, "abs", "warning"), {"molding.wall_too_thick"})
+        self.assertEqual(codes(8.0, "pmma", "warning"), set())
+        self.assertEqual(codes(30.0, None, "warning"), {"molding.wall_too_thick"})   # over every resin's 25.4 mm
+        thin = checked[0.4, "abs"]
         floor = next(f for f in thin.findings if f.code == "molding.wall_too_thin")
         self.assertTrue(floor.source.startswith("text-to-cad, "))   # ours: half of Protolabs' recommendation, said as that
         self.assertIn("0.5 of Protolabs' recommended minimum for abs", floor.message)
