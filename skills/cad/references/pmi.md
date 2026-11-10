@@ -351,6 +351,14 @@ pmi: PART: ask: What is the 9 mm hole for? Suggest dimensional_size(...), positi
 - **Also ask what the run cannot see**: the surface finish (Ra 3.2 is ordinary
   machining) and the edge break (break sharp edges 0.2 max) as notes, the coating or
   heat treatment if any, each with that default.
+- **Ask with the agent's question tool, where it has one** (the options a user picks
+  from in the chat): the suggested answer is the first option, its why that option's
+  description, and an answer of their own stays open to them. Without one, ask in the
+  reply.
+- **Few questions, not one a suggestion**: ask alone what has no default (the material,
+  a coating or heat treatment); then put every suggestion together as one question,
+  each listed with its why, to write as they are or to change. One they change is asked
+  again alone. Twelve suggestions are one confirmation, not twelve questions.
 - **A ref in an answer** is the face's canonical ref, which `annotate` takes as written;
   a build123d face of the part says the same.
 
