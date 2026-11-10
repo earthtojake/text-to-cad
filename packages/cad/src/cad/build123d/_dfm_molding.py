@@ -2011,17 +2011,22 @@ def _projection_part(geo: _Geometry, pull: np.ndarray) -> tuple[dict[str, Any], 
             "raster_resolution_mm": _r(projection["cell"], 6),
             "depth_along_pull_mm": _r(float(heights.max() - heights.min()), 3) if len(heights) else 0.0,
             "span_major_mm": _r(float(span.max()), 3), "span_minor_mm": _r(float(span.min()), 3),
-            "volume_mm3": _r(float(geo.part.shape.volume), 2)}
+            "volume_mm3": _r(float(geo.part.shape.volume), 2), "occurrences": geo.part.occurrences}
     return item, projection, vertices
 
 
 def _projection(items: list[dict[str, Any]], pull: np.ndarray) -> dict[str, Any]:
+    """The parts' projections and their totals: an area or a volume counts a part once for each time it occurs
+    (``occurrences``: the occurrences turned alike are measured once)."""
+    def total(key: str) -> float:
+        return sum(int(item.get("occurrences") or 1) * (item[key] or 0) for item in items)
+
     return {"pull_axis": [_r(v) for v in pull],
-            "projected_area_mm2": _r(sum(item["projected_area_mm2"] or 0 for item in items), 1),
-            "area_error_mm2": _r(sum(item["area_error_mm2"] or 0 for item in items), 2),
+            "projected_area_mm2": _r(total("projected_area_mm2"), 1),
+            "area_error_mm2": _r(total("area_error_mm2"), 2),
             "raster_resolution_mm": max(item["raster_resolution_mm"] for item in items) if items else None,
             "depth_along_pull_mm": max(item["depth_along_pull_mm"] for item in items) if items else None,
-            "volume_mm3": _r(sum(item["volume_mm3"] or 0 for item in items), 1),
+            "volume_mm3": _r(total("volume_mm3"), 1),
             "method": ("the part triangulated on its B-rep and projected on the parting plane; the area is the "
                        "cells of a raster 2000 across the part whose centres a triangle covers, good to "
                        "area_error_mm2 (half the outline's cells)"),

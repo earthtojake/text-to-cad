@@ -117,7 +117,7 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
 - `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a molder's
   factor for the resin.
 - Several bodies (`several_bodies`) are an assembly: each body is checked on its own. Say so rather
-  than reviewing an assembly as a part. A part of several solids gets the same warning: a component
+  than reviewing an assembly as a part. A part of several solids is warned too (`several_solids`): a component
   model whose contacts sit inside its housing reads its pins as walls and ribs and its slots as
   undercuts, so check the housing alone (one fused solid gives no such signal: say so).
 
@@ -128,11 +128,11 @@ mold's own) before budgeting side actions or drafting walls. `pull_check.chosen`
 pull's own figures and `pull_check.candidates` what each other pull was read to. No `pull_better` is not
 a confirmed pull: the check compares x, y, z and the part's principal axes, no others.
 
-Three more findings say what was not judged; none is a pass. `crevices` (info): two faces closer than
+Two more findings say what was not judged; none is a pass. `crevices` (info): two faces closer than
 steel can stand between them (a rib's end a hair off a wall), no undercut -- join them or part them.
 `undercuts_unsearched` (a warning): undercuts whose release the search did not reach; whether a slide
-frees them is not known. `occurrences_measured_once` (a warning): a part that occurs several times in an
-assembly is measured where its first occurrence stands; check the part on its own.
+frees them is not known. A part that occurs several times in an assembly is judged each way it stands
+against the pull, and the projected area and the clamp force count every occurrence.
 
 ## Review the part
 

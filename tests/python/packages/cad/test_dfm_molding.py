@@ -155,8 +155,8 @@ class DraftTest(unittest.TestCase):
         self.assertFalse(deep.ok)
         floors = [f for f in deep.findings if f.code == "molding.draft_zero"]
         self.assertEqual(({f.severity for f in floors}, len(floors)), ({"error"}, 8))   # four outside, four inside
-        self.assertIn("source: text-to-cad", floors[0].message)
-        self.assertNotRegex(floors[0].message, "Protolabs|Hubs|Xometry")
+        self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in floors))
+        self.assertNotRegex(floors[0].message + floors[0].source, "Protolabs|Hubs|Xometry")
         self.assertRegex(floors[0].message, r"(18|20) mm deep along the pull, over 10 mm")
         # the recommendation is left to the record where the floor says it: one finding a face
         self.assertFalse({f.location for f in floors} & {f.location for f in deep.findings if f.code == "molding.draft_min"})
@@ -821,8 +821,11 @@ class CandidatesAndPartsTest(unittest.TestCase):
     def test_several_solids_in_one_part_are_said(self) -> None:
         pair = bd.Box(10, 10, 10) + bd.Pos(30, 0, 0) * bd.Box(10, 10, 10)
         self.assertEqual(len(pair.solids()), 2)
-        (said,) = [f for f in _check(pair).findings if f.code == "several_bodies"]
+        found = _check(pair).findings
+        (said,) = [f for f in found if f.code == "several_solids"]   # every process's warning, once
         self.assertIn("2 solids in one part", said.message)
+        self.assertIn("shadow each other", said.message)
+        self.assertNotIn("several_bodies", {f.code for f in found})
 
     def test_an_assembly_is_measured_part_by_part_at_its_parts_refs(self) -> None:
         plain = bd.Box(20, 20, 10)
@@ -836,23 +839,35 @@ class CandidatesAndPartsTest(unittest.TestCase):
         self.assertIn("several_bodies", {f.code for f in result.findings})
         self.assertNotIn("pull_check", result.measurements)   # each part opens its own way: no one pull to compare
 
-    def test_a_part_that_occurs_twice_is_said_to_be_measured_once(self) -> None:
-        # A STEP holds a part's geometry once, placed where its first occurrence stands: the second, turned on its
-        # side against the pull, is not the part that was measured -- said, never skipped in silence. (A live
-        # shape's two children are two parts, each measured where it stands.)
-        clip = bd.extrude(bd.Rectangle(20, 20), 3, taper=3)
-        clip.label = "clip"
-        other = bd.Pos(40, 0, 0) * bd.Rot(90, 0, 0) * clip
-        other.label = "clip"
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "pair.step"
-            bd.export_step(bd.Compound(label="pair", children=[clip, other]), str(path))
-            result = cad.step.dfm(path, process="molding", material="abs")
-        (body,) = result.measurements["bodies"]
+    def test_a_part_that_occurs_twice_is_judged_each_way_it_stands_and_counted_every_time(self) -> None:
+        # A STEP holds a part's geometry once. Its occurrences turned alike are measured once and counted twice
+        # in the totals; one turned on its side against the pull is a part of its own, judged as it stands.
+        def pair(turn: Any) -> Any:
+            clip = bd.extrude(bd.Rectangle(20, 20), 3, taper=3)
+            clip.label = "clip"
+            other = bd.Pos(40, 0, 0) * turn * clip
+            other.label = "clip"
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "pair.step"
+                bd.export_step(bd.Compound(label="pair", children=[clip, other]), str(path))
+                return cad.step.dfm(path, process="molding", material="abs")
+
+        alike = pair(bd.Rot(0, 0, 0))
+        (body,) = alike.measurements["bodies"]
         self.assertEqual(body["occurrences"], 2)
-        (said,) = [f for f in result.findings if f.code == "occurrences_measured_once"]
-        self.assertEqual((said.severity, said.location), ("warning", body["owner"]))
-        self.assertIn("occurs 2 times", said.message)
+        (one,) = alike.measurements["projection"]["items"]
+        self.assertEqual(one["occurrences"], 2)
+        self.assertAlmostEqual(alike.measurements["projection"]["projected_area_mm2"], 2 * one["projected_area_mm2"],
+                               delta=0.1)
+        self.assertAlmostEqual(alike.measurements["projection"]["volume_mm3"], 2 * one["volume_mm3"], delta=0.1)
+        self.assertAlmostEqual(alike.measurements["clamp"]["tons"], 2 * alike.measurements["clamp"]["items"][0]["tons"],
+                               delta=0.011)
+        self.assertEqual(alike.measurements["rules"]["failed"], [])
+        turned = pair(bd.Rot(90, 0, 0))
+        self.assertEqual([body["occurrences"] for body in turned.measurements["bodies"]], [1, 1])
+        flat, side = turned.measurements["projection"]["items"]
+        self.assertLess(side["projected_area_mm2"], flat["projected_area_mm2"] / 2)   # on its side against the pull
+        self.assertNotIn("occurrences_measured_once", {f.code for f in turned.findings + alike.findings})
 
     def test_a_step_reads_as_its_live_shape(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -1007,7 +1022,7 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(errors(plate(8.0), None), set())
         self.assertEqual(errors(plate(30.0), None), {"molding.wall_too_thick"})   # over every resin's 25.4 mm
         floor = next(f for f in _check(plate(0.4), material="abs").findings if f.code == "molding.wall_too_thin")
-        self.assertIn("source: text-to-cad", floor.message)   # ours: half of Protolabs' recommendation, said as that
+        self.assertTrue(floor.source.startswith("text-to-cad, "))   # ours: half of Protolabs' recommendation, said as that
         self.assertIn("0.5 of Protolabs' recommended minimum for abs", floor.message)
         # the recommendation is left to the record beside the floor: one finding a face
         self.assertNotIn("molding.wall_min", {f.code for f in _check(plate(0.4), material="abs").findings})

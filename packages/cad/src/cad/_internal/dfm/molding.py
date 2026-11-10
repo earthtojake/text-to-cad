@@ -362,7 +362,8 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
 
 def clamp(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any] | None:
     """The clamp force the projected area needs: per part, area (in2) x the resin's factor x the cavities x
-    (1 + the safety margin), in US tons, kN and tonnes. A resin the table lacks gets the usual range."""
+    (1 + the safety margin), in US tons, kN and tonnes; the total counts a part once for each time it occurs
+    (``occurrences``). A resin the table lacks gets the usual range."""
     projection = report.get("projection")
     if not isinstance(projection, dict) or "error" in projection:
         return None
@@ -382,14 +383,15 @@ def clamp(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any] | 
                       "projected_area_in2": round(square_inches, 3), "cavities": cavities,
                       "factor_tons_per_in2": estimate, "tons": round(tons, 2), "tons_low": round(base * low, 2),
                       "tons_high": round(base * high, 2), "kN": round(tons * _KN_PER_TON, 1),
-                      "tonnes": round(tons * 0.90718474, 2), **({"xyz": part["xyz"]} if part.get("xyz") else {})})
+                      "tonnes": round(tons * 0.90718474, 2), "occurrences": int(part.get("occurrences") or 1),
+                      **({"xyz": part["xyz"]} if part.get("xyz") else {})})
     return {
         "material": material, "cavities": cavities, "safety_factor": CLAMP_SAFETY,
         "factor_tons_per_in2": estimate, "factor_range_tons_per_in2": [low, high],
         "factor_source": (f"{MOLDMINDS.publisher}, {MOLDMINDS.title} ({MOLDMINDS.url})" if factor else
                           f"no factor for {material or 'an unnamed resin'}: {RJC.publisher}'s usual {low:g}-{high:g} "
                           f"tons/in2 ({RJC.url}), estimated at {PT.publisher}'s starting {CLAMP_START:g} ({PT.url})"),
-        "tons": round(sum(item["tons"] for item in items), 2), "items": items,
+        "tons": round(sum(item["occurrences"] * item["tons"] for item in items), 2), "items": items,
         "method": ("projected area (in2) x tonnage factor (tons/in2) x cavities x (1 + safety); the area is the "
                    "part's alone (runners and sprues add to it), the factor a molder's table, not a resin "
                    "supplier's cavity pressure: an estimate for choosing a press, not a mold design"),
@@ -525,7 +527,6 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                   f"{len(bodies)} parts: an assembly, not one molded part; each is measured on its "
                                   f"own, none shadows another", "bodies"))
     touching = report.get("touching") or {}
-    touched = {pair.get("part") for pair in touching.get("items") or ()}
     for pair in touching.get("items") or ():
         found.append(CheckFinding(
             "warning", "solids_touching",
@@ -534,24 +535,6 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             "is one solid -- their contact is no surface of it and is left out of its draft and undercuts",
             pair.get("location"), "fuse them into one solid (`a + b` in build123d) before checking, or check each "
                                    "solid as its own part"))
-    for body in bodies:
-        if isinstance(body, dict) and (body.get("occurrences") or 1) > 1:
-            # Said, never skipped in silence: the document gives a part's geometry where its first occurrence
-            # stands, so an occurrence turned another way against the pull is not the part that was measured.
-            found.append(CheckFinding(
-                "warning", "occurrences_measured_once",
-                f"{body.get('owner') or body.get('name')} occurs {body['occurrences']} times and is measured once, where "
-                f"its first occurrence stands: an occurrence turned another way against the pull is not judged",
-                body.get("owner") or body.get("name") or "bodies",
-                "check the part on its own, along the pull its mold opens along"))
-    for body in bodies:
-        if isinstance(body, dict) and (body.get("solid_count") or 0) > 1 and \
-                (body.get("owner") or body.get("name")) not in touched:
-            found.append(CheckFinding(
-                "warning", "several_bodies",
-                f"{body['solid_count']} solids in one part shadow each other: its undercuts, walls and bosses are "
-                f"read across them", body.get("owner") or body.get("name") or "bodies",
-                "check the molded solid alone (a component model's housing without its contacts)"))
     if candidates:
         return found
     _hint_fields(report)
