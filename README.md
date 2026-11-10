@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/ed3713e159c3220b4870e84291873ae5ab9b330c/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/05ae4284e95251a0e34ea0260e70f7cadc6804bf/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -43,7 +43,7 @@ lists the apps to restart.
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/ed3713e159c3220b4870e84291873ae5ab9b330c/docs/install.md)
+Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/docs/install.md)
 
 ## ✨ Features
 
@@ -65,14 +65,14 @@ text-to-cad is MIT-licensed and built in the open.
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor --check` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/ed3713e159c3220b4870e84291873ae5ab9b330c/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/ed3713e159c3220b4870e84291873ae5ab9b330c/CONTRIBUTING.md) has the local setup and how to
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/CONTRIBUTING.md) has the local setup and how to
   test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/ed3713e159c3220b4870e84291873ae5ab9b330c/AGENTS.md).
+  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/AGENTS.md).
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
