@@ -378,9 +378,10 @@ def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarr
 def _arch(normals: np.ndarray, areas: np.ndarray) -> bool:
     """Whether a region of these triangles curves one way alone (an arch, a cylinder's part: its normals are all
     square to its axis, so they lie in one plane through the origin) rather than both (a dome, whose normals
-    fill a cone): of the three spreads of its normals, the least under a tenth of the next."""
+    fill a cone) or not at all (a plane, tilted: no arch): of the three spreads of its normals, the least under
+    a tenth of the next, and that next no noise (a thousandth of the first)."""
     spread = np.linalg.svd(normals * np.sqrt(np.maximum(areas, 0.0))[:, None], compute_uv=False)
-    return bool(spread[2] < 0.1 * spread[1]) if len(spread) == 3 else True
+    return bool(len(spread) == 3 and spread[1] > 1e-3 * spread[0] and spread[2] < 0.1 * spread[1])
 
 
 def _bridge_facts(overhangs: dict) -> dict:
@@ -695,15 +696,62 @@ def _cast(mesh: trimesh.Trimesh):
     return cast
 
 
+def _least_wall(mesh: trimesh.Trimesh, point: np.ndarray, face: int, value: float, step: float,
+                zones: list[_Knife] | None = None) -> tuple[float, np.ndarray, int, int] | None:
+    """The least wall about a sampled one: from the sample's place on the surface, ``step`` across it eight
+    ways -- each put back on the surface and read by a ray into the material, as the samples are -- to the
+    thinnest, the step halved where none is thinner. The random rays land a few a face, and read the skin over a
+    round cavity, thinnest at one point, thicker than it is; exact geometry refines its listed walls to their
+    least distance alike. A place in a knife edge's own sliver (``zones``) is no wall's, as no sample's there is.
+    The thickness, its place, its triangle and the one across; None where none is thinner."""
+    caster, normals = _caster(mesh), mesh.face_normals
+    best: tuple[float, np.ndarray, int, int] | None = None
+    at, tri, least = np.asarray(point, dtype=float), int(face), float(value)
+    turn = np.linspace(0.0, 2.0 * math.pi, 8, endpoint=False)
+    floor = 1e-3 * step
+    for _move in range(40):
+        n = normals[tri]
+        seed = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        u = np.cross(n, seed)
+        u /= np.linalg.norm(u)
+        v = np.cross(n, u)
+        tried = at + step * (np.cos(turn)[:, None] * u + np.sin(turn)[:, None] * v)
+        drop, onto = caster.first(tried + n * step, np.broadcast_to(-n, tried.shape), 2.0 * step)
+        on = np.flatnonzero(onto >= 0)
+        better = False
+        if len(on):
+            landed, inward = tried[on] + n * (step - drop[on])[:, None], -normals[onto[on]]
+            origin = landed + inward * NUDGE
+            length, across = caster.first(origin, inward)
+            met = np.flatnonzero(across >= 0)
+            if len(met):
+                reach = origin[met] + inward[met] * length[met][:, None]
+                walls = _facing(mesh, onto[on][met], across[met], origin[met], reach)
+                if zones:
+                    walls &= _outside_knives(origin[met], normals[onto[on][met]], zones, normals[across[met]])
+                thick = np.where(walls, length[met] + NUDGE, np.inf)
+                k = int(np.argmin(thick))
+                if thick[k] < least - 1e-9:
+                    at, tri, least = landed[met][k], int(onto[on][met][k]), float(thick[k])
+                    best, better = (least, at, tri, int(across[met][k])), True
+        if not better:
+            step /= 2.0
+            if step < floor:
+                break
+    return best
+
+
 def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, hits: np.ndarray,
-                labels: np.ndarray, mesh: trimesh.Trimesh | None = None, judged_below: float | None = None) -> list[dict]:
+                labels: np.ndarray, mesh: trimesh.Trimesh | None = None, judged_below: float | None = None,
+                zones: list[_Knife] | None = None) -> list[dict]:
     """The thickness field as items: each face's thinnest sample (``_regions``: ``labels``, per triangle), a face
     and the face its thinnest ray lands on one item -- a wall is read from both its sides, and is one wall --,
     as the exact path lists them. A wall under ``judged_below`` (the rules' unsupported-wall minimum: the only
     walls a verdict can turn on) has its support read off the wall itself, as the exact path reads it
     (``meshops_printing.wall_support``: ``supported``, ``joined_sides``), the ``SUPPORT_READ`` thinnest of a
-    body; any other says ``supported`` None. Each has how far its thinnest ray's length may be off the wall the
-    mesh stands for (``chord_mm``):
+    body; any other says ``supported`` None. One sampled under twice ``judged_below`` is first refined to the
+    least wall about its thinnest sample (``_least_wall``: ``refined`` true). Each has how far its thinnest ray's
+    length may be off the wall the mesh stands for (``chord_mm``):
     the surfaces' offsets from the chords at its two ends (``_surface_offset``), each along its ray, summed with
     their signs -- a tube's two rows of chords, one convex and one concave, cancel where they lie alike.
     Unsorted and uncapped: ``_wall_ranked`` ranks every body's together."""
@@ -733,12 +781,29 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
         seen.add(pair)
         item = {"xyz": _p(points[at]), "thickness_mm": _r(float(value), mo.JUDGED), "samples": int(count),
                 "supported": None, "sampled": True, "chord_mm": _r(float(chords[at]), 6)}
+        place, face = points[at], int(faces[order][at])
+        if mesh is not None and judged_below is not None and value < 2.0 * judged_below:
+            least = _least_wall(mesh, place + mesh.face_normals[face] * NUDGE, face, float(value),
+                                math.sqrt(float(mesh.area) / len(thickness)), zones)
+            if least is not None:
+                value, place, face, far = least
+                inward = -mesh.face_normals[face]
+                chord = abs(float((_surface_offset(mesh, np.array([face]), place[None]) +
+                                   _surface_offset(mesh, np.array([far]), (place + inward * value)[None]))[0]))
+                item.update(xyz=_p(place), thickness_mm=_r(float(value), mo.JUDGED), chord_mm=_r(chord, 6), refined=True)
         read = sum(1 for other in items if "joined_sides" in other)
         if mesh is not None and judged_below is not None and value < judged_below and read < SUPPORT_READ:
-            found = mo.wall_support(_cast(mesh), points[at], mesh.face_normals[faces[order][at]], float(value))
+            found = mo.wall_support(_cast(mesh), place, mesh.face_normals[face], float(value))
             item.update(supported=found["supported"], joined_sides=found["joined_sides"])
         items.append(item)
     return items
+
+
+def _least_of(stats: dict, items: list[dict]) -> dict:
+    """``stats`` with its least the thinner of the rays' and a refined item's: the summary never reads thicker
+    than a finding."""
+    refined = [item["thickness_mm"] for item in items if item.get("refined")]
+    return {**stats, "min_mm": round(min([stats["min_mm"], *refined]), 3)}
 
 
 def _wall_ranked(items: list[dict]) -> list[dict]:
@@ -805,7 +870,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             found["_hits"] = np.concatenate([found["_hits"], extra[4]])
         if "_thickness" in found:
             found["_items"] = _wall_items(found["_thickness"], found["_origins"], found["_faces"], found["_hits"],
-                                          _regions(body)[0], body, judged_below)
+                                          _regions(body)[0], body, judged_below, zones)
         return found
 
     if len(bodies) <= 1:
@@ -814,7 +879,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             t, o = facts["_thickness"], facts["_origins"]
             if keep is not None:
                 keep.update(thickness=t, origins=o, normals=facts["_normals"])
-            facts = {**_wall_stats(t, o), "items": _wall_ranked(facts["_items"])}
+            facts = {**_least_of(_wall_stats(t, o), facts["_items"]), "items": _wall_ranked(facts["_items"])}
             facts.update(cover=cover, method=_wall_method(cover, samples))
         return {key: value for key, value in facts.items() if not key.startswith("_")}
 
@@ -862,7 +927,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
         "items": _wall_ranked(pooled_items),
         "body_count": len(bodies),
         "measured_per_body": True,
-        **_wall_stats(thickness, origins),
+        **_least_of(_wall_stats(thickness, origins), pooled_items),
         "per_body": per_body,
         "cover": cover,
         "method": _wall_method(cover, samples),
@@ -1109,9 +1174,8 @@ def _trapped_facts(field: _Field, walls: dict, open_mesh: bool = False,
         item.update(xyz=_p(item["xyz"]), min_wall_mm=_r(near.get(k), 4))
     for void in voids or ():
         # a void's triangles face its own air: the voxel cavity just off them, if the field holds one
-        probes = void.triangles_center[:6] + void.face_normals[:6] * (0.75 * grid.pitch)
-        marks = labels[grid.index(probes)]
-        k = int(marks[marks >= 0][0]) if (marks >= 0).any() else None
+        some = np.linspace(0, len(void.faces) - 1, min(len(void.faces), 24)).round().astype(int)
+        k = mo.cavity_at(grid, labels, void.triangles_center[some], void.face_normals[some])
         exact = {"xyz": _p(void.center_mass if void.is_volume else void.bounds.mean(axis=0)),
                  "volume_mm3": _r(abs(float(void.volume)), 2), **mo.SEALED_EXACT}
         if k is None:

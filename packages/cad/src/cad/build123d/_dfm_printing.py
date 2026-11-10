@@ -1479,16 +1479,9 @@ def _trapped(ctx: Context) -> dict[str, Any]:
                                           for k, cavity in enumerate(found)]
         # every inner shell is a sealed cavity, measured exactly; it replaces the voxels' reading of it
         for shell in exact:
-            k = None
-            for ordinal in shell["faces"]:
-                info = ctx.info(part, ordinal)
-                for sample in info.samples[:6]:
-                    probe = label(sample.point + sample.normal * 0.75 * grid.pitch)
-                    if probe >= 0:
-                        k = probe
-                        break
-                if k is not None:
-                    break
+            walls = [sample for ordinal in shell["faces"] for sample in ctx.info(part, ordinal).samples[:6]]
+            k = mo.cavity_at(grid, labels, np.array([sample.point for sample in walls]),
+                             np.array([sample.normal for sample in walls])) if walls else None
             entry = next((c for c in cavities if c["k"] == k), None) if k is not None else None
             if entry is None:
                 entry = {"k": None, "cavity": None, "holes": []}

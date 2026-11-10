@@ -31,7 +31,7 @@ import numpy as np
 from cad._internal.dfm import checkpoint
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
-           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "SPREADS", "Smooth", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
+           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "SPREADS", "Smooth", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
            "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
            "voxels", "wall_support"]
 
@@ -383,9 +383,11 @@ def wall_support(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.n
     leaves through the wall's own face it is put back in the middle and turned along the wall.
 
     Supported: a ring; two or more separate runs of joined directions (a web between two posts); or one run
-    whose joins do not lie along one line (a floor and a side wall: round a corner; a skin over a cavity: all
-    round). One run along one line is one side (a fin on its base), none is none: unsupported. A walk that
-    reaches no end leaves an unsupported reading unknown (``supported`` None), never supported."""
+    that is no one straight side's -- it takes up half the circle or more (a straight side, seen from the wall,
+    takes up less), or its joins do not lie along one line (a floor and a side wall: round a corner; a skin
+    over a cavity: all round). One run along one line is one side (a fin on its base), none is none:
+    unsupported. A walk that reaches no end leaves an unsupported reading unknown (``supported`` None), never
+    supported."""
     n0 = np.asarray(normal, dtype=float) / (np.linalg.norm(normal) or 1.0)
     t0 = float(thickness)
     seed = np.array([1.0, 0.0, 0.0]) if abs(n0[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
@@ -475,7 +477,7 @@ def wall_support(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.n
     # the runs of joined directions round the circle
     runs = int(np.count_nonzero(joined & ~np.roll(joined, 1))) if not joined.all() else 1
     supported: bool | None
-    if (state == RING).any() or runs >= 2 or joined.all():
+    if (state == RING).any() or runs >= 2 or int(joined.sum()) > _WALL_FAN // 2:
         supported = True
     elif runs == 1 and int(joined.sum()) >= 3:
         places = joins[joined] - joins[joined].mean(axis=0)
@@ -1016,6 +1018,18 @@ TRAPPED_METHOD = ("sealed voids exactly, from their own shells; from a voxel fie
 #: What a sealed void read from its own shell says of its openings: none.
 SEALED_EXACT = {"sealed": True, "exact": True, "escape_holes": 0, "escape_hole_diameters_mm": [],
                 "min_escape_hole_mm": None, "escape_hole_uncertainty_mm": None}
+
+
+def cavity_at(grid: Grid, labels: np.ndarray, points: np.ndarray, normals: np.ndarray) -> int | None:
+    """The cavity (its label) that points on a void's own wall look into: the first of them a voxel or a few
+    off the wall, along its ``normals`` (out of the material), lies in -- a point three quarters of a voxel off
+    is often still in the surface's own voxel. None where the field holds none there (a void under its voxels)."""
+    points, normals = np.asarray(points, dtype=float).reshape(-1, 3), np.asarray(normals, dtype=float).reshape(-1, 3)
+    for depth in (0.75, 1.5, 2.5, 4.0):
+        marks = labels[grid.index(points + normals * depth * grid.pitch)]
+        if (marks >= 0).any():
+            return int(marks[marks >= 0][0])
+    return None
 
 
 def trapped_item(cavity: Cavity, pitch: float, diameters: list[tuple[float, float]] | None = None) -> dict[str, Any]:
