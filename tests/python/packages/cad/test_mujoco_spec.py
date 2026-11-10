@@ -175,6 +175,12 @@ class SpecTest(unittest.TestCase):
         spec(self.models / "hinge.step")
         self.assertEqual(len(list((self.cache / "mjcf").iterdir())), 2)
 
+    def test_a_zero_state_takes_the_robot_there(self) -> None:
+        model = spec(self.models / "XBF/hinge.xbf", zero="raised").compile()
+        # The elbow's zero is the raised state: its key is at zero, its range its own less the 90 degrees raised.
+        np.testing.assert_allclose(model.key("raised").qpos, [0.0], atol=1e-6)
+        np.testing.assert_allclose(model.jnt_range[0], np.radians([-100, 30]), atol=1e-5)
+
     def test_a_step_with_assets_named_writes_them_there_and_a_scene_saved_anywhere_finds_them(self) -> None:
         made = spec(self.models / "hinge.step", assets="assets")
         # A STEP carries no mechanism: its parts hang from the world, fixed.

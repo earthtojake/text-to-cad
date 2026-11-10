@@ -108,8 +108,8 @@ if __name__ == "__main__":
   `condim`, solver settings and contact softness are the scene's.
 - **Collision kinds.** `box`, `sphere`, `cylinder` and `capsule` are fitted by the kernel to the
   part's oriented bounding box (a capsule's axis its longest side; a cylinder's the axis the part is
-  turned about where its round faces make a quarter of its surface, so a pancake motor's is its short
-  side, else its longest side): fast and stable,
+  turned about where its rim is a round face as wide as the part, or its round faces make a quarter of
+  its surface, so a disc's or a pancake motor's is its short side however thin, else its longest side): fast and stable,
   and as wrong as the box is for a part far from its shape. `mesh` (the default) is the part's own
   mesh, which MuJoCo collides as its convex hull. `none` for a part that only shows (a cover, a
   label). Split a concave part that must collide as itself into convex parts in the model.

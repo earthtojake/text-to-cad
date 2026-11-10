@@ -338,8 +338,9 @@ free(root)                                  # the base is not bolted to the worl
 - **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
   declared; MuJoCo collides it as its convex hull), `box`, `sphere`, `cylinder` or `capsule` (fitted
   by the kernel to the part's oriented bounding box, a capsule's axis its longest side, a cylinder's
-  the axis the part is turned about where its round faces make a quarter of its surface, a pancake
-  motor's short side, else its longest side), `decomposed`, or `none`. On an assembly it is inherited by every part below it that declares
+  the axis the part is turned about where its rim is a round face as wide as the part, or its round
+  faces make a quarter of its surface, a disc's or a pancake motor's short side however thin, else its
+  longest side), `decomposed`, or `none`. On an assembly it is inherited by every part below it that declares
   none, as a material is; a part's own declaration wins. `decomposed` is for a concave part that must
   collide as its shape (a pocket, a jaw): CoACD cuts its mesh into convex hulls, each a collision geom
   `<part>_hull<i>`, while the part stays whole as its visual and in every other export. `max_hulls=`

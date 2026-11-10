@@ -77,6 +77,7 @@ import math
 from typing import Any
 
 from cad.engine.description import COLLISIONS
+from cad.engine.hulls import MAX_HULLS, THRESHOLD, options as hull_options
 
 __all__ = ["body", "collision", "exclude", "frame", "free", "friction", "limits", "link", "mass", "point_mass"]
 
@@ -111,19 +112,16 @@ def _shape(part: Any, said: str) -> Any:
     return part
 
 
-#: The most hulls a decomposed collision is cut into where it gives no ``max_hulls``: onshape-to-robot's default,
-#: which keeps a simulator's collision checks cheap (MuJoCo tests each hull as a geom of its own).
-MAX_HULLS = 16
-#: The concavity threshold CoACD takes: its own range (its default, 0.05, where none is given).
-THRESHOLD = (0.01, 1.0)
+# ``MAX_HULLS`` and ``THRESHOLD`` are the decomposition's (``hulls``), kept here by name for the readers of these.
 
 
 def collision(part: Any, kind: str, *, max_hulls: int | None = MAX_HULLS, threshold: float | None = None) -> Any:
     """Say what a simulator collides ``part`` as: one of ``mesh``, ``box``, ``sphere``,
     ``cylinder``, ``capsule``, ``decomposed`` or ``none`` (the primitives fitted by the kernel to the
     part's oriented bounding box, a capsule's axis its longest side, a cylinder's the axis the part is turned
-    about where its cylindrical and conical faces make a quarter of its surface, a pancake motor's short side,
-    else its longest side: ``describe._turned_axis``). ``decomposed``
+    about where its rim is a cylindrical face as wide as the part, or where its cylindrical and conical faces make
+    a quarter of its surface, a disc's or a pancake motor's short side however thin, else its longest side:
+    ``describe._turned_axis``). ``decomposed``
     is a set of convex hulls cut from the part's mesh by CoACD (the coacd integration, ``cad[coacd]``,
     where the robot is described), its visual left whole: ``max_hulls`` at most that many (CoACD's
     ``max_convex_hull``; ``MAX_HULLS``, 16, by default, None for no limit), ``threshold`` its concavity
@@ -133,19 +131,9 @@ def collision(part: Any, kind: str, *, max_hulls: int | None = MAX_HULLS, thresh
     _shape(part, "collision")
     if kind not in COLLISIONS:
         raise ValueError(f"collision {kind!r} is none of {', '.join(COLLISIONS)}")
-    options: dict[str, Any] = {}
     if max_hulls == MAX_HULLS and kind != "decomposed" and not isinstance(max_hulls, bool):
         max_hulls = None  # the default bounds a decomposed collision alone: another kind is given none
-    if max_hulls is not None:
-        if isinstance(max_hulls, bool) or not isinstance(max_hulls, int) or max_hulls < 1:
-            raise ValueError(f"max_hulls is a whole number of hulls, at least 1, not {max_hulls!r}")
-        options["maxHulls"] = int(max_hulls)
-    if threshold is not None:
-        if (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
-                or not THRESHOLD[0] <= threshold <= THRESHOLD[1]):
-            raise ValueError(f"threshold is CoACD's concavity threshold, {THRESHOLD[0]:g} to {THRESHOLD[1]:g}, "
-                             f"not {threshold!r}")
-        options["threshold"] = float(threshold)
+    options = hull_options(max_hulls, threshold)
     if options and kind != "decomposed":
         given = " or ".join(name for name, value in (("max_hulls", max_hulls), ("threshold", threshold))
                             if value is not None)

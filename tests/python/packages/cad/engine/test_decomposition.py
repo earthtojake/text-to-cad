@@ -6,13 +6,16 @@ kept in the engine's cache by the mesh and the options, so a second description 
 saying so as it starts, and each part as it is done, at its cap said so; the refusals,
 of an option on another kind and of options out of range; at most 16 hulls by default; a miss where coacd is not
 installed decomposed in the coacd integration's environment, which the engine makes on first need (a stand-in
-here), and refused, saying why, where none can hold it (no wheel, no engine, a making that failed); and,
-where coacd is installed (the development environment's extra), CoACD's own hulls of an L-shaped part, two or
-more, which MuJoCo compiles."""
+here), and refused, saying why, where none can hold it (no wheel, no engine, a making that failed); a MuJoCo
+function's ``cad.mujoco.decompose`` of a part, on a document's spec and on one read from an MJCF, taking the
+export's options, cache and names; and, where coacd is installed (the development environment's extra), CoACD's
+own hulls of an L-shaped part, two or more, which MuJoCo compiles, cut again from the MJCF it was written to."""
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import os
 import shutil
 import tempfile
@@ -259,6 +262,52 @@ class WritersTest(_Folder):
         self.assertIn("\ndecomposed under: 1 hull in 2.0 s (2 of 2)\n", said.getvalue())
 
 
+class DecomposeTest(_Folder):
+    """``cad.mujoco.decompose``: a part's collision replaced, in a MuJoCo function's spec, by the hulls the export
+    cuts it into -- the same cache and options, the same names -- on a document's spec and on one read from an
+    MJCF, whose mesh is read from its file."""
+
+    def test_a_document_s_spec_and_an_mjcf_s_take_the_export_s_hulls_by_the_part_s_label(self) -> None:
+        import mujoco
+
+        from cad.mujoco import collisions, decompose, save, spec
+
+        cut: list[Any] = []
+
+        def stand_in(meshes: Any, _done: Any = None) -> list[list[tuple[Any, Any]]]:
+            cut.extend(positions for positions, _triangles, _options in meshes)
+            return self.stand_in(meshes)
+
+        path = self.build("pass")
+        made = spec(path)
+        with mock.patch("cad.engine.hulls._decompose", stand_in):
+            geoms = decompose(made, "bracket/bracket")
+        self.assertEqual([geom.name for geom in geoms], ["bracket_hull0", "bracket_hull1"])
+        self.assertEqual([geom.meshname for geom in geoms], ["bracket_hull0", "bracket_hull1"])
+        self.assertEqual([geom.name for geom in collisions(made, "bracket")], ["bracket_hull0", "bracket_hull1"])
+        self.assertIsNone(made.geom("bracket_collision"))
+        self.assertEqual(made.compile().nmesh, 4)
+        # The export's default options and the export's cache: a part declared decomposed is cut no more.
+        self.assertEqual(self.calls, [[{"maxHulls": 16}]])
+        self.described(self.build('collision(arm, "decomposed")'))
+        self.assertEqual(self.calls, [[{"maxHulls": 16}]], "the export found the hulls decompose made")
+        # Read from an MJCF, the part is the mesh its collision uses, read from its file in metres.
+        out = self.folder / "robot" / "bracket.xml"
+        mjcf.write_description(describe(Source.read(self.build("pass")).view()), out)
+        read = spec(out)
+        with mock.patch("cad.engine.hulls._decompose", stand_in):
+            geoms = decompose(read, "bracket", max_hulls=2, threshold=0.1)
+        self.assertEqual(self.calls[-1], [{"maxHulls": 2, "threshold": 0.1}])
+        np.testing.assert_allclose(cut[-1].min(axis=0), [0, 0, 0], atol=1e-6)
+        np.testing.assert_allclose(cut[-1].max(axis=0), [0.04, 0.04, 0.01], atol=1e-6)
+        self.assertEqual([geom.name for geom in geoms], ["bracket_hull0", "bracket_hull1"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            save(read, self.folder / "saved" / "bracket.xml")
+        model = mujoco.MjModel.from_xml_path(str(self.folder / "saved" / "bracket.xml"))
+        self.assertEqual((model.nmesh, model.geom("bracket_hull1").group), (4, 3))
+        with self.assertRaisesRegex(ValueError, "max_hulls is a whole number of hulls, at least 1"):
+            decompose(read, "bracket", max_hulls=0)
+
 
 class FirstNeedTest(_Folder):
     """Where this environment lacks coacd, the decomposer runs in the coacd integration's environment, which the
@@ -397,3 +446,13 @@ class CoacdTest(_Folder):
         model = mujoco.MjModel.from_xml_path(str(out))
         self.assertEqual(model.nmesh, 2 + len(hulls))
         self.assertNotIn("<contact>", out.read_text(encoding="utf-8"), "the arms clear the block")
+        # Read back from that MJCF, the part's mesh cut again from its file by cad.mujoco's decompose.
+        from cad.mujoco import decompose, spec
+
+        plain = self.folder / "plain" / "bracket.xml"
+        mjcf.write_description(describe(Source.read(self.build("pass")).view()), plain)
+        read = spec(plain)
+        with contextlib.redirect_stderr(io.StringIO()):
+            geoms = decompose(read, "bracket")
+        self.assertGreaterEqual(len(geoms), 2)
+        self.assertEqual(read.compile().nmesh, 2 + len(geoms))

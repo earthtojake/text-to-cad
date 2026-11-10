@@ -106,7 +106,7 @@ from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
 from cad.engine.description import Description, DescriptionError, Geometry, Joint, Link
 from cad.engine.export import ExportRefused, note
 
-__all__ = ["SCENE", "digest", "rendered", "scene", "write", "write_description"]
+__all__ = ["SCENE", "digest", "rendered", "scene", "scene_around", "scene_of", "write", "write_description"]
 
 #: The moments a principal inertia may miss the triangle inequality by and be nudged onto it, kg*m^2.
 NUDGE = 1e-9
@@ -178,11 +178,18 @@ def scene_of(description: Description, robot: str) -> str:
     """A Menagerie scene that includes the MJCF ``robot`` (a file name beside it) of ``description`` (the
     module's **The scene**)."""
     low, high = _bounds(description)
+    return scene_around(description.name, low, high, robot)
+
+
+def scene_around(name: str, low: Any, high: Any, robot: str) -> str:
+    """A Menagerie scene that includes the MJCF ``robot`` (a file name beside it) of the model ``name`` whose geometry
+    at zero spans ``low`` to ``high`` (metres): ``scene_of``'s, for a model known by its extent alone."""
+    low, high = np.asarray(low, dtype=float), np.asarray(high, dtype=float)
     centre, extent = (low + high) / 2, max(float(np.linalg.norm(high - low)), 0.1)
     floor = float(low[2]) if low[2] < -1e-6 else 0.0  # a micron's rounding below the origin is on it
     level = "" if floor == 0 else f' pos="0 0 {_number(floor)}"'
     lines = [
-        f'<mujoco model="{escape(description.name, {chr(34): "&quot;"})} scene">',
+        f'<mujoco model="{escape(name, {chr(34): "&quot;"})} scene">',
         f'  <include file="{escape(robot, {chr(34): "&quot;"})}"/>',
         "",
         f'  <statistic center="{_numbers(centre)}" extent="{_number(extent)}"/>',
@@ -256,10 +263,11 @@ def _listed(folder: Path, name: str) -> set[str]:
     return {line for line in lines if line and line == Path(line).name and not line.startswith(".")}
 
 
-def _stale(path: Path, folder: Path, files: dict[str, bytes]) -> None:
+def _stale(path: Path, folder: Path, files: dict[str, bytes], writer: str = "export") -> None:
     """The meshes the last export of ``path`` wrote and this one no longer names, removed, and this export's listed
     (``WRITTEN``): a writer removes only files it can show it wrote, its own list naming them, never one another
-    file's list still names (two robots sharing a folder) nor any other file. Said where it removes any."""
+    file's list still names (two robots sharing a folder) nor any other file. Said where it removes any, the write
+    called ``writer`` (an ``export``, ``cad.mujoco``'s ``save``)."""
     wanted = set(files)
     gone = _listed(folder, path.name) - wanted
     if gone:
@@ -278,7 +286,7 @@ def _stale(path: Path, folder: Path, files: dict[str, bytes]) -> None:
     if not same_text(listed, text):
         listed.write_text(text, encoding="utf-8")
     if removed:
-        note(f"removed {removed} mesh{'es' if removed != 1 else ''} from {folder.name}/ that the last export of "
+        note(f"removed {removed} mesh{'es' if removed != 1 else ''} from {folder.name}/ that the last {writer} of "
              f"{path.name} wrote and this one no longer names")
 
 
@@ -320,10 +328,13 @@ def place(path: Path, text: str, files: dict[str, bytes], assets: str) -> list[P
 # --- the rendering ---------------------------------------------------------------------------------
 
 
-def rendered(description: Description, assets: str = "assets", *,
-             touching: list[tuple[str, str]] | None = None) -> tuple[str, dict[str, bytes]]:
+def rendered(description: Description, assets: str = "assets", *, touching: list[tuple[str, str]] | None = None,
+             owners: dict[str, dict[str, Any]] | None = None) -> tuple[str, dict[str, bytes]]:
     """``description`` as MJCF text and its mesh files' bytes by file name, nothing written. ``touching``: the
-    pairs ``contact.touching`` found of it, found here where None."""
+    pairs ``contact.touching`` found of it, found here where None. ``owners``, where given, is filled with what
+    was written of each part, by its occurrence path (``Visual.path``): its ``body``, its ``visuals`` and
+    ``collisions`` (geom names), its ``placement`` in the body (the visual's frame, metres) and its mesh's
+    ``key`` in the description (``cad.mujoco``'s helpers find a part's geoms by it)."""
     for closure in description.closures:
         if closure.kind in ("prismatic", "cylindrical"):
             raise ExportRefused(f"{description.name}: joint {closure.name!r} closes the loop through "
@@ -333,7 +344,7 @@ def rendered(description: Description, assets: str = "assets", *,
         description.check()
     except DescriptionError as error:
         raise ExportRefused(f"{description.name}: {error}") from error
-    return _Writer(description, assets, touching).render()
+    return _Writer(description, assets, touching, owners).render()
 
 
 class _Names:
@@ -388,8 +399,10 @@ class _Element:
 
 
 class _Writer:
-    def __init__(self, description: Description, assets: str, touching: list[tuple[str, str]] | None = None) -> None:
+    def __init__(self, description: Description, assets: str, touching: list[tuple[str, str]] | None = None,
+                 owners: dict[str, dict[str, Any]] | None = None) -> None:
         self.description = description
+        self.owners = owners
         self.assets = assets
         self.touching = touching
         self.geoms, self.sites, self.materials_named, self.meshes_named = _Names(), _Names(), _Names(), _Names()
@@ -535,7 +548,12 @@ class _Writer:
 
     def _content(self, body: _Element, link: Link, frame: np.ndarray) -> None:
         """A link's geoms and sites, each placed in ``body``'s frame (``frame`` the link's in it)."""
+        named_body = dict(body.attributes).get("name", "world")
         for visual in link.visuals:
+            owned = self._owned(visual.path, named_body)
+            if owned is not None:
+                owned["placement"] = frame @ np.asarray(visual.geometry.placement, dtype=float)
+                owned["key"] = visual.geometry.mesh
             # A painted part is a geom per look, as the viewer draws its faces (``Visual.drawn``), each drawn and not
             # weighed (a link with no inertial is weighed by its geoms: a look's surface would weigh as a shell).
             weighed = None if not visual.looks else "0"
@@ -546,19 +564,34 @@ class _Writer:
                     painted = [("material", self._material(material, colour))]
                 else:
                     painted = [("rgba", _numbers(colour, snap=0))]
-                body.add("geom", [("class", "visual"), *self._shape(geometry), ("name", self.geoms(named)),
+                written = self.geoms(named)
+                body.add("geom", [("class", "visual"), *self._shape(geometry), ("name", written),
                                   *painted, ("mass", weighed), *_placement(frame @ geometry.placement)])
+                if owned is not None:
+                    owned["visuals"].append(written)
         for collision in link.collisions:
             # A part's collision shares its visual's name: it is told apart as Menagerie tells them.
             named = collision.name if collision.name not in self.geoms.taken else f"{collision.name}_collision"
-            body.add("geom", [("class", "collision"), *self._shape(collision.geometry), ("name", self.geoms(named)),
+            written = self.geoms(named)
+            body.add("geom", [("class", "collision"), *self._shape(collision.geometry), ("name", written),
                               ("friction", _numbers(collision.friction, snap=0) if collision.friction else None),
                               *_placement(frame @ collision.geometry.placement)])
+            owned = self._owned(collision.path, named_body)
+            if owned is not None:
+                owned["collisions"].append(written)
         for name, placed in link.frames.items():
             body.add("site", [("name", self.sites(name)), *_placement(frame @ np.asarray(placed, dtype=float))])
         for closure, which, placed in self.closure_sites.get(link.name, ()):
             named = self.closure_named[(closure, which)] = self.sites(f"{closure}/{which}")
             body.add("site", [("name", named), *_placement(frame @ placed)])
+
+    def _owned(self, path: str, body: str) -> dict[str, Any] | None:
+        """What is written of the part at ``path`` (``rendered``'s ``owners``), None where no one asks or it has no
+        path."""
+        if self.owners is None or not path:
+            return None
+        return self.owners.setdefault(path, {"body": body, "visuals": [], "collisions": [], "placement": np.eye(4),
+                                             "key": None})
 
     def _shape(self, geometry: Geometry) -> list[tuple[str, str | None]]:
         size = [float(value) for value in geometry.size]

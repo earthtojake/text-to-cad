@@ -56,8 +56,8 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["DONE", "EXTRA", "PLATFORMS", "PROVIDE", "RECIPE", "TIMEOUT_S", "Failed", "Unavailable", "digest", "hulls",
-           "published"]
+__all__ = ["DONE", "EXTRA", "MAX_HULLS", "PLATFORMS", "PROVIDE", "RECIPE", "THRESHOLD", "TIMEOUT_S", "Failed",
+           "Unavailable", "digest", "hulls", "options", "published"]
 
 EXTRA = "cad[coacd]"
 #: The coacd integration's decomposer, run as a module in the child (never imported here).
@@ -81,6 +81,12 @@ DONE = "cad-coacd-done"
 #: The lines of the child's own output kept, to say why it stopped where it stops.
 TAIL = 12
 
+#: The most hulls a decomposition cuts a part into where it is given no ``max_hulls``: onshape-to-robot's default,
+#: which keeps a simulator's collision checks cheap (MuJoCo tests each hull as a geom of its own).
+MAX_HULLS = 16
+#: The concavity threshold CoACD takes: its own range (its default, 0.05, where none is given).
+THRESHOLD = (0.01, 1.0)
+
 Mesh = tuple[np.ndarray, np.ndarray, dict[str, Any]]
 Hull = tuple[np.ndarray, np.ndarray]
 
@@ -95,6 +101,23 @@ class Failed(RuntimeError):
     def __init__(self, text: str, index: int | None = None) -> None:
         super().__init__(text)
         self.index = index
+
+
+def options(max_hulls: int | None, threshold: float | None) -> dict[str, Any]:
+    """A decomposition's options as ``hulls`` takes them (``maxHulls``, ``threshold``), each only where given:
+    ``max_hulls`` a whole number of hulls, at least 1, ``threshold`` within ``THRESHOLD``; else refused by name."""
+    found: dict[str, Any] = {}
+    if max_hulls is not None:
+        if isinstance(max_hulls, bool) or not isinstance(max_hulls, int) or max_hulls < 1:
+            raise ValueError(f"max_hulls is a whole number of hulls, at least 1, not {max_hulls!r}")
+        found["maxHulls"] = int(max_hulls)
+    if threshold is not None:
+        if (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
+                or not THRESHOLD[0] <= threshold <= THRESHOLD[1]):
+            raise ValueError(f"threshold is CoACD's concavity threshold, {THRESHOLD[0]:g} to {THRESHOLD[1]:g}, "
+                             f"not {threshold!r}")
+        found["threshold"] = float(threshold)
+    return found
 
 
 def digest(positions: Any, triangles: Any, options: dict[str, Any]) -> str:

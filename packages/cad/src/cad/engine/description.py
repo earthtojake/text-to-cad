@@ -200,6 +200,7 @@ class Collision:
     geometry: Geometry
     friction: tuple[float, ...] = ()  # (sliding,) or (sliding, torsional, rolling); () where none is declared
     part: str = ""  # the part it is one hull of (a decomposition: ``name`` is ``<part>_hull<i>``); "" where ``name`` is
+    path: str = ""  # the part's occurrence path in the document, as its visual's (``Visual.path``); "" where it has none
 
     @property
     def of(self) -> str:

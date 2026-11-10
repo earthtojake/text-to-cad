@@ -501,6 +501,29 @@ class DeclarationsTest(_Folder):
         with self.assertRaisesRegex(ValueError, "collision_default 'hull'"):
             describe(Source.read(self.folder / "XBF/hinge.xbf").view(), collision_default="hull")
 
+    def test_a_disc_of_any_height_is_a_cylinder_about_its_own_axis_and_a_drilled_plate_is_not(self) -> None:
+        import build123d as bd
+
+        from cad.engine.describe import fit
+
+        # A disc's rim is a round face as wide as the disc: however thin, its cylinder is about its own axis, its
+        # radius the disc's (a quarter of the surface in round faces was the rule, which a disc under a third of its
+        # radius high missed, laying the cylinder along a diameter).
+        for height in (2, 5, 10, 12, 40):
+            with self.subTest(height=height):
+                frame, size = fit(bd.Cylinder(30, height).wrapped, "disc", "cylinder")
+                np.testing.assert_allclose(np.abs(frame[:3, 2]), [0, 0, 1], atol=1e-6)
+                np.testing.assert_allclose(size, (0.03, height * 0.001), atol=1e-9)
+        # A plate drilled through, and a block with its edges filleted, are not turned: the hole is narrower than
+        # the plate and the fillets are a sliver of the surface, so the cylinder lies along the longest side.
+        plate = bd.Box(40, 40, 10) - bd.Cylinder(15, 10)
+        block = bd.Box(60, 40, 20)
+        for name, shape in (("plate", plate), ("block", block.fillet(3, block.edges()))):
+            with self.subTest(name):
+                frame, size = fit(shape.wrapped, name, "cylinder")
+                self.assertLess(abs(float(frame[2, 2])), 0.01, frame[:3, 2])
+                self.assertAlmostEqual(size[1], 0.04 if name == "plate" else 0.06, delta=5e-4)  # the box's own fit
+
 
 PANCAKE = """
 import build123d as bd

@@ -32,6 +32,10 @@ outlive the call. Where they go:
 - ``assets`` a folder: the meshes and the fragment's MJCF (``<assets>/<model>.xml``) are written there,
   relative to the working directory, where a project keeps them beside its scene.
 
+**Each spec remembers its parts** (``_parts``): a document's by their label paths, with their geoms, their
+meshes and their solids; an MJCF's by the meshes its colliding geoms use. ``collisions``, ``fit`` and
+``decompose`` find a part by it, and ``save`` writes the spec as a folder that travels (``_save``).
+
 ``tolerance`` meshes a document's visual and collision meshes to within it (millimetres, as an
 export's): the engine's own otherwise; an MJCF's meshes are its files, and a tolerance is refused.
 ``zero`` takes a document's robot at a mechanism state, as an export's ``--zero`` does (``describe``'s
@@ -70,34 +74,43 @@ def spec(thing: Any, *, assets: str | Path | None = None, tolerance: float | Non
             raise ValueError(f"{path.name} is an MJCF: its joints' zero is the file's, and no zero state retakes it")
         if not path.is_file():
             raise FileNotFoundError(f"no MJCF {path}")
-        return _rooted(mujoco.MjSpec.from_file(str(path)))
+        from cad.mujoco._parts import remember_mjcf
+
+        return remember_mjcf(mujoco, _rooted(mujoco.MjSpec.from_file(str(path))))
     tolerance = tolerance_of(tolerance)
+    owners: dict[str, dict[str, Any]] = {}
     with _source(thing) as source:
         from cad.engine.describe import describe
 
         view = source.view()
         view.tolerance = tolerance
         description = describe(view, zero=zero)
-    return _written(mujoco, description, assets)
+        made = _written(mujoco, description, assets, owners)
+        solids = {key: source.shape_data(key) for key in {owned["key"] for owned in owners.values()}
+                  if key in (source.shapes or {})}
+    from cad.mujoco._parts import remember_document
+
+    return remember_document(made, description, owners, solids)
 
 
-def _written(mujoco: Any, description: Any, assets: str | Path | None) -> Any:
+def _written(mujoco: Any, description: Any, assets: str | Path | None,
+             owners: dict[str, dict[str, Any]] | None = None) -> Any:
     """``description`` written where ``assets`` says and read back as a spec naming its meshes so a saved
-    scene finds them."""
+    scene finds them; ``owners`` filled with what was written of each part (``mjcf.rendered``)."""
     from cad.engine.export.mjcf import digest, place, rendered
 
     stem = "".join(c if c.isalnum() or c in "._-" else "_" for c in description.name).strip(".") or "model"
     if assets is None:
         from cad.engine.places import cache_dir
 
-        text, files = rendered(description, "assets")
+        text, files = rendered(description, "assets", owners=owners)
         folder = cache_dir() / "mjcf" / digest(text, files)[:32]
         fragment = folder / f"{stem}.xml"
         place(fragment, text, files, "assets")
         named = {name: str((folder / "assets" / name).resolve()) for name in files}
     else:
         given = Path(assets)
-        text, files = rendered(description, ".")
+        text, files = rendered(description, ".", owners=owners)
         fragment = given / f"{stem}.xml"
         place(fragment, text, files, ".")
         named = {name: str((given / name).resolve()) for name in files}

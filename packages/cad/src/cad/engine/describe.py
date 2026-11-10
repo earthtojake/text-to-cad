@@ -112,7 +112,7 @@ from cad.engine.declarations import DRIVE, MAX_HULLS
 from cad.engine.description import (COLLISIONS, Closure, Collision, Description, DescriptionError, Geometry, Inertial,
                                     Joint, Link, Look, Mesh, Pose, Visual, column_major, srgb)
 
-__all__ = ["describe"]
+__all__ = ["describe", "fit", "oriented_box", "primitive"]
 
 MM = 0.001  # metres per millimetre
 UNITS = {"deg": math.pi / 180.0, "mm": MM}  # SI per pair unit
@@ -805,14 +805,16 @@ class _Describer:
             kind = prototype.get("collision") or self.collision_default
             surface = tuple(float(value) for value in prototype.get("friction") or ())
             if kind == "mesh" or (kind == "decomposed" and not self.decompose):
-                link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key), surface))
+                link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key), surface,
+                                                 path=instance["path"]))
             elif kind == "decomposed":
                 for at, hull in enumerate(self.hulls.get(self._cut(prototype), ())):
                     link.collisions.append(Collision(f"{name}_hull{at}", Geometry("mesh", placement, mesh=hull),
-                                                     surface, part=name))
+                                                     surface, part=name, path=instance["path"]))
             elif kind != "none":
                 frame, size = self._fit(key, prototype["name"], kind)
-                link.collisions.append(Collision(name, Geometry(kind, placement @ frame, size=size), surface))
+                link.collisions.append(Collision(name, Geometry(kind, placement @ frame, size=size), surface,
+                                                 path=instance["path"]))
             for frame_name, values in sorted((prototype.get("frames") or {}).items()):
                 named = frame_name
                 if named in link.frames:
@@ -1006,49 +1008,75 @@ class _Describer:
         return read_shape(self.source.shape_data(key))
 
     def _fit(self, key: str, name: str, kind: str) -> tuple[np.ndarray, tuple[float, ...]]:
-        """A primitive fitted to a prototype's oriented bounding box: its frame in the prototype's
-        (metres) and its sizes (``Geometry.size``)."""
+        """A primitive fitted to a prototype's oriented bounding box (``fit``), its box and axis of turning kept
+        per prototype: its frame in the prototype's (metres) and its sizes (``Geometry.size``)."""
         box = self.fitted.get(key)
         if box is None:
-            from OCP.Bnd import Bnd_OBB
-            from OCP.BRepBndLib import BRepBndLib
-
-            shape = self._shape(key)
-            if shape is None:
-                raise DescriptionError(f"part {name!r} is a mesh: no {kind} is fitted to it without its B-rep")
-            obb = Bnd_OBB()
-            BRepBndLib.AddOBB_s(shape, obb, False, True, False)
-            if obb.IsVoid():
-                raise DescriptionError(f"part {name!r} has no extent to fit a {kind} to")
-            axes = [np.array([d.X(), d.Y(), d.Z()]) for d in (obb.XDirection(), obb.YDirection(), obb.ZDirection())]
-            halves = np.array([obb.XHSize(), obb.YHSize(), obb.ZHSize()]) * MM
-            centre = obb.Center()
-            box = self.fitted[key] = (axes, halves, np.array([centre.X(), centre.Y(), centre.Z()]) * MM)
-        axes, halves, centre = box
-        frame = np.eye(4)
-        frame[:3, 3] = centre
-        if kind == "box":
-            frame[:3, 0], frame[:3, 1] = axes[0], axes[1]
-            frame[:3, 2] = np.cross(axes[0], axes[1])
-            return frame, tuple(float(2 * half) for half in halves)
-        if kind == "sphere":
-            return frame, (float(np.linalg.norm(halves)),)
-        order = np.argsort(-halves, kind="stable")  # the longest side the axis, the next X
+            box = self.fitted[key] = oriented_box(self._shape(key), name, kind)
+        turned = None
         if kind == "cylinder":
-            # A part turned about an axis (a pancake motor, a wheel, a disc) is a cylinder about it, however short:
-            # the box's side along it the axis, the larger of the two across it the radius.
             turned = self.turned.get(key, -1)
             if turned == -1:
-                turned = self.turned[key] = _turned_axis(self._shape(key), axes)
-            if turned is not None:
-                across = [at for at in order if at != turned]
-                order = np.array([turned, *across])
-        z, x = axes[order[0]], axes[order[1]]
-        frame[:3, 0], frame[:3, 1], frame[:3, 2] = x, np.cross(z, x), z
-        radius, length = float(halves[order[1]]), float(2 * halves[order[0]])
-        if kind == "capsule":
-            length = max(length - 2 * radius, 0.0)
-        return frame, (radius, length)
+                turned = self.turned[key] = _turned_axis(self._shape(key), box[0], box[1] / MM)
+        return primitive(box, kind, turned)
+
+
+def fit(shape: Any, name: str, kind: str) -> tuple[np.ndarray, tuple[float, ...]]:
+    """The primitive ``kind`` (``box``, ``sphere``, ``cylinder``, ``capsule``) the kernel fits to ``shape``, a part's
+    B-rep (None for a mesh's part, refused) in its own frame: the primitive's frame in the part's (metres) and its
+    sizes (``Geometry.size``: a box's full extents, a sphere's radius, a cylinder's or a capsule's radius and its
+    cylinder's length). ``name`` is the part's, for a refusal. The one fit every collision primitive is made by,
+    declared on the model or chosen in a MuJoCo function (``cad.mujoco.fit``)."""
+    box = oriented_box(shape, name, kind)
+    turned = _turned_axis(shape, box[0], box[1] / MM) if kind == "cylinder" else None
+    return primitive(box, kind, turned)
+
+
+def oriented_box(shape: Any, name: str, kind: str) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
+    """``shape``'s oriented bounding box (``Bnd_OBB``, the exact B-rep's): its three axes (unit vectors), its half
+    sizes and its centre (metres); refused by name for a mesh's part (no B-rep) or a shape of no extent."""
+    from OCP.Bnd import Bnd_OBB
+    from OCP.BRepBndLib import BRepBndLib
+
+    if shape is None:
+        raise DescriptionError(f"part {name!r} is a mesh: no {kind} is fitted to it without its B-rep")
+    obb = Bnd_OBB()
+    BRepBndLib.AddOBB_s(shape, obb, False, True, False)
+    if obb.IsVoid():
+        raise DescriptionError(f"part {name!r} has no extent to fit a {kind} to")
+    axes = [np.array([d.X(), d.Y(), d.Z()]) for d in (obb.XDirection(), obb.YDirection(), obb.ZDirection())]
+    halves = np.array([obb.XHSize(), obb.YHSize(), obb.ZHSize()]) * MM
+    centre = obb.Center()
+    return axes, halves, np.array([centre.X(), centre.Y(), centre.Z()]) * MM
+
+
+def primitive(box: tuple[list[np.ndarray], np.ndarray, np.ndarray], kind: str,
+              turned: int | None = None) -> tuple[np.ndarray, tuple[float, ...]]:
+    """The primitive ``kind`` fitted to an oriented box (``oriented_box``): its frame and sizes (``fit``). A box is
+    the box; a sphere is centred on it, its radius the box's half diagonal; a capsule's axis is the box's longest
+    side, a cylinder's the side ``turned`` names (``_turned_axis``) where it names one, else the longest, the radius
+    the larger half size across it."""
+    axes, halves, centre = box
+    frame = np.eye(4)
+    frame[:3, 3] = centre
+    if kind == "box":
+        frame[:3, 0], frame[:3, 1] = axes[0], axes[1]
+        frame[:3, 2] = np.cross(axes[0], axes[1])
+        return frame, tuple(float(2 * half) for half in halves)
+    if kind == "sphere":
+        return frame, (float(np.linalg.norm(halves)),)
+    order = np.argsort(-halves, kind="stable")  # the longest side the axis, the next X
+    if kind == "cylinder" and turned is not None:
+        # A part turned about an axis (a pancake motor, a wheel, a disc) is a cylinder about it, however short:
+        # the box's side along it the axis, the larger of the two across it the radius.
+        across = [at for at in order if at != turned]
+        order = np.array([turned, *across])
+    z, x = axes[order[0]], axes[order[1]]
+    frame[:3, 0], frame[:3, 1], frame[:3, 2] = x, np.cross(z, x), z
+    radius, length = float(halves[order[1]]), float(2 * halves[order[0]])
+    if kind == "capsule":
+        length = max(length - 2 * radius, 0.0)
+    return frame, (radius, length)
 
 
 #: The share of a part's surface its faces turned about one axis (cylinders and cones) must hold for a fitted cylinder to
@@ -1056,13 +1084,19 @@ class _Describer:
 #: a side of the part's oriented bounding box.
 TURNED = 0.25
 TURNED_ALIGNED = 5.0
+#: How near (a share of the radius) a cylindrical face's radius must be to the oriented box's half size on both sides
+#: across its axis for the face to be the part's round outside (``_turned_axis``): a disc's rim, however thin the disc.
+ROUND = 0.01
 
 
-def _turned_axis(shape: Any, axes: list[np.ndarray]) -> int | None:
-    """Which side of a part's oriented bounding box (``axes``, unit vectors) its axis of turning lies along, or None:
-    the direction its cylindrical and conical faces share, weighed by their area, where those faces hold at least
-    ``TURNED`` of its surface and the direction lies within ``TURNED_ALIGNED`` of a side. A housing turned about one
-    axis is mostly such faces; a block with a hole or a boss is not."""
+def _turned_axis(shape: Any, axes: list[np.ndarray], halves: np.ndarray) -> int | None:
+    """Which side of a part's oriented bounding box (``axes``, unit vectors; ``halves``, its half sizes in mm) its
+    axis of turning lies along, or None. A side is the axis where a cylindrical face along it (within
+    ``TURNED_ALIGNED``) is the part's round outside: its radius the box's half size on both sides across it (within
+    ``ROUND``), as a disc's or a wheel's rim is however thin it is. Else it is the direction the cylindrical and
+    conical faces share, weighed by their area, where those faces hold at least ``TURNED`` of the surface and the
+    direction lies within ``TURNED_ALIGNED`` of a side: a housing turned about one axis is mostly such faces. A
+    block with a hole or a boss is neither: its holes are narrower than the block and hold little of its surface."""
     from OCP.BRepAdaptor import BRepAdaptor_Surface
     from OCP.BRepGProp import BRepGProp
     from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder
@@ -1073,7 +1107,8 @@ def _turned_axis(shape: Any, axes: list[np.ndarray]) -> int | None:
 
     if shape is None:
         return None
-    total, by_side = 0.0, [0.0, 0.0, 0.0]
+    aligned = math.cos(math.radians(TURNED_ALIGNED))
+    total, by_side, rims = 0.0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
     explorer = TopExp_Explorer(shape, TopAbs_FACE)
     while explorer.More():
         face = TopoDS.Face(explorer.Current())
@@ -1084,13 +1119,22 @@ def _turned_axis(shape: Any, axes: list[np.ndarray]) -> int | None:
         surface = BRepAdaptor_Surface(face)
         kind = surface.GetType()
         if kind in (GeomAbs_Cylinder, GeomAbs_Cone):
-            axis = (surface.Cylinder() if kind == GeomAbs_Cylinder else surface.Cone()).Axis().Direction()
+            turned = surface.Cylinder() if kind == GeomAbs_Cylinder else surface.Cone()
+            axis = turned.Axis().Direction()
             direction = np.array([axis.X(), axis.Y(), axis.Z()])
             cosines = [abs(float(direction @ side)) for side in axes]
             nearest = int(np.argmax(cosines))
-            if cosines[nearest] >= math.cos(math.radians(TURNED_ALIGNED)):
+            if cosines[nearest] >= aligned:
                 by_side[nearest] += area
+                if kind == GeomAbs_Cylinder:
+                    radius = float(turned.Radius())
+                    across = [float(halves[at]) for at in range(3) if at != nearest]
+                    if radius > 0 and all(abs(half - radius) <= ROUND * radius for half in across):
+                        rims[nearest] += area
         explorer.Next()
+    rim = int(np.argmax(rims))
+    if rims[rim] > 0:
+        return rim
     best = int(np.argmax(by_side))
     return best if total > 0 and by_side[best] >= TURNED * total else None
 
