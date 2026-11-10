@@ -526,7 +526,7 @@ def _here(document_type: str, source: Any, process: str | None, resolved: dict[s
     check's limits (``_watched``) -- and finished here. One stopped at a limit, or whose process was lost, is
     not checked (``over_time``, ``over_memory``, ``process_lost``: the engine's words for the same)."""
     found = _watched({"type": document_type, "source": os.fspath(source), "process": process, "resolved": resolved,
-                      "candidates": bool(candidates), "given": given or {}})
+                      "candidates": bool(candidates), "given": (given or {}) if process is None else {}})
     if "refused" in found:
         raise ArgumentRefused(found["refused"])
     if "unmeasured" in found:
