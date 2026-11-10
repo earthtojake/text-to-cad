@@ -79,6 +79,7 @@ def features():
     planted = [
         ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
         ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
+        ("printing.wall_unsupported", ALL, (-5, 12, 6), 3.0),  # the pin: a wall joined at its foot alone
         ("printing.pin_diameter", ("fdm", "sla", "sls", "mjf", "pbf"), (-5, 12, 6), 3.0),  # FDM: Xometry's 1 mm
         ("printing.pin_aspect", ("pbf",), (-5, 12, 6), 3.0),
         ("printing.hole_diameter", ("fdm", "sla", "sls", "pbf"), (-5, -12, 2), 3.0),
@@ -89,12 +90,13 @@ def features():
         ("printing.gap", ALL, (25, 0, 4), 5.0),
     ]
     # a mesh's walls are read as exact geometry's are, their support off the wall itself; it has no axes: the
-    # pin is a thin wall joined at its foot alone, the hole a gap, the steps not measured
+    # pin is a thin wall joined at its foot alone (as on exact geometry, less the pins' own rule), the hole the
+    # gap whose rays cross a round hole, the steps not measured
     mesh = [
         ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
         ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
         ("printing.wall_unsupported", ALL, (-5, 12, 6), 3.0),
-        ("printing.gap", ALL, (-5, -12, 2), 3.0),
+        ("printing.hole_diameter", ("fdm", "sla", "sls", "pbf"), (-5, -12, 2), 3.0),
         ("printing.gap", ALL, (10, 10, 2.5), 7.0),
         ("printing.gap", ALL, (25, 0, 4), 5.0),
     ]

@@ -230,6 +230,32 @@ class Context:
     def info(self, part: int, ordinal: int) -> FaceInfo:
         return self.faces[part][ordinal - 1]
 
+    def solid_of(self, part: int) -> dict[int, int]:
+        """Each face's solid (its index among the part's) where the part is of several solids; empty for a
+        part of one. Solids of one part are bodies printed together, as parts are: what lies between two of
+        them is a clearance, never a slot of one."""
+        found = self.__dict__.setdefault("_solid_of", {})
+        if part not in found:
+            solids = self.parts[part].solids()
+            found[part] = {} if len(solids) < 2 else {
+                ordinal: k for k, solid in enumerate(solids) for face in solid.faces()
+                if (ordinal := self.parts[part].face_ordinal(face))}
+        return found[part]
+
+    def bodies(self) -> list[tuple[int, int | None]]:
+        """The bodies the clearances lie between: every part, and every solid of a part of several (part,
+        solid; None for a part of one)."""
+        found: list[tuple[int, int | None]] = []
+        for part in range(len(self.parts)):
+            solids = sorted(set(self.solid_of(part).values()))
+            found += [(part, solid) for solid in solids] if solids else [(part, None)]
+        return found
+
+    def body_name(self, body: tuple[int, int | None]) -> str:
+        part, solid = body
+        name = self.parts[part].name or self.parts[part].owner
+        return f"{name or 'part'} (solid {solid + 1})" if solid is not None else name
+
     def ref(self, part: int, ordinal: int) -> str:
         return self.parts[part].ref("face", ordinal)
 
@@ -335,6 +361,7 @@ class Context:
             walls = _first_hits(rays, points, -normals, 1e-5, 1e9)
             gaps = _first_hits(rays, points, normals, 1e-5, GAP_CEILING)
             props: dict[int, Any] = {}
+            solids = self.solid_of(part)
             for (info, k), wall, gap, normal in zip(owners, walls, gaps, normals):
                 adjacent = self.adjacent(part, info.ordinal)
                 if wall is not None:
@@ -354,7 +381,10 @@ class Context:
                     other = gap[1] + 1
                     same = other == info.ordinal or other in adjacent or (
                         info.group is not None and self.info(part, other).group == info.group)
-                    if not same:
+                    # a slot's far wall looks back across it (within KNIFE_DEG, as a wall's far face does): a V
+                    # groove wider than that -- a thread's 60 deg -- is a notch, no slot, on both paths; and what
+                    # lies between two solids of one part is their clearance
+                    if not same and solids.get(other) == solids.get(info.ordinal) and _facing(rays, props, gap, -normal):
                         info.gap.append((gap[0], k, other))
 
 
@@ -508,8 +538,11 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
 
 
 #: The kernel's boolean-argument check (self-intersections too) runs on the parts while their faces add up
-#: to this many; the rest get its topology check alone (BRepCheck), a fraction of the cost.
-SOUND_FACES = 200
+#: to this many; the rest get its topology check alone (BRepCheck), a fraction of the cost, and say that no
+#: self-intersection was looked for: not checked. The check's time grows with the square of a part's faces: a
+#: grille of 262 faces took 0.5 s and one of 406 faces 3.2 s, so 1000 is about 20 s -- more faces than the
+#: parts a printer is sent have (a helical thread of 26 took 4 s: its faces, not their count).
+SOUND_FACES = 1000
 #: A part with a free-form face of more control points than this has faces checked against edges, not faces
 #: against faces (``_boolean_check``): the boolean check's face/face search grows with them, without end.
 SOUND_POLES = 2000
@@ -677,6 +710,7 @@ def _solid(ctx: Context) -> dict[str, Any]:
                       "issues": issues, "check": check, "volume_mm3": _r(float(part.shape.volume), 3),
                       "area_mm2": _r(float(part.shape.area), 3), "occurrences": part.occurrences})
     return {"items": items, "part_count": len(items), "body_count": sum(item["solids"] for item in items),
+            "sound_budget_faces": SOUND_FACES,
             "volume_mm3": _r(sum(item["volume_mm3"] or 0.0 for item in items), 3),
             "watertight": all(item["closed"] for item in items),
             "sound": None if any(item["sound"] is None for item in items) else all(item["sound"] for item in items),
@@ -937,9 +971,9 @@ def _walls(ctx: Context) -> dict[str, Any]:
     for part, infos in enumerate(ctx.faces):
         zones = _knife_zones(ctx, part)
         for info in infos:
-            pin = info.group is not None and not ctx.rounds[info.group].concave and \
-                ctx.rounds[info.group].coverage_deg >= ROUND_DEG
-            if not info.thickness or pin:  # a pin's thickness is its diameter: the pins' rules judge it
+            # a pin is a wall too, joined on one side, its thickness its diameter (as a mesh reads it): the wall
+            # minimum is its floor, the pins' rules their guides' own figures for it
+            if not info.thickness:
                 continue
             thickness = info.thickness
             # a ray inside a knife edge's thin depth that starts or lands on one of its two faces (its flanks) is
@@ -986,6 +1020,7 @@ def _walls(ctx: Context) -> dict[str, Any]:
         if pair not in seen:
             seen.add(pair)
             unique.append(item)
+            item["lying"] = mo.lying(outward)  # a skin in the layer plane, laid layer on layer
             # a wall a verdict can turn on (under the unsupported minimum) has its support read off the wall
             # itself, as a mesh's is (``mo.wall_support``): its thin region's outline, and what it is joined to
             if minimum is not None and item["thickness_mm"] < minimum and len(unique) <= CAP:
@@ -1044,9 +1079,9 @@ def _orientation(axis: np.ndarray) -> str:
     return "vertical" if tilt < 10.0 else "horizontal" if tilt > 80.0 else "inclined"
 
 
-def _inside(ctx: Context, part: int, points: list[np.ndarray]) -> list[bool]:
-    """Whether each point lies inside a solid of ``part``: one classifier per solid, made once (making one is
-    most of a query's cost on a large solid)."""
+def _inside(ctx: Context, part: int, points: list[np.ndarray], solid: int | None = None) -> list[bool]:
+    """Whether each point lies inside a solid of ``part`` (inside its ``solid``, where given): one classifier
+    per solid, made once (making one is most of a query's cost on a large solid)."""
     from OCP.BRepClass3d import BRepClass3d_SolidClassifier
     from OCP.gp import gp_Pnt
     from OCP.TopAbs import TopAbs_IN
@@ -1058,7 +1093,7 @@ def _inside(ctx: Context, part: int, points: list[np.ndarray]) -> list[bool]:
     found = []
     for point in points:
         state = False
-        for classifier in cache[part]:
+        for classifier in cache[part] if solid is None else [cache[part][solid]]:
             classifier.Perform(gp_Pnt(*map(float, point)), 1e-6)
             if classifier.State() == TopAbs_IN:
                 state = True
@@ -1262,8 +1297,9 @@ def _near_pairs(pa: np.ndarray, pb: np.ndarray, within: float) -> tuple[float, n
 
 
 def _clearances(ctx: Context) -> dict[str, Any]:
-    """The least distance between each pair of parts within ``reach``: their triangulations (thinned to a
-    points budget) find the nearest faces, BRepExtrema measures those face pairs exactly."""
+    """The least distance between each pair of bodies -- parts, and the solids of a part of several
+    (``Context.bodies``) -- within ``reach``: their triangulations (thinned to a points budget) find the nearest
+    faces, BRepExtrema measures those face pairs exactly."""
     from OCP.BRepExtrema import BRepExtrema_DistShapeShape
     from OCP.Extrema import Extrema_ExtFlag_MIN
 
@@ -1271,10 +1307,18 @@ def _clearances(ctx: Context) -> dict[str, Any]:
 
     items, reach = [], 5.0
     V, F, O = ctx.mesh()
-    part_of = O >> 20
+    bodies = ctx.bodies()
+    at = {body: index for index, body in enumerate(bodies)}
+    first = {part: index for index, (part, _solid) in reversed(list(enumerate(bodies)))}
+    # each triangle's body: its part's, or its face's solid's (a face beside a part's solids: its first's)
+    owners = np.unique(O)
+    body_of = np.array([at.get((int(owner) >> 20, ctx.solid_of(int(owner) >> 20).get(int(owner) & 0xFFFFF)),
+                               first[int(owner) >> 20]) for owner in owners], dtype=int)
+    body_of = body_of[np.searchsorted(owners, O)] if len(owners) else np.zeros(0, dtype=int)
+    shapes = [ctx.parts[part].shape if solid is None else ctx.parts[part].solids()[solid] for part, solid in bodies]
     clouds = []
-    for part in range(len(ctx.parts)):
-        mine = part_of == part
+    for body in range(len(bodies)):
+        mine = body_of == body
         tri = V[F[mine]]
         points = np.vstack([tri.reshape(-1, 3), tri.mean(axis=1)])
         owners = np.concatenate([np.repeat(O[mine] & 0xFFFFF, 3), O[mine] & 0xFFFFF])
@@ -1317,17 +1361,16 @@ def _clearances(ctx: Context) -> dict[str, Any]:
     # exact where it can decide a verdict, the nearest pairs first, within the document's budget
     for rough, margin, a, b, faces, q1, q2 in sorted(candidates, key=lambda row: row[0]):
         if rough - margin > EXACT_BELOW or exact_pairs + len(faces) > EXACT_QUERIES:
-            items.append({"location": ctx.ref(a, faces[0][0]), "xyz": _xyz((q1 + q2) / 2.0),
+            items.append({"location": ctx.ref(bodies[a][0], faces[0][0]), "xyz": _xyz((q1 + q2) / 2.0),
                           "distance_mm": _r(rough, JUDGED), "kind": "gap" if rough > margin else "near",
                           "overlap_mm3": None, "exact": False, "uncertainty_mm": _r(margin, 4),
-                          "faces": [ctx.ref(b, faces[0][1])],
-                          "parts": [ctx.parts[a].name or ctx.parts[a].owner,
-                                    ctx.parts[b].name or ctx.parts[b].owner]})
+                          "faces": [ctx.ref(bodies[b][0], faces[0][1])],
+                          "parts": [ctx.body_name(bodies[a]), ctx.body_name(bodies[b])]})
             continue
         best = None
         for fa, fb in faces:
-            query = BRepExtrema_DistShapeShape(ctx.info(a, fa).face.wrapped, ctx.info(b, fb).face.wrapped,
-                                               Extrema_ExtFlag_MIN)
+            query = BRepExtrema_DistShapeShape(ctx.info(bodies[a][0], fa).face.wrapped,
+                                               ctx.info(bodies[b][0], fb).face.wrapped, Extrema_ExtFlag_MIN)
             exact_pairs += 1
             if query.IsDone() and query.NbSolution() and (best is None or query.Value() < best[0]):
                 p1, p2 = query.PointOnShape1(1), query.PointOnShape2(1)
@@ -1339,23 +1382,27 @@ def _clearances(ctx: Context) -> dict[str, Any]:
         overlap = None
         if distance <= 1e-6:
             # touching faces: the parts touch, or one runs into the other (a sample of one inside the other)
-            probes = [s.point - s.normal * 1e-3 for info in ctx.faces[a] for s in info.samples[:1]][:40]
-            if any(_inside(ctx, b, probes)):
+            mine = ctx.solid_of(bodies[a][0])
+            probes = [s.point - s.normal * 1e-3 for info in ctx.faces[bodies[a][0]]
+                      if mine.get(info.ordinal) == bodies[a][1] for s in info.samples[:1]][:40]
+            if any(_inside(ctx, bodies[b][0], probes, bodies[b][1])):
                 overlap = math.nan
             if booleans < OVERLAP_BOOLEANS:
                 booleans += 1
                 try:
-                    overlap = float(_geometry.overlap_volume(ctx.parts[a].shape, ctx.parts[b].shape))
+                    overlap = float(_geometry.overlap_volume(shapes[a], shapes[b]))
                 except Exception:  # noqa: BLE001 - a boolean that fails leaves the overlap unmeasured
                     pass
         kind = "gap" if distance > 1e-6 else ("overlap" if overlap is not None and (
             math.isnan(overlap) or overlap > 1e-6) else "contact")
-        items.append({"location": ctx.ref(a, fa), "xyz": _xyz((p1 + p2) / 2.0), "distance_mm": _r(distance, JUDGED),
+        items.append({"location": ctx.ref(bodies[a][0], fa), "xyz": _xyz((p1 + p2) / 2.0),
+                      "distance_mm": _r(distance, JUDGED),
                       "kind": kind, "exact": True, "overlap_mm3": None if overlap is None or math.isnan(overlap) else _r(overlap, 4),
-                      "faces": [ctx.ref(b, fb)],
-                      "parts": [ctx.parts[a].name or ctx.parts[a].owner, ctx.parts[b].name or ctx.parts[b].owner]})
+                      "faces": [ctx.ref(bodies[b][0], fb)],
+                      "parts": [ctx.body_name(bodies[a]), ctx.body_name(bodies[b])]})
     items, count = _capped(items, lambda item: item["distance_mm"])
-    return {"items": items, "count": count, "part_count": len(ctx.parts), "reported_below_mm": reach,
+    return {"items": items, "count": count, "part_count": len(ctx.parts), "body_count": len(bodies),
+            "reported_below_mm": reach,
             "min_mm": items[0]["distance_mm"] if items else None, "exact_face_pairs": exact_pairs,
             "budget": {"points_per_side": CLEARANCE_POINTS, "face_pairs_per_pair": CLEARANCE_FACES,
                        "exact_queries": EXACT_QUERIES,

@@ -32,7 +32,7 @@ from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG  # every process's: a
 
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
-           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "CHORD_CAP_DEG", "SPREADS", "Smooth", "edge_pairs", "joined", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "hull", "lie", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
+           "THIN_DEPTH_CAP_MM", "lying", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "CHORD_CAP_DEG", "SPREADS", "Smooth", "edge_pairs", "joined", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "hull", "lie", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "doubled", "down_to",
            "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
            "voxels", "wall_support"]
 
@@ -60,6 +60,14 @@ FOLD_DEG = 2.0
 #: A knife's thin depth is at most this many mm: past it the sliver is a fin, which the walls measure (an edge of
 #: 4.6 deg stays under FDM's 0.8 mm for 10 mm).
 THIN_DEPTH_CAP_MM = 10.0
+
+
+def lying(across: np.ndarray) -> bool:
+    """Whether a wall whose thickness runs along ``across`` (a face's normal at its thinnest place) lies in
+    the layer plane: its faces within 45 deg of it -- a floor, a lid, a living hinge, laid layer on layer --
+    rather than stands (a wall laid bead beside bead). At 45 deg exactly it stands."""
+    across = np.asarray(across, dtype=float)
+    return bool(abs(float(across[2])) > math.cos(math.radians(45.0)) * (float(np.linalg.norm(across)) or 1.0) + 1e-9)
 
 
 def thin_depth(minimum: float | None, angle_deg: float) -> float | None:
@@ -700,6 +708,28 @@ def _sorted(c: Crossings) -> tuple[np.ndarray, ...]:
     return line, t, tri, sign, first, before
 
 
+def doubled(V: np.ndarray, F: np.ndarray, columns: int = 120) -> tuple[int, int, np.ndarray | None]:
+    """Where a closed surface passes through itself, read off a raster of lines up through it (``columns``
+    along its longer side): the lines that enter material they are already in or leave material they are not in
+    (an extruded pentagram's centre is wound twice), the lines that cross it at all, and a place on one. A
+    surface with its voids' shells (wound inward) crosses in and out in turn on every line."""
+    lo, hi = V.min(axis=0), V.max(axis=0)
+    pitch = max(float((hi - lo)[:2].max()) / columns, 1e-6)
+    shape = (max(1, int(math.ceil((hi[0] - lo[0]) / pitch))), max(1, int(math.ceil((hi[1] - lo[1]) / pitch))))
+    c = crossings(V, F, 2, lo[:2], pitch, shape)
+    if not len(c.t):
+        return 0, 0, None
+    line, t, _, sign, _, before = _sorted(c)
+    wrong = np.where(sign < 0, before >= 1, before <= 0)
+    lines = np.unique(line[wrong])
+    if not len(lines):
+        return 0, len(np.unique(line)), None
+    k = int(np.flatnonzero(wrong)[0])
+    i, j = divmod(int(line[k]), shape[1])
+    place = np.array([lo[0] + (i + 0.5 + _JITTER[0]) * pitch, lo[1] + (j + 0.5 + _JITTER[1]) * pitch, float(t[k])])
+    return len(lines), len(np.unique(line)), place
+
+
 # --- support ------------------------------------------------------------------------------------------------
 
 
@@ -947,10 +977,12 @@ _CHORD_DEG = 45.0
 def _section(caster: Caster, at: np.ndarray, way: np.ndarray, reach: float,
              ) -> tuple[np.ndarray, float, float, np.ndarray] | None:
     """The cross-section of a passage through ``at`` square to ``way``: a fan of rays in that plane reads the
-    walls all round, the point moved to their middle (half the way between each pair of opposite walls, four
-    times) -- its middle, the radius of the largest circle about it (the nearest wall), how far a round wall's
+    walls round it, the point moved to their middle (away from the nearest wall, half the way to the one across
+    from it, eight times at most) -- its middle, the radius of the largest circle about it (the nearest wall), how far a round wall's
     chords (``_CHORD_DEG``) stand inside the circle they stand for, and the walls' normals where the rays
-    landed. None where a ray meets no wall within ``reach``: the section is open, no passage's."""
+    landed. A slot longer than ``reach`` is read across its narrow way (a 2 x 12 mm vent is 2 mm: the largest
+    ball through it); None where the nearest wall has none across from it within ``reach``: the section is
+    open, no passage's."""
     seed = np.array([1.0, 0.0, 0.0]) if abs(way[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
     u = np.cross(way, seed)
     u /= np.linalg.norm(u)
@@ -958,17 +990,36 @@ def _section(caster: Caster, at: np.ndarray, way: np.ndarray, reach: float,
     angles = np.linspace(0.0, 2.0 * math.pi, _FAN_RAYS, endpoint=False)
     fan = np.cos(angles)[:, None] * u[None, :] + np.sin(angles)[:, None] * v[None, :]
     centre = np.asarray(at, dtype=float)
-    for _move in range(4):
+    half = _FAN_RAYS // 2
+
+    def walls() -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """The fan's distances and triangles from the centre, and which rays met a wall: None where the
+        nearest wall has none across from it within reach (the section is open, no passage's). A ray that
+        meets none along a slot's length is as far as the reach: the slot is read across its narrow way."""
         distance, hit = caster.first(np.broadcast_to(centre, fan.shape), fan, reach)
-        if not np.isfinite(distance).all():
+        met = np.isfinite(distance)
+        if not met.any() or not met[(int(np.where(met, distance, np.inf).argmin()) + half) % _FAN_RAYS]:
             return None
-        shift = ((distance - np.roll(distance, _FAN_RAYS // 2)) / 2.0)[:, None] * fan
-        centre = centre + shift.sum(axis=0) / (_FAN_RAYS / 2.0)
-    distance, hit = caster.first(np.broadcast_to(centre, fan.shape), fan, reach)
-    if not np.isfinite(distance).all():
+        return np.where(met, distance, reach), hit, met
+
+    for _move in range(8):
+        read = walls()
+        if read is None:
+            return None
+        distance, _, _ = read
+        # away from the nearest wall, half the way to the one across from it: the middle between the two (a
+        # round hole's in a move, a slot's across its narrow way), the nearest again from there
+        nearest = int(distance.argmin())
+        across = float(distance[(nearest + half) % _FAN_RAYS]) - float(distance[nearest])
+        if across < 1e-9 * max(1.0, float(distance[nearest])):
+            break
+        centre = centre - fan[nearest] * (across / 2.0)
+    read = walls()
+    if read is None:
         return None
+    distance, hit, met = read
     radius = float(distance.min())
-    normals = caster.normals_of(hit)
+    normals = caster.normals_of(hit[met])
     turn = np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", normals, np.roll(normals, 1, axis=0)), -1.0, 1.0)))
     chord = turn[(turn > 1e-6) & (turn < _CHORD_DEG)]
     sag = radius * (1.0 / math.cos(math.radians(float(chord.max())) / 2.0) - 1.0) if len(chord) else 0.0

@@ -49,6 +49,11 @@ def check(shape, name: str, **options):
     return result
 
 
+def _labelled(shape, name: str):
+    shape.label = name
+    return shape
+
+
 def items(result, family: str, **match) -> list[dict]:
     return [item for item in result.measurements[family]["items"]
             if all(item.get(key) == value for key, value in match.items())]
@@ -193,7 +198,82 @@ class UnsampledFaceTest(unittest.TestCase):
         self.assertNotIn("measurement_failed", codes(result))
 
 
+class ClassifiedAlikeTest(unittest.TestCase):
+    """A pin, a slot, a clearance and a skin are the same thing on exact geometry as on a mesh."""
+
+    def test_a_pin_is_a_wall_joined_on_one_side(self) -> None:
+        # 0.5 mm across: under FDM's wall minimum, which is its floor (a mesh reads it so); the pins' rule adds
+        # its guide's own figure
+        pin = bd.Box(20, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Cylinder(0.25, 10, align=A)
+        result = check(pin, "pin")
+        failed = {f.code: f.severity for f in result.findings if f.rule}
+        self.assertEqual(failed, {"printing.wall_unsupported": "error", "printing.pin_diameter": "warning"})
+        wall = min(items(result, "wall_thickness"), key=lambda item: item["thickness_mm"])
+        self.assertAlmostEqual(wall["thickness_mm"], 0.5, delta=1e-6)
+        self.assertEqual((wall["supported"], wall["joined_sides"]), (False, 1))
+
+    def test_what_lies_between_two_solids_of_one_part_is_a_clearance(self) -> None:
+        pair = bd.Compound([bd.Box(10, 10, 10, align=A), bd.Pos(10.2, 0, 0) * bd.Box(10, 10, 10, align=A)])
+        result = check(pair, "pair", technology="sls")
+        self.assertEqual(result.measurements["gaps"]["items"], [], "no slot of one body")
+        (between,) = items(result, "clearances")
+        self.assertAlmostEqual(between["distance_mm"], 0.2, delta=1e-6)
+        self.assertEqual(between["parts"], ["pair (solid 1)", "pair (solid 2)"])
+        self.assertEqual({f.code: f.severity for f in result.findings if f.rule}, {"printing.clearance": "warning"})
+        self.assertIn("several_solids", codes(result))
+
+    def test_a_v_groove_is_a_slot_only_where_its_flanks_face_each_other(self) -> None:
+        # a thread's 60 deg V, 0.5 mm across its root: its flanks look past each other -- a notch, no slot; the
+        # same root between flanks 20 deg apart is a slot
+        def grooved(angle: float):
+            half = 0.25 + 3 * math.tan(math.radians(angle / 2))
+            groove = bd.extrude(bd.make_face(bd.Polyline((-0.25, 0), (0.25, 0), (half, 3), (-half, 3), (-0.25, 0))), 20)
+            return bd.Box(30, 20, 10, align=A) - bd.Pos(0, 10, 7) * bd.Rotation(90, 0, 0) * groove
+
+        self.assertEqual(check(grooved(60), "thread", technology="sls").measurements["gaps"]["items"], [])
+        (slot,) = items(check(grooved(20), "slot", technology="sls"), "gaps")
+        self.assertAlmostEqual(slot["gap_mm"], 0.5, delta=0.02)
+
+    def test_fdm_s_two_beads_are_a_standing_wall_s_and_a_skin_is_judged_by_its_layers(self) -> None:
+        def tray(floor: float):
+            return bd.Box(40, 30, 10, align=A) - bd.Pos(0, 0, floor) * bd.Box(36, 26, 10, align=A)
+
+        # a 0.6 mm floor is three 0.2 mm layers: no wall of two beads, and no failure; so is its STL's
+        result = check(tray(0.6), "tray")
+        floor = min(items(result, "wall_thickness"), key=lambda item: item["thickness_mm"])
+        self.assertEqual((floor["thickness_mm"], floor["lying"]), (0.6, True))
+        self.assertEqual([f.code for f in result.findings if f.rule], [])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "tray.stl"
+            bd.export_stl(tray(0.6), str(path), tolerance=0.01)
+            self.assertEqual([f.code for f in _dfm(path).findings if f.rule], [])
+        # one layer alone is a recommendation, under a layer the floor; a standing wall of 0.6 mm fails as before
+        for thickness, rule, severity in ((0.3, "printing.skin_layers", "warning"), (0.15, "printing.skin_layer", "error")):
+            found = [(f.code, f.severity) for f in check(tray(thickness), "tray").findings if f.rule]
+            self.assertEqual(found, [(rule, severity)], thickness)
+        fin = bd.Box(30, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Box(20, 0.6, 8, align=A)
+        self.assertEqual([(f.code, f.severity) for f in check(fin, "fin").findings if f.rule],
+                         [("printing.wall_unsupported", "error")])
+        self.assertEqual([f.code for f in check(tray(0.6), "tray", technology="sls").findings if f.rule],
+                         ["printing.wall_supported"], "the other technologies' minima are of every wall")
+
+
 class BoundedSoundnessTest(unittest.TestCase):
+    def test_a_part_past_the_self_intersection_check_s_budget_is_not_checked_and_named_once(self) -> None:
+        from unittest import mock
+
+        plates = bd.Compound(children=[_labelled(bd.Pos(30 * k, 0, 0) * bd.Box(20, 20, 3, align=A), "plate")
+                                       for k in range(4)], label="rack")
+        self.assertGreaterEqual(measured.SOUND_FACES, 1000, "a part of a few hundred faces is checked in full")
+        with mock.patch.object(measured, "SOUND_FACES", 12):  # two plates' faces: the other two are past it
+            result = check(plates, "rack")
+        self.assertEqual([item["check"] for item in result.measurements["solid"]["items"]],
+                         ["boolean", "boolean", "topology", "topology"])
+        (said,) = [f for f in result.findings if f.code == "measurement_failed"]
+        self.assertIn("plate (x2) had no self-intersection looked for", said.message)
+        self.assertEqual((result.status, result.ok), ("not_checked", False))
+        self.assertEqual(check(plates, "rack").status, "ok")
+
     """The boolean check's face/face search is bounded: a part with a large free-form face is checked edges
     against faces (``check`` boolean_edges, said in the item), a self-intersection through an edge still found."""
 
@@ -956,8 +1036,13 @@ class MeshopsTest(unittest.TestCase):
         hollow = items(result, "trapped_volumes")[0]
         self.assertEqual((hollow["sealed"], hollow["escape_holes"]), (False, 1))
         self.assertAlmostEqual(hollow["min_wall_mm"], 3.0, delta=0.05)
-        self.assertNotIn("holes", report, "a mesh has no axis: holes are exact geometry's")
-        self.assertEqual(outcome(result, "printing.hole_diameter")[0]["status"], "not_evaluated")
+        # a mesh holds no cylinder: its holes up to the gaps' reach are the gaps whose rays cross a round hole
+        # (the 5 mm drain is past it, and no hole here); its pins and details are exact geometry's
+        self.assertEqual((report["holes"]["items"], report["holes"]["read_below_mm"]), ([], 3.0))
+        self.assertEqual(outcome(result, "printing.hole_diameter")[0]["status"], "passed")
+        self.assertEqual(sorted(report["not_measured"]), ["details", "pins"])
+        self.assertEqual(outcome(result, "printing.pin_diameter")[0]["status"], "not_evaluated")
+        self.assertIn("not judged on a mesh: holes over 3 mm as holes", result.summary)
         json.dumps(report, allow_nan=False)
 
     def test_a_sliver_is_sampled_along_its_length_and_spans_read_far_from_the_origin(self) -> None:

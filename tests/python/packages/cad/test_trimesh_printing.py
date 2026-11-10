@@ -607,6 +607,7 @@ class GateTest(unittest.TestCase):
                 found = {f.code: f for f in result.findings}
                 with self.subTest(shift=shift):
                     self.assertEqual("bodies_intersect" in found, crossing)
+                    self.assertEqual(found["several_solids"].severity, "warning", "as a STEP's part of two solids")
                     self.assertEqual("printing.clearance" in found, not crossing, "one finding a pair")
                     if crossing:
                         self.assertEqual(found["bodies_intersect"].severity, "warning")
@@ -809,15 +810,58 @@ class MeshAccuracyTest(unittest.TestCase):
                     self.assertEqual("printing.escape_hole_diameter" in {f.code for f in result.findings}, warned)
                     self.assertEqual(cavity["escape_at_limit"], not warned)
 
-    def test_one_hole_is_one_gap(self) -> None:
-        # a 0.4 mm hole through 30 mm: a mesh has no axis to call it a hole, and reads it as a gap -- once
-        part = Box(40, 30, 30) - Pos(-10, 0, 0) * Cylinder(0.2, 30)
+    def test_a_round_hole_is_a_hole_not_a_gap_and_a_slot_is_a_gap(self) -> None:
+        # a mesh holds no cylinder: the gap whose rays cross a round hole (all as long, from all round one axis,
+        # meeting on it) is that hole, judged by the hole rules as on exact geometry -- once; a slot stays a gap
+        part = Box(40, 30, 30) - Pos(-10, 0, 0) * Cylinder(0.6, 30) - Pos(10, 0, 0) * Box(0.6, 12, 30)
         with tempfile.TemporaryDirectory() as td:
             result = _dfm(_stl(part, Path(td), "hole"), process="printing", technology="sls")
-        gaps = result.measurements["gaps"]
-        self.assertEqual(gaps["count"], 1)
-        self.assertAlmostEqual(gaps["items"][0]["gap_mm"], 0.4, delta=0.01)
-        self.assertEqual([f.code for f in result.findings if f.code == "printing.gap"], ["printing.gap"])
+        (hole,) = result.measurements["holes"]["items"]
+        self.assertAlmostEqual(hole["diameter_mm"], 1.2, delta=0.01)
+        self.assertEqual((hole["orientation"], hole["xyz"][0]), ("vertical", -10.0))
+        (gap,) = result.measurements["gaps"]["items"]
+        self.assertAlmostEqual(gap["gap_mm"], 0.6, delta=0.01)
+        failed = {f.code: f for f in result.findings if f.rule}
+        self.assertEqual(sorted(failed), ["printing.gap", "printing.hole_diameter"])
+        self.assertAlmostEqual(failed["printing.hole_diameter"].value, 1.2, delta=0.01)   # SLS: 1.5 mm at least
+        self.assertIn("not judged on a mesh: holes over 3 mm as holes", result.summary)
+
+    def test_a_slot_s_narrowest_is_found_between_the_triangles_centres(self) -> None:
+        # a groove that narrows from 1.4 mm to 0.5 mm at its floor: its triangles' centres read it wide
+        groove = extrude(make_face(Polyline((-0.25, 0), (0.25, 0), (0.7, 6), (-0.7, 6), (-0.25, 0))), 20)
+        part = Box(30, 20, 12, align=(Align.CENTER, Align.MIN, Align.MIN)) - Pos(0, 0, 6) * Rotation(90, 0, 0) * groove.mirror()
+        with tempfile.TemporaryDirectory() as td:
+            gaps = _measured(_stl(part, Path(td), "groove"))["gaps"]
+        self.assertAlmostEqual(gaps["min_mm"], 0.5, delta=0.02)
+
+    def test_a_surface_that_passes_through_itself_is_not_sound(self) -> None:
+        # a pentagram extruded: one closed shell, its centre wound twice -- the kernel's check on exact geometry
+        import numpy as np
+
+        star = [(10 * math.cos(math.radians(90 + 144 * k)), 10 * math.sin(math.radians(90 + 144 * k))) for k in range(5)]
+        corners = [(x, y, 0.0) for x, y in star] + [(x, y, 5.0) for x, y in star]
+        faces = [face for k in range(5) for face in ((k, (k + 1) % 5, (k + 1) % 5 + 5), (k, (k + 1) % 5 + 5, k + 5))]
+        faces += [(0, 2, 1), (0, 3, 2), (0, 4, 3), (5, 6, 7), (5, 7, 8), (5, 8, 9)]
+        with tempfile.TemporaryDirectory() as td:
+            crossed = _dfm(_written(trimesh.Trimesh(np.array(corners), np.array(faces), process=False), Path(td), "star"))
+            sound = _dfm(_stl(_hollow_box(2.0), Path(td), "cup"))
+        (said,) = [f for f in crossed.findings if f.code == "not_sound"]
+        self.assertEqual((said.severity, crossed.status), ("error", "failed"))
+        self.assertIn("passes through itself", said.message)
+        self.assertNotIn("self_intersecting", sound.measurements["mesh"])
+
+    def test_a_long_vent_s_throat_is_its_width_and_a_hollow_s_wall_at_its_limit_is_no_warning(self) -> None:
+        # a closed box with a 2 x 12 mm vent: the largest ball through it is 2 mm, measured on the triangles
+        # (the fan's rays along the slot meet no wall within reach); its 2 mm walls are at SLA's 2 mm, not under
+        box = Box(40, 30, 20) - Box(36, 26, 16) - Pos(0, -14, 0) * Box(2, 4, 12)
+        with tempfile.TemporaryDirectory() as td:
+            result = _dfm(_stl(box, Path(td), "vented"), process="printing", technology="sla")
+        (hollow,) = result.measurements["trapped_volumes"]["items"]
+        self.assertEqual(hollow["escape_holes"], 1)
+        self.assertAlmostEqual(hollow["min_escape_hole_mm"], 2.0, delta=0.02)
+        self.assertAlmostEqual(hollow["min_wall_mm"], 2.0, delta=0.01)
+        self.assertNotIn("printing.hollow_wall", [f.code for f in result.findings])
+        self.assertIn("printing.escape_hole_diameter", [f.code for f in result.findings])
 
 
 class CheckTest(unittest.TestCase):

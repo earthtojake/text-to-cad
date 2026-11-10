@@ -14,7 +14,8 @@
 - ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster's column fill), ``sections``;
   the candidate orientations ranked (``orientations``).
 
-A mesh has no cylinders an axis names: holes, pins and embossed details are measured on exact geometry
+A mesh has no cylinders an axis names: its round holes up to the gaps' reach are the gaps whose rays cross one
+(``holes``), a pin is one of its walls, and pins' own minima and embossed details are measured on exact geometry
 alone, so their rules say "not measured" of a mesh rather than pass it.
 
 Facts, never verdicts: nothing here compares a figure against a process's limit.
@@ -54,6 +55,9 @@ GAP_CEILING = 3.0
 GAP_DEFECT_MM = 0.05
 #: A shallow slope stair-steps: above flat and under this many degrees from horizontal.
 SHALLOW_DEG = 20.0
+#: A gap sampled under this width, mm, is refined to the least about its narrowest ray (``_least_wall``), the
+#: ``REFINE_READ`` narrowest of a mesh: every published minimum gap is under 1 mm.
+REFINE_GAP_MM = 2.0
 #: Clearances between bodies are reported up to this distance, mm.
 CLEARANCE_REACH = 5.0
 
@@ -216,6 +220,17 @@ def _mesh_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], list]
     facts["body_count"] = len(bodies)
     if voids:
         facts["internal_void_count"] = len(voids)
+    # a closed body whose surface passes through itself (the validity the exact path's kernel checks): more
+    # than a stray line of a raster up through it enters material it is already in
+    crossed = []
+    for index, body in enumerate(bodies):
+        if not body.is_watertight:
+            continue
+        lines, of, place = mo.doubled(np.asarray(body.vertices, dtype=float), np.asarray(body.faces, dtype=int))
+        if lines > max(2, of // 500):
+            crossed.append({"body": index, "columns": lines, "of": of, "xyz": _p(place)})
+    if crossed:
+        facts["self_intersecting"] = crossed
     return facts
 
 
@@ -494,6 +509,10 @@ def _facing(mesh: trimesh.Trimesh, started: np.ndarray, landed: np.ndarray, orig
     return read <= mo.KNIFE_DEG + mo.ANGLE_EPS + surface.within(read, smoothed, started) + surface.noise[landed]
 
 
+#: A gap's far wall looks back across it: its normal within ``KNIFE_DEG`` of the ray's way back, as a wall's far
+#: face is turned (``_facing``) and as the exact path reads a slot. Two flanks further apart than that -- a
+#: thread's 60 deg V -- are a notch, no slot.
+_LOOKS_BACK = math.cos(math.radians(mo.KNIFE_DEG + mo.ANGLE_EPS))
 #: A ray starts on (or lands on) a knife edge's flank when that triangle's normal is within this many degrees of
 #: the flank's (the triangle by the crease on either side): the knife's sliver is a ray within its thin depth that
 #: starts or lands on a flank, and any other ray there (a fin beside the knife, across itself) measures a wall.
@@ -704,7 +723,7 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
     # a wall's far face looks away from the ray; one square to it (a corner) does not, one under KNIFE_DEG
     # off parallel (a knife edge's other face) does, as the exact path counts it
     facing = _facing(mesh, faces[rays], hit, origins[rays], np.asarray(locations).reshape(-1, 3)) if inward else \
-        np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) < -0.5
+        np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) < -_LOOKS_BACK
     keep = (length > 1e-3) & facing & (length < (reach or float(np.linalg.norm(mesh.extents))))
     if zones:
         keep &= _outside_knives(origins[rays], normals[rays], zones, mesh.face_normals[hit])
@@ -772,13 +791,17 @@ def _cast(mesh: trimesh.Trimesh):
 
 
 def _least_wall(mesh: trimesh.Trimesh, point: np.ndarray, face: int, value: float, step: float,
-                zones: list[_Knife] | None = None) -> tuple[float, np.ndarray, int, int] | None:
+                zones: list[_Knife] | None = None, across_gap: Any = None) -> tuple[float, np.ndarray, int, int] | None:
     """The least wall about a sampled one: from the sample's place on the surface, ``step`` across it eight
     ways -- each put back on the surface and read by a ray into the material, as the samples are -- to the
     thinnest, the step halved where none is thinner. The random rays land a few a face, and read the skin over a
     round cavity, thinnest at one point, thicker than it is; exact geometry refines its listed walls to their
     least distance alike. A place in a knife edge's own sliver (``zones``) is no wall's, as no sample's there is.
-    The thickness, its place, its triangle and the one across; None where none is thinner."""
+    The thickness, its place, its triangle and the one across; None where none is thinner.
+
+    With ``across_gap`` the least gap about a sampled one, alike: each ray out of the material, to a wall that
+    looks back (``_LOOKS_BACK``) and that ``across_gap(from triangles, onto triangles)`` says is no face beside
+    the ray's own."""
     caster, normals = _caster(mesh), mesh.face_normals
     best: tuple[float, np.ndarray, int, int] | None = None
     at, tri, least = np.asarray(point, dtype=float), int(face), float(value)
@@ -796,12 +819,18 @@ def _least_wall(mesh: trimesh.Trimesh, point: np.ndarray, face: int, value: floa
         better = False
         if len(on):
             landed, inward = tried[on] + n * (step - drop[on])[:, None], -normals[onto[on]]
+            if across_gap is not None:
+                inward = -inward  # a gap's rays leave the material
             origin = landed + inward * NUDGE
-            length, across = caster.first(origin, inward)
+            length, across = caster.first(origin, inward, GAP_CEILING if across_gap is not None else None)
             met = np.flatnonzero(across >= 0)
             if len(met):
                 reach = origin[met] + inward[met] * length[met][:, None]
-                walls = _facing(mesh, onto[on][met], across[met], origin[met], reach)
+                if across_gap is not None:
+                    walls = (np.einsum("ij,ij->i", normals[across[met]], inward[met]) < -_LOOKS_BACK) & \
+                        across_gap(onto[on][met], across[met])
+                else:
+                    walls = _facing(mesh, onto[on][met], across[met], origin[met], reach)
                 if zones:
                     walls &= _outside_knives(origin[met], normals[onto[on][met]], zones, normals[across[met]])
                 thick = np.where(walls, length[met] + NUDGE, np.inf)
@@ -873,6 +902,8 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
             found = mo.wall_support(_cast(mesh), place, mesh.face_normals[face], float(value))
             item.update(supported=found["supported"], joined_sides=found["joined_sides"],
                         free_fraction=found["free_fraction"])
+        if mesh is not None:
+            item["lying"] = mo.lying(mesh.face_normals[face])  # a skin in the layer plane, laid layer on layer
         items.append(item)
     return items
 
@@ -949,6 +980,10 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
         if "_thickness" in found:
             found["_items"] = _wall_items(found["_thickness"], found["_origins"], found["_faces"], found["_hits"],
                                           _regions(body)[0], body, judged_below, zones)
+            # how far each ray's length may be off the wall the mesh stands for (``_wall_items``: ``chord_mm``)
+            landing = found["_origins"] - found["_normals"] * found["_thickness"][:, None]
+            found["_chords"] = np.abs(_surface_offset(body, found["_faces"], found["_origins"]) +
+                                      _surface_offset(body, found["_hits"], landing))
         return found
 
     if len(bodies) <= 1:
@@ -956,7 +991,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
         if "_thickness" in facts:
             t, o = facts["_thickness"], facts["_origins"]
             if keep is not None:
-                keep.update(thickness=t, origins=o, normals=facts["_normals"])
+                keep.update(thickness=t, origins=o, normals=facts["_normals"], chords=facts["_chords"])
             facts = {**_least_of(_wall_stats(t, o), facts["_items"]), "items": _wall_ranked(facts["_items"])}
             facts.update(cover=cover, method=_wall_method(cover, samples))
         return {key: value for key, value in facts.items() if not key.startswith("_")}
@@ -975,6 +1010,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     pooled: list = []
     pooled_origins: list = []
     pooled_normals: list = []
+    pooled_chords: list = []
     pooled_items: list = []
     per_body: list = []
     for i, (body, frac) in enumerate(zip(bodies, share)):
@@ -987,6 +1023,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             pooled.append(facts["_thickness"])
             pooled_origins.append(facts["_origins"])
             pooled_normals.append(facts["_normals"])
+            pooled_chords.append(facts["_chords"])
             pooled_items.extend(facts["_items"])
         per_body.append(row)
 
@@ -1000,7 +1037,8 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     thickness = np.concatenate(pooled)
     origins = np.concatenate(pooled_origins)
     if keep is not None:
-        keep.update(thickness=thickness, origins=origins, normals=np.concatenate(pooled_normals))
+        keep.update(thickness=thickness, origins=origins, normals=np.concatenate(pooled_normals),
+                    chords=np.concatenate(pooled_chords))
     return {
         "items": _wall_ranked(pooled_items),
         "body_count": len(bodies),
@@ -1123,32 +1161,74 @@ def _orientation_facts(mesh: trimesh.Trimesh, angle_limit: float, technology: st
     }
 
 
+def _round_hole(origins: np.ndarray, normals: np.ndarray, width: np.ndarray) -> tuple[float, np.ndarray, np.ndarray] | None:
+    """The round hole a gap's rays cross (its diameter, a point on its axis and the axis), or None where they
+    cross no round hole: rays all as
+    long (within 5 %), looking across one axis from all round it (no arc of 110 deg without one: a hole's wall
+    is at least 250 deg of its circle, as on exact geometry) and meeting on it (their middles on one line: an
+    annular groove's lie on a circle). A mesh's hole is a polygon inside the hole's circle: a ray from one of
+    its sides reads the polygon's width, the circle's less the chords' sag, which is given back (the sides
+    turn by the least angle between two rays' directions that are not one side's)."""
+    if len(width) < 6 or float(width.max()) > 1.05 * float(width.min()) + 1e-3:
+        return None
+    _, spread, axes = np.linalg.svd(normals, full_matrices=False)
+    if spread[2] > 0.1 * spread[1]:
+        return None  # the rays look every way, not across one axis
+    axis = axes[2]
+    turn = np.sort(np.arctan2(normals @ axes[1], normals @ axes[0]))
+    steps = np.diff(np.append(turn, turn[0] + 2.0 * math.pi))
+    if float(steps.max()) > math.radians(110.0):
+        return None
+    middles = origins + normals * (width / 2.0)[:, None]
+    off = middles - middles.mean(axis=0)
+    off -= np.outer(off @ axis, axis)
+    if float(np.linalg.norm(off, axis=1).max()) > 0.1 * float(np.median(width)):
+        return None  # an annular groove, a slot round a post: its rays do not meet on an axis
+    side = steps[steps > math.radians(0.5)]
+    diameter = float(np.median(width)) / math.cos(min(float(side.min()) if len(side) else 0.0, math.radians(60.0)) / 2.0)
+    return diameter, middles.mean(axis=0), axis
+
+
 def _gap_facts(mesh: trimesh.Trimesh, samples: int, split: tuple[list[trimesh.Trimesh], list] | None = None) -> dict:
     """Rays out of the material from every triangle of each body to a wall of the same body that faces back
-    (not a triangle sharing a corner with it, nor a face of the part sharing an edge with its own: ``_regions``):
+    (within ``KNIFE_DEG``, as on exact geometry: a V groove wider than that is a notch, no slot; not a triangle
+    sharing a corner with it, nor a face of the part sharing an edge with its own: ``_regions``):
     the narrow slots, one item a slot -- the faces of the part its rays join, and the faces beside them that
     have such rays too, are one gap (a slot's two walls; a hole's wall, whatever its chords), its narrowest ray
-    the item, as the exact path lists a pair of faces once."""
+    the item, as the exact path lists a pair of faces once. A gap whose rays cross a round hole (``_round_hole``)
+    is no slot but a hole, as on exact geometry: a mesh holds no cylinder, and its holes up to the gaps' reach
+    are read here (``holes``, which ``measure`` makes the family of)."""
     found: list[tuple[float, np.ndarray, int]] = []
+    holes: list[dict] = []
     defects: list[tuple[float, np.ndarray]] = []
     bodies, _voids = split if split is not None else _bodies(mesh)
+    refined = 0
     for body in bodies:
-        width, origins, _, faces, hit = _cover(body, inward=False, reach=GAP_CEILING)
+        width, origins, normals, faces, hit = _cover(body, inward=False, reach=GAP_CEILING)
         if not len(width):
             continue
-        shared = (body.faces[faces][:, :, None] == body.faces[hit][:, None, :]).any(axis=(1, 2))
-        # a face beside the ray's own (sharing an edge with it) meets it there: the gap closes to nothing at the
-        # crease -- an acute corner inside a letter --, its angle, no slot (the exact path skips it alike)
         labels, beside = _regions(body)
+
+        def apart(start: np.ndarray, landed: np.ndarray, body: trimesh.Trimesh = body, labels: np.ndarray = labels,
+                  beside: set = beside) -> np.ndarray:
+            """Which rays (from triangles ``start`` onto ``landed``) cross a gap: not onto a triangle sharing a
+            corner with their own, nor onto a face beside their own (sharing an edge with it: the gap closes to
+            nothing at the crease -- an acute corner inside a letter --, its angle, no slot; the exact path
+            skips it alike)."""
+            corner = (body.faces[start][:, :, None] == body.faces[landed][:, None, :]).any(axis=(1, 2))
+            near = np.fromiter(((int(min(x, y)), int(max(x, y))) in beside
+                                for x, y in zip(labels[start], labels[landed])), dtype=bool, count=len(start))
+            return ~corner & ~near
+
+        shared = ~apart(faces, hit)
         own, other = labels[faces], labels[hit]
-        shared |= np.fromiter(((int(min(x, y)), int(max(x, y))) in beside for x, y in zip(own, other)), dtype=bool,
-                              count=len(own))
         # under GAP_DEFECT_MM the "gap" is faces lying on faces (doubled or overlapping triangles): the mesh's
         # defect, said once (``overlap``), no slot a printer would close
         defect = ~shared & (width < GAP_DEFECT_MM)
         defects += [(float(w), o) for w, o in zip(width[defect], origins[defect])]
         keep = ~shared & ~defect
-        width, origins, own, other = width[keep], origins[keep], own[keep], other[keep]
+        width, origins, normals, own, other, faces = (width[keep], origins[keep], normals[keep], own[keep],
+                                                      other[keep], faces[keep])
         if not len(width):
             continue
         group = {int(label): int(label) for label in np.unique(np.concatenate([own, other]))}
@@ -1165,18 +1245,36 @@ def _gap_facts(mesh: trimesh.Trimesh, samples: int, split: tuple[list[trimesh.Tr
         for which in np.unique(gap):
             mine = np.flatnonzero(gap == which)
             at = mine[int(np.argmin(width[mine]))]
-            found.append((float(width[at]), origins[at], int(len(mine))))
+            least, place = float(width[at]), origins[at]
+            hole = _round_hole(origins[mine], normals[mine], width[mine])
+            if hole is not None:
+                tilt = math.degrees(math.acos(min(1.0, abs(float(hole[2][2])))))
+                holes.append({"xyz": _p(hole[1]), "diameter_mm": _r(hole[0], mo.JUDGED), "axis": _p(hole[2]),
+                              "orientation": "vertical" if tilt < 10.0 else "horizontal" if tilt > 80.0 else "inclined",
+                              "teardrop": False, "samples": int(len(mine))})
+                continue
+            if least < REFINE_GAP_MM and refined < REFINE_READ:
+                # a slot's narrowest is seldom under a triangle's centre: the least about it, as a wall's
+                refined += 1
+                nearer = _least_wall(body, place - normals[at] * NUDGE, int(faces[at]), least,
+                                     math.sqrt(float(body.area) / max(1, len(body.faces))), across_gap=apart)
+                if nearer is not None:
+                    least, place = nearer[0], nearer[1]
+            found.append((least, place, int(len(mine))))
     overlap = None
     if defects:
         least = min(defects, key=lambda row: row[0])
         overlap = {"xyz": _p(least[1]), "gap_mm": _r(least[0], 5), "samples": len(defects)}
     found.sort(key=lambda row: row[0])
     items = [{"xyz": _p(point), "gap_mm": _r(value, mo.JUDGED), "samples": count} for value, point, count in found[:CAP]]
-    return {"items": items, "count": len(found), "reported_below_mm": GAP_CEILING,
+    holes.sort(key=lambda item: item["diameter_mm"])
+    return {"items": items, "count": len(found), "reported_below_mm": GAP_CEILING, "_holes": holes,
             "min_mm": items[0]["gap_mm"] if items else None, "overlap": overlap, "defect_below_mm": GAP_DEFECT_MM,
-            "method": "a ray out of the material from every triangle to a facing wall of the same body, not a "
-                      "face beside its own (holes read as gaps on a mesh), one item a slot: the faces its rays "
-                      f"join; under {GAP_DEFECT_MM:g} mm, faces lying on faces: the mesh's defect (overlap), no gap"}
+            "method": "a ray out of the material from every triangle to a wall of the same body that looks back "
+                      "(within 45 deg), not a face beside its own, one item a slot: the faces its rays join, "
+                      "its narrowest refined to the least about it; a gap whose rays cross a round hole is a "
+                      f"hole (holes), no gap; under {GAP_DEFECT_MM:g} mm, faces lying on faces: the mesh's "
+                      "defect (overlap), no gap"}
 
 
 def _some(points: np.ndarray, most: int = 2000) -> np.ndarray:
@@ -1350,15 +1448,19 @@ def _trapped_facts(field: _Field, walls: dict, open_mesh: bool = False,
     open body (``open_mesh``) a cavity's openings may be the mesh's own holes, no escape hole: its openings are
     not measured (None), never read as escape holes or as none."""
     grid, labels = field.grid, field.labels
-    near = {}
+    near: dict[int, tuple[float, float]] = {}
     if walls.get("thickness") is not None:
         probes = walls["origins"] + walls["normals"] * (0.75 * grid.pitch + 1e-4)
         marks = labels[grid.index(probes)]
         for k in np.unique(marks[marks >= 0]):
-            near[int(k)] = float(walls["thickness"][marks == k].min())
+            mine = np.flatnonzero(marks == k)
+            thinnest = mine[int(walls["thickness"][mine].argmin())]
+            near[int(k)] = (float(walls["thickness"][thinnest]), float(walls["chords"][thinnest]))
     items = [mo.trapped_item(cavity, grid.pitch) for cavity in field.cavities]
     for k, item in enumerate(items):
-        item.update(xyz=_p(item["xyz"]), min_wall_mm=_r(near.get(k), 4))
+        # the thinnest wall round it, and how far that ray's length may be off the wall the mesh stands for
+        wall, chord = near.get(k, (None, None))
+        item.update(xyz=_p(item["xyz"]), min_wall_mm=_r(wall, mo.JUDGED), min_wall_chord_mm=_r(chord, 6))
     for void in voids or ():
         # a void's triangles face its own air: the voxel cavity just off them, if the field holds one
         some = np.linspace(0, len(void.faces) - 1, min(len(void.faces), 24)).round().astype(int)
@@ -1564,6 +1666,16 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
     }
     report["bridges"] = _bridge_facts(report["overhangs"])
+    # A mesh holds no cylinder: its round holes are the gaps whose rays cross one, up to the gaps' reach -- past
+    # every published minimum hole (1.5 mm at most). A larger hole is read as what it is to a printer: its crown
+    # an overhang, a bridge of its span.
+    found = report["gaps"].pop("_holes", None)
+    report["holes"] = {"error": report["gaps"]["error"]} if "error" in report["gaps"] else {
+        "items": (found or [])[:CAP], "count": len(found or []), "read_below_mm": GAP_CEILING,
+        "method": "the gaps whose rays cross a round hole: all as long (within 5 %), from all round one axis (no "
+                  "arc of 110 deg without one) and meeting on it; the diameter the rays', with the sag of the "
+                  "hole's chords given back. Holes over read_below_mm across are not read as holes: their "
+                  "crowns are overhangs and bridges"}
     # a body wholly inside another's material adds nothing to the part: its volume is counted once
     nested = {item["inside"]: item for item in report["clearances"].get("items") or () if item.get("inside") is not None}
     if nested and isinstance(report["mesh"].get("volume_mm3"), (int, float)):
@@ -1579,10 +1691,10 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         open_mesh = isinstance(report.get("mesh"), dict) and report["mesh"].get("watertight") is False
         report["trapped_volumes"] = _safe(_trapped_facts, field, kept, open_mesh, split[1] if split else None)
         report["sections"] = _safe(_section_facts, field)
-    # What a mesh does not hold: no cylinder's axis, no face to read a hole, a pin or a raised detail by. Their
-    # rules judge nothing here, and the result says so (``rules``' ``not_measured``).
-    report["not_measured"] = {family: "a mesh holds no axis or face to read them by"
-                              for family in ("holes", "pins", "details")}
+    # What a mesh does not hold: no cylinder's axis, no face to read a pin or a raised detail by. Their rules
+    # judge nothing here, and the result says so (``rules``' ``not_measured``). A pin is a wall to a mesh, and
+    # the wall rules judge it.
+    report["not_measured"] = {family: "a mesh holds no axis or face to read them by" for family in ("pins", "details")}
     _mark_partial(report)
     return report
 
