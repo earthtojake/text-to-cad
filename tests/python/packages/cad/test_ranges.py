@@ -186,6 +186,52 @@ def motor():
 """
 
 
+# An arm lying flat on a base's top face, hinged at its inner end: turned down, the 10 mm of it over the base go
+# straight into the base (0.17 mm deep at a degree), touching all the while; turned up, it lifts off, and its end face
+# comes down flat onto the base at 90 degrees.
+HINGE = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/hinge.xbf")
+def hinge():
+    base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    base.label, arm.label = "base", "arm"
+    elbow = bd.RevoluteJoint("elbow", base, axis=bd.Axis((40, 0, 20), (0, -1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("elbow", arm, elbow.location)
+    elbow.connect_to(arm.joints["elbow"], angle=0)
+    return bd.Compound(children=[base, arm], label="hinge")
+"""
+
+
+# A link turning in a clevis on a pin through the clevis's bores, the pin filling them, the link drawn 0.4 mm too wide
+# for the gap between the cheeks (0.2 mm into each, under what counts as drawn overlapping), over a floor. Turning, the
+# pin rides in its bores and the link's sides groove the cheeks: both go into surfaces it moves along, which stop
+# nothing. The floor stops it, about 15 degrees down one way and 195 the other.
+CLEVIS = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/clevis.xbf")
+def clevis():
+    floor = bd.Pos(0, 0, 5) * bd.Box(140, 40, 10)
+    floor.label = "floor"
+    cheeks = bd.Pos(0, -9, 25) * bd.Box(20, 6, 30) + bd.Pos(0, 9, 25) * bd.Box(20, 6, 30)
+    body = cheeks - bd.Pos(0, 0, 30) * bd.Rot(X=90) * bd.Cylinder(4, 30)
+    body.label = "clevis"
+    base = bd.Compound(children=[floor, body], label="base")
+    arm = bd.Pos(26, 0, 30) * bd.Box(68, 12.4, 8) + bd.Pos(0, 0, 30) * bd.Rot(X=90) * bd.Cylinder(4, 24)
+    arm.label = "arm"
+    pivot = bd.RevoluteJoint("pivot", base, axis=bd.Axis((0, 0, 30), (0, 1, 0)), angular_range=(-180, 180))
+    bd.RigidJoint("pivot", arm, pivot.location)
+    pivot.connect_to(arm.joints["pivot"], angle=0)
+    return bd.Compound(children=[base, arm], label="clevis")
+"""
+
+
 class Ranges(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="cad-ranges-")).resolve()
@@ -362,6 +408,38 @@ class Ranges(unittest.TestCase):
         self.assertIn(["plate", "motor"], [list(pair) for pair in output["resting"]])
         [line] = [line for line in result.human_lines() if line.startswith("output: ")]
         self.assertIn("turns on: plate (plate) on motor (base), touching as built on a surface about its axis", line)
+
+    def test_a_part_resting_on_its_parent_stops_where_it_is_pushed_into_it(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "hinge.py"
+        script.write_text(textwrap.dedent(HINGE), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["hinge"], cwd=self.folder)[0]["ok"])
+        [elbow] = xbf.ranges(self.folder / "XBF/hinge.xbf").measurements["joints"]
+        # Turned down it goes into the base at once: its stop is where it lies, to within the step, not where it
+        # has turned far enough for some other part of it to reach the base's side.
+        self.assertEqual(("base", "base"), (elbow["lower_contact"]["still"], elbow["upper_contact"]["still"]), elbow)
+        self.assertTrue(-1.0 <= elbow["lower"] <= 0.0, elbow)
+        # Turned up it lifts off: its end face comes within the clearance of the base, over a contact grown,
+        # short of lying flat on it at 90 degrees.
+        self.assertTrue(70.0 <= elbow["upper"] < 90.0, elbow)
+
+    def test_a_link_turning_in_its_clevis_is_stopped_by_neither_its_pin_nor_the_cheeks(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "clevis.py"
+        script.write_text(textwrap.dedent(CLEVIS), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["clevis"], cwd=self.folder)[0]["ok"])
+        [pivot] = xbf.ranges(self.folder / "XBF/clevis.xbf").measurements["joints"]
+        # The pin in its bores and the sides grooving the cheeks stop nothing: the floor stops it, its tip there at
+        # 15.4 degrees one way and 195.4 the other.
+        self.assertEqual(("floor", "floor"), (pivot["lower_contact"]["still"], pivot["upper_contact"]["still"]), pivot)
+        self.assertTrue(13.0 <= pivot["upper"] <= 15.4, pivot)
+        self.assertTrue(-195.4 <= pivot["lower"] <= -193.0, pivot)
+        self.assertEqual([("arm", "clevis")], [(pair["moving"], pair["still"]) for pair in pivot["riding"]])
+        self.assertEqual([], pivot["overlapping"])
 
     def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
         import contextlib

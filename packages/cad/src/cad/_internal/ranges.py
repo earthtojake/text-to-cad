@@ -77,7 +77,8 @@ def ranges_for(document_type: str) -> Any:
         meets another link first, in the pose the others stand in, that clash is said beside the stop. Two parts
         meet where they come within the clearance and within half their gap as built (less the 0.3 mm the
         surfaces are sampled to), or where their contact grows by about 15 mm^2 on a surface that stops the motion:
-        parts touching already as built (a horn on its servo) meet only when their contact grows there, parts near
+        parts touching already as built (a horn on its servo) meet only when their contact grows there or one is
+        pushed into the other (a part resting on its parent, turned into it, stops where it lies), parts near
         as built (apart, within the clearance) only where their gap halves, and each joint's finding names them with
         their gap as built and at each stop. A pair touching as built on a surface about the joint's axis (a plate
         bolted to a motor's output, the output drawn as one solid with the motor's case) turns on it: neither that

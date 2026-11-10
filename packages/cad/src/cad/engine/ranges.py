@@ -40,8 +40,9 @@ between the two meshes, and at most ``2 * RESOLUTION`` over it (each side's near
   within ``RESOLUTION`` of the still part, each one that stood ``2 * RESOLUTION`` or more from it as built.
   This is how a pair touching as built meets (a horn on its servo, a part on the bearing it turns on, a
   carriage on its rail), whose bound is nothing (its gap as built is under ``RESOLUTION``): where more of
-  it comes into contact, not where it slides along what it touches. A sample counted truly came nearer:
-  its gap now is at least its true gap, and its gap as built at most ``RESOLUTION`` over its true one.
+  it comes into contact, not where it slides along what it touches (or where it is **Pushed in**, below). A
+  sample counted truly came nearer: its gap now is at least its true gap, and its gap as built at most
+  ``RESOLUTION`` over its true one.
 
 **Parts drawn overlapping.** A pair touching as built may be drawn one inside the other (a vendor's simplified
 envelope sunk into its neighbour, a carriage drawn inside its rail, a link drawn a little too wide for its
@@ -71,6 +72,16 @@ as built about the axis (and ``2 * RESOLUTION``) is the output's own -- a locati
 through the face, drawn into the same solid as the case and locked into the other part as the hardware's output is
 -- and its contact counts for that pair no more than the face's; the case beyond that reach, and every other part,
 still stops the turn. Neither the normals, the share nor the reach read the clearance, so the rule below holds.
+
+**Pushed in.** A pair touching as built and not drawn overlapping meets too where the moving part is pushed into the
+still one: where more than ``STOP`` of its samples lie inside the still part (``_inside``), within ``4 * RESOLUTION``
+of one of its samples, deeper than each lay as built by ``PRESSED`` -- a sample's depth its distance from the plane of
+the triangle under the still sample nearest it (``_Sweep._depths``) -- none counted whose nearest still sample lies on a
+surface the joint moves along, or within an output's reach. A part resting face to face on its parent and turned into
+it so stops where it lies, where neither half above reads it: its samples touching as built count towards no contact,
+and those pressed into the still part are never nearer its surface than they stood. A pin in its bore, a carriage on
+its rail, a link drawn a little too wide for its clevis go only into surfaces they move along, and stop nothing. It
+does not read the clearance either.
 
 Two parts meet where either holds at a pose and the next (a graze past a corner, at one pose alone, is no
 contact). The stop reported each way is the last clear pose and the two parts that met one step past it,
@@ -132,6 +143,10 @@ CLOSED = 0.5
 #: ``RESOLUTION`` squared): a contact grown, not a corner grazed.
 STOP_AREA = 15.0
 STOP = int(STOP_AREA / RESOLUTION ** 2)
+#: How much deeper than as built, in mm, a moving part's sample must lie inside a still part it touched as built to
+#: count as pushed into it (the module's **Pushed in**): over the noise of a face lying on a face, under the depth a
+#: degree's turn presses a part resting 10 mm from its axis into what it rests on.
+PRESSED = 0.1
 #: The most grid points the volume two parts drawn overlapping share is measured on (``_Sweep._overlap``), and the
 #: most cells a still part's inside is told on (``_Sweep._deep``).
 OVERLAP_POINTS = 400_000
@@ -433,71 +448,86 @@ _TESTED_AT_ONCE = 2_000_000
 
 
 def _inside(points: np.ndarray, vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
-    """Which ``points`` lie inside the closed surface of ``vertices`` and ``faces``: a ray from each, up Z, crosses it
-    an odd number of times. The triangles are filed by the cells of a grid across X and Y that they span, so each
-    ray is tested against those of its own cell alone; a triangle seen edge-on from below (a wall) crosses no ray."""
-    found = np.zeros(len(points), dtype=bool)
-    if not len(points) or not len(faces):
+    """Which ``points`` lie inside the closed surface of ``vertices`` and ``faces`` (``_Rays``)."""
+    return _Rays(vertices, faces).inside(points)
+
+
+class _Rays:
+    """A closed surface filed for telling which points lie inside it: a ray from each, up Z, crosses it an odd number
+    of times. The triangles are filed by the cells of a grid across X and Y that they span, so each ray is tested
+    against those of its own cell alone; a triangle seen edge-on from below (a wall) crosses no ray. Filed once, asked
+    at every pose (``_Sweep._filed``)."""
+
+    def __init__(self, vertices: np.ndarray, faces: np.ndarray) -> None:
+        self.seen = np.zeros(0, dtype=np.int64)
+        if not len(faces):
+            return
+        self.low, self.high = vertices.min(axis=0), vertices.max(axis=0)
+        corners = vertices[faces]
+        self.a, self.b, self.c = a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
+        self.doubled = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
+        self.seen = seen = np.flatnonzero(self.doubled != 0.0)
+        if not len(seen):
+            return
+        flat_low, flat_high = corners[seen, :, :2].min(axis=1), corners[seen, :, :2].max(axis=1)
+        extent = np.maximum(self.high[:2] - self.low[:2], 1e-12)
+        size = float(extent.max()) / max(1.0, math.sqrt(len(seen)))
+        while True:
+            first = np.floor((flat_low - self.low[:2]) / size).astype(np.int64)
+            last = np.floor((flat_high - self.low[:2]) / size).astype(np.int64)
+            spans = last - first + 1
+            counts = spans[:, 0] * spans[:, 1]
+            if int(counts.sum()) <= _FILED:
+                break
+            size *= 2.0
+        self.size, self.columns = size, int(np.floor(extent[1] / size)) + 2
+        owner = np.repeat(np.arange(len(seen)), counts)
+        within_triangle = np.arange(len(owner)) - np.repeat(np.cumsum(counts) - counts, counts)
+        cell_x = first[owner, 0] + within_triangle % spans[owner, 0]
+        cell_y = first[owner, 1] + within_triangle // spans[owner, 0]
+        keys = cell_x * self.columns + cell_y
+        order = np.argsort(keys, kind="stable")
+        self.keys, self.filed = keys[order], seen[owner[order]]
+
+    def inside(self, points: np.ndarray) -> np.ndarray:
+        """Which ``points`` lie inside the surface."""
+        found = np.zeros(len(points), dtype=bool)
+        if not len(points) or not len(self.seen):
+            return found
+        within = np.flatnonzero(np.all((points >= self.low) & (points <= self.high), axis=1))
+        if not len(within):
+            return found
+        a, b, c, doubled, filed = self.a, self.b, self.c, self.doubled, self.filed
+        query = points[within]
+        xy = query[:, :2] + _NUDGE
+        asked = np.floor((xy - self.low[:2]) / self.size).astype(np.int64)
+        asked_keys = asked[:, 0] * self.columns + asked[:, 1]
+        start, stop = np.searchsorted(self.keys, asked_keys, "left"), np.searchsorted(self.keys, asked_keys, "right")
+        many = stop - start
+        crossings = np.zeros(len(query), dtype=np.int64)
+        total = np.cumsum(many)
+        at = 0
+        while at < len(query):
+            # As many points as their (point, triangle) pairs allow at once, one at least.
+            done = int(total[at - 1]) if at else 0
+            upto = max(at + 1, int(np.searchsorted(total, done + _TESTED_AT_ONCE, "right")))
+            span = many[at:upto]
+            point = np.repeat(np.arange(at, upto), span)
+            triangle = filed[np.repeat(start[at:upto] - np.cumsum(span) + span, span) + np.arange(int(span.sum()))]
+            px, py = xy[point, 0], xy[point, 1]
+            ta, tb, tc = a[triangle], b[triangle], c[triangle]
+            w0 = (tc[:, 0] - tb[:, 0]) * (py - tb[:, 1]) - (tc[:, 1] - tb[:, 1]) * (px - tb[:, 0])
+            w1 = (ta[:, 0] - tc[:, 0]) * (py - tc[:, 1]) - (ta[:, 1] - tc[:, 1]) * (px - tc[:, 0])
+            w2 = (tb[:, 0] - ta[:, 0]) * (py - ta[:, 1]) - (tb[:, 1] - ta[:, 1]) * (px - ta[:, 0])
+            area = doubled[triangle]
+            sign = np.sign(area)
+            hit = (w0 * sign >= 0) & (w1 * sign >= 0) & (w2 * sign >= 0)
+            height = (w0 * ta[:, 2] + w1 * tb[:, 2] + w2 * tc[:, 2]) / area
+            hit &= height > query[point, 2]
+            crossings[at:upto] += np.bincount(point[hit] - at, minlength=upto - at)
+            at = upto
+        found[within] = crossings % 2 == 1
         return found
-    low, high = vertices.min(axis=0), vertices.max(axis=0)
-    within = np.flatnonzero(np.all((points >= low) & (points <= high), axis=1))
-    if not len(within):
-        return found
-    corners = vertices[faces]
-    a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
-    doubled = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
-    seen = np.flatnonzero(doubled != 0.0)
-    if not len(seen):
-        return found
-    flat_low, flat_high = corners[seen, :, :2].min(axis=1), corners[seen, :, :2].max(axis=1)
-    extent = np.maximum(high[:2] - low[:2], 1e-12)
-    size = float(extent.max()) / max(1.0, math.sqrt(len(seen)))
-    while True:
-        first = np.floor((flat_low - low[:2]) / size).astype(np.int64)
-        last = np.floor((flat_high - low[:2]) / size).astype(np.int64)
-        spans = last - first + 1
-        counts = spans[:, 0] * spans[:, 1]
-        if int(counts.sum()) <= _FILED:
-            break
-        size *= 2.0
-    columns = int(np.floor(extent[1] / size)) + 2
-    owner = np.repeat(np.arange(len(seen)), counts)
-    within_triangle = np.arange(len(owner)) - np.repeat(np.cumsum(counts) - counts, counts)
-    cell_x = first[owner, 0] + within_triangle % spans[owner, 0]
-    cell_y = first[owner, 1] + within_triangle // spans[owner, 0]
-    keys = cell_x * columns + cell_y
-    order = np.argsort(keys, kind="stable")
-    keys, filed = keys[order], seen[owner[order]]
-    query = points[within]
-    xy = query[:, :2] + _NUDGE
-    asked = np.floor((xy - low[:2]) / size).astype(np.int64)
-    asked_keys = asked[:, 0] * columns + asked[:, 1]
-    start, stop = np.searchsorted(keys, asked_keys, "left"), np.searchsorted(keys, asked_keys, "right")
-    many = stop - start
-    crossings = np.zeros(len(query), dtype=np.int64)
-    total = np.cumsum(many)
-    at = 0
-    while at < len(query):
-        # As many points as their (point, triangle) pairs allow at once, one at least.
-        done = int(total[at - 1]) if at else 0
-        upto = max(at + 1, int(np.searchsorted(total, done + _TESTED_AT_ONCE, "right")))
-        span = many[at:upto]
-        point = np.repeat(np.arange(at, upto), span)
-        triangle = filed[np.repeat(start[at:upto] - np.cumsum(span) + span, span) + np.arange(int(span.sum()))]
-        px, py = xy[point, 0], xy[point, 1]
-        ta, tb, tc = a[triangle], b[triangle], c[triangle]
-        w0 = (tc[:, 0] - tb[:, 0]) * (py - tb[:, 1]) - (tc[:, 1] - tb[:, 1]) * (px - tb[:, 0])
-        w1 = (ta[:, 0] - tc[:, 0]) * (py - tc[:, 1]) - (ta[:, 1] - tc[:, 1]) * (px - tc[:, 0])
-        w2 = (tb[:, 0] - ta[:, 0]) * (py - ta[:, 1]) - (tb[:, 1] - ta[:, 1]) * (px - ta[:, 0])
-        area = doubled[triangle]
-        sign = np.sign(area)
-        hit = (w0 * sign >= 0) & (w1 * sign >= 0) & (w2 * sign >= 0)
-        height = (w0 * ta[:, 2] + w1 * tb[:, 2] + w2 * tc[:, 2]) / area
-        hit &= height > query[point, 2]
-        crossings[at:upto] += np.bincount(point[hit] - at, minlength=upto - at)
-        at = upto
-    found[within] = crossings % 2 == 1
-    return found
 
 
 def _outside(points: np.ndarray, owners: np.ndarray, cell: float) -> np.ndarray:
@@ -792,6 +822,8 @@ class _Sweep:
         self.shared: dict[tuple[int, int], float] = {}
         self.depths: dict[tuple[int, int], float] = {}  # how deep a moving part lies in a still one, mm (``_depth``)
         self.insides: dict[int, tuple[np.ndarray, float, np.ndarray, np.ndarray]] = {}  # a still part's (``_deep``)
+        self.rays: dict[int, tuple[_Rays, np.ndarray]] = {}  # each still part's, made once (``_filed``)
+        self.pressed: dict[tuple[int, int], np.ndarray] = {}  # a moving part's depths in a still one as built
         # The part pairs set aside (``exclude(a, b)``), by part index: a part's hulls are each that part.
         self.excluded = np.zeros((len(self.parts), len(self.parts)), dtype=bool)
         by_path: dict[str, list[int]] = {}
@@ -886,6 +918,39 @@ class _Sweep:
                 inner, size = np.vstack(left), 2 * size
             found = self.depths[(moving, still)] = deepest * 1000.0
         return found
+
+    def _filed(self, still: int) -> tuple[_Rays, np.ndarray]:
+        """A still part's triangles as built, filed for ``_inside``, and its samples' normals as built (``_rest``'s
+        order): made once a part."""
+        found = self.rays.get(still)
+        if found is None:
+            link, frame = self.parts[still][1], self.frames({})[self.parts[still][1]]
+            normals = self.normals[link][self.owners[link] == still].astype(np.float64) @ frame[:3, :3].T
+            found = self.rays[still] = (_Rays(*self._rest_mesh(still)), normals)
+        return found
+
+    def _depths(self, still: int, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Each of ``points``' nearest sample of ``still`` as built within ``4 * RESOLUTION`` (its index in ``_rest``,
+        -1 where none is), and the point's distance from the plane of the triangle that sample lies on, in metres
+        (``inf`` where none is): how deep a point inside the part lies (the depth under a flat face exactly, a face
+        lying on a face none, never more than its distance from the sample). Whether it lies inside is ``_inside``'s."""
+        normals = self._filed(still)[1]
+        depth, nearest = np.full(len(points), np.inf), np.full(len(points), -1, dtype=np.int64)
+        left = np.arange(len(points))
+        for size in (self.resolution, 2 * self.resolution, 4 * self.resolution):
+            if not len(left):
+                break
+            asked, held, apart = self._hashed(still, size).pairs(points[left])
+            order = np.lexsort((apart, asked))  # each point's nearest sample first
+            asked, held = asked[order], held[order]
+            first = np.ones(len(asked), dtype=bool)
+            first[1:] = asked[1:] != asked[:-1]
+            at, held = left[asked[first]], held[first]
+            offset = points[at] - self._rest()[still][held]
+            depth[at] = np.abs(np.einsum("ij,ij->i", offset, normals[held]))
+            nearest[at] = held
+            left = left[nearest[left] < 0]
+        return depth, nearest
 
     def _deep(self, still: int, depth: float) -> tuple[np.ndarray, float, np.ndarray]:
         """Where a point lies inside ``still`` as built deeper than ``depth`` mm: the cells of a grid over it
@@ -1207,6 +1272,30 @@ class _Sweep:
         reaches: dict[int, np.ndarray] = {}
         for (moving_part, still_part), reach_of in outputs.items():
             reaches.setdefault(still_part, np.full(width, -1.0))[moving_part] = reach_of
+        # The pairs touching as built (not drawn overlapping), each met too where its moving part is pushed into the
+        # still one (the module's **Pushed in**): the moving part's link and its samples, clustered in its link's
+        # frame, how deep each lay in the still part as built (0 outside it), which of the still part's samples the
+        # motion slides over, and where the others are, as a coarse mask for the clusters and a fine one for the samples
+        # that may come within ``4 * RESOLUTION`` of one, the only samples that may count.
+        pushed: dict[tuple[int, int], tuple[str, _Clusters, np.ndarray, np.ndarray, _Occupied, _Occupied]] = {}
+        for (moving_part, still_part), gap in sorted(close.items()):
+            if gap >= RESOLUTION or overlapped[moving_part, still_part]:
+                continue
+            drawn = self.pressed.get((moving_part, still_part))
+            if drawn is None:
+                buried = self._buried(moving_part, still_part)
+                drawn = self.pressed[(moving_part, still_part)] = np.zeros(len(buried))
+                drawn[buried] = self._depths(still_part, self._rest()[moving_part][buried])[0]
+            slides = rides(still_part)
+            if still_part in reaches:  # what of an output lies within its reach is its own (``reaches``)
+                slides = slides | (radius(still_part) <= reaches[still_part][moving_part])
+            link_name, stopping = self.parts[moving_part][1], self._rest()[still_part][~slides]
+            mine = _Clusters([self.points[link_name][self.owners[link_name] == moving_part]], CLUSTER * 1e-3)
+            none = np.zeros(len(stopping), dtype=np.int64)
+            pushed[(moving_part, still_part)] = (
+                link_name, mine, drawn, slides,
+                _Occupied(stopping, none, (mine.radius + 4 * self.resolution) / GROWN, grown=GROWN),
+                _Occupied(stopping, none, 4 * self.resolution))
         occupied = _Occupied(still_points, still_owners, clearance)
         # Each still part's samples, hashed at the clearance, at halves of it and at ``RESOLUTION`` (``_hashed``):
         # a sample is looked up against a part only where it may close on it, and only as far as its bound.
@@ -1223,12 +1312,31 @@ class _Sweep:
         def deeper_at(frames: dict[str, np.ndarray], own: bool) -> dict[tuple[int, int], float]:
             """The pairs drawn overlapping whose overlap has deepened at a pose (``frames``), each with no gap: more
             than ``STOP`` of the moving part's samples inside the still part past its depth as built and a margin
-            (the module's **Parts drawn overlapping**)."""
+            (the module's **Parts drawn overlapping**); and the pairs touching as built pushed into each other, each
+            with no gap: more than ``STOP`` of them deeper than they lay as built by ``PRESSED`` (**Pushed in**)."""
             found: dict[tuple[int, int], float] = {}
             for (moving_part, still_part), (link_name, deep) in deepened.items():
                 if own and (link_name not in child_side or self.parts[still_part][1] not in parent_side):
                     continue
                 if deep.count(frames[link_name]) > STOP:
+                    found[(moving_part, still_part)] = 0.0
+            for (moving_part, still_part), (link_name, mine, drawn, slides, coarse_of, stopping) in pushed.items():
+                if own and (link_name not in child_side or self.parts[still_part][1] not in parent_side):
+                    continue
+                near, placed = mine.placed([frames[link_name]], coarse_of)
+                if len(near) <= STOP:
+                    continue
+                maybe = stopping.near(placed)[0]
+                if len(maybe) <= STOP:
+                    continue
+                maybe = maybe[self._filed(still_part)[0].inside(placed[maybe])]
+                if len(maybe) <= STOP:
+                    continue
+                # Each one inside deeper than it lay by ``PRESSED``, under a surface that stops the motion.
+                depth, nearest = self._depths(still_part, placed[maybe])
+                into = nearest >= 0
+                into[into] = (depth[into] > drawn[near[maybe[into]]] + PRESSED * 1e-3) & ~slides[nearest[into]]
+                if int(into.sum()) > STOP:
                     found[(moving_part, still_part)] = 0.0
             return found
 
