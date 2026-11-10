@@ -8,10 +8,11 @@ name: Windows installer rehearsal
 # line, through a script's header, from a venv of the user's own with the library installed, and the
 # page link's token), arguments cmd would have parsed, cad.exe rewritten while it runs, and the
 # uninstall; then the same again into a state folder named with accents and a non-Latin script.
-# A rehearsal, not a release gate: dispatched by hand, or by a push to main that changes the
-# installer or what it runs. No test.yml job runs it (scripts/github-workflows/select_checks.py).
-# Dispatched with `published`, the same steps run against what people install today: the docs site's
-# install.ps1 and the newest release on PyPI, no wheel built.
+# test.yml calls it, as it does the Linux one, on a full run (so before a release ships) and on a
+# change to the installer or what it runs: the selector's `installer` flag
+# (scripts/github-workflows/select_checks.py, INSTALLER_CODE). Dispatched by hand with `published`,
+# the same steps run against what people install today: the docs site's install.ps1 and the newest
+# release on PyPI, no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -24,17 +25,18 @@ on:
         type: boolean
         required: false
         default: false
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/install-windows.yml
-      - scripts/install/install.ps1
-      - packages/cad-server/src/cad_server/cli/setup.py
-      - packages/cad-server/src/cad_server/cli/uninstall.py
-      - packages/cad-server/src/cad_server/cli/doctor.py
-      - packages/cad-server/src/cad_server/_internal/providers.py
-      - packages/cad-server/src/cad_server/_internal/launch.py
-      - packages/cad-server/src/cad_server/_internal/installations.py
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to rehearse (default: the caller's commit)"
+        type: string
+        required: false
+        default: ""
+      published:
+        description: "Rehearse the published release (the site's install.ps1, PyPI), not this tree's wheel"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -52,6 +54,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core packages/ui apps/web apps/mcp
@@ -61,6 +64,7 @@ jobs:
         run: scripts/bundle/bundle.sh --clean
 
       - name: Build and check the wheels
+        timeout-minutes: 10
         env:
           CAD_KEEP_WHEEL: "1"
           CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
@@ -71,7 +75,7 @@ jobs:
       - name: Keep the wheels for the Windows job
         uses: actions/upload-artifact@v7
         with:
-          name: wheels
+          name: install-windows-wheels
           path: ${{ runner.temp }}/wheels/*.whl
           if-no-files-found: error
           retention-days: 1
@@ -97,7 +101,7 @@ jobs:
         if: ${{ !inputs.published }}
         uses: actions/download-artifact@v8
         with:
-          name: wheels
+          name: install-windows-wheels
           path: ${{ runner.temp }}\wheel
 
       # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at

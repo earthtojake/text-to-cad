@@ -1,42 +1,62 @@
 """Every test runs in CI, and a change runs what can break: test.yml against its selector.
 
 scripts/github-workflows/select_checks.py maps each changed path to the tests that read it;
-test.yml runs each job on the selector's flag for it. These tests hold the two together and
-the table to the tree, and pin how each kind of change is routed.
+test.yml runs each job whole on the selector's one flag for it, and its last job, `CI`, is the
+one required check (scripts/github-workflows/ci_gate.py). These tests hold the three together
+and the table to the tree, and pin how each kind of change is routed.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
+import json
 import os
 import re
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT
 from tests.python.support.tmp_root import temporary_directory
 
-WORKFLOW = (REPO_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+WORKFLOWS = REPO_ROOT / ".github/workflows"
+WORKFLOW = (WORKFLOWS / "test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
 
-_spec = importlib.util.spec_from_file_location("select_checks", REPO_ROOT / "scripts/github-workflows/select_checks.py")
-selector = importlib.util.module_from_spec(_spec)
-sys.modules.setdefault("select_checks", selector)
-_spec.loader.exec_module(selector)
 
-GATED = set(JOBS) - {"changes", "version"}
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(name, REPO_ROOT / f"scripts/github-workflows/{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault(name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+selector = _load("select_checks")
+gate = _load("ci_gate")
+
+# Every job but the selection itself, the job that waits on nothing, and the gate runs on a flag.
+GATED = set(JOBS) - {"changes", "static", "ci"}
 TRACKED = subprocess.run(["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.split()
-CADGEN, POLICY, SKILLS = selector.CADGEN_SUITE, selector.POLICY_SUITE, selector.SKILL_SUITES
-LIBRARY, SERVER, SHIM = f"{CADGEN}/cad", f"{CADGEN}/cad_server", f"{CADGEN}/cad_mcp"
+PACKAGES, POLICY, SKILLS = selector.PACKAGES_SUITE, selector.POLICY_SUITE, selector.SKILL_SUITES
+LIBRARY, SERVER, SHIM = f"{PACKAGES}/cad", f"{PACKAGES}/cad_server", f"{PACKAGES}/cad_mcp"
+# The jobs a change to the packages reaches, whatever else it reaches.
+SUITES = {"packages-linux", "packages-windows"}
+CONSUMERS = SUITES | {"skills", "packaging", "viewer-e2e"}
+REHEARSALS = {"install-linux", "install-windows"}
+JS = {"js-core", "js-ui", "js-web", "js-mcp"}
 
 
 def route(*paths: str) -> dict[str, str]:
-    return selector.outputs(selector.select_paths(paths), changed=bool(paths))
+    return selector.outputs(selector.select_paths(paths), paths)
 
 
 def condition(job: str) -> str:
-    return re.search(r"^    if: .*?needs\.changes\.outputs\.(\w+) == 'true'", JOBS[job], re.M)[1]
+    """The one flag a job runs on: its whole `if:`."""
+    return re.search(r"^    if: needs\.changes\.outputs\.(\w+) == 'true'$", JOBS[job], re.M)[1]
 
 
 def jobs_for(*paths: str) -> set[str]:
@@ -47,7 +67,11 @@ def jobs_for(*paths: str) -> set[str]:
 
 def tests_for(*paths: str) -> dict[str, list[str]]:
     selected = route(*paths)
-    return {key: selected[key].split() for key in ("cadgen_tests", "skills_policy", "skills_tests")}
+    return {key: selected[key].split() for key in ("packages_tests", "skills_policy", "skills_tests")}
+
+
+def steps(job: str) -> dict[str, str]:
+    return dict(re.findall(r"      - name: ([^\n]+)\n(.*?)(?=\n      - name: |\Z)", JOBS[job], re.S))
 
 
 class EveryTestRunsInCI(unittest.TestCase):
@@ -86,22 +110,43 @@ class EveryTestRunsInCI(unittest.TestCase):
     def test_a_full_run_runs_every_job_and_every_suite_whole(self):
         selected = selector.outputs(selector.EVERYTHING)
         self.assertEqual(jobs_for("VERSION"), GATED)
-        self.assertEqual(selected["cadgen_tests"], CADGEN)
+        self.assertEqual(selected["packages_tests"], PACKAGES)
         self.assertEqual(selector.scope(selected), "full")
-        # Light tests run in the light phase, every other test in the heavy one: together, all.
-        policy = set(selected["light_policy"].split()) | set(selected["skills_policy"].split())
+        # Light tests run in static, every other test in the skills job: together, all.
+        policy = set(selector.light_policy()) | set(selected["skills_policy"].split())
         self.assertEqual(policy, {path.relative_to(REPO_ROOT).as_posix() for path in (REPO_ROOT / POLICY).glob("test_*.py")})
-        suites = set(selected["light_tests"].split()) | set(selected["skills_tests"].split())
+        suites = set(selector.LIGHT_SKILL_TESTS) | set(selected["skills_tests"].split())
         self.assertEqual(suites, {f"{SKILLS}/{path.name}" for path in (REPO_ROOT / SKILLS).iterdir() if path.is_dir()})
 
-    def test_the_light_contracts_run_on_every_change_and_install_nothing(self):
-        for path in ("models/examples/src/part.py", "README.md", "packages/cad/src/cad/engine/api.py"):
-            with self.subTest(path=path):
-                selected = route(path)
-                self.assertEqual(selected["skills"], "true")
-                self.assertEqual(selected["light_policy"].split(), selector.light_policy())
-        light = JOBS["skills"].split("- name: Set up dependencies", 1)[0]
-        self.assertNotIn("setup-deps", light)
+    def test_static_runs_on_every_change_waits_on_nothing_and_installs_nothing(self):
+        static = JOBS["static"]
+        # No flag and no selection to wait for: it runs when Changed paths fails, and on a push
+        # whose tree was already tested.
+        self.assertNotRegex(static, r"(?m)^    (if|needs):")
+        self.assertNotIn("needs.changes", static)
+        self.assertNotIn("setup-deps", static)
+        ran = steps("static")
+        # The version and tree checks, on every change; what merging releases, on a pull request.
+        self.assertIn("scripts/release/check-version.sh", ran["Check release version"])
+        self.assertIn("node scripts/release/sync-version.mjs --check", ran["Check release version"])
+        self.assertIn("if: github.event_name == 'pull_request'", ran["Check what merging releases"])
+        self.assertIn("scripts/release/check-pr-version.sh", ran["Check what merging releases"])
+        self.assertIn("fetch-depth: 0", ran["Check out repository"])  # the target's history, the tags
+        self.assertIn("check-builds.sh --tree-only", ran["Check the tracked tree"])
+        # The light contracts, their lists read from the selector itself.
+        light = ran["Run the light contracts"]
+        self.assertIn("scripts/test/test-global.sh $(python3 scripts/github-workflows/select_checks.py --light policy)", light)
+        self.assertIn("scripts/test/test-python.sh --select skills "
+                      "$(python3 scripts/github-workflows/select_checks.py --light skills)", light)
+        for name, expected in (("policy", selector.light_policy()), ("skills", list(selector.LIGHT_SKILL_TESTS))):
+            with self.subTest(name=name), contextlib.redirect_stdout(io.StringIO()) as said:
+                self.assertEqual(selector.main(["--light", name]), 0)
+                self.assertEqual(said.getvalue().split(), expected)
+        self.assertTrue(selector.light_policy())
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(selector.main(["--light"]), 2)
+        # The API's tests install nothing, so they run here for every change: no job, no flag.
+        self.assertIn("run: scripts/test/test-api.sh", ran["Run the API tests"])
 
 
 class TheTableHoldsToTheTree(unittest.TestCase):
@@ -109,7 +154,7 @@ class TheTableHoldsToTheTree(unittest.TestCase):
         # A misspelt test path would select nothing, silently.
         for rule in selector.RULES:
             if isinstance(rule.selects, selector.Select):
-                for path in rule.selects.cadgen | rule.selects.policy | rule.selects.skills:
+                for path in rule.selects.packages | rule.selects.policy | rule.selects.skills:
                     with self.subTest(path=path):
                         self.assertTrue((REPO_ROOT / path).exists())
         for name in selector.HEAVY_POLICY:
@@ -141,7 +186,7 @@ class TheTableHoldsToTheTree(unittest.TestCase):
         self.assertEqual(unknown, [])
 
     def test_light_tests_never_skip_for_a_missing_dependency(self):
-        # The light phase installs nothing; a test that skipped itself without a dependency
+        # static installs nothing; a test that skipped itself without a dependency
         # would pass there having tested nothing.
         light = [REPO_ROOT / path for path in selector.light_policy()]
         light += [file for path in selector.LIGHT_SKILL_TESTS for file in sorted((REPO_ROOT / path).rglob("test*.py"))]
@@ -151,11 +196,32 @@ class TheTableHoldsToTheTree(unittest.TestCase):
 
 
 class TheWorkflowFollowsTheSelector(unittest.TestCase):
-    def test_every_gated_job_runs_on_its_own_flag(self):
+    def test_one_flag_one_job(self):
+        # A job runs whole on its own flag or is skipped; a flag starts one job -- but the
+        # packages' suites, which are a job a platform, and the two installer rehearsals.
         flags = set(route())
+        started: dict[str, set[str]] = {}
         for job in GATED:
             with self.subTest(job=job):
                 self.assertIn(condition(job), flags)
+                started.setdefault(condition(job), set()).add(job)
+        several = {flag: jobs for flag, jobs in started.items() if len(jobs) > 1}
+        self.assertEqual(several, {"packages": SUITES, "installer": REHEARSALS})
+        # ...and every flag the selector writes starts one: none is left that nothing reads.
+        self.assertEqual(set(started), set(selector.FLAGS) | {"packages", "skills"})
+
+    def test_no_step_runs_on_a_flag(self):
+        # A green job ran all of itself. A step may wait on a list being there to run (a runner
+        # given no paths would run its whole suite) and on its shard, never on a flag.
+        lists = {"changed_tests", "skills_policy", "skills_tests"}
+        for job, body in JOBS.items():
+            for line in re.findall(r"^        if: (.+)$", body, re.M):
+                with self.subTest(job=job, line=line):
+                    self.assertNotIn("== 'true'", line)
+                    read = set(re.findall(r"needs\.changes\.outputs\.(\w+)", line))
+                    self.assertLessEqual(read, lists)
+                    for name in read:
+                        self.assertIn(f"needs.changes.outputs.{name} != ''", line)
 
     def test_every_output_the_jobs_read_is_one_the_selector_writes(self):
         written = set(route()) | {"record"}
@@ -165,8 +231,9 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
         self.assertLessEqual(set(re.findall(r"needs\.changes\.outputs\.(\w+)", WORKFLOW)), set(exposed))
         self.assertEqual(written - {"record", "full"}, set(exposed))
 
-    def test_a_manual_or_called_run_selects_everything_and_records_it(self):
-        self.assertIn("FULL: ${{ github.event_name == 'workflow_dispatch' || inputs.full }}", JOBS["changes"])
+    def test_a_manual_called_or_nightly_run_selects_everything_and_records_it(self):
+        self.assertIn("FULL: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' "
+                      "|| inputs.full }}", JOBS["changes"])
         self.assertIn("name: ${{ steps.select.outputs.record }}", JOBS["changes"])
         # A record only saves a re-run: failing to upload one must not fail the run.
         self.assertIn("continue-on-error: true", JOBS["changes"].split("- name: Record the tree this run tests", 1)[1])
@@ -184,22 +251,229 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
         self.assertTrue(values["record"].startswith("tested-") and values["record"].endswith("-full"))
         self.assertEqual({job for job in GATED if values[condition(job)] == "true"}, GATED)
 
-    def test_a_selection_that_failed_fails_a_required_check(self):
-        # Every job waits on Changed paths, and GitHub counts a job skipped for a failed dependency
-        # as a passing required check. skills is required and runs for every change, so it also runs
-        # when Changed paths failed -- and fails.
-        skills = JOBS["skills"]
-        self.assertRegex(skills, r"(?m)^    if: \$\{\{ !cancelled\(\) && \(needs\.changes\.result != 'success' \|\| ")
-        guard = skills.split("steps:", 1)[1].split("- name:", 2)[1]
-        self.assertIn("if: needs.changes.result != 'success'", guard)
-        self.assertIn("exit 1", guard)
-        self.assertTrue(all(route(path)["skills"] == "true" for path in ("README.md", "skills/cad/SKILL.md", "VERSION")))
+    def _selected(self, event: str, tested: bool) -> tuple[dict[str, str], list[list[str]]]:
+        asked: list[list[str]] = []
 
-    def test_required_check_names_are_the_jobs(self):
-        # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).
-        names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}
-        self.assertTrue({"Version Check", "cadgen (Linux)", "cadgen (Windows)", "core-js", "web", "skills", "docs",
-                         "packaging", "api"} <= names)
+        def already(names: list[str]) -> bool:
+            asked.append(names)
+            return tested
+
+        with temporary_directory(prefix="select-checks-") as temp:
+            output = Path(temp) / "output"
+            environment = {"FULL": "true", "GITHUB_EVENT_NAME": event, "GITHUB_OUTPUT": str(output), "RUNNER_TEMP": temp}
+            with mock.patch.dict(os.environ, environment), mock.patch.object(selector, "_tested", already), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(selector.main([]), 0)
+            return dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines()), asked
+
+    def test_the_nightly_run_stands_down_for_a_tree_already_tested_in_full(self):
+        # Nightly, on main, off the hour (when every schedule on GitHub fires at once).
+        cron = re.search(r'^  schedule:\n    - cron: "(\d+) (\d+) \* \* \*"$', WORKFLOW, re.M)
+        self.assertTrue(cron and cron[1] not in ("0", "00", "30"), "a nightly schedule, off the hour")
+        # A release's run tested main's tree whole, normally: nothing runs again, and no record is made.
+        values, asked = self._selected("schedule", tested=True)
+        self.assertEqual(len(asked), 1)
+        self.assertRegex(asked[0][0], r"^tested-[0-9a-f]{40}-full$")
+        self.assertEqual(values["record"], "")
+        self.assertEqual({job for job in GATED if values[condition(job)] == "true"}, set())
+        # No such run: everything, recorded as a full run.
+        values, _asked = self._selected("schedule", tested=False)
+        self.assertTrue(values["record"].endswith("-full"))
+        self.assertEqual({job for job in GATED if values[condition(job)] == "true"}, GATED)
+        # A manual run never stands down.
+        values, asked = self._selected("workflow_dispatch", tested=True)
+        self.assertEqual(asked, [])
+        self.assertTrue(values["record"].endswith("-full"))
+
+    def test_nothing_selected_skips_every_gated_job(self):
+        # A push whose tree was already tested: every flag is off, and the lists are empty.
+        nothing = selector.outputs(selector.NOTHING)
+        self.assertEqual({job for job in GATED if nothing[condition(job)] == "true"}, set())
+        self.assertEqual((nothing["packages_tests"], nothing["skills_policy"], nothing["skills_tests"],
+                          nothing["changed_tests"]), ("", "", "", ""))
+        # The matrices still parse: a skipped job's is never expanded, and a job's that runs is.
+        self.assertEqual(json.loads(nothing["linux_shards"]), ["1/1"])
+
+
+class TheOneRequiredCheck(unittest.TestCase):
+    """main's branch protection requires `CI` alone (CONTRIBUTING.md, Repository settings)."""
+
+    def test_the_gate_needs_every_job_and_runs_whatever_became_of_them(self):
+        ci = JOBS["ci"]
+        self.assertRegex(ci, r"(?m)^    name: CI$")
+        self.assertEqual([body for body in JOBS.values() if re.search(r"(?m)^    name: CI$", body)], [ci])
+        needed = set(re.findall(r"^      - ([a-z][\w-]*)$", ci.split("    needs:\n", 1)[1].split("    if:", 1)[0], re.M))
+        self.assertEqual(needed, set(JOBS) - {"ci"})
+        # always(): a job skipped for a failed dependency would satisfy the required check.
+        self.assertRegex(ci, r"(?m)^    if: always\(\)$")
+        self.assertIn("NEEDS: ${{ toJSON(needs) }}", ci)
+        self.assertIn("run: python3 scripts/github-workflows/ci_gate.py", ci)
+        self.assertIn("PULL_REQUEST: ${{ github.event.pull_request.number }}", ci)
+        self.assertIn("HEAD_SHA: ${{ github.event.pull_request.head.sha }}", ci)
+        self.assertEqual(route("scripts/github-workflows/ci_gate.py")["full"], "true")
+
+    def test_no_job_asks_for_more_than_publish_release_grants_the_call(self):
+        # A called workflow's job may ask for no permission its caller lacks: one that did would
+        # stop Publish Release's call before a job ran.
+        publish = (WORKFLOWS / "release-publish.yml").read_text(encoding="utf-8")
+        call = publish.split("\n  test:\n", 1)[1].split("\n  publish:\n", 1)[0]
+        granted = dict(re.findall(r"^      (\w[\w-]*): (\w+)$", call.split("    permissions:\n", 1)[1].split("    uses:", 1)[0], re.M))
+        self.assertEqual(granted, {"contents": "read", "actions": "read"})
+        for name in ("test.yml", "install-linux.yml", "install-windows.yml"):
+            text = (WORKFLOWS / name).read_text(encoding="utf-8")
+            for block in re.findall(r"^( *)permissions:\n((?:\1  .*\n)+)", text, re.M):
+                for permission, level in re.findall(r"^\s+([\w-]+): (\w+)$", block[1], re.M):
+                    with self.subTest(workflow=name, permission=permission):
+                        self.assertEqual(granted.get(permission), level)
+
+    def test_a_job_passes_by_succeeding_or_by_having_nothing_to_test(self):
+        never = mock.Mock(side_effect=AssertionError("nothing was cancelled"))
+        code, why = gate.verdict({"changes": "success", "static": "success", "fea": "skipped", "docs": "success"}, never)
+        self.assertEqual(code, 0, why)
+        # A push whose tree was already tested: everything but static skipped.
+        code, why = gate.verdict({"changes": "success", "static": "success", **{job: "skipped" for job in GATED}}, never)
+        self.assertEqual(code, 0, why)
+
+    def test_a_selection_that_failed_fails_the_required_check(self):
+        # Every gated job waits on Changed paths, and GitHub counts a job skipped for a failed
+        # dependency as a passing check: the gate is where that stops.
+        skipped = {job: "skipped" for job in GATED}
+        for result in ("failure", "skipped", ""):
+            with self.subTest(result=result):
+                code, why = gate.verdict({"changes": result, "static": "success", **skipped}, lambda: True)
+                self.assertEqual(code, 1)
+                self.assertIn("nothing was selected", why)
+
+    def test_a_failed_job_fails_it_superseded_or_not(self):
+        for superseded in (True, False):
+            code, why = gate.verdict({"changes": "success", "static": "success", "fea": "failure",
+                                      "docs": "cancelled"}, lambda: superseded)
+            self.assertEqual((code, why), (1, "Failed: fea."))
+
+    def test_a_cancelled_job_fails_it_unless_a_newer_push_superseded_the_run(self):
+        # A job that ran out its timeout reports `cancelled`, and so does every job of a run the
+        # concurrency group cancelled for a newer push: only the second passes.
+        results = {"changes": "success", "static": "success", "packages-windows": "cancelled", "fea": "skipped"}
+        code, why = gate.verdict(results, lambda: False)
+        self.assertEqual(code, 1)
+        self.assertIn("packages-windows", why)
+        self.assertEqual(gate.verdict(results, lambda: True)[0], 0)
+        self.assertEqual(gate.verdict({"changes": "cancelled", "static": "cancelled"}, lambda: True)[0], 0)
+        self.assertEqual(gate.verdict({"changes": "cancelled", "static": "cancelled"}, lambda: False)[0], 1)
+
+    def test_only_a_pull_request_whose_head_moved_is_superseded(self):
+        tested = "a" * 40
+        pull_request = {"GITHUB_EVENT_NAME": "pull_request", "PULL_REQUEST": "7", "HEAD_SHA": tested,
+                        "GITHUB_REPOSITORY": "someone/somewhere", "GITHUB_TOKEN": "t"}
+        cases = [
+            (pull_request, "b" * 40, True),                                   # a newer push
+            (pull_request, tested, False),                                    # cancelled by hand, or timed out
+            (pull_request, None, False),                                      # could not be read: not superseded
+            ({**pull_request, "GITHUB_EVENT_NAME": "push"}, "b" * 40, False),  # a push's run is never cancelled for another
+            ({**pull_request, "PULL_REQUEST": ""}, "b" * 40, False),
+        ]
+        for environment, head, expected in cases:
+            with self.subTest(event=environment["GITHUB_EVENT_NAME"], head=head), \
+                    mock.patch.dict(os.environ, environment), \
+                    mock.patch.object(gate, "pull_request_head", return_value=head):
+                self.assertIs(gate.superseded(), expected)
+
+    def test_the_gate_reads_the_results_github_gives_it(self):
+        needs = {"changes": {"result": "success", "outputs": {"packages": "true"}}, "static": {"result": "success"},
+                 "packages-linux": {"result": "failure", "outputs": {}}}
+        with temporary_directory(prefix="ci-gate-") as temp:
+            summary = Path(temp) / "summary.md"
+            environment = {"NEEDS": json.dumps(needs), "GITHUB_STEP_SUMMARY": str(summary), "GITHUB_EVENT_NAME": "push"}
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()) as said:
+                self.assertEqual(gate.main(), 1)
+            self.assertIn("Failed: packages-linux.", said.getvalue())
+            self.assertIn("| `packages-linux` | failure |", summary.read_text(encoding="utf-8"))
+
+
+class DownloadsAreBounded(unittest.TestCase):
+    """A stalled mirror fails in minutes: an `apt-get update` once ran 39 minutes to its job's timeout."""
+
+    def test_every_setup_step_has_a_timeout_of_its_own(self):
+        for name in ("test.yml", "install-linux.yml", "install-windows.yml"):
+            text = (WORKFLOWS / name).read_text(encoding="utf-8")
+            setups = re.findall(r"      - name: ([^\n]+)\n((?:        .*\n)*?)        uses: (\./\.github/actions/setup-deps"
+                                r"|actions/setup-python@\S+|actions/setup-node@\S+)\n", text)
+            self.assertTrue(setups, name)
+            for step, before, _action in setups:
+                with self.subTest(workflow=name, step=step):
+                    self.assertRegex(before, r"timeout-minutes: \d+\n")
+
+    def test_system_packages_come_through_one_bounded_step(self):
+        # No job runs apt itself: setup-deps installs what a job names, only when the image lacks
+        # it, and gives up on a connection that says nothing.
+        self.assertNotIn("apt-get", WORKFLOW)
+        action = (REPO_ROOT / ".github/actions/setup-deps/action.yml").read_text(encoding="utf-8")
+        step = action.split("- name: Install system packages\n", 1)[1].split("\n    - name: ", 1)[0]
+        self.assertIn("if: inputs.apt != '' && runner.os == 'Linux'", step)
+        for option in ("Acquire::Retries=3", "Acquire::http::Timeout=30", "Acquire::https::Timeout=30"):
+            self.assertIn(option, step)
+        self.assertIn("dpkg-query", step)
+        # The display the engine's stills draw on, wherever a suite draws them.
+        for job in ("packages-linux", "packages-floor", "fea"):
+            with self.subTest(job=job):
+                self.assertIn("apt: xvfb libgl1-mesa-dri fonts-dejavu-core", JOBS[job])
+                self.assertIn("xvfb-run ", JOBS[job])
+
+    def test_every_job_has_a_timeout(self):
+        for job, body in JOBS.items():
+            with self.subTest(job=job):
+                if re.search(r"(?m)^    uses: ", body):
+                    continue  # a called workflow: its own jobs', below
+                self.assertRegex(body, r"(?m)^    timeout-minutes: \d+$")
+        for name in ("install-linux.yml", "install-windows.yml"):
+            text = (WORKFLOWS / name).read_text(encoding="utf-8")
+            self.assertEqual(len(re.findall(r"(?m)^    runs-on: ", text)), len(re.findall(r"(?m)^    timeout-minutes: \d+$", text)), name)
+
+
+class ThePackagesSuites(unittest.TestCase):
+    def test_a_whole_run_is_split_over_shards_and_a_narrowed_one_is_not(self):
+        whole = route("packages/cad/src/cad/engine/api.py")
+        self.assertEqual(json.loads(whole["linux_shards"]), ["1/2", "2/2"])
+        self.assertEqual(json.loads(whole["windows_shards"]), ["1/3", "2/3", "3/3"])
+        narrowed = route(f"{SERVER}/test_settings.py")
+        self.assertEqual((json.loads(narrowed["linux_shards"]), json.loads(narrowed["windows_shards"])), (["1/1"], ["1/1"]))
+        for job, shards in (("packages-linux", "linux_shards"), ("packages-windows", "windows_shards")):
+            with self.subTest(job=job):
+                body = JOBS[job]
+                self.assertIn(f"shard: ${{{{ fromJSON(needs.changes.outputs.{shards}) }}}}", body)
+                # Every shard reports: one's failure does not cancel the rest.
+                self.assertIn("fail-fast: false", body)
+                suite = steps(job)["Run the packages' suites"]
+                self.assertIn("CAD_TEST_SHARD: ${{ matrix.shard }}", suite)
+                self.assertIn("TESTS: ${{ needs.changes.outputs.packages_tests }}", suite)
+                self.assertRegex(suite, r"scripts/test/test-python\.sh (--keep-going )?--select cadgen --print-weights \$TESTS")
+                # The types once a platform (the checker reads the win32 branches on Windows alone).
+                self.assertIn("if: startsWith(matrix.shard, '1/')", steps(job)["Check the packages' types (basic)"])
+
+    def test_the_tests_a_change_touches_run_first(self):
+        # A break in a pull request's own test reports in a minute or two, not at the suite's end.
+        engine, settings, protocol = "packages/cad/src/cad/engine/api.py", f"{SERVER}/test_settings.py", f"{SHIM}/test_protocol.py"
+        self.assertEqual(route(engine, settings, protocol)["changed_tests"], f"{SHIM}/test_protocol.py {SERVER}/test_settings.py")
+        # ...but not when they are all the suite step runs anyway, nor a file that is gone, nor one
+        # of a suite another job owns.
+        self.assertEqual(route(settings)["changed_tests"], "")
+        self.assertEqual(route(engine, f"{SERVER}/test_gone_for_good.py")["changed_tests"], "")
+        self.assertEqual(route(engine, "tests/python/packages/fea/test_fea.py")["changed_tests"], "")
+        self.assertEqual(route(engine)["changed_tests"], "")
+        # A release that edits a test runs it first too; a run with no diff has none to name.
+        self.assertEqual(route("VERSION", settings)["changed_tests"], settings)
+        self.assertEqual(selector.outputs(selector.EVERYTHING)["changed_tests"], "")
+        # What runs first is no part of what was tested: the record's scope is the same.
+        self.assertEqual(selector.scope(route(engine, settings)), selector.scope(route(engine)))
+        for job in SUITES:
+            with self.subTest(job=job):
+                names = list(steps(job))
+                first = steps(job)["Run the tests this change touches first"]
+                self.assertLess(names.index("Run the tests this change touches first"), names.index("Run the packages' suites"))
+                self.assertIn("if: startsWith(matrix.shard, '1/') && needs.changes.outputs.changed_tests != ''", first)
+                self.assertIn("TESTS: ${{ needs.changes.outputs.changed_tests }}", first)
+                self.assertNotIn("CAD_TEST_SHARD", first)  # all of them, in the one shard that runs them
 
 
 class ChangesRunWhatCanBreak(unittest.TestCase):

@@ -8,32 +8,39 @@ no rule matches runs everything: a new kind of file is tested whole until someon
 down what reads it. VERSION, the shared test machinery, the dependency manifests and
 packages/core (which every runtime and app is built from) run everything too.
 
-The light contracts -- every policy test but HEAVY_POLICY, and the skill suites in
-LIGHT_SKILL_TESTS: tests that need nothing but Python's standard library, Node and the
-repository's text -- run on every change, first and with nothing installed, so a path only
-they read needs no rule beyond saying so. The rest -- the packages' suites (the library's, the
-server's and the shim's: the cadgen jobs), the skill suites that drive the CAD kernel, the policy
-tests that load the packages or their built runtime, and each job -- run only on the paths that
-reach them.
+One flag, one job: a job runs whole on its flag or is skipped, and no step inside it reads
+another. The `static` job needs no flag: the version and tree checks, the light contracts
+(every policy test but HEAVY_POLICY, and the skill suites in LIGHT_SKILL_TESTS: tests that
+need nothing but Python's standard library, Node and the repository's text) and the API's
+tests run on every change with nothing installed, so a path only they read needs no rule
+beyond saying so. `--light policy` and `--light skills` print those lists for it.
+
+The release tier -- the packages' suites on their oldest Python (`floor`) and the installer
+rehearsals (`installer`) -- runs on a full run: a VERSION change, the nightly schedule, a
+manual dispatch, Publish Release's call. The rehearsals also run on a change to the
+installer or what it runs.
 
 Selection is by path, never by diff content: a comment in a module selects what the
 module's code would.
 
 Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
 
-    cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
+    packages  packages_tests      packages (Linux), packages (Windows): the library's, the server's
+      linux_shards                and the shim's suites, split over the shards these name ("1/2",
+      windows_shards              "2/2"; one shard when the selection is narrowed)
+      changed_tests               the package test files the change itself touches, run first
+    floor                         packages (Python 3.13 floor): the same suites, whole
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
-    blender  bpy  floor           blender, the job on Python 3.13: bpy (cad.blender.load and Open in's Blender script
-                                  in the environment cad run makes for bpy) and floor (the library's, the server's
-                                  and the shim's suites on the packages' oldest Python)
+    bpy                           blender (cad.blender.load and Open in's Blender script in the
+                                  environment cad run makes for bpy)
+    kicad                         kicad
     routing                       routing (macOS): the router's unit files, on the third C library
-    core_js                       core-js
-    web  web_ui  web_client
-    mcp
-    api
-    skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
+    core_js  web_ui  web_client  mcp   js-core, js-ui, js-web, js-mcp
+    skills  skills_policy  skills_tests   skills: the policy tests and skill suites that load the packages
     docs
-    packaging  web_viewer         packaging, and its steps that drive the bundled viewer
+    packaging                     packaging: the bundle, the wheels, the installed commands
+    web_viewer                    viewer-e2e: the bundled viewer through the real backend
+    installer                     install-linux, install-windows (the installer rehearsals)
     full
     record                        the artifact name recording what this run tests
 
@@ -41,10 +48,12 @@ Test paths are repo-relative and space-separated; a suite's own directory means 
 suite. A run's record is `tested-<tree>-<scope>`: the git tree it checked out, and `full`
 or a digest of the selection. On a push, a successful run of this repository that already
 recorded the same tree and scope (its pull request's, normally) stands in for this one, and
-nothing runs again (tested_tree.py).
+nothing runs again (tested_tree.py); the nightly run stands down the same way for a tree a
+run already tested in full.
 
     python3 scripts/github-workflows/select_checks.py            # in CI: FULL, BEFORE, GITHUB_*
     python3 scripts/github-workflows/select_checks.py --paths a b  # the selection for some paths
+    python3 scripts/github-workflows/select_checks.py --light policy|skills  # the light contracts
 """
 from __future__ import annotations
 
@@ -61,12 +70,15 @@ from typing import Callable, Iterable
 ROOT = Path(__file__).resolve().parents[2]
 
 # The three packages' suites, one folder each under it: the library's (cad), the server's
-# (cad_server) and the shim's (cad_mcp). The cadgen jobs run them all.
-CADGEN_SUITE = "tests/python/packages"
+# (cad_server) and the shim's (cad_mcp). The packages jobs run them all.
+PACKAGES_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea", "bpy", "floor",
-         "routing")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging", "kicad", "fea", "bpy", "floor",
+         "routing", "installer")
+# How many jobs the packages' suites are split over when they run whole (CAD_TEST_SHARD); a
+# narrowed selection runs in one. Windows starts every process slower, so it takes one more.
+SHARDS = {"linux": 2, "windows": 3}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,24 +86,24 @@ class Select:
     """What one rule selects: job flags, and test files or suite directories."""
 
     flags: frozenset[str] = frozenset()
-    cadgen: frozenset[str] = frozenset()
+    packages: frozenset[str] = frozenset()
     policy: frozenset[str] = frozenset()
     skills: frozenset[str] = frozenset()
     full: bool = False
 
     def __or__(self, other: Select) -> Select:
         return Select(
-            self.flags | other.flags, self.cadgen | other.cadgen, self.policy | other.policy,
+            self.flags | other.flags, self.packages | other.packages, self.policy | other.policy,
             self.skills | other.skills, self.full or other.full,
         )
 
 
-def select(*, flags: Iterable[str] = (), cadgen: Iterable[str] = (), policy: Iterable[str] = (),
+def select(*, flags: Iterable[str] = (), packages: Iterable[str] = (), policy: Iterable[str] = (),
            skills: Iterable[str] = (), full: bool = False) -> Select:
     unknown = set(flags) - set(FLAGS)
     if unknown:
         raise ValueError(f"unknown flags {sorted(unknown)}")
-    return Select(frozenset(flags), frozenset(cadgen), frozenset(policy), frozenset(skills), full)
+    return Select(frozenset(flags), frozenset(packages), frozenset(policy), frozenset(skills), full)
 
 
 def policy(*names: str) -> Select:
@@ -109,8 +121,8 @@ NOTHING = select()
 # phase runs with nothing installed, so one that is not fails there until it is listed here
 # with a rule for what it reads.
 HEAVY_POLICY = {
-    "test_cli_stream_contract.py",          # cadgen CLIs, run
-    "test_viewer_renders_emitted_dxf.py",   # a DXF cadgen emits, through the kernel
+    "test_cli_stream_contract.py",          # the server's commands, run
+    "test_viewer_renders_emitted_dxf.py",   # a DXF the library emits, through the kernel
 }
 # Skill suites that need nothing installed: they read their skill's files.
 LIGHT_SKILL_TESTS = (
@@ -123,8 +135,8 @@ LIGHT_SKILL_TESTS = (
 # and the CAD app server's among them), the policy tests that load them, the viewer gates that
 # serve and draw through them, the wheels. A skill's commands are the server's, and the light
 # contracts that check what a skill documents run on every change.
-CADGEN_CONSUMERS = select(
-    flags=["web_viewer", "packaging"], cadgen=[CADGEN_SUITE],
+PACKAGE_CONSUMERS = select(
+    flags=["web_viewer", "packaging"], packages=[PACKAGES_SUITE],
     policy=[f"{POLICY_SUITE}/{name}" for name in sorted(HEAVY_POLICY)],
 )
 
@@ -140,8 +152,8 @@ def _test_file(suite: str, whole: str | None = None) -> Callable[[str], Select]:
             target = whole
         else:
             target = "/".join(path.split("/")[: len(suite.split("/")) + 1])
-        if suite == CADGEN_SUITE:
-            return select(cadgen=[target])
+        if suite == PACKAGES_SUITE:
+            return select(packages=[target])
         if suite == POLICY_SUITE:
             return select(policy=[target])
         return select(skills=[target])
@@ -171,16 +183,16 @@ _READS_ALL = (r"_COMMANDS|walk_packages|iter_modules|r?glob\(\s*[\"'](?:\*\*/)?\
               r"|import_module\(\s*(?![\"'])|__import__\(\s*(?![\"'])")
 
 
-def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
+def _package_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
     """The package tests a change to a leaf can reach: those in `directories`, and those whose
     text names it, names a support module that does, or reads all of the packages."""
     support = [path.stem for path in sorted((ROOT / "tests/python/support").glob("*.py"))
                if re.search(names, path.read_text(encoding="utf-8", errors="replace"))]
     pattern = re.compile("|".join([names, _READS_ALL] + [rf"\b{re.escape(stem)}\b" for stem in support]))
     found = []
-    for path in sorted((ROOT / CADGEN_SUITE).rglob("test*.py")):
+    for path in sorted((ROOT / PACKAGES_SUITE).rglob("test*.py")):
         relative = path.relative_to(ROOT).as_posix()
-        inside = any(relative.startswith(f"{CADGEN_SUITE}/{directory}/") for directory in directories)
+        inside = any(relative.startswith(f"{PACKAGES_SUITE}/{directory}/") for directory in directories)
         if inside or pattern.search(path.read_text(encoding="utf-8", errors="replace")):
             found.append(relative)
     return found
@@ -188,15 +200,15 @@ def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
 
 def _viewer_change(path: str) -> Select:
     return select(flags=["web_viewer", "packaging"],
-                  cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("cad_server/viewer", "cad_server/mcp")))
+                  packages=_package_tests_naming(_NAMES_VIEWER, ("cad_server/viewer", "cad_server/mcp")))
 
 
 def _mcp_change(path: str) -> Select:
-    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_MCP, ("cad_server/mcp",)))
+    return select(flags=["packaging"], packages=_package_tests_naming(_NAMES_MCP, ("cad_server/mcp",)))
 
 
 def _shim_change(path: str) -> Select:
-    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_SHIM, ("cad_mcp",)))
+    return select(flags=["packaging"], packages=_package_tests_naming(_NAMES_SHIM, ("cad_mcp",)))
 
 
 # The engine (cad.engine, and the server's half, cad_server.engine) is no leaf: every build,
@@ -259,17 +271,19 @@ BLENDER_GLB = (f"{LIBRARY_SRC}/engine/formats/gltf.py",
                f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py",
                f"{SERVER_SRC}/engine/cli.py", f"{SERVER_SRC}/engine/daemon.py", f"{SERVER_SRC}/engine/supervisor.py")
 BLENDER_SUITE = "tests/python/packages/blender"
-# The packages' floor, the oldest Python they declare (requires-python): the library runs on it wherever a render
-# script does (bpy's one line), in that script's process and in the worker that builds its models, and the server
-# and the shim declare it too, so the three suites run on it, in the blender job, the one job on that Python
-# (test-floor.sh), beside the cadgen jobs on the Python the server's installations run on. Whatever a 3.14-only call
-# in them could break (one reached the server once: argparse's suggest_on_error): their sources and their suites.
-FLOOR_CODE = ("packages/cad/**", "packages/cad-server/**", "packages/cad-mcp/**", f"{CADGEN_SUITE}/cad/**",
-              f"{CADGEN_SUITE}/cad_server/**", f"{CADGEN_SUITE}/cad_mcp/**")
+# The installer and what it runs: the two one-line installers, the commands they run (`cad setup`,
+# its doctor and its uninstall) and where an installation is found, registered and started. The
+# rehearsals (install-linux.yml, install-windows.yml: this tree's wheel installed on a fresh machine,
+# the way a person does) run on these and on a full run. Each also reaches what its package reaches.
+INSTALLER_CODE = (".github/workflows/install-linux.yml", ".github/workflows/install-windows.yml",
+                  "scripts/install/install.sh", "scripts/install/install.ps1",
+                  f"{SERVER_SRC}/cli/setup.py", f"{SERVER_SRC}/cli/uninstall.py", f"{SERVER_SRC}/cli/doctor.py",
+                  f"{SERVER_SRC}/_internal/providers.py", f"{SERVER_SRC}/_internal/launch.py",
+                  f"{SERVER_SRC}/_internal/installations.py")
 
 # The router (cad.kicad.route) and what it reads a board's numbers through: the board readers, their geometry
 # and the parser, and the numpy the library pins. Its copper must be the same
-# bits on every OS: the cadgen jobs run its unit files on Linux and Windows, and the routing job on macOS, whose
+# bits on every OS: the packages jobs run its unit files on Linux and Windows, and the routing job on macOS, whose
 # C library is the third (test-routing.sh). Each also reaches what its package reaches.
 ROUTING_CODE = (f"{LIBRARY_SRC}/kicad/_route.py", f"{LIBRARY_SRC}/kicad/_routing/**",
                 f"{LIBRARY_SRC}/engine/formats/kicad/geometry.py", f"{LIBRARY_SRC}/engine/formats/kicad/board_index.py",
@@ -316,9 +330,9 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
-    # The installer rehearsals: workflows of their own, dispatched by hand or by a push to main that
-    # changes the installer; a light contract reads their triggers and no test.yml job runs them.
-    Rule((".github/workflows/install-windows.yml", ".github/workflows/install-linux.yml"), NOTHING, final=True),
+    # The installer rehearsals, which test.yml calls: the workflows themselves, the installers and
+    # what they run. Not final: the server's modules among them reach what their package reaches.
+    Rule(INSTALLER_CODE, select(flags=["installer"])),
 
     # Shared by every job, or the selection itself: everything runs.
     Rule((
@@ -326,6 +340,7 @@ RULES: tuple[Rule, ...] = (
         "package.json", "package-lock.json", "requirements-dev.txt",
         ".github/workflows/test.yml", ".github/actions/**",
         "scripts/github-workflows/select_checks.py", "scripts/github-workflows/tested_tree.py",
+        "scripts/github-workflows/ci_gate.py",
         "scripts/test/common.sh", "scripts/test/unittest_files.py",
         "tests/python/support/**",
         "packages/core/**",              # bundled into cadgen's runtime and every app
@@ -337,10 +352,7 @@ RULES: tuple[Rule, ...] = (
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
     Rule(ROUTING_CODE, select(flags=["routing"])),
-    # The library, the server and the shim on the packages' oldest Python: before the leaves' and the engine's final
-    # rules.
-    Rule(FLOOR_CODE, select(flags=["floor"])),
-    Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
+    Rule(VIEWER_SHARED, PACKAGE_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(SHIM_CODE, _shim_change, final=True),
@@ -349,9 +361,9 @@ RULES: tuple[Rule, ...] = (
     Rule(FEA_SHARED, select(flags=["fea"])),
     # The GLB cad.blender.load reads and imports, how it is exported and meshed, and the clips in it.
     Rule(BLENDER_GLB, select(flags=["bpy"])),
-    Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
+    Rule(ENGINE_CODE, PACKAGE_CONSUMERS, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
-         CADGEN_CONSUMERS),
+         PACKAGE_CONSUMERS),
     # The stress study's code runs what its package runs, and the fea job, which installs netgen and CalculiX.
     Rule(FEA_CODE, select(flags=["fea"])),
     # cad.blender, bpy's environment and how cad run chooses it: what its package runs, and the blender job's bpy steps.
@@ -360,23 +372,23 @@ RULES: tuple[Rule, ...] = (
          select(skills=[f"{SKILL_SUITES}/fea"])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
-    # reaches the two hosts and the wheel, not cadgen's suites.
+    # reaches the two hosts and the wheel, not the packages' suites.
     Rule(("packages/ui/**",), select(flags=["web_ui", "web_client", "web_viewer", "mcp", "packaging"])),
     Rule(("apps/web/**",), select(flags=["web_client", "web_viewer", "packaging"])),
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
-    Rule(("apps/api/**",), select(flags=["api"])),
+    Rule(("apps/api/**",), NOTHING),  # its tests need no install: static runs them on every change
     Rule(("apps/docs/**",), select(flags=["docs"])),
     # check-dependencies.mjs walks every app's source and runs in core-js, the cheapest job
     # that has it.
     Rule(("apps/docs/src/**",), select(flags=["core_js"])),
-    # The robot renderer's browser fixtures are the payloads cadgen resolves for its descriptions:
+    # The robot renderer's browser fixtures are the payloads the server resolves for its descriptions:
     # the payload suite asserts they are current.
     Rule(("packages/ui/src/renderers/robot/__fixtures__/**",),
-         select(cadgen=[f"{CADGEN_SUITE}/cad_server/test_robot_payload.py"])),
+         select(packages=[f"{PACKAGES_SUITE}/cad_server/test_robot_payload.py"])),
     # The board renderer's fixture is the test board's plot payload: the plot suite asserts it is current.
     Rule(("packages/ui/src/renderers/board/__fixtures__/**",),
-         select(cadgen=[f"{CADGEN_SUITE}/cad/test_pcb_plot.py"])),
-    Rule(("tests/browser/**",), select(flags=["web_viewer", "packaging"])),
+         select(packages=[f"{PACKAGES_SUITE}/cad/test_pcb_plot.py"])),
+    Rule(("tests/browser/**",), select(flags=["web_viewer"])),
 
     # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
     # installed), never the package jobs'.
@@ -384,10 +396,11 @@ RULES: tuple[Rule, ...] = (
     Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
          final=True),
     Rule((f"{BLENDER_SUITE}/**", "scripts/test/test-blender.sh"), select(flags=["bpy"]), final=True),
+    # The floor's suites are the release tier's: a full run, and a change to their runner.
     Rule(("scripts/test/test-floor.sh",), select(flags=["floor"]), final=True),
-    # The router's unit files run themselves in the cadgen jobs (below) and all of them in the routing job.
+    # The router's unit files run themselves in the packages jobs (below) and all of them in the routing job.
     Rule((ROUTING_TESTS, "scripts/test/test-routing.sh"), select(flags=["routing"])),
-    Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
+    Rule((f"{PACKAGES_SUITE}/**",), _test_file(PACKAGES_SUITE, whole=PACKAGES_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
 
@@ -397,19 +410,20 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
 
     # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-python.sh",), select(packages=[PACKAGES_SUITE], skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
-    Rule(("scripts/test/test-api.sh",), select(flags=["api"])),
+    Rule(("scripts/test/test-api.sh",), NOTHING),  # static runs it on every change
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
     Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"),
-         select(flags=["web_viewer", "packaging"])),
+         select(flags=["web_viewer"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
 
-    # The one-line installer: its tests read both scripts, and the docs site serves copies of them.
+    # The one-line installer: its tests read both scripts, and the docs site serves copies of them
+    # (and the rehearsals run them: INSTALLER_CODE, above).
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
-         select(flags=["docs"], cadgen=[f"{CADGEN_SUITE}/cad_server/test_setup.py"])),
+         select(flags=["docs"], packages=[f"{PACKAGES_SUITE}/cad_server/test_setup.py"])),
 
     # What builds and checks the wheel: bundle.sh stamps metadata with sync-version.mjs.
     Rule((
@@ -515,35 +529,55 @@ def _heavy(paths: list[str], suite: str) -> list[str]:
     return [path for path in paths if not _light(path)]
 
 
-def outputs(chosen: Select, *, changed: bool = True) -> dict[str, str]:
-    """The step outputs for a selection. `changed` is false when nothing runs at all."""
+# The packages' own suites: a changed test file under one is run first, ahead of its job's suite.
+_PACKAGE_TEST = re.compile(rf"{re.escape(PACKAGES_SUITE)}/(?:cad|cad_server|cad_mcp)/(?:.*/)?test[^/]*\.py\Z")
+
+
+def _changed_tests(paths: Iterable[str], packages: list[str]) -> list[str]:
+    """The package test files a change itself touches, which their jobs run before the suite: a
+    break in a pull request's own new test is reported in a minute or two rather than at the
+    suite's end. None when they are all the selection is (the suite step runs just them)."""
+    changed = sorted({path for path in paths if _PACKAGE_TEST.match(path) and (ROOT / path).exists()})
+    selected = [path for path in changed
+                if any(path == chosen or path.startswith(chosen + "/") for chosen in packages)]
+    return [] if selected == packages else selected
+
+
+def _shards(count: int) -> str:
+    return json.dumps([f"{index}/{count}" for index in range(1, count + 1)], separators=(",", ":"))
+
+
+def outputs(chosen: Select, paths: Iterable[str] = ()) -> dict[str, str]:
+    """The step outputs for a selection of the changed `paths`."""
     if chosen.full:
-        chosen = Select(frozenset(FLAGS), frozenset({CADGEN_SUITE}), frozenset({POLICY_SUITE}),
+        chosen = Select(frozenset(FLAGS), frozenset({PACKAGES_SUITE}), frozenset({POLICY_SUITE}),
                         frozenset({SKILL_SUITES}), True)
-    cadgen = _narrow(chosen.cadgen, CADGEN_SUITE)
+    packages = _narrow(chosen.packages, PACKAGES_SUITE)
+    whole = packages == [PACKAGES_SUITE]
     heavy_policy = _heavy(_narrow(chosen.policy, POLICY_SUITE), POLICY_SUITE)
     heavy_skills = _heavy(_narrow(chosen.skills, SKILL_SUITES), SKILL_SUITES)
     result = {flag: flag in chosen.flags for flag in FLAGS}
     result.update({
-        "cadgen": bool(cadgen),
-        "cadgen_tests": " ".join(cadgen),
-        "web": result["web_ui"] or result["web_client"],
-        "blender": result["bpy"] or result["floor"],
-        "skills": changed,
-        "light_policy": " ".join(light_policy()) if changed else "",
-        "light_tests": " ".join(LIGHT_SKILL_TESTS) if changed else "",
+        "packages": bool(packages),
+        "packages_tests": " ".join(packages),
+        "linux_shards": _shards(SHARDS["linux"] if whole else 1),
+        "windows_shards": _shards(SHARDS["windows"] if whole else 1),
+        "changed_tests": " ".join(_changed_tests(paths, packages)),
+        "skills": bool(heavy_policy or heavy_skills),
         "skills_policy": " ".join(heavy_policy),
         "skills_tests": " ".join(heavy_skills),
-        "skills_runtime": bool(heavy_policy or heavy_skills),
         "full": chosen.full,
     })
     return {key: (("true" if value else "false") if isinstance(value, bool) else value) for key, value in result.items()}
 
 
 def scope(selected: dict[str, str]) -> str:
+    """`full`, or a digest of what the selection runs. Not of `changed_tests`: what runs first is
+    part of what runs."""
     if selected["full"] == "true":
         return "full"
-    digest = hashlib.sha256(json.dumps(selected, sort_keys=True).encode("utf-8")).hexdigest()
+    tested = {key: value for key, value in selected.items() if key != "changed_tests"}
+    digest = hashlib.sha256(json.dumps(tested, sort_keys=True).encode("utf-8")).hexdigest()
     return digest[:16]
 
 
@@ -574,30 +608,47 @@ def changed_paths(before: str) -> list[str] | None:
     return [path for path in listing.split("\0") if path]
 
 
+def _tested(names: list[str]) -> bool:
+    """Whether a successful run of this repository already recorded one of `names`
+    (tested_tree.py, which treats any failure to look as "not tested")."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import tested_tree
+
+    return tested_tree.main(names) == 0
+
+
 def main(argv: list[str]) -> int:
     if argv[:1] == ["--paths"]:
-        print(json.dumps(outputs(select_paths(argv[1:]), changed=len(argv) > 1), indent=2))
+        print(json.dumps(outputs(select_paths(argv[1:]), argv[1:]), indent=2))
+        return 0
+    if argv[:1] == ["--light"]:
+        lists = {"policy": light_policy(), "skills": list(LIGHT_SKILL_TESTS)}
+        if argv[1:] not in ([name] for name in lists):
+            print("usage: select_checks.py --light policy|skills", file=sys.stderr)
+            return 2
+        print(" ".join(lists[argv[1]]))
         return 0
 
+    event = os.environ.get("GITHUB_EVENT_NAME", "")
     full = os.environ.get("FULL", "") == "true"
     paths = None if full else changed_paths(os.environ.get("BEFORE", ""))
     chosen = EVERYTHING if paths is None else select_paths(paths)
-    selected = outputs(chosen, changed=paths is None or bool(paths))
+    selected = outputs(chosen, paths or ())
     tree = _git("rev-parse", "HEAD^{tree}").strip()
     record = f"tested-{tree}-{scope(selected)}"
     note = f"Selected from {'everything' if paths is None else f'{len(paths)} changed path(s)'}."
 
-    # A push repeats what its pull request ran on the same tree: skip it when that run
-    # succeeded. (tested_tree.py treats any failure to look as "not tested".)
-    if not full and paths and os.environ.get("GITHUB_EVENT_NAME") == "push":
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import tested_tree
-
-        names = [record] + ([] if selected["full"] == "true" else [f"tested-{tree}-full"])
-        if tested_tree.main(names) == 0:
-            selected = outputs(NOTHING, changed=False)
-            record = ""
-            note = "This tree was already tested with this selection; nothing runs again."
+    # A push repeats what its pull request ran on the same tree, and the nightly run what a full
+    # run (a release's, normally) already ran on main's: nothing runs again when that run succeeded.
+    already = None
+    if not full and paths and event == "push":
+        already = [record] + ([] if selected["full"] == "true" else [f"tested-{tree}-full"])
+    elif event == "schedule":
+        already = [f"tested-{tree}-full"]
+    if already and _tested(already):
+        selected = outputs(NOTHING)
+        record = ""
+        note = "This tree was already tested with this selection; nothing runs again."
 
     summary = {"tree": tree, "paths": paths, **selected}
     temp = Path(os.environ.get("RUNNER_TEMP") or ROOT / "tmp")
