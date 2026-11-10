@@ -19,10 +19,13 @@ technology is named; a machine datasheet moves them):
   5 mm as a bridge (FDM), and a horizontal round hole up to 10 mm prints unsupported (wider: a teardrop,
   or turn the part so the hole is vertical). Powder processes (SLS, MJF) need no support: there, trapped powder is the
   question.
-- **Walls, pins and holes.** Walls 0.8 mm or more (two beads of a 0.4 mm nozzle: with `--nozzle` given,
-  two of its; SLA 0.5 supported / 1.0 free,
-  SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); holes 1 mm or wider (SLS 1.5), vertical where they
-  can be; pins 1 mm (FDM, Xometry's recommendation) or 0.8 mm (SLS, a recommendation; SLA 0.5); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule) -- raised or
+- **Walls, pins and holes.** Standing walls 0.8 mm or more (two beads of a 0.4 mm nozzle: with `--nozzle`
+  given, two of its; SLA 0.5 supported / 1.0 free,
+  SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); on FDM a skin lying in the layer plane (a tray's floor, a
+  living hinge) is laid layer on layer and needs two layers (0.4 mm at 0.2 mm layers; under one layer it is
+  not printed at all); holes 1 mm or wider (SLS 1.5), vertical where they
+  can be; pins 1 mm (FDM, Xometry's recommendation) or 0.8 mm (SLS, a recommendation; SLA 0.5), and never
+  thinner than the free-wall minimum: a pin is a wall joined on one side; embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule) -- raised or
   sunk detail alone: a step running across a face is the part's shape, not text.
 - **No knife edges.** A chamfer or a draft that meets a face under 45 degrees thins to nothing over
   its last millimetres: blunt it to the wall minimum (`printing.knife_edge`, a warning: the tip prints
@@ -37,7 +40,9 @@ technology is named; a machine datasheet moves them):
   SLA 0.5; walls are judged per part, clearances per pair.
 - Within the printer: `--build-volume 256x256x256` for the person's machine (without it the fit is
   judged against a typical machine of the technology's, assumed: a warning naming it -- and an error only
-  where no orientation fits the largest machine the guide lists, 900 x 600 x 900 mm for FDM). The material and the
+  where the part fits the largest machine the guide lists lying no way, 900 x 600 x 900 mm for FDM). The fit
+  is of the part lying its best way -- on any side, turned any way on the bed, across its corners -- so it
+  does not change with how the model is turned. The material and the
   process on the part, `part.material = plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`,
   `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad model dfm "$ID"` then needs no
   `--process`, `--technology` or `--layer-height`.
@@ -86,12 +91,18 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   `mesh_too_large` (over 2 million triangles: decimate it), `inconsistent_normals`, `mesh_no_volume`.
   `mesh_repaired` (a warning) says what was put right before measuring -- doubled triangles, triangles
   wound against their neighbours, a shell inside out: export the file again, a slicer reads it as it is.
-  `bodies_intersect`: bodies that pass through each other; the volume given is their sum.
+  `bodies_intersect`: bodies that pass through each other; the volume given is their sum (a body wholly
+  inside another is counted once). `several_solids` (a warning): a part of several solids, or a mesh of
+  several bodies -- what lies between two of them is a clearance, not a gap. A B-rep of more faces than the
+  self-intersection check's budget (1000 in all) is `NOT CHECKED` for the parts past it: check them one at a
+  time.
 - Walls are `supported` (joined to the part on two sides or more) or not, each with its own minimum
   (`printing.wall_supported`, `printing.wall_unsupported`), read off the wall itself on a STEP and on a
-  mesh alike: a fin on its base is joined on one side, a skin over a cavity all round. A wall whose
-  support could not be read is `printing.wall`: judged as supported, and warned of under the unsupported
-  minimum. On a mesh
+  mesh alike from the outline of its thin region: a fin on its base and a pin on its foot are joined on one
+  side; a skin over a cavity, a tray's floor and the land a countersink leaves round a hole are joined all
+  round. A wall whose support could not be read is `printing.wall`: judged as supported, and warned of
+  between the two minima. FDM judges a skin lying in the layer plane (`lying`) by its layers
+  (`printing.skin_layer`, `printing.skin_layers`), not by two beads. On a mesh
   the field is `--samples` rays (2000) from random points over the surface (plus one from every
   triangle on a mesh of 5000 triangles or fewer), each straight in to the face it leaves through, a
   knife edge's own sliver left to the knife family: a thin `min_mm` beside a thick `p05_mm` is a small
@@ -108,9 +119,10 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   stays under the minimum wall. A warning (text-to-cad's own rule;
   no guide defines a knife edge, and the tip prints rounded): blunt it, chamfer it at 45 degrees or
   more, or move the cut that made it.
-- `mesh_at_limit` (info, a mesh alone): surface or edges that read within the mesh's own angular
-  accuracy of a limit -- a 45 degree cone's triangles read 44.3 to 45.4 -- and were not judged. The STEP or
-  the model has the angle; a finer mesh narrows the band.
+- `mesh_at_limit` (info, a mesh alone): curved surface or edges that read within the mesh's own angular
+  accuracy of a limit (3 degrees at most) -- a 45 degree cone's triangles read 44.3 to 45.4 -- and were not
+  judged. The STEP or the model has the angle; a finer mesh narrows the band. A flat face reads its own
+  angle exactly: a 30 degree flat overhang is an overhang on a mesh as on a STEP.
 - The powder processes (SLS, MJF) need no support: their overhangs are facts, not verdicts, and
   trapped powder and its escape holes (`trapped_volumes`) are the check instead. A sealed cavity in
   SLA traps resin; in FDM it prints as infill (`internal_void`). Each opening's `min_escape_hole_mm` is the
@@ -119,11 +131,15 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   apply the SLS guide's figure.
 - `support_volume` is a column fill to the plate or the part: a coarse upper bound, a cost and finish
   signal, not a failure unless the person set a budget.
-- `clearances` measures each pair of parts in an assembly, and walls are per part: attribute a thin
-  wall to its part, never to a fit gap between two.
-- On a mesh, holes, pins and embossed or engraved detail are not measured (no axes or faces): their
-  rules are not evaluated and the result says so (`families_not_measured`), so check the STEP or the
-  model. When `scale.units_suspect` is true, report
+- `clearances` measures each pair of parts in an assembly (and of solids in one part, of bodies in a
+  mesh), and walls are per part: attribute a thin wall to its part, never to a fit gap between two. A gap
+  is a slot whose walls face each other (within 45 degrees): a thread's V is no slot.
+- On a mesh, a round hole up to 3 mm across is read as a hole and judged as on a STEP, and a pin as a
+  wall. Pins' own recommended diameters and embossed or engraved detail are not measured (no axes or
+  faces): their rules are not evaluated, and the result's line says so ("not judged on a mesh: ...",
+  `families_not_measured`) -- so an `OK` of a mesh is of what a mesh can be judged by: check the STEP or
+  the model for the rest. A family that ran out of its budget on a very large mesh (`measurement_failed`,
+  `clearance_bounded`) makes the result `NOT CHECKED`, never `OK`. When `scale.units_suspect` is true, report
   a units finding and ask before comparing anything.
 
 ## Review the part
