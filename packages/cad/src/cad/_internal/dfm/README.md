@@ -792,11 +792,12 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   the face opposite it (an antiparallel plane, a coaxial cylinder) where the face is at least 2.5 times as wide
   as the two are apart (`SKIN_WIDTHS`: a plane's outline's smallest rectangle's short side, a cylinder's
   length along its axis -- each face in its own frame, so the same wherever the part stands; text-to-cad's
-  own line), the area-weighted modal distance. Where no face is that wide, one twice as wide as the part is
-  thick there votes (`STRIP_WIDTHS`, its own line too: a 100 x 4 x 2 mm strip is cut from sheet, and has no
-  wider face to outvote). A tube's two ends, a grille's webs, a bar's sides and a block's faces are opposite
-  too and are no skins: a part with none is not sheet (`why`: "no face is 2 times as wide as it is from the
-  face opposite it ... a bar or a block"). Nothing reads the part's axis-aligned box. A planar face
+  own line), the area-weighted modal distance. Where no face is that wide, one twice as wide and ten times
+  as long as the part is thick there votes (`STRIP_WIDTHS`, `STRIP_LENGTHS`, its own lines too: a 100 x 4 x 2
+  mm strip is cut from sheet, and has no wider face to outvote; a 40 x 30 x 15 mm block is no strip). A tube's
+  two ends, a grille's webs, a bar's sides and a block's faces are opposite too and are no skins: a part with
+  none is not sheet (`why`: "no face is 2 times as wide and 10 times as long as it is from the face opposite
+  it ... a bar or a block"). Nothing reads the part's axis-aligned box. A planar face
   whose rays mostly reach an antiparallel planar face `t` away is a skin. A coaxial concave/convex cylinder
   pair `t` apart is a bend; a part of such pairs with no flat skin is a closed section, a tube (not sheet,
   named at its real wall), or, where a face along the axis joins inside to outside (a slit), a sheet rolled
@@ -1021,7 +1022,7 @@ carry each of them (`parts.thickness_mm`, `bends.inside_radius_mm` and `angle_de
 `cut_file.cut_layer_count`) for a shop's own limits to be read against.
 
 Sources and when each was read: `sheet.RULES.sources`. text-to-cad's own figures, each said as its own:
-`SKIN_WIDTHS` and `STRIP_WIDTHS`, `PLATE_MM`, `LARGEST_PLATE`, `BRAKE_RADIUS_T`, `HEM_DIAMETER_T`, and a
+`SKIN_WIDTHS`, `STRIP_WIDTHS` and `STRIP_LENGTHS`, `PLATE_MM`, `LARGEST_PLATE`, `BRAKE_RADIUS_T`, `HEM_DIAMETER_T`, and a
 cut file's `WINDOW_T`.
 
 ### What it does not measure

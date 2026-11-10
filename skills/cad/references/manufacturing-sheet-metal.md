@@ -55,7 +55,8 @@ the thickness `t`; a shop's tooling and bend table move them):
   wide enough for the brake's punch between its flanges (the shop's tooling: a check by hand).
 - Stock 0.5 to 6 mm bent (10 mm cut flat) is the recommendation (warnings); past an inch (25.4 mm) it is
   plate, no sheet shop's work (`sheet.thickness_limit`, an error, text-to-cad's own floor). A strip is
-  sheet from twice as wide as it is thick; narrower, it is a bar (`sheet.not_sheet`). The material on the
+  sheet from twice as wide and ten times as long as it is thick; narrower or shorter, it is a bar or a
+  block (`sheet.not_sheet`). The material on the
   part (`part.material =
   metals.mild_steel()` or the alloy's factory: the check reads it); `--thickness` when the person named
   the gauge. `bd_materials` has no sheet process, so the check always takes `--process sheet`.
@@ -106,7 +107,7 @@ The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels
   pocket or a closed hem's double thickness `not_sheet` (one finding a feature), chamfered or rounded
   cut edges `edge_break` (a warning), a cone or a torus `formed` (`sheet.formed_surface`); a part
   that is not sheet (`is_sheet` false: `sheet.not_sheet` says why -- a bar or a block, no face twice as
-  wide as it is thick; a tube, a closed section) gets no other sheet verdict. A sheet rolled round with
+  wide and ten times as long as it is thick; a tube, a closed section) gets no other sheet verdict. A sheet rolled round with
   no flat flange is sheet, rolled, and not unrolled here: `NOT CHECKED` (`measurement_failed` for
   `bends`), to be checked by hand. `sharp_bends` are corners joined without a bend
   (`sheet.sharp_bend`): nothing past one unfolds.

@@ -60,10 +60,12 @@ _PARALLEL = 0.9995
 #: grille's webs, a bar's sides, a block's faces and a tube's two ends are not). Read on each face in its own
 #: frame, so the same wherever the part stands.
 SKIN_WIDTHS = 2.5
-#: Where no face is that wide, one this many times as wide as the part is thick there still makes it a strip of
-#: sheet (a 4 mm strip of 2 mm sheet is laser cut; it has no wider face to outvote); under it the part is as much
-#: a bar on its side as a strip: a 100 x 8 x 6 mm bar, a 30 x 30 x 20 mm block. text-to-cad's own line too.
+#: Where no face is that wide, one this many times as wide, and ``STRIP_LENGTHS`` times as long, as the part is
+#: thick there still makes it a strip of sheet (a 100 x 4 mm strip of 2 mm sheet is laser cut; it has no wider
+#: face to outvote). Narrower it is as much a bar on its side (100 x 8 x 6 mm); shorter, a block (40 x 30 x 15
+#: mm). text-to-cad's own lines too.
 STRIP_WIDTHS = 2.0
+STRIP_LENGTHS = 10.0
 #: A bend this far round or more is a hem (to 185 degrees, its inside diameter within ``sheet.HEM_DIAMETER_T``
 #: thicknesses), a U-bend (as far round, wider) or a curl: its mold lines meet at no finite point, so it has no
 #: setback, bend deduction or distance from a mold line.
@@ -567,16 +569,18 @@ class _Analysis:
                     found.append(_Hit(sample.area, hit[0], self.part.face_ordinal(hit[1]), sample.point))
             self.hits[ordinal] = found
 
-    def _width(self, a: int) -> float:
-        """How wide face ``a`` is, in its own frame: a plane's outline's smallest rectangle's short side, a
-        cylinder's length along its axis."""
+    def _width(self, a: int) -> tuple[float, float]:
+        """How wide and how long face ``a`` is, in its own frame: a plane's outline's smallest rectangle's short
+        and long sides, a cylinder's length along its axis (both)."""
         surface = self.surfaces[a - 1]
         points = np.array([(p.X, p.Y, p.Z) for edge in self.faces[a - 1].outer_wire().edges()
                            for p in (edge.position_at(float(u)) for u in np.linspace(0.0, 1.0, 9))])
         if surface.kind == "cylinder":
-            return float(np.ptp(points @ np.array(surface.axis)))
+            along = float(np.ptp(points @ np.array(surface.axis)))
+            return along, along
         u = _perpendicular(np.array(surface.normal))
-        return plane.min_rectangle(np.column_stack([points @ u, points @ np.cross(surface.normal, u)]))[1]
+        long, short, _ = plane.min_rectangle(np.column_stack([points @ u, points @ np.cross(surface.normal, u)]))
+        return short, long
 
     def classify(self) -> None:
         # The votes for the thickness: every ray between a face and the face opposite it -- an antiparallel
@@ -586,17 +590,21 @@ class _Analysis:
         opposite = {a: [h for h in hs if h.distance is not None and h.face and self._opposite(a, h.face)]
                     for a, hs in self.hits.items()}
         opposite = {a: hs for a, hs in opposite.items() if hs}
-        widths = {a: self._width(a) for a in opposite}
-        planar: list[tuple[float, float]] = []
-        for least in (SKIN_WIDTHS, STRIP_WIDTHS):  # a strip's faces vote only where no wider face does
-            planar = planar or [(h.distance, h.area) for a, hs in opposite.items() for h in hs
-                                if widths[a] >= least * h.distance * (1.0 - 1e-9)]
+        sizes = {a: self._width(a) for a in opposite}
+        widths = {a: size[0] for a, size in sizes.items()}
+        planar = [(h.distance, h.area) for a, hs in opposite.items() for h in hs
+                  if widths[a] >= SKIN_WIDTHS * h.distance * (1.0 - 1e-9)]
+        # a strip's faces vote only where no wider face does
+        planar = planar or [(h.distance, h.area) for a, hs in opposite.items() for h in hs
+                            if widths[a] >= STRIP_WIDTHS * h.distance * (1.0 - 1e-9)
+                            and sizes[a][1] >= STRIP_LENGTHS * h.distance * (1.0 - 1e-9)]
         if not planar and opposite:
             # no skin: the facts are read as before, off the opposite faces there are, and the part is not sheet
             widest = max(opposite, key=lambda a: (widths[a], self.areas[a - 1]))
             apart = float(np.median([h.distance for h in opposite[widest]]))
-            self.why = (f"no face is {STRIP_WIDTHS:g} times as wide as it is from the face opposite it (the widest "
-                        f"is {widths[widest]:.4g} mm wide and {apart:.4g} mm across): a bar or a block, not sheet")
+            self.why = (f"no face is {STRIP_WIDTHS:g} times as wide and {STRIP_LENGTHS:g} times as long as it is "
+                        f"from the face opposite it (the widest is {widths[widest]:.4g} mm wide and {apart:.4g} mm "
+                        "across): a bar or a block, not sheet")
             self.block = True
             planar = [(h.distance, h.area) for hs in opposite.values() for h in hs]
         if not planar:
