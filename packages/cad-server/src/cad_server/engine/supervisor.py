@@ -104,7 +104,7 @@ from typing import Any, Callable
 from cad.engine import frames, places
 from cad.engine.client import WORKER_STDERR
 
-__all__ = ["Gone", "Withdrawn", "PRESSURE_SHARE", "Process", "RETIRED_KEPT", "STOP_SECONDS", "Service", "Standby", "Supervisor",
+__all__ = ["Gone", "PRESSURE_SHARE", "Process", "RETIRED_KEPT", "STOP_SECONDS", "Service", "Standby", "Supervisor",
            "Words"]
 
 # Under the system's memory pressure, the processes' resident memory is brought down to this share of
@@ -204,14 +204,6 @@ class Service:
         for seconds in (self.ready_seconds, self.standby.ready_seconds if self.standby else None):
             if seconds is not None and not seconds > 0:
                 raise ValueError(f"ready_seconds is {seconds!r}: a positive number, or None")
-
-
-# How often a lease that may give up asks whether it has (``Supervisor.lease``'s ``gave_up``).
-GAVE_UP_SECONDS = 0.2
-
-
-class Withdrawn(Exception):
-    """A lease that gave up while it waited its turn (``Supervisor.lease``'s ``gave_up``)."""
 
 
 class Gone(Exception):
@@ -673,16 +665,14 @@ class Supervisor:
 
     def lease(self, service: str, key: str, environment: dict[str, str], cwd: str | None = None,
               loading: Callable[[str], None] | None = None, label: str | None = None,
-              python: str | None = None, python_key: str | None = None,
-              gave_up: Callable[[], bool] | None = None) -> Any:
+              python: str | None = None, python_key: str | None = None) -> Any:
         """The process of ``service`` for ``key`` (a script's path, a document's id; ``label`` what it
         is said as, the key by default), for one request, waiting its turn (see the module): started
         when there is none, or the standby taken for it. ``release`` it after. ``loading`` is told the
         standby's notice, once, when the lease waits for the standby being started past its patience.
         ``python``: the caller's Python (a service whose ``interpreter`` is ``"lease"``), which a process
         started for the lease runs, and ``python_key`` the key of its environment (by default the Python
-        itself): a key of its own, and no standby. ``gave_up``, asked while the lease waits its turn: true,
-        the lease leaves the queue and ``Withdrawn`` is raised."""
+        itself): a key of its own, and no standby."""
         declared = self.services[service]
         if python is not None and declared.interpreter != "lease":
             raise ValueError(f"a {service} runs its own environment's Python: a lease names none")
@@ -708,11 +698,7 @@ class Supervisor:
                 told.start()
             try:
                 while not ticket.granted:
-                    if gave_up is not None and gave_up():
-                        self.queue.remove(ticket)
-                        self._grant()
-                        raise Withdrawn
-                    self.lock.wait(GAVE_UP_SECONDS if gave_up is not None else None)
+                    self.lock.wait()
             finally:
                 if told is not None:
                     told.cancel()
