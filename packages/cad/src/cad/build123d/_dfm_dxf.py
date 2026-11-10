@@ -685,28 +685,29 @@ def _units(name: str, code: int, given: str | None) -> tuple[str, float, list[di
 
 
 def _units_suspect(unit: str, extents: Any, options: dict[str, Any]) -> str | None:
-    """Why the unit makes the part implausible, read the other way, or None: in millimetres a part under an
-    inch; in inches a part larger than the sheet (the one given, else the standard sheet). The rules still run
-    in the unit the file is read in."""
+    """Why the unit makes the drawing implausible, or None. A cut file's own two mistakes first, each read the
+    other way: in millimetres a drawing under an inch; in inches one larger than the sheet (the one given,
+    else the standard sheet). Then what every source is held to (``_common.units_doubt``): under a
+    millimetre or over ten metres across. The rules still run in the unit the file is read in."""
+    from cad._internal.dfm import _common
     from cad._internal.dfm import sheet as rules_side
 
-    if unit not in ("in", "mm") or extents is None or not len(extents):
+    if extents is None or not len(extents):
         return None
     long, short = float(max(extents)), float(min(extents))
     if long <= 0:
         return None
-    if unit == "mm":
-        if long >= 25.4:
-            return None
+    sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.DEFAULT_SHEET
+    if unit == "mm" and long < 25.4:
         return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm; read as inches it is "
                 f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches give --units in (and set "
                 "$INSUNITS to 1)")
-    sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.DEFAULT_SHEET
-    if long <= sheet[0] and short <= sheet[1]:
-        return None
-    return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "
-            f"{sheet[1]:.4g} mm sheet; read as millimetres it is {long / 25.4:.4g} x {short / 25.4:.4g} mm: if it "
-            "was drawn in millimetres give --units mm (and set $INSUNITS to 4)")
+    if unit == "in" and (long > sheet[0] or short > sheet[1]):
+        return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "
+                f"{sheet[1]:.4g} mm sheet; read as millimetres it is {long / 25.4:.4g} x {short / 25.4:.4g} mm: if "
+                "it was drawn in millimetres give --units mm (and set $INSUNITS to 4)")
+    doubt = _common.units_doubt(math.hypot(long, short), f"the file is read in {unit} and its cut geometry is")
+    return doubt["note"] if doubt["units_suspect"] else None
 
 
 def _nothing_to_cut(name: str, read: dict[str, Any]) -> Unmeasured:

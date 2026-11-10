@@ -28,6 +28,7 @@ measurements with them.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 from cad._internal.refused import ArgumentRefused
@@ -36,7 +37,8 @@ from cad._internal.dfm._common import mm, not_applicable, occurrences
 from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
-__all__ = ["DEFAULT_SHEET", "MEASURED_FROM", "OPTIONS", "RULES", "context", "findings", "k_factor", "sheet_size",
+__all__ = ["DEFAULT_SHEET", "LARGEST_PLATE", "MEASURED_FROM", "OPTIONS", "RULES", "context", "findings", "k_factor",
+           "sheet_size",
            "summary", "validate"]
 
 OPTIONS: dict[str, Any] = {"thickness": None, "k_factor": None, "bend_radius": None, "kerf": None,
@@ -80,6 +82,13 @@ _HARDNESS = {"aluminum": "soft", "copper": "soft", "brass": "soft", "steel": "me
 #: The sheet a flat pattern is held to where no --sheet-size names the shop's (long x short, mm): a 5 x 10 ft
 #: blank, the largest of the standard sheet sizes (4 x 8, 4 x 10, 5 x 10 ft).
 DEFAULT_SHEET = (3048.0, 1524.0)
+
+
+#: The largest plate a flat pattern can be cut from where no --sheet-size names the shop's (long x short, mm):
+#: text-to-cad's own floor -- a 10 x 40 ft plate, the largest steel mills and service centres stock (120 x 480
+#: in), which the longest laser and plasma beds in general service take. A flat longer or wider is cut from no
+#: one plate: it is split and welded, or it is a mistake of units.
+LARGEST_PLATE = (12192.0, 3048.0)
 
 
 def sheet_size(text: str | None) -> tuple[float, float] | None:
@@ -197,13 +206,23 @@ def _hems(source: Source) -> tuple[Rule, ...]:
 
 
 def _flat_size(source: Source, note: str) -> tuple[Rule, ...]:
-    """The flat pattern on the standard sheet assumed (``DEFAULT_SHEET``), a warning: no shop's limit. Against
-    the sheet given (``--sheet-size``, the shop's) it is a finding of fact (``_on_sheet``), which cites no
-    guide."""
+    """The flat pattern on the standard sheet assumed (``DEFAULT_SHEET``), a warning: no shop's limit; and on
+    the largest plate there is (``LARGEST_PLATE``, text-to-cad's own floor), an error: no shop cuts it in one
+    piece. Against the sheet given (``--sheet-size``, the shop's) it is a finding of fact (``_on_sheet``), which
+    cites no guide."""
     # a part that is not sheet has no flat pattern (``sheet.not_sheet`` says so): the rule is a sheet part's
     more = {"severity": "warning", "note": note, "when": {"sheet_given": False},
             "item_when": {"is_sheet": True}}
+    plate = {"item_when": {"is_sheet": True}, "when": {"sheet_given": False},
+             "note": "text-to-cad's own floor: a 10 x 40 ft plate (3048 x 12192 mm) is the largest plate stocked "
+                     "and the longest bed in general service; --sheet-size names a shop's own"}
     return (
+        _r("flat_length_limit", "parts", "flat_length_mm", "max", LARGEST_PLATE[0], "mm", "flat pattern's long side",
+           OWN, **plate, fix="split the part into pieces a plate holds: no stock plate is longer than {limit:.5g} "
+                             "mm (or give --sheet-size, the shop's own)"),
+        _r("flat_width_limit", "parts", "flat_width_mm", "max", LARGEST_PLATE[1], "mm", "flat pattern's short side",
+           OWN, **plate, fix="split the part into pieces a plate holds: no stock plate is wider than {limit:.5g} "
+                             "mm (or give --sheet-size, the shop's own)"),
         _r("flat_length", "parts", "flat_length_mm", "max", 1.0, "mm", "flat pattern's long side", source,
            scale_by="sheet_long_mm", **more,
            fix="split the part or nest it on a larger sheet: the flat pattern is longer than the {limit:.4g} mm "
@@ -424,6 +443,21 @@ _FILE_DEFECTS = {
 FLAT_MATERIAL_SLACK = 0.03
 
 
+#: A ref as an item names a face or an edge (``bracket/face 7``): what ``cad step inspect`` resolves.
+_REF = re.compile(r"(?:^|/)(?:vertex|edge|face) \d+$")
+
+
+def _refs(*named: Any) -> list[str]:
+    """The refs among what a finding names -- its location first, then each face or edge of its items, once
+    each -- so no ref has to be read out of its message. A cut file's places (a layer and a handle) are none."""
+    found: dict[str, None] = {}
+    for value in named:
+        for text in value if isinstance(value, (list, tuple)) else (value,):
+            if isinstance(text, str) and _REF.search(text):
+                found.setdefault(text)
+    return list(found)
+
+
 def _sharp_message(corner: dict[str, Any]) -> str:
     t = corner.get("thickness_mm") or 0.0
     kind = corner.get("kind")
@@ -489,7 +523,8 @@ def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
                 "stamped (an emboss, a louver, a bead), not brake-bent, and no rule here judges a formed feature",
                 here[0].get("location"),
                 "quote it as a formed feature (stamped, rolled or spun) with the shop's own limits, or make each "
-                "bend a cylinder about a straight axis between flat flanges"))
+                "bend a cylinder about a straight axis between flat flanges",
+                refs=_refs(here[0].get("location"), [item.get("face") for item in here])))
         else:
             deepest = max(float(item.get("break_mm") or 0.0) for item in here)
             found.append(CheckFinding(
@@ -497,7 +532,8 @@ def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
                 f"{len(here)} face(s) chamfer or round the cut edges ({_faces_said(here)}; up to {deepest:.3g} mm "
                 "deep): a laser or waterjet cuts a square edge, so a chamfer or a round is a second operation "
                 "(deburring, an edge-break pass)", here[0].get("location"),
-                "leave the cut edges square and call for deburring, or quote the chamfers as a second operation"))
+                "leave the cut edges square and call for deburring, or quote the chamfers as a second operation",
+                value=deepest, unit="mm", refs=_refs(here[0].get("location"), [item.get("face") for item in here])))
     return found
 
 
@@ -533,7 +569,8 @@ def _cut_file_notes(report: dict[str, Any]) -> list[CheckFinding]:
             "warning", "sheet.joined_gap",
             f"{count} joint(s) closed across a gap of up to {widest.get('gap_mm') or 0.0:.3g} mm: ends under 0.01 mm "
             "apart are read as one point, and a cutter's software may read them as an open contour",
-            widest.get("location"), "snap the ends together: join the curves into one closed polyline"))
+            widest.get("location"), "snap the ends together: join the curves into one closed polyline",
+            value=widest.get("gap_mm"), limit=0.01, unit="mm", op="max"))
     lines = (report.get("cut_file") or {}).get("bend_line_count")
     if lines:
         found.append(CheckFinding(
@@ -613,7 +650,8 @@ def _on_sheet(part: dict[str, Any], resolved: dict[str, Any]) -> list[CheckFindi
             found.append(CheckFinding(
                 "error", code, f"the flat pattern's {what} side {value:.4g} mm is over the {limit:.4g} mm of the "
                                f"{given[0]:.4g} x {given[1]:.4g} mm sheet given (--sheet-size)",
-                part.get("location"), fix))
+                part.get("location"), fix, value=float(value), limit=float(limit), unit="mm", op="max",
+                refs=_refs(part.get("location"))))
     return found
 
 
@@ -631,14 +669,16 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             found.append(CheckFinding(
                 "error", "sheet.not_sheet",
                 f"{name} is not one sheet: {part.get('why') or 'no constant thickness'}",
-                where, "model it as one thickness of sheet, its bends as inside and outside radii a thickness apart"))
+                where, "model it as one thickness of sheet, its bends as inside and outside radii a thickness apart",
+                refs=_refs(where)))
         measured = part.get("thickness_mm")
         if given is not None and isinstance(measured, (int, float)):
             tolerance = max(0.01, 0.005 * float(given))
             if abs(float(measured) - float(given)) > tolerance:
                 found.append(CheckFinding("error", "sheet.thickness_mismatch",
                                           f"the part is {measured:.4g} mm thick, the stock {float(given):.4g} mm",
-                                          where, "model the part at the stock's thickness, or order the part's"))
+                                          where, "model the part at the stock's thickness, or order the part's",
+                                          value=float(measured), limit=float(given), unit="mm", refs=_refs(where)))
         found.extend(_on_sheet(part, resolved))
         fraction = part.get("flat_material_fraction")
         # where a sharp_bend or a judged not_sheet face of this part already says why the flat is short, that
@@ -663,7 +703,8 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             found.append(CheckFinding(
                 "error", "sheet.flat_incomplete",
                 f"the flat pattern holds {100 * float(fraction):.0f}% of the part's material: {why}; it is not the "
-                "part's blank", missing[0] if missing else where, fix))
+                "part's blank", missing[0] if missing else where, fix, value=float(fraction), limit=1.0, unit="ratio",
+                refs=_refs(missing, where)))
         for joggle in part.get("joggles") or ():
             web = joggle.get("web_mm") or 0.0
             between = ("no flat between them" if web <= 0 else
@@ -675,22 +716,31 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                 "joggle (an offset bend), unrolled into the flat; it needs an offset/joggle die; not measured",
                 joggle.get("location"),
                 "a joggle is formed in one hit by an offset (joggle) die: confirm its offset and run with the shop, "
-                "or lengthen the web to a flange's minimum and bend it as two bends"))
+                "or lengthen the web to a flange's minimum and bend it as two bends",
+                value=float(web), limit=joggle.get("web_min_mm"), unit="mm", op="min",
+                refs=_refs(joggle.get("location"), joggle.get("bends"))))
         if part.get("flat_overlap_mm2"):
             found.append(CheckFinding("error", "sheet.flat_overlap",
                                       f"the flat pattern overlaps itself by {part['flat_overlap_mm2']:.4g} mm2: "
                                       "it cannot be cut in one piece", where,
-                                      "shorten or cut back the flanges that collide when unfolded"))
+                                      "shorten or cut back the flanges that collide when unfolded",
+                                      value=float(part["flat_overlap_mm2"]), limit=0.0, unit="mm2", op="max",
+                                      refs=_refs(where)))
         if part.get("unfold_note"):
-            found.append(CheckFinding("warning", "sheet.not_unfolded", str(part["unfold_note"]), where))
+            found.append(CheckFinding("warning", "sheet.not_unfolded", str(part["unfold_note"]), where,
+                                      refs=_refs(where, part.get("not_in_flat"))))
     found.extend(_surface_findings(report))
     corners: dict[tuple[Any, Any, Any], list[dict[str, Any]]] = {}
     for corner in _items(report, "sharp_bends"):  # one finding per place and kind, the rest counted
         corners.setdefault((corner.get("location"), corner.get("kind"), corner.get("angle_deg")), []).append(corner)
     for (location, _, _), here in corners.items():
         more = f" (and {len(here) - 1} more at this ref)" if len(here) > 1 else ""
+        # its figure: a sharp corner's angle, else the one radius modelled
+        angle, radius = here[0].get("angle_deg"), here[0].get("inside_radius_mm") or here[0].get("outside_radius_mm")
         found.append(CheckFinding("error", "sheet.sharp_bend", _sharp_message(here[0]) + more, location,
-                                  _sharp_hint(here[0])))
+                                  _sharp_hint(here[0]), value=angle if angle is not None else radius,
+                                  unit=None if angle is None and radius is None else "deg" if angle is not None else "mm",
+                                  refs=_refs(location, *(corner.get("faces") for corner in here))))
     # the shop's radius (--bend-radius) against the modelled one: one finding a bend
     radius = resolved.get("bend_radius")
     bends = _items(report, "bends")
@@ -704,18 +754,20 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                     "warning", "sheet.bend_radius_differs",
                     f"the bend's inside radius is {value:.4g} mm, the shop's {radius:.4g} mm: the part and its "
                     "flat pattern will come out differently", bend.get("location"),
-                    f"model the bend at the shop's {radius:.4g} mm inside radius"))
-    mixed: dict[str, set[float]] = {}  # a part's own bends: two parts of two radii mix none
+                    f"model the bend at the shop's {radius:.4g} mm inside radius", value=float(value), limit=radius,
+                    unit="mm", refs=_refs(bend.get("location"), bend.get("faces"))))
+    mixed: dict[str, dict[float, str]] = {}  # a part's own bends: two parts of two radii mix none
     for bend in bends:  # hems and curls: their own tools
         if bend.get("kind", "bend") == "bend" and isinstance(bend.get("inside_radius_mm"), (int, float)):
-            mixed.setdefault(_owner(bend.get("location")), set()).add(round(float(bend["inside_radius_mm"]), 3))
+            mixed.setdefault(_owner(bend.get("location")), {}).setdefault(
+                round(float(bend["inside_radius_mm"]), 3), bend.get("location"))
     for owner, radii in mixed.items():
         if len(radii) > 1:
             found.append(CheckFinding(
                 "info", "sheet.bend_radii_mixed",
                 f"{owner.rsplit('/', 1)[-1] or 'the part'}'s bends use {len(radii)} inside radii "
                 f"({', '.join(f'{r:g}' for r in sorted(radii))} mm)", "bends",
-                "one radius for every bend saves tool changes"))
+                "one radius for every bend saves tool changes", refs=_refs([radii[r] for r in sorted(radii)])))
     kerf = resolved.get("kerf")
     if kerf:
         for family, field, what in (("holes", "size_mm", "hole"), ("webs", "width_mm", "web"),
@@ -726,17 +778,21 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                     found.append(CheckFinding("error", "sheet.under_kerf",
                                               f"a {what} {value:.4g} mm wide is narrower than the {float(kerf):g} mm "
                                               "kerf: the cut takes it away", item.get("location"),
-                                              f"make it wider than the kerf, {float(kerf):g} mm"))
+                                              f"make it wider than the kerf, {float(kerf):g} mm", value=float(value),
+                                              limit=float(kerf), unit="mm", op="min",
+                                              refs=_refs(item.get("location"), item.get("faces"))))
     for hole in _items(report, "holes"):
         if hole.get("in_bend"):
             found.append(CheckFinding("warning", "sheet.hole_in_bend", "a hole cuts across a bend: it distorts "
                                       "as the bend forms", hole.get("location"),
-                                      "move the hole out of the bend, or cut it after bending"))
+                                      "move the hole out of the bend, or cut it after bending",
+                                      refs=_refs(hole.get("location"), hole.get("faces"))))
     for family, (code, severity, what, fix) in _FILE_DEFECTS.items():
         items = _items(report, family)
         for item in items[:8]:
+            figure = {"value": item["length_mm"], "unit": "mm"} if "length_mm" in item else {}
             found.append(CheckFinding(severity, code, f"{what} ({item.get('detail') or item.get('kind') or ''})"
-                                      .replace(" ()", ""), item.get("location"), fix))
+                                      .replace(" ()", ""), item.get("location"), fix, **figure))
         if len(items) > 8:
             found.append(CheckFinding(severity, code, f"{len(items) - 8} more of the same", family))
     found.extend(_thickness_unknown(report, resolved))

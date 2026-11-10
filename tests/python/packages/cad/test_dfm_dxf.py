@@ -160,6 +160,22 @@ class CutFileTest(unittest.TestCase):
         self.assertIn("units_differ", self.codes(over))
         self.assertEqual(over.measurements["parts"]["items"][0]["flat_length_mm"], 101.6)
 
+    def test_a_drawing_larger_than_any_plate_fails_and_its_units_are_doubted(self) -> None:
+        import warnings
+
+        def build(msp, _):
+            _plate(msp, 100, 50)        # drawn in metres: 100 m x 50 m
+            msp.add_circle((20, 30), 5)
+        path = self.write("metres", build, ezdxf.units.M)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")   # no overflow in the plane's arithmetic at this size
+            result = self.check(path, thickness=2.0)
+        self.assertEqual(self.errors(result), ["sheet.flat_length_limit", "sheet.flat_width_limit"])
+        (doubt,) = [f for f in result.findings if f.code == "units_suspect"]
+        self.assertIn("111803 mm across, implausibly large", doubt.message)
+        # the same drawing read in millimetres is a 100 x 50 mm plate
+        self.assertEqual(self.errors(self.check(path, thickness=2.0, units="mm")), [])
+
     def test_a_cut_file_with_no_thickness_says_its_rules_waited(self) -> None:
         def build(msp, _):
             _plate(msp)

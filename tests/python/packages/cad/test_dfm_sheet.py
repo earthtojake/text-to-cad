@@ -458,6 +458,19 @@ class TypeSideTest(unittest.TestCase):
         self.assertEqual([(f.code, f.severity) for f in assumed], [("sheet.flat_length", "warning")])
         self.assertIn("give --sheet-size", assumed[0].hint)
 
+    def test_a_flat_no_plate_holds_is_an_error_of_text_to_cads_own(self) -> None:
+        # longer than a 10 x 40 ft plate, the largest stocked: cut from no one plate, wherever it lies
+        for placed in (bd.Box(20000, 3000, 2), turned(bd.Box(20000, 3000, 2))):
+            result = checked(placed)
+            (limit,) = [f for f in result.findings if f.severity == "error"]
+            self.assertEqual((limit.code, limit.value, limit.limit), ("sheet.flat_length_limit", 20000.0, 12192.0))
+            self.assertTrue(limit.source.startswith("text-to-cad, its own figure"), limit.source)
+        # one such a plate holds is over the standard sheet assumed, a warning; and the shop's own sheet rules
+        self.assertEqual({code for severity, code in verdicts(checked(bd.Box(12000, 3000, 2)))},
+                         {"units_suspect", "sheet.flat_length", "sheet.flat_width"})
+        self.assertEqual(verdicts(checked(bd.Box(20000, 3000, 2), sheet_size="20000x3000")),
+                         [("warning", "units_suspect")])
+
     def test_a_bend_relief_is_as_wide_as_the_thickness(self) -> None:
         from cad._internal.dfm import rules
 
@@ -497,6 +510,26 @@ class TypeSideTest(unittest.TestCase):
                 if finding.location and "/face " in finding.location:
                     hits = refs.resolve_structure(structure, finding.location, path)
                     self.assertEqual(len(hits), 1, finding.location)
+            # what no rule's verdict says names its faces as data too: a sharp corner's, a chamfered edge's, a
+            # block's -- each ref one `cad step inspect` resolves, the finding's location the first
+            sharp = _boxes_bracket()
+            chamfered = bd.Pos(100, 0, 0) * bd.chamfer(bd.Box(80, 40, 3).edges(), 0.5)
+            chamfered.label = "chamfered"
+            block = bd.Pos(0, 100, 0) * bd.Box(50, 40, 30)
+            block.label = "block"
+            path = Path(folder) / "three.step"
+            bd.export_step(bd.Compound(children=[sharp, chamfered, block]), str(path))
+            result = step.dfm(path, process="sheet")
+            structure = Loaded(path).structure()
+            found = {f.code: f for f in result.findings}
+            for code, count in (("sheet.sharp_bend", 4), ("sheet.edge_break", 16), ("sheet.not_sheet", 1)):
+                finding = found[code]   # (the corner's two faces inside and two outside; the skins' chamfers)
+                self.assertEqual(len(finding.refs), count, (code, finding.refs))
+                self.assertEqual(finding.refs[0], finding.location)
+                for ref in finding.refs:
+                    self.assertEqual(len(refs.resolve_structure(structure, ref, path)), 1, ref)
+            self.assertEqual((found["sheet.sharp_bend"].value, found["sheet.sharp_bend"].unit), (90.0, "deg"))
+            self.assertEqual((found["sheet.edge_break"].value, found["sheet.edge_break"].unit), (0.5, "mm"))
 
 
 def checked(shape: bd.Shape, **options):

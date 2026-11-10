@@ -147,7 +147,7 @@ def inside(points: np.ndarray, loops: Sequence[Loop]) -> np.ndarray:
             p = points[rows, None, :]
             ya, yb = a[None, :, 1], b[None, :, 1]
             crosses = (ya > p[..., 1]) != (yb > p[..., 1])
-            dy = np.where(np.abs(yb - ya) < 1e-300, 1e-300, yb - ya)
+            dy = np.where(crosses, yb - ya, 1.0)  # (a segment the point's level crosses is not level itself)
             x_at = a[None, :, 0] + (p[..., 1] - ya) * (b[None, :, 0] - a[None, :, 0]) / dy
             count[rows] += (crosses & (p[..., 0] < x_at)).sum(axis=1)
     return count % 2 == 1
