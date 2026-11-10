@@ -983,8 +983,13 @@ class RulesTest(unittest.TestCase):
         part = _part(bd.Box(40, 30, 12) - _pocket(10, 10, 4, 0.0, 6), "block")
         live = cnc(part)
         written = _check(part)
-        self.assertEqual(sorted(f.location for f in live.findings if f.code == "cnc.internal_corner_sharp"),
-                         sorted(f.location for f in written.findings if f.code == "cnc.internal_corner_sharp"))
+        # a corner is at its edge, and a STEP numbers its edges anew: the corners are the same faces' in both
+        def corners(result: object) -> list[list[str]]:
+            return sorted(sorted(ref for ref in f.refs if "/face " in ref)
+                          for f in result.findings if f.code == "cnc.internal_corner_sharp")
+
+        self.assertEqual(len(corners(live)), 4)
+        self.assertEqual(corners(live), corners(written))
         json.dumps(live.measurements, allow_nan=False)
 
 

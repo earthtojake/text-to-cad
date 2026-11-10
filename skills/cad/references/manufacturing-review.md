@@ -20,11 +20,15 @@ cad stl dfm part.stl --process printing --technology sla --json
 
 A model, a STEP or an xbf is measured exactly, and each finding names a face ref; a mesh (STL, 3MF,
 GLB) is measured as triangles, at `x, y, z` in millimetres. In a check script,
-`cad.model.dfm(handle, process=...)` and `cad.step.dfm(path, process=...)` return the same result as
-data.
+`cad.model.dfm(handle, process=...)`, `cad.step.dfm(path, process=...)` and, on a live build123d
+shape, `cad.build123d.dfm(shape, process=...)` return the same result as data: `result.status` is
+`"ok"`, `"failed"` or `"not_checked"`, numbers are given as numbers (`tools=[3, 6]`), and `strict=True`
+fails on a warning.
 
 Run the check on the part's own id: each part model has its own document, and an assembly's check
-judges nothing a part's does not, and names the assembly in every ref. Process-specific flags that
+names the assembly in every ref. An assembly's check judges every part, and a part used several times
+each way it stands (a print's overhangs and a molding's draft turn with it): an occurrence turned
+another way has findings of its own, at its own ref. Process-specific flags that
 change the verdicts (`--axes`, `--tools`, `--pull`, `--thickness`, `--build-volume`) belong in the
 script's `Check:` line.
 
@@ -52,37 +56,55 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
 
 ## Read the result
 
-- **The exit.** 1 when a finding is an error (a limit the part breaks as drawn) or a family was not
-  measured (`measurement_failed`: the rest is still reported, so never read it as "no findings").
-  The last line digests a failure: `FAILED <id>: N blocking finding(s); <what was measured>; failed:
-  cnc.internal_corner_sharp x4, ...`: each failing rule with its count of error failures, then every other
-  error by its code. 0 is not an approval: warnings (recommendations, cost, risk) and unverified rules
-  remain, and a check that judged nothing says so (`rules_none_evaluated`). 2 means the command itself
-  was refused -- an option of another process or kind, no process where none is declared or the parts
-  declare several, a file that is not there, a mesh asked for cnc or sheet: fix the command, not the part.
-- **Fix by code.** A part with no closed solid (an open shell, a face) is refused, `not_solid`: close
-  it or check the solid meant. What puts every figure in doubt comes first, whatever its severity
-  (`not_watertight` and `not_sound`, errors in every process; `measurement_failed`, `units_suspect`: a
+- **The state and the exit.** The last line leads with one of three, and the exit status is it
+  (`"status"` in `--json`: `ok`, `failed`, `not_checked`; `"ok"` is true for the first alone):
+
+  | Last line | Exit | It says |
+  | --- | --- | --- |
+  | `OK <id>: [N warning(s); ]<what was measured>` | 0 | every part was measured and no finding is an error. Not an approval: warnings (recommendations, cost, risk) and unverified rules remain |
+  | `FAILED <id>: E error(s)[, W warning(s)]; <what was measured>; failed: cnc.internal_corner_sharp x4, ...` | 1 | a finding is an error: the part cannot be made by this process as drawn. With `--strict`, a warning fails too |
+  | `NOT CHECKED <id>: <code> ...` | 3 | the check did not judge what it was asked to: no verdict, never a pass, never "no findings". `"reason"` is the code |
+
+  `NOT CHECKED` is a part with no closed solid (`not_solid`: an open shell, a face -- close it or check
+  the solid meant), a source that does not read (`document_unreadable`, `mesh_unreadable`,
+  `document_empty`), a family that could not be measured (`measurement_failed`: the rest is still
+  reported), faces the kernel failed to intersect rays with (`rays_unintersected`: rebuild the face it
+  names), rules that judged nothing (`rules_none_evaluated`), or a check the engine did not finish
+  (cancelled by a run of the model's script, stopped: run it again). A part that both fails and was not
+  wholly checked is `FAILED`, its line ending `; not checked: <code> xN`. Exit 2 means the command itself
+  was refused -- an option of another process or kind, a value no machine has (`--tools 1000`), no process
+  where none is declared or the parts declare several, a file that is not there, a mesh asked for cnc or
+  sheet: fix the command, not the part.
+- **One count.** The line's errors and warnings count features, one finding each, and `failed: <rule>
+  xN` is the same count by rule; a rule's features past eight are one more finding that lists them.
+- **Fix by code.** What puts every figure in doubt comes first, whatever its severity (what was not
+  checked; `not_watertight` and `not_sound`, errors in every process; `units_suspect`: a
   part under 1 mm or over 10 m across, probably in the wrong unit -- its note names the readings that
   fit), then errors, warnings and
-  the facts. A failing rule's finding is coded by its rule id
-  (`cnc.internal_corner_radius`), with the measured value, its limit and source, and a hint saying
-  what to change; several failures at one ref are one finding (`and 2 more at this ref`), a warning on
+  the facts. A failing rule is said once -- `error: <rule>, N place(s). Hint: <what to change>. Source:
+  <guide>.` -- then a short line for each feature at its ref. In `--json` each is a finding coded by
+  its rule id (`cnc.internal_corner_radius`) with the verdict as data: `value`, `limit`, `unit`, `op`
+  (`min`: at least; `max`: at most), `source`, and `refs`, every ref of the feature, the most
+  specific first (a corner's edge, then its faces: `location` is the first). Several failures at one
+  feature are one finding (`and 2 more at this ref`), and a warning on
   a figure that already fails an error, or a stricter recommendation, at the same place is left to
-  `measurements.rules`, and at
-  most eight refs of one rule are shown. Other codes are facts the figures call for
+  `measurements.rules`. Other codes are facts the figures call for
   (`zero_draft_walls`, `cnc.live_tooling`, `sheet.bend_radius_differs`, `material_declared`: the
-  material was read from the part).
-- **See the place.** Resolve a finding's ref with `cad model inspect "$ID" 'plate/face 7'` or
+  material was read from the part; `several_solids`: a part of several solids, which a process makes
+  as several parts -- fuse them or label each).
+- **See the place.** Resolve a finding's ref with `cad model inspect "$ID" 'plate/edge 17'` or
   `cad step inspect part.step 'COMPOUND/face 7'`: the face's surface, radius, area and box. The
   figures behind it are `measurements.<family>`, items worst first; the process's reference names the families.
 - **Read what was not judged.** `--json` prints one line; `measurements.rules` holds `title`, `note`,
   `failed`, and `outcomes`, one per rule id (a rule's variants
   merged: each failure carries its own `limit` where they differ): `rule`, `status`
-  (`passed`, `failed`, `not_evaluated`, `not_applicable`), `limit`, `source`, `failures` and
+  (`passed`, `partial`, `failed`, `not_evaluated`, `not_applicable`), `limit`, `source`, `failures`
+  (each with its `refs` and the index of its `item` in its family) and
   `reason`. A rule `passed` with reason "none found" had nothing of its kind to judge (no holes, no
   wall thin enough to list: `rules.none_found`): say none was found. A rule `not_evaluated` is never a
-  pass: "the rules give no limit here" or "... was not measured" leave it unverified.
+  pass: "the rules give no limit here" or "... was not measured" leave it unverified. A rule `partial`
+  judged some of its features and not the rest (`rule_partly_judged` names them): its pass is of the
+  judged ones alone -- judge the others by hand from `measurements.<family>`.
 
 ## The review
 
@@ -99,8 +121,9 @@ source, the result and a concrete change; then the coverage: the rules not evalu
 
 **pass** for a rule `passed`; **fail** for a rule `failed`, saying whether it is an error (not made as
 drawn under that rule) or a warning (a recommendation); **review** for a qualitative risk from the
-checks by hand; **unverified** for a rule `not_evaluated` for want of a limit or a measurement, a
-family `measurement_failed`, or a check by hand without the evidence. A rule passed with nothing to
+checks by hand; **unverified** for a rule `not_evaluated` for want of a limit or a measurement, the
+features a `partial` rule did not judge, a family `measurement_failed`, anything a `NOT CHECKED` result
+did not reach, or a check by hand without the evidence. A rule passed with nothing to
 judge is "none found", and a `not_applicable` one (another technology, turning on a milled part) is
 left out. Keep cost suggestions apart from manufacturing constraints. If only a render is provided,
 list visible concerns as review items and ask for geometry. Never fill a report with invented feature
@@ -113,5 +136,5 @@ keep the original, edit the model's source, run it again, and run the same check
 (`--process`, `--material` and the process's options) on the new revision; without editing
 tools, give a specific change list. The finding's code should be gone from its place and no new one
 appear: compare `measurements.rules.failed` before and after, and each outcome's `failures` by `xyz`
-(face numbers can change with an edit). A moved hole can open a finding beside it. Check the file a
+(face and edge numbers can change with an edit). A moved hole can open a finding beside it. Check the file a
 shop takes once it is exported, never the model alone.

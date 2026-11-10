@@ -213,7 +213,8 @@ _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL,
 # its B-rep by the build123d integration, a mesh by the trimesh integration; a DXF checked as a cut file.
 _DFM_SUMMARY = ("check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding "
                   "(molding) or 3D printing (printing), measured and judged against general, cited rules")
-_DFM_EXACT = Operation("dfm", _DFM_SUMMARY + ", each finding at a face's ref", "build123d", "manufacturing")
+_DFM_EXACT = Operation("dfm", _DFM_SUMMARY + ", each finding at a face's or an edge's ref", "build123d",
+                       "manufacturing")
 _DFM_MESH = Operation("dfm", "check it can be 3D printed (--process printing), measured as a mesh and judged "
                                  "against general, cited rules", "trimesh", "manufacturing")
 _DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): closed contours, nothing cut "

@@ -635,9 +635,9 @@ _HELP = {
     "units": "the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.",
     "axes": "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
     "turning": "cnc: the part is turned on a lathe (its axis found), not milled.",
-    "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10; in Python a sequence of "
-             "numbers too); default none: a sharp corner is held to the smallest standard end mill, 2.5 mm.",
-    "stock": "cnc: the stock's size in mm (100x60x25; in Python three numbers too); default the part's box.",
+    "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a sharp "
+             "corner is held to the smallest standard end mill, 2.5 mm.",
+    "stock": "cnc: the stock's size in mm (100x60x25); default the part's box.",
     "thickness": "sheet: the stock's thickness in mm; default measured.",
     "k_factor": "sheet: the neutral axis's place in the thickness, for the flat pattern (the shop's bend "
                 "table's); default a K-factor chart's, by the material and each bend's radius.",
@@ -666,25 +666,37 @@ _SUMMARY = {
     "mesh": "Check a mesh for 3D printing.",
     "cut": "Check a sheet's cut file (a DXF) for laser, waterjet or router cutting: the sheet process.",
 }
+# The exit statuses, in the summary the command's help shows.
+_STATUSES = ("Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, "
+             "something was not judged: never a pass. Exit 2: the command line's mistake.")
+# What the last line and the exit status say, under every type's help.
+_EXITS = """The last line and the exit status are the check's state. OK, exit 0: everything was measured and no
+finding is an error. FAILED, exit 1: a finding is an error (with --strict, a warning too): the part cannot be
+made by this process as drawn. NOT CHECKED, exit 3: the check did not judge what it was asked to -- a source
+that does not read or holds no solid, a family that could not be measured, an engine that stopped -- which
+is no verdict and never a pass. Exit 2: the command line's mistake."""
 _ABOUT = {
     "brep": """A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
 (cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
 from a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source
-and what to change. A rule's feasibility limit broken is an error, as is a family that could not be measured;
-a recommendation is a warning. For a named shop, compare the measurements with its own published limits.
---json carries every measurement and every rule's outcome.""",
+and what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named
+shop, compare the measurements with its own published limits. --json carries every measurement, every rule's
+outcome and each verdict as data (value, limit, unit, refs).
+""" + _EXITS,
     "mesh": """A mesh (STL, 3MF, GLB) is measured as triangles for 3D printing, each finding at x, y, z; CNC
 machining and sheet metal need the exact radii, axes and thicknesses a mesh does not hold, and injection
 molding's draft, undercuts and walls are judged on exact geometry: check the part's STEP or model for them. The measurements are facts; the verdicts are general rules, each from a published design guide and
 no shop's limit, each finding coded by its rule, with the limit, the source and what to change. A rule's
-feasibility limit broken is an error, as is a family that could not be measured; a recommendation is a
-warning. For a named shop, compare the measurements with its own published limits. --json carries every
-measurement and every rule's outcome.""",
+feasibility limit broken is an error; a recommendation is a warning. For a named shop, compare the
+measurements with its own published limits. --json carries every measurement, every rule's outcome and each
+verdict as data (value, limit, unit).
+""" + _EXITS,
     "cut": """Its units, closed contours on the cut layers, curves cut twice (overlapping, crossing, zero-area),
 annotation on a cut layer, curves drawn as short lines, and holes, slots, webs and spacing against the kerf
 and the thickness, judged against general rules, each cited; each finding at a layer and an entity handle.
 A rule's feasibility limit broken is an error, a recommendation a warning; for a named shop, compare the
-measurements with its own published limits. --json carries every measurement and every rule's outcome.""",
+measurements with its own published limits. --json carries every measurement and every rule's outcome.
+""" + _EXITS,
 }
 
 
@@ -750,7 +762,8 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
              "printing": "printing the orientations"}[process] for process in processes if process in _RANKED) + ".")
     helps["strict"] = "a warning fails the check too (exit 1): a gate that takes no recommendation broken."
     kind = _kind_of(document_type)
-    doc = "\n\n".join([_SUMMARY[kind], _ABOUT[kind], "\n".join(f"{name}: {text}" for name, text in helps.items())])
+    doc = "\n\n".join([f"{_SUMMARY[kind]} {_STATUSES}", _ABOUT[kind],
+                       "\n".join(f"{name}: {text}" for name, text in helps.items())])
     return inspect.Signature(parameters, return_annotation=CheckResult), doc
 
 

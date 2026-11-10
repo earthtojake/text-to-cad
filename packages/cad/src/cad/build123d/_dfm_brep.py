@@ -1589,9 +1589,10 @@ class Rays:
         one entry where every face there is passed inward, one exit where outward, and nothing where the
         faces disagree -- the line touches the edge and stays on its side, outside or inside. The stretches
         are those from an entry to the exit after it. Where the places do not alternate so -- two entries
-        running, a line that ends inside, a place where the line runs along one face while it crosses
-        another, so which side it is on is the boundary's -- the answer is None, counted in ``unpaired``:
-        unknown, never a guess a wall or a gap is measured from."""
+        running, a line that ends inside (an open shell, a crossing the kernel lost), a place where the
+        kernel finds the line along one face while it crosses another -- the answer is None, counted in
+        ``unpaired``: unknown, never a guess a wall or a gap is measured from. A line that lies in a face's
+        own surface, where the kernel finds no crossing of that face, is read by the faces it does cross."""
         senses: list[int] = []
         crossings = self._crossings(origin, direction, -1e9, 1e9, False, senses)
         places: list[tuple[float, list[int]]] = []

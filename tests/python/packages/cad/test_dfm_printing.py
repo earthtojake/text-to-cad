@@ -436,7 +436,7 @@ class FeatureTest(unittest.TestCase):
         thin = check(bd.Box(20, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Cylinder(0.4, 6, align=A), "thin_pin")
         finding = next(f for f in thin.findings if f.code == "printing.pin_diameter")
         self.assertEqual(finding.severity, "warning")
-        self.assertIn("Xometry", finding.message)
+        self.assertIn("Xometry", finding.source)  # where the limit comes from is the finding's own field
 
 
 class DetailAndGapTest(unittest.TestCase):
