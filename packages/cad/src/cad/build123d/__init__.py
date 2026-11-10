@@ -18,6 +18,11 @@ and the helpers a model calls with build123d objects:
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
   ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):
+  ``dfm(shape, process=...)`` -- what ``cad.step.dfm`` and ``cad.xbf.dfm`` run on a file's or a document's
+  B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,
+  ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;
+  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;
 * ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,
   moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.
 
@@ -44,6 +49,8 @@ _NAMES = {
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
     **{name: "cad.build123d._flatten" for name in (
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
+    **{name: "cad.build123d._dfm_check" for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
+    "unfold": "cad.build123d._dfm_sheet",
 }
 
 # Its public submodules, each imported on first use (``cad.build123d.materials``), offered with its names.
@@ -76,5 +83,7 @@ if TYPE_CHECKING:
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,
                                          self_intersections, topology_errors)
+    from cad.build123d._dfm_check import cnc, dfm, molding, printing, sheet_metal
+    from cad.build123d._dfm_sheet import unfold
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint

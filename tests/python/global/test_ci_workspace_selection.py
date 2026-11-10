@@ -507,11 +507,24 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("skills/print3d/scripts/orca_presets.py"), set())
         self.assertEqual(tests_for("skills/print3d/scripts/orca_presets.py")["skills_tests"], [])
 
-    def test_the_manufacturing_check_runs_the_package_suites(self):
-        # Its measurements are the library's trimesh integration: no skill suite reads them.
-        chosen = tests_for("packages/cad/src/cad/trimesh/_molding.py")
-        self.assertEqual(chosen["packages_tests"], [PACKAGES])
-        self.assertEqual(chosen["skills_tests"], [])
+    def test_the_manufacturing_check_runs_the_tests_that_reach_it(self):
+        # A leaf of the library: its type side, its exact measurements, the numpy geometry they measure with
+        # and its mesh measurements reach the tests that name them and those that read every command, never the
+        # whole suite or a skill's -- and the packaging job, which checks a part from the built wheels.
+        for path in ("packages/cad/src/cad/trimesh/_printing.py", "packages/cad/src/cad/build123d/_dfm_cnc.py",
+                     "packages/cad/src/cad/_internal/dfm/rules.py", "packages/cad/src/cad/_internal/manufacturing.py",
+                     "packages/cad/src/cad/_internal/molding_geometry.py",
+                     "packages/cad/src/cad/_internal/sheet_plane.py",
+                     "packages/cad/src/cad/_internal/meshops_printing.py"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"packages-linux", "packages-windows", "packaging"})
+                chosen = tests_for(path)
+                self.assertIn(f"{LIBRARY}/test_dfm_core.py", chosen["packages_tests"])
+                self.assertIn(f"{LIBRARY}/test_trimesh_printing.py", chosen["packages_tests"])
+                self.assertIn(f"{SERVER}/test_manufacturing_check_cli.py", chosen["packages_tests"])
+                self.assertNotIn(PACKAGES, chosen["packages_tests"])
+                self.assertNotIn(f"{LIBRARY}/engine/test_animation.py", chosen["packages_tests"])
+                self.assertEqual(chosen["skills_tests"], [])
 
     def test_a_test_file_runs_itself(self):
         self.assertEqual(tests_for(f"{SERVER}/test_settings.py")["packages_tests"], [f"{SERVER}/test_settings.py"])
@@ -522,8 +535,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for(f"{POLICY}/test_cli_stream_contract.py"), {"skills"})
         # A light policy test is static's, which every change runs.
         self.assertEqual(jobs_for(f"{POLICY}/test_ci_workspace_selection.py"), set())
-        self.assertEqual(tests_for(f"{LIBRARY}/test_trimesh_molding.py")["packages_tests"],
-                         [f"{LIBRARY}/test_trimesh_molding.py"])
+        self.assertEqual(tests_for(f"{LIBRARY}/test_trimesh_printing.py")["packages_tests"],
+                         [f"{LIBRARY}/test_trimesh_printing.py"])
         self.assertEqual(tests_for(f"{LIBRARY}/engine/formats_golden/stl.png")["packages_tests"], [PACKAGES])
 
     def test_the_packages_run_their_suites_their_hosts_and_the_wheel(self):

@@ -185,7 +185,11 @@ build runs the new code. Never stop one you did not start.
 The engine's switches are environment variables, never script options (the
 engine's README, **The engine server and its workers** and **Body retention**):
 `CAD_ENGINE_WORKERS`, `CAD_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
-retires a worker), `CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
+retires a worker), `CAD_ENGINE_CHECKS` (how many checks processes measure manufacturing checks at once:
+by default half the cores, one to four; a value is held to one to the cores, and the engine says so in `cad
+status`), `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB` (what one check may take before the engine
+stops it: half an hour, and the workers' memory cap, by default; `0` for no limit),
+`CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
 **Document lifetime**), `CAD_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
 tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
 `0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CAD_ENGINE_MEMO=0` (no memo

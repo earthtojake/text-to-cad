@@ -628,6 +628,23 @@ def windowless() -> dict[str, Any]:
     return {"creationflags": CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
+def standard_input_aside() -> int:
+    """A process its starter speaks to, or watches, on its standard input: that pipe taken aside, on a
+    descriptor of the process's own (returned), and standard input (descriptor 0, ``sys.stdin``) the null
+    device from then on. On Windows a thread blocked reading a pipe holds every other call on that pipe --
+    GetFileType, which a DLL's C runtime asks of the standard handles as the DLL loads (numpy's OpenBLAS,
+    say) -- so an import while the pipe is read would wait for the pipe's next line, or its end: a process
+    that never gets on. And a library reading its input reads none of the pipe. Called before any thread
+    reads the pipe: a worker (``worker.main``), a process a manufacturing check is measured in
+    (``cad._internal.manufacturing._child``)."""
+    kept = os.dup(0)
+    null = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null, 0)
+    os.close(null)
+    sys.stdin = open(os.devnull, encoding="utf-8")  # noqa: SIM115 - standard input, for the process's life
+    return kept
+
+
 def detached() -> dict[str, Any]:
     """How the daemon is started: outliving the command that needed it. On Windows a console of its
     own with no window and a process group of its own, never no console at all (``DETACHED_PROCESS``),
