@@ -520,11 +520,6 @@ export function useRendererShell({
     },
     read: path => host.promptFiles.read(path),
   }), [host.promptFiles, currentView, annotationNow, promptFile]);
-  // The view as it is on screen, the annotation's ink in it: the annotation's Copy.
-  const captureView = useCallback(() => {
-    if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
-    return viewerRef.current.captureScreenshotBlob();
-  }, []);
   const captureKey = services.captureRequest?.key ?? null;
   const appliedCaptureKey = useRef(null);
   useEffect(() => {
@@ -733,10 +728,10 @@ export function useRendererShell({
       runtimeLifecycle: stableRuntimeLifecycle,
       previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, panelControl, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
-      copyActionRef, copyAnnotation, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
+      copyActionRef, copyAnnotation,
       // Quick Edit's: the file it is about, how a copied prompt spells its paths, its annotation, and
       // the renderer's own Escape, which an empty Quick Edit passes on.
-      resource, captureView, escape: escapeView, currentView, quickEditPrompt,
+      resource, escape: escapeView, currentView, quickEditPrompt,
       // Select is the tool in hand (the default one), where a press on ink picks it before a part.
       selecting: !previewing && Boolean(toolModes) && toolMode === toolModes.defaultMode,
       annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, zoomKeys: zoomKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,

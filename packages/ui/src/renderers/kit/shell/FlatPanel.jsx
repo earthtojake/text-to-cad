@@ -214,11 +214,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   // A section drawn in the panel names its tab (`ToolPanel.jsx`); the tabs are in the sections' order.
   const body = useRef(null);
   const [registered, setRegistered] = useState([]);
-  const names = useRef(new Map());
   const register = useCallback((id, name) => {
-    names.current.set(id, name);
     setRegistered(current => (current.some(entry => entry.id === id && entry.label === name) ? current : [...current.filter(entry => entry.id !== id), { id, label: name }]));
-    return () => { names.current.delete(id); setRegistered(current => current.filter(entry => entry.id !== id)); };
+    return () => { setRegistered(current => current.filter(entry => entry.id !== id)); };
   }, []);
   useLayoutEffect(() => {
     if (!sections || !body.current) return;

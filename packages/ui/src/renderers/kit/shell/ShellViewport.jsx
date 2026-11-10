@@ -60,9 +60,9 @@ import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
 import { useI18n } from "@cad/ui/i18n";
+import { SHELL_CAMERA_COORDINATES } from "./fileView.js";
 import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
-const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 // The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
 const THEME_LIGHTS = Object.freeze(["hemisphereLight", "ambientLight", "keyLight", "fillLight", "rimLight", "spotLight", "pointLight"]);
 /** How long after the open-time fit the viewport and projection may still be settling. */
@@ -318,7 +318,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     try { return callback(); }
     finally { suppressPerspectiveEventsRef.current = Math.max(0, suppressPerspectiveEventsRef.current - 1); }
   };
-  const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
+  const coordinateSystemFor = useCallback(() => SHELL_CAMERA_COORDINATES, []);
   // Zoom to fit frames what is shown now: the scene's own word for it (`shownBounds`: hidden and
   // ghosted parts left out), else where it stands posed (`bounds`). 100% is the authored box's still.
   const fitSceneRef = useRef(scene);
@@ -495,7 +495,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     requestFrame() { requestSceneFrame(runtimeRef.current, false); },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
-        modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: STORED_CAMERA_COORDINATES
+        modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: SHELL_CAMERA_COORDINATES
       });
     },
     // The annotation's mark under a point of the page (client pixels), by its id: what Select picks
@@ -1113,7 +1113,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (reframe === "model") fitCamera(runtime);
       const nextPerspective = resolvePerspectiveSnapshot(perspectiveRef ? perspectiveRef.current : undefined, perspective);
       const storedMatches = perspectiveSnapshotMatchesScene(nextPerspective, {
-        modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: STORED_CAMERA_COORDINATES,
+        modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: SHELL_CAMERA_COORDINATES,
         requireModelKey: true, requireSceneScaleMode: true, requireCoordinateSystem: true
       });
       // WHOSE CAMERA IS ON SCREEN. The completion fit exists for a camera NOBODY set: a
@@ -1293,7 +1293,6 @@ const ShellViewport = forwardRef(function ShellViewport({
         activeViewPlaneFace={activeViewPlaneFace}
         viewPlaneFaces={VIEW_PLANE_FACES}
         orientation={viewPlaneOrientation}
-        viewerTheme={viewerTheme}
         activateViewPlaneFace={activateViewPlaneFace}
         orbitViewCube={orbitFromViewCube}
       />

@@ -312,25 +312,13 @@ export function useViewerRuntime({
       pointLight.visible = false;
       pointLight.castShadow = false;
       scene.add(pointLight);
-      const axesHelper = null;
 
       const stageGroup = new THREE.Group();
       const modelGroup = new THREE.Group();
-      const edgesGroup = new THREE.Group();
-      const facePickGroup = new THREE.Group();
-      const edgePickGroup = new THREE.Group();
-      // Pick proxies are opacity-0 raycast targets; keep them out of the render
-      // pass entirely. Raycaster does not check `visible`, so picking still works.
-      facePickGroup.visible = false;
-      edgePickGroup.visible = false;
       scene.add(stageGroup);
       scene.add(modelGroup);
-      scene.add(edgesGroup);
-      scene.add(facePickGroup);
-      scene.add(edgePickGroup);
 
       const raycaster = new THREE.Raycaster();
-      const pointer = new THREE.Vector2();
       const interactionState = {
         active: false,
         pixelRatioCap: idlePixelRatioCap,
@@ -930,12 +918,6 @@ export function useViewerRuntime({
         controls,
         stageGroup,
         modelGroup,
-        edgesGroup,
-        facePickGroup,
-        edgePickGroup,
-        facePickMesh: null,
-        edgePickLines: null,
-        edgePickObjects: [],
         // What a scene tells the depth fit it has placed, each with its own bounds and
         // transforms (`fitCameraDepthToBounds`). A scene that says nothing leaves it empty
         // and the fit uses the whole model's box.
@@ -945,7 +927,6 @@ export function useViewerRuntime({
         activeModelKey: "",
         sceneScaleMode,
         raycaster,
-        pointer,
         hemisphereLight,
         ambientLight,
         keyLight,
@@ -953,7 +934,6 @@ export function useViewerRuntime({
         rimLight,
         spotLight,
         pointLight,
-        axesHelper,
         sceneBackgroundTexture: null,
         environmentResource: null,
         environmentResourceIdentity: "",
@@ -965,14 +945,12 @@ export function useViewerRuntime({
         floorMode,
         hasVisibleModel: false,
         hasDrawingDocument: false,
-        edgePickThreshold: 1.5,
         cameraTransition: null,
         previewOrbitEnabled: false,
         orbitControlsLastTimestamp: 0,
         preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
         interactionState,
         keyboardOrbitState,
-        onResize,
         onWindowResize,
         resizeObserver,
         rafId,
@@ -1010,9 +988,6 @@ export function useViewerRuntime({
         idleQualityDelayMs: 0,
         onIdleQualityRestore: null,
         resolveExtraPixelRatioCap: null,
-        refreshRenderQuality: () => {
-          applyRenderQuality(interactionState.pixelRatioCap, { force: true });
-        },
         onViewportResize,
         registerScreenSpaceLineMaterial,
         unregisterScreenSpaceLineMaterial,
@@ -1075,7 +1050,6 @@ export function useViewerRuntime({
         const disposedSource = disposeScene?.(runtime);
         onSceneDisposed?.(disposedSource, { handoff: viewerMountedRef.current });
         disposeSceneObject(runtime.gridHelper);
-        disposeSceneObject(runtime.axesHelper);
         disposeTexture(runtime.sceneBackgroundTexture);
         runtime.viewUpdateGate?.dispose();
         // A device's studio environments are every view's: they go with the device.

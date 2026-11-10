@@ -5,7 +5,6 @@ import { Checkbox } from "@cad/ui/primitives/checkbox";
 import { ColorPicker } from "@cad/ui/primitives/color-picker";
 import { useI18n } from "@cad/ui/i18n";
 
-export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
 // Section headers sit at the navbar's size (12px, normal weight) — a sheet's headings
 // and the chrome above it read as the same level of structure. Row labels stay
@@ -19,7 +18,6 @@ export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-mut
 // through the border instead of truncating.
 const FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES = "!h-7 px-2 !text-tiny overflow-hidden [&_svg]:size-3.5 [&>span]:min-w-0 [&>span]:truncate";
 export const FILE_SHEET_SELECT_TRIGGER_CLASSES = `${FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES} w-full`;
-export const FILE_SHEET_VALUE_BADGE_CLASSES = "shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-micro leading-none tabular-nums text-muted-foreground";
 export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "h-7 w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-tiny leading-none tabular-nums text-foreground shadow-xs outline-none",
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
@@ -126,36 +124,6 @@ export function FileSheetSubsection({ title, children, contentClassName }) {
         </div>
       ) : null}
       {hasRows ? <div className={cn(FILE_SHEET_ROW_STACK_CLASSES, contentClassName)}>{children}</div> : null}
-    </div>
-  );
-}
-
-export function FileSheetControlRow({ label, value, trailing, children, className }) {
-  // A row whose control lives in the trailing slot (a color picker, a value
-  // readout) has no block content. Rendering the content div anyway left an
-  // empty box carrying the stack's 4px top margin, so those rows stood 4px
-  // taller than every switch row beside them.
-  const hasContent = Children.toArray(children).length > 0;
-  return (
-    <div className={cn(FILE_SHEET_CONTROL_ROW_CLASSES, className)}>
-      {label != null || value != null || trailing != null ? (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-2",
-            hasContent ? "min-h-4" : "min-h-7"
-          )}
-        >
-          {label != null ? (
-            <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{label}</span>
-          ) : <span />}
-          {trailing != null ? trailing : value != null ? (
-            <span className={FILE_SHEET_VALUE_BADGE_CLASSES}>{value}</span>
-          ) : null}
-        </div>
-      ) : null}
-      {hasContent ? (
-        <div className="min-w-0">{children}</div>
-      ) : null}
     </div>
   );
 }

@@ -46,11 +46,6 @@ import { requestSceneFrame } from "../viewport/sceneFrames.js";
 
 export const DEFAULT_DAMPING_FACTOR = 0.14;
 
-export const CAMERA_TRANSITION_EASING = Object.freeze({
-  EASE_IN_OUT_CUBIC: "ease-in-out-cubic",
-  EASE_IN_OUT_SINE: "ease-in-out-sine"
-});
-
 export const ZOOM_CONTROL_MIN_PERCENT = 10;
 
 export const ZOOM_CONTROL_MAX_PERCENT = 800;
@@ -445,22 +440,6 @@ export function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle 
   return true;
 }
 
-export function easeInOutSine(t) {
-  if (t <= 0) {
-    return 0;
-  }
-  if (t >= 1) {
-    return 1;
-  }
-  return -(Math.cos(Math.PI * t) - 1) / 2;
-}
-
-export function easeCameraTransitionProgress(t, easing = CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC) {
-  return easing === CAMERA_TRANSITION_EASING.EASE_IN_OUT_SINE
-    ? easeInOutSine(t)
-    : easeInOutCubic(t);
-}
-
 export function readPerspectiveSnapshot(runtime) {
   if (!runtime?.camera || !runtime?.controls) {
     return null;
@@ -593,7 +572,6 @@ function turnAt(THREE, turn, t) {
 
 export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   durationMs = VIEW_PLANE_TRANSITION_MS,
-  easing = CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC,
   orthographicHalfHeight = undefined,
   resetZoomBaselineOnComplete = false
 } = {}) {
@@ -643,8 +621,7 @@ export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
     endZoom,
     startOrthographicHalfHeight,
     endOrthographicHalfHeight,
-    resetZoomBaselineOnComplete,
-    easing
+    resetZoomBaselineOnComplete
   };
   runtime.controls.enableDamping = false;
   runtime.beginInteraction?.();
@@ -754,7 +731,6 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   if (animate) {
     return transitionCameraToPerspectiveSnapshot(runtime, snapshot, {
       durationMs: VIEW_PLANE_TRANSITION_MS,
-      easing: CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC,
       orthographicHalfHeight,
       resetZoomBaselineOnComplete: resetZoomBaseline
     });
@@ -781,7 +757,7 @@ export function stepCameraTransition(runtime, timestamp) {
 
   const durationMs = Math.max(transition.durationMs, 1);
   const progress = clamp((timestamp - transition.startTime) / durationMs, 0, 1);
-  const eased = easeCameraTransitionProgress(progress, transition.easing);
+  const eased = easeInOutCubic(progress);
   const target = new runtime.THREE.Vector3().lerpVectors(
     transition.startTarget,
     transition.endTarget,

@@ -4,8 +4,7 @@ import test from "node:test";
 import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "./renderDepthPolicy.js";
 
 test("all interactive presets use one shadow-compatible depth policy", () => {
-  assert.equal(viewerLogarithmicDepthBuffer(false), false);
-  assert.equal(viewerLogarithmicDepthBuffer(true), false);
+  assert.equal(viewerLogarithmicDepthBuffer(), false);
 });
 
 test("depth fitting includes Grid independently of Floor and omits disabled guides", () => {

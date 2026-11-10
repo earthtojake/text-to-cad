@@ -176,7 +176,6 @@ function TouchStrip({ tools, views }) {
   const viewEntries = views.map(view => ({ control: view, view: true, width: TILE_PX }));
   const count = touchStripFit(toolEntries, room, { more: viewEntries.length > 0 });
   const shown = toolEntries.slice(0, count), hidden = [...toolEntries.slice(count), ...viewEntries];
-  const shownTools = shown.filter(entry => !entry.view), shownViews = shown.filter(entry => entry.view);
   // What opens a popover from More: a view control's, or a model effect's (a tool with a `tile`).
   const overflowPopovers = hidden.map(entry => entry.view ? entry.control : entry.tool).filter(item => item.popover);
   const popoverView = overflowPopovers.find(item => item.id === openView);
@@ -185,11 +184,7 @@ function TouchStrip({ tools, views }) {
   return <StripTouchProvider value={true}>
     <div ref={root} className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools" data-touch-strip="">
       <div role="group" aria-label={t("toolbar.tools")} className={cn(GROUP_CLASS, "flex-nowrap")}>
-        {shownTools.map(({ tool }) => <Fragment key={tool.id}>{toolButton(tool, TOUCH_STRIP_BUTTON_CLASS, true)}</Fragment>)}
-        {shownTools.length && shownViews.length ? rule : null}
-        {shownViews.length ? <span className="inline-flex items-center gap-1" data-view-controls="">
-          {shownViews.map(({ control }) => <Fragment key={control.id}>{control.tile}</Fragment>)}
-        </span> : null}
+        {shown.map(({ tool }) => <Fragment key={tool.id}>{toolButton(tool, TOUCH_STRIP_BUTTON_CLASS, true)}</Fragment>)}
         {hidden.length ? <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <ToolbarButton ref={more} tooltipSide="top" label={t("toolbar.more")} active={heldInMore} className={TOUCH_STRIP_BUTTON_CLASS} data-strip-more="">

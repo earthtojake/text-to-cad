@@ -9,7 +9,7 @@ import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 //   { version: 2, camera, display, preview, playback, renderer, panel? }
 //
 //   camera    the renderer's own camera value, opaque here: a perspective snapshot for a scene
-//             (`readShellCamera`), a plane transform for a drawing. Null is "fit the model".
+//             (`scopeShellCamera`), a plane transform for a drawing. Null is "fit the model".
 //   display   the Display settings: the mode, the grid, and what every mode shares (the model tools, the lens).
 //   preview   Preview's own settings: Render's lighting, background, floor and part colours.
 //   playback  the playback settings (`tools/playbar/playbackPreferences.js`): Preview's orbit speed,
@@ -29,7 +29,7 @@ import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 // routine's time — every open starts those afresh.
 
 export const FILE_VIEW_VERSION = 2;
-/** The coordinate system a scoped camera (a live `setCamera`) is expressed in. */
+/** The coordinate system a stored or scoped camera (a live `setCamera`) is expressed in: the viewport restores a camera only in it. */
 export const SHELL_CAMERA_COORDINATES = "cad-z-up-v1";
 
 const plainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
