@@ -137,7 +137,8 @@ or an alias, else the longest run of its words that is one -- `Aluminium 6061` i
 304` stainless). A value in range that no machine has is refused too (`_plausible`): an end mill over 100
 mm across, an FDM layer taller than its nozzle (0.4 mm unless `--nozzle` says), a powder or resin layer over
 0.5 mm -- text-to-cad's own bounds, there because such a value would judge the part against nothing. `units`
-is an STL's alone: a type that declares its units takes no such option. A refusal names the command line's
+is an STL's, and a DXF's (one that declares none is not checked without it): a type that always declares its
+units takes no such option. A refusal names the command line's
 flag (`--tools is ...`), and to a Python caller the parameter (`tools is ...`: `manufacturing.parameters`;
 the command calls the same function with `_command=True`, a keyword of its own in no signature).
 

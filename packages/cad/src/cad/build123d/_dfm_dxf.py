@@ -1,10 +1,10 @@
 """A sheet's cut file (a DXF), checked with ezdxf, build123d's own DXF library (``cad._internal.dfm.sheet``).
 
-The file is read as a cutter reads it: its units (``$INSUNITS``, never assumed: an unset or unknown code is
-reported and every size rule is withheld), each layer's intent by its name and its layer table
-(``cad.engine.export.dxf.layer_intent``: cut, bend, engrave or reference), and the drawing checks every
-export runs that bear on a cut (``validate_drawing_document``: units, zero-length entities), whose findings
-are kept.
+The file is read as a cutter reads it: its units (``_units``: the ones it declares, ``$INSUNITS``, or the
+ones given, ``--units``; never assumed -- a file that declares none, as every R12 file, is not measured until
+they are given), each layer's intent by its name and its layer table (``cad.engine.export.dxf.layer_intent``:
+cut, bend, engrave or reference), and the one drawing check every export runs that bears on a cut
+(``validate_drawing_document``'s zero-length entities), whose findings are kept.
 
 **Every entity on a cut layer is read, an annotation, or said not read.** ezdxf explodes what holds curves
 (``_primitives``): a block reference into its block's entities, its own transform applied and a nested
@@ -630,31 +630,56 @@ def _layer_intents(document: Any) -> tuple[dict[str, str], Any]:
     return declared, lambda layer: declared.get(layer) or layer_intent(layer)
 
 
-def _units_suspect(code: int, extents: Any, holes: list[float], options: dict[str, Any]) -> str | None:
-    """Why the declared unit makes the part implausible, read the other way, or None: in millimetres a part
-    under an inch or every hole under the given thickness; in inches a part larger than the sheet (the one
-    given, else the standard sheet). The rules still run in the declared unit."""
+def _units(name: str, code: int, given: str | None) -> tuple[str, float, list[dict[str, Any]]]:
+    """The unit the file is read in and its length in millimetres -- the one ``given`` (``--units``), else the
+    one it declares (``$INSUNITS``) -- with what a shop should know of it: a file that declares none, a
+    ``--units`` over the file's own. ``Unmeasured`` where neither says: no length would be a length."""
+    declared = UNITS.get(code)
+    if given is None:
+        if declared is None:
+            why = "is not set" if code == 0 else "names no length a cutter reads"
+            raise Unmeasured("units_not_set", f"{name} declares no length unit ($INSUNITS {code} {why}), so nothing "
+                                              "was measured: give --units (mm, cm, m, in or ft), the unit it was "
+                                              "drawn in")
+        return *declared, []
+    factor = next(length for unit, length in UNITS.values() if unit == given)
+    if declared is None:
+        said = (f"the file declares no length unit ($INSUNITS {code}), and is read with --units {given}: a shop's "
+                "software has to be told too")
+    elif declared[0] != given:
+        said = (f"the file declares {declared[0]} ($INSUNITS {code}), and is read with --units {given}: a shop's "
+                "software reads the file's own")
+    else:
+        return given, factor, []
+    return given, factor, [{"severity": "warning", "code": "units_not_set" if declared is None else "units_differ",
+                            "message": said, "location": None,
+                            "hint": "save the file with its unit set ($INSUNITS; R12 holds none: save a later "
+                                    "version), or tell the shop the unit"}]
+
+
+def _units_suspect(unit: str, extents: Any, options: dict[str, Any]) -> str | None:
+    """Why the unit makes the part implausible, read the other way, or None: in millimetres a part under an
+    inch; in inches a part larger than the sheet (the one given, else the standard sheet). The rules still run
+    in the unit the file is read in."""
     from cad._internal.dfm import sheet as rules_side
 
-    if code not in (1, 4) or extents is None or not len(extents):
+    if unit not in ("in", "mm") or extents is None or not len(extents):
         return None
     long, short = float(max(extents)), float(min(extents))
     if long <= 0:
         return None
-    thickness = options.get("thickness")
-    if code == 4:
-        small_holes = bool(holes) and thickness is not None and max(holes) < float(thickness)
-        if not (long < 25.4 or small_holes):
+    if unit == "mm":
+        if long >= 25.4:
             return None
-        hole = f" (a {min(holes):.4g} mm hole)" if holes else ""
-        return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm{hole}; read as inches it is "
-                f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches set $INSUNITS to 1")
+        return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm; read as inches it is "
+                f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches give --units in (and set "
+                "$INSUNITS to 1)")
     sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.DEFAULT_SHEET
     if long <= sheet[0] and short <= sheet[1]:
         return None
     return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "
             f"{sheet[1]:.4g} mm sheet; read as millimetres it is {long / 25.4:.4g} x {short / 25.4:.4g} mm: if it "
-            "was drawn in millimetres set $INSUNITS to 4")
+            "was drawn in millimetres give --units mm (and set $INSUNITS to 4)")
 
 
 def _nothing_to_cut(name: str, read: dict[str, Any]) -> Unmeasured:
@@ -690,18 +715,16 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         document = ezdxf.readfile(str(path))
     except Exception as error:  # noqa: BLE001 - a file that does not read is the check's answer
         raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
-    # the drawing checks that bear on a cut: its units and its zero-length entities. The rest are this check's
-    # own, read exactly: open contours, curves cut twice (a duplicate is an overlap), and a file with dimensions
-    # in it is measured as any other
-    findings = [{"severity": found.severity, "code": found.code, "message": found.message, "location": None,
-                 "hint": None} for found in validate_drawing_document(document)
-                if found.code in ("units_not_set", "zero_length_entity")]
     try:
         code = int(document.header.get("$INSUNITS", 0))
     except (TypeError, ValueError):
         code = 0
-    unit, factor = UNITS.get(code, (None, 1.0))
-    unknown = unit is None
+    unit, factor, findings = _units(path.name, code, options.get("units"))
+    # the drawing check that bears on a cut: its zero-length entities. The rest are this check's own, read
+    # exactly: open contours, curves cut twice (a duplicate is an overlap), and a file with dimensions in it is
+    # measured as any other
+    findings += [{"severity": found.severity, "code": found.code, "message": found.message, "location": None,
+                  "hint": None} for found in validate_drawing_document(document) if found.code == "zero_length_entity"]
     _, intent = _layer_intents(document)
     is_drawing, evidence = document_is_drawing(document)
     read = _read(document, intent, factor)
@@ -728,7 +751,8 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     all_points = np.vstack([piece.points for piece in pieces])
     extents = np.ptp(all_points, axis=0)
     report["cut_file"] = {
-        "insunits": code, "unit": unit or f"unknown ($INSUNITS {code})", "mm_per_unit": factor,
+        "insunits": code, "unit": unit, "unit_from": "--units" if options.get("units") else "$INSUNITS",
+        "mm_per_unit": factor,
         "extents_mm": [round(float(v), 4) for v in extents],
         "extents_min_mm": [round(float(v), 4) for v in all_points.min(axis=0)],
         "layers": sorted(layers.values(), key=lambda r: r["layer"]), "cut_layers": cut_layers,
@@ -739,9 +763,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     # ``not_measured``); the bent part's check judges them.
     report["not_measured"] = {family: "a cut file is flat: it holds no bend, relief, hem or thickness to read"
                               for family in ("bends", "reliefs", "hems", "not_sheet")}
-    report["scale"] = {"units_unknown": unknown, "units_suspect": unknown,
-                       "note": (f"$INSUNITS is {code}: the file's units are not set, so no size is compared with a "
-                                "rule; save it in mm or inches") if unknown else f"lengths in {unit}, read as mm"}
+    report["scale"] = {"units_suspect": False, "note": f"lengths in {unit}, read as mm"}
     # an exact copy of a curve is cut twice (an overlap) but bounds nothing: the contours are chained without
     # it, so the outline it doubles is still the part's
     once, copies = _unique(pieces)
@@ -884,7 +906,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                     "distance_mm": round(d, 4), "location": records[k]["location"],
                     "other": records[g]["location"], "xyz": records[k]["xyz"]})
         families["hole_spacing"].extend(pairs.values())
-    suspect = _units_suspect(code, extents, [item["size_mm"] for item in families["holes"]], options)
+    suspect = _units_suspect(unit, extents, options)
     if suspect:
         report["scale"].update(units_suspect=True, note=suspect)
     sort_keys = {"holes": "size_mm", "hole_spacing": "distance_mm", "hole_to_bend": "distance_centerline_mm",

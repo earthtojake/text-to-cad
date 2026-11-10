@@ -132,7 +132,7 @@ class CutFileTest(unittest.TestCase):
         (part,) = result.measurements["parts"]["items"]
         self.assertEqual((part["flat_length_mm"], part["flat_width_mm"]), (100.0, 60.0))
 
-    def test_units_inches_scale_and_unset_units_withhold_every_size_rule(self) -> None:
+    def test_a_file_is_read_in_its_units_or_the_ones_given_and_never_in_none(self) -> None:
         def build(msp, _):
             _plate(msp, 4.0, 3.0)
             msp.add_circle((1.0, 1.0), 0.02)     # a 0.04 in (1.016 mm) hole
@@ -141,12 +141,24 @@ class CutFileTest(unittest.TestCase):
         self.assertAlmostEqual(holes[0]["size_mm"], 1.016, places=6)
         self.assertEqual(inch.measurements["parts"]["items"][0]["flat_length_mm"], 101.6)
         self.assertIn("sheet.hole_diameter", self.codes(inch))  # 1.016 mm under the 2 mm sheet's 1 t
-        unset = self.check(self.write("unset", build, None), thickness=2.0)
-        codes = self.codes(unset)
-        self.assertIn("units_not_set", codes)
-        self.assertIn("units_suspect", codes)
-        self.assertNotIn("sheet.hole_diameter", codes)
-        self.assertFalse(unset.ok)
+        # a file that declares no unit (every R12 file) is not checked, and the one finding names the option
+        unset = self.write("unset", build, None)
+        result = self.check(unset, thickness=2.0)
+        self.assertEqual((result.status, result.reason), ("not_checked", "units_not_set"))
+        (finding,) = result.findings
+        self.assertIn("give --units (mm, cm, m, in or ft)", finding.message)
+        self.assertNotIn("ezdxf", finding.message)
+        # with its units given it is measured as the file that declares them is, and passes: the shop is to be told
+        given = self.check(unset, thickness=2.0, units="in")
+        self.assertEqual(given.status, "ok")
+        self.assertEqual(self.codes(given) - CLEAN_CODES, {"units_not_set", "sheet.hole_diameter"})
+        self.assertEqual(next(f.severity for f in given.findings if f.code == "units_not_set"), "warning")
+        self.assertEqual(given.measurements["parts"]["items"], inch.measurements["parts"]["items"])
+        self.assertEqual(given.measurements["cut_file"]["unit_from"], "--units")
+        # the units given are read over the file's own, and that is said
+        over = self.check(self.write("mm", build), thickness=2.0, units="in")
+        self.assertIn("units_differ", self.codes(over))
+        self.assertEqual(over.measurements["parts"]["items"][0]["flat_length_mm"], 101.6)
 
     def test_a_cut_file_with_no_thickness_says_its_rules_waited(self) -> None:
         def build(msp, _):
@@ -173,6 +185,13 @@ class CutFileTest(unittest.TestCase):
         self.assertIn("read as inches it is 101.6 x 76.2 mm", suspect.message)
         self.assertIn("$INSUNITS to 1", suspect.message)
         self.assertEqual(result.measurements["parts"]["items"][0]["flat_length_mm"], 4.0)  # judged as declared
+
+        # an ordinary plate with one small hole is no inch drawing: the hole is the hole rule's finding
+        def pierced(msp, _):
+            _plate(msp, 100, 60)
+            msp.add_circle((50, 30), 0.2)
+        result = self.check(self.write("pierced", pierced), thickness=2.0)
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.hole_diameter"})
 
     def test_features_against_the_thickness_the_kerf_and_the_sheet(self) -> None:
         def build(msp, _):

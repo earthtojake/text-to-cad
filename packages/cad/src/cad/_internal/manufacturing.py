@@ -74,8 +74,9 @@ PROCESSES = dfm.PROCESSES
 #: a sheet's cut file, checked by the build123d integration's DXF library (ezdxf).
 BREP_TYPES = ("model", "step", "xbf")
 CUT_TYPES = ("dxf",)
-#: Length units a mesh file may carry, as a factor to millimetres. An STL is unitless, so the caller says
-#: which one; the other types declare theirs.
+#: Length units a file may carry, as a factor to millimetres. An STL is unitless, so the caller says which
+#: one (millimetres unless said); a DXF may declare none (``$INSUNITS`` unset: every R12 file), and is then
+#: read in the one the caller says, or not measured. The other types declare theirs.
 UNITS_MM = dict(zip(get_args(Unit), (1.0, 10.0, 1000.0, 25.4, 304.8), strict=True))
 
 
@@ -110,11 +111,12 @@ def processes_for(document_type: str) -> tuple[str, ...]:
     if document_type in BREP_TYPES:
         return PROCESSES
     return tuple(process for process in PROCESSES if "mesh" in dfm.module(process).MEASURED_FROM)
-# The types that declare their own units, read as millimetres: a units option is the STL's alone.
+# The types that always declare their own units, read as millimetres: a units option is the STL's and the
+# DXF's.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
              "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
-             "model": "a model is in millimetres",
-             "dxf": "a DXF declares its units ($INSUNITS)"}
+             "model": "a model is in millimetres"}
+_UNITS_OF = "--units is an STL's or a DXF's, which may declare none"
 # Why a mesh is not checked for each process measured on exact geometry alone, and what to check instead.
 _MESH_REFUSED = {
     "cnc": "a cnc check measures exact geometry -- radii, axes, thicknesses -- that a mesh does not hold",
@@ -256,11 +258,13 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     if candidates and given.get("pull") is not None:
         raise ArgumentRefused("--candidates ranks every pull: give it no --pull")
     resolved = {name: given[name] if given.get(name) is not None else default for name, default in own.items()}
+    if document_type in CUT_TYPES:
+        resolved["units"] = given.get("units")  # a DXF's default is its own ($INSUNITS): none here
     units = resolved["units"]
-    if units not in UNITS_MM:
+    if units is not None and units not in UNITS_MM:
         raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
     if units != "mm" and document_type in _DECLARED:
-        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: {_UNITS_OF}")
     module.validate(resolved, document_type)
     _plausible(process, resolved)
     return resolved
@@ -279,7 +283,7 @@ def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> N
     if units is not None and units != "mm":
         if units not in UNITS_MM:
             raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
-        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: {_UNITS_OF}")
     return None
 
 
@@ -662,7 +666,8 @@ _HELP = {
     "material": "the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's "
                 "limits; default the material the part declares (part.material = metals.aluminum()), when every "
                 "part agrees.",
-    "units": "the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.",
+    "units": "the file's length units (mm, cm, m, in, ft): an STL's (default mm), or a DXF's (default the "
+             "ones it declares; needed where it declares none, as an R12 file).",
     "axes": "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
     "turning": "cnc: the part is turned on a lathe (its axis found), not milled.",
     "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner "
@@ -764,7 +769,8 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
     """``cad.<document_type>.dfm``'s signature -- the source, the type's processes, and the options of those
     processes alone (a mesh's help offers no ``--axes``) -- and its docstring, built for the type."""
     processes = processes_for(document_type)
-    # ``units`` is an STL's alone: a type that declares its units takes no option it would refuse every value of
+    # ``units`` is an STL's and a DXF's: a type that always declares its units takes no option it would refuse
+    # every value of
     names = [name for name in KINDS if (name in dfm.COMMON and (name != "units" or document_type not in _DECLARED))
              or any(name in OPTIONS[process] for process in processes)]
     ranked = any(process in _RANKED for process in processes)
