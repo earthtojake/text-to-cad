@@ -773,6 +773,63 @@ class KeptTest(unittest.TestCase):
         self.assertEqual((list(kept.writes), kept.written), ([], 1))
         self.assertEqual((path.stat().st_mtime_ns, held.get(ident)), stamps, "the file and its record as they were")
 
+    def test_a_request_arriving_while_the_index_is_listed_finds_the_files_it_lists(self) -> None:
+        import threading
+
+        from cad_server.engine import cache as engine_cache
+
+        folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-index-")))
+        self.addCleanup(shutil.rmtree, folder, True)
+        held = Registry(folder / "state", folder / "cache")
+        ident = model_id(folder / "cube.py", "cube")
+        held.cache.write(f"documents/{ident}/document.xbf", b"x" * 10)
+
+        class Models:
+            def registry(self) -> Registry:
+                return held
+
+        kept = engine_cache.Cache(Models())
+        listing, release, waiting = threading.Event(), threading.Event(), threading.Event()
+        names = held.cache.names
+
+        def listed(inside: str) -> list[str]:
+            listing.set()
+            release.wait(30)
+            return names(inside)
+
+        class Watched:  # the index's lock, saying when the second request reaches it
+            def __init__(self, lock) -> None:
+                self.lock = lock
+
+            def __enter__(self):
+                if threading.current_thread().name == "second":
+                    waiting.set()
+                return self.lock.__enter__()
+
+            def __exit__(self, *args):
+                return self.lock.__exit__(*args)
+
+        kept.indexing = Watched(kept.indexing)
+        answers: dict[str, list[str]] = {}
+
+        def ask(name: str) -> None:
+            try:
+                answers[name] = kept.documents()
+            finally:
+                waiting.set()
+
+        with mock.patch.object(held.cache, "names", listed):
+            first = threading.Thread(target=ask, args=("first",), name="first")
+            first.start()
+            self.assertTrue(listing.wait(30))
+            second = threading.Thread(target=ask, args=("second",), name="second")
+            second.start()
+            self.assertTrue(waiting.wait(30))  # answered, or waiting on the pass
+            release.set()
+            first.join(30)
+            second.join(30)
+        self.assertEqual(answers, {"first": [ident], "second": [ident]}, "the second waits for the first's listing")
+
     def test_a_shape_taken_up_after_a_restart_and_unsaved_names_the_program_that_handed_it_over(self) -> None:
         from cad_server.engine import registry as registering
         from cad_server.engine.models import Models as Book

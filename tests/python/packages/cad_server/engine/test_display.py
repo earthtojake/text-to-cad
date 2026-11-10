@@ -106,6 +106,23 @@ class EngineDisplayTest(unittest.TestCase):
         self.gone(pid)
         self.assertFalse(cookie.parent.exists(), "its cookie goes with it")
 
+    def test_an_xvfb_that_died_is_cleaned_up_as_another_starts(self) -> None:
+        import signal
+
+        self.xvfb(FAKE)
+        cookie = Path(display.environment()["CAD_ENGINE_XAUTHORITY"])
+        self.addCleanup(shutil.rmtree, cookie.parent, ignore_errors=True)
+        dead = display._XVFB
+        [pid] = self.started()
+        os.kill(pid, signal.SIGKILL)
+        dead.process.wait(30)
+        given = display.environment()
+        self.assertEqual(given["CAD_ENGINE_DISPLAY"], ":7")
+        self.assertNotEqual(Path(given["CAD_ENGINE_XAUTHORITY"]), cookie)
+        self.assertEqual(len(self.started()), 2, "another started")
+        self.assertFalse(cookie.parent.exists(), "the dead one's cookie is gone")
+        self.assertTrue(dead.log.closed, "and its log closed")
+
     def test_its_xvfb_goes_with_a_daemon_that_is_killed(self) -> None:
         self.xvfb(FAKE)
         code = textwrap.dedent("""

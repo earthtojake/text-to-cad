@@ -15,8 +15,8 @@ installation (``cad_server._internal.proxy``): the same installation, so the ser
 every skill command share one daemon. Where no installation is registered, the command says the
 ``uvx`` line that installs, registers and writes them (``cad doctor``).
 
-Error hints and ``cad doctor`` print these from here; the plugin's server configs carry the same
-strings, stamped by the release and held to these by a repository test.
+The plugin's server configs carry the same strings, stamped by the release and held to these by a
+repository test.
 """
 
 from __future__ import annotations
@@ -29,14 +29,6 @@ LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--fro
 # The server's distribution and its command; the CAD app's transport (the shim's) and its command.
 SERVER, COMMAND = "cad-server", "cad"
 SHIM, SHIM_COMMAND = "cad-mcp", "cad-mcp"
-
-
-def launch_command(tool: str = COMMAND, version: str | None = None) -> str:
-    """``uvx ... --from cad-server==<version> <tool>``: run ``tool`` (``cad`` or ``python``)
-    from this version's installation, installing it first if uv has none."""
-    if version is None:
-        from cad_server import __version__ as version
-    return " ".join((*LAUNCHER, f"{SERVER}=={version}", tool))
 
 
 def mcp_command(version: str | None = None) -> list[str]:

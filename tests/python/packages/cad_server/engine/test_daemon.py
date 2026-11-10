@@ -880,6 +880,26 @@ class NoTimerTest(unittest.TestCase):
         engine.tend()
         self.assertTrue(engine.stopping.is_set())
 
+    def test_a_drain_that_closed_the_door_stops_only_once_what_it_waits_for_is_done(self) -> None:
+        from cad_server.engine import daemon
+
+        folder = Path(tempfile.mkdtemp(prefix="door-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        door = folder / "engine.door"
+        door.write_bytes(b"")
+        engine = daemon.Daemon(cap=1)
+        self.addCleanup(engine.supervisor.stop)
+        engine.reached_by(door)
+        with engine.busy_lock:
+            engine.busy += 1  # a build admitted before the door closed
+        engine.drain()
+        door.unlink()  # the drain's door closed (``Door.close``)
+        engine.tend()
+        self.assertFalse(engine.stopping.is_set(), "the build the drain waits for is not cut")
+        with engine.busy_lock:
+            engine.busy -= 1
+        self.assertTrue(engine.stopping.wait(30), "the drain stops it once the build is done")
+
 
 class BusyTest(unittest.TestCase):
     """What ``status`` says is in use, and an update's drain waits for: a request that serves, binding
@@ -1880,7 +1900,7 @@ if __name__ == '__main__':
                          ["built block.py::block cold", "built block.py::peg warm"])
         self.assertEqual(sum(line.startswith("  view: http://127.0.0.1:") for line in done.stdout.splitlines()), 2,
                          "each model reports its viewer link, including file-output builds")
-        from urllib.parse import parse_qs, urlparse
+        from urllib.parse import urlparse
 
         from cad.engine.ids import model_id
 

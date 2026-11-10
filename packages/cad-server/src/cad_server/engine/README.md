@@ -1258,13 +1258,13 @@ agent's shell may give each turn its own `PATH` (Codex puts a temporary folder o
 `cad status` says what the server holds (`--json`: the same as data, `api.status()`):
 
 ```
-engine server 98307, up 2h10m · workers 3/10 with the standby · held by 1 app server · RSS 4.7 GB of 16.0 GB
+engine server 98307 (cad-server 0.11.4), up 2h10m · workers 3/10 with the standby · held by 1 app server · RSS 4.7 GB of 16.0 GB
   busy  tom.py         98310   12 builds   3.7 GB  building tom.py::tom · Building geometry · 3/7 stages · 41s
   idle  motorbike.py   98410    3 builds   0.6 GB  4m
   standby              98512               0.4 GB  kernel loaded · 4m
   waiting  2 builds, first come first served
 retired: finger_01.py (LRU) 3m ago · qdd_actuator.py (pressure) 41m ago · tom.py (RSS) 2h ago
-serving http://127.0.0.1:52811: 3 documents · 2.1 GB of 16.0 GB held
+serving http://127.0.0.1:3245 (the default port): 3 documents opened by a page or a command · 2.1 GB of 16.0 GB held
 cache /Users/me/.cache/cad: 14 documents · 212.4 MB, kept until deleted
 documents:
   live      tom      8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12
@@ -1292,8 +1292,7 @@ folder, with no engine asked). `--json` lists the documents as `models`, the cac
 `cache`, and `serving.documents` the files served, each `held` or `evicted` (out of memory for its
 budget: read again from its file when asked), with the bytes it holds. It
 also says its `version` (its release), its `installation` (the version it runs as) and what uses it -- `holders`, `watched` (the documents pages watch), `busy`
-(builds and draws running) and `active` (HTTP work underway) -- what a later release's engine asks of
-an earlier one before it takes its port (**Starting and updating**).
+(builds and draws running) and `active` (HTTP work underway).
 
 ## The door
 
@@ -1347,7 +1346,7 @@ other's door.
   a client waiting on a greeting it will never send sees the door go and stops waiting. Once its
   workers have stopped it removes the rest of its files -- its port file, its failure note (but a
   failure's, which its client reads) and last its lock, removed while still held (`daemon.let_go`)
-  -- whether it stopped on `stop`, a terminate, a retirement or its door gone. An engine killed
+  -- whether it stopped on `stop`, a terminate, an update's drain or its door gone. An engine killed
   leaves its files: the next to start takes its lock and makes its door anew, and `cad status` and
   `cad stop` remove them, its lock free and nothing answering at its door (`client.sweep`). A lock is
   taken on the file its name names (`places.lock`), so a lock file removed under a daemon starting

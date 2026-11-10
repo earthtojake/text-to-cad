@@ -36,8 +36,7 @@ from typing import Any, Callable
 from cad.engine import said as _said
 from cad_server._internal.cli_errors import Failure
 
-__all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", "run",
-           "inspect_main", "inspect_parser"]
+__all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", "run"]
 
 
 def _source_help(document_type: str | None, generic: str) -> str:
@@ -440,18 +439,6 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     except api.EngineError as error:
         raise Failed(str(error)) from None
     return 0
-
-
-def inspect_parser(prog: str = "cad <type> inspect") -> argparse.ArgumentParser:
-    """``cad <type> inspect``'s parser: a document, and a ref into it or none."""
-    return parser_for("inspect", prog)
-
-
-def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect") -> int:
-    """``cad xbf inspect DOC``: the build closure the xbf holds; ``cad model inspect ID REF``: what the
-    kernel measures of the elements a ref names, and what made each (``made_by``, null for a model's
-    document no live worker built; none of a file, which names no model)."""
-    return run("inspect", argv, prog)
 
 
 def _inspect(args: argparse.Namespace, prog: str) -> int:

@@ -134,7 +134,7 @@ SKILLS = ("cad", "engineering-drawing", "fea", "pcb", "print3d", "robot-simulati
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
                   "urdf")
-# Claude Desktop's server key, and the variable its server is told its install channel by.
+# Claude Desktop's server key.
 DESKTOP_KEY = "cad"
 # A checkout's development install (its installer): its catalog, and the file it marks its Cursor copy with.
 DEV_MARKETPLACE = "earthtojake-dev"
@@ -154,8 +154,6 @@ LABELS = {"claude": "Claude Code", "claude-desktop": "Claude Desktop", "codex": 
           "grok": "Grok Build", "gemini": "Gemini CLI"}
 # Cursor and Grok Build load the plugins Claude Code installed, beside their own.
 FED_BY = {"cursor": "claude", "grok": "claude"}
-# The apps the doctor's report reads (its host inventory): Grok Build's own storage is not among them.
-INVENTORIED = frozenset({"claude", "claude-desktop", "codex", "cursor", "gemini"})
 # What a person does for an app to pick up a changed plugin: never done for them.
 RESTART = {
     "claude": "Claude Code: start a new session (a running one keeps the plugin it started with)",

@@ -64,7 +64,7 @@ snapshot asks for is drawn by a render process of its own (``renders``), started
 picture, sent each new version of it at the picture that asks for it, gone with the daemon or under
 the memory cap.
 
-Its only files are the operating system's coordination, in its own folder, ``state_dir``: a lock,
+Its only files are the operating system's coordination, in its own folder, ``places.engine_dir``: a lock,
 and on POSIX its door, a named pipe (``door_path``), and the pipes of the connections being opened
 (``door``: no socket, so a sandbox that refuses sockets still reaches it); on Windows a localhost
 TCP port and a token, in a port file there. It removes them as it stops (``let_go``); those of one
@@ -595,7 +595,6 @@ class Daemon:
                                      pressed=self.pressure.under, on_progress=self.progressed,
                                      on_event={"saved": lambda process, header, payload:
                                                self.models.cache.saved(process, header, payload)})
-        self.workers_lock = threading.Lock()  # each worker's ``held``
         self.born = time.time()
         # What the startup identity migration did (``identity.migrate``), which ``status`` says when it
         # did anything: a started engine's stderr is no one's.
@@ -1521,11 +1520,11 @@ class Daemon:
         long anything has been idle. A killed client's pipes are swept, and the processes' memory is
         held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents drained
         first, so they stay held); the memory budget sends unwatched documents out of memory, least recently used
-        first, to the cache, as they are loaded (``serve.Server.trim``). The engine stops on ``stop``, a terminate, another installation's
-        retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
-        folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
-        what it holds to the cache."""
-        if self.address is not None and _identity(self.address) != self.address_id:
+        first, to the cache, as they are loaded (``serve.Server.trim``). The engine stops on ``stop``, a terminate, an update's
+        drain (``drain``), and here when its door is gone (its folder removed, a temporary folder
+        cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving what it
+        holds to the cache. A drain closes the door itself and stops once what it waits for is done."""
+        if not self.draining and self.address is not None and _identity(self.address) != self.address_id:
             self.stopping.set()
             return
         if self.door is not None:

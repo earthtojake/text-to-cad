@@ -2,14 +2,14 @@
 
 ``<state>/documents/<id>/document.json`` is a document's record, one shape for every kind:
 ``{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?,
-revision, built, facts?, program?, cache?, opened?, pinned?, preview?}`` (identity's fields: ``identity``). ``kind`` is ``model``, a model built from a script (``home`` and ``entry``: the
+revision, built, created?, facts?, program?, python?, with?, cache?, opened?, pinned?, preview?}`` (identity's fields: ``identity``). ``kind`` is ``model``, a model built from a script (``home`` and ``entry``: the
 script and the function it points at; the command that builds it again is always ``cad run``
 of its home); ``shape``, a shape a program handed over (``home``: the script that handed it over,
 or the folder it was handed over in; ``program``: that program, where there is one; nothing builds
 it again); or ``file``, an on-disk CAD file the person opened (``home`` and ``opened`` alone, and
 ``pinned`` and ``preview``: never a ``revision``, never bytes). The registry POINTS: no geometry, no
 mesh, no xbf and no memo is ever written here. A model's record may say that the engine's cache
-holds its document (``cache``: ``{revision, bytes, read}``), whose bytes live in the
+holds its document (``cache``: ``{revision, bytes}``), whose bytes live in the
 cache folder, not here (``Registry.cache``: ``<cache>/documents/<id>/document.xbf``, the engine's
 ``cache`` module): regenerable, wiped at no loss, never the source of anything; the record is
 authoritative, and a cache file missing or unreadable is simply not cached. Ids are the

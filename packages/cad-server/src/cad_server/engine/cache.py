@@ -38,9 +38,10 @@ along with the model's code and inputs. The closure records cadgen and Python ve
 keying them. An explicit build with a changed key rebuilds from source. Reading an older
 supported snapshot converts its metadata in memory, leaving these bytes and its build key alone.
 
-Read: at start the daemon indexes which records have a cache file (``Cache.ensure_index``: a listing
-and a stat each, no record and no byte read). A document with one answers every verb by loading its
-bytes through the documents worker, as a held document does. A run reads it too: a build is handed
+Read: once after its start, on the first request that asks, the daemon indexes which records have a
+cache file (``Cache.ensure_index``: a listing and a stat each, no record and no byte read). A
+document with one answers every verb by loading its bytes through the documents worker, as a held
+document does. A run reads it too: a build is handed
 the folder (``folder``), and a fresh worker takes any model from its cache file when the
 key it holds is the model's (``build._previous``), with nothing run.
 
@@ -101,6 +102,8 @@ class Cache:
         self.idle = idle()
         self.lock = threading.Condition()
         self.indexed = False
+        # Held through the index's pass, so a request arriving meanwhile waits for the files it lists.
+        self.indexing = threading.Lock()
         # Each cache file: its bytes, and its revision once known.
         self.index: dict[str, dict[str, Any]] = {}
         self.due: dict[str, float] = {}  # each document's idle deadline (monotonic)
@@ -139,29 +142,31 @@ class Cache:
         return f"{DOCUMENTS}/{ident}/{FILE}"
 
     def ensure_index(self) -> None:
-        """Index the cache files once (the module): a listing and a stat each, nothing read."""
-        with self.lock:
-            if self.indexed:
+        """Index the cache files once (the module): a listing and a stat each, nothing read. A caller
+        arriving while another indexes returns once the index holds what that pass found."""
+        with self.indexing:
+            with self.lock:
+                if self.indexed:
+                    return
+                self.indexed = True
+            held = self.registry()
+            if held is None:
                 return
-            self.indexed = True
-        held = self.registry()
-        if held is None:
-            return
-        from cad.engine.ids import is_id
-        from cad_server.engine.registry import DOCUMENTS
+            from cad.engine.ids import is_id
+            from cad_server.engine.registry import DOCUMENTS
 
-        found = {}
-        for ident in held.cache.names(DOCUMENTS):  # only ``documents/``: the rest of the folder is not ours
-            if not is_id(ident):
-                continue
-            try:
-                stat = held.cache.path(self.inside(ident)).stat()
-            except OSError:
-                continue
-            found[ident] = {"bytes": stat.st_size, "revision": None}
-        with self.lock:
-            for ident, entry in found.items():
-                self.index.setdefault(ident, entry)
+            found = {}
+            for ident in held.cache.names(DOCUMENTS):  # only ``documents/``: the rest of the folder is not ours
+                if not is_id(ident):
+                    continue
+                try:
+                    stat = held.cache.path(self.inside(ident)).stat()
+                except OSError:
+                    continue
+                found[ident] = {"bytes": stat.st_size, "revision": None}
+            with self.lock:
+                for ident, entry in found.items():
+                    self.index.setdefault(ident, entry)
 
     def documents(self) -> list[str]:
         """The ids of the documents with a cache file."""

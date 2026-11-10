@@ -25,8 +25,8 @@ documents across a restart; a run of the same closure in the worker holding the 
 same for the same code, so a build that changed nothing rewrites no record.
 
 What a restart opens at once is the cache's (``cache``): each ``model`` and ``shape`` document's
-bytes, saved in its registry folder once it has been idle (and at its drain, and at shutdown). A
-document with a cache file is ``held`` -- the engine answers it without a worker -- in memory, on
+bytes, saved in the engine's cache folder once it has been idle (and at its drain, and at shutdown).
+A document with a cache file is ``held`` -- the engine answers it without a worker -- in memory, on
 disk, or both (``where``): after a restart its id is taken up (``adopt``) from its record the first
 time anything names it, and its bytes are read through the documents worker when a verb needs them
 (``load``). It is the last built state, never a rerun: the engine knows the document of its last
@@ -265,7 +265,7 @@ class Models:
         script = Path(source["script"])
         old = held.get(ident) or {}
         root = str(script.parent)
-        # What a restart needs of it and no more: what it is (``id``, ``kind``, ``key``), where its
+        # What a restart needs of it and no more: what it is (``id``, ``kind``), where its
         # code is (``root``, ``home``, ``entry``: the command that builds it again is ``cad run``
         # of its home -- or, built in a Python of its own, that Python of its home: ``python``), the
         # revision the cache and the delta compare, when it was built (the

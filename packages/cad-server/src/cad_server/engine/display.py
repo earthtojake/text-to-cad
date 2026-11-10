@@ -129,6 +129,9 @@ def _xvfb() -> str | None:
             return _XVFB.display
         if _FAILED is not None:
             return None
+        if _XVFB is not None:
+            _XVFB.stop()  # one that died: its cookie and its log go with it
+            _XVFB = None
         program = shutil.which("Xvfb")
         if program is None:
             return None

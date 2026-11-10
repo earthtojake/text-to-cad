@@ -503,12 +503,3 @@ def _verb(target: tuple[str, str]) -> Callable[..., Any]:
 
 def generated_parser(target: tuple[str, str], *, prog: str) -> argparse.ArgumentParser:
     return cli_from_function(_verb(target), prog=prog)
-
-
-def generated_main(
-    target: tuple[str, str],
-    argv: Sequence[str] | None,
-    *,
-    prog: str,
-) -> int:
-    return run_cli(_verb(target), argv, prog=prog)
