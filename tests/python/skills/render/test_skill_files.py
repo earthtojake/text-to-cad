@@ -19,7 +19,8 @@ class SkillFiles(unittest.TestCase):
     def test_the_skill_holds_no_code_its_script_imports_the_library_s(self) -> None:
         # What a render script needs is the library's, reached by an import: nothing to copy into a project.
         self.assertEqual(sorted(path.relative_to(SKILL).as_posix() for path in SKILL.rglob("*")
-                                if path.is_file() and path.suffix not in (".md", ".yaml") and path.name != "LICENSE"), [])
+                                if path.is_file() and path.suffix not in (".md", ".yaml") and path.name != "LICENSE"
+                                and "__pycache__" not in path.parts), [])
         page = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         script = re.search(r"```python\n# render\.py.*?```", page, re.S)[0]
         self.assertIn("from cad.blender import load\n", script)
