@@ -590,6 +590,8 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
     ``CAD_ENGINE_CHECK_RSS_MB``, the same defaults), read each ``WATCH_SECONDS``, the time from the process's
     start and its memory as the system counts it. From outside, because nothing inside can stop it: a kernel
     call holds the interpreter until it returns, and one that never returns would hold a watchdog there too.
+    The process ends with its caller: it holds the read end of a pipe this one keeps open, and leaves when
+    that closes (a caller a shell's time limit killed leaves no check running on, measured for no one).
 
     Its answer, ``_measured_here``'s; or ``{"unmeasured": {"code", "message"}}`` for one stopped at a limit
     (``over_time``, ``over_memory``: its process killed), whose process exited with no answer
@@ -601,6 +603,7 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
         return _measured_here(request)
     import site
     import subprocess
+    import tempfile
     import time
 
     from cad.engine.places import windowless
@@ -620,30 +623,33 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
         return {"unmeasured": {"code": reason, "message": _STOPPED[reason].format(**said)}}
 
     began = time.monotonic()
-    process = subprocess.Popen([sys.executable, "-P", "-c", _CHILD, json.dumps(request)], stdin=subprocess.DEVNULL,
-                               stdout=subprocess.PIPE, env=env, **windowless())
-    try:
-        while True:
-            try:
-                said, _ = process.communicate(timeout=WATCH_SECONDS)
-                break
-            except subprocess.TimeoutExpired:
-                pass
-            elapsed, limit = time.monotonic() - began, memory()
-            resident = resident_of(process.pid) if limit is not None else None
-            if seconds is not None and elapsed > seconds:
-                return stopped("over_time", seconds=elapsed, limit=seconds)
-            if limit is not None and resident is not None and resident > limit:
-                return stopped("over_memory", resident=resident, limit=limit)
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.communicate()
-    lines = said.decode("utf-8", "replace").strip().splitlines()
-    try:
-        answer = json.loads(lines[-1]) if lines else None
-    except ValueError:
-        answer = None
+    with tempfile.TemporaryDirectory(prefix="cad-check-") as folder:
+        written = Path(folder) / "answer.json"
+        process = subprocess.Popen([sys.executable, "-P", "-c", _CHILD, json.dumps(request), str(written)],
+                                   stdin=subprocess.PIPE, env=env, **windowless())
+        try:
+            while True:
+                try:
+                    process.wait(timeout=WATCH_SECONDS)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                elapsed, limit = time.monotonic() - began, memory()
+                resident = resident_of(process.pid) if limit is not None else None
+                if seconds is not None and elapsed > seconds:
+                    return stopped("over_time", seconds=elapsed, limit=seconds)
+                if limit is not None and resident is not None and resident > limit:
+                    return stopped("over_memory", resident=resident, limit=limit)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            if process.stdin is not None:
+                process.stdin.close()
+        try:
+            answer = json.loads(written.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            answer = None
     if not isinstance(answer, dict):
         killed = process.returncode is not None and process.returncode < 0
         return stopped("process_lost", code=process.returncode,
@@ -656,13 +662,25 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def _child() -> None:
-    """The process ``_watched`` starts: the request in its arguments measured (``_measured_here``) and answered
-    in one line on its own standard output, which nothing else writes to (the kernel's and a library's prints go
-    to standard error, never into an answer). What the integration raised is the check's answer, not checked
-    for ``error``: its type, its words and where it was raised, in one line; a module this environment lacks
-    is answered as such (``missing``)."""
-    out = os.fdopen(os.dup(1), "w", encoding="utf-8")
+    """The process ``_watched`` starts: the request in its first argument measured (``_measured_here``) and
+    answered in the file its second names, written whole as it ends. Its standard output is its standard error's
+    (the kernel's and a library's prints never reach its caller's answer), and its standard input the pipe its
+    caller holds open: at its end of file the caller is gone, and so is this process, as soon as the interpreter
+    runs. What the integration raised is the check's answer, not checked for ``error``: its type, its words and
+    where it was raised, in one line; a module this environment lacks is answered as such (``missing``)."""
+    import threading
+
     os.dup2(2, 1)
+
+    def orphaned() -> None:
+        try:
+            while os.read(0, 4096):  # the descriptor itself: no lock of ``sys.stdin``'s is held as this process ends
+                pass
+        except OSError:
+            pass
+        os._exit(1)
+
+    threading.Thread(target=orphaned, name="cad-check-caller", daemon=True).start()
     try:
         answer = _measured_here(json.loads(sys.argv[1]))
     except ModuleNotFoundError as error:
@@ -680,8 +698,7 @@ def _child() -> None:
     except ValueError as error:
         line = json.dumps({"unmeasured": {"code": "not_finite", "message": "a measurement was not a finite number, "
                                                                            f"so the report is not JSON: {error}"}})
-    out.write(line + "\n")
-    out.flush()
+    Path(sys.argv[2]).write_text(line, encoding="utf-8")
 
 
 def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,

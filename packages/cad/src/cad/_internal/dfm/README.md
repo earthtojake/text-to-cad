@@ -61,7 +61,8 @@ script that changes nothing, or a build of another model, disturbs no check.
 A mesh and a DXF are measured by their caller (or in the integration's environment) always, and so is a file
 where no engine can be reached: in a process of its own that the caller starts and holds to the same limits from
 outside (`manufacturing._watched`: `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB`, the same defaults,
-read each second), since a kernel call that never returns can be stopped from nowhere else. Past one the check is
+read each second), since a kernel call that never returns can be stopped from nowhere else; the process ends
+with its caller, so one a shell's time limit killed leaves nothing measuring. Past a limit the check is
 `not_checked` with the engine's reason for the same (`over_time`, `over_memory`); a process that exits with no
 answer is `process_lost`, and a measuring that raised is `error`, in one line. A mesh is read
 and cleaned (`cad/trimesh/_mesh.py`): corners at one place welded into one

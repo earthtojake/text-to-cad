@@ -1373,8 +1373,12 @@ class StatesTest(unittest.TestCase):
         measured in a process of its own, which the caller stops past the engine's limits for a check --
         whatever call it is in: it is killed from outside -- and says not checked for (``over_time``,
         ``over_memory``); one whose process exits with no answer is ``process_lost``, one whose measuring raised
-        ``error``, in one line; under its limits it answers what the integration measures."""
+        ``error``, in one line; under its limits it answers what the integration measures. The process ends
+        with its caller: once the pipe its caller holds is closed it is gone, measuring for no one."""
+        import json
         import os
+        import subprocess
+        import sys
         from unittest import mock
 
         from cad.trimesh import _check
@@ -1409,6 +1413,17 @@ class StatesTest(unittest.TestCase):
             measured = checked(CAD_ENGINE_CHECK_SECONDS="0", CAD_ENGINE_CHECK_RSS_MB="0")  # no limit
             here = _check.measure("stl", path, "printing", resolved, False)
             self.assertEqual((measured.status, measured.measurements["mesh"]), ("ok", here["mesh"]))
+
+            # a measuring that never ends, its caller gone: the process leaves at the end of its caller's pipe
+            answer = Path(folder) / "answer.json"
+            forever = manufacturing._CHILD.replace(
+                "_child()", "import cad.trimesh._check as c, time; c.measure = lambda *a: time.sleep(3600); _child()")
+            request = {"type": "stl", "source": path, "process": "printing", "resolved": resolved, "candidates": False}
+            orphan = subprocess.Popen([sys.executable, "-c", forever, json.dumps(request), str(answer)],
+                                      stdin=subprocess.PIPE, env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+            self.addCleanup(orphan.kill)
+            orphan.stdin.close()
+            self.assertEqual((orphan.wait(120), answer.exists()), (1, False))
 
     def test_a_result_holds_its_state(self) -> None:
         from cad.results import CheckFinding, CheckResult
