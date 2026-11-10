@@ -28,7 +28,7 @@ import numpy as np
 
 
 __all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "lateral_directions",
-           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster",
+           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_depth", "pull_vector", "raster",
            "slide_directions", "steps", "transitions", "weighted_median", "weighted_quantile"]
 
 Cast = Callable[[np.ndarray, np.ndarray], np.ndarray]
@@ -737,13 +737,15 @@ def _distinct(vectors: Sequence[np.ndarray], taken: Sequence[np.ndarray] = ()) -
     return found
 
 
-def slide_directions(pull: np.ndarray, own: Sequence[Sequence[float]] = ()) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The directions a slide is tried along, three sets in the order they are tried:
+def slide_directions(pull: np.ndarray, own: Sequence[Sequence[float]] = ()) -> tuple[np.ndarray, np.ndarray]:
+    """The directions a slide is tried along, two sets in the order they are tried:
 
     - plain: ``own`` directions lying in the parting plane (the feature's own: a bore's axis, a slot's run, a
       pocket floor's normal; either way along each), then eight round the plane;
-    - angled: ``own`` directions leaning out of the plane, ``SLIDE_STEEPEST_DEG`` at most (an angled hole's axis);
-    - guessed: the eight tilted 45 degrees toward either pull, the last thing tried before nothing releases it.
+    - angled: ``own`` directions leaning out of the plane, ``SLIDE_STEEPEST_DEG`` at most (an angled hole's axis).
+
+    No direction is guessed: a slide at an angle the feature's own faces do not give frees it by chance, and
+    names a mold nobody would build.
     """
     p = np.asarray(pull, dtype=float)
     p = p / np.linalg.norm(p)
@@ -765,8 +767,7 @@ def slide_directions(pull: np.ndarray, own: Sequence[Sequence[float]] = ()) -> t
     lateral = lateral_directions(p, 8)
     plain = np.array(flat + _distinct(list(lateral), flat)).reshape(-1, 3)
     angled = np.array(_distinct(steep)).reshape(-1, 3)
-    guessed = np.vstack([(lateral + p) / math.sqrt(2.0), (lateral - p) / math.sqrt(2.0)])
-    return plain, angled, guessed
+    return plain, angled
 
 
 def _frees(pts: np.ndarray, nrm: np.ndarray, sides: np.ndarray, cast: Cast, tol: float) -> np.ndarray:
@@ -815,7 +816,8 @@ def _cover(frees: np.ndarray, plain: np.ndarray, names: Sequence[str], exits: np
 def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast, *, scale: float,
                       zero_tol_deg: float, own: Sequence[Sequence[float]] = (),
                       box: tuple[np.ndarray, np.ndarray] | None = None, stroke_limit: float | None = None,
-                      lip_limit: float | None = None, depth: bool = True) -> dict[str, Any]:
+                      lip_limit: float | None = None, depth: bool = True, stroke: bool = True
+                      ) -> dict[str, Any]:
     """What releases a trapped feature, from its points (already offset off the surface), their outward
     normals, the pull and ``cast``; ``own``: the directions its own faces give a slide (``slide_directions``);
     ``box``: the part's box (its low and high corners), which says how far a point is from its way out.
@@ -832,7 +834,6 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
       (a quarter of ``scale`` by default), clears every point for a pull: a lifter or an internal slide;
     - ``collapsible_core``: every point is cleared so, but along directions round an axis that no one
       direction serves (an internal groove or thread round the pull, a cavity wider below its mouth);
-    - ``side_action`` along a slide guessed at 45 degrees to the plane (``angled``);
     - ``none``: some point is cleared by none of these (a sealed pocket, an interlock).
 
     ``kind``, from the geometry alone, whatever releases it: ``external`` where ``OPEN_SHARE`` of the points
@@ -843,6 +844,10 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     ``slide_depth_mm`` against its best slide too (a re-entrant lip, at every tested point; searched up to
     ``lip_limit``, ``slide_depth_limited`` past it). A side action says each tested point's travel (``travel``:
     its index in ``points``, its slide's place in ``vectors``, its travel).
+
+    What a release costs most is its figures, not its kind: with ``stroke`` False a side action's travel is not
+    walked (``stroke_mm`` None, every slide of the cover named), with ``depth`` False no depth against the pull
+    is read (``pull_depth`` reads it later). One nothing releases is always read in full: it fails the part.
     """
     pts = np.asarray(points, dtype=float).reshape(-1, 3)
     nrm = np.asarray(normals, dtype=float).reshape(-1, 3)
@@ -857,17 +862,14 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     if not len(pts):
         return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [],
                 "stroke_mm": None}
-    found = _classify(pts, nrm, p, cast, scale, tol, slide_directions(p, own), stroke_limit, box)
+    found = _classify(pts, nrm, p, cast, scale, tol, slide_directions(p, own), stroke_limit, box, stroke)
     if "travel" in found:
         found["travel"] = [(int(tested[index]), slide, travel) for index, slide, travel in found["travel"]]
     # How deep it is: against the straight pull (a bump-off's strain); one nothing releases, against its
     # best slide too (a re-entrant lip the slide's steel would scrape over).
     reach = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
-    deep = _subset(len(pts), DEPTH_POINTS)
     if depth:  # (a pull only ranked asks no depth against it: only whether a lip frees it)
-        found["depth_mm"] = interference(pts[deep], nrm[deep], (p, -p), cast, limit=reach, zero_tol_deg=zero_tol_deg,
-                                         rungs=8)
-        found["depth_limited"] = found["depth_mm"] >= reach
+        found.update(pull_depth(pts, nrm, p, cast, scale=scale, zero_tol_deg=zero_tol_deg, stroke_limit=stroke_limit))
     if found["release"] == "none":
         # only as deep as a lip is worth telling apart (``lip_limit``): past it, "deeper than that"
         lip = float(lip_limit) if lip_limit is not None else reach
@@ -877,10 +879,31 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     return found
 
 
+def pull_depth(points: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast, *, scale: float,
+               zero_tol_deg: float, stroke_limit: float | None = None) -> dict[str, Any]:
+    """How deep a trapped feature is against the straight pull (``interference`` at ``DEPTH_POINTS`` of the
+    points ``classify_undercut`` tests): ``depth_mm``, and ``depth_limited`` where no move up to the stroke
+    limit frees it."""
+    pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    nrm = np.asarray(normals, dtype=float).reshape(-1, 3)
+    tested = _subset(len(pts), int(min(RELEASE_POINTS, max(16, 4 * math.sqrt(len(pts))))))
+    pts, nrm = pts[tested], nrm[tested]
+    p = np.asarray(pull, dtype=float)
+    p = p / np.linalg.norm(p)
+    reach = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
+    deep = _subset(len(pts), DEPTH_POINTS)
+    found = interference(pts[deep], nrm[deep], (p, -p), cast, limit=reach, zero_tol_deg=zero_tol_deg, rungs=8)
+    return {"depth_mm": found, "depth_limited": found >= reach}
+
+
 def _side_action(pts: np.ndarray, p: np.ndarray, cast: Cast, scale: float, sides: np.ndarray, frees: np.ndarray,
-                 chosen: list[int], angled: np.ndarray, kind: str) -> dict[str, Any]:
+                 chosen: list[int], angled: np.ndarray, kind: str, stroke: bool = True) -> dict[str, Any]:
     """The side action along ``chosen`` of ``sides``: each point goes to the slide that frees it in the shortest
-    travel; the stroke is the longest any slide then needs."""
+    travel; the stroke is the longest any slide then needs (``stroke`` False: not walked, every slide named)."""
+    if not stroke:
+        return {"release": "side_action", "kind": kind, "directions": [direction_name(sides[pick]) for pick in chosen],
+                "vectors": [sides[pick] for pick in chosen], "angled": [bool(angled[pick]) for pick in chosen],
+                "stroke_mm": None}
     n = len(pts)
     travel = np.full((len(chosen), 2, n), np.inf)   # per slide, per way along the pull, per point
     for row, pick in enumerate(chosen):
@@ -900,9 +923,9 @@ def _side_action(pts: np.ndarray, p: np.ndarray, cast: Cast, scale: float, sides
 
 
 def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale: float, tol: float,
-              slides: tuple[np.ndarray, np.ndarray, np.ndarray], stroke_limit: float | None,
-              box: tuple[np.ndarray, np.ndarray] | None = None) -> dict[str, Any]:
-    plain, angled, guessed = slides
+              slides: tuple[np.ndarray, np.ndarray], stroke_limit: float | None,
+              box: tuple[np.ndarray, np.ndarray] | None = None, stroke: bool = True) -> dict[str, Any]:
+    plain, angled = slides
 
     def cover(sides: np.ndarray, frees: np.ndarray, tilted: np.ndarray) -> list[int] | None:
         # how far each point is from its way out of the part's box along each direction
@@ -924,17 +947,10 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
         chosen = cover(sides, frees, tilted)
     kind = "external" if float(frees.any(axis=0).mean()) >= OPEN_SHARE else "internal"
     if chosen is not None:
-        return _side_action(pts, p, cast, scale, sides, frees, chosen, tilted, kind)
+        return _side_action(pts, p, cast, scale, sides, frees, chosen, tilted, kind, stroke)
     inside = _inside_release(pts, p, cast, scale, plain, stroke_limit)
     if inside is not None:
         return {**inside, "kind": kind}
-    # Last, before nothing releases it: a slide guessed at 45 degrees to the plane.
-    sides = np.vstack([sides, guessed])
-    frees = np.vstack([frees, _frees(pts, nrm, guessed, cast, tol)])
-    tilted = np.arange(len(sides)) >= len(plain)
-    chosen = cover(sides, frees, tilted)
-    if chosen is not None:
-        return _side_action(pts, p, cast, scale, sides, frees, chosen, tilted, kind)
     return {"release": "none", "kind": kind, "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
 
 
