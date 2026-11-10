@@ -215,7 +215,7 @@ operation its models ran, keyed by its inputs and the body that ran it. A hit ha
 the objects the first run made; a miss makes everything downstream of it miss. So an edit
 costs what it changed, and an element keeps the name its feature history gave it.
 
-Two things a key does not hold:
+One thing a key does not hold, and one it holds only by value:
 
 - **A shape made past build123d.** One made by calling `OCP` directly (a
   `BRepOffsetAPI_MakeFilling`, a sewing) has no key, so every operation downstream of it
@@ -224,11 +224,13 @@ Two things a key does not hold:
   Reach for `OCP` to ask a question; to make a shape, use build123d's operation
   (`Face.make_surface_patch` for a filled cap), or make it in a `@memo` function of values
   that returns it as made.
-- **An attribute of your own on a shape.** A key covers a shape's geometry, label, colour,
-  material, joints and mechanism, not a plain Python attribute a model sets on it
-  (`shape._stood = ...`). A hit hands back the shape as first made, so code edited to set a
-  new attribute still gets the old shapes without it. Keep such data beside the shape (a
-  dict by label, a value the function returns), never on it.
+- **An attribute of your own on a shape.** A plain Python attribute a model sets on a shape
+  (`shape._stood = location`) is part of that shape's key beside its geometry, label, colour,
+  material, joints and mechanism, so code edited to set or change one runs again what is
+  made of the shape. Its value is a parameter: a number, a string, a `Location`, a tuple or a
+  dict of them. A value that is none (a function, an object of your own) cannot be compared,
+  so every operation on that shape runs on every build, which the run's line says
+  (`uncached`): keep such data beside the shape, in a dict by label.
 
 Above that, a body (a model's, or a `@memo` call's) is replayed, not run, while what it
 is made of is unchanged:
