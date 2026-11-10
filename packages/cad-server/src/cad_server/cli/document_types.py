@@ -162,6 +162,34 @@ NOT_CHECKED = 3
 _UNCHECKED = (("cad.engine.api", "Stopped", "engine_stopped"), ("cad.engine.api", "EngineError", "engine_failed"))
 
 
+def _mistake(failure: Any, *, prog: str, as_json: bool) -> int:
+    """The command line's mistake said by a manufacturing check, and its exit status (2): as every command
+    says one (``cli_errors.write``), its ``--json`` document with ``"status": "usage"`` -- so each answer of the
+    command, a result's, a check that did not run to its end and this, holds its state in the one field."""
+    import json
+
+    from cad_server._internal import cli_errors
+
+    if not as_json:
+        return cli_errors.write(failure, prog=prog, as_json=False)
+    print(json.dumps({**cli_errors.document(failure), "status": "usage"}, separators=(",", ":")), flush=True)
+    return failure.status
+
+
+def _stated(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """A manufacturing check's ``parser``, whose ``--json`` document of a command line it refuses -- an option
+    it does not take, a source of another type, a file that is not there -- says its state too (``_mistake``)."""
+    said = parser.fail  # type: ignore[attr-defined]
+
+    def fail(failure: Any, *, as_json: bool) -> None:
+        if as_json:
+            parser.exit(_mistake(failure, prog=parser.prog, as_json=True))
+        said(failure, as_json=False)
+
+    parser.fail = fail  # type: ignore[attr-defined]
+    return parser
+
+
 def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: str) -> int:
     """A manufacturing check run and said, and its exit status, which is its state: 0 ``ok``, 1 ``failed``
     (the part: an error finding, or with ``--strict`` a warning), 3 ``not_checked`` -- the result's own
@@ -169,30 +197,35 @@ def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: 
     stopped, cancelled it or lost its worker, its environment gave no answer, it crashed. Never 1 for those:
     1 says the part fails. Under ``--json`` such a failure is the contract's document with ``"status":
     "not_checked"`` and its ``reason`` -- the engine's own (``error.reason``) where it gives one --; without,
-    its words on stderr and ``NOT CHECKED <source>: <reason>`` on stdout. The command line's mistake (a value
-    refused by name, a document the engine does not hold) stays exit 2, said as ever."""
+    one line on stderr (``<prog>: NOT CHECKED (<reason>): <its words>``: no part failed, so nothing there says
+    FAILED, and no frame of the command's is named) and ``NOT CHECKED <source>: <reason>`` on stdout. The
+    command line's mistake (a value refused by name, a document the engine does not hold) stays exit 2, its
+    ``--json`` document's ``status`` ``usage`` (``_mistake``)."""
     import json
 
     from cad_server._internal import cli_errors
-    from cad_server._internal.cli_from_function import _report_crash, report_failure, result_lines, result_payload
+    from cad_server._internal.cli_from_function import _report_crash, result_lines, result_payload
 
     try:
         result = invoke()
     except Exception as error:  # noqa: BLE001 - the CLI boundary: report, do not traceback
+        _report_crash(error)
         failure = cli_errors.classify(error)
         if failure.status == cli_errors.USAGE:
-            return report_failure(error, prog=prog, as_json=as_json, verbose_hint=False)
+            return _mistake(failure, prog=prog, as_json=as_json)
         reason = getattr(error, "reason", None)
+        known = (isinstance(reason, str) and bool(reason)) or isinstance(error, cli_errors.Failure)
         if not isinstance(reason, str) or not reason:
             reason = next((code for module, name, code in _UNCHECKED
                            if any(kind.__module__ == module and kind.__name__ == name for kind in type(error).__mro__)),
                           failure.reason)
         if as_json:
-            _report_crash(error)
             print(json.dumps({**cli_errors.document(failure), "status": "not_checked", "reason": reason},
                              separators=(",", ":")), flush=True)
         else:
-            report_failure(error, prog=prog, as_json=False, verbose_hint=False)
+            # What stopped it, in its own words; a failure of no class the check knows says its type too.
+            words = str(failure) if known or reason != failure.reason else f"{type(error).__name__}: {failure}"
+            print(f"{prog}: NOT CHECKED ({reason}): {words}", file=sys.stderr, flush=True)
             print(f"NOT CHECKED {source}: {reason}", flush=True)
         return NOT_CHECKED
     if as_json:
@@ -224,10 +257,13 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
             # Molding, CNC and sheet on a mesh: refused with the reason and the check to run instead, whatever else
             # is given -- another process's flags (``--pull``, ``--axes``) are not this mistake's to name.
             from cad._internal.manufacturing import options
-            from cad_server._internal.cli_from_function import emit
+            from cad._internal.refused import ArgumentRefused
+            from cad_server._internal import cli_errors
 
-            return emit(lambda: options(document_type, refused, {}), prog=prog, as_json="--json" in argv,
-                        verbose_hint=False)
+            try:
+                options(document_type, refused, {})
+            except ArgumentRefused as error:
+                return _mistake(cli_errors.classify(error), prog=prog, as_json="--json" in argv)
         target = (f"cad.{document_type}", "dfm")
         integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
         if integration_env.carries(integration):
@@ -243,7 +279,8 @@ def _checked_here(document_type: str, target: tuple[str, str], argv: list[str], 
     from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
                                                         _verb, generated_parser)
 
-    parser = _present(_typed(generated_parser(target, prog=prog), document_type, target[1], _first_parameter(target)))
+    parser = _stated(_present(_typed(generated_parser(target, prog=prog), document_type, target[1],
+                                     _first_parameter(target))))
     parsed = parser.parse_args(argv)
     function = _verb(target)
     positional, keywords = _call_arguments(function, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
@@ -275,7 +312,7 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
     from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
                                                         _verb, generated_parser)
 
-    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
+    parser = _stated(_typed(generated_parser(target, prog=prog), document_type, target[1], "source"))
     parsed = parser.parse_args(argv)
     positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
 
