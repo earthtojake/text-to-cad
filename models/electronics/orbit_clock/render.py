@@ -17,25 +17,23 @@ from pathlib import Path
 import bpy
 from mathutils import Matrix, Vector
 
-HERE = Path(__file__).resolve().parent
-# A project outside this repository copies the helper beside its script, as the render skill says.
-sys.path.insert(0, str(HERE.parents[2] / "skills" / "render" / "scripts"))
-import cad_glb
+from cad.blender import load
 
-args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+HERE = Path(__file__).resolve().parent
+args = sys.argv[1:]
 final = "--final" in args
 OUT = HERE / "RENDERS"
 
 bpy.ops.wm.read_factory_settings(use_empty=True)  # no person's startup file, no default cube
 scene = bpy.context.scene
-model = cad_glb.load(HERE / "GLB" / "orbit_assembly.glb")
+model = load(HERE / "GLB" / "orbit_assembly.glb")
 
 # The board's layers. KiCad's GLB is imported in the board's frame, in metres; the assembly's PCB holds its
 # mesh in the same frame in mm, turned to glTF's Y up (its root turns it back). So the layers ride on the PCB,
 # and with it the explode, scaled by 1000 and given that quarter turn. KiCad's parts are the assembly's
 # again: only the layers are kept.
 pcb = model.objects["board/orbit_PCB"]
-layers = cad_glb.load(HERE / "GLB" / "orbit.glb").root
+layers = load(HERE / "GLB" / "orbit.glb").root
 for item in list(layers.children):
     if item.type != "MESH":  # a footprint's 3D model
         bpy.data.batch_remove(item.children_recursive + [item])

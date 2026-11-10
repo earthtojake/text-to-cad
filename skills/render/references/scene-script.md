@@ -1,7 +1,7 @@
 # The scene script
 
 Read this for the parts of a render script past SKILL.md's skeleton: arguments, framing, lights,
-the world, colour, the engines and the GPU, and running the same file in a person's Blender.
+the world, colour, the engines and the GPU.
 
 - [Running it](#running-it)
 - [Framing](#framing)
@@ -16,18 +16,13 @@ cad run render.py
 cad run render.py --final
 ```
 
-`cad run` runs the script with Python 3.13 and bpy 5.2.3, its folder first on the path, so
-`cad_glb.py` beside it imports. Its arguments are `sys.argv[1:]`. In a person's Blender (5.2 LTS
-renders the same pixels; the helper needs 4.4 or later), the same file runs as
-`blender -b -P render.py -- --final`: Blender's own options come first and the script's after the
-`--`, and the script's folder is not on the path until the script puts it there. Read the arguments
-so either works:
+`cad run` runs the script with Python 3.13, bpy 5.2.3 and cad, so `from cad.blender import load`
+imports, as does a module beside the script. Its arguments are `sys.argv[1:]`:
 
 ```python
 import sys
 
-args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
-final = "--final" in args
+final = "--final" in sys.argv[1:]
 ```
 
 Start every script with `bpy.ops.wm.read_factory_settings(use_empty=True)`: an empty scene and

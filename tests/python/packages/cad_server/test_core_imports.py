@@ -155,7 +155,12 @@ EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_mate
                  "kicad": {"kicode"},
                  "netgen": {"netgen"},
                  "calculix": {"cad_ccx"},
-                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
+                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
+                 "blender": {"bpy", "mathutils"}}  # mathutils is Blender's own, in bpy's wheel
+# A platform an integration is built for (``cad.registry.PLATFORMS``' words), as its extra's marker says it.
+MARKED = {"macOS arm64": "(sys_platform == 'darwin' and platform_machine == 'arm64')",
+          "Linux x86-64": "(sys_platform == 'linux' and platform_machine == 'x86_64')",
+          "Windows x86-64": " or sys_platform == 'win32')", "Windows arm64": " or sys_platform == 'win32')"}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.
@@ -186,23 +191,25 @@ class IntegrationsTest(unittest.TestCase):
             with self.subTest(integration=integration.name):
                 named = {re.split(r"[\s<>=!~;\[]", requirement, maxsplit=1)[0].lower().replace("_", "-")
                          for requirement in extras.get(integration.extra or "", [])}
-                if not integration.library:  # its own pins, no extra's: its distributions are among them
-                    self.assertNotIn(integration.name, extras)
-                    self.assertTrue(set(integration.distributions) <= {item.split("==")[0] for item in integration.requires})
-                    continue
                 self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
                                  "an integration's distributions are its extra's")
                 self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
+                # The one Python and the platforms the registry says its tool is built for are its extra's markers:
+                # anywhere else the extra installs nothing, and a run is refused by name.
+                for requirement in extras.get(integration.extra or "", []) if integration.python else ():
+                    marker = requirement.partition(";")[2]
+                    self.assertIn(f"python_version == '{integration.python}'", marker)
+                    self.assertEqual({platform for platform, said in MARKED.items() if said in marker},
+                                     set(integration.platforms))
+                    self.assertEqual(marker.count("sys_platform == "), 3, "macOS, Linux and Windows, each once")
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
-        # An integration with no library in its environment (blender's bpy) has no code of ours in it: no package.
-        hosted = {name for name, integration in INTEGRATIONS.items() if integration.library}
-        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *hosted}))
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))
         self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
         import cad
 
         self.assertEqual(sorted(cad._TYPES), sorted(DOCUMENT_TYPES))
-        self.assertEqual(sorted(cad._INTEGRATIONS), sorted(hosted))
+        self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
 
     def test_each_integration_imports_its_own_extras_dependencies_alone(self) -> None:
         from cad.registry import INTEGRATIONS

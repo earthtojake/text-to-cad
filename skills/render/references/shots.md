@@ -19,7 +19,9 @@ for framing, the camera's height, the light's direction and anything missing. Th
 Cycles, with the same scene. One script does both:
 
 ```python
-final = "--final" in sys.argv
+import sys
+
+final = "--final" in sys.argv[1:]
 scene.render.engine = "CYCLES" if final else "BLENDER_EEVEE"
 scene.render.filepath = str(HERE / ("hero.png" if final else "hero-draft.png"))
 bpy.ops.render.render(write_still=True)

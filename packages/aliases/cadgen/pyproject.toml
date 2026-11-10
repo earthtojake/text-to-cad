@@ -11,7 +11,7 @@ version = "0.11.4"
 description = "Deprecated alias of the text-to-cad library, still published: installs cad at the same release. Import cad."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 authors = [{ name = "earthtojake" }]
 dependencies = ["cad==0.11.4"]
 

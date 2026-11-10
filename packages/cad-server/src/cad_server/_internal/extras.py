@@ -44,13 +44,12 @@ never changed. A script's ``requires-python`` the Python cannot meet is refused 
 do is said in one line (``base.failure``): requirements it cannot resolve beside cad's pins, with its
 reason; a package its cache lacks where the network cannot be reached, by name.
 
-**An environment without cad** (``alone``): a program that imports an integration whose environment holds no
-library (the registry's ``library`` false: blender's bpy, built for CPython 3.13 alone) gets an environment of
-that integration's own requirements, exactly pinned, and the program's packages, on its Python, a managed one uv
-fetches (``uv venv --managed-python``: never ``uv python install``, which writes the person's own
-``python3.13``) -- no cad, nothing resolved again, and a key of the architecture and the spec alone, so an
-update keeps it and no release's sweep removes it. A program that names cad too, or another integration (each
-needs cad), is refused in one line, as is a platform its tool has no build for, before anything is made.
+**What an integration's tool decides** (the registry's ``python`` and ``platforms``: blender's bpy is built for
+CPython 3.13 alone, and not for every platform): an environment with such an integration is made on that
+line where the engine's own Python is another (``on``: a Python uv manages, ``uv venv --managed-python``,
+never ``uv python install``, which writes a ``python3.13`` among the person's commands), with cad pinned in
+it as in any other; a platform its tool has no build for is refused in one line before anything is made
+(``supported``), as are two integrations built for different lines.
 
 **Its releases**: environments are tied to the release (cad is pinned in each). When one is made, the
 environments of releases older than the one before the current go -- the current release's and the one
@@ -68,6 +67,7 @@ import hashlib
 import json
 import ntpath
 import os
+import platform
 import posixpath
 import re
 import stat
@@ -81,10 +81,10 @@ from typing import Any, Callable, Iterable
 
 from cad_server._internal import base
 
-__all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "admits_line", "alone", "alone_python",
-           "ensure", "fingerprint", "fingerprints", "header", "integration_spec", "integrations", "key", "kept",
-           "local_package", "locked_cad", "making", "normalized", "pinned", "project", "refusal", "split", "supported",
-           "tell", "uv_config", "uv_settings", "where"]
+__all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "admits_line", "ensure", "fingerprint",
+           "fingerprints", "header", "integration_spec", "integrations", "key", "kept", "local_package", "locked_cad",
+           "making", "normalized", "on", "pinned", "project", "python_line", "refusal", "split", "supported", "tell",
+           "uv_config", "uv_settings", "where"]
 # uv's settings that say how it reaches an index, never what it resolves: a run that differs from the base's
 # only by them still runs in the base, made with the engine's own.
 HOW = frozenset({"UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_HTTP_TIMEOUT", "UV_KEYRING_PROVIDER", "UV_INSECURE_HOST"})
@@ -311,46 +311,46 @@ def integrations(*, header_cad: tuple[str, ...] | None, given_cad: Iterable[str]
     return tuple(sorted({*scanned(), *project_cad, *given_cad, *named}))
 
 
-# --- an environment without cad ---------------------------------------------------------------------
+# --- what an integration's tool decides of its environment -------------------------------------------
 
 
-def alone(names: Iterable[str]) -> Any:
-    """The integration among ``names`` whose environment holds no library (``cad.registry``'s, ``library``
-    false: blender), or None. ``Refused`` in one line for one beside another integration, which needs cad."""
+def python_line(names: Iterable[str]) -> tuple[str, str] | None:
+    """The one Python line an environment of the integrations ``names`` is made on, where one of them is
+    built for one alone, and that integration's name (the registry's ``python``: ``("3.13", "blender")``, bpy
+    having wheels for CPython 3.13 alone); None for integrations that run on any. ``Refused`` in one line for
+    two built for different lines, which no environment holds together."""
     from cad.registry import INTEGRATIONS as REGISTERED
 
-    names = sorted(set(names))
-    own = [REGISTERED[name] for name in names if name in REGISTERED and not REGISTERED[name].library]
-    if not own:
-        return None
-    if len(names) > 1:
-        others = [name for name in names if name != own[0].name]
-        raise Refused(f"the {own[0].name} integration's environment holds {own[0].tool} on Python {own[0].python} "
-                      f"and no cad, and {' and '.join(others)} need{'s' if len(others) == 1 else ''} cad: no "
-                      "environment holds both")
-    return own[0]
+    found = {REGISTERED[name].python: name for name in sorted(set(names))
+             if name in REGISTERED and REGISTERED[name].python}
+    if len(found) > 1:
+        (first, one), (second, other) = sorted(found.items())[:2]
+        raise Refused(f"cad's {one} integration runs on Python {first} alone and its {other} integration on Python "
+                      f"{second} alone: no environment holds both")
+    return next(iter(found.items()), None)
 
 
-def alone_python(integration: Any, python: str | None, options: Iterable[str] = ()) -> tuple[str, tuple[str, ...]]:
-    """The Python an environment of ``integration`` (``alone``'s) is made on, and ``uv venv``'s options for it:
-    ``python`` as given (``--python``), else the integration's; a managed one (``--managed-python``) but for a
-    path, or where ``options`` already say which kind (``--no-managed-python``)."""
+def on(names: Iterable[str], engine: str, python: str | None = None,
+       options: Iterable[str] = ()) -> tuple[str | None, tuple[str, ...]]:
+    """The Python an environment of the integrations ``names`` is made on, and ``uv venv``'s options for it:
+    ``python`` (``--python``) and ``options`` as given. With no ``--python`` it is the engine's own (None; its
+    version is ``engine``), unless one of the integrations is built for another line (``python_line``): then
+    that line, a Python uv manages (``--managed-python``, fetched by uv into its own folder on first need)
+    where ``options`` do not already say which kind."""
     options = tuple(options)
-    request = python or integration.python
-    path = "/" in request or "\\" in request
-    if not path and not {"--managed-python", "--no-managed-python"} & set(options):
+    found = python_line(names)
+    if python is not None or found is None or admits(f"=={found[0]}.*", engine):
+        return python, options
+    if not {"--managed-python", "--no-managed-python"} & set(options):
         options = (*options, "--managed-python")
-    return request, options
+    return found[0], options
 
 
-def integration_spec(names: Iterable[str]) -> "Spec":
+def integration_spec(installation: base.Installation, names: Iterable[str]) -> "Spec":
     """The spec of the environment of the integrations ``names`` alone, as ``cad run`` makes it for a program
-    that names nothing else: an integration's with no library (``alone``) on its own Python."""
+    that names nothing else: on the Python they are built for (``on``)."""
     names = tuple(sorted(set(names)))
-    own = alone(names)
-    if own is None:
-        return Spec(integrations=names)
-    python, options = alone_python(own, None)
+    python, options = on(names, installation.python or platform.python_version())
     return Spec(integrations=names, python=python, python_options=options)
 
 
@@ -359,19 +359,18 @@ def _system() -> str:
     return sys.platform
 
 
-def supported(integration: Any, arch: str) -> None:
-    """``integration``'s tool built for this platform (the system, ``_system``, and ``arch``, the installation's
-    machine), else ``Refused`` in one line naming the platforms it has (the registry's ``platforms``)."""
-    from cad.registry import platform_of
+def supported(names: Iterable[str], arch: str) -> None:
+    """Each of the integrations ``names`` built for this platform (the system, ``_system``, and ``arch``, the
+    installation's machine), else ``Refused`` in one line naming the platforms it has (the registry's
+    ``platforms``; an integration that names none runs on all)."""
+    from cad.registry import INTEGRATIONS as REGISTERED, platform_of
 
-    if not integration.platforms:
-        return
     here = platform_of(_system(), arch)
-    if here not in integration.platforms:
-        built = list(integration.platforms)
-        listed = ", ".join(built[:-1]) + f" and {built[-1]}" if len(built) > 1 else built[0]
-        raise Refused(f"{integration.tool} has no build for {here}: the {integration.name} integration runs on "
-                      f"{listed}")
+    for name in sorted(set(names)):
+        built = list(REGISTERED[name].platforms) if name in REGISTERED else []
+        if built and here not in built:
+            listed = ", ".join(built[:-1]) + f" and {built[-1]}" if len(built) > 1 else built[0]
+            raise Refused(f"cad's {name} integration has no build for {here}: it runs on {listed}")
 
 
 # --- a project ---------------------------------------------------------------------------------------
@@ -713,23 +712,13 @@ def locked_cad(lock: str | os.PathLike, release: str) -> None:
                 pinned(f"{base.LIBRARY}=={version}", release, str(lock))
 
 
-def _inputs(installation: base.Installation, spec: Spec) -> dict[str, Any]:
-    """What of the installation makes the environment of ``spec``: its base's inputs (``base._inputs``); for one
-    without cad (``alone``), the architecture alone -- no release, so an update keeps it."""
-    own = alone(spec.integrations)
-    if own is None:
-        return base._inputs(installation)
-    return {"schema": base.SCHEMA, "alone": own.name, "arch": installation.arch}
-
-
 def key(installation: base.Installation, spec: Spec | list[str], prints: dict[str, str] | None = None) -> str:
     """The environment's key: its installation's base's inputs (the release, its source, its Python and
-    the architecture among them; for one without cad, the architecture alone: ``_inputs``), the spec
-    (``Spec.keyed``), and what each local thing among it is now (``prints``, ``fingerprints`` by default): an
-    edit to one is another environment. A list of requirements is a spec of them, with the build123d
-    integration."""
+    the architecture among them), the spec (``Spec.keyed``), and what each local thing among it is now
+    (``prints``, ``fingerprints`` by default): an edit to one is another environment. A list of
+    requirements is a spec of them, with the build123d integration."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(sorted(set(spec))))
-    material = json.dumps({"base": _inputs(installation, spec), "spec": spec.keyed(),
+    material = json.dumps({"base": base._inputs(installation), "spec": spec.keyed(),
                            "local": fingerprints(spec) if prints is None else prints}, sort_keys=True)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
@@ -756,9 +745,7 @@ def ensure(installation: base.Installation, spec: Spec | list[str], *, told: Cal
     the device's engine with ``engine`` (``cad run``) when one runs, its lines said to ``told``, else here.
     ``Refused`` in one line when uv cannot make it. A list of requirements is a spec of them."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(sorted(set(spec))))
-    own = alone(spec.integrations)
-    if own is not None:
-        supported(own, installation.arch)
+    supported(spec.integrations, installation.arch)
     prints = fingerprints(spec)
     env = where(installation, spec, prints)
     marker = _complete(env, spec)
@@ -815,11 +802,11 @@ def _cad(installation: base.Installation, extras: Iterable[str]) -> tuple[str, .
 def _options(spec: Spec, extras: Iterable[str]) -> tuple[str, ...]:
     """What uv is handed beside the requirements: the spec's options and making's, and the indexes and
     folders of wheels of its integrations (``cad._internal.integrations``: a hook, none today)."""
-    from cad._internal.integrations import ALONE, INTEGRATIONS
+    from cad._internal.integrations import INTEGRATIONS
 
     found: list[str] = []
     for extra in sorted(set(extras)):
-        known = INTEGRATIONS.get(extra) or ALONE.get(extra)
+        known = INTEGRATIONS.get(extra)
         for index in known.indexes if known else ():
             found += ["--index", index]
         for links in known.find_links if known else ():
@@ -874,11 +861,11 @@ def _distributions(path: list[str], prefix: Path) -> set[str]:
 def _pulled(env: Path, extras: Iterable[str]) -> list[str]:
     """The integrations the environment just installed at ``env`` holds a distribution of but was not given
     (``cad._internal.integrations.for_distribution``): pulled in through another package."""
-    from cad._internal.integrations import ALONE, for_distribution
+    from cad._internal.integrations import for_distribution
 
     given = set(extras)
     return sorted({key for name in _distributions(base._path(env), env)
-                   if (key := for_distribution(name)) is not None and key not in given and key not in ALONE})
+                   if (key := for_distribution(name)) is not None and key not in given})
 
 
 def recipe(installation: base.Installation, spec: Spec | list[str], changed: list[str] | None = None,
@@ -888,9 +875,6 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
     line names. Its revision adds an integration a resolution pulled in (``_pulled``), and says the
     integrations it was made with in ``made`` (``integrations``)."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(sorted(set(spec))))
-    own = alone(spec.integrations)
-    if own is not None:
-        return _recipe_alone(installation, spec, own, changed)
     named = _named(spec)
     extras = ",".join(spec.integrations)
     kernel = f"{base.LIBRARY}[{extras}] {installation.release}" if extras else f"{base.LIBRARY} {installation.release}"
@@ -922,33 +906,6 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
                        unsatisfiable=unsatisfiable,
                        options=_options(spec, spec.integrations), venv_options=spec.python_options, revise=revise,
                        environment=spec.settings(), folder=spec.folder,
-                       before=(lambda env: _export(env, spec, installation.release)) if spec.lock else None)
-
-
-def _recipe_alone(installation: base.Installation, spec: Spec, own: Any, changed: list[str] | None) -> base.Recipe:
-    """The recipe of an environment without cad (``alone``): the integration's own pins and the spec's packages
-    and options, on its Python (``Spec.python``, a managed one by default: ``alone_python``), nothing resolved
-    again."""
-    named = _named(spec)
-    python = spec.python or own.python
-    tool = f"{own.tool} on Python {python}"
-    called = f"the {own.name} integration's environment"
-    if named:
-        making = (f"making {called} again, as {', '.join(changed)} changed: {named} beside {tool}" if changed
-                  else f"making {called}, once: {named} beside {tool} ({own.holds}, about {own.download_mb} MB "
-                       "to download)")
-        downloading = f"downloading {own.tool} ({own.holds}, about {own.download_mb} MB) and what {named} needs, once"
-        unsatisfiable = f"{named} cannot be resolved beside {own.tool}"
-    else:
-        making = f"making {called}, once: {tool} ({own.holds}, about {own.download_mb} MB to download)"
-        downloading = f"downloading {own.tool} ({own.holds}, about {own.download_mb} MB), once"
-        unsatisfiable = f"{own.tool} cannot be resolved here"
-    rest = (*spec.requirements, *(word for each in spec.editable for word in ("-e", each)),
-            *(word for each in spec.files for word in ("-r", each)))
-    return base.Recipe(what=called, python=python, requirement=(*own.requires, *rest), release=installation.release,
-                       source=installation.source, making=making, downloading=downloading,
-                       unsatisfiable=unsatisfiable, options=_options(spec, spec.integrations),
-                       venv_options=spec.python_options, environment=spec.settings(), folder=spec.folder,
                        before=(lambda env: _export(env, spec, installation.release)) if spec.lock else None)
 
 
@@ -995,16 +952,13 @@ def _make(env: Path, installation: base.Installation, spec: Spec, prints: dict[s
     version and its local things' fingerprints (``local``), its line naming those an edit made it anew for
     (``_changed``); then the environments of releases before the one before, and the one it supersedes,
     collected."""
-    inputs = _inputs(installation, spec)
+    inputs = base._inputs(installation)
     made: dict[str, Any] = {"integrations": list(spec.integrations)}
-    own = alone(spec.integrations) is not None
 
     def finish(steps: list[list[str]], seconds: float) -> dict[str, Any]:
         path, version = base._probe(env)
-        # One without cad names no installation: it is no release's (``releases.collect`` removes an
-        # installation's bases with it), and no process of cad's runs there to read one.
         return {"schema": base.SCHEMA, "key": env.name, "inputs": inputs,
-                **({} if own else {"installation": dataclasses.asdict(installation)}), "with": list(spec.requirements),
+                "installation": dataclasses.asdict(installation), "with": list(spec.requirements),
                 "spec": spec.keyed(), "integrations": made["integrations"], "local": prints,
                 "path": path, "python_version": version, "commands": steps, "seconds": round(seconds, 2),
                 "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
@@ -1087,8 +1041,7 @@ def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec 
         marker = base.complete(env) if env != made else None
         if marker is None or not isinstance(marker.get("with"), list):
             continue
-        release = (marker.get("inputs") or {}).get("release")
-        other = release is not None and release not in keep  # one without cad is no release's
+        other = (marker.get("inputs") or {}).get("release") not in keep
         superseded = (made is not None and spec is not None and marker.get("spec") == spec.keyed()
                       and marker.get("inputs") == inputs)
         if not (other or superseded) or running(env):

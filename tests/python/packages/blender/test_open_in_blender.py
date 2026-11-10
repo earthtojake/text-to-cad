@@ -2,7 +2,7 @@
 
 A person's Blender is started as ``blender --python <script> -- <file>`` (``apps.open_file``); here a driver beside a
 copy of the script sets ``sys.argv`` the way Blender leaves it and runs the script, under ``cad run``, which runs it in
-the blender integration's environment (bpy 5.2.3 on Python 3.13, without cad), each time from the factory startup
+the blender integration's environment (bpy 5.2.3 on Python 3.13), each time from the factory startup
 scene. A two-node GLB and a one-triangle STL, written here, are each imported, the startup scene's cube, light and
 camera removed and the imported root selected and active; an STL named ``Cube`` keeps its name; a path with spaces,
 quotes, non-ASCII and a leading dash is read as it is. What it cannot open -- a 3MF, a file that is not there, a GLB
@@ -28,7 +28,6 @@ from tests.python.support.paths import add_sources
 
 add_sources()
 
-from cad.registry import INTEGRATIONS  # noqa: E402
 from cad_server._internal import apps, base, extras  # noqa: E402
 
 TIMEOUT = 840.0  # the making of bpy's environment, the first time, downloads about 430 MB on Linux
@@ -90,7 +89,7 @@ def glb() -> bytes:
 
 def _built_here() -> bool:
     try:
-        extras.supported(INTEGRATIONS["blender"], base.Installation.here().arch)
+        extras.supported(("blender",), base.Installation.here().arch)
     except extras.Refused:
         return False
     return True

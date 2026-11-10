@@ -505,6 +505,23 @@ _SPAWN_PATH: list[str] | None = None
 _PREPARATION: Callable[[str], dict[str, Any]] | None = None
 
 
+def _end(pool: concurrent.futures.ProcessPoolExecutor) -> None:
+    """A process pool shut down now: its queued jobs cancelled and each of its processes ended, a busy one
+    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; on 3.13, the packages' floor, the same
+    steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
+    if hasattr(pool, "terminate_workers"):
+        pool.terminate_workers()
+        return
+    processes = list((getattr(pool, "_processes", None) or {}).values())
+    pool.shutdown(wait=False, cancel_futures=True)
+    for process in processes:
+        try:
+            if process.is_alive():
+                process.terminate()
+        except (ValueError, ProcessLookupError):
+            continue  # exited already
+
+
 def _spawn_in(context: Any, python: str, path: Any) -> Any:
     """The spawn pools' processes started with ``python``, another environment's (the base), importing
     from that environment's ``path``: the context to start them with. ``multiprocessing`` hands a
@@ -727,7 +744,7 @@ class Mesher:
             job.future.cancel()
         self._inline.shutdown(wait=False, cancel_futures=True)
         if self._processes is not None:
-            self._processes.terminate_workers()  # shut down, its queued jobs cancelled, and each process ended
+            _end(self._processes)  # shut down, its queued jobs cancelled, and each process ended
 
 
 def _triangles(data: bytes) -> int:
@@ -1137,7 +1154,7 @@ class Server:
                 self.helpers_idle.cancel()
         for pool in pools:
             if pool is not None:
-                pool.terminate_workers()  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
+                _end(pool)  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
 
     # --- documents -------------------------------------------------------------------
 

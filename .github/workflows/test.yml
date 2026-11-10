@@ -64,6 +64,8 @@ jobs:
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
       fea: ${{ steps.select.outputs.fea }}
       blender: ${{ steps.select.outputs.blender }}
+      bpy: ${{ steps.select.outputs.bpy }}
+      floor: ${{ steps.select.outputs.floor }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -323,21 +325,31 @@ jobs:
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
         shell: bash
 
-  # Blender as a Python module (bpy), as the render skill runs it: `cad run` makes the blender integration's
-  # environment (bpy 5.2.3 on Python 3.13, without cad; about 430 MB from PyPI for Linux, some 20 s, not cached, as
-  # the KiCad job fetches kicode), and the skill's helper (skills/render/scripts/cad_glb.py) loads a GLB this
-  # checkout's cad exports, plays its clips in both orders and renders a 64x64 still with Cycles on the CPU, then one
-  # with EEVEE, which skips naming Blender's reason if the runner's software OpenGL cannot draw it. Its suite
-  # (tests/python/packages/blender, test-blender.sh) is this job's alone. Only bpy's environment and how cad run
-  # chooses it, the GLB writer and its clips, the render skill, and the suite and its runner select it (and a full
-  # run). Linux only: bpy's wheel is one build per platform and no runner has a GPU. About 3 minutes: the install,
-  # the environment, a model's build and export, two bpy runs (7 tests in 30 s locally, warm).
+  # The one job on Python 3.13: bpy's only line (Blender as a Python module), and so the packages' floor. Two
+  # halves, each on the changes that reach it (and both on a full run).
+  #
+  # bpy: the server, on its own Python as everywhere, runs one script that imports cad, build123d and bpy:
+  # `cad run` makes the environment of cad[blender,build123d] for it on a Python 3.13 uv manages (bpy 5.2.3: about
+  # 430 MB from PyPI for Linux, some 20 s, not cached, as the KiCad job fetches kicode), a worker of that Python
+  # builds its model for the engine, and cad.blender.load loads the GLBs this checkout's cad exports, plays their
+  # clips in both orders and renders a 64x64 still with Cycles on the CPU, then one with EEVEE through Mesa's
+  # software OpenGL. Nothing in it may skip here: its runner fails a run in which a test did. The suite
+  # (tests/python/packages/blender, test-blender.sh) is this job's alone. cad.blender, bpy's environment and how
+  # cad run chooses it, the GLB's export, the suite and its runner select it. Linux only: bpy's wheel is one
+  # build per platform and no runner has a GPU. About 2 minutes: the X and OpenGL libraries, the environment, a
+  # model's build and export, two bpy runs (16 tests in 47 s locally, warm).
+  #
+  # floor: the library's suite, and the shim's, on Python 3.13 (test-floor.sh), in an environment made here with
+  # requirements-dev.txt: a call Python 3.13 lacks parses there and fails only when it runs, so only the suite holds
+  # the floor. The library's and the shim's sources and suites select it; the server's suite stays the cadgen
+  # jobs', on the Python its installations run on. About 5 minutes: the environment (the kernel's wheels for 3.13,
+  # no cache of them), then 1050 tests (2.3 minutes locally, on four cores).
   blender:
     name: Blender renders
     needs: changes
     if: needs.changes.outputs.blender == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -353,14 +365,28 @@ jobs:
 
       # What bpy's Linux wheel loads from the system and does not carry: X11's client libraries, the keyboard map,
       # and OpenGL and EGL with Mesa's software drivers (EEVEE draws through them; Cycles on the CPU needs none).
-      - name: Install the X and OpenGL libraries bpy loads
+      # And what the library's suite draws its stills on: Xvfb, and the font their text is set in.
+      - name: Install the display, and the X and OpenGL libraries bpy loads
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-6 libxfixes3 libxi6 libxrender1 libxxf86vm1 libxkbcommon0 libsm6 libice6 \
-            libgl1 libegl1 libglx-mesa0 libegl-mesa0 libgl1-mesa-dri
+            libgl1 libegl1 libglx-mesa0 libegl-mesa0 libgl1-mesa-dri xvfb fonts-dejavu-core
 
       - name: Run the blender suite
+        if: needs.changes.outputs.bpy == 'true'
         run: scripts/test/test-blender.sh
+
+      - name: Make an environment on Python 3.13, the packages' floor
+        if: ${{ !cancelled() && needs.changes.outputs.floor == 'true' }}
+        run: |
+          uv venv --python 3.13 "$RUNNER_TEMP/floor"
+          uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
+
+      - name: Run the library's and the shim's suites on the floor
+        if: ${{ !cancelled() && needs.changes.outputs.floor == 'true' }}
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/floor/bin/python
+        run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
 
   core-js:
     name: core-js

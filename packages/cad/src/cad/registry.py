@@ -7,10 +7,7 @@ ids (``.step`` and ``.stp`` are both ``step``); 3MF's id is ``threemf`` because 
 
 An **integration** is our support for one third-party tool, named for the tool's own project: one
 extra (``cad[<name>]``) grouping what our code for it needs, our code for it (helpers that take its
-objects, producers and operations), and a process kind. One whose tool cannot be installed beside the
-library (``library`` false: bpy, Blender's module, is built for one Python the library does not run on) has
-no extra: its own Python and its own exact pins, an environment ``cad run`` makes for a program that imports
-it, without cad. A **producer** is code that makes a document
+objects, producers and operations), and a process kind. A **producer** is code that makes a document
 type from some input; many integrations may produce one type, each stating which parts of the type's
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
@@ -90,8 +87,7 @@ class Probe:
 class Integration:
     """Our support for one third-party tool: its extra, its process kind, the top-level modules a script
     imports it by (``modules``: a script that imports one uses the integration), the distributions its
-    extra installs (``distributions``; one with no library, its own requirements'), and, for an external
-    program, its probe."""
+    extra installs (``distributions``) and, for an external program, its probe."""
 
     name: str
     summary: str
@@ -119,22 +115,15 @@ class Integration:
     #: The integrations its operations need in the same environment (netgen's: a stress study reads the B-rep with
     #: the kernel, build123d's, beside the mesher), so the environment the ``cad`` command makes for it holds them too.
     alongside: tuple[str, ...] = ()
-    #: Whether its environment holds the library. One that does not (``library`` false, no extra: bpy is built for
-    #: CPython 3.13 alone, and the library needs 3.14) has its own Python (``python``: uv's request, fetched by uv as
-    #: a managed Python) and its own exact pins (``requires``: its tool and everything it needs, each ``==``, since no
-    #: extra holds them), and is built for the platforms ``platforms`` names (``PLATFORMS``' words; none: all). A
-    #: program that imports it runs in that environment itself, imports nothing of cad's, and its tool's own
-    #: settings folders (``homes``: the variables that name them) are private folders of the engine's.
-    library: bool = True
+    #: What only its tool decides of the environment its extra is installed in, each empty for a tool that decides
+    #: none: the one Python line its tool is built for (``python``: ``3.13``; an environment ``cad run`` makes with
+    #: it is made on that line, a Python uv manages, where the engine's own is another), the platforms it is built
+    #: for (``platforms``, ``PLATFORMS``' words: its extra installs nothing anywhere else, and a run there is
+    #: refused by name), and the variables that name its tool's own settings folders (``homes``: a run's are
+    #: private folders of the engine's, so nothing of a person's own copy of the tool loads into it).
     python: str | None = None
-    requires: tuple[str, ...] = ()
     platforms: tuple[str, ...] = ()
     homes: tuple[str, ...] = ()
-
-    @property
-    def tool(self) -> str:
-        """Its tool as its environment pins it, in words (``bpy 5.2.3``): ``requires``' first; its name with none."""
-        return self.requires[0].replace("==", " ", 1) if self.requires else self.name
 
 
 @dataclass(frozen=True)
@@ -380,19 +369,13 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),
     "blender": Integration(
-        "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script that imports bpy -- a "
-                   "scene of the GLB cad exports, its camera, lights, materials and renders -- runs with cad run in "
-                   "an environment of its own, on Python 3.13 and without cad, which bpy cannot be installed beside",
-        extra=None, process="separate", modules=("bpy",), distributions=("bpy",), identity=("bpy",),
-        library=False, python="3.13",
-        # bpy 5.2.3 (``Requires-Python ==3.13.*``, cp313 wheels alone) and what it needs (cattrs, cython, numpy>=2.2,<3,
-        # requests, zstandard, and theirs), resolved for CPython 3.13 on each platform below: the same set on all four,
-        # each a wheel there. Pinned exactly, a lock: no extra of cad's can hold them.
-        requires=("bpy==5.2.3", "attrs==26.1.0", "cattrs==26.2.1", "certifi==2026.10.23", "charset-normalizer==3.5.2",
-                  "cython==3.3.1", "idna==3.20", "numpy==2.5.4", "requests==2.34.2", "typing-extensions==4.16.0",
-                  "urllib3==2.8.0", "zstandard==0.25.0"),
-        # PyPI's bpy 5.2.3: none for Intel Macs or Linux arm64.
-        platforms=("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"),
+        "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad "
+                   "exports into Blender's scene, every part where the file places it and each clip playable alone "
+                   "(cad.blender.load), then frames, lights and renders it with bpy itself",
+        extra="blender", process="in-process", modules=("bpy",), distributions=("bpy",), identity=("bpy",),
+        # bpy 5.2.3 is ``Requires-Python ==3.13.*``, cp313 wheels alone, and none for Intel Macs or Linux arm64: the
+        # extra's markers say the same (packages/cad/pyproject.toml), and a test holds the two together.
+        python="3.13", platforms=("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"),
         # Blender's own folders for a person's preferences, add-ons, extensions and data, which bpy reads as the app
         # does: a run's are private, so a person's Blender settings and add-ons never load into it.
         homes=("BLENDER_USER_RESOURCES", "BLENDER_USER_CONFIG", "BLENDER_USER_SCRIPTS", "BLENDER_USER_DATAFILES",

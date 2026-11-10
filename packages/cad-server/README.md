@@ -10,7 +10,8 @@ its CAD kernel: the kernel lives in the environments the server makes, on first 
 its own kernel processes, `cad[build123d]` at the server's own release. `cad run` runs a program as
 `uv run` does, with cad pinned at the server's release and the integrations its imports use; a tool's
 own command an integration declares (`cad run kicad-cli …`) gets that integration and runs headless; a
-script that imports `bpy` runs on Python 3.13 in the blender integration's environment, without cad.
+script that imports `bpy` gets the blender integration, its environment made on Python 3.13, the one
+Blender is built for.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 

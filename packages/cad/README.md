@@ -56,7 +56,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `netgen`, `calculix`),
+  `kicad`, `trimesh`, `netgen`, `calculix`, `blender`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -165,7 +165,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
    beside it each environment a program's run made (`cad run`: the library pinned with the integrations
    its imports use, and the packages it names), regenerable as well, those of the release before the
-   current kept as the way back (the engine's **Running a model**). The code stays the only source of truth: a document is what its
+   current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
+   folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
+   imports bpy: `homes/blender`), empty but for what the tool itself writes there. The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
@@ -515,10 +517,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     add, or to run the script with `cad run`. A command line an integration's extra installs
     (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
     and the integration's `_command` module runs the environment's own command there, headless in
-    private homes, never one on PATH. A tool that cannot be installed beside the library (blender's
-    bpy, built for Python 3.13 alone) has no extra: its registry entry names its Python and its exact
-    pins (`library=False`), and a program that imports it runs in that environment without the library,
-    importing nothing of cad's.
+    private homes, never one on PATH. A tool built for one Python alone (blender's bpy, CPython 3.13) is
+    an integration like any other, its extra installing it only there: the registry names that Python, the
+    platforms it has builds for and the folders its settings are read from, an environment with it is
+    made on that Python with the library pinned in it, and a run's settings folders are private. That is
+    why the library's floor is Python 3.13 while the server's installations run on a newer one.
 
 30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
     <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
@@ -640,6 +643,10 @@ src/cad/
                          #   on this computer (places)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
+  blender/               # the blender integration, bpy: a GLB loaded into Blender's scene for a
+                         #   render, every node's object found by its place in the file, each node
+                         #   a clip moves put back where the file places it, and one clip played at
+                         #   a time (load, Model, Clip: _scene)
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
