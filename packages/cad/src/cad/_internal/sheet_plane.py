@@ -595,7 +595,7 @@ def tabs(loop: Loop, material_left: bool) -> list[Tab]:
         facing = (ahead >= 0) & ((unit[ahead] * unit[rows, None, :]).sum(axis=2) <= -1.0 + 1e-9)
         pairs.extend((int(i) + start, int(ahead[i, column]), int(column) + 1) for i, column in np.argwhere(facing))
     for i, j, between in pairs:
-        (fi, li, si, ei), (fj, lj, sj, ej) = sides[i], sides[j]
+        (fi, li, si, ei), (_, lj, sj, ej) = sides[i], sides[j]
         length_i = float(np.linalg.norm(ei - si))
         if j == i or length_i < 1e-9 or float(np.linalg.norm(ej - sj)) < 1e-9:
             continue
@@ -751,7 +751,6 @@ def crossings(first: Loop, second: Loop, tolerance: float = 1e-7) -> list[tuple[
         return [(x1 + along * ux - sign * half * uy, y1 + along * uy + sign * half * ux) for sign in (1.0, -1.0)]
     walker, target = (second, first) if second.circle is None and first.circle is not None else (first, second)
     a, b = walker.a, walker.b
-    n = len(a)
     if target.circle is not None:
         cx, cy, r = target.circle
         lo, hi = np.array([cx - r, cy - r]), np.array([cx + r, cy + r])
