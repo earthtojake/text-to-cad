@@ -9,6 +9,8 @@
     cad run src/checks/interference.py --limits        every control swept through its travel, alone:
                                                        a joint's own neighbourhood (links within 3 joints);
                                                        or only the controls named after it
+    cad run src/checks/interference.py --corners       the joints that share a centre, moved together:
+                                                       each group at the corners and edges of its travel
     cad run src/checks/interference.py --motions       every motion, at its waypoints and between them
 
 The verdict is the kernel's: two parts interfere when their solids share volume
@@ -25,6 +27,7 @@ The right side is the left's mirror image, so as built a pair with both parts on
 right is its left twin's, and a right control's sweep its left twin's: neither is run.
 """
 
+import itertools
 import sys
 import time
 
@@ -36,6 +39,10 @@ from lib import kin
 from lib.poses import MOTIONS, POSES
 
 SWEEP = 8            # steps across each control's travel
+# Joints whose axes meet, under one cover that has to clear its neighbours however they lean together.
+CORNERS = {"waist": ("waist_yaw", "waist_roll", "waist_pitch"), "neck": ("neck_yaw", "neck_roll", "neck_pitch"),
+           "hip": ("l_hip_yaw", "l_hip_roll", "l_hip_pitch"), "shoulder": ("l_shoulder_pitch", "l_shoulder_roll", "l_shoulder_yaw"),
+           "wrist": ("l_wrist_roll", "l_wrist_pitch", "l_wrist_yaw"), "ankle": ("l_ankle_pitch", "l_ankle_roll")}
 BETWEEN = 4          # frames between two waypoints of a motion
 
 
@@ -126,6 +133,19 @@ def main(argv):
             if overlaps or unmeasured:
                 count += report(f"{control} {low:g}..{high:g}", overlaps, unmeasured, limit=8)
             print(f"swept {control} {low:g}..{high:g}", flush=True)
+    elif argv[0] == "--corners":
+        # One control at a time says nothing of a bow with a lean in it. Each group goes to every
+        # corner of its travel and the middle of every edge: all the poses with two or three of
+        # its controls at a limit.
+        limits = {control: (low, high) for control, low, high in control_limits()}
+        distances = kin.link_distances()
+        far = lambda a, b: distances[a, b] > 3
+        for name, controls in CORNERS.items():
+            if argv[1:] and name not in argv[1:]:
+                continue
+            ends = itertools.product(*[(limits[control][0], 0.0, limits[control][1]) for control in controls])
+            poses = [dict(zip(controls, values)) for values in ends if sum(value != 0.0 for value in values) >= 2]
+            count += report(f"{name}, {len(poses)} corners and edges", *sweep(links, poses, skip=far), limit=8)
     elif argv == ["--motions"]:
         for name, waypoints, _ in MOTIONS:
             found = report(f"motion {name}", *sweep(links, list(frames(waypoints))), limit=8)

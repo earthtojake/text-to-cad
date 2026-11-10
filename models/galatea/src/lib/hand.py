@@ -65,7 +65,7 @@ class _Bones:
         if key not in self._made:
             root = width if kind == "prox" else width - 7.0
             tip = kind == "dist"
-            bone = proto(_bone(length, width, root, tip), "shell" if tip else "slate")
+            bone = proto(_bone(length, width, root, tip), "shell" if tip else "link")
             pad = proto(_pad(length, width, tip), "rubber") if (tip or length - 25.0 > 6.0) else None
             hinge = proto(geo.cyl(2.5, width, (0, 0, 0), (1, 0, 0), centered=True), "steel")
             self._made[key] = (bone, pad, hinge)
@@ -109,7 +109,7 @@ def _palm(hw, links):
     back = geo.plate_yz(geo.hull([(-30, 824, 8), (28, 824, 8), (-32, 784, 6), (30, 784, 6)]), SX + 9, SX + 12.5)
     back = bd.fillet(back.edges().group_by(bd.Axis.X)[-1], 2.0)
     pad = geo.plate_yz(geo.hull([(-14, 830, 8), (24, 830, 8), (-14, 796, 8), (26, 796, 8)]), SX - 12, SX - 9)
-    links["palm"] += [part(slab + lug + bridge, "palm_frame", "slate"), part(back, "hand_back", "shell"),
+    links["palm"] += [part(slab + lug + bridge, "palm_frame", "link"), part(back, "hand_back", "shell"),
                       part(pad, "palm_pad", "rubber"),
                       pin((SX, -42.0, KNUCKLE_Z), (0, 1, 0), 2.5, 82.0, label="knuckle_pin"),
                       pin((THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 10), (0, 0, 1), 4.0, 30.0, label="thumb_pivot")]
@@ -126,6 +126,6 @@ def _thumb(links, bones):
     fork = _ears(THUMB_BONES[0], width) - geo.cyl(2.5, width + 2, (0, 0, -THUMB_BONES[0]), (1, 0, 0), centered=True)
     meta = ring + arm + loc * (body + fork)
     meta -= geo.cyl(4.0, 30, (THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 15), (0, 0, 1))     # the pivot's bore
-    links["thumb_meta"] += [part(meta, "thumb_meta", "slate")]
+    links["thumb_meta"] += [part(meta, "thumb_meta", "link")]
     links["thumb_prox"] += bones.place("mid", THUMB_BONES[1], width, frame(mcp, tuple(-k for k in d), (1, 0, 0)), "thumb_prox")
     links["thumb_dist"] += bones.place("dist", THUMB_BONES[2], width, frame(ip, tuple(-k for k in d), (1, 0, 0)), "thumb_dist")

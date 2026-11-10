@@ -205,7 +205,7 @@ SIDE_JOINTS = {
 
 CENTRE_JOINTS = {
     "waist_yaw": ("pelvis", "lumbar_yoke", (0.0, WAIST_AXIS_Y, 1080.0), Z, (-50.0, 50.0)),   # + turns the chest left
-    "waist_roll": ("lumbar_yoke", "waist_cross", WAIST, Y, (-20.0, 20.0)),                  # + leans to the left
+    "waist_roll": ("lumbar_yoke", "waist_cross", WAIST, Y, (-15.0, 15.0)),                  # + leans to the left; the abdomen's hem ends it
     "waist_pitch": ("waist_cross", "chest", WAIST, X, (-20.0, 40.0)),                       # + bows forward
     "neck_yaw": ("chest", "neck", NECK_BASE, Z, (-75.0, 75.0)),                             # + looks left
     "neck_roll": ("neck", "neck_stem", NECK_ROLL, Y, (-25.0, 25.0)),                        # + tilts to the left

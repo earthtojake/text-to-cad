@@ -62,6 +62,24 @@ dimensioned myself. Most of the exterior and every drive bracket was redone. Wha
   "does this skin hold the mechanism, through its travel, with 3 mm of air" from the
   sections and the meshes in seconds, where a build and an exact check take minutes.
 - Say what I am doing while I do it. Long silent runs were read, rightly, as not listening.
+- Judge a look from behind as well. Every sheet I had judged the restyle on was a front or
+  a three-quarter view, and the checks all passed on a robot whose back still showed three
+  bare drives at the waist, two behind the hips and an open pelvis. The sheet I judge now
+  is five views round the model (front, front quarter, side, back quarter, back), whole
+  and then region by region (`models/galatea/src/sheet.py`, sixty lines).
+- Count what a cover costs before drawing it. The abdomen that hides the waist's drives
+  had to clear the pelvis however the chest leans, which set its hem and took 5 degrees
+  off the waist's roll; the head's nape cannot come lower without meeting the neck's stem.
+  Travel and covers are one design, and the travel table is where the cost is written.
+- Move the joints that share a centre together. The sweep that takes one control through
+  its travel passed a hip that could not raise a leg turned in: at 100 degrees of flexion
+  the thigh's skin stood 2 mm in front of the pelvis plate, and 5 degrees of toe-in put
+  it through. `interference.py --corners` now takes each such group (waist, neck, hip,
+  shoulder, wrist, ankle) to every corner of its travel and the middle of every edge, 20
+  poses a group, about a minute each. It found that one and nothing else. The fix was no
+  apron between the hips and a raked top edge on the thigh, lower toward the groin: the
+  plane under every point of the skin that came up under the pelvis anywhere in the hip's
+  travel, found without the kernel by taking the skin's mesh through 200 poses.
 
 **For the skill.** `SKILL.md` already says an assembly is clear when `overlap_volume` is 0
 for every pair. What it lacks is a gate: nothing asks for a per-part and per-link review
@@ -229,6 +247,30 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     22 s. `cad status` could show each worker's memory against the budget, and the
     engine could refuse a new job rather than lose a warm worker.
 
+22. **A snapshot's background is clear or white, nothing else.** `output` takes
+    `transparent`, `padding`, `renderScale`, `sizeProfile` and `tightFrame`; a pearl robot
+    on white has no outline and on clear it has to be composited before anyone can look at
+    it. A `background` colour would do. So would a sheet: the same job from N cameras,
+    tiled into one picture, which is what every review above wanted.
+
+23. **A turned polygon shows as rings.** `revolve` of a polyline profile is a stack of
+    cones, and a shaded picture draws every one of them as a band on a glossy panel (the
+    shoulder pods looked like targets). The cure is a profile of real arcs
+    (`EllipticalCenterArc`, whose angles are `start_angle` and the keyword `arc_size`, not
+    a start and an end). Worth a line in the skill's modelling notes: profiles that will
+    be seen should be curves, not sampled points.
+
+24. **A loft is a spline through its sections, and it rings.** To make a thigh shallower
+    at its top I added two sections 30 and 80 mm below the top one. The surface moved
+    20 mm inward 250 mm away, between the two lowest sections, and put the liner through
+    the frame there. My quick measure, which interpolates the sections linearly, saw
+    14.9 mm of air where the kernel's solid had none; only the exact check as built found
+    it. Sections spaced evenly with the change carried by their values, not by more of
+    them, kept the form where it was. The skill could say so where it describes `loft`:
+    sections close together at one end bend the surface at the other, `ruled=True` is the
+    way to a form that goes only where its sections say, and a clearance measured from
+    the sections is not one measured from the solid.
+
 ## What worked well
 
 - `@memo` on the shared stage: nine models in 90 s, a pose edit in 0.6 s.
@@ -244,6 +286,9 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   an assembly, would make the review above the path of least effort.)
 - A finish-only change rebuilds in 0.65 s (every kernel call a hit), and
   `transmission=1` draws a visor one can see through.
+- A change of finish across the whole structure (31 parts renamed and recoloured, grey to
+  black) rebuilt in 36 s, and a five-view sheet of any region takes about 20 s: fast
+  enough to settle a look by trying it.
 - Re-basing nineteen joints on real actuators was an edit to one table and one builder
   for the housings, then twenty minutes of the build line's part count and the exact
   check saying which brackets no longer fitted. A parametric model in a real language is

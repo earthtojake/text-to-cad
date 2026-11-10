@@ -62,14 +62,14 @@ def _neck(hw, links):
     rear = geo.plate_xz(geo.bones([(0, RZ, 24), (0, RZ - 24, 20)]), 32, 40) - mount_bores("RS05", roll_at, (0, 1, 0), x_dir=(1, 0, 0))
     rear -= geo.half_space((0, 0, NECK_BASE[2]), (0, 0, -1))
     stator, rotor = hw.actuator("RS05", roll_at, (0, 1, 0), x_dir=(1, 0, 0), name="neck_roll")
-    links["neck"] += [part(lug + rear, "neck_root", "gunmetal"),
+    links["neck"] += [part(lug + rear, "neck_root", "frame"),
                       *hw.rotor_screws("RS00", yaw_at, (0, 0, 1), 10.0, x_dir=(-1, 0, 0), sunk=3.0), *stator]
 
     lug = geo.plate_xz(geo.bones([(0, RZ, 18), (22, RZ + 17, 12)], holes=[(0, RZ, 3)]), 41, 51)
     pitch_at = (18.0, NY, NZ)
     side = geo.plate_yz(geo.bones([(NY, NZ, 30), (46, RZ + 26, 12)]), 18, 26) - mount_bores("RS00", pitch_at, (1, 0, 0), x_dir=(0, 1, 0))
     p_stator, p_rotor = hw.actuator("RS00", pitch_at, (1, 0, 0), x_dir=(0, 1, 0), name="neck_pitch")
-    links["neck_stem"] += [part(lug + side, "neck_stem", "gunmetal"), *rotor,
+    links["neck_stem"] += [part(lug + side, "neck_stem", "frame"), *rotor,
                            *hw.rotor_screws("RS05", roll_at, (0, 1, 0), 10.0, x_dir=(1, 0, 0)), *p_stator]
     links["head"] += [*p_rotor, *hw.rotor_screws("RS00", pitch_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0))]
 
@@ -128,7 +128,7 @@ def _head(hw, links):
         pad = geo.common(geo.cyl(5.0, 140.0, origin, direction), cavity, "liner pad")
         pads = pad if pads is None else pads + pad
 
-    links["head"] += [part(frame_part, "head_frame", "gunmetal"), part(skin.solids(pads - frame_part), "pad_head", "gunmetal"),
+    links["head"] += [part(frame_part, "head_frame", "frame"), part(skin.solids(pads - frame_part), "pad_head", "frame"),
                       part(skin.solids(helmet), "helmet", "shell"),
                       part(skin.solids(shield), "face_shield", "smoke35"), part(skin.solids(liner), "head_liner", "under"),
                       part(skin.solids(fascia), "face_fascia", "under"),

@@ -56,12 +56,13 @@ _FINISHES = {
     # Light guides: the head's and the chest's status lines.
     "light": lambda: _look(plastics.pc(), "light_white", color="#eef4ff", metalness=0.0, roughness=0.4,
                            emissive="#dfeaff", emissive_intensity=0.9),
-    # Structure: 7075 aluminium, hard anodised dark.
-    "gunmetal": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "gunmetal_anodise", color="#4b4f56",
-                              metalness=0.6, roughness=0.48),
-    # A darker structural tone for links that sit behind the others.
-    "slate": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "slate_anodise", color="#3a3d43",
-                           metalness=0.55, roughness=0.5),
+    # Structure: 7075 aluminium, anodised black, so that what shows between the panels reads as one
+    # under-body with the liners and the drives.
+    "frame": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "frame_black", color="#2b2d31",
+                           metalness=0.6, roughness=0.5),
+    # The same, a shade deeper, for links that sit behind the others.
+    "link": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "link_black", color="#222428",
+                          metalness=0.55, roughness=0.52),
     # Output hubs, axles, pins, the ankle's rod: 4340 steel, quenched and tempered, ground satin.
     "steel": lambda: _look(metals.alloy_steel(metals.AlloySteel.G4340_QUENCHED_TEMPERED), "steel_satin", color="#c4c5c4",
                            metalness=1.0, roughness=0.28),

@@ -2,7 +2,7 @@
 
 A 1.76 m humanoid robot, designed here from a blank page and then redrawn in the manner
 of current production humanoids: pearl panels over a black under-body, black joints, and
-a helmet with one smoked face. 58.8 kg, 44 driven degrees of freedom and two sprung toe
+a helmet with one smoked face. 58.3 kg, 44 driven degrees of freedom and two sprung toe
 hinges. Its 33 drives are real ones, RobStride quasi-direct drives modelled to their
 maker's drawings at their maker's mass, and the brackets, bolt circles and joint spacings
 follow from them. Every joint is a joint of the document, so the model stands, crouches,
@@ -14,7 +14,7 @@ linkages close, and what holding each pose asks of each drive against its datash
 
 | Script | Models | What it is |
 | --- | --- | --- |
-| `galatea.py` | `galatea` | the robot: 708 placements of about 180 parts in 73 links, 72 joints, 14 couplings, 10 configurations, 8 motions |
+| `galatea.py` | `galatea` | the robot: 707 placements of about 180 parts in 73 links, 72 joints, 14 couplings, 10 configurations, 8 motions |
 | `stances.py` | `galatea_ready`, `_stride`, `_contrapposto`, `_reach`, `_wave`, `_present`, `_poise`, `_crouch`, `_bow` | the robot at each standing pose, set down on the ground |
 | `styling.py` | `galatea_styling` | the outside alone, as plain solids on the joint layout: where the look was settled before the skins were built |
 | `leg_study.py` | `galatea_leg` | the left leg alone, with its hip drive: the page to study the knee and ankle linkages on |
@@ -23,6 +23,7 @@ linkages close, and what holding each pose asks of each drive against its datash
 | `fit.py` | none | does each skin hold the mechanism under it, through its travel, and with how much air: arithmetic on the sections, no kernel, seconds |
 | `renders.py` | none | the presentation stills (posed, close up, and with the skins left off) and the walk as a clip, into `tmp/renders/`, which Git ignores; the clip needs ffmpeg |
 | `review.py` | none | every link alone from four sides, dressed and with its skins off, into `tmp/review/`: what to look at before the whole robot |
+| `sheet.py` | none | the robot, or a region of it by height, from five sides round it in one picture, into `tmp/sheets/`: what a look is judged on |
 | `checks/*.py` | none | interference (and `planted`, the test of it), attachment, balance, linkages, loads |
 
 ```
@@ -30,6 +31,7 @@ cad run src/galatea.py                       # about two minutes cold; 25 s afte
 cad run src/stances.py                       # the nine poses: the first builds the robot, the rest take 2 s each
 cad run src/fit.py                           # every skin against its mechanism
 cad run src/checks/interference.py --poses   # and the other checks, below
+cad run src/sheet.py waist 1040 1300         # a region from five sides in one picture
 cad run src/renders.py hero stride walk      # stills and clips by name; all of them without names
 ```
 
@@ -72,8 +74,9 @@ waist's centre at 1150, 32 behind the hips; the crown at 1764.
   cross.
 - **Toe**: a sprung hinge under its own cap, 0 to 50 degrees, for heel-off. Not driven.
 - **Waist**, three axes through one point: yaw in the pelvis, then a spider whose
-  fore-and-aft shaft is the roll axis (its drive behind) and whose cross shaft is the
-  pitch axis, a drive at each end with its stator on the chest.
+  fore-and-aft shaft is the roll axis (its drive behind, a bearing plate on a raked strut
+  in front) and whose cross shaft is the pitch axis, a drive at each end with its stator
+  on the chest.
 - **Arm**, seven: shoulder pitch in the chest wall, roll on the yoke, yaw inside the upper
   arm's head (the three meet at one point); an in-line hinge at the elbow; forearm roll
   under it; wrist pitch and yaw, 51 apart: two 46 mm cans, crossed.
@@ -97,13 +100,13 @@ zero pose. A name in italics is a coupling: the control a pose sets, with its jo
 | Control | Axis | Travel | Positive | Drive |
 | --- | --- | --- | --- | --- |
 | `waist_yaw` | Z | -50 to 50 | the chest turns left | RS06 |
-| `waist_roll` | Y | -20 to 20 | leans left | RS06 |
+| `waist_roll` | Y | -15 to 15 | leans left | RS06 |
 | `waist_pitch` | X | -20 to 40 | bows forward | 2 x RS06 |
 | `neck_yaw` | Z | -75 to 75 | looks left | RS00 |
 | `neck_roll` | Y | -25 to 25 | tilts left | RS05 |
 | `neck_pitch` | X | -25 to 40 | nods down | RS00 |
 | `hip_yaw` | Z | -25 to 20 | the toes turn out | RS06 |
-| `hip_roll` | -Y | -20 to 25 | the leg swings out | RS04 |
+| `hip_roll` | -Y | -20 to 16 | the leg swings out | RS04 |
 | `hip_pitch` | -X | -30 to 100 | the thigh swings forward | RS04 |
 | *`knee`*: `knee_pivot`, `knee_crank`, `knee_rod` | X | 0 to 125 | the heel goes back | RS04, in the thigh |
 | *`ankle_pitch`*: `ankle_pitch_pivot`, `ankle_crank`, `ankle_rod` | -X | -45 to 30 | the toes lift | RS04, in the calf |
@@ -164,10 +167,12 @@ invented for this skeleton. The knee's drive moved down 20 so that it passes und
 hip's roll drive; the wrist's two axes moved apart to 51 and the neck's to 55 so that
 their cans cross; the shoulders moved out 7 each; the waist's yoke grew 12 longer; the
 ankle's double-ended drive, which nobody makes, became one RS04 with one crank and one
-rod; and the hips' toe-out became the coupled travel above.
+rod; and the hips' toe-out became the coupled travel above. Covering them cost travel
+too: the waist leans 15 degrees to a side, not 20, because the abdomen that hides its
+drives has to clear the pelvis.
 
-Where the 58.8 kg is: the chest 11.3 kg, each thigh 4.1, each shin 3.6, the pelvis 3.4,
-each hip's yoke and cradle 4.1; the legs 28.9 kg in all, 11.3 kg of it below the knees.
+Where the 58.3 kg is: the chest 11.4 kg, each thigh 4.0, each shin 3.5, the pelvis 3.4,
+each hip's yoke and cradle 4.1; the legs 28.6 kg in all, 11.1 kg of it below the knees.
 The 33 drives are 22.5 kg of it.
 
 ### Skins
@@ -177,22 +182,37 @@ The panel is pearl, 2.6 mm, the outside; it is cut into panels by regions drawn 
 or front view. The liner is black, 1.8 mm, under all of it: where no panel lies it is the
 outside, the under-body that shows at the flanks, between a leg's front and back plates
 and in every shut line. The frame carries the liner on pads that grow to its inner
-surface. No screw shows on a panel.
+surface. No screw shows on a panel. What shows between the skins is black as well: the
+drives' housings, and the frames, which are 7075 aluminium anodised black, so that a joint
+reads as one dark mass and not as its brackets.
 
 The mechanism stands inside the liner with 3 mm of air round it, through the travel of
 whatever moves under it. `fit.py` measures that from the sections and the meshes, without
 the kernel, so a form is drawn and redrawn in seconds; every form is entered in
 `skin.FORMS` with the links it has to hold and the poses to hold them at.
 
+The pelvis is a black band round its casting, arched over each hip, with one pearl plate
+in front and two round openings behind, on the charge and data ports. The shin's two
+plates end over the ankle in a point: the form cannot narrow there, because the ankle's
+fork is under it, so the pearl does and leaves the liner's black at the hem's corners.
+
 Where a skin meets a joint it ends on the line the joint needs. The thigh's ends at the
-knee on a slant, the line the calf's back comes up to at full flexion, and is notched
-behind the hip, where the roll drive's can comes down when the leg swings back. The upper
-arm's ends on the slant the forearm folds up to. The chest's lower edge is cut on a sphere
-about the waist's centre, and the belly's shield is a piece of a smaller sphere about the
-same point, carried on the waist's yoke: the chest turns over it at one distance through
-all of the waist's roll and pitch. The shoulder's pod is a body of revolution about the
-roll axis, so that it turns with the arm round the yoke and the roll drive behind it; a
-slot round it lets the yoke's arm through. The hip's cap is a cup about the pitch axis,
+knee on a slant, the line the calf's back comes up to at full flexion; it is notched
+behind the hip, where the roll drive's can comes down when the leg swings back, and
+raked in front, lower toward the groin than at the outside of the hip: the plane under
+every point of the skin that would otherwise come up under the pelvis with the thigh
+raised and the leg turned in. Nothing hangs between the hips for the same reason. The upper
+arm's ends on the slant the forearm folds up to. The chest's liner runs on down round the
+waist as the abdomen, a black shell over the waist's three drives: wide enough for the
+pitch drives, which ride on the chest's lugs, and deep enough behind for the roll drive's
+can, which the chest swings past as it leans. It ends in a hem drawn as a V in the side
+view, its point under the pitch axis, where a bow does not move it, and its ends high,
+where a bow swings them down: leaning 40 degrees forward, 20 back, 15 to a side or two of
+those at once, the hem stays 6 mm off the pelvis. That hem is what ends the waist's roll
+at 15 degrees. Under it in front, a small shield (a piece of a sphere about the waist's
+centre, on the yoke) closes the gap between the chest's lugs. The shoulder's pod is a
+capsule about the roll axis, so that it turns with the arm round the yoke and the roll
+drive behind it; a slot round it lets the yoke's arm through. The hip's cap is a cup about the pitch axis,
 over the pitch drive's can, and turns with the thigh.
 
 ## Poses and motions
@@ -228,14 +248,15 @@ engine to move anything.
 
 | Check | Asks | Result |
 | --- | --- | --- |
-| `interference.py` | do two parts share volume? As built: inside every link and link against link | none |
-| `interference.py --poses` | the same, link against link, at each configuration | none in the ten configurations, 137 to 140 pairs measured in each |
+| `interference.py` | do two parts share volume? As built: inside every link and link against link | none in the 484 pairs near enough to measure, of 1,200 whose boxes meet |
+| `interference.py --poses` | the same, link against link, at each configuration | none in the ten configurations, 135 to 139 pairs measured in each |
 | `interference.py --limits` | each control swept alone through its travel in eight steps, against the links within three joints of it | none: the 26 controls of the centre and the left side, which stands for the right |
+| `interference.py --corners` | the joints that share a centre, moved together: waist, neck, hip, shoulder, wrist and ankle, each at every corner of its travel and the middle of every edge | none in the 104 poses |
 | `interference.py --motions` | each motion at its waypoints and between them | none in the eight motions |
 | `planted.py` | does that check find a plate planted through a 2.6 mm skin, clear one 0.3 mm from it, and pass a pin in its bore? | it does |
-| `fit.py` | does each skin hold its mechanism with 3 mm of air, through the travel under it? | it does. The least air: 3.1 mm round the upper arm and the pelvis, 3.3 the shin, 3.5 the chest, 4.3 the thigh, 5.3 the forearm, 15 the head |
+| `fit.py` | does each skin hold its mechanism with 3 mm of air, through the travel under it? | it does. The least air: 3.1 mm round the upper arm and the pelvis, 3.3 the shin, 3.5 the chest, 3.8 the thigh, 5.3 the forearm, 15 the head |
 | `attachment.py` | does every part touch another part of its own link, or else a part of a link it is jointed to (a pushrod on its pin)? | every part is held, eight of them by a joint's pin alone |
-| `balance.py` | is the centre of mass over the support polygon in each standing pose, and by how much? | standing straight 52 mm inside, ready 77, contrapposto 55, reach 72, wave 72, present 94, crouch 32, bow 90, poise 30 (on one sole), fists 77; the stride is a gait frame |
+| `balance.py` | is the centre of mass over the support polygon in each standing pose, and by how much? | standing straight 51 mm inside, ready 77, contrapposto 55, reach 72, wave 72, present 94, crouch 32, bow 90, poise 30 (on one sole), fists 77; the stride is a gait frame |
 | `linkages.py` | do the pushrods' far eyes stay on their pins through the travel, and do the axes that should meet, meet? | gaps under 1e-12 mm; hip, ankle, waist and shoulder axes meet exactly |
 | `loads.py` | statics: the torque each drive holds in thirteen cases, against its rated and its peak torque; each pushrod's force against its Euler load | below |
 
@@ -253,15 +274,15 @@ and as held briefly while every drive is within 75 % of its peak.
 
 - Standing straight asks 6 N m of each ankle; `ready`, `contrapposto` and `wave` are
   within every rated torque (the stance hip's roll drive at 87 % in contrapposto).
-- Held briefly: the crouch (64 N m at each knee, 160 % of an RS04's rated torque and 53 %
+- Held briefly: the crouch (64 N m at each knee, 159 % of an RS04's rated torque and 53 %
   of its peak; 46 N m at the waist's pitch pair), the bow, standing on one leg (52 N m at
-  the stance hip's roll drive, 130 % of rated), and the carried loads: 4 kg in each hand
+  the stance hip's roll drive, 129 % of rated), and the carried loads: 4 kg in each hand
   with the elbows square, 2.5 kg on each palm presented, 2 kg at the end of a reach, 1.5
   kg in each hand with the arms out level. The wrists (an RS05 gives 1.6 N m rated) and
   the waist's pitch pair are what limit them: a level palm carries about 1 kg for as long
   as one likes.
 - Walking adds what a foot can lever. The whole weight on one forefoot is 68 N m at the
-  ankle's pitch drive, 57 % of an RS04's peak, which is why that drive is an RS04 and not
+  ankle's pitch drive, 56 % of an RS04's peak, which is why that drive is an RS04 and not
   the RS03 first fitted (60 N m peak). The whole weight on one sole's edge would be 25 N m
   at the ankle's roll drive, and an RS00 gives 14: Galatea cannot stand on the edge of a
   foot. Its ankle steers the centre of pressure 24 mm either side of the roll axis, and
@@ -271,9 +292,10 @@ and as held briefly while every drive is within 75 % of its peak.
   factor of 3.0. The ankle's rod (9 mm steel, 255 long) buckles at 9.8 kN and keeps
   2.6 on the same measure.
 
-Limits of the checks: a sweep moves one control at a time, so two joints at their limits
-together are covered only where a pose or the rule on the hips' toe-out covers them; the
-loads are static; `fit.py` interpolates the sections linearly where the loft is a spline,
+Limits of the checks: a sweep moves one control at a time, and joints are taken to their
+limits together only within a group that shares a centre (`--corners`), so an arm swung
+into a leg, or a knee folded with the hip at a corner, is covered only where a pose or a
+motion covers it; the loads are static; `fit.py` interpolates the sections linearly where the loft is a spline,
 and is a design aid whose word the exact check confirms.
 
 ## Reviewing a change
@@ -283,8 +305,10 @@ rails standing through a shin guard: a part alone, then its link alone from four
 dressed and bare (`review.py`), then a joint at both ends of its travel, then the
 assembly, then the poses. A skin is drawn with an intended relation to what it covers
 (`fit.py` holds it to that). A check is trusted only after it has failed on a planted
-example of what it guards against (`planted.py`). And the look is settled on a styling
-model, sent for an opinion, before it is detailed (`styling.py`).
+example of what it guards against (`planted.py`). The look is settled on a styling
+model, sent for an opinion, before it is detailed (`styling.py`), and judged from every
+side, the back included (`sheet.py`): a first restyle passed every check here with three
+bare drives still showing behind the waist.
 
 ## Not modelled
 
