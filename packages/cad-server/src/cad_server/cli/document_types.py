@@ -214,7 +214,6 @@ def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: 
         if failure.status == cli_errors.USAGE:
             return _mistake(failure, prog=prog, as_json=as_json)
         reason = getattr(error, "reason", None)
-        known = (isinstance(reason, str) and bool(reason)) or isinstance(error, cli_errors.Failure)
         if not isinstance(reason, str) or not reason:
             reason = next((code for module, name, code in _UNCHECKED
                            if any(kind.__module__ == module and kind.__name__ == name for kind in type(error).__mro__)),
@@ -223,8 +222,9 @@ def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: 
             print(json.dumps({**cli_errors.document(failure), "status": "not_checked", "reason": reason},
                              separators=(",", ":")), flush=True)
         else:
-            # What stopped it, in its own words; a failure of no class the check knows says its type too.
-            words = str(failure) if known or reason != failure.reason else f"{type(error).__name__}: {failure}"
+            # What stopped it, in its own words; a failure of no class the command knows says its type too.
+            unknown = reason == "failed" and not type(error).__module__.startswith("cad_server.")
+            words = f"{type(error).__name__}: {failure}" if unknown else str(failure)
             print(f"{prog}: NOT CHECKED ({reason}): {words}", file=sys.stderr, flush=True)
             print(f"NOT CHECKED {source}: {reason}", flush=True)
         return NOT_CHECKED
