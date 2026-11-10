@@ -351,6 +351,10 @@ def _primitives() -> dict:
                              False) for angle in (25, 30)},
         **{f"facet55_{angle}": (_facet(angle), "fdm", [("printing.overhang_angle", warning)], False)
            for angle in (25, 30, 35, 40)},
+        # a 1 mm plate with a 30 deg tip: the tip's edge is 1 mm long, shorter than its sliver is deep -- a knife
+        # on both paths, never a wall of nothing
+        "arrow": (bd.extrude(bd.Polygon((0, -6), (30, -6), (30 + 6 / math.tan(math.radians(15)), 0), (30, 6), (0, 6),
+                                        align=None), 1), "fdm", [("printing.knife_edge", warning)], False),
         "cone43": (_cone(43), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)], True),
         "cone45": (_cone(45), "fdm", [], True),
         "tee": (bd.Box(5, 5, 16, align=A) + bd.Pos(0, 0, 16) * bd.Box(24, 5, 2, align=A), "sla",

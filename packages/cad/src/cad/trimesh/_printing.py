@@ -10,7 +10,7 @@
   faces on faces: the mesh's ``overlap``); ``clearances``: the least distance between bodies;
 - ``trapped_volumes``: cavities from a voxel field (``cad._internal.meshops_printing``) and their openings;
 - ``knife_edges``: sharp convex creases (under 45 deg, at least 2: a sharper one is a fold of the tessellation)
-  chained into edges, each at least as long as its thin depth;
+  chained into edges, however short;
 - ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster's column fill), ``sections``;
   the candidate orientations ranked (``orientations``).
 
@@ -503,9 +503,9 @@ def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
     """The sharp edges: convex creases (material angle under ``CREASE_DEG``, at least ``FOLD_DEG``: a sharper
     one is a fold of the tessellation) chained by shared corners, each chain with its angle (its creases' median
     by length, as the exact path reads an edge at its middle) and how far that may be off (``slack``: its
-    creases' median ``_crease_slack``), where it is at least as long as its thin depth -- a shorter one is a sliver
-    triangle's crease, no edge of the part (a knife whose sliver is deeper than the edge is long is not one a
-    slicer or a part has). A chain under ``KNIFE_DEG`` by more than its slack is a knife (``_Knife.knife``); every
+    creases' median ``_crease_slack``), however short it is: the tip of a 1 mm plate, the corner of an engraved
+    letter 0.6 mm deep, is an edge as short as the plate is thick, and a knife as exact geometry reads it. A
+    chain under ``KNIFE_DEG`` by more than its slack is a knife (``_Knife.knife``); every
     chain is a zone whose own sliver the walls leave alone (``_outside_knives``), so a tip at the limit, or a
     curved one whose chords read either side of it, is neither a knife nor a thin wall."""
     material = 180.0 - np.degrees(mesh.face_adjacency_angles)
@@ -529,8 +529,6 @@ def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
         middle = min(int(np.searchsorted(weight, weight[-1] / 2.0)), len(order) - 1)
         typical = float(angle[mine][order][middle])
         depth = mo.thin_depth(minimum, typical)
-        if depth is not None and length < depth:
-            continue
         starts, ends = mesh.vertices[pairs[mine, 0]], mesh.vertices[pairs[mine, 1]]
         depths = None
         if depth is not None:
@@ -1287,9 +1285,8 @@ def _knife_facts(mesh: trimesh.Trimesh, options: dict, zones: list[_Knife] | Non
             "at_limit_tolerance_deg": _r(max((knife.slack for knife in near), default=0.0), 4),
             "method": f"convex creases between triangles of material under {CREASE_DEG:g} deg, chained by shared "
                       "corners, a chain a knife where its angle (its creases' median by length) is under "
-                      "knife_below_deg; a crease under "
-                      "fold_below_deg is a fold of the tessellation, and a chain shorter than its thin depth a "
-                      "sliver triangle's, neither a knife"}
+                      "knife_below_deg, however short; a crease under fold_below_deg is a fold of the "
+                      "tessellation, no knife"}
 
 
 def _build_volume_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
