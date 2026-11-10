@@ -271,9 +271,10 @@ pelvis: heel strike, roll-over, heel-off on the toe hinge), `wave`, `bow`, `crou
 and `settle` (from `ready` into `contrapposto`).
 
 One thing moves that is not the mechanism's: `explode`, an animation of the GLB
-(`cad.build123d.animation`, in `lib/show.py`). Every link goes apart up the robot, the
-parts of each away from its middle, then each skin off what it covers, and all come
-back. The document's joints and a STEP know nothing of it; the viewer's playbar and
+(`cad.build123d.animation`, in `lib/show.py`), in two stages with a hold after each.
+First the links go apart up the robot and each skin slides off what it covers; then
+every piece goes off on its own, each part well away from its link's middle, the whole
+wider than it is tall; and all come back. The document's joints and a STEP know nothing of it; the viewer's playbar and
 `film.py` play it from the GLB. A standing leg is
 posed by where its foot goes (`kin.leg` solves hip, knee and ankle and keeps the sole
 level), so both feet stand on one floor. The pelvis is the mechanism's fixed link, so a
@@ -392,8 +393,9 @@ cad run src/film.py cut                          # tmp/film/galatea.mp4 (needs f
 ```
 
 The cut is about the model being a CAD file and about its mechanism, and gets inside
-it in four seconds: it wakes; the camera goes round it; the whole assembly comes apart
-(the GLB's `explode`); then the mechanism with its skins left off, a joint at a time
+it in three seconds: it wakes; the camera goes round it and, in the same shot, the
+whole assembly comes apart (the GLB's `explode`: links and skins, a hold, then all 689
+pieces, a longer hold); then the mechanism with its skins left off, a joint at a time
 as it moves (the knee's linkage, the ankle, the hip, the waist, the arm, the hand, the
 neck and the head's cameras), and all of it crouching; the skins are wiped back on and
 it walks; then the same document with no studio at all, as the CAD viewer draws it

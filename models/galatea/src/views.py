@@ -46,14 +46,14 @@ def eased(u):
 
 def frame(k):
     """The job of frame k: (camera, display, pose)."""
-    if k < 36:                                              # solid, on the grid
-        return camera(20 + 60 * k / 36, 12, 5700), {"mode": "solid", "grid": True}, None
-    if k < 72:                                              # parts, coming apart
+    if k < 36:                                              # solid, on the grid: across the front
+        return camera(-25 + 50 * k / 36, 12, 4900), {"mode": "solid", "grid": True}, None
+    if k < 72:                                              # parts, coming apart: on round to a three-quarter view
         u = (k - 36) / 36
         apart = 0.3 * eased(min(1.0, u / 0.6))
-        return camera(80 + 55 * u, 12, 5700 + 2600 * apart / 0.3), {"mode": "parts", "exploded": {"enabled": True, "amount": apart}}, None
-    t = (k - 72) / FPS                                      # x-ray, walking
-    return camera(135 - 170 * (k - 72) / 96, 8, 5700), {"mode": "xray"}, walk(t % CYCLE)
+        return camera(25 + 40 * u, 12, 4900 + 2600 * apart / 0.3), {"mode": "parts", "exploded": {"enabled": True, "amount": apart}}, None
+    t = (k - 72) / FPS                                      # x-ray, walking: on to its side
+    return camera(65 + 45 * (k - 72) / 48, 8, 4900), {"mode": "xray"}, walk(t % CYCLE)
 
 
 def main(arguments):

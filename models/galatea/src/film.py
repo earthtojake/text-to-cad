@@ -82,40 +82,43 @@ SHOTS = {
     "hero": dict(clip="settle", frames=120, plant="r_foot", lens=45, turn=20,
                  camera=[(0, (-2700, -3500, 760), (0, 20, 900)), (60, (-200, -4420, 1000), (0, 20, 905)),
                          (120, (2500, -3650, 1240), (0, 20, 910))], lights=[(0, ON)]),
-    # The whole assembly comes apart: every link, every part of each, then the skins off them (the GLB's `explode`).
-    "explode": dict(clip="explode", frames=84, lens=35, turn=-10,
-                    camera=[(0, (-1900, -3000, 1000), (0, 0, 900)), (30, (-2750, -4250, 1500), (0, 0, 1370)),
-                            (84, (-1300, -4900, 1650), (0, 0, 1390))], lights=[(0, ON), (30, OPEN)]),
+    # The camera goes round the whole figure, and the whole assembly comes apart as it does (the GLB's `explode`): the
+    # links and the skins first, a hold, then every piece on its own, and a longer hold.
+    "explode": dict(clip="explode", frames=176, lens=35, turn=-10,
+                    camera=[(0, (-2450, -2250, 930), (0, 0, 900)), (30, (-1950, -2850, 1000), (0, 0, 910)),
+                            (54, (-1750, -4450, 1450), (0, 0, 1350)), (92, (-1250, -4700, 1500), (0, 0, 1360)),
+                            (116, (-600, -5550, 1650), (0, 0, 1500)), (176, (1200, -5600, 1750), (0, 0, 1510))],
+                    lights=[(0, ON), (40, ON), (64, OPEN)]),
     # The mechanism, its skins left off, one joint at a time. The knee: a crank high in the thigh, a pushrod, the horn.
     "knee": dict(clip="crouch", start=50, frames=44, plant="l_foot", lens=70, fstop=5.6, turn=-110, wipe="off", follow="r_shin",
                  samples=16, camera=[(0, (-1500, -420, 500), (-82, 0, 520)), (44, (-1440, -200, 600), (-82, 0, 520))],
                  lights=[(0, OPEN)]),
     # The ankle: the calf's drive, its crank, the rod down the back of the shin, the gimbal and the roll drive along the foot.
-    "ankle": dict(clip="crouch", start=4, frames=42, plant="l_foot", lens=50, fstop=5.6, turn=150, wipe="off", follow="l_shin",
-                  samples=16, camera=[(0, (800, 780, 330), (100, 20, 230)), (42, (880, 640, 300), (100, 20, 230))],
+    "ankle": dict(clip="crouch", start=6, frames=38, plant="l_foot", lens=50, fstop=5.6, turn=150, wipe="off", follow="l_shin",
+                  samples=14, camera=[(0, (800, 780, 330), (100, 20, 230)), (38, (880, 640, 300), (100, 20, 230))],
                   lights=[(0, OPEN)]),
     # The hip: three drives whose axes meet at one point.
-    "hip": dict(clip="crouch", start=2, frames=42, plant="l_foot", lens=60, fstop=5.6, turn=150, wipe="off",
-                follow="l_hip_cradle", ride=True, samples=16,
-                camera=[(0, (780, 640, 1000), (95, 20, 920)), (42, (700, 740, 1050), (95, 20, 920))], lights=[(0, OPEN)]),
+    "hip": dict(clip="crouch", start=4, frames=38, plant="l_foot", lens=60, fstop=5.6, turn=150, wipe="off",
+                follow="l_hip_cradle", ride=True, samples=14,
+                camera=[(0, (780, 640, 1000), (95, 20, 920)), (38, (700, 740, 1050), (95, 20, 920))], lights=[(0, OPEN)]),
     # The waist: a spider between the yoke and the chest, roll behind, pitch at both ends.
-    "waist": dict(clip="bow", start=2, frames=40, plant="l_foot", lens=60, fstop=5.6, turn=170, wipe="off",
-                  follow="lumbar_yoke", ride=True, samples=16,
-                  camera=[(0, (620, 760, 1260), (0, 40, 1150)), (40, (720, 640, 1240), (0, 40, 1150))], lights=[(0, OPEN)]),
+    "waist": dict(clip="bow", start=4, frames=36, plant="l_foot", lens=60, fstop=5.6, turn=170, wipe="off",
+                  follow="lumbar_yoke", ride=True, samples=14,
+                  camera=[(0, (620, 760, 1260), (0, 40, 1150)), (36, (720, 640, 1240), (0, 40, 1150))], lights=[(0, OPEN)]),
     # The arm: shoulder roll and yaw, the elbow, the wrist, as it waves.
-    "arm": dict(clip="wave", start=2, frames=44, plant="l_foot", lens=50, fstop=5.6, turn=30, wipe="off", samples=16,
-                camera=[(0, (-1150, -1250, 1420), (-250, -40, 1330)), (44, (-1250, -1150, 1470), (-290, -60, 1380))],
+    "arm": dict(clip="wave", start=4, frames=40, plant="l_foot", lens=50, fstop=5.6, turn=30, wipe="off", samples=14,
+                camera=[(0, (-1150, -1250, 1420), (-250, -40, 1330)), (40, (-1250, -1150, 1470), (-290, -60, 1380))],
                 lights=[(0, OPEN)]),
     # The hand closes.
-    "hand": dict(clip="grasp", start=6, frames=42, plant="l_foot", lens=100, fstop=4.0, on="l_palm", turn=60, wipe="off",
-                 samples=18, camera=[(0, (760, -500, 860), (212, -5, 790)), (42, (720, -580, 820), (212, -5, 787))],
+    "hand": dict(clip="grasp", start=8, frames=36, plant="l_foot", lens=100, fstop=4.0, on="l_palm", turn=60, wipe="off",
+                 samples=14, camera=[(0, (760, -500, 860), (212, -5, 790)), (36, (720, -580, 820), (212, -5, 787))],
                  lights=[(0, OPEN)]),
     # The neck's three drives and the head's cameras, as it looks about.
-    "neck": dict(clip="look", start=2, frames=36, plant="l_foot", lens=60, fstop=5.6, turn=-20, wipe="off", samples=16,
-                 camera=[(0, (520, -700, 1640), (0, 5, 1585)), (36, (440, -760, 1660), (0, 5, 1590))], lights=[(0, OPEN)]),
+    "neck": dict(clip="look", start=4, frames=32, plant="l_foot", lens=60, fstop=5.6, turn=-20, wipe="off", samples=14,
+                 camera=[(0, (520, -700, 1640), (0, 5, 1585)), (32, (440, -760, 1660), (0, 5, 1590))], lights=[(0, OPEN)]),
     # All of it at once: the mechanism crouches.
-    "crouch": dict(clip="crouch", speed=1.5, frames=44, plant="l_foot", lens=45, turn=-25, wipe="off", follow="pelvis",
-                   camera=[(0, (1950, -3250, 1050), (0, 0, 880)), (44, (1700, -3000, 900), (0, -20, 860))], lights=[(0, OPEN)]),
+    "crouch": dict(clip="crouch", speed=1.5, frames=40, plant="l_foot", lens=45, turn=-25, wipe="off", follow="pelvis",
+                   camera=[(0, (1950, -3250, 1050), (0, 0, 880)), (40, (1700, -3000, 900), (0, -20, 860))], lights=[(0, OPEN)]),
     # The skins are wiped away from the head down (the cut plays this backwards, to dress the robot again).
     "scan": dict(clip="crouch", freeze=0, frames=78, plant="l_foot", lens=45, turn=-25, follow="pelvis",
                  camera=[(0, (2250, -3550, 1150), (0, 0, 900)), (162, (1650, -2950, 900), (0, -20, 860))],
@@ -135,16 +138,15 @@ def quick(first, last, speed=1.5):
 
 CUT = [
     ("wake", range(8, 54), None),
-    ("hero", range(30, 76), "1.76 m    57 kg    44 driven joints"),
-    ("explode", range(0, 84), "one CAD assembly: 689 parts in 73 links, written as code"),
+    ("explode", range(0, 176), None),
     ("knee", range(0, 44), "the knee's drive rides at the hip: a crank, a pushrod, a parallelogram"),
-    ("ankle", range(0, 42), "the ankle: a drive in the calf, a rod down the back of the shin"),
-    ("hip", range(0, 42), "the hip: three drives whose axes meet at one point"),
-    ("waist", range(0, 40), "the waist: yaw, roll and pitch through one centre"),
-    ("arm", range(0, 44), "seven joints an arm"),
-    ("hand", range(0, 42), "six more in each hand"),
-    ("neck", range(0, 36), "33 RobStride drives, each its maker's own CAD model"),
-    ("crouch", range(0, 44), "every pose checked for interference, balance and torque"),
+    ("ankle", range(0, 38), "the ankle: a drive in the calf, a rod down the back of the shin"),
+    ("hip", range(0, 38), "the hip: three drives whose axes meet at one point"),
+    ("waist", range(0, 36), "the waist: yaw, roll and pitch through one centre"),
+    ("arm", range(0, 40), "seven joints an arm"),
+    ("hand", range(0, 36), "six more in each hand"),
+    ("neck", range(0, 32), "33 RobStride drives, each its maker's own CAD model"),
+    ("crouch", range(0, 40), "every pose checked for interference, balance and torque"),
     ("scan", quick(72, 4), None),
     ("walk", range(0, 60), None),
     ("views", None, "the same document as the CAD viewer draws it: solid, parts, x-ray"),
@@ -153,6 +155,13 @@ CUT = [
 ]
 ORDER = tuple(dict.fromkeys(name for name, _, _ in CUT if name in SHOTS))
 END_FRAMES = 66                # how long the end card is held
+ON_LIGHT = {"views"}           # the pieces drawn on a light ground, whose captions are dark
+# Captions that come and go inside one piece: (piece, from its frame, to its frame, words).
+WITHIN = [
+    ("explode", 2, 30, "1.76 m    57 kg    44 driven joints"),
+    ("explode", 60, 104, "one CAD assembly, written as code: 73 links"),
+    ("explode", 122, 174, "689 parts, each one modelled"),
+]
 # The title, over the last piece, and the line under it.
 TITLE = dict(text="G A L A T E A", height=0.045, at=0.76, under="designed, modelled and checked in code with text-to-cad")
 
@@ -644,16 +653,19 @@ def cut(quality, step=1):
         page = reel / f"text{len(list(reel.glob('text*.txt')))}.txt"
         page.write_text(words)
         font = f"fontfile={face}:" if Path(face).exists() else ""
-        return (f"drawtext={font}textfile={page}:expansion=none:fontsize={round(size * height)}:fontcolor={colour}:"
-                f"shadowcolor=0x000000@0.5:shadowx={max(1, round(height / 540))}:shadowy={max(1, round(height / 540))}:"
+        shadow = "" if colour == "0x2A2E35" else (f"shadowcolor=0x000000@0.5:shadowx={max(1, round(height / 540))}:"
+                                                  f"shadowy={max(1, round(height / 540))}:")
+        return (f"drawtext={font}textfile={page}:expansion=none:fontsize={round(size * height)}:fontcolor={colour}:{shadow}"
                 f"alpha='{alpha}':x={x}:y={y}")
 
     steps = [f"scale={width}:{height}:flags=lanczos", "fade=t=in:st=0:d=0.3"]
     for name, first, last, words in spans:
-        a, b = first / rate, last / rate
-        if words:
+        lines = [(0, last - first, words)] if isinstance(words, str) else (words or [])
+        for begin, finish, line in [*lines, *[(b0, b1, w) for shot, b0, b1, w in WITHIN if shot == name]]:
+            a, b = (first + begin / step) / rate, (first + min(finish / step, last - first)) / rate
             fade = f"0.9*min(1,min((t-{a:.3f})/0.25,({b:.3f}-t)/0.25))*between(t,{a:.3f},{b:.3f})"
-            steps.append(text(words, 0.027, "0xDADCE0", "w*0.06", "h*0.885", fade, FONT_LIGHT))
+            ink = "0x2A2E35" if name in ON_LIGHT else "0xDADCE0"            # dark words on the viewer's light page
+            steps.append(text(line, 0.027, ink, "w*0.06", "h*0.885", fade, FONT_LIGHT))
     if spans and spans[-1][0] == CUT[-1][0]:                # the title, over the last piece
         a = spans[-1][1] / rate
         rise = f"min(1,max(0,(t-{a + 0.3:.3f})/0.7))"
