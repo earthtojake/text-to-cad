@@ -48,6 +48,12 @@ all end within that says nothing more.
 ``--shard I/N`` (``CAD_TEST_SHARD=I/N`` through ``run_python_unittest``) runs one of N shards of the
 files given: sorted by path, the k-th (from 0) is shard ``k % N + 1``'s, so each file is in exactly
 one shard. A shard none of the files falls to passes, saying so.
+
+``--file-budget SECONDS`` (``CAD_TEST_FILE_BUDGET``) names each file that took longer, in an ``OVER
+BUDGET`` list after the summary and, in a GitHub Actions run, as a warning on the run: a shard is no
+shorter than its slowest file, so one that outgrows the budget is split. It never fails a run: how
+long a file takes is the runner's to say and the machine's to vary, and a bound on it that failed
+would be a flake.
 """
 
 from __future__ import annotations
@@ -476,7 +482,7 @@ def _shard_argument(value: str) -> tuple[int, int]:
 
 
 def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False,
-              no_skips: bool = False, hang_seconds: float | None = None) -> int:
+              no_skips: bool = False, hang_seconds: float | None = None, file_budget: float | None = None) -> int:
     top = os.path.realpath(top)
     hang_seconds = FILE_HANG_SECONDS if hang_seconds is None else hang_seconds
     started = time.perf_counter()
@@ -647,6 +653,17 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
     if hung:
         sys.stderr.write("hung (each one's stacks are with its output above):\n"
                          + "".join(f"  {p}: {how}\n" for p, how in sorted(hung.items())))
+    over = sorted(((seconds, _shown(path, top)) for path, seconds in durations
+                   if file_budget and seconds > file_budget), reverse=True)
+    if over:
+        # Said, never failed: the verdict above stands.
+        sys.stderr.write(f"OVER BUDGET ({file_budget:g} s a test file; split what outgrows it):\n"
+                         + "".join(f"  {path}  {seconds:.0f}s\n" for seconds, path in over))
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            for seconds, path in over:
+                sys.stderr.write(f"::warning file={path.replace(os.sep, '/')},title=Test file over its time budget::"
+                                 f"{seconds:.0f} s, over the {file_budget:g} s a test file's budget: split it "
+                                 "(docs/contributing/testing.md)\n")
     if not_run:
         # Last, so the run's last line: a run cut short is not a short run that passed.
         sys.stderr.write(f"RUN CUT SHORT: {len(not_run)} of the {len(files)} files given never started, because "
@@ -685,6 +702,13 @@ def main(argv: list[str] | None = None) -> int:
         help=f"a file still running this long after it started is hung (default {FILE_HANG_SECONDS}): its "
              "interpreter prints every thread's stack and exits 1, and the run starts no file after it",
     )
+    parser.add_argument(
+        "--file-budget",
+        type=float,
+        metavar="SECONDS",
+        help="name each file that took longer than this after the summary (and as a warning in a GitHub "
+             "Actions run); it never fails the run",
+    )
     # The runner's own: where the file's interpreter writes its stacks should it hang.
     parser.add_argument("--hang-report", help=argparse.SUPPRESS)
     # The runner's own: the developer's places its file's tests are watched for (``_Watching``).
@@ -707,7 +731,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         sys.stderr.write(f"shard {index}/{count}: {len(files)} of the {len(args.files)} files given\n")
     return run_files(files, args.top, max(1, args.jobs), args.verbose, args.print_weights, args.no_skips,
-                     args.hang_seconds)
+                     args.hang_seconds, args.file_budget)
 
 
 if __name__ == "__main__":

@@ -150,6 +150,28 @@ class Heartbeat(_Quiet):
         self.assertNotIn("still running", said.getvalue())
 
 
+class FileBudget(_Quiet):
+    """A shard is no shorter than its slowest file, so the runner names the files over the budget:
+    said, on a GitHub Actions run as a warning too, and never a failure."""
+
+    def test_a_file_over_the_budget_is_named_and_the_run_still_passes(self):
+        def run(path, top, verbose, env, **_):
+            return path, 0, PASSED, {"slow.py": 130.4, "quick.py": 3.0}[path], None
+
+        said, plain = io.StringIO(), io.StringIO()
+        with mock.patch.object(runner, "_run_one_file", side_effect=run):
+            with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), mock.patch.object(runner.sys, "stderr", said):
+                code = runner.run_files(["slow.py", "quick.py"], str(REPO_ROOT), 2, False, file_budget=120)
+            with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": ""}), mock.patch.object(runner.sys, "stderr", plain):
+                unbudgeted = runner.run_files(["slow.py", "quick.py"], str(REPO_ROOT), 2, False)
+        self.assertEqual((code, unbudgeted), (0, 0), said.getvalue())
+        self.assertIn("OVER BUDGET (120 s a test file; split what outgrows it):\n  slow.py  130s\n", said.getvalue())
+        self.assertIn("::warning file=slow.py,title=Test file over its time budget::130 s, over the 120 s",
+                      said.getvalue())
+        self.assertNotIn("quick.py  ", said.getvalue())
+        self.assertNotIn("OVER BUDGET", plain.getvalue())
+
+
 class Shards(unittest.TestCase):
     FILES = [f"tests/python/{group}/test_{name}.py" for group in ("b", "a") for name in "zyxwvu"]
 

@@ -103,6 +103,11 @@ run_python_unittest() {
   if [ -n "${CAD_TEST_SHARD:-}" ]; then
     extra+=(--shard "$CAD_TEST_SHARD")
   fi
+  # CAD_TEST_FILE_BUDGET=<seconds>, --file-budget: the files that took longer are named after the
+  # summary (CI sets it; a run never fails for it).
+  if [ -n "${CAD_TEST_FILE_BUDGET:-}" ]; then
+    extra+=(--file-budget "$CAD_TEST_FILE_BUDGET")
+  fi
 
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
     "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" \
