@@ -170,7 +170,7 @@ The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cad-mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
-The runtime supports Python 3.14+; the launch commands use uv-managed Python 3.14.
+The runtime supports Python 3.13+; the launch commands use uv-managed Python 3.14.
 
 The commands below take the `latest` branch: it holds the plugin alone and gets
 each release once it is on PyPI. `main`, where development happens, installs too,

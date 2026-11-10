@@ -9,13 +9,14 @@ description = "The stdio transport an agent app starts for text-to-cad's CAD app
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 authors = [{ name = "earthtojake" }]
 keywords = ["cad", "mcp", "agent-skills"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Multimedia :: Graphics :: 3D Modeling",
 ]
