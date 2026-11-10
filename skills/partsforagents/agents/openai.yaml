@@ -1,0 +1,4 @@
+interface:
+  display_name: "partsforagents"
+  short_description: "Prepare exact-CAD review and fabrication requests."
+  default_prompt: "Use $partsforagents to get free advice for this CAD export and prepare an exact-file review request."

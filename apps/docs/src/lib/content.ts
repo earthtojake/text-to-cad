@@ -124,7 +124,7 @@ export const features = [
     id: "fabrication",
     name: "Fabrication services",
     path: "skills/sendcutsend/SKILL.md",
-    summary: "[Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.",
+    summary: "[Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio, and [prepares exact-file DFM review and nonbinding fabrication requests with partsforagents](skills/partsforagents/SKILL.md).",
     file: "bracket_flat.dxf, housing.gcode.3mf",
   },
   {
