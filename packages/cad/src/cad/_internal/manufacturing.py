@@ -17,9 +17,9 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
 finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
-processes (``_held``, ``cad.engine.api.check``), a file in this process only where no engine can be reached; an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), in this process, each
-finding at ``x, y, z``. The report is the result's
-``measurements``, facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
+processes (``_held``, ``cad.engine.api.check``), a file in this process only where no engine can be reached;
+an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), in this process, each finding at
+``x, y, z``. The report is the result's ``measurements``, facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
 practice, no shop's -- every rule a limit on one measured figure with the published guide that states it, a
 failing one a finding whose code is the rule's id and whose hint says what to change; the record of every
 rule is ``measurements["rules"]``. A shop's own limits are no option here: they are compared with the

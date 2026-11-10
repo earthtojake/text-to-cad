@@ -89,6 +89,11 @@ check the STEP or the model.
 
 ## Read it
 
+The last line is the check's state and its exit status -- `OK` 0, `FAILED` 1 (a finding is an error; with
+`--strict` a warning fails too), `NOT CHECKED` 3 (something was not judged: never a pass), and 2 for a
+command refused -- and a rule's finding is data to edit from (`value`, `limit`, `unit`, `op`, `source`,
+`refs`): [Read the result](../SKILL.md#read-the-result).
+
 The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, `walls`, `gaps`,
 `access`, `setups`, `voids`, `stock`, `small_features`; with `--turning`, `turning`,
 `turned_diameters`, `bores`, `grooves` and `live_tooling`.

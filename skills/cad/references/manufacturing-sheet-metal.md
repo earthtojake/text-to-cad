@@ -86,6 +86,11 @@ model.
 
 ## Read it
 
+The last line is the check's state and its exit status -- `OK` 0, `FAILED` 1 (a finding is an error; with
+`--strict` a warning fails too), `NOT CHECKED` 3 (something was not judged: never a pass), and 2 for a
+command refused -- and a rule's finding is data to edit from (`value`, `limit`, `unit`, `op`, `source`,
+`refs`): [Read the result](../SKILL.md#read-the-result).
+
 The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels`, `reliefs`, `hems`,
 `curls`, `holes`, `hole_spacing`, `hole_to_bend`, `notches`, `tabs`, `webs`, `gaps`.
 

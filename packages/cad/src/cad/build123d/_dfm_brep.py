@@ -17,7 +17,8 @@ its own, at its own refs, measured as it stands. So what depends on how a part s
 a molding's draft against the pull -- is judged for every occurrence, what does not is measured once per
 geometry by the processes that read it so (``copies``), and a total counts ``occurrences``
 (``Document.facts``); a print, whose parts stand among each other on one plate, measures every occurrence
-where it stands (``every_occurrence``). A live shape's leaves that share one geometry are read the same way (``parts_of``).
+where it stands (``every_occurrence``). A live shape's leaves that share one geometry are read the same way
+(``parts_of``).
 
 **Never the held shapes themselves.** A check meshes faces (``BRepMesh``), which writes a triangulation
 into the shape it meshes: on the document the engine holds, the next check would find the last one's

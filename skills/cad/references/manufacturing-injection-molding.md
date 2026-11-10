@@ -89,6 +89,11 @@ exactly and each item names a face ref; prefer it to a mesh.
 
 ## Read it
 
+The last line is the check's state and its exit status -- `OK` 0, `FAILED` 1 (a finding is an error; with
+`--strict` a warning fails too), `NOT CHECKED` 3 (something was not judged: never a pass), and 2 for a
+command refused -- and a rule's finding is data to edit from (`value`, `limit`, `unit`, `op`, `source`,
+`refs`): [Read the result](../SKILL.md#read-the-result).
+
 The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`, `corners`, `projection`,
 `envelope`, `parting`, `clamp`, `pull_check`; `pulls` with `--candidates`.
 
