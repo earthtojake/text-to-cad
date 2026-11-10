@@ -227,12 +227,16 @@ class PocketsTest(unittest.TestCase):
         self.assertIn("cnc.corner_radius_to_depth", _codes(self.result))
         tight = _check(_part(bd.Box(40, 30, 12) - _pocket(20, 14, 4, 1.0, 6)), tools="3,6")
         found = [f for f in tight.findings if f.code == "cnc.internal_corner_radius"]
-        # the pocket's four corners are one finding, at the pocket: the record holds each
-        self.assertEqual(len(found), 1)
+        # a round corner is a feature of its own, as a sharp one is: one finding a corner, at its own fillet's
+        # face (refs[0], the face to edit), the cavity's floor after it
+        corners = tight.measurements["internal_corners"]["items"]
+        self.assertEqual(sorted(f.location for f in found), sorted(c["corner"] for c in corners))
+        self.assertEqual(len({f.location for f in found}), 4)
+        (floor,) = {c["pocket"] for c in corners}
+        self.assertTrue(all(f.refs == [f.location, floor] for f in found))
         self.assertIn("under the 1.5 mm minimum", found[0].message)
-        self.assertIn("(and 3 more at this ref)", found[0].message)
-        outcome = next(o for o in tight.measurements["rules"]["outcomes"] if o["rule"] == "cnc.internal_corner_radius")
-        self.assertEqual(len(outcome["failures"]), 4)
+        self.assertIn(f"a corner of the cavity at {floor}", found[0].message)
+        self.assertIn("cnc.internal_corner_radius x4", tight.summary)
 
     def test_a_sharp_corner_is_radius_zero_and_once(self) -> None:
         result = _check(_part(bd.Box(40, 30, 12) - _pocket(10, 10, 4, 0.0, 6)))
@@ -252,7 +256,7 @@ class PocketsTest(unittest.TestCase):
         # rule's hint and its source are said once for the four
         self.assertEqual(sorted(f.location for f in found), sorted(c["edge"] for c in corners))
         self.assertEqual(len({c["edge"] for c in corners}), 4)
-        self.assertEqual({c["location"] for c in corners}, {"part/face 11"})
+        self.assertEqual({c["pocket"] for c in corners}, {"part/face 11"})
         self.assertTrue(all("part/face 11" in f.refs and f.refs[0] == f.location for f in found))
         self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in found))  # the 0.025 mm is our own floor
         self.assertEqual(sum("cnc.internal_corner_sharp, 4 place(s)" in line for line in result.human_lines()), 1)
@@ -597,9 +601,14 @@ class PartsTest(unittest.TestCase):
 
         self.assertEqual(_judged(cnc(plate(1900))), set())
         self.assertEqual(_judged(cnc(plate(2200))), {"cnc.part_size"})
+        # past twice a general shop's it is a specialist's machine: said, and made -- size alone fails no part
         far = cnc(plate(4500))
-        self.assertFalse(far.ok)
-        self.assertIn("cnc.part_size_limit", _judged(far))
+        self.assertTrue(far.ok)
+        self.assertEqual(_judged(far), {"cnc.part_size_limit"})
+        self.assertTrue(cnc(_part(bd.Cylinder(550, 100)), turning=True).ok)
+        # a stock the user gave that the part does not fit is the error
+        self.assertIn("cnc.stock_too_small", {f.code for f in cnc(plate(4500), stock="4000x300x20").findings
+                                              if f.severity == "error"})
 
 
 class TallAndDeepTest(unittest.TestCase):
@@ -617,17 +626,39 @@ class TallAndDeepTest(unittest.TestCase):
         def slot(width: float, depth: float) -> Any:
             return _part(bd.Box(40, 40, depth + 10) - bd.Pos(0, 0, 5) * bd.Box(40, width, depth))
 
-        # 15 widths deep is slow work (a warning); 33 is past what any tool of its width reaches
+        def closed(width: float, depth: float) -> Any:  # a slot shut at both ends, round ones: an end mill's alone
+            cut = bd.Pos(0, 0, 5 - depth / 2) * bd.extrude(bd.SlotOverall(30, width), depth)
+            return _part(bd.Box(40, 40, depth + 10) - cut)
+
+        # 15 widths deep is slow work (a warning); 33 is past what any end mill of its width reaches
         self.assertTrue(cnc(slot(2.0, 30.0)).ok)
-        deep = cnc(slot(1.2, 40.0))
-        self.assertFalse(deep.ok)
-        self.assertIn("cnc.pocket_depth_limit", _judged(deep))
-        # a tool under 1 mm reaches ten of its diameters: a 0.5 mm slot 6 deep, a 0.1 mm corner 6 deep
-        self.assertIn("cnc.pocket_depth_limit", _judged(cnc(slot(0.5, 6.0))))
-        for depth, made in ((6.0, False), (1.5, True)):
+        self.assertIn("cnc.pocket_depth_limit", {f.code for f in cnc(closed(1.2, 40.0)).findings
+                                                 if f.severity == "error"})
+        # open at both ends the slit is a slitting saw's, said by name: made, to sixty of its widths
+        sawn = cnc(slot(1.2, 40.0))
+        self.assertTrue(sawn.ok)
+        self.assertIn("cnc.slitting_saw", _judged(sawn))
+        self.assertNotIn("cnc.pocket_depth_to_width", _judged(sawn))  # one finding for the slit's depth
+        self.assertIn("cnc.pocket_depth_limit", _judged(cnc(slot(0.5, 32.0))))
+        # a micro tool's reach is one continuous limit, 25 diameters at 0.5 mm rising to 30 at 1 mm: no cliff
+        self.assertEqual([rules_side.reach_limit(d) for d in (0.2, 0.5, 0.75, 1.0, 3.0)], [25.0, 25.0, 27.5, 30.0, 30.0])
+        self.assertTrue(cnc(closed(0.8, 9.0)).ok)
+        self.assertTrue(cnc(closed(0.99, 29.0)).ok)
+        self.assertFalse(cnc(closed(0.5, 13.0)).ok)
+        for depth, made in ((6.5, False), (4.5, True)):  # a 0.1 mm corner takes a 0.2 mm tool: 5 mm deep at most
             cut = bd.fillet(bd.Box(10, 10, depth + 1, align=(A.CENTER, A.CENTER, A.MIN)).edges().filter_by(bd.Axis.Z), 0.1)
             result = cnc(_part(bd.Box(40, 40, 20) - bd.Pos(0, 0, 10 - depth) * cut))
             self.assertEqual((result.ok, "cnc.corner_reach_limit" in _judged(result)), (made, not made), depth)
+        # a micro drill reaches as a micro end mill does: 33 diameters at 0.06 mm is past it
+        micro = cnc(_part(bd.Box(5, 5, 4) - bd.Pos(0, 0, 2) * bd.Cylinder(0.03, 4, align=(A.CENTER, A.CENTER, A.MAX))))
+        self.assertIn("cnc.hole_depth_limit", {f.code for f in micro.findings if f.severity == "error"})
+
+    def test_a_thick_pin_stands_tall_too(self) -> None:
+        # 6 mm across and 40 tall: over the 5 mm a wall is listed under, and a tall feature all the same
+        pin = cnc(_part(bd.Box(40, 40, 5) + bd.Pos(0, 0, 22.5) * bd.Cylinder(3, 40)))
+        self.assertEqual(_judged(pin), {"cnc.tall_feature"})
+        short = cnc(_part(bd.Box(40, 40, 5) + bd.Pos(0, 0, 12.5) * bd.Cylinder(3, 20)))
+        self.assertEqual(_judged(short), set())
 
 
 class StockTest(unittest.TestCase):
@@ -689,6 +720,21 @@ class TurningTest(unittest.TestCase):
         slender = cnc(_part(bd.Cylinder(1, 100)), turning=True)
         self.assertTrue(slender.ok)
         self.assertEqual(_judged(slender), {"cnc.turned_slenderness"})
+        # judged a section: a 6 x 120 stem on a 60 mm flange is twenty diameters, the flange's width no help
+        stem = bd.Cylinder(30, 10, align=(A.CENTER, A.CENTER, A.MAX)) + bd.Cylinder(3, 120, align=(A.CENTER, A.CENTER, A.MIN))
+        stemmed = cnc(_part(stem), turning=True)
+        (said,) = [f for f in stemmed.findings if f.code == "cnc.turned_slenderness"]
+        self.assertEqual(said.value, 20.0)
+        runs = sorted((d["diameter_mm"], d["run_mm"]) for d in stemmed.measurements["turned_diameters"]["items"])
+        self.assertEqual(runs, [(6.0, 120.0), (60.0, 130.0)])
+        # an internal groove's depth has a warning before its error: a quarter of the bore, then half of it
+        def grooved(depth: float) -> Any:
+            return _part(bd.Cylinder(30, 40) - bd.Pos(0, 0, 5) * bd.Cylinder(10, 30) - bd.Cylinder(10 + depth, 6))
+
+        self.assertEqual(_judged(cnc(grooved(4.0), turning=True)), set())
+        near = cnc(grooved(9.0), turning=True)
+        self.assertTrue(near.ok)
+        self.assertIn("cnc.groove_depth", _judged(near))
 
     def test_a_square_plate_with_a_bore_is_mostly_not_turned(self) -> None:
         result = _check(_part(bd.Box(100, 100, 10) - bd.Cylinder(10, 30)), turning=True)
@@ -1041,6 +1087,152 @@ class DiscCutterTest(unittest.TestCase):
         finally:
             _dfm_brep.edge_angles = real
         self.assertAlmostEqual(float(angles.min()), 10.0, places=6)
+
+
+class DraftedCavitiesTest(unittest.TestCase):
+    """One cavity model: a wall drafted back from the tool's axis is a wall, a cavity's width and its corners'
+    radius are read at its floor, and an annular cavity is a pocket -- each judged as its straight twin is."""
+
+    @staticmethod
+    def _lofted(width: float, length: float, depth: float, radius: float, draft: float) -> Any:
+        inset = depth * math.tan(math.radians(draft))
+        return bd.loft([bd.Pos(0, 0, -depth) * bd.RectangleRounded(length - 2 * inset, width - 2 * inset, radius - inset),
+                        bd.RectangleRounded(length, width, radius)])
+
+    def test_drafted_and_annular_pockets_read_as_their_straight_twins_whatever_the_turn(self) -> None:
+        plate = bd.Box(200, 60, 20, align=(A.CENTER, A.CENTER, A.MAX))
+        straight = bd.Pos(-70, 0, -10) * bd.extrude(bd.RectangleRounded(40, 30, 4), 10)
+        lofted = bd.Pos(-20, 0, 0) * self._lofted(30, 40, 10, 4, 5)
+        tapered = bd.Pos(30, 0, 0) * bd.extrude(bd.RectangleRounded(40, 30, 4), -10, taper=3)
+        # a drafted box whose corner edges are filleted after: cylinders leaning with the corner
+        wedge = bd.loft([bd.Pos(0, 0, -10) * bd.Rectangle(18.9, 28.9), bd.Rectangle(20, 30)])
+        leaning = bd.Pos(75, 0, 0) * bd.fillet([e for e in wedge.edges() if abs(e.center().Z + 5) < 1e-6], 4)
+        part = plate - straight - lofted - tapered - leaning
+        # an O-ring's face groove (3 wide, 2 deep) and a round pocket about a boss, cut in the far face
+        part -= bd.Pos(-60, 0, -20) * (bd.Cylinder(13.5, 2, align=(A.CENTER, A.CENTER, A.MIN))
+                                       - bd.Cylinder(10.5, 2, align=(A.CENTER, A.CENTER, A.MIN)))
+        part -= bd.Pos(60, 0, -20) * (bd.Cylinder(15, 6, align=(A.CENTER, A.CENTER, A.MIN))
+                                      - bd.Cylinder(5, 6, align=(A.CENTER, A.CENTER, A.MIN)))
+
+        def read(shape: Any) -> tuple[Any, ...]:
+            result = cnc(_part(shape), material="aluminum")
+            report = result.measurements
+            pockets = sorted((p["kind"], p["depth_mm"], round(p["width_mm"], 2), p["wall_count"])
+                             for p in report["pockets"]["items"])
+            corners = sorted(round(c["radius_mm"], 1) for c in report["internal_corners"]["items"])
+            return (result.status, sorted(_judged(result)), report["holes"]["count"], pockets, corners,
+                    [i["setup_count"] for i in report["setups"]["items"]])
+
+        drawn = read(part)
+        # every one measured, none a hole, nothing to send back: only the lofted one's corners, 3.1 mm at the
+        # floor of a 10 mm cavity, are under the third of its depth recommended
+        self.assertEqual(drawn[:3], ("ok", ["cnc.corner_radius_to_depth"], 0))
+        # each the pocket its twin is: 10 deep and closed, 8 walls, its width at the floor (40 x 30 less the
+        # draft's inset, the leaning one's 20 x 30), four corners at their radius there; the groove's width is
+        # its radial gap (3), the ring's 10
+        self.assertEqual(drawn[3], [("closed", 2.0, 3.0, 2), ("closed", 6.0, 10.0, 2), ("closed", 10.0, 18.9, 8),
+                                    ("closed", 10.0, 28.25, 8), ("closed", 10.0, 28.95, 8), ("closed", 10.0, 30.0, 8)])
+        self.assertEqual(drawn[4], [3.1] * 4 + [3.5] * 4 + [4.0] * 8 + [13.5, 15.0])
+        self.assertEqual(drawn[5], [2])
+        self.assertEqual(read(bd.Pos(13, -7, 5) * bd.Rot(17, 23, 41) * part), drawn)
+
+    def test_a_drafted_cavity_too_deep_fails_as_its_straight_twin_does(self) -> None:
+        # 6 x 30 and 60 deep with 0.3 mm corners: straight, and lofted with 0.2 degrees of draft
+        block = bd.Box(100, 60, 65, align=(A.CENTER, A.CENTER, A.MAX))
+        straight = bd.Pos(-25, 0, -60) * bd.extrude(bd.RectangleRounded(6, 30, 0.3), 60)
+        part = block - straight - bd.Pos(25, 0, 0) * bd.Rot(0, 0, 90) * self._lofted(6, 30, 60, 0.3, 0.2)
+        result = cnc(_part(part), material="aluminum")
+        self.assertFalse(result.ok)
+        failed = [f for f in result.findings if f.code == "cnc.corner_reach_limit"]
+        self.assertEqual(len(failed), 8)  # four corners each: the drafted ones tighter still at the floor
+        radii = sorted(c["radius_mm"] for c in result.measurements["internal_corners"]["items"])
+        self.assertEqual(radii, [0.09] * 4 + [0.3] * 4)
+        # a slit drafted 1.5 degrees a side, 3 mm at the top and 0.38 at its floor 50 down, is no 3 mm slot
+        slit = bd.extrude(bd.Plane.XZ * bd.make_face(bd.Polyline(
+            (-1.5, 0), (1.5, 0), (0.19, -50), (-0.19, -50), close=True)), 30, both=True)
+        drafted = cnc(_part(bd.Box(40, 40, 60, align=(A.CENTER, A.CENTER, A.MAX)) - slit))
+        (pocket,) = drafted.measurements["pockets"]["items"]
+        self.assertEqual((pocket["kind"], pocket["depth_mm"], round(pocket["width_mm"], 2)), ("slot", 50.0, 0.38))
+        self.assertIn("cnc.pocket_depth_limit", {f.code for f in drafted.findings if f.severity == "error"})
+
+    def test_a_tapered_window_is_a_through_cavity(self) -> None:
+        window = bd.Box(80, 60, 20) - bd.Pos(0, 0, 10) * self._lofted(30, 40, 20, 4, 3)
+        (cavity,) = cnc(_part(window)).measurements["pockets"]["items"]
+        self.assertEqual((cavity["kind"], cavity["depth_mm"], round(cavity["width_mm"], 1)), ("through", 20.0, 27.9))
+
+
+class EngravingAndEntryTest(unittest.TestCase):
+    def test_shallow_lettering_is_an_engraving_tool_s_said_once(self) -> None:
+        # an L-shaped stroke 0.8 wide and 0.4 deep, five sharp corners: no end mill's corner to fail
+        outline = bd.make_face(bd.Polyline((0, 0), (6, 0), (6, 0.8), (0.8, 0.8), (0.8, 8), (0, 8), close=True))
+        stroke = bd.extrude(outline, -0.4)
+        result = cnc(_part(bd.Box(30, 30, 5, align=(A.CENTER, A.CENTER, A.MAX)) - bd.Pos(-3, -4, 0) * stroke))
+        self.assertTrue(result.ok)
+        self.assertEqual(_judged(result), {"cnc.gap_width_small"})  # micro-machining still, one stroke one warning
+        (said,) = [f for f in result.findings if f.code == "cnc.engraving"]
+        self.assertEqual(said.severity, "info")
+        self.assertIn("1 shallow, narrow cavity", said.message)
+        self.assertIn("with 5 corner(s)", said.message)  # the elbow's sixth is the material's, no corner to cut
+        self.assertEqual(result.measurements["internal_corners"]["count"], 0)
+        # the same stroke 3 mm deep is a pocket, and its corners are sharp
+        deep = bd.extrude(outline, -3)
+        self.assertIn("cnc.internal_corner_sharp",
+                      _judged(cnc(_part(bd.Box(30, 30, 5, align=(A.CENTER, A.CENTER, A.MAX)) - bd.Pos(-3, -4, 0) * deep))))
+
+    def test_a_closed_t_slot_s_way_in_is_its_entry_hole(self) -> None:
+        # the cutter drops in through a 16 mm hole at one end and travels the slot: its far end's edges are made
+        block = bd.Box(80, 40, 20)
+        slot = bd.extrude(bd.Pos(0, 0, 10) * bd.SlotOverall(56, 6), -8)
+        slot += bd.Pos(0, 0, -1) * bd.extrude(bd.SlotOverall(64, 14), 4)
+        with_entry = cnc(_part(block - slot - bd.Pos(-25, 0, 3) * bd.Cylinder(8, 14)))
+        self.assertTrue(with_entry.ok)
+        self.assertEqual(_judged(with_entry), {"cnc.special_cutter"})  # (with no way in at all: DiscCutterTest)
+
+
+class OccurrencesTest(unittest.TestCase):
+    def test_every_occurrence_counts_however_it_is_turned(self) -> None:
+        from unittest import mock
+
+        from cad.build123d import _dfm_cnc
+
+        def kit(*turns: tuple[float, float, float]) -> Any:
+            parts = []
+            for index, turn in enumerate(turns):
+                placed = bd.Pos(60 * index, 0, 0) * bd.Rot(*turn) * (bd.Box(40, 30, 12) - _pocket(10, 10, 4, 0.0, 6)
+                                                                    - bd.Pos(12, 0, 0) * bd.Cylinder(2, 12))
+                placed.label = f"p{index}"
+                parts.append(placed)
+            return bd.Compound(children=parts, label="kit")
+
+        def read(shape: Any) -> tuple[Any, ...]:
+            with mock.patch.object(_dfm_cnc, "_measure_part", side_effect=_dfm_cnc._measure_part) as measured:
+                result = cnc(shape)
+            line = result.summary.split(": ", 1)[1]
+            return line, result.measurements["holes"]["count"], measured.call_count
+
+        alike = read(kit((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+        turned = read(kit((0, 0, 0), (90, 0, 0), (17, 23, 41)))
+        # three parts, three holes, three pockets, twelve sharp corners: measured once, turned alike or not
+        self.assertEqual(alike, turned)
+        self.assertEqual(alike[1:], (3, 1))
+        self.assertIn("3 part(s)", alike[0])
+        self.assertIn("3 holes, 3 pockets", alike[0])
+        self.assertIn("cnc.internal_corner_sharp x12", alike[0])
+
+    def test_a_recess_reads_as_one_feature_at_any_turn_and_every_ref_is_one_ref(self) -> None:
+        # a chamber behind a neck, its floor reached in part by a line at an angle: one recess, one finding
+        chamber = bd.fillet((bd.Pos(0, 0, -3) * bd.Cylinder(5, 6)).edges(), 1)
+        necked = bd.Box(40, 40, 40) - bd.Pos(0, 0, 17.5) * bd.Cylinder(10, 5) - chamber
+        necked -= bd.Pos(0, 0, 7.5) * bd.Cylinder(3, 15.01)
+        said = []
+        for turn in (bd.Rot(0, 0, 0), bd.Pos(13, -7, 5) * bd.Rot(17, 23, 41)):
+            result = cnc(_part(turn * necked))
+            said.append(sorted((f.code, f.location, f.severity) for f in result.findings if f.severity != "info"))
+            for finding in result.findings:
+                for ref in finding.refs:
+                    self.assertRegex(ref, r"^part/(face|edge) \d+$")
+        self.assertEqual(said[0], said[1])
+        self.assertEqual([code for code, _, _ in said[0]], ["cnc.undercut"])
 
 
 class FrameTest(unittest.TestCase):

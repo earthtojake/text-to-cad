@@ -11,7 +11,8 @@ so), a ``flat`` (one plane along the axis), a ``slot`` (planes along the axis fa
 ``feature``. A live tool mills these, so their pockets and internal corners are measured as a mill's are
 (``_dfm_cnc._pockets`` over their faces alone).
 
-**Diameters** are the convex coaxial cylinders (diameter, length along the axis); **bores** the holes on the
+**Diameters** are the convex coaxial cylinders (diameter, length along the axis, and the slender run each
+is the thinnest of, ``_runs``); **bores** the holes on the
 axis; **grooves** the coaxial cylinders whose both ends meet planes square to the axis by concave edges: an
 outside (OD) groove's floor is convex, an internal (ID) groove's concave; width along the axis, depth to the
 lower shoulder, ``depth_to_width``, and for an internal one the bore its tool enters by (``entry_diameter_mm``:
@@ -113,7 +114,8 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
         if s.kind == "cylinder" and s.concave is False and i not in groove_floors:
             low, high = model.extent(i, axis)
             diameters.append({"diameter_mm": round(2 * float(s.radius), 4), "length_mm": round(high - low, 4),
-                              "location": model.ref(i), "xyz": model.center(i)})
+                              "location": model.ref(i), "xyz": model.center(i), "_low": low, "_high": high})
+    _runs(diameters)
     bores = []
     hole_faces_by_ordinal = {}
     for hole in holes:
@@ -172,6 +174,39 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
                      "xyz": model.center(main), "_faces": sorted(group)})
     return {"turning": [turning], "turned_diameters": diameters, "bores": bores, "grooves": grooves,
             "live_tooling": live}
+
+
+#: A section runs on into a neighbour at most this many times its own diameter across (``_runs``).
+RUN_WIDER = 1.25
+
+
+def _runs(sections: list[dict[str, Any]]) -> None:
+    """Each turned section's slender run: thinnest first, a section and the sections beside it along the axis
+    that are no more than ``RUN_WIDER`` of its diameter across (a step, a chamfer, a groove between them, up to
+    its diameter long) bend as one length -- ``run_mm`` and ``run_to_diameter`` on the thinnest (a 6 x 240 stem
+    on a 60 mm flange is 40 diameters, the flange's width no help to it); a section a thinner one's run takes
+    in is judged with it (``run_of``, its own figure None)."""
+    taken: set[int] = set()
+    for seed in sorted(range(len(sections)), key=lambda k: (sections[k]["diameter_mm"], sections[k]["_low"])):
+        if seed in taken:
+            continue
+        diameter = sections[seed]["diameter_mm"]
+        low, high = sections[seed]["_low"], sections[seed]["_high"]
+        members = {seed}
+        grew = True
+        while grew:
+            grew = False
+            for k, other in enumerate(sections):
+                if k not in members and other["diameter_mm"] <= RUN_WIDER * diameter + 1e-9 \
+                        and other["_low"] <= high + diameter + 1e-9 and other["_high"] >= low - diameter - 1e-9:
+                    members.add(k)
+                    low, high = min(low, other["_low"]), max(high, other["_high"])
+                    grew = True
+        for k in members - taken - {seed}:
+            sections[k].update(run_mm=None, run_to_diameter=None, run_of=sections[seed]["location"])
+        taken |= members
+        sections[seed].update(run_mm=round(high - low, 4), run_of=None,
+                              run_to_diameter=round((high - low) / diameter, 9) if diameter > 0 else None)
 
 
 def _groove_floors(model: Model, on: list[int], on_set: set[int], origin: np.ndarray,
