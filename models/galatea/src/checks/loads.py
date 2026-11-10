@@ -38,6 +38,7 @@ G = 9.81
 HOLD = 0.5
 ROD_MARGIN = 1.5
 GRIP = (dims.SHOULDER_X - 30.0, 0.0, 800.0)          # where a carried load hangs from the left hand
+SOLE_EDGE = 44.0                                     # from the ankle's roll axis to the sole's outer edge, mm
 PIVOT = {"knee": "knee_pivot", "ankle_pitch": "ankle_pitch_pivot"}     # a coupled drive's loaded joint
 
 ARMS_DOWN = dict(shoulder_pitch=0, shoulder_roll=0, shoulder_yaw=0, elbow=0, wrist_roll=0, wrist_pitch=0, wrist_yaw=0)
@@ -189,7 +190,8 @@ def main():
     links, grades = weigh(handle), materials(handle.shape)
     table, worst, strained = drives(), {}, 0
     rods = {"knee_pushrod": 0.0, "achilles_rods": 0.0}
-    print(f"holding torques, statics ({sum(mass for mass, _ in links.values()):.1f} kg); the three hardest-worked drives of each case")
+    total = sum(mass for mass, _ in links.values())
+    print(f"holding torques, statics ({total:.1f} kg); the three hardest-worked drives of each case")
     for name, pose, feet, carried in CASES:
         torques, outside = holding(pose, links, carried, feet)
         used = sorted(((abs(torques[joint]) / most, drive, torques[joint]) for drive, joint, most in table), reverse=True)
@@ -211,10 +213,10 @@ def main():
         print(f"  {control:15s} {drive:8s} peak {peak(control):5.0f} N m   holds {abs(torque):5.1f} N m ({share:4.0%})  {name}")
 
     # What walking adds to the statics: a foot can lever no more than the weight at its own edge.
-    weight = sum(mass for mass, _ in links.values()) * G
-    toe_lever, edge_lever = abs(dims.TOE[1] - dims.ANKLE[1]), 44.0
-    print(f"  push-off on one forefoot: ankle_pitch {weight * toe_lever / 1000:.0f} N m ({weight * toe_lever / 1000 / peak('ankle_pitch'):.0%} of its peak); "
-          f"the weight on one sole's edge: ankle_roll {weight * edge_lever / 1000:.0f} N m ({weight * edge_lever / 1000 / peak('ankle_roll'):.0%})")
+    on_toe = total * G * abs(dims.TOE[1] - dims.ANKLE[1]) / 1000.0
+    on_edge = total * G * SOLE_EDGE / 1000.0
+    print(f"  push-off on one forefoot: ankle_pitch {on_toe:.0f} N m ({on_toe / peak('ankle_pitch'):.0%} of its peak); "
+          f"the weight on one sole's edge: ankle_roll {on_edge:.0f} N m ({on_edge / peak('ankle_roll'):.0%})")
 
     print("pushrods (a push is negative)")
     weak = 0

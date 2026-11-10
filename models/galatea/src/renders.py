@@ -34,11 +34,17 @@ LENS = {"projection": "perspective", "focalLength": 85}
 # model) or a camera object in millimetres; extras are a pose, or parts to isolate.
 LEFT_HAND = [f"l_{link}" for link in ("forearm", "forearm_distal", "wrist_link", *HAND_LINKS)]
 HAND_OUT = {"l_shoulder_roll": 24, "l_elbow": 30}          # the left hand held clear of the hip
+# The body's skins and liners by label: what the undressed stills leave out, with the screws that hold them.
+SKINS = {"pelvis_belt", "apron", "breastplate", "backplate", "collar", "neck_deck", "midriff", "sternum_inlay",
+         "thigh_fairing", "shin_guard", "foot_shell", "toe_cap", "shoulder_ball", "upper_arm_fairing", "forearm_cuff",
+         "forearm_fairing", "skin_screw"}
 STILLS = {
     "hero": (stances.galatea_contrapposto, "24:5", (1600, 2400), {}),
     "front": (galatea, "0:2", (1400, 2400), {}),
     "three_quarter": (galatea, "32:8", (1400, 2400), {}),
     "side": (galatea, "90:2", (1400, 2400), {}),
+    "undressed": (galatea, "32:8", (1400, 2400), {"without": SKINS}),
+    "undressed_back": (galatea, "152:8", (1400, 2400), {"without": SKINS}),
     "back": (galatea, "152:8", (1400, 2400), {}),
     "stride": (stances.galatea_stride, "58:4", (1800, 2400), {}),
     "reach": (stances.galatea_reach, "40:6", (1700, 2400), {}),
@@ -83,6 +89,20 @@ def snapshot(document, camera, size, extras, path):
     done = subprocess.run(["cad", "model", "snapshot", "--job", json.dumps(job), "--json"], capture_output=True, text=True)
     if done.returncode:
         raise SystemExit(f"snapshot failed for {path.name}: {done.stdout.strip() or done.stderr.strip()}")
+
+
+def without(shape, labels, keep=("head",)):
+    """Refs of the parts so labelled, link by link (but in the links to `keep`): an occurrence's
+    path, numbered among the siblings that share its label."""
+    refs = []
+    for link in shape.children:
+        names = [part.label for part in link.children]
+        seen = {}
+        for name in names:
+            seen[name] = seen.get(name, 0) + 1
+            if name in labels and link.label not in keep:
+                refs.append(f"{link.label}/{name}" + (f".{seen[name]}" if names.count(name) > 1 else ""))
+    return refs
 
 
 def backdrop(size, top=(36, 39, 46), bottom=(11, 12, 15), pool=(78, 84, 97)):
@@ -160,9 +180,11 @@ def main(names):
             continue
         model, camera, size, extras = STILLS[name]
         if model not in documents:
-            documents[model] = model().id
+            documents[model] = model()
+        if "without" in extras:
+            extras = {"hidden": without(documents[model].shape, extras["without"])}
         path = OUT / f"galatea_{name}.png"
-        snapshot(documents[model], camera, size, extras, path)
+        snapshot(documents[model].id, camera, size, extras, path)
         stage(path, grounded=isinstance(camera, str))
         print(f"wrote {path}")
 

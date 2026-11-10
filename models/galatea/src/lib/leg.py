@@ -32,6 +32,7 @@ C0, C1 = CRADLE_CHEEK_X
 P0, P1 = FEMUR_PLATE_X
 R0, R1 = SHIN_RAIL_X
 SKIN_T = 2.6
+DECK_Z = 33.5         # top of the foot shell's deck, half a millimetre under its rim
 LEG_LINKS = ("hip_yoke", "hip_cradle", "thigh", "knee_crank", "knee_rod", "shin", "ankle_crank", "ankle_rods",
              "ankle_gimbal", "foot", "toe")
 
@@ -260,6 +261,9 @@ def _foot(hw, links):
     rim = geo.polygon((95, 58), (62, 56), (36, 41), (0, 36), (-80, 34), (-125, 34), (-125, 140), (95, 140))
     skin -= geo.half_space((0, 0, 10.5), (0, 0, -1))
     skin -= geo.plate_yz(rim, xr(-90), xr(90))
+    # A deck closes the shell just under its rim, with a well for the ankle's uprights and the keel between them.
+    deck = geo.box(240, 320, SKIN_T, (HX, -20, DECK_Z - SKIN_T / 2)) & shell_outer
+    skin += deck - geo.plate_xy(geo.slot(HX, -62, HX, 1, 20), 0, 60)
     skin -= geo.cyl(26, 240, TOE, (1, 0, 0), centered=True)               # round opening about the toe hinge
     skin -= geo.half_space((0, TY + 8.5, 0), (0, -1, 0))
     pads, screws = _skin_mounts(hw, cavity, shell_outer, [((xr(s * 28), y, 15), (s, 0, 0))

@@ -2,7 +2,7 @@
 
 A 1.75 m humanoid robot, designed here from a blank page: ivory lacquered skins over a
 gunmetal machined frame, a bronze finned actuator left in view at every joint, a smoked
-visor with two amber light bars. 47.4 kg, 44 driven degrees of freedom and two sprung toe
+visor with two amber light bars. 47.5 kg, 44 driven degrees of freedom and two sprung toe
 hinges. Every joint is a joint of the document, so the model stands, crouches, bows,
 balances on one leg, walks on the spot and closes its hands, and five checks say what a
 picture cannot show: that nothing passes through anything else in any pose, motion or
@@ -15,7 +15,7 @@ linkages close, and what holding each pose asks of the drives.
 | `stances.py` | `galatea_ready`, `_stride`, `_contrapposto`, `_reach`, `_wave`, `_present`, `_poise`, `_crouch`, `_bow` | the robot at each standing pose, set down on the ground |
 | `leg_study.py` | `galatea_leg` | the left leg alone, with its hip drive: the page to study the knee and ankle linkages on |
 | `actuators.py` | `galatea_actuators` | the actuator family on a bench (five frames, one of them in two lengths), each on a mounting plate with its output through it |
-| `renders.py` | none | the presentation stills and the walk as a clip (`tmp/renders/`, ignored by Git; the clip needs ffmpeg) |
+| `renders.py` | none | the presentation stills (posed, close up, and with the skins left off) and the walk as a clip, into `tmp/renders/`, which Git ignores; the clip needs ffmpeg |
 | `checks/*.py` | none | interference, attachment, balance, linkages, loads |
 
 ```
@@ -58,7 +58,8 @@ waist's centre at 1150, 32 behind the hips; the crown at 1757.
 - **Ankle**. Pitch comes from a double-ended drive between the shin rails, through twin
   cranks and two 7 mm steel rods to the ankle gimbal: a parallelogram again, 255 long on
   45 mm levers. The rods run behind the ankle like a tendon, so push-off pulls them. The
-  gimbal's own axle is the roll drive, lying along the foot, and the two axes cross.
+  gimbal's own axle is the roll drive, lying along the foot, and the two axes cross. The
+  foot hangs on that drive between two uprights that rise through a well in its shell's deck.
 - **Toe**: a sprung hinge under its own cap, 0 to 50 degrees, for heel-off. Not driven.
 - **Waist**, three axes: yaw in the pelvis, then a spider whose fore-and-aft shaft is the
   roll axis (its drive behind) and whose cross shaft is the pitch axis, a drive at each
@@ -120,11 +121,11 @@ whole assembly at 3,400 kg/m3).
 | A40 | 40 mm | 28 mm | 6 mm | 7 N m | 0.09 kg | wrist pitch and yaw, neck roll |
 | calf drive | 72 mm | 48 mm | | 60 N m | 0.56 kg | ankle pitch, with its 0.30 kg crankshaft |
 
-Where the 47.4 kg is (`cad model inspect`, by material): the frame, 7075 plate and
+Where the 47.5 kg is (`cad model inspect`, by material): the frame, 7075 plate and
 castings, 18.6 kg; the housings of the 31 family drives and the two calf drives 12.4 kg;
 steel (output flanges, axles, pins, crankshafts, the Achilles rods) 6.0 kg; the battery
-3.7 kg; the skins 3.2 kg; electronics 1.3 kg; liners, fasteners, pads and the rest 2.2 kg.
-By limb: the chest 10.8 kg, the legs 21.3 kg with 7.9 kg of it below the knees, an arm
+3.7 kg; the skins 3.3 kg; electronics 1.3 kg; liners, fasteners, pads and the rest 2.2 kg.
+By limb: the chest 10.8 kg, the legs 21.4 kg with 8.0 kg of it below the knees, an arm
 with its hand 4.2 kg, the head and neck 1.4 kg.
 
 ### How the parts are held
@@ -140,10 +141,10 @@ heads and pins: every screw head is seated on a face, every pin runs in a bore.
 Configurations: `ready`, `stride`, `contrapposto`, `reach`, `wave`, `present`, `crouch`,
 `bow`, `poise` (balanced on the left leg) and `fists`. Motions: `walk` (one gait cycle of
 2 s, the feet treading under a fixed pelvis: heel strike, roll-over, heel-off on the toe
-hinge), `wave`, `bow`, `crouch`, `reach`, `poise`, `look` and `grasp`. A leg is posed by
-where its foot goes (`kin.leg`), so both soles stay flat on one floor. The pelvis is the
-mechanism's fixed link, so a pose lifts or tilts the feet; `stances.py` sets each posed
-robot back on the ground.
+hinge), `wave`, `bow`, `crouch`, `reach`, `poise`, `look` and `grasp`. A standing leg is
+posed by where its foot goes (`kin.leg` solves hip, knee and ankle and keeps the sole
+level), so both feet stand on one floor. The pelvis is the mechanism's fixed link, so a
+pose lifts or tilts the feet; `stances.py` sets each posed robot back on the ground.
 
 ## Source
 
@@ -172,7 +173,7 @@ with `lib/kin.py`; none asks the engine to move anything.
 | `interference.py --limits` | each of the 46 controls swept alone through its travel in eight steps, against the links within three joints of it | 0 |
 | `interference.py --motions` | each motion at its waypoints and four frames between each pair | 0 in 8 |
 | `attachment.py` | does every part touch another part of its own link, or else a part of a link it is jointed to (a pushrod on its pin)? | all 851 held, 10 of them by a pin alone |
-| `balance.py` | is the centre of mass over the support polygon in each standing pose, and by how much? | standing straight 53 mm inside, ready 78, contrapposto 52, reach 72, wave 73, present 94, crouch 26, bow 96, poise 29 (on one sole), fists 78; the stride is a gait frame, 1 mm inside |
+| `balance.py` | is the centre of mass over the support polygon in each standing pose, and by how much? | standing straight 53 mm inside, ready 78, contrapposto 52, reach 72, wave 73, present 94, crouch 27, bow 96, poise 29 (on one sole), fists 78; the stride is a gait frame, 1 mm inside |
 | `linkages.py` | do the pushrods' far eyes stay on their pins through the travel, and do the axes that should meet, meet? | gaps under 1e-12 mm; hip, ankle, waist and shoulder axes meet exactly |
 | `loads.py` | statics: the torque each drive holds in thirteen cases, against its peak; each pushrod's force against its Euler load | below |
 
@@ -188,7 +189,7 @@ without strain, and the loads below are the ratings that rule gives):
   each hand with the arms out level. The wrists and the waist's pitch pair are what limit
   them.
 - Walking adds what a foot can lever: the whole weight on one forefoot is 55 N m at the
-  ankle's pitch drive (92 % of its peak), on one sole's edge 20 N m at its roll drive
+  ankle's pitch drive (92 % of its peak), on one sole's edge 21 N m at its roll drive
   (76 %). The ankle is sized to walk and to rise on its toes, not to hop.
 - The knee pushrod (12 mm titanium, 300 long) buckles at 12.3 kN; the crouch pushes it
   with 1.5 kN, and the drive at its peak and the lever at its shortest with 6.3 kN: a
