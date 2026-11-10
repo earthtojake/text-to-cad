@@ -654,8 +654,16 @@ src/cad/
                          #   its input and printed output (_files)
   results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
                          #   validate) and a KiCad export return, typed
-  eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
-                         #   pdf document type)
+  eng_drawing.py         # @eng_drawing: Sheet, View, part_sheet and assembly_sheets, one PDF
+                         #   projected from a part or an assembly (open: a future pdf document
+                         #   type); its engine is _internal/drawing_* (base: sizes, scales, text;
+                         #   sheet: frame, layout, chosen size and scale; views:
+                         #   projection, sections, details, breaks; annotation:
+                         #   dimensions, callouts, hole tables; render: a sheet
+                         #   drawn; report: what is left unstated; features:
+                         #   holes, slots, blends read off the B-rep; assembly:
+                         #   parts list, balloons, the set's sheets; gdt: feature
+                         #   control frames; profile: stages and Profile)
   _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
                          #   signature and options, its integration's measuring imported when it
                          #   runs (manufacturing), each process's options, rules and findings
