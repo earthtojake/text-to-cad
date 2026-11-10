@@ -139,7 +139,7 @@ export const itemColor = BOARD_PALETTES.dark.item;
  * carries geometry only, so a switch of theme redraws the sheet without reading it again.
  */
 export const SCHEMATIC_COLORS = Object.freeze({
-  background: "#F5F4EF", sheet: "#840000", notes: "#0000C2", sheet_box: "#840000", sheet_name: "#006464",
+  background: "#F5F4EF", sheet: "#840000", drawing_sheet: "#840000", notes: "#0000C2", sheet_box: "#840000", sheet_name: "#006464",
   sheet_file: "#725600", sheet_pin: "#006464", sheet_field: "#840084", symbol: "#840000",
   symbol_background: "#FFFFC2", pin: "#840000", wire: "#009600", bus: "#000084", junction: "#009600",
   no_connect: "#000084", pin_number: "#A90000", pin_name: "#006464", reference: "#006464",
@@ -147,7 +147,7 @@ export const SCHEMATIC_COLORS = Object.freeze({
 });
 /** The dark sheet's: light ink of the same hues on a neutral dark grey sheet. */
 export const SCHEMATIC_DARK_COLORS = Object.freeze({
-  background: "#1C1C1C", sheet: "#A04040", notes: "#6E9BE6", sheet_box: "#C8A040", sheet_name: "#4FCBCB",
+  background: "#1C1C1C", sheet: "#A04040", drawing_sheet: "#D07050", notes: "#6E9BE6", sheet_box: "#C8A040", sheet_name: "#4FCBCB",
   sheet_file: "#C8A040", sheet_pin: "#4FCBCB", sheet_field: "#C87FC8", symbol: "#D07050",
   symbol_background: "#2E2E24", pin: "#D07050", wire: "#3CC83C", bus: "#5B8FE6", junction: "#3CC83C",
   no_connect: "#5B8FE6", pin_number: "#E06060", pin_name: "#4FCBCB", reference: "#4FCBCB",

@@ -140,6 +140,14 @@ export function toggleBoardLayer(display, sheet, id, shown) {
 /** Whether a display draws the board's airwires and pads itself (its plot without copper). */
 export const boardDisplayAirwires = (display) => Boolean(display && (BOARD_DISPLAY_MODES[display.mode] || BOARD_DISPLAY_MODES.board).airwires);
 
+/**
+ * Whether a 3D face shows the board as it is made (in its stack-up's colours, `stackup.js`) under this
+ * display: in Board mode, KiCad's whole board, with every layer shown as it is (no active layer drawn over
+ * the others dimmed or hidden). Copper, Assembly and Placement, and a layer in focus, are views for working
+ * on layers, so a face draws them in the layers' colours, as the 2D view does.
+ */
+export const boardDisplayAsMade = (display) => Boolean(display) && (display.mode ?? "board") === "board" && (display.others ?? "shown") === "shown";
+
 /** Whether a display draws any copper layer: when it does, its pours are a choice. */
 export const boardDisplayDrawsCopper = (display, sheet) => {
   const drawn = new Set(boardDisplayLayers(display, sheet));

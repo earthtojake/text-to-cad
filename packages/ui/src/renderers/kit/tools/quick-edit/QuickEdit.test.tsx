@@ -376,6 +376,28 @@ it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON 
 });
 
 
+it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the host says, the inline packet\'s input too, never by the home', async action => {
+  const { resolvePromptMessage } = await import('@cad/core/prompt');
+  let message = '';
+  const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'sent' as const, partIds: [] }; };
+  const board = { kind: 'workspace-file', path: '/Users/jake/robots/demo/twin_orbit.kicad_pcb' } as const;
+  const part = { resource: board, target: { kind: 'cad-selector', selectors: ['#R1'] } } as const;
+  const folders = vi.fn(async () => ({ start: '/Users/jake/robots/demo', home: '/Users/jake' }));
+  const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
+    promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take },
+    promptFiles: { create: vi.fn(), read: vi.fn(), folders } });
+  const packet = JSON.stringify({ input: board.path, jobs: [{ camera: 'front', outputs: [{ path: '/tmp/cad-quick-edit-a/twin_orbit-1-current.png' }] }] });
+  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ inline: packet })), read: vi.fn() };
+  mount(host, { resource: board, references: [part], prompt });
+  write('Add a logo here.');
+  fireEvent.click(within(box()!).getByRole('button', { name: action }));
+  await waitFor(() => expect(message).toContain('Snapshot JSON'));
+  expect(folders).toHaveBeenCalledTimes(1);
+  expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\n');
+  expect(message).toContain('{"input":"twin_orbit.kicad_pcb","jobs":[{"camera":"front","outputs":[{"path":"/tmp/cad-quick-edit-a/twin_orbit-1-current.png"}]}]}');
+  expect(message).not.toContain('/Users/jake');
+});
+
 it.each(['unsaved build preview', 'previous revision'])('keeps the note and honestly delivers text/references for a displayed %s without snapshot jobs', async displayed => {
   const copied: string[] = [];
   const files = vi.fn();

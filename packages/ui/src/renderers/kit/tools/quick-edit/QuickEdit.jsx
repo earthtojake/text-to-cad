@@ -61,8 +61,8 @@ export function quickEditReferenceIds(selection) {
  * that reference's text, in its place (`noteEditor.js`). The file always goes and is not named. The buttons, bottom-right, are the ones this
  * host can carry out, the rightmost primary and pressed by Enter (Shift+Enter is a new line): Copy
  * Prompt always — the note as text to paste into an agent's prompt box, its references by their
- * files' absolute paths, and the files the host makes for it (`prompt`, `host.promptFiles`) by
- * theirs: one .snapshot.json containing the drawn views and the shared inline annotation, written only when Copy, Queue or Send is pressed, without rendering. Every way
+ * files' paths from the workspace the host names (`host.promptFiles.folders`; else from `~/`), and the
+ * files the host makes for it (`prompt`, `host.promptFiles`) by theirs: one .snapshot.json containing the drawn views and the shared inline annotation, written only when Copy, Queue or Send is pressed, without rendering. Every way
  * it goes carries the same. A displayed unsaved or retained revision instead carries explicit
  * context that the saved file may differ, preserving text and references without replay jobs; Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
@@ -249,7 +249,10 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       // The selection goes with the views: a board's packet lights what it names when it is drawn again.
       const files = views.length ? prompt.files(views, selection) : null;
       void files?.catch(() => {});
-      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable,
+      // The folders the message names its files by, asked at the press (a browser's workspace is its last launch's).
+      const folders = host.promptFiles?.folders?.() ?? null;
+      void folders?.catch(() => {});
+      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable, folders,
         requests: (requests || EMPTY).map(item => item.request).filter(Boolean) });
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);

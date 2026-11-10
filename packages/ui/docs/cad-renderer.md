@@ -235,7 +235,8 @@ A board is a flat view with two canvases in one frame (`ViewFrame.jsx`, through 
 chunk, so a board in 2D loads no three.js): a `ShellViewport` (its settings through
 `useStageViewport.js`) around core's bare board (`@cad/core/lib/board3d/`: `boardStage.js`, a slab cut
 to the outline, and round it, at each face's height, a see-through surround with what the file draws
-past the outline; `boardFaces.js`, its two faces the 2D drawer's own `drawPlot` of each side over the
+past the outline; `boardFaces.js`, its two faces the 2D drawer's own `drawPlot` of each side (a board made in its
+stack-up's colours, in Board mode: `drawPlot`'s `finish`, the side as it is made) over the
 face's box (`faceBox`: the outline's box and what lies past it, symmetric about the sheet's centre line,
 at most half the sheet farther) and an overlay of `drawBoardOverlay` and the ink, drawn through one scratch canvas per kind into textures
 overwritten in place, at most 8 megapixels a face (a quarter of it on software WebGL) and 2 an
@@ -261,11 +262,13 @@ at the flat scale for the viewport's lens, `boardFrame.js`'s `perspectiveHeadOn`
 eases to a camera on the side the 2D view showed (`boardFrame.js`'s `cameraOnSide`, the opening's
 `side`): the camera the file was left at in 3D, turned over to that side when it looks at the other, or
 Home's direction so turned, handed to the viewport's `goHome`, so the ease never crosses the board's plane.
-Leaving, the flat canvas paints the window it is handed (`usePlotView`'s `settle`) under the 3D
-viewport, which then goes: its own window when the 3D view opened on it (`opening.flat`) and nobody has
-moved the 3D camera since the opening (the count of hands on it, `camera/cameraTouch.js`'s `cameraHands`),
-else the camera's (`planFromCamera`): a camera moved, or the one a file left in 3D reopened on, which no
-2D picture was under (`boardFrame.js`'s `leavingView`).
+Leaving, the flat canvas paints its own window again (`usePlotView`'s `settle`) under the 3D viewport,
+which then goes: the window it held all the while 3D was up, as the 2D view was left (a file reopened in
+3D: the window it was left at in 2D, or the fit), whatever the 3D camera did, as KiCad's 3D viewer, a
+window of its own, never moves the PCB editor's view. Each mode keeps its own last view: entering eases
+to the 3D camera, leaving gives back the 2D window. Only the side carries over, both ways: Flip's icon is
+one state, the camera's side in 3D. The camera's window (`boardFrame.js`'s `planFromCamera`) is what a
+prompt's view of the board in 3D is, and nothing leaving frames.
 
 The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the
 board's models table (`board/useBoardModels.js`, `GET …/kicad_pcb/<id>/models`, asked on every revision
@@ -892,7 +895,8 @@ carries — the view on screen, from `ShellViewport.promptCamera` and the render
 makes of them, with the annotations as an annotation file), the viewer's Escape, and the box's size
 as the person drags it, kept across files. `quickEditPrompt.js` builds the context at
 the press, from what is live then (`createQuickEditContext`), and the text a copy writes
-(`copiedQuickEdit`, over core's `formatPromptMessage`). The drawing tools hand it whether there is
+(`copiedQuickEdit`, over core's `formatPromptMessage`), its files named from the workspace
+(`host.promptFiles.folders()`), the inline packet's `input` too. The drawing tools hand it whether there is
 ink, and the Annotation chip copies its `.annotation.json` file's path. Copying without
 Quick Edit is the copy shortcut — the selection's references, or, while Pencil or Shapes is up, the
 view with its annotations — which writes the clipboard directly. See
