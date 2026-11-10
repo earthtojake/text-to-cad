@@ -23,7 +23,9 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
-    blender                       blender (the render skill's helper and Open in's Blender script in bpy's environment)
+    blender  bpy  floor           blender, the job on Python 3.13: bpy (cad.blender.load and Open in's Blender script
+                                  in the environment cad run makes for bpy) and floor (the library's and the shim's
+                                  suites on the packages' oldest Python)
     routing                       routing (macOS): the router's unit files, on the third C library
     core_js                       core-js
     web  web_ui  web_client
@@ -63,7 +65,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea", "blender", "routing")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea", "bpy", "floor",
+         "routing")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -235,20 +238,31 @@ FEA_SHARED = (f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.p
               f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/programs.py",
               f"{SERVER_SRC}/_internal/cli_from_function.py")
 FEA_SUITE = "tests/python/packages/fea"
-# Blender as a Python module: the render skill's helper, run in the blender integration's environment that `cad run`
-# makes for a script that imports bpy (bpy's pins and platforms in the registry, the library's integrations table,
-# the environment's making in the server's extras and base, `cad run` and the import scan that chooses it), on a GLB
-# the engine writes (the GLB writer and the clips it bakes: motions, animations and their keys). Each also reaches what
-# its package reaches; the blender job, which makes bpy's environment from PyPI, runs on these, the skill, its own
-# suite and runner, and a full run. Open in's Blender script runs in bpy there too, found by the opener.
-BLENDER_CODE = (f"{LIBRARY_SRC}/registry.py", f"{LIBRARY_SRC}/_internal/integrations.py",
+# Blender as a Python module, the blender integration: cad.blender.load, the library's GLB reader it reads a file
+# through, and the environment `cad run` makes for a script that imports bpy (bpy's Python line and platforms in the
+# registry, its pin and markers in the library's project, the library's integrations table, the environment's making
+# in the server's extras and base, `cad run` and the import scan that chooses it), on a GLB the engine writes and
+# `cad model export` meshes finer (the command's options, the export's dispatch and its meshing, the GLB writer and
+# the clips it bakes: motions, animations and their keys). Open in's Blender script runs in bpy there too (the opener
+# that finds a person's Blender does not). Each also reaches what its package reaches; the blender job's bpy steps,
+# which make that environment from PyPI, run on these, their own suite and runner, and a full run.
+BLENDER_CODE = (f"{LIBRARY_SRC}/blender/**", f"{LIBRARY_SRC}/registry.py", f"{LIBRARY_SRC}/_internal/integrations.py", "packages/cad/pyproject.toml",
                 f"{SERVER_SRC}/_internal/extras.py", f"{SERVER_SRC}/_internal/base.py",
-                f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/scan.py",
-                f"{SERVER_SRC}/cli/run.py", f"{SERVER_SRC}/_internal/apps.py",
+                f"{SERVER_SRC}/_internal/scan.py", f"{SERVER_SRC}/cli/run.py",
                 f"{SERVER_SRC}/_internal/open_in_blender.py")
-BLENDER_GLB = (f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/export/motion.py",
-               f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py")
+# The engine's modules among them, which the engine's final rule would end at.
+BLENDER_GLB = (f"{LIBRARY_SRC}/engine/formats/gltf.py",
+               f"{LIBRARY_SRC}/engine/export/__init__.py", f"{LIBRARY_SRC}/engine/export/mesh.py",
+               f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/export/motion.py",
+               f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py",
+               f"{SERVER_SRC}/engine/cli.py")
 BLENDER_SUITE = "tests/python/packages/blender"
+# The packages' floor, the oldest Python they declare (requires-python): the library runs on it wherever a render
+# script does (bpy's one line), in that script's process and in the worker that builds its models, so the library's
+# suite runs on it too, with the shim's (seconds), in the blender job, the one job on that Python (test-floor.sh).
+# Whatever a 3.14-only call in them could break: their sources and their suites. The server's suite is the cadgen
+# jobs' alone, on the Python its installations run on.
+FLOOR_CODE = ("packages/cad/**", "packages/cad-mcp/**", f"{CADGEN_SUITE}/cad/**", f"{CADGEN_SUITE}/cad_mcp/**")
 
 # The router (cad.kicad.route) and what it reads a board's numbers through: the board readers, their geometry
 # and the parser, and the numpy the library pins. Its copper must be the same
@@ -320,6 +334,8 @@ RULES: tuple[Rule, ...] = (
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
     Rule(ROUTING_CODE, select(flags=["routing"])),
+    # The library and the shim on the packages' oldest Python: before the leaves' and the engine's final rules.
+    Rule(FLOOR_CODE, select(flags=["floor"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
@@ -327,15 +343,15 @@ RULES: tuple[Rule, ...] = (
     # The engine and shared modules a stress study reads a document, finds CalculiX and writes its result through:
     # a change there runs the solves too. Before the engine's final rule, which adds the rest.
     Rule(FEA_SHARED, select(flags=["fea"])),
-    # The GLB the render skill's helper imports, and the clips in it: Blender reads them.
-    Rule(BLENDER_GLB, select(flags=["blender"])),
+    # The GLB cad.blender.load reads and imports, how it is exported and meshed, and the clips in it.
+    Rule(BLENDER_GLB, select(flags=["bpy"])),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
          CADGEN_CONSUMERS),
     # The stress study's code runs what its package runs, and the fea job, which installs netgen and CalculiX.
     Rule(FEA_CODE, select(flags=["fea"])),
-    # bpy's environment and how cad run chooses it: what its package runs, and the blender job.
-    Rule(BLENDER_CODE, select(flags=["blender"])),
+    # cad.blender, bpy's environment and how cad run chooses it: what its package runs, and the blender job's bpy steps.
+    Rule(BLENDER_CODE, select(flags=["bpy"])),
     Rule((f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**"),
          select(skills=[f"{SKILL_SUITES}/fea"])),
 
@@ -363,7 +379,8 @@ RULES: tuple[Rule, ...] = (
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
     Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
          final=True),
-    Rule((f"{BLENDER_SUITE}/**", "scripts/test/test-blender.sh"), select(flags=["blender"]), final=True),
+    Rule((f"{BLENDER_SUITE}/**", "scripts/test/test-blender.sh"), select(flags=["bpy"]), final=True),
+    Rule(("scripts/test/test-floor.sh",), select(flags=["floor"]), final=True),
     # The router's unit files run themselves in the cadgen jobs (below) and all of them in the routing job.
     Rule((ROUTING_TESTS, "scripts/test/test-routing.sh"), select(flags=["routing"])),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
@@ -374,8 +391,6 @@ RULES: tuple[Rule, ...] = (
     # commands a skill documents among them; scripts by their skill's suite, each a light one.
     Rule(("skills/**",), NOTHING),
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
-    # The render skill's helper runs in bpy, in the blender job; its pages are its light suite's.
-    Rule(("skills/render/**",), select(flags=["blender"])),
 
     # The test runners and the gates each one feeds.
     Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
@@ -509,6 +524,7 @@ def outputs(chosen: Select, *, changed: bool = True) -> dict[str, str]:
         "cadgen": bool(cadgen),
         "cadgen_tests": " ".join(cadgen),
         "web": result["web_ui"] or result["web_client"],
+        "blender": result["bpy"] or result["floor"],
         "skills": changed,
         "light_policy": " ".join(light_policy()) if changed else "",
         "light_tests": " ".join(LIGHT_SKILL_TESTS) if changed else "",

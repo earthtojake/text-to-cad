@@ -4,6 +4,10 @@
 `scripts/run-tests.mjs` when their collector finds nothing. `run_python_unittest`
 in `scripts/test/common.sh` is the Python side of the same gate, so a renamed or
 emptied test directory must stop CI rather than report a group that never ran.
+
+And a suite whose job exists to run it whole (`PYTHON_TEST_NO_SKIPS`: the blender
+suite's on CI) fails when a test of it skips: a job that skipped is one that passed
+having checked nothing.
 """
 
 from __future__ import annotations
@@ -28,13 +32,27 @@ class Passing(unittest.TestCase):
 """
 
 
-def run_group(start_dir: Path) -> subprocess.CompletedProcess[str]:
+SKIPPING_TEST = """\
+import unittest
+
+
+class Skipping(unittest.TestCase):
+    def test_passes(self):
+        self.assertTrue(True)
+
+    def test_skips(self):
+        self.skipTest("nothing to draw on")
+"""
+
+
+def run_group(start_dir: Path, no_skips: bool = False) -> subprocess.CompletedProcess[str]:
     """Invoke `run_python_unittest` on one directory, as `test-*.sh` would."""
     relative = start_dir.relative_to(REPO_ROOT).as_posix()
     script = (
         "set -euo pipefail\n"
         f'source "{COMMON_SH}"\n'
-        f'run_python_unittest "runner gate" "{relative}"\n'
+        + ("export PYTHON_TEST_NO_SKIPS=1\n" if no_skips else "unset PYTHON_TEST_NO_SKIPS\n")
+        + f'run_python_unittest "runner gate" "{relative}"\n'
     )
     return subprocess.run(
         ["bash", "-c", script],
@@ -62,6 +80,16 @@ class PythonTestRunnerFailsClosed(unittest.TestCase):
             (Path(tmp) / "test_collected.py").write_text(PASSING_TEST, encoding="utf-8")
             result = run_group(Path(tmp))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_a_skip_passes_a_run_and_fails_one_that_takes_none(self):
+        with temporary_directory(prefix="runner-gate-skips-") as tmp:
+            (Path(tmp) / "test_skipping.py").write_text(SKIPPING_TEST, encoding="utf-8")
+            allowed, refused = run_group(Path(tmp)), run_group(Path(tmp), no_skips=True)
+        self.assertEqual(allowed.returncode, 0, allowed.stdout + allowed.stderr)
+        self.assertIn("OK (skipped=1)", allowed.stderr)
+        self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
+        self.assertIn("1 test skipped in a run that takes none (--no-skips)", refused.stderr)
+        self.assertIn("FAILED (skipped=1)", refused.stderr)
 
 
 if __name__ == "__main__":
