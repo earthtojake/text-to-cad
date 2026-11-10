@@ -857,7 +857,7 @@ shadows square to it. A point no machine direction reaches is probed on two poin
 each (the part's own normals and axes first, then every 15 degrees about each world axis, then 200 over the
 sphere); a point that fails all 32 reads as having no line of sight -- a stated cap, so a rare direction can be
 missed (a face of revolution's own axis is tried first: a deep bore's wall sees out along it alone). A face's
-unreached share is read on at most 16 points, its disc cutter's reach on 4. A part of more than 20000 faces is
+unreached share is read on at most 16 points, its disc cutter's reach on 4. A part of more than 4000 faces is
 not measured (`FACE_BUDGET`); rays' boxes are tested together a batch of at most a million ray-face pairs
 (`BATCH_PAIRS`), so memory a batch does not grow with the part's faces. Time is not bounded otherwise: a ray
 costs with the edges of the face it crosses (a plate of 576 holes takes most of a minute).
