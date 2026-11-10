@@ -716,100 +716,151 @@ def _subset(count: int, most: int) -> np.ndarray:
     return np.arange(count) if count <= most else np.unique(np.linspace(0, count - 1, most).astype(int))
 
 
-def _signature(points: np.ndarray, normals: np.ndarray) -> tuple:
-    """A feature's shape, wherever it stands: its point count, the spans of its points and its mean normal,
-    rounded -- the same for each of a row of identical contacts."""
-    span = points.max(axis=0) - points.min(axis=0)
-    size = float(np.linalg.norm(span)) or 1.0
-    mean = normals.mean(axis=0)
-    return (len(points), *np.round(span / max(size, 1e-12) * 50).astype(int), round(size, 3),
-            *np.round(mean * 20).astype(int))
+#: A direction within this of the parting plane is a plain slide's (taken in the plane); steeper, an angled one's,
+#: up to ``SLIDE_STEEPEST_DEG`` -- past that it is the pull's, no slide's.
+IN_PLANE_DEG = 0.5
+SLIDE_STEEPEST_DEG = 45.0
+#: A feature's own directions tried, at most (each both ways).
+OWN_DIRECTIONS = 6
+#: A feature is the part's outside's (``kind`` external) where this share of its points has a straight line out
+#: of the part along a slide: steel can reach it from beside the part. An inside feature's points have none (the
+#: wall across the cavity stops every one).
+OPEN_SHARE = 1.0 / 3.0
 
 
-def _replays(release: dict[str, Any], probe: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast,
-             strokes: np.ndarray, tol: float) -> bool:
-    """Whether a release found for a feature of the same shape frees this one's probe points as it did."""
-    vectors = [np.asarray(vector, dtype=float) for vector in release["vectors"]]
-    if release["release"] == "side_action":
-        freed = np.zeros(len(probe), dtype=bool)
-        for side in vectors:
-            leans = normals @ side >= -tol
-            freed |= leans & ~np.isfinite(cast(probe, np.repeat(side[None, :], len(probe), axis=0)))
-        return bool(freed.all())
-    if release["release"] == "lifter":
-        reach = float(release["stroke_mm"] or 0.0) * 1.05
-        ladder = strokes[strokes <= reach] if (strokes <= reach).any() else strokes[:1]
-        return bool(_ever_freed(probe, vectors[0], (pull, -pull), cast, np.append(ladder, reach)).all())
-    lateral = lateral_directions(pull, 8)
-    if release["release"] == "collapsible_core":
-        left = np.ones(len(probe), dtype=bool)
-        for side in lateral:
-            index = np.nonzero(left)[0]
-            if not len(index):
-                break
-            left[index] = ~_ever_freed(probe[index], side, (pull, -pull), cast, strokes)
-        return not left.any()
-    if release["release"] == "none":
-        # Two of its points, freed by no direction, as they were.
-        two = probe[_subset(len(probe), 2)]
-        return all(not _ever_freed(two, side, (pull, -pull), cast, strokes).any() for side in lateral)
-    return False
+def _distinct(vectors: Sequence[np.ndarray], taken: Sequence[np.ndarray] = ()) -> list[np.ndarray]:
+    """``vectors`` less each within ``IN_PLANE_DEG`` of one before it or of one of ``taken``."""
+    near = math.cos(math.radians(IN_PLANE_DEG))
+    found: list[np.ndarray] = []
+    for vector in vectors:
+        if not any(float(vector @ other) > near for other in (*taken, *found)):
+            found.append(vector)
+    return found
+
+
+def slide_directions(pull: np.ndarray, own: Sequence[Sequence[float]] = ()) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The directions a slide is tried along, three sets in the order they are tried:
+
+    - plain: ``own`` directions lying in the parting plane (the feature's own: a bore's axis, a slot's run, a
+      pocket floor's normal; either way along each), then eight round the plane;
+    - angled: ``own`` directions leaning out of the plane, ``SLIDE_STEEPEST_DEG`` at most (an angled hole's axis);
+    - guessed: the eight tilted 45 degrees toward either pull, the last thing tried before nothing releases it.
+    """
+    p = np.asarray(pull, dtype=float)
+    p = p / np.linalg.norm(p)
+    flat, steep = [], []
+    for vector in list(own)[:OWN_DIRECTIONS]:
+        d = np.asarray(vector, dtype=float)
+        size = float(np.linalg.norm(d))
+        if size <= 0.0:
+            continue
+        d = d / size
+        along = float(d @ p)
+        if abs(along) <= math.sin(math.radians(IN_PLANE_DEG)):
+            d = d - along * p
+            d /= np.linalg.norm(d)
+            flat += [d, -d]
+        elif abs(along) <= math.sin(math.radians(SLIDE_STEEPEST_DEG + IN_PLANE_DEG)):
+            steep += [d, -d]
+    flat = _distinct(flat)
+    lateral = lateral_directions(p, 8)
+    plain = np.array(flat + _distinct(list(lateral), flat)).reshape(-1, 3)
+    angled = np.array(_distinct(steep)).reshape(-1, 3)
+    guessed = np.vstack([(lateral + p) / math.sqrt(2.0), (lateral - p) / math.sqrt(2.0)])
+    return plain, angled, guessed
+
+
+def _frees(pts: np.ndarray, nrm: np.ndarray, sides: np.ndarray, cast: Cast, tol: float) -> np.ndarray:
+    """Per direction of ``sides``, per point: does a ray along it leave the part, no face of the point's leaning
+    against it (n . s at least -``tol``)?"""
+    found = np.zeros((len(sides), len(pts)), dtype=bool)
+    for index, side in enumerate(sides):
+        leans = np.nonzero(nrm @ side >= -tol)[0]
+        if len(leans):
+            found[index, leans] = ~np.isfinite(cast(pts[leans], np.repeat(side[None, :], len(leans), axis=0)))
+    return found
+
+
+def _cover(frees: np.ndarray, plain: np.ndarray, names: Sequence[str], exits: np.ndarray) -> list[int] | None:
+    """The fewest directions, four at most, that between them free every point (greedy); None where none do.
+    A plain direction is taken before an angled one freeing as many points, and a world axis where it frees
+    nine-tenths as many as the best (a round groove's slides read +x and -x, not whichever diagonal its sampled
+    points favoured). Among those freeing as many (within a fiftieth), the one whose points are nearest their way
+    out of the part's box (``exits``, per direction and point: a hole through the -x wall is its -x slide's,
+    though a ray along +x leaves through the hole opposite); among those within a tenth of each other, the
+    first, so +x before +y on every machine."""
+    n = frees.shape[1]
+    if not n or not frees.any(axis=0).all():
+        return None
+    chosen: list[int] = []
+    left = np.ones(n, dtype=bool)
+    pool = np.array(["," not in name for name in names]) & plain
+    penalty = np.where(plain, 0.0, 0.5)
+    while left.any() and len(chosen) < 4:
+        fresh = frees & left[None, :]
+        gain = fresh.sum(axis=1) - penalty
+        pick = int(np.argmax(gain))
+        among, top = plain == plain[pick], float(gain[pick])
+        if pool.any() and 0 < float(np.max(np.where(pool, gain, -np.inf))) >= 0.9 * gain[pick]:
+            among, top = pool, float(np.max(np.where(pool, gain, -np.inf)))
+        if top <= 0:
+            break
+        alike = np.flatnonzero(among & (gain >= 0.98 * top))
+        way = np.array([float(exits[index][fresh[index]].mean()) for index in alike])
+        pick = int(alike[np.flatnonzero(way <= 1.1 * way.min() + 1e-9)[0]])
+        chosen.append(pick)
+        left &= ~frees[pick]
+    return None if left.any() else chosen
 
 
 def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast, *, scale: float,
-                      zero_tol_deg: float, stroke_limit: float | None = None, lip_limit: float | None = None,
-                      depth: bool = True, cache: dict | None = None) -> dict[str, Any]:
+                      zero_tol_deg: float, own: Sequence[Sequence[float]] = (),
+                      box: tuple[np.ndarray, np.ndarray] | None = None, stroke_limit: float | None = None,
+                      lip_limit: float | None = None, depth: bool = True) -> dict[str, Any]:
     """What releases a trapped feature, from its points (already offset off the surface), their outward
-    normals, the pull and ``cast``. Directions tried: eight round the parting plane, the feature's own mean
-    lateral normal, and each of those tilted 45 degrees toward either pull (an angled slide).
+    normals, the pull and ``cast``; ``own``: the directions its own faces give a slide (``slide_directions``);
+    ``box``: the part's box (its low and high corners), which says how far a point is from its way out.
+    Tried in this order, the first that holds:
 
-    - ``side_action``: from every point a ray leaves the part along one of at most four directions, none
-      of whose faces leans against it (n . s at least -sin(zero_tol)); ``directions`` the fewest covering
-      the feature, ``stroke_mm`` the farthest any must travel before the pull is clear;
-    - ``lifter``: no direction leaves the part (the feature faces the part's inside) but one short move
-      along one direction, at most ``stroke_limit`` (a quarter of ``scale`` by default), clears every point
-      for a pull: a lifter or an internal slide;
+    - ``side_action`` along plain slides: from every point a ray leaves the part along one of at most four
+      directions in the parting plane, none of whose faces leans against it (n . s at least -sin(zero_tol));
+      ``directions`` the fewest covering the feature, ``stroke_mm`` the farthest any must travel before its
+      slide's points are all clear of the part one way along the pull (the way that asks the shorter travel:
+      a slide stands in one half of the mold);
+    - ``side_action`` with an angled slide among them: one of the feature's own directions out of the plane
+      (``angled``);
+    - ``lifter``: no slide frees it all, but one short move along one plain direction, at most ``stroke_limit``
+      (a quarter of ``scale`` by default), clears every point for a pull: a lifter or an internal slide;
     - ``collapsible_core``: every point is cleared so, but along directions round an axis that no one
-      direction serves (an internal groove or thread round the pull);
+      direction serves (an internal groove or thread round the pull, a cavity wider below its mouth);
+    - ``side_action`` along a slide guessed at 45 degrees to the plane (``angled``);
     - ``none``: some point is cleared by none of these (a sealed pocket, an interlock).
+
+    ``kind``, from the geometry alone, whatever releases it: ``external`` where ``OPEN_SHARE`` of the points
+    have a straight line out of the part along a plain slide or one of its own directions, else ``internal``.
 
     Each says how deep it is (``interference``, at ``DEPTH_POINTS`` of its points): ``depth_mm`` against the
     straight pull (``depth_limited`` where no move up to the stroke limit frees it), and one released by none
     ``slide_depth_mm`` against its best slide too (a re-entrant lip, at every tested point; searched up to
-    ``lip_limit``, ``slide_depth_limited`` past it).
-
-    With ``cache`` (one dict per part), a feature of the same shape as one already classified (a row of
-    identical contacts) is given its release once that release frees a probe of its own points too.
+    ``lip_limit``, ``slide_depth_limited`` past it). A side action says each tested point's travel (``travel``:
+    its index in ``points``, its slide's place in ``vectors``, its travel).
     """
     pts = np.asarray(points, dtype=float).reshape(-1, 3)
     nrm = np.asarray(normals, dtype=float).reshape(-1, 3)
     # Points tested, at most: four per sqrt of the feature's points, 16 to RELEASE_POINTS -- a part of many
     # small features (a connector's contacts) spends its rays on each in proportion, not 96 apiece.
     most = int(min(RELEASE_POINTS, max(16, 4 * math.sqrt(len(pts)))))
-    chosen_points = _subset(len(pts), most)
-    pts, nrm = pts[chosen_points], nrm[chosen_points]
+    tested = _subset(len(pts), most)
+    pts, nrm = pts[tested], nrm[tested]
     p = np.asarray(pull, dtype=float)
     p = p / np.linalg.norm(p)
     tol = math.sin(math.radians(max(zero_tol_deg, 0.05)))
-    lateral = lateral_directions(p, 8)
-    total = nrm.sum(axis=0)
-    mean = total - p * float(total @ p)
-    if np.linalg.norm(mean) > 1e-3 * len(nrm):
-        lateral = np.vstack([mean / np.linalg.norm(mean), lateral])
-    tilted = np.vstack([(lateral + p) / math.sqrt(2.0), (lateral - p) / math.sqrt(2.0)])
-    candidates = np.vstack([lateral, tilted])
-    n = len(pts)
-    if not n:
+    if not len(pts):
         return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [],
                 "stroke_mm": None}
-    key = _signature(pts, nrm) if cache is not None else None
-    if key is not None and key in cache:
-        probe = _subset(n, 8)
-        limit = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
-        ladder = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 12), [limit]]))
-        if _replays(cache[key], pts[probe], nrm[probe], p, cast, ladder, tol):
-            return dict(cache[key])
-    found = _classify(pts, nrm, p, cast, scale, tol, lateral, candidates, stroke_limit)
+    found = _classify(pts, nrm, p, cast, scale, tol, slide_directions(p, own), stroke_limit, box)
+    if "travel" in found:
+        found["travel"] = [(int(tested[index]), slide, travel) for index, slide, travel in found["travel"]]
     # How deep it is: against the straight pull (a bump-off's strain); one nothing releases, against its
     # best slide too (a re-entrant lip the slide's steel would scrape over).
     reach = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
@@ -821,61 +872,78 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     if found["release"] == "none":
         # only as deep as a lip is worth telling apart (``lip_limit``): past it, "deeper than that"
         lip = float(lip_limit) if lip_limit is not None else reach
-        found["slide_depth_mm"] = interference(pts, nrm, lateral, cast, limit=lip, zero_tol_deg=zero_tol_deg, rungs=5)
+        found["slide_depth_mm"] = interference(pts, nrm, lateral_directions(p, 8), cast, limit=lip,
+                                               zero_tol_deg=zero_tol_deg, rungs=5)
         found["slide_depth_limited"] = found["slide_depth_mm"] >= lip
-    if key is not None:
-        cache[key] = found
     return found
 
 
-def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale: float, tol: float,
-              lateral: np.ndarray, candidates: np.ndarray, stroke_limit: float | None) -> dict[str, Any]:
+def _side_action(pts: np.ndarray, p: np.ndarray, cast: Cast, scale: float, sides: np.ndarray, frees: np.ndarray,
+                 chosen: list[int], angled: np.ndarray, kind: str) -> dict[str, Any]:
+    """The side action along ``chosen`` of ``sides``: each point goes to the slide that frees it in the shortest
+    travel; the stroke is the longest any slide then needs."""
     n = len(pts)
-    frees = np.zeros((len(candidates), n), dtype=bool)
-    for index, side in enumerate(candidates):
-        if index == len(lateral) and frees[:index].all(axis=1).any():
-            break  # one plain slide frees it all: no angled one is needed
-        leans = nrm @ side >= -tol
-        if leans.any():
-            frees[index] = leans & ~np.isfinite(cast(pts, np.repeat(side[None, :], n, axis=0)))
-    if frees.any(axis=0).all():
-        chosen: list[int] = []
-        left = np.ones(n, dtype=bool)
-        plain = np.arange(len(candidates)) < len(lateral)
-        # A world axis is preferred where it frees nine-tenths as many points as the best (a symmetric
-        # groove's slides read +x and -x, not whichever diagonal its sampled points favoured); then any
-        # plain slide over an angled one.
-        axis = np.array(["," not in direction_name(c) for c in candidates])
-        penalty = np.where(plain, 0.0, 0.5)
-        while left.any() and len(chosen) < 4:
-            gain = (frees & left[None, :]).sum(axis=1) - penalty
-            pick = int(np.argmax(gain))
-            pool = axis & plain
-            if pool.any():
-                top = float(np.max(np.where(pool, gain, -np.inf)))
-                if top >= 0.9 * gain[pick] and top > 0:
-                    # Among world axes freeing about as many points (within a fiftieth: a symmetric part's
-                    # sampling decides the rest, and it differs from platform to platform), the first in
-                    # the candidates' order, so +x before +y on every machine.
-                    pick = int(np.flatnonzero(pool & (gain >= 0.98 * top))[0])
-            if gain[pick] <= 0:
-                break
-            chosen.append(pick)
-            left &= ~frees[pick]
-        if not left.any():
-            # Each point goes to the slide that frees it in the shortest travel; the stroke is the longest
-            # any slide then needs.
-            travel = np.full((len(chosen), n), np.inf)
-            for row, pick in enumerate(chosen):
-                travel[row, frees[pick]] = _strokes(pts[frees[pick]], candidates[pick], p, cast, scale)
-            best = travel.min(axis=0)
-            used = sorted({int(row) for row in np.argmin(travel, axis=0)})
-            chosen = [chosen[row] for row in used]
-            return {"release": "side_action", "kind": "external",
-                    "directions": [direction_name(candidates[pick]) for pick in chosen],
-                    "vectors": [candidates[pick] for pick in chosen],
-                    "angled": [not bool(plain[pick]) for pick in chosen],
-                    "stroke_mm": float(best[np.isfinite(best)].max()) if np.isfinite(best).any() else float(scale)}
+    travel = np.full((len(chosen), 2, n), np.inf)   # per slide, per way along the pull, per point
+    for row, pick in enumerate(chosen):
+        travel[row][:, frees[pick]] = _strokes(pts[frees[pick]], sides[pick], p, cast, scale)
+    mine = np.argmin(travel.min(axis=1), axis=0)
+    used = sorted({int(row) for row in mine})
+    travels = []
+    for order, row in enumerate(used):
+        index = np.flatnonzero(mine == row)
+        way = int(np.argmin(travel[row][:, index].max(axis=1)))
+        travels.extend((int(point), order, float(travel[row, way, point])) for point in index)
+    return {"release": "side_action", "kind": kind,
+            "directions": [direction_name(sides[chosen[row]]) for row in used],
+            "vectors": [sides[chosen[row]] for row in used],
+            "angled": [bool(angled[chosen[row]]) for row in used],
+            "stroke_mm": max(found for _point, _slide, found in travels), "travel": travels}
+
+
+def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale: float, tol: float,
+              slides: tuple[np.ndarray, np.ndarray, np.ndarray], stroke_limit: float | None,
+              box: tuple[np.ndarray, np.ndarray] | None = None) -> dict[str, Any]:
+    plain, angled, guessed = slides
+
+    def cover(sides: np.ndarray, frees: np.ndarray, tilted: np.ndarray) -> list[int] | None:
+        # how far each point is from its way out of the part's box along each direction
+        exits = np.zeros(frees.shape)
+        if box is not None:
+            far = np.einsum("ck,ck->c", np.where(sides > 0, box[1][None, :], box[0][None, :]), sides)
+            exits = far[:, None] - sides @ pts.T
+        return _cover(frees, ~tilted, [direction_name(side) for side in sides], exits)
+
+    sides = plain
+    frees = _frees(pts, nrm, plain, cast, tol)
+    tilted = np.zeros(len(plain), dtype=bool)
+    chosen = cover(sides, frees, tilted)
+    if chosen is None and len(angled):
+        # no set of plain slides frees it all: the feature's own directions out of the plane, with them
+        sides = np.vstack([plain, angled])
+        frees = np.vstack([frees, _frees(pts, nrm, angled, cast, tol)])
+        tilted = np.arange(len(sides)) >= len(plain)
+        chosen = cover(sides, frees, tilted)
+    kind = "external" if float(frees.any(axis=0).mean()) >= OPEN_SHARE else "internal"
+    if chosen is not None:
+        return _side_action(pts, p, cast, scale, sides, frees, chosen, tilted, kind)
+    inside = _inside_release(pts, p, cast, scale, plain, stroke_limit)
+    if inside is not None:
+        return {**inside, "kind": kind}
+    # Last, before nothing releases it: a slide guessed at 45 degrees to the plane.
+    sides = np.vstack([sides, guessed])
+    frees = np.vstack([frees, _frees(pts, nrm, guessed, cast, tol)])
+    tilted = np.arange(len(sides)) >= len(plain)
+    chosen = cover(sides, frees, tilted)
+    if chosen is not None:
+        return _side_action(pts, p, cast, scale, sides, frees, chosen, tilted, kind)
+    return {"release": "none", "kind": kind, "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
+
+
+def _inside_release(pts: np.ndarray, p: np.ndarray, cast: Cast, scale: float, lateral: np.ndarray,
+                    stroke_limit: float | None) -> dict[str, Any] | None:
+    """A lifter's or a collapsible core's release of points no slide's ray frees: a short move along a direction
+    of ``lateral`` and then a pull. None where some point is cleared by none."""
+    n = len(pts)
     limit = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
     strokes = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 12), [limit]]))
     # A few points first: one that no direction frees settles it (nothing releases the feature) before
@@ -888,8 +956,7 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
         index = np.nonzero(stuck)[0]
         stuck[index] = ~_ever_freed(probe[index], side, (p, -p), cast, strokes)
     if stuck.any():
-        return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [],
-                "stroke_mm": None}
+        return None
     freed = np.full((len(lateral), n), np.inf)
     # Which directions free every point at all (a yes or no each, cheap); only those are walked for their
     # stroke, and none past the shortest common stroke found yet.
@@ -908,7 +975,7 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
     common = np.max(freed, axis=1)
     if np.isfinite(common).any():
         pick = int(np.argmin(common))
-        return {"release": "lifter", "kind": "internal", "directions": [direction_name(lateral[pick])],
+        return {"release": "lifter", "directions": [direction_name(lateral[pick])],
                 "vectors": [lateral[pick]], "angled": [False], "stroke_mm": float(common[pick])}
     if ever.any(axis=0).all():
         # No one direction frees it all, but each point is freed by some: a collapsing core; its stroke the
@@ -919,9 +986,9 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
             if mine.any():
                 each[mine] = _freed_after(pts[mine], side, (p, -p), cast, strokes)
         finite = each[np.isfinite(each)]
-        return {"release": "collapsible_core", "kind": "internal", "directions": [], "vectors": [], "angled": [],
+        return {"release": "collapsible_core", "directions": [], "vectors": [], "angled": [],
                 "stroke_mm": float(finite.max()) if len(finite) else None}
-    return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
+    return None
 
 
 #: A feature's points its depth against the pull is measured at, at most (evenly chosen).
@@ -987,11 +1054,12 @@ def interference(points: np.ndarray, normals: np.ndarray, ways: Sequence[np.ndar
 
 
 def _strokes(points: np.ndarray, side: np.ndarray, pull: np.ndarray, cast: Cast, scale: float) -> np.ndarray:
-    """How far a slide along ``side`` travels before each point clears a pull (``scale`` where none does)."""
+    """How far a slide along ``side`` travels before each point is clear of the part along the pull, and
+    against it: two rows (``scale`` where it never is)."""
     if not len(points):
-        return np.zeros(0)
+        return np.zeros((2, 0))
     strokes = np.unique(np.concatenate([np.geomspace(max(scale * 2e-4, 1e-4), scale, 20), [scale]]))
-    freed = _freed_after(points, side, (pull, -pull), cast, strokes)
+    freed = np.array([_freed_after(points, side, (way,), cast, strokes) for way in (pull, -pull)])
     return np.where(np.isfinite(freed), freed, scale)
 
 
