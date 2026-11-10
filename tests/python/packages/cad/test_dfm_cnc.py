@@ -891,8 +891,10 @@ class FrameTest(unittest.TestCase):
 
         drawn = read(plate)
         self.assertFalse(drawn[0].measurements["machine"]["frames"][0]["turned"])
-        # a quarter turn is still square to the world: no frame of its own is needed
-        for turn, own in ((bd.Rot(0, 0, 30), True), (bd.Rot(17, 23, 41), True), (bd.Rot(90, 0, 0), False)):
+        # a quarter turn is still square to the world: no frame of its own is needed; a tilt of a twentieth of a
+        # degree is a frame of its own as much as one of 37 (the world's frame aligns less of the part than its own)
+        tilts = [(bd.Rot(*angles), True) for angles in ((0.05, 0, 0), (0.4, 0.4, 0), (0, 0.8, 0), (1.0, 0, 0))]
+        for turn, own in ((bd.Rot(0, 0, 30), True), (bd.Rot(17, 23, 41), True), (bd.Rot(90, 0, 0), False), *tilts):
             turned = read(turn * plate)
             self.assertEqual(turned[1:], drawn[1:])
             frame = turned[0].measurements["machine"]["frames"][0]

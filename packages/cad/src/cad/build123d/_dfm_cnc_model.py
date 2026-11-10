@@ -94,8 +94,9 @@ def _xyz(value: Any) -> tuple[float, float, float]:
     return (float(value.X()), float(value.Y()), float(value.Z()))
 
 
-#: Two directions within this of square (|cos|) are square to each other: a frame's second axis.
-SQUARE = 2e-3
+#: Two clusters' directions within this of square (|cos|: a cluster's own width, ``SAME``'s angle) are square
+#: to each other: a frame's second axis, squared to its first exactly.
+SQUARE = math.sqrt(1.0 - SAME * SAME)
 #: The heaviest directions a frame is tried about.
 FRAME_SEEDS = 6
 
@@ -123,10 +124,18 @@ def machine_frame(faces: list[Any], surfaces: list[brep.Surface]) -> tuple[np.nd
     coordinates) whose axes the most of the part's area lies along -- each plane's normal and each cylinder's,
     cone's or torus's axis, weighted by its face's area --, and the share of that area it aligns.
 
-    Candidates: the world's own frame, and about each of the ``FRAME_SEEDS`` heaviest directions a frame whose
-    second axis is the heaviest direction square to it (else the world axis most nearly square). Ranked by the
-    area they align, as printing ranks orientations by its figures; the world's frame wins a tie, and of the 24
-    rotations that are one frame, the one nearest the world's is taken (a part drawn square stays as drawn)."""
+    Two tolerances, two meanings. Directions within ``SAME`` of each other are one **cluster** (a face's own
+    noise, a few tenths of a degree of draft), its direction their mean by area. A face is **aligned** with a
+    frame by how near its direction is to an axis: wholly where it is the axis, not at all ``SAME`` away, by the
+    square of the angle between -- so the world's frame, a tenth of a degree off a part's own, aligns less of
+    it than the part's own does, however small the tilt (a part tilted 0.05 or 0.8 degrees is machined in its
+    own frame, as one tilted 37 is).
+
+    Candidates: the world's own frame, and about each of the ``FRAME_SEEDS`` heaviest clusters a frame whose
+    second axis is the heaviest cluster square to it (within a cluster's width, then squared to it exactly;
+    else the world axis most nearly square). Ranked by the area they align, as printing ranks orientations by
+    its figures; the world's frame wins a tie (a frame's own noise, 1e-9 of the area), and of the 24 rotations
+    that are one frame, the one nearest the world's is taken (a part drawn square stays as drawn)."""
     vectors, weights = [], []
     for face, s in zip(faces, surfaces):
         v = s.normal if s.kind == "plane" else s.axis if s.kind in ("cylinder", "cone", "torus") else None
@@ -146,17 +155,21 @@ def machine_frame(faces: list[Any], surfaces: list[brep.Surface]) -> tuple[np.nd
     total = float(w.sum())
 
     def aligned(frame: np.ndarray) -> float:
-        return float(w[np.abs(d @ frame.T).max(axis=1) > SAME].sum())
+        # 1 - cos is half the angle squared: all of a face on an axis, none of one ``SAME`` off it
+        off = 1.0 - np.abs(d @ frame.T).max(axis=1)
+        return float((w * np.clip(1.0 - off / (1.0 - SAME), 0.0, 1.0)).sum())
 
-    clusters: list[list[Any]] = []  # [direction, weight], sign free
+    clusters: list[list[Any]] = []  # [the heaviest member's direction, weight, the members' sum], sign free
     for i in np.argsort(-w):
         for cluster in clusters:
-            if abs(float(d[i] @ cluster[0])) > SAME:
+            along = float(d[i] @ cluster[0])
+            if abs(along) > SAME:
                 cluster[1] += float(w[i])
+                cluster[2] = cluster[2] + d[i] * (w[i] if along > 0 else -w[i])
                 break
         else:
-            clusters.append([d[i], float(w[i])])
-    clusters.sort(key=lambda cluster: -cluster[1])
+            clusters.append([d[i], float(w[i]), d[i] * w[i]])
+    clusters = [[unit(total), weight] for _, weight, total in sorted(clusters, key=lambda cluster: -cluster[1])]
     candidates = [identity]
     for a, _ in clusters[:FRAME_SEEDS]:
         square = [b for b, _ in clusters if abs(float(a @ b)) < SQUARE]
@@ -172,8 +185,8 @@ def machine_frame(faces: list[Any], surfaces: list[brep.Surface]) -> tuple[np.nd
             best, best_score = frame, score
     if best is not identity:
         best = max((p @ best for p in _PERMUTATIONS), key=lambda m: float(np.trace(m)))
-        if np.allclose(best, identity, atol=1e-12):
-            best = identity
+        if np.allclose(best, identity, atol=1e-9):
+            best = identity  # the world's, to the kernel's own noise
     return best, best_score / total
 
 
