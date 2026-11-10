@@ -50,13 +50,13 @@ where those files ship, so these scripts are what produces them.
 - `test.sh` — `test-js.sh`, `test-api.sh`, `test-python.sh`, then `test-global.sh`: the
   whole tree on one machine, for a local run; `test.yml` calls the focused
   runners per job instead.
-- `test-js.sh [--select core|ui|ui-browser|web|mcp|all]` — builds the required shared exports,
+- `test-js.sh [--select core|ui|ui-units|ui-browser|web|mcp|all]` — builds the required shared exports,
   checks dependency boundaries, type-checks each selected workspace (`npm run
   typecheck`: `tsc`, which neither Vite's builds nor the Node test runners do) and
   runs its suite. `mcp` runs the CAD app's tests and builds it, since its one-file
-  build is half its contract. `ui-browser` is the UI's browser specs alone, and
-  `UI_BROWSER_TEST_SHARD=I/N` picks one shard of them: CI's two `js-ui` jobs run
-  `ui` with `1/2` and `ui-browser` with `2/2`, every spec once.
+  build is half its contract. `ui-units` and `ui-browser` are the two halves of `ui`
+  (everything but the browser specs; the browser specs alone): CI's two `js-ui`
+  jobs run one each.
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]`
   — the package suites (the library's, the server's and the shim's), then every skill's suite. Each test FILE runs in
   its own interpreter with an engine daemon of its own, `CAD_TEST_JOBS` at a

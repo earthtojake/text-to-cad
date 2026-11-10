@@ -39,42 +39,23 @@ if (!tests.length) {
 // Browser specs (`*.browser.test.*`) each drive a Chromium doing WebGL, in software on Linux CI:
 // four at once saturate a four-core runner until clicks time out. They run as their own pass,
 // `UI_BROWSER_TEST_CONCURRENCY` at a time (4 unless set; CI sets 1); everything else stays at 4.
-// `UI_BROWSER_TEST_SHARD=I/N` (1-based) splits that pass across N jobs: of the browser specs, sorted by
-// path, spec k (0-based) belongs to shard (k % N) + 1 and only shard I's run. It applies to whatever
-// browser specs were collected or named on the command line. `UI_TEST_PASS=browser` runs the browser
-// pass alone (no Node tests, no Vitest), for the job that runs only a shard.
+// `UI_TEST_PASS` runs one half alone, for CI's two jobs: `units` is the Node tests and Vitest (no
+// browser), `browser` the browser specs. Unset, everything runs.
 const fail = (message) => {
   console.error(`run-tests.mjs: ${message}`);
   process.exit(2);
 };
 const testPass = process.env.UI_TEST_PASS || "";
-if (testPass !== "" && testPass !== "browser") {
-  fail(`UI_TEST_PASS wants "browser" or nothing, not "${testPass}"`);
-}
-let shard = null;
-const shardValue = process.env.UI_BROWSER_TEST_SHARD || "";
-if (shardValue !== "") {
-  const match = /^(\d+)\/(\d+)$/u.exec(shardValue);
-  const index = match ? Number(match[1]) : 0;
-  const count = match ? Number(match[2]) : 0;
-  if (!match || index < 1 || index > count) {
-    fail(`UI_BROWSER_TEST_SHARD wants I/N with integers 1 <= I <= N (e.g. 1/2), not "${shardValue}"`);
-  }
-  shard = { index, count };
+if (!["", "units", "browser"].includes(testPass)) {
+  fail(`UI_TEST_PASS wants "units", "browser" or nothing, not "${testPass}"`);
 }
 const allBrowserTests = tests.filter((test) => /\.browser\.test\.[cm]?js$/u.test(test));
-const browserTests = shard
-  ? allBrowserTests.filter((_, k) => k % shard.count === shard.index - 1)
-  : allBrowserTests;
-// A collector that finds nothing fails: a browser pass or a shard that was asked for, with no spec
-// named, on a tree whose specs it no longer finds would pass having run none.
-if (!requestedTests.length && !allBrowserTests.length && (shard || testPass === "browser")) {
+// A collector that finds nothing fails: the browser pass asked for, with no spec named, on a tree
+// whose specs it no longer finds would pass having run none.
+if (!requestedTests.length && !allBrowserTests.length && testPass === "browser") {
   fail("no *.browser.test.* spec found under src/ or scripts/, and the browser pass was asked for");
 }
-if (shard) {
-  console.log(`Browser shard ${shard.index}/${shard.count}: ${browserTests.length} of ${allBrowserTests.length} browser specs.`);
-  if (!browserTests.length) console.log("This shard has no browser specs; nothing to run in the browser pass.");
-}
+const browserTests = testPass === "units" ? [] : allBrowserTests;
 const nodeTests = testPass === "browser" ? [] : tests.filter((test) => !allBrowserTests.includes(test));
 const browserConcurrency = Math.max(1, Number.parseInt(process.env.UI_BROWSER_TEST_CONCURRENCY || "4", 10) || 4);
 const run = (files, concurrency) => files.length ? spawnSync(process.execPath, [

@@ -585,12 +585,12 @@ jobs:
       - name: Run shared core tests
         run: scripts/test/test-js.sh --select core
 
-  # The shared UI: its type check, its units, and its browser specs, each of which drives a
-  # Chromium doing WebGL in software (SwiftShader). Several at once saturate the runner's four
-  # cores until clicks time out, so they run one at a time, and are split over two jobs
-  # instead: the first runs everything else and its half of them, the second its half alone.
+  # The shared UI, as two jobs of about four minutes: `units` is the dependency checks, the type
+  # check, the Node tests and Vitest; `browser` is the browser specs, each of which drives a
+  # Chromium doing WebGL in software (SwiftShader). Several of those at once saturate the
+  # runner's four cores until clicks time out, so they run one at a time.
   js-ui:
-    name: js-ui (${{ matrix.shard }})
+    name: js-ui (${{ matrix.part }})
     needs: changes
     if: needs.changes.outputs.web_ui == 'true'
     runs-on: ubuntu-latest
@@ -598,11 +598,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - shard: 1/2
-            select: ui
-          - shard: 2/2
-            select: ui-browser
+        part: [units, browser]
 
     steps:
       - name: Check out repository
@@ -616,13 +612,13 @@ jobs:
         with:
           python: "false"
           npm: packages/core packages/ui apps/web
-          ui-browser: "true"
+          # Only the browser specs drive npm Playwright's Chromium.
+          ui-browser: ${{ matrix.part == 'browser' }}
 
       - name: Run shared UI tests
         env:
           UI_BROWSER_TEST_CONCURRENCY: "1"
-          UI_BROWSER_TEST_SHARD: ${{ matrix.shard }}
-        run: scripts/test/test-js.sh --select ${{ matrix.select }}
+        run: scripts/test/test-js.sh --select ui-${{ matrix.part }}
 
   # The CAD Viewer's client: Node only. The bundled viewer, served through the real backend,
   # is driven in `viewer-e2e`.

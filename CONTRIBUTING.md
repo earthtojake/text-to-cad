@@ -330,7 +330,7 @@ cache reuse, rendering, and process-lifecycle behavior.
 The UI's browser specs (`packages/ui/**/*.browser.test.mjs`) run as their own
 pass, `UI_BROWSER_TEST_CONCURRENCY` files at a time (4 by default; the CI
 `js-ui` jobs set 1, because Linux renders their WebGL in software and several
-at once saturate the runner, and split them over two jobs instead). `CAD_TEST_SWIFTSHADER=1` makes a macOS run use that same
+at once saturate the runner; they are a job of their own). `CAD_TEST_SWIFTSHADER=1` makes a macOS run use that same
 software renderer, to reproduce a CI-only browser failure locally.
 
 A test's COST is part of its design. Model runs go through the engine's daemon,
@@ -388,7 +388,7 @@ python3 scripts/github-workflows/select_checks.py --paths packages/cad/src/cad/r
 | `routing (macOS)` | the router and what it reads a board through | The router's unit files on the third C library (its copper is held to a digest on all three) |
 | `skills` | the packages, `scripts/bundle`, the fea skill | The policy tests and skill suites that load the CAD kernel or the built runtime |
 | `js-core` | `packages/core`, the dependency checks | `@cad/core`'s units, the dependency and kit-boundary checks |
-| `js-ui (1/2)`, `js-ui (2/2)` | `packages/ui` | The UI's type check, units and browser specs |
+| `js-ui (units)`, `js-ui (browser)` | `packages/ui` | The UI's type check and units; its browser specs |
 | `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
 | `docs` | `apps/docs`, `scripts/brand`, the installers | Lint, the Next build, icon verification, the brand marks |
@@ -428,10 +428,10 @@ first shard also runs the type check, once a platform because the checker reads
 the `win32` branches on Windows alone, and the package test files the change
 itself touches before the suite, so a break in a pull request's own test (most
 Windows failures are one: a POSIX path, a line ending) reports in a minute or
-two. The UI's browser specs, one at a time because each renders WebGL in
-software, are split over the two `js-ui` jobs (`UI_BROWSER_TEST_SHARD=I/N`): the
-first runs everything else and its half, the second its half alone
-(`test-js.sh --select ui-browser`).
+two. The UI's tests are two jobs: `js-ui (units)` runs the checks, the type check,
+the Node tests and Vitest (`test-js.sh --select ui-units`), and `js-ui (browser)`
+the browser specs, one at a time because each renders WebGL in software
+(`--select ui-browser`).
 
 Adding a test that reads a new path means adding the path to the test's rule in
 `select_checks.py`; `tests/python/global/test_ci_workspace_selection.py` holds

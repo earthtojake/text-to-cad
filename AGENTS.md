@@ -302,7 +302,7 @@ when touching shared surfaces or before handoff:
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-api.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
-  `--print-weights`; `test-js.sh` takes `--select core|ui|ui-browser|web|mcp|all`. See
+  `--print-weights`; `test-js.sh` takes `--select core|ui|ui-units|ui-browser|web|mcp|all`. See
   [`scripts/README.md`](scripts/README.md).
 - In GitHub Actions, `test.yml` runs one job per concern, each whole on its one
   flag and only when the change reaches it: `scripts/github-workflows/select_checks.py`

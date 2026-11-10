@@ -2,23 +2,22 @@
 set -euo pipefail
 
 # Shared JavaScript suites: @cad/core, @cad/ui, the web app and the CAD app.
-# --select lets a small change run only the affected workspace and its build. `ui-browser` is @cad/ui's
-# browser specs alone (no checks, no typecheck), for a job beside `ui`: UI_BROWSER_TEST_SHARD=I/N
-# picks the specs of one shard, so a `ui` job and a `ui-browser` job run every spec exactly once.
-# `all` runs the browser specs through `ui`, never `ui-browser` as well.
+# --select lets a small change run only the affected workspace and its build. `ui` is all of
+# @cad/ui's; CI runs it as two jobs: `ui-units` (the checks, the type check, the Node tests and
+# Vitest) and `ui-browser` (the browser specs alone), every test once between them.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 SELECT=all
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --select) SELECT="${2:?--select wants core|ui|ui-browser|web|mcp|all}"; shift ;;
+    --select) SELECT="${2:?--select wants core|ui|ui-units|ui-browser|web|mcp|all}"; shift ;;
     --select=*) SELECT="${1#--select=}" ;;
     *) echo "test-js.sh: unknown argument $1" >&2; exit 2 ;;
   esac
   shift
 done
 case "$SELECT" in
-  core|ui|ui-browser|web|mcp|all) ;;
-  *) echo "test-js.sh: --select wants core|ui|ui-browser|web|mcp|all, not '$SELECT'" >&2; exit 2 ;;
+  core|ui|ui-units|ui-browser|web|mcp|all) ;;
+  *) echo "test-js.sh: --select wants core|ui|ui-units|ui-browser|web|mcp|all, not '$SELECT'" >&2; exit 2 ;;
 esac
 cd "$REPO_ROOT"
 if [ "$SELECT" = core ]; then
@@ -26,7 +25,7 @@ if [ "$SELECT" = core ]; then
 else
   npm run build:packages
 fi
-# The checks below belong to the `ui` job; `ui-browser` goes straight to its specs.
+# The checks below are `ui-units`'s; `ui-browser` goes straight to its specs.
 if [ "$SELECT" = ui-browser ]; then
   section "@cad/ui browser tests"
   UI_TEST_PASS=browser npm --prefix packages/ui test
@@ -53,6 +52,11 @@ if [ "$SELECT" = ui ] || [ "$SELECT" = all ]; then
   section "@cad/ui tests"
   npm --prefix packages/ui run typecheck
   npm --prefix packages/ui test
+fi
+if [ "$SELECT" = ui-units ]; then
+  section "@cad/ui tests (no browser)"
+  npm --prefix packages/ui run typecheck
+  UI_TEST_PASS=units npm --prefix packages/ui test
 fi
 if [ "$SELECT" = web ] || [ "$SELECT" = all ]; then
   section "CAD Viewer tests"

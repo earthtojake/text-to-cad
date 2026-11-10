@@ -807,19 +807,24 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for("packages/ui/src/renderers/robot/__fixtures__/arm.urdf")["packages_tests"],
                          [f"{SERVER}/test_robot_payload.py"])
 
-    def test_the_ui_s_browser_specs_are_split_over_two_jobs(self):
-        # Each spec drives a Chromium doing WebGL in software: one at a time in a job, two jobs.
+    def test_the_ui_s_tests_are_two_jobs_and_every_one_runs_once(self):
+        # The browser specs each drive a Chromium doing WebGL in software, one at a time: a job of
+        # their own, beside the checks, the type check, the Node tests and Vitest.
         job = JOBS["js-ui"]
-        self.assertEqual(re.findall(r"- shard: (\S+)\n\s+select: (\S+)", job), [("1/2", "ui"), ("2/2", "ui-browser")])
+        self.assertIn("part: [units, browser]", job)
+        self.assertIn("ui-browser: ${{ matrix.part == 'browser' }}", job)
         ran = steps("js-ui")["Run shared UI tests"]
         self.assertIn('UI_BROWSER_TEST_CONCURRENCY: "1"', ran)
-        self.assertIn("UI_BROWSER_TEST_SHARD: ${{ matrix.shard }}", ran)
-        self.assertIn("run: scripts/test/test-js.sh --select ${{ matrix.select }}", ran)
-        # The runner's two groups for them: `ui` runs its shard's specs beside everything else, `ui-browser`
-        # its shard's alone.
+        self.assertIn("run: scripts/test/test-js.sh --select ui-${{ matrix.part }}", ran)
+        # The runner's two halves of `ui`, and the pass each asks the UI's own runner for.
         runner = (REPO_ROOT / "scripts/test/test-js.sh").read_text(encoding="utf-8")
-        self.assertIn("core|ui|ui-browser|web|mcp|all) ;;", runner)
-        self.assertIn("UI_BROWSER_TEST_SHARD", (REPO_ROOT / "packages/ui/scripts/run-tests.mjs").read_text(encoding="utf-8"))
+        self.assertIn("core|ui|ui-units|ui-browser|web|mcp|all) ;;", runner)
+        self.assertIn("UI_TEST_PASS=units npm --prefix packages/ui test", runner)
+        self.assertIn("UI_TEST_PASS=browser npm --prefix packages/ui test", runner)
+        ui = (REPO_ROOT / "packages/ui/scripts/run-tests.mjs").read_text(encoding="utf-8")
+        self.assertIn('const browserTests = testPass === "units" ? [] : allBrowserTests;', ui)
+        self.assertIn('const nodeTests = testPass === "browser" ? [] : ', ui)
+        self.assertIn('if (!requestedTests.length && testPass !== "browser") {', ui)  # Vitest: units' and all's
 
     def test_each_app_runs_its_own_job(self):
         self.assertEqual(jobs_for("apps/web/src/main.tsx"), {"js-web", "packaging", "viewer-e2e"})
