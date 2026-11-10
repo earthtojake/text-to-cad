@@ -1,22 +1,28 @@
 # Galatea
 
+> **Work in progress.** The exterior is being restyled (a plainer, two-tone body and a new head) and the drives
+> re-based on real actuators. The sections below describe the iteration before that, and its numbers are not all current.
+
 A 1.75 m humanoid robot, designed here from a blank page: ivory lacquered skins over a
-gunmetal machined frame, a bronze finned actuator left in view at every joint, a smoked
-visor with two amber light bars. 47.5 kg, 44 driven degrees of freedom and two sprung toe
-hinges. Every joint is a joint of the document, so the model stands, crouches, bows,
-balances on one leg, walks on the spot and closes its hands, and five checks say what a
-picture cannot show: that nothing passes through anything else in any pose, motion or
-joint's travel, that every part is held by something, that the poses balance, that the
-linkages close, and what holding each pose asks of the drives.
+gunmetal machined frame, a bronze finned actuator left in view at every joint, and a
+helmet of a head with two camera eyes lit amber under its brow. About 48 kg, 44 driven degrees
+of freedom and two sprung toe hinges. Every joint is a joint of the document, so the model
+stands, crouches, bows, balances on one leg, walks on the spot and closes its hands, and
+six checks say what a picture cannot show: that no two parts share volume as built, in
+any pose, along any motion or through any joint's travel (measured by the kernel, by a
+check that is itself checked), that every part is held by something, that the poses
+balance, that the linkages close, and what holding each pose asks of the drives.
 
 | Script | Models | What it is |
 | --- | --- | --- |
 | `galatea.py` | `galatea` | the robot: 851 placements of 163 parts in 73 links, 72 joints, 14 couplings, 10 configurations, 8 motions |
 | `stances.py` | `galatea_ready`, `_stride`, `_contrapposto`, `_reach`, `_wave`, `_present`, `_poise`, `_crouch`, `_bow` | the robot at each standing pose, set down on the ground |
 | `leg_study.py` | `galatea_leg` | the left leg alone, with its hip drive: the page to study the knee and ankle linkages on |
+| `head_study.py` | `galatea_head` | the neck and head alone: the page to study the face on |
 | `actuators.py` | `galatea_actuators` | the actuator family on a bench (five frames, one of them in two lengths), each on a mounting plate with its output through it |
 | `renders.py` | none | the presentation stills (posed, close up, and with the skins left off) and the walk as a clip, into `tmp/renders/`, which Git ignores; the clip needs ffmpeg |
-| `checks/*.py` | none | interference, attachment, balance, linkages, loads |
+| `review.py` | none | every link alone from four sides, dressed and with its skins off, into `tmp/review/`: what to look at before the whole robot |
+| `checks/*.py` | none | interference (and `planted`, the test of it), attachment, balance, linkages, loads |
 
 ```
 cad run src/galatea.py                       # 68 s cold; a pose or motion edit 0.6 s; unchanged 0.1 s
@@ -72,6 +78,16 @@ waist's centre at 1150, 32 behind the hips; the crown at 1757.
   arm's head (the three meet at one point, under the ivory shoulder ball); an in-line
   hinge at the elbow; forearm roll just under it; wrist pitch and yaw, 44 apart.
 - **Neck**, three: yaw under the collar, roll at the neck's root, pitch at the skull's base.
+- **Head**, no joint of its own: a helmet more than a face. The skull swells into a brow
+  over two eye sockets that sweep up toward the temples, and a ridge runs from the nape
+  over the crown and down between them as a nasal, a graphite line along it as the
+  sternum's runs down the chest. Behind the sockets is one bay, lined in black and closed
+  by a smoked visor. In it are two camera eyes, toed out 8 degrees to lie with the face: a
+  bronze barrel, a lens set 3.3 back in it, a ring of amber light in eight segments, a
+  bronze ring round the pupil. The brow covers the upper inner part of each eye and is
+  the only lid they have. A depth sensor is let into the ridge on the forehead, nine slots
+  lit from behind show the voice, the antenna turret stands on the crown, and each ear is
+  a finned pod (six microphone ports round a status light) with a blade swept up and back.
 - **Hand**, six: four fingers of three phalanges on barrel hinges, each one tendon-driven
   degree of freedom (a coupling per finger closes its knuckles 85, 100 and 70 degrees for
   a curl of 1), and a thumb on an opposition pivot with a coupled curl of its own.
@@ -132,13 +148,21 @@ steel (output flanges, axles, pins, crankshafts, the Achilles rods) 6.0 kg; the 
 By limb: the chest 10.8 kg, the legs 21.4 kg with 8.0 kg of it below the knees, an arm
 with its hand 4.2 kg, the head and neck 1.4 kg.
 
-### How the parts are held
+### Casings, and what they cover
 
 Machined links are plates and turned parts, hulls of circles about the axes they carry.
 A skin is a 2.6 mm shell lofted through superellipse sections and trimmed by a cylinder
 about every axis it borders, so a joint always turns in a round opening; it sits on pads
 that grow from the frame to its inner surface, a screw through each. Hardware is drawn as
 heads and pins: every screw head is seated on a face, every pin runs in a bore.
+
+A casing either holds the structure under it inside, with air round it, or leaves it in
+the open; its edge never runs across a plate. The shin guard holds the tibia's rails
+3.7 mm clear down to where it ends above the ankle, and they come out below it as a fork;
+the thigh fairing holds the femur's plates 3.1 mm clear between the knee's arch and the
+knee drive's window. Both are open to the back, where the pushrods run. This is a rule
+the first version broke: its shin guard tapered to 100 mm over rails 96 mm apart, and the
+rails came through its flanks (see *Checks*).
 
 ## Poses and motions
 
@@ -158,7 +182,7 @@ pose lifts or tilts the feet; `stances.py` sets each posed robot back on the gro
 | `lib/kin.py` | the joint tree, the couplings, forward kinematics, the leg's inverse kinematics, standing a pose on the ground. No kernel: poses, motions and checks compute with it |
 | `lib/poses.py` | the configurations and motions, as numbers |
 | `lib/finish.py` | sixteen finishes: a `bd_materials` grade (or a homogenised density for an assembly the model does not open) and a scalar PBR look |
-| `lib/geo.py` | the geometry vocabulary: superellipse sections, lofts and shells, plates from hulls of circles, turned parts, skin mounts |
+| `lib/geo.py` | the geometry vocabulary: superellipse sections, lofts and shells, plates from hulls of circles, turned parts, skin mounts; and four booleans (`common`, `cut`, `carve`, `fuse`) that refuse an answer the kernel got wrong, which a lofted solid's sometimes is: valid, silent and the wrong shape |
 | `lib/kit.py` | parts, prototypes and their placements, groups, `mirror_tree` |
 | `lib/hardware.py` | screw heads, the actuator family, pivot caps, pushrods, pins |
 | `lib/leg.py`, `torso.py`, `arm.py`, `hand.py`, `head.py` | the links, part by part |

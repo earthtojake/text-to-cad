@@ -57,11 +57,13 @@ _FINISHES = {
     # Structural tubes: gloss carbon.
     "carbon": lambda: _look(plastics.cfrp(), "carbon_gloss", color="#17191c", metalness=0.0, roughness=0.3,
                             clearcoat=1.0, clearcoat_roughness=0.05),
+    # The sensor bay's liner: aluminium, bead-blasted and anodised black.
+    "black": lambda: _look(metals.aluminum(), "black_anodise", color="#101215", metalness=0.4, roughness=0.62),
     # Soles, pads, bump stops: TPU.
     "rubber": lambda: _look(plastics.tpu(), "rubber_matte", color="#1d1e20", metalness=0.0, roughness=0.9),
-    # The face: smoked polycarbonate, drawn near-opaque so the sensors glow through it.
-    "visor": lambda: _look(plastics.pc(), "visor_smoke", color="#0d1014", metalness=0.0, roughness=0.06,
-                           clearcoat=1.0, clearcoat_roughness=0.03),
+    # The visor: smoked polycarbonate, clear enough that the eyes behind it show through.
+    "visor": lambda: _look(plastics.pc(), "visor_smoke", color="#1b222b", metalness=0.0, roughness=0.05,
+                           clearcoat=1.0, clearcoat_roughness=0.03, transmission=1.0),
     # Light guides: status bar, eye rings.
     "glow": lambda: _look(plastics.pc(), "glow_amber", color="#ff9d3c", metalness=0.0, roughness=0.4,
                           emissive="#ff7a10", emissive_intensity=0.6),

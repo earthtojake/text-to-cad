@@ -224,7 +224,7 @@ def _chest(hw, links):
     collar_rows = [geo.S(1498, 0, 16, rx=78, ry=50, n=2.6, ryn=44), geo.S(1524, 0, NECK_BASE[1], rx=50, ry=46, n=2.2, ryn=44)]
     collar = geo.shell(collar_rows, SKIN_T)[0] - geo.half_space((0, 0, 1498), (0, 0, -1)) \
         - geo.half_space((0, 0, 1524), (0, 0, 1))
-    deck = (geo.box(400, 300, 3.0, (0, 0, 1496.5)) & cavity) - geo.cyl(37, 20, (0, NECK_BASE[1], 1490), (0, 0, 1))
+    deck = (geo.box(400, 300, 2.0, (0, 0, 1497.0)) & cavity) - geo.cyl(37, 20, (0, NECK_BASE[1], 1490), (0, 0, 1))   # z 1496..1498
 
     links["chest"] += [part(frame, "thorax_frame", "gunmetal"), part(breast, "breastplate", "ivory"), *screws,
                        part(back, "backplate", "ivory"), *back_screws, part(liner, "midriff", "graphite"),

@@ -99,16 +99,20 @@ def _hip(hw, links):
 # Thigh: the femur, two plates with the knee drive between them, and its fairing
 # ---------------------------------------------------------------------------------------------
 def _thigh(hw, links):
+    # The fairing holds the femur's plates (outer faces P1 from the centre plane) inside it
+    # from the knee's arch up to the knee drive's window, 3 mm clear, and its rear edge runs
+    # behind them: the plates show through the windows and at the joints, never across an edge.
     rows = [
-        geo.S(538, HX + 0, -5, rx=44, ry=38, n=2.6, rxn=42, ryn=48),
-        geo.S(600, HX + 1, -6, rx=48, ry=42, n=2.6, rxn=45, ryn=57),
-        geo.S(680, HX + 2, -7, rx=52, ry=46, n=2.5, rxn=48, ryn=64),
-        geo.S(760, HX + 2, -7, rx=57, ry=50, n=2.5, rxn=53, ryn=70),
+        geo.S(538, HX + 0, -3, rx=46, ry=46, n=2.6, rxn=44, ryn=50),
+        geo.S(600, HX + 1, -5, rx=49, ry=50, n=2.6, rxn=46, ryn=58),
+        geo.S(680, HX + 2, -6, rx=52.5, ry=52, n=2.5, rxn=48.5, ryn=65),
+        geo.S(760, HX + 2, -6, rx=57, ry=52, n=2.5, rxn=53, ryn=71),
         geo.S(830, HX + 2, -6, rx=59, ry=50, n=2.5, rxn=55, ryn=71),
         geo.S(890, HX + 2, -5, rx=58, ry=48, n=2.5, rxn=55, ryn=68),
     ]
     skin, cavity, shell_outer = geo.shell(rows, SKIN_T)
-    back_edge = geo.behind_curve([(8, 520), (26, 600), (30, 680), (22, 750), (0, 800), (-22, 850), (-34, 910)], [(160, 910), (160, 520)])
+    back_edge = geo.behind_curve([(22, 520), (36, 556), (35, 610), (34, 670), (36, 725), (30, 765), (0, 800), (-22, 850), (-34, 910)],
+                                 [(160, 910), (160, 520)])
     skin -= geo.plate_yz(back_edge, xr(-90), xr(90))                     # open to the back: the pushrod's channel
     skin -= geo.half_space((HX, 0, 856), (0.3, 0.0, 1.0))                # top edge, falling toward the outside
     skin -= geo.cyl(62, 240, HIP, (1, 0, 0), centered=True)              # round openings about the hip drive
@@ -173,17 +177,21 @@ def _calf_housing():
 
 
 def _shin(hw, links):
+    # The guard holds the tibia's rails (their outer faces R1 from the centre plane) inside
+    # it all the way down, 3 mm clear: so its lower sections are wide and square-shouldered,
+    # and its rear edge runs behind the rails, which never show through its flank.
     rows = [
-        geo.S(118, HX, 0, rx=50, ry=28, n=2.6, ryn=40),
-        geo.S(170, HX, -1, rx=51, ry=28, n=2.6, ryn=44),
-        geo.S(255, HX, -2, rx=54, ry=40, n=2.5, ryn=52),
-        geo.S(345, HX, -2, rx=58, ry=50, n=2.5, ryn=60),
-        geo.S(430, HX, -2, rx=56, ry=46, n=2.5, ryn=59),
-        geo.S(492, HX, -2, rx=49, ry=36, n=2.5, ryn=57),
-        geo.S(536, HX, -2, rx=41, ry=26, n=2.6, ryn=50),
+        geo.S(118, HX, 0, rx=54.5, ry=44, n=3.6, ryn=44),
+        geo.S(170, HX, -1, rx=55, ry=46, n=3.6, ryn=46),
+        geo.S(255, HX, -2, rx=56.5, ry=50, n=3.2, ryn=53),
+        geo.S(345, HX, -2, rx=58.5, ry=56, n=3.0, ryn=60),
+        geo.S(430, HX, -2, rx=57.5, ry=50, n=2.9, ryn=59),
+        geo.S(492, HX, -2, rx=50, ry=38, n=2.6, ryn=57),
+        geo.S(536, HX, -2, rx=42, ry=27, n=2.6, ryn=50),
     ]
     skin, cavity, shell_outer = geo.shell(rows, SKIN_T)
-    back_edge = geo.behind_curve([(2, 100), (4, 200), (13, 300), (23, 395), (15, 480), (3, 550)], [(160, 550), (160, 100)])
+    back_edge = geo.behind_curve([(27, 100), (26, 170), (25, 230), (31, 300), (34, 345), (31, 395), (20, 450), (9, 505), (3, 550)],
+                                 [(160, 550), (160, 100)])
     skin -= geo.plate_yz(back_edge, xr(-90), xr(90))                     # open to the back: calf drive and rods
     skin -= geo.cyl(80, 240, ANKLE, (1, 0, 0), centered=True)            # arch over the ankle
     reveal = geo.band([(xr(-70), 478), (xr(-34), 452), (xr(0), 442), (xr(34), 452), (xr(70), 478)], 2.2)
@@ -263,14 +271,14 @@ def _foot(hw, links):
     skin -= geo.plate_yz(rim, xr(-90), xr(90))
     # A deck closes the shell just under its rim, with a well for the ankle's uprights and the keel between them.
     deck = geo.box(240, 320, SKIN_T, (HX, -20, DECK_Z - SKIN_T / 2)) & shell_outer
-    skin += deck - geo.plate_xy(geo.slot(HX, -62, HX, 1, 20), 0, 60)
+    skin += deck - geo.plate_xy(geo.slot(HX, -62, HX, 10, 20), 0, 60)
     skin -= geo.cyl(26, 240, TOE, (1, 0, 0), centered=True)               # round opening about the toe hinge
     skin -= geo.half_space((0, TY + 8.5, 0), (0, -1, 0))
     pads, screws = _skin_mounts(hw, cavity, shell_outer, [((xr(s * 28), y, 15), (s, 0, 0))
                                                          for s in (1, -1) for y in (34, -62)], size="M3", radius=4.5)
 
     edge = TY + 8.0                                            # the sole plate stops short of the hinge
-    outline = geo.hull([(HX, 40, 31), (xr(3), -40, 38), (xr(3), -88, 44)])
+    outline = geo.hull([(HX, 40, 31), (xr(3), -40, 38), (xr(3), -88, 42)])
     sole = geo.plate_xy(outline, 10, 20) - geo.box(240, 120, 40, (HX, edge - 60, 15))
     rear = geo.plate_xz(geo.bones([(HX, AZ, 19), (HX, 26, 15)], holes=[(HX, AZ, 4)]), 5, 15)
     front = geo.plate_xz(geo.bones([(HX, AZ, 12), (HX, 26, 12)]), -76, -66)

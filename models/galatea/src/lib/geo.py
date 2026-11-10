@@ -61,6 +61,66 @@ def half_space(point, normal, size=3000.0):
 
 
 # ---------------------------------------------------------------------------------------------
+# Booleans that say when the kernel has given a wrong answer
+# ---------------------------------------------------------------------------------------------
+class WrongBoolean(ValueError):
+    """The kernel returned a valid solid that cannot be the answer."""
+
+
+def _span(shape):
+    b = shape.bounding_box()
+    return (b.min.X, b.min.Y, b.min.Z), (b.max.X, b.max.Y, b.max.Z)
+
+
+def common(a, b, what="common"):
+    """a & b, refused when it cannot be right. A lofted solid met by a long prism has come
+    back as the whole prism, valid and silent: the kernel missed the surfaces' crossing and
+    then judged the prism inside. No corner of an intersection lies outside either solid's
+    box, and that is cheap to hold it to (the corners, not the result's own box: a strip
+    cut from a lofted surface reports the whole surface's)."""
+    result = a & b
+    (alo, ahi), (blo, bhi) = _span(a), _span(b)
+    for vertex in result.vertices():
+        at = (vertex.X, vertex.Y, vertex.Z)
+        if any(at[k] < max(alo[k], blo[k]) - 0.5 or at[k] > min(ahi[k], bhi[k]) + 0.5 for k in range(3)):
+            raise WrongBoolean(f"{what}: the intersection reaches outside the solids it is of")
+    return result
+
+
+def cut(a, b, what="cut"):
+    """a - b, refused when it and what it removed do not add up to a. The allowance is the
+    kernel's own: a lofted solid's volume is good to about one part in ten thousand of the
+    box it fills, which for a thin shell is a visible share of the shell."""
+    result, removed = a - b, common(a, b, what)
+    (lo, hi) = _span(a)
+    allowance = 2e-3 * a.volume + 1e-4 * (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]) + 1.0
+    if abs(result.volume + removed.volume - a.volume) > allowance:
+        raise WrongBoolean(f"{what}: {result.volume:.0f} left and {removed.volume:.0f} removed are not the {a.volume:.0f} there was")
+    return result
+
+
+def carve(a, b, what="carve"):
+    """a - b where the tool is known to pass through a's surface: refused when the kernel
+    took nothing away, or took the whole tool as if it lay inside. Cheaper than `cut`, which
+    intersects as well; use `cut` where the tool may lie wholly inside."""
+    result = a - b
+    slack = 1e-4 * a.volume + 0.5
+    if not a.volume - b.volume + slack < result.volume < a.volume - slack:
+        raise WrongBoolean(f"{what}: {result.volume:.0f} left of {a.volume:.0f} after a tool of {b.volume:.0f} that crosses its surface")
+    return result
+
+
+def fuse(a, b, what="fuse"):
+    """a + b of two solids that overlap or touch, refused when the sum is less than its
+    larger part or more than both."""
+    result = a + b
+    slack = 1e-3 * (a.volume + b.volume) + 1.0
+    if not max(a.volume, b.volume) - slack <= result.volume <= a.volume + b.volume + slack:
+        raise WrongBoolean(f"{what}: {result.volume:.0f} from {a.volume:.0f} and {b.volume:.0f}")
+    return result
+
+
+# ---------------------------------------------------------------------------------------------
 # Machined plates
 # ---------------------------------------------------------------------------------------------
 def hull(circles):
