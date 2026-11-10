@@ -61,14 +61,17 @@ for model in src/*.py; do python "$model"; done
 python scripts/verify.py
 ```
 
-From the repository root, run these for `baseline` and `fdm`:
+From the repository root, run these for `fdm` and `injection`:
 
 ```sh
 cad stl dfm models/dfm-process-comparison/STL/fdm.stl --process printing --angle-limit 45 --json
 cad stl dfm models/dfm-process-comparison/STL/fdm.stl --process printing --candidates --angle-limit 45 --json
-cad stl dfm models/dfm-process-comparison/STL/injection.stl --process molding --pull z --json
-cad stl dfm models/dfm-process-comparison/STL/injection.stl --process molding --candidates --json
+cad step dfm models/dfm-process-comparison/STEP/injection.step --process molding --pull z --json
+cad step dfm models/dfm-process-comparison/STEP/injection.step --process molding --candidates --json
 ```
+
+Molding is judged on exact geometry, so `injection` is checked from its STEP export
+(`cad model export <id> STEP/injection.step`, as `verify.py` reads it), never from a mesh.
 
 (The checks above were run with the skills' measurement scripts these commands replaced; the figures are
 the same measurements.)

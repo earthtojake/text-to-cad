@@ -127,6 +127,39 @@ class BoundsTest(unittest.TestCase):
         self.assertEqual(self.bounds(bd.Compound(children=[turned, blob], label="pair")),
                          self.exact((sweep, turned.location), (blob, None)))
 
+    def test_a_periodic_surface_cut_from_a_hair_below_its_first_knot_is_measured_whole(self) -> None:
+        """A face's parameter range on a periodic B-spline can start a hair below the first knot and span
+        a whole period (motorbike's exhaust: -8.9e-16 to 2 pi + 2.6e-14). OCCT 8.0 cuts such a surface
+        to one with no poles (no box: the face kept its coarser one) over a hair less than a period, and
+        over a whole period or more crashes the process; the range is cut as one it handles
+        (``delta._in_period``)."""
+        import math
+
+        from OCP.Geom import Geom_CylindricalSurface, Geom_RectangularTrimmedSurface
+        from OCP.GeomConvert import GeomConvert
+        from OCP.gp import gp_Ax3
+
+        from cad.engine import delta
+
+        surface = GeomConvert.SurfaceToBSplineSurface_s(
+            Geom_RectangularTrimmedSurface(Geom_CylindricalSurface(gp_Ax3(), 10.0), 0.0, 2 * math.pi, 0.0, 20.0))
+        surface.SetUPeriodic()
+        period = surface.UPeriod()
+        hull = delta._hull(surface, -8.881784197001252e-16, period - 1e-12, 0.0, 20.0)
+        self.assertIsNotNone(hull)
+        for axis in range(2):
+            self.assertLessEqual(hull[axis], -10.0 + 1e-6, "the whole circle, not a line at its seam")
+            self.assertGreaterEqual(hull[axis + 3], 10.0 - 1e-6)
+        whole = (0.0, period)
+        self.assertEqual(delta._in_period(-8.881784197001252e-16, period + 2.6e-14, *whole), whole)
+        self.assertEqual(delta._in_period(-1e-12, period - 1e-12, *whole), whole)
+        self.assertEqual(delta._in_period(-1e-12, 3.0, *whole), (0.0, 3.0 + 1e-12))
+        self.assertEqual(delta._in_period(period - 1e-12, period + 3.0, *whole), (0.0, 3.0 + 1e-12))
+        start, end = delta._in_period(-1.0, 2.0, *whole)
+        self.assertAlmostEqual(start, period - 1.0, places=12)
+        self.assertAlmostEqual(end - start, 3.0, places=12)
+        self.assertEqual(delta._in_period(1.0, 4.0, *whole), (1.0, 4.0))
+
 
 class DeltaTest(unittest.TestCase):
     @classmethod

@@ -310,7 +310,9 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad import stl\nstl.read('p.stl')\n", {"build123d"}),
                 ("from cad import memo\n", {"build123d"}),
                 ("from cad.ap242 import posed\n", {"build123d"}),
-                ("from cad import step\nstep.dfm('p.step')\n", {"trimesh"}),
+                # A manufacturing check: exact geometry is measured by build123d, a mesh by trimesh.
+                ("from cad import step\nstep.dfm('p.step')\n", {"build123d"}),
+                ("from cad import stl\nstl.dfm('p.stl')\n", {"trimesh"}),
                 # A stress study is calculix's operation, and needs what its operations do beside it: the kernel
                 # that reads the part and netgen that meshes it (the registry's alongside). The tool alone is
                 # calculix's, as is its command.
