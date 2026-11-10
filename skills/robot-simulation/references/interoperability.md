@@ -49,6 +49,7 @@ held in its kind is given `_2` and the export says so. What each drops is what i
 | A link with no material | no `<inertial>`: MuJoCo weighs its geoms | no `<inertial>` (the validator warns of a moving one) |
 | A part with painted faces (a STEP's or xbf's face colours, `paint()`) | a visual geom per colour, as the viewer draws it, each `mass="0"` on a mesh with `inertia="shell"` | a `<visual>` per colour |
 | Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad urdf validate` warns of |
+| A joint's range with one end open | `range` with the open end written `1e+16`, said in the export's log: MuJoCo's range holds both ends | `<limit lower upper>` with the open end `1e+16` |
 | A part kept a body (`body()`) | a child body with no joint | a link on a fixed joint |
 | Contact exclusions (`exclude()`) | `<contact><exclude>`, and every jointed pair touching at rest | not written (an SRDF's `disable_collisions` for MoveIt) |
 | Joint dynamics (`limits(armature=, damping=, friction=)`) | `armature`, `damping`, `frictionloss` on the joint | `<dynamics damping friction>`; no armature (the export's log says so) |
