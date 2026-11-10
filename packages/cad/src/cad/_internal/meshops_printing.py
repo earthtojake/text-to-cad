@@ -1441,6 +1441,20 @@ TURN_STEP_DEG = 0.25
 FIT_EPS = 1e-6
 
 
+def _outline(flat: np.ndarray) -> np.ndarray:
+    """The corners of the convex outline of the 2D points ``flat``, in order round it: scipy's where it is
+    installed and the points have one (a sphere's 165 000 hull corners a pass each took 25 s in ``_hull``'s
+    own loop), else ``_hull``'s."""
+    if len(flat) <= 3:
+        return flat
+    try:
+        from scipy.spatial import ConvexHull
+
+        return flat[ConvexHull(flat).vertices]
+    except Exception:  # noqa: BLE001 - no scipy, or points on one line: qhull refuses them
+        return _hull(flat)
+
+
 def _widths(outline: np.ndarray, turns: np.ndarray) -> np.ndarray:
     """The width of the 2D ``outline`` along each direction ``turns`` (radians)."""
     across = outline @ np.stack([np.cos(turns), np.sin(turns)], axis=0)
@@ -1514,7 +1528,7 @@ def lie(points: np.ndarray, volume: np.ndarray | None = None, sides: np.ndarray 
             e1, e2 = np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])  # its turn is the turn about the plate's axis
         height = float(np.ptp(points @ up))
         flat = np.stack([points @ e1, points @ e2], axis=1)
-        outline = _hull(flat) if len(flat) > 3 else flat
+        outline = _outline(flat)
         edges = np.roll(outline, -1, axis=0) - outline
         along = np.arctan2(edges[:, 1], edges[:, 0]) % math.pi
         turns = np.unique(np.concatenate([np.radians(np.arange(0.0, 180.0, TURN_STEP_DEG)), along,
