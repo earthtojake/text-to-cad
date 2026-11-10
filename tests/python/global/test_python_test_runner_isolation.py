@@ -372,7 +372,7 @@ class HangGuard(unittest.TestCase):
                     mock.patch.object(runner, "person_places", return_value=([], [], "")), \
                     mock.patch.object(runner.sys, "stderr", report):
                 code = runner.run_files([str(hung)], top, 1, False)
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 3)  # HUNG_EXIT: a hang, apart from a failure
         self.assertIn("in test_waits_forever", report.getvalue())
         self.assertIn(f"failing modules:\n  {hung}", report.getvalue())
         self.assertIn(f"hung (each one's stacks are with its output above):\n  {hung}: its guard fired 1 s after",

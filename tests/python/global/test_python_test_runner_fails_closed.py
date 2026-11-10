@@ -13,6 +13,7 @@ to is not a run that selected nothing: it passes, saying so.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import unittest
 from pathlib import Path
@@ -111,6 +112,25 @@ class PythonTestRunnerFailsClosed(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
         self.assertIn("shard 2/2: none of the 1 files given is this shard's; nothing to run (OK)", second.stderr)
         self.assertNotIn("No test file at or under", second.stderr)
+
+    def test_a_hung_file_ends_a_run_that_goes_on_after_a_failing_suite(self):
+        # --keep-going reports every failing suite in one round, but a suite in which a file hung
+        # (the runner's exit 3) is the last: the next would likely hang too, each to its guard.
+        with temporary_directory(prefix="runner-gate-hung-") as tmp:
+            for name, code in (("hangs", 3), ("fails", 1)):
+                stub = Path(tmp) / name
+                stub.write_text(f"#!/usr/bin/env bash\nexit {code}\n", encoding="utf-8")
+                stub.chmod(0o755)
+            hung, failed = (subprocess.run(
+                ["bash", str(REPO_ROOT / "scripts/test/test-python.sh"), "--keep-going", "--select", "cadgen"],
+                cwd=REPO_ROOT, env={**os.environ, "PYTHON_BIN": str(Path(tmp) / name), "CAD_TEST_JOBS": "1"},
+                capture_output=True, text=True, check=False) for name in ("hangs", "fails"))
+        self.assertEqual(hung.returncode, 1, hung.stdout + hung.stderr)
+        self.assertIn("A FILE HUNG in: cad (the library) Python tests. No further suite runs.", hung.stderr)
+        self.assertNotIn("cad-server Python tests", hung.stderr)
+        self.assertEqual(failed.returncode, 1, failed.stdout + failed.stderr)
+        self.assertIn("cad-mcp (the shim) Python tests", failed.stderr)
+        self.assertIn("FAILING SUITES (3)", failed.stdout)
 
 
 if __name__ == "__main__":

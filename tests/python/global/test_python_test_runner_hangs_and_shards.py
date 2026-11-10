@@ -83,7 +83,7 @@ class StopsAtTheFirstHang(_Quiet):
     def test_a_file_whose_guard_fires_stops_the_run_and_the_summary_says_it_was_cut_short(self):
         code, said, started = self.real_run({"test_a_hung.py": WAITS_FOREVER, "test_b_later.py": LEAVES_WORD,
                                              "test_c_later.py": LEAVES_WORD}, hang_seconds=1)
-        self.assertEqual((code, started), (1, []), said)
+        self.assertEqual((code, started), (runner.HUNG_EXIT, []), said)
         self.assertRegex(said, r"hung: \S+test_a_hung\.py: its guard fired 1 s after it started; "
                                r"the run starts no further file\n")
         self.assertIn("in test_waits_forever", said, "its stacks")
@@ -96,7 +96,7 @@ class StopsAtTheFirstHang(_Quiet):
         with mock.patch.object(runner, "FILE_BACKSTOP_SECONDS", -59.5):
             code, said, started = self.real_run({"test_a_hung.py": WAITS_FOREVER, "test_b_later.py": LEAVES_WORD},
                                                 hang_seconds=60)
-        self.assertEqual((code, started), (1, []), said)
+        self.assertEqual((code, started), (runner.HUNG_EXIT, []), said)
         self.assertRegex(said, r"hung: \S+test_a_hung\.py: the runner killed it 0\.5 s after it started: "
                                r"its own 60 s guard never fired")
         self.assertIn("failing modules:", said)
@@ -121,7 +121,7 @@ class StopsAtTheFirstHang(_Quiet):
         with mock.patch.object(runner, "_run_one_file", side_effect=run), mock.patch.object(runner.sys, "stderr", said):
             code = runner.run_files(["a_hangs.py", "b_beside.py", "c_later.py", "d_later.py"], str(REPO_ROOT), 2, False)
         report = said.getvalue()
-        self.assertEqual((code, sorted(ran)), (1, ["a_hangs.py", "b_beside.py"]), report)
+        self.assertEqual((code, sorted(ran)), (runner.HUNG_EXIT, ["a_hangs.py", "b_beside.py"]), report)
         self.assertIn("hung: a_hangs.py: its guard fired 600 s after it started; the run starts no further file "
                       "(1 already running will finish first)\n", report)
         self.assertIn("failing modules:\n  a_hangs.py\n", report)

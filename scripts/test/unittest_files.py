@@ -39,7 +39,8 @@ A file still running ``FILE_HANG_SECONDS`` (``--hang-seconds``) after it started
 interpreter prints every thread's stack and exits (its guard), and should that guard not fire, the
 runner ends the interpreter itself ``FILE_BACKSTOP_SECONDS`` later. Either way the run fails naming
 the file, and from then on starts no file it has not started (the ones running finish, each under
-its own guard): the summary says how many never ran, and ends ``RUN CUT SHORT``. While files run, a
+its own guard): the summary says how many never ran, and ends ``RUN CUT SHORT``, and the run exits
+``HUNG_EXIT`` (3), not 1, so a caller that goes on after a failing suite can stop at a hung one. While files run, a
 ``still running:`` line on stderr names each with how long it has been running, once a
 ``HEARTBEAT_SECONDS``, so a run its job's timeout kills still said where it was; a run whose files
 all end within that says nothing more.
@@ -78,6 +79,10 @@ FILE_HANG_SECONDS = 10 * 60
 FILE_BACKSTOP_SECONDS = 60
 # How often the run names the files still running (``still running:``), on stderr.
 HEARTBEAT_SECONDS = 60
+# What a run in which a file hung exits with, apart from a run that failed (1): a caller that goes
+# on after a failing suite (test-python.sh --keep-going) stops at this one, where the next suite
+# would likely hang too and each would wait out its guard.
+HUNG_EXIT = 3
 # A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
 # timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
 # folder) or its folder is removed (an engine whose door is gone stops).
@@ -647,7 +652,7 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
         sys.stderr.write(f"RUN CUT SHORT: {len(not_run)} of the {len(files)} files given never started, because "
                          f"a file hung; the counts above are of the {len(files) - len(not_run)} that ran\n")
     sys.stderr.flush()
-    return 0 if ok else 1
+    return 0 if ok else HUNG_EXIT if hung else 1
 
 
 def main(argv: list[str] | None = None) -> int:
