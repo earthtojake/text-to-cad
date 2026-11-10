@@ -119,12 +119,69 @@ class NamedLooksTest(unittest.TestCase):
         import cad.build123d
 
         self.assertIs(cad.build123d.materials, materials)
+        self.assertIn("materials", cad.build123d.__all__, "offered as the package's other members are")
+        self.assertIn("materials", dir(cad.build123d))
         with self.assertRaisesRegex(ValueError, "soldermask's finish is one of 'glossy', 'matte', not 'satin'"):
             materials.soldermask(finish="satin")
-        with self.assertRaisesRegex(ValueError, "zinc_plated's colour is one of"):
-            materials.zinc_plated("pink")
+        # A passivation is a chemistry, not a colour: one of four, spelled in any case.
+        with self.assertRaisesRegex(ValueError, "zinc_plated's passivation is one of 'clear', 'blue', 'yellow', 'black', "
+                                                "not '#cfb766'"):
+            materials.zinc_plated("#cfb766")
+        self.assertEqual(document.material_json(materials.zinc_plated(" Yellow ")),
+                         document.material_json(materials.zinc_plated("yellow")))
         with self.assertRaisesRegex(TypeError, "substrate is a bd_materials FinishedMaterial"):
             materials.anodized(substrate="6061")
+        for bad in ("", "light blue", (1, 2, 3), (0.1, 0.2)):
+            with self.subTest(colour=bad), self.assertRaisesRegex(ValueError, "anodized: a colour is one of clear, "):
+                materials.anodized(bad)
+
+    def test_one_finish_is_one_material_whichever_spelling_asked_for_it(self):
+        def same(*looks):
+            first = document.material_json(looks[0])
+            for look in looks[1:]:
+                self.assertEqual(document.material_json(look), first)
+            return looks[0].material.name
+
+        black = (0x1e / 255, 0x1f / 255, 0x22 / 255)
+        self.assertEqual(same(materials.anodized(), materials.anodized("silver"), materials.anodized("Clear ")),
+                         "anodized_clear")
+        self.assertEqual(same(materials.anodized("grey"), materials.anodized("gray")), "anodized_grey")
+        self.assertEqual(same(materials.anodized_black(), materials.anodized("#1E1F22"), materials.anodized(black)),
+                         "anodized_black", "a preset's own colour is the preset, its metalness included")
+        self.assertEqual(same(materials.powder_coat("grey"), materials.powder_coat("gray"), materials.powder_coat("ral7016")),
+                         "powder_coat_RAL7016_satin")
+        self.assertEqual(same(materials.powder_coat("white"), materials.powder_coat("RAL9016")), "powder_coat_RAL9016_satin")
+        self.assertEqual(same(materials.ceramic("beige"), materials.ceramic("tan")), "ceramic_tan")
+        self.assertEqual(same(materials.led_lens("white"), materials.led_lens(), materials.led_lens("#ffffff")),
+                         "led_lens_clear")
+        self.assertEqual(same(materials.connector_housing("beige"), materials.connector_housing("natural")),
+                         "connector_housing_natural")
+        self.assertEqual(same(materials.anodized("navy"), materials.anodized("#000080")), "anodized_000080",
+                         "any other colour is named by its sRGB hex")
+        self.assertNotEqual(materials.powder_coat("black").material.name, materials.powder_coat("RAL9005").material.name,
+                            "two shades are two materials")
+
+    def test_a_finish_on_a_substrate_wears_its_own_look_not_the_substrate_s(self):
+        from bd_materials import metals
+
+        bare = materials.bead_blasted()
+        on_anodize = materials.bead_blasted(substrate=materials.anodized_black())
+        self.assertEqual(on_anodize.material.name, "bead_blasted_aluminum")
+        self.assertEqual(on_anodize.pbr.values.color, bare.pbr.values.color, "the bare metal's colour, not the dye's")
+        self.assertEqual(materials.brushed(substrate=materials.powder_coat("RAL3020", substrate=metals.stainless()))
+                         .pbr.values.color, materials.brushed().pbr.values.color)
+        self.assertEqual(materials.brushed(substrate=materials.solder()).pbr.values.color, materials.solder().pbr.values.color,
+                         "a metal bd_materials has no family look for keeps its own")
+
+    def test_a_coloured_lens_is_tinted_once(self):
+        """three.js tints the light a transmissive look passes by its base colour, and again by its attenuation
+        colour over the part's depth: a lens is tinted by its colour alone, so it is its colour, however thick."""
+        for colour in ("red", "green", "blue", "amber", "yellow"):
+            with self.subTest(colour=colour):
+                lens = materials.led_lens(colour).pbr.values
+                self.assertEqual((lens.transmission, lens.attenuation_distance), (1.0, None))
+                self.assertIn(lens.attenuation_color, (None, [1.0, 1.0, 1.0], (1.0, 1.0, 1.0)))
+                self.assertEqual("#" + "".join(f"{round(c * 255):02x}" for c in lens.color), materials.LED[colour])
 
 
 if __name__ == "__main__":

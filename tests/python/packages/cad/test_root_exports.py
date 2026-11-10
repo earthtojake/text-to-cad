@@ -29,8 +29,10 @@ NAMESPACES = {
                       "posed", "animation", "memo", "paint", "GeometryError", "GeometryIssue", "ClosestPoints",
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
-                      "flatten_face", "flatten_faces", "union_faces", "offset_profile"),
+                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", "materials"),
 }
+# The namespaces' public submodules, offered with their names and imported on first use.
+SUBMODULES = {"cad.build123d": ("materials",)}
 
 
 class RootExports(unittest.TestCase):
@@ -114,7 +116,10 @@ class RootExports(unittest.TestCase):
             self.assertEqual(sorted(names), sorted(module.__all__))
             for name in names:
                 with self.subTest(name=f"{namespace}.{name}"):
-                    self.assertIs(getattr(module, name), getattr(defined[name], name))
+                    if name in SUBMODULES.get(namespace, ()):
+                        self.assertIs(getattr(module, name), importlib.import_module(f"{namespace}.{name}"))
+                    else:
+                        self.assertIs(getattr(module, name), getattr(defined[name], name))
                     self.assertNotIn(name, cad.__all__, f"{name} is {namespace}'s, not the root's")
 
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
