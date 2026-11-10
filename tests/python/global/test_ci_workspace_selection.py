@@ -232,14 +232,15 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_the_manufacturing_check_runs_the_tests_that_reach_it(self):
         # A leaf of the library: its type side, its exact measurements, the numpy geometry they measure with
         # and its mesh measurements reach the tests that name them and those that read every command, never the
-        # whole suite or a skill's -- and the packaging job, which checks a part from the built wheels.
+        # whole suite or a skill's -- and the packaging job, which checks a part from the built wheels, and the
+        # blender job, the floor's: the library runs on Python 3.13 too.
         for path in ("packages/cad/src/cad/trimesh/_printing.py", "packages/cad/src/cad/build123d/_dfm_cnc.py",
                      "packages/cad/src/cad/_internal/dfm/rules.py", "packages/cad/src/cad/_internal/manufacturing.py",
                      "packages/cad/src/cad/_internal/molding_geometry.py",
                      "packages/cad/src/cad/_internal/sheet_plane.py",
                      "packages/cad/src/cad/_internal/meshops_printing.py"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
+                self.assertEqual(jobs_for(path), {"cadgen-linux", "cadgen-windows", "skills", "packaging", "blender"})
                 chosen = tests_for(path)
                 self.assertIn(f"{LIBRARY}/test_dfm_core.py", chosen["cadgen_tests"])
                 self.assertIn(f"{LIBRARY}/test_trimesh_printing.py", chosen["cadgen_tests"])
