@@ -514,9 +514,9 @@ shows. Nothing is installed in advance: each environment is made the first time 
 it, and a first model or view waits for it. A model run so imports what its environment holds.
 `cad[build123d]` is about 240 MB to download, and `cad[kicad]`, made the first time a board needs
 it, about 100 MB. On disk, measured on an Apple silicon Mac, they take about 620 MB and 340 MB. A
-script that imports Blender's `bpy` runs in an environment of its own, without cad, on Python 3.13,
-which uv fetches: bpy 5.2.3 is about 260 MB to download on a Mac and 430 MB on Linux, 730 MB on disk,
-and has no build for Intel Macs or Linux arm64.
+script that imports Blender's `bpy` gets `cad[blender]`, whose environment is made on Python 3.13, the
+one bpy is built for, which uv fetches: bpy 5.2.3 is about 260 MB to download on a Mac and 430 MB on
+Linux, 730 MB on disk, and has no build for Intel Macs or Linux arm64.
 
 A model that needs another package names it at the top of its script, in Python's inline
 script metadata, and `cad run` installs it beside cad once, in an environment of its own that

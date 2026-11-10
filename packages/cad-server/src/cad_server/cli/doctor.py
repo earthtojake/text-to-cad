@@ -62,7 +62,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 # Each check's status, as the report's lines and its JSON say them: right, said for what it is, worth a
 # look (a write a sandbox refused, a command that is not text-to-cad's), and failed (the exit status 1).
@@ -757,18 +756,21 @@ def _kernel(check: bool) -> dict:
 def _integrations() -> list[tuple[str, str]]:
     """Each integration whose operations run in an environment of their own (``cad[<integration>]``, made on
     first need: ``cad_server._internal.integration_env``) -- this installation's own where it carries it, else
-    that environment, made or where it will be -- read, never made: what a manufacturing check (trimesh) or a
-    KiCad command (kicad) runs in. The CAD kernel's is the kernel line's."""
+    that environment, made or where it will be -- read, never made: what a manufacturing check (trimesh), a
+    KiCad command (kicad) or a render script that uses nothing else of cad's (blender) runs in; one whose tool
+    has no build for this platform says so. The CAD kernel's is the kernel line's."""
     try:
         from cad.registry import INTEGRATIONS
-        from cad_server._internal import integration_env
+        from cad_server._internal import base, extras, integration_env
 
         lines = []
         for name, integration in INTEGRATIONS.items():
-            if not integration.library:
-                lines.append(_alone(name, integration))
-                continue
             if name == "build123d" or not integration.extra:
+                continue
+            try:
+                extras.supported((name,), base.Installation.here().arch)
+            except base.Refused as refused:  # its tool has no build for this platform: said, nothing to make
+                lines.append((INFO, f"{name} not made: {refused}"))
                 continue
             state, folder, release = integration_env.found(name)
             if state == "carried":
@@ -781,23 +783,6 @@ def _integrations() -> list[tuple[str, str]]:
         return lines
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return [(WARNING, f"extras unknown ({type(error).__name__}: {error})")]
-
-
-def _alone(name: str, integration: Any) -> tuple[str, str]:
-    """An integration whose environment holds no library (blender's: bpy on its own Python): made, made on the
-    first ``cad run`` of a program that imports it, or none for this platform -- read, never made."""
-    from cad_server._internal import base, extras, integration_env
-
-    tool = f"{integration.tool} on Python {integration.python}"
-    try:
-        extras.supported(integration, base.Installation.here().arch)
-    except base.Refused as refused:
-        return INFO, f"{name} {refused}"
-    state, folder, _release = integration_env.found(name)
-    if state == "made":
-        return OK, f"{name} {tool} in {_home(folder)}"
-    return INFO, (f"{name} {tool}, made on first need in {_home(folder)}: the first cad run of a program that "
-                  f"imports {', '.join(integration.modules)}")
 
 
 if __name__ == "__main__":

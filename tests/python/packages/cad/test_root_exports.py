@@ -117,6 +117,27 @@ class RootExports(unittest.TestCase):
                     self.assertIs(getattr(module, name), getattr(defined[name], name))
                     self.assertNotIn(name, cad.__all__, f"{name} is {namespace}'s, not the root's")
 
+    def test_the_blender_namespace_loads_no_bpy_and_a_script_without_it_is_told_the_extra(self):
+        """``cad.blender`` is its declared names, loaded on first use: importing it imports no bpy. Where bpy is
+        absent -- any Python but the one Blender is built for, an environment made without the extra -- a name of
+        it says which extra brings it, in the one line every integration's missing module is said in."""
+        import importlib.util
+
+        code = ("import sys, cad.blender\n"
+                "print(cad.blender.__all__, 'bpy' in sys.modules, [n for n in dir(cad.blender) if n[0] != '_'])\n")
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(proc.stdout.strip(), "['Clip', 'Model', 'load'] False ['Clip', 'Model', 'load']", proc.stderr)
+        import cad.blender
+
+        with self.assertRaises(AttributeError):
+            cad.blender.cube
+        self.assertNotIn("blender", cad.__all__, "an integration's namespace, not a name of the root")
+        if importlib.util.find_spec("bpy") is None:
+            with self.assertRaises(ModuleNotFoundError) as caught:
+                from cad.blender import load  # noqa: F401
+            self.assertEqual((str(caught.exception), caught.exception.name),
+                             ("bpy comes with cad's blender integration: add `cad[blender]` to the script's header", "bpy"))
+
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
         """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
         shape form (``model(shape, name=, animations=)``); a file decorator takes its path and its

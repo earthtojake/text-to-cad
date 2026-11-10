@@ -60,6 +60,9 @@ LIBRARY_REQUIRED=(
   "cad/_internal/findings.py"
   "cad/kicad_pcb/__init__.py"
   "cad/kicad/_program.py"
+  # The blender integration: what a render script imports (cad.blender.load), in place of a helper a skill shipped.
+  "cad/blender/__init__.py"
+  "cad/blender/_scene.py"
   # The engine's library half: the worker every build runs in, and the client every command reaches
   # the server by.
   "cad/engine/__init__.py"

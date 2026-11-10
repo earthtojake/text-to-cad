@@ -538,21 +538,23 @@ sets stay, one per set a program named: `cad doctor` reports those unused for a 
 its marker), `cad doctor --prune` removes them (`leftovers.package_environments`). After an update,
 a new release's environments are made as its runs ask for them, from uv's cache.
 
-**An environment without cad** (`extras.alone`). A program that imports an integration the registry
-marks `library=False` -- `import bpy`, blender's, the scan finding it through local imports, a header or
-`--with bpy` too -- gets that integration's environment instead: its exact pins (`requires`) and the
-program's packages, on its Python (`--python 3.13 --managed-python`: uv fetches a managed one, never `uv
-python install`, which writes `~/.local/bin/python3.13`), nothing resolved again and no cad. Its key and
-marker hold the architecture and the spec, no release and no installation, so an update keeps it and no
-release's sweep removes it; `cad doctor` gives it a row, and the week-unused prune takes it. Its Python
-runs the program itself (`python SCRIPT.py ARGS`, the script's folder first, as `uv run` runs it), the
-tool's settings folders (`homes`: `BLENDER_USER_CONFIG` and the rest) private ones in the cache folder
-(`homes/<name>`, the system's temporary folder where the cache cannot be written) unless the caller named
-them. Refused in one line, before anything is made: a program that imports cad too or uses another
-integration (`render.py uses bpy, which the blender integration runs on Python 3.13 without cad, and imports
-cad too: ...`), a header's `requires-python` or a `--python` no release of 3.13 meets, and a platform the
-tool has no build for (`bpy 5.2.3 has no build for macOS x86-64: the blender integration runs on macOS
-arm64, Linux x86-64, Windows x86-64 and Windows arm64`).
+**An integration built for one Python** (`extras.on`). The registry says what only a tool decides of its
+environment: the one Python line it is built for (`python`), its platforms and the folders its settings are
+read from (`homes`). Blender's bpy has builds for CPython 3.13 alone, so an environment with the blender
+integration -- a program that imports `bpy` or `cad.blender`, the scan finding either through local imports,
+a header or `--with` too -- is made on that line where the engine's own Python is another (`uv venv --python
+3.13 --managed-python`: a Python uv fetches into its own folder, never `uv python install`, which writes
+`~/.local/bin/python3.13`), and on the engine's own where it is that line already. Nothing else differs: cad
+is pinned in it with every integration the program uses (`cad[blender,build123d]==<release>`), it is keyed
+and removed by its release as any other, the program runs through the library's runner, and the engine
+builds its models in a warm worker of that Python. The tool's settings folders (`BLENDER_USER_CONFIG` and
+the rest) are private ones in the cache folder (`homes/<name>`, the system's temporary folder where the cache
+cannot be written) unless the caller named them, for the program and for that worker, so nothing of a
+person's own Blender loads into a run. Refused in one line, before anything is made: a `--python` that names
+another line (`render.py uses cad's blender integration, which runs on Python 3.13 alone: --python 3.14 is
+another; drop --python`), a header's `requires-python` no release of 3.13 meets, and a platform the tool has
+no build for (`cad's blender integration has no build for macOS x86-64: it runs on macOS arm64, Linux x86-64,
+Windows x86-64 and Windows arm64`), where its extra installs nothing.
 
 **What cannot be done is said in one line** (`base.failure`): requirements uv cannot resolve beside
 cad's pins, with its reason -- `build123d<0.1 cannot be resolved beside cad[build123d] 0.10.0:
@@ -684,8 +686,8 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              explicitly calls (and python SCRIPT.py in an environment
                                              of the library's, with its kernel); a command an
                                              integration declares (kicad-cli) with that integration,
-                                             headless; a script that imports bpy, on Python 3.13
-                                             in the blender integration's environment, without cad
+                                             headless; a script that imports bpy with the blender
+                                             integration, on Python 3.13, the one bpy is built for
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
 cad model export ID DST [DST ...] [--tolerance MM] [--angle DEG] [--json]
@@ -1071,6 +1073,17 @@ board's `--to glb` holds its copper, mask and silkscreen too, each KiCad's own m
 and its parts alone. A
 schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
 run the same way.
+
+**A GLB in Blender's scene.** `cad.blender.load` is the `blender` integration's one helper, for a script that
+renders with bpy (Blender as a Python module, its extra `cad[blender]`), run by `cad run` in the environment
+**Running a model** describes; no command of the server's runs it. It reads the GLB with the library's own
+reader, hands Blender's glTF importer a copy whose JSON tags every node with its index (in the node's
+`extras`, which the importer keeps on the object it makes, as a custom property) and names every animation by
+its index, the binary chunk a file beside it in a temporary folder, and so knows each node's object and each
+clip's action whatever Blender names them: a node with no name, two of one name, a name Blender cuts short.
+The tags are taken off, each action is given its clip's name, every NLA track the import made is removed,
+and each node a clip moves is put back where the file places it (the importer leaves it at its first clip's
+start). `Model.play` assigns one clip's action to the objects it moves, the scene's frames 0 to its duration.
 
 ## Profiling
 

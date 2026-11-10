@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`), never for a capability. It is three
+(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`, `blender`), never for a capability. It is three
 things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -28,17 +28,17 @@ where it is, is usually better than asking a person to install it (`earthtojake/
 kernel's own line), whether this installation carries it or where its environment is and whether it is
 made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
 
-**An integration on its own Python, without the library.** A tool that cannot be installed beside `cad`
-(Blender's `bpy`: cp313 wheels alone, and `cad` needs 3.14) has no extra. Its registry entry says so
-(`library=False`) and carries what an extra would: its Python (`python="3.13"`, a managed one uv fetches),
-its exact pins (`requires`, the tool and everything it needs, each `==`, resolved for every platform it has),
-the platforms it is built for (`platforms`, `cad.registry.PLATFORMS`' words) and the variables naming its
-own settings folders (`homes`, pointed at private folders in the cache). `cad run` gives a program that
-imports it (`modules`) that environment and no `cad`, runs it with that Python itself (`python SCRIPT.py`,
-its folder first), and refuses in one line a program that imports `cad` or another integration too, a
-`requires-python` or `--python` its Python cannot meet, and a platform without a build. Its key holds no
-release, so an update keeps it; `cad doctor` gives it a row and `--prune` takes it unused. It has no
-`cad/<name>/` package and no `_command`: nothing of ours runs there (`blender` is the example).
+**A tool built for one Python, or not for every platform.** Such a tool is an integration like any other:
+an extra, a namespace, an environment with `cad` pinned in it. Its extra's markers install it only where it
+has a build, and nothing anywhere else (Blender's `bpy`: cp313 wheels alone, none for Intel Macs or Linux
+arm64), and its registry entry says the same, which a test holds to the markers: the one Python line it is
+built for (`python="3.13"`) and its platforms (`platforms`, `cad.registry.PLATFORMS`' words), with the
+variables that name its own settings folders (`homes`). `cad run`
+makes an environment with it on that line (a Python uv manages, where the engine's own is another), points
+those variables at private folders in the cache, and refuses in one line a `--python` or a `requires-python`
+that leaves the line out and a platform without a build. The packages' floor (`requires-python`) is the
+oldest such line, so the library runs there; CI holds it with the library's suite on that Python
+(`scripts/test/test-floor.sh`). `blender` is the example.
 
 ## Is it really an integration?
 
@@ -64,11 +64,12 @@ an integration.
       (`fea`, `pcb`, `cam`).
 - [ ] **The extra and its pins**, in `packages/cad/pyproject.toml` (`[project.optional-dependencies]`):
       exactly the packages our code for it imports, each bounded as the `build123d` extra's are, with a
-      comment saying why. An external program needs no extra until it ships as a package; a tool that
-      cannot be installed beside the library has none either, its pins in its registry entry (above).
+      comment saying why. An external program needs no extra until it ships as a package. A tool with no
+      build for some Python or platform carries markers that install it only where it has one (above).
 - [ ] **The registry entry**, `INTEGRATIONS` in `packages/cad/src/cad/registry.py`: name, summary,
       extra, process kind (`in-process`, `separate`, `both`) and, for an external program, its `Probe`
-      (the program, its minimum version, its install hint, the variable that names it outright); and
+      (the program, its minimum version, its install hint, the variable that names it outright); what
+      only its tool decides of its environment, where it decides any (`python`, `platforms`, `homes`); and
       `alongside`, the integrations its operations need in the same environment (calculix's: the kernel,
       which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
       command makes for it holds too.
