@@ -468,8 +468,8 @@ of the part is no obstacle to its tools and no wall of its gaps --, its refs the
 `<part> (solid 2 of 3)`; the part's `several_solids` (the warning every process gives) says so, and the
 summary counts the parts judged. A
 part of more than 4000 faces (`FACE_BUDGET`, text-to-cad's own bound) is not measured: `model` is
-`{"error": ...}`, the report `partial`, never a pass. The bound is what holds a check's time where nothing
-else does (a check measured in the caller's own process is never stopped): a check's time grows about as its
+`{"error": ...}`, the report `partial`, never a pass. The bound keeps a check of a large part inside a check's
+time limit (`CAD_ENGINE_CHECK_SECONDS`, past which the check is stopped, not checked): a check's time grows about as its
 part's faces to the power 1.4 -- a plate of 144 holes takes 9 seconds, one of 576 a minute -- so a part at the
 bound takes about a quarter of an hour, and one of 20000 faces would take over two.
 

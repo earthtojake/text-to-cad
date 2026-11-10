@@ -2489,15 +2489,10 @@ def _pulled(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float, z
     return report, drafts, trapped
 
 
-def _families(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float, zero_tol: float,
-              checks: list[dict[str, Any] | None] | None = None) -> dict[str, Any]:
-    """Every family of ``geos``, each part along its own pull of ``pulls``; ``checks``: each part's
-    ``pull_check`` where it was already asked (an assembly's parts, ``measure``)."""
-    lost: dict[str, set[str]] = {}
-
+def _tracker(geos: list[_Geometry], lost: dict[str, set[str]]) -> Any:
+    """``tracked(names, fn, *args)``: ``_safe(fn, *args)``, the faces of ``geos`` its rays the kernel failed to
+    intersect added to ``lost`` against each family of ``names`` it measures (``unmeasured_faces``)."""
     def tracked(names: tuple[str, ...], fn: Any, *args: Any) -> Any:
-        """``_safe(fn, *args)``, the faces its rays the kernel failed to intersect said against each family it
-        measures (``unmeasured_faces``)."""
         before = _failures(geos)
         try:
             return _safe(fn, *args)
@@ -2506,6 +2501,17 @@ def _families(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float,
             for name in names if refs else ():
                 lost.setdefault(name, set()).update(refs)
 
+    return tracked
+
+
+def _families(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float, zero_tol: float,
+              checks: list[dict[str, Any] | None] | None = None,
+              lost: dict[str, set[str]] | None = None) -> dict[str, Any]:
+    """Every family of ``geos``, each part along its own pull of ``pulls``; ``checks``: each part's
+    ``pull_check`` where it was already asked (an assembly's parts, ``measure``); ``lost``: the faces each family
+    already lost while those were asked (what a part's search then found is kept, its rays not cast again)."""
+    lost = {} if lost is None else lost
+    tracked = _tracker(geos, lost)
     pulled, drafts, trapped = _pulled(geos, pulls, wall_limit, zero_tol, _Budget(), tracked)
     report: dict[str, Any] = {"scale": _scale(geos), "draft": pulled["draft"], "undercuts": pulled["undercuts"]}
     touching = tracked(("touching", "draft", "undercuts"),
@@ -2795,20 +2801,29 @@ def _candidates(geos: list[_Geometry], wall_limit: float, zero_tol: float) -> di
             "candidates": rows}
 
 
-def _own_pull(geo: _Geometry, pull: np.ndarray, wall_limit: float, zero_tol: float, budget: _Budget
-              ) -> tuple[np.ndarray, dict[str, Any] | None]:
+def _own_pull(geo: _Geometry, pull: np.ndarray, wall_limit: float, zero_tol: float, budget: _Budget,
+              lost: dict[str, set[str]]) -> tuple[np.ndarray, dict[str, Any] | None]:
     """The pull one part of an assembly is judged along, and its ``pull_check``: the assembly's ``pull`` unless
     one of the part's own does better for it (``_pull_check``) -- an assembly's parts lie as they are assembled,
     not as each is molded, so one pull is rarely every part's. ``budget``: the parts' release searches along
-    the assembly's pull share one (what each finds is kept for its report: ``_Geometry._undercut``)."""
+    the assembly's pull share one (what each finds is kept for its report: ``_Geometry._undercut``). The faces
+    whose rays the kernel failed to intersect here are added to ``lost`` by family (``_families``'): its pull
+    kept, the assembly's families read what was found here; a pull of its own, its ``pull_check`` names them."""
     if len(geo.part.solids()) != 1:
         return pull, None
-    pulled = _pulled([geo], [pull], wall_limit, zero_tol, budget)[0]
-    if "error" in pulled["draft"] or "error" in pulled["undercuts"]:
+    here: dict[str, set[str]] = {}
+    tracked = _tracker([geo], here)
+    pulled = _pulled([geo], [pull], wall_limit, zero_tol, budget, tracked)[0]
+    check = None
+    if "error" not in pulled["draft"] and "error" not in pulled["undercuts"]:
+        check = tracked(("pull_check",), _pull_check, geo, pull, pulled, wall_limit, zero_tol)
+    if check is None or "error" in check or not check.get("better"):
+        for name, refs in here.items():
+            lost.setdefault(name, set()).update(refs)
         return pull, None
-    check = _safe(_pull_check, geo, pull, pulled, wall_limit, zero_tol)
-    if "error" in check or not check.get("better"):
-        return pull, None
+    refs = set().union(*here.values())
+    if refs:
+        check["unmeasured_faces"] = sorted(refs)
     better = next(row for row in check["candidates"] if row["pull"] == check["better"])
     return np.array(better["axis"], dtype=float), check
 
@@ -2828,9 +2843,10 @@ def measure(document: _dfm_brep.Document, options: dict[str, Any], candidates: b
         pull = ops.pull_vector(options.get("pull") or DEFAULT_PULL)
         if len(geos) > 1:
             budget = _Budget()
-            own = [_own_pull(geo, pull, wall_limit, zero_tol, budget) for geo in geos]
+            lost: dict[str, set[str]] = {}
+            own = [_own_pull(geo, pull, wall_limit, zero_tol, budget, lost) for geo in geos]
             pulls = [axis / (np.linalg.norm(axis) or 1.0) for axis, _check in own]
-            report = _families(geos, pulls, wall_limit, zero_tol, [check for _axis, check in own])
+            report = _families(geos, pulls, wall_limit, zero_tol, [check for _axis, check in own], lost)
             report["pulls"] = [{"part": geo.part.owner or geo.part.name, "axis": [_r(v) for v in axis],
                                 "own": check is not None, **({"pull": check["better"]} if check else {})}
                                for geo, (axis, check) in zip(geos, own)]

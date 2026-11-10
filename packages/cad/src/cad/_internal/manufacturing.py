@@ -922,8 +922,6 @@ def _process_help(document_type: str, processes: tuple[str, ...]) -> str:
     if len(processes) == 1:
         return f"{processes[0]}, the one process a {document_type.upper()} is checked for (the default)."
     named = f"{', '.join(processes[:-1])} or {processes[-1]}"
-    if document_type not in BREP_TYPES:
-        return f"{named}; a mesh holds no exact radius, axis or thickness, so cnc and sheet check its STEP."
     declared = ("the process the parts declare (part.material = metals.aluminum(process=machined()): machined is "
                 "cnc, molded molding, fdm, sls, mjf, slm and vat printing with technology fdm, sls, mjf, pbf and "
                 "sla), when every part agrees")

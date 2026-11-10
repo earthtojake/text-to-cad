@@ -140,7 +140,7 @@ CAP = 200
 #: check casts grow with the faces, and each costs with the edges of the face it crosses -- a plate of 144 holes
 #: (150 faces) takes 9 seconds and one of 576 (582 faces) a minute, about the faces' count to the power 1.4, so
 #: a part at this bound takes about a quarter of an hour and one of 20000 faces over two hours. text-to-cad's
-#: own bound: the one thing that bounds a check measured in the caller's own process, which nothing stops.
+#: own bound: it keeps a check of a large part inside a check's time limit, past which the check is stopped.
 FACE_BUDGET = 4000
 WALL_CAP_MM = 5.0
 GAP_CAP_MM = 10.0

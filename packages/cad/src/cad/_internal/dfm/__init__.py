@@ -43,8 +43,9 @@ reads it, was not measured (``measurement_failed``).
 
 **No stopping from inside.** A measurement runs to its end or its process ends: a check the engine runs is
 measured in one of its checks processes, which holds nothing of anyone's, and the engine stops one by killing
-that process -- a check past its time or its memory, one nobody waits for, the engine stopping. Nothing here
-asks a measurement to stop, and a check in the caller's own process never stops.
+that process -- a check past its time or its memory, one nobody waits for, the engine stopping. A check its
+caller measures is measured in a process of its own that the caller holds to the same limits from outside and
+kills past them (``manufacturing._watched``). Nothing here asks a measurement to stop.
 """
 
 from __future__ import annotations

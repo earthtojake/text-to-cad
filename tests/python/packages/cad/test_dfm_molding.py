@@ -499,6 +499,53 @@ class UndercutTest(unittest.TestCase):
         self.assertIn(" face(s) of bar (", said[0].message)
         self.assertEqual(result.measurements["pull_check"]["unmeasured_faces"], [said[0].location])
 
+    def test_an_assembly_part_s_face_lost_while_its_pull_is_chosen_is_named_by_its_undercuts(self) -> None:
+        """An assembly's part reads what its pull traps once, while its pull is chosen (``_own_pull``), and its
+        report keeps that reading: a face the kernel fails on there is named by the undercuts family
+        (``unmeasured_faces``), as one part's is, not by the part's ``rays_unintersected`` alone."""
+        from unittest import mock
+
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector as Real
+        from OCP.Standard import Standard_Failure
+
+        from cad.build123d import _dfm_molding
+
+        tray = _tray() - bd.Pos(30, 0, 10) * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 12)
+        tray.label = "tray"
+        plate = bd.Pos(80, 0, 0) * bd.extrude(bd.Rectangle(20, 20), 3, taper=3)
+        plate.label = "plate"
+        searching = {"now": False}
+
+        class Failing:
+            def __init__(self, face: Any, tolerance: float) -> None:
+                self.inner = Real(face, tolerance)
+
+            def Perform(self, *args: Any) -> None:  # noqa: N802 - the kernel's name
+                if searching["now"]:
+                    raise Standard_Failure("")
+                self.inner.Perform(*args)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self.inner, name)
+
+        search = _dfm_molding._undercut_part
+
+        def failing(*args: Any, **kwargs: Any) -> Any:
+            searching["now"] = True
+            try:
+                return search(*args, **kwargs)
+            finally:
+                searching["now"] = False
+
+        with mock.patch("OCP.IntCurvesFace.IntCurvesFace_Intersector", Failing), \
+                mock.patch.object(_dfm_molding, "_undercut_part", failing):
+            result = _check(bd.Compound(label="pair", children=[tray, plate]))
+        self.assertEqual([part["own"] for part in result.measurements["pulls"]], [False, False])
+        said = [ref for f in result.findings if f.code == "rays_unintersected" for ref in f.refs or [f.location]]
+        self.assertTrue(said)
+        self.assertTrue(set(said) <= set(result.measurements["undercuts"].get("unmeasured_faces") or ()),
+                        (said, result.measurements["undercuts"].get("unmeasured_faces")))
+
     def test_a_family_not_measured_fails_the_check_and_never_raises(self) -> None:
         from unittest import mock
 

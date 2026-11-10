@@ -192,7 +192,8 @@ class ManufacturingCheckCommand(unittest.TestCase):
         with mock.patch.object(manufacturing, "WATCH_SECONDS", 0.01), \
                 mock.patch.dict(os.environ, {"CAD_ENGINE_CHECK_SECONDS": "1e-9"}):
             code, out, _ = _run("stl", str(self.box), "--process", "printing")
-            self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {self.box}: over_time"))
+            # the path as the command names it, resolved (a temporary folder is a link on macOS)
+            self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {self.box.resolve().as_posix()}: over_time"))
             code, out, _ = _run("stl", str(self.box), "--process", "printing", "--json")
         payload = json.loads(out)
         self.assertEqual((code, payload["status"], payload["reason"]), (3, "not_checked", "over_time"))
