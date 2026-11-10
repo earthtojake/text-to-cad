@@ -72,9 +72,9 @@ class ViewerAndMcpAreLeaves(unittest.TestCase):
                                                        f"{selector.SERVER_SRC}/viewer/recents.py"})
 
     def test_a_change_to_a_leaf_reaches_every_test_that_imports_it(self):
-        viewer = set(selector._viewer_change("").cadgen)
-        mcp = set(selector._mcp_change("").cadgen)
-        for path in sorted((REPO_ROOT / selector.CADGEN_SUITE).rglob("test*.py")):
+        viewer = set(selector._viewer_change("").packages)
+        mcp = set(selector._mcp_change("").packages)
+        for path in sorted((REPO_ROOT / selector.PACKAGES_SUITE).rglob("test*.py")):
             relative = path.relative_to(REPO_ROOT).as_posix()
             names = [name for name in references(path, "tests/x.py") if leaf(name) or name.startswith("cad_server.cli.")]
             with self.subTest(test=relative):

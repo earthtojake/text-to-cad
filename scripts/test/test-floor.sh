@@ -11,8 +11,8 @@ set -euo pipefail
 #
 #   PYTHON_BIN=<a Python of the floor, requirements-dev.txt installed> scripts/test/test-floor.sh
 #
-# Called by test.yml's Blender renders job, the one job on that Python, which makes the environment first. On
-# Linux it draws stills: run it under xvfb-run, as the package suites are.
+# Called by test.yml's packages-floor job, on a full run (before a release ships, and nightly), which makes the
+# environment first. On Linux it draws stills: run it under xvfb-run, as the package suites are.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"

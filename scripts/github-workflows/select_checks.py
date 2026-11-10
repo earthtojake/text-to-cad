@@ -256,8 +256,8 @@ FEA_SUITE = "tests/python/packages/fea"
 # in the server's extras and base, `cad run` and the import scan that chooses it), on a GLB the engine writes and
 # `cad model export` meshes finer (the command's options, the export's dispatch and its meshing, the GLB writer and
 # the clips it bakes: motions, animations and their keys). Open in's Blender script runs in bpy there too (the opener
-# that finds a person's Blender does not). Each also reaches what its package reaches; the blender job's bpy steps,
-# which make that environment from PyPI, run on these, their own suite and runner, and a full run.
+# that finds a person's Blender does not). Each also reaches what its package reaches; the blender job,
+# which makes that environment from PyPI, runs on these, its own suite and runner, and a full run.
 BLENDER_CODE = (f"{LIBRARY_SRC}/blender/**", f"{LIBRARY_SRC}/registry.py", f"{LIBRARY_SRC}/_internal/integrations.py", "packages/cad/pyproject.toml",
                 f"{SERVER_SRC}/_internal/extras.py", f"{SERVER_SRC}/_internal/base.py",
                 f"{SERVER_SRC}/_internal/scan.py", f"{SERVER_SRC}/cli/run.py",
@@ -366,7 +366,7 @@ RULES: tuple[Rule, ...] = (
          PACKAGE_CONSUMERS),
     # The stress study's code runs what its package runs, and the fea job, which installs netgen and CalculiX.
     Rule(FEA_CODE, select(flags=["fea"])),
-    # cad.blender, bpy's environment and how cad run chooses it: what its package runs, and the blender job's bpy steps.
+    # cad.blender, bpy's environment and how cad run chooses it: what its package runs, and the blender job.
     Rule(BLENDER_CODE, select(flags=["bpy"])),
     Rule((f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**"),
          select(skills=[f"{SKILL_SUITES}/fea"])),
@@ -378,7 +378,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
     Rule(("apps/api/**",), NOTHING),  # its tests need no install: static runs them on every change
     Rule(("apps/docs/**",), select(flags=["docs"])),
-    # check-dependencies.mjs walks every app's source and runs in core-js, the cheapest job
+    # check-dependencies.mjs walks every app's source and runs in js-core, the cheapest job
     # that has it.
     Rule(("apps/docs/src/**",), select(flags=["core_js"])),
     # The robot renderer's browser fixtures are the payloads the server resolves for its descriptions:
