@@ -23,14 +23,15 @@ where 0.11 had two:
 | `NOT CHECKED` | `not_checked` | 3 | the check did not judge what it was asked to: no verdict, never a pass. `"reason"` is the code that says why |
 
 `"ok"` is true for `ok` alone. An error found wins over what was not checked: such a part is `FAILED`.
-Exit 2 is the command line's mistake, as in 0.11. A script or a prompt that reads a check's exit status,
+Exit 2 is the command line's mistake, as in 0.11; under `--json` its document says `"status": "usage"`, so
+every answer of the command holds its state in `"status"`: `ok`, `failed`, `not_checked` or `usage`. A script or a prompt that reads a check's exit status,
 its `--json` or its findings changes for these:
 
 | 0.11 | Now |
 | --- | --- |
 | a part whose every family measured passed, exit 0 and `"ok": true`, whatever its figures: zero-draft walls, thin walls and overhangs were warnings | a part that breaks a rule's feasibility limit fails, exit 1 and `"ok": false`: the finding is an `error` coded by the rule's id, with the figure, the limit, its source and what to change. A recommendation broken is a `warning` and does not fail the check (a wall with less than 0.5 deg of draft, `molding.draft_min`; a wall under the resin's recommended minimum, `molding.wall_min`; an overhang, `printing.overhang_angle`), where its floor is an `error` (no draft at all on a wall deeper than 10 mm, `molding.draft_zero`; a wall under half the resin's minimum, `molding.wall_too_thin`): the last line counts the warnings, `OK part.step: 22 warning(s); ...`, and `--strict` fails on them. Which a rule is: its `severity` in `measurements.rules.outcomes`. The measurements are in the result either way |
 | exit 1 and `"ok": false` for a family that could not be measured (`measurement_failed`), a source that could not be read (`mesh_unreadable`, `document_unreadable`) or a missing file (`invalid_target`) | exit 3, `"status": "not_checked"`, `"reason"` the code: no rule failed, nothing says the part cannot be made. The same for a part with no closed solid (`not_solid`), a document with no part (`document_empty`), a mesh with no triangle (`mesh_empty`), faces the kernel failed to intersect rays with (`rays_unintersected`), a rule whose features carry no figure that should have been measured (`rule_partly_judged`), rules that judged nothing (`rules_none_evaluated`) and a report that is not finite (`not_finite`): every code is under "What to change" below |
-| exit 1 and `{"ok": false, "error": ..., "reason": "failed"}` for a check that did not run to its end (its environment gave no answer, it crashed) | exit 3, and the document gains `"status": "not_checked"`. The engine measures a STEP's, an xbf's and a model's check now, so the same holds for a check it did not finish: its `"reason"` is the engine's own where its error carries one (its document changed while it was measured, `superseded`; its process lost, `process_lost`; past its time or memory, `over_time`, `over_memory`), else `engine_stopped`, `engine_failed`, `engine_unavailable` or `failed` |
+| exit 1 and `{"ok": false, "error": ..., "reason": "failed"}` for a check that did not run to its end (its environment gave no answer, it crashed) | exit 3, and the document gains `"status": "not_checked"`. The engine measures a STEP's, an xbf's and a model's check now, so the same holds for a check it did not finish: its `"reason"` is the engine's own where its error carries one (its document changed under each try of it, `superseded`; its process lost, `process_lost`; past its time or memory, `over_time`, `over_memory`), else `engine_stopped`, `engine_failed`, `engine_unavailable` or `failed` |
 | a mesh that is not watertight: `not_watertight`, a warning, exit 0 | an `error`, exit 1: an open mesh has no inside, so its walls, voids and volume are a surface's. A STEP's, an xbf's or a model's part with an open shell or loose faces is `not_watertight` too, and one whose solids share volume or that fails the kernel's validity check `not_sound`: errors in every process |
 | `--json`: `ok`, `path`, `findings`, `summary`, `measurements` | also `status` (`ok`, `failed`, `not_checked`) and `reason` (the code, when not checked; else null). Every check's result carries them (`drc`, `erc`, `validate`, `solve`: `ok` or `failed`) |
 | a finding: `severity`, `code`, `message`, `location`, `hint`, `items` | also `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`), `source` and `refs`: a rule's verdict as data (null and empty for any other finding). Read those, never the message, which no longer carries the source |
@@ -50,13 +51,24 @@ its `--json` or its findings changes for these:
 
 What to change:
 
-- **Read the exit status as one of three, then the findings.** Exit 0 is `OK`; exit 1 is `FAILED`, a
-  finding whose severity is `error`; exit 3 is `NOT CHECKED`, which a script must not take for a pass nor
-  for a part that fails: fix what its `reason` names, or run the check again. A script that tested `exit
-  != 0` still stops on all of them; one that tested `exit == 1` for "could not be measured" tests `exit ==
-  3` (or `status == "not_checked"`) now.
-- **What fails a check** is every finding of severity `error`, whatever its code. Do not key on a list of
-  codes: key on the exit status or `status`, then read `findings` by severity. As this is written they are:
+- **Read the state first, then the findings.** The state is `"status"` in `--json` (`result.status`) and
+  the exit status, and nothing else decides it -- never a finding's severity, never a list of codes:
+
+  | `"status"` | Exit | The `--json` document | Read |
+  | --- | --- | --- | --- |
+  | `ok` | 0 | the result: `ok` true, `findings`, `measurements`, `reason` null | the part can be made; its `warning` findings are recommendations |
+  | `failed` | 1 | the result: `ok` false, `reason` null | the part cannot be made as drawn: fix each `error` finding (with `--strict`, each `warning` too) |
+  | `not_checked` | 3 | the result with `reason` the code of the finding that says why; or, for a check that did not run to its end, `{"ok": false, "error", "reason", "status"}` and no findings | no verdict: neither a pass nor a part that fails. Fix what `reason` names, or run the check again |
+  | `usage` | 2 | `{"ok": false, "error", "reason", "status"}` | the command line's mistake: fix the command, not the part |
+
+  A `not_checked` result carries a finding of severity `error` too -- the one whose code is its `reason`
+  (`not_solid`, `measurement_failed`, `over_time`) -- which says why nothing was judged, not that the part
+  fails. So a script that counted `error` findings to tell a failed part reads `status` instead. One that
+  tested `exit != 0` still stops on all of them; one that tested `exit == 1` for "could not be measured"
+  tests `exit == 3` (or `status == "not_checked"`) now. Without `--json`, a check that did not run to its
+  end says one line on stderr, `cad <type> dfm: NOT CHECKED (<reason>): <why>`, before its last line.
+- **What fails a part**, where `status` is `failed`, is every finding of severity `error`, whatever its
+  code. Do not key on a list of codes. As this is written they are:
   - **a rule's feasibility limit**, coded by the rule's id (`<process>.<rule>`). The rules that failed are
     `measurements.rules.failed`, each rule's outcome and `severity` are in `measurements.rules.outcomes`,
     and `measurements.rules.failing` counts the failing features by severity. Every other rule is a
@@ -86,8 +98,8 @@ What to change:
     `sheet.under_kerf`, `sheet.flat_incomplete`, `sheet.flat_overlap`, and `sheet.flat_length` and
     `sheet.flat_width` against the sheet given (`--sheet-size`; against the standard sheet assumed they are
     the rules' warnings); a cut file's `sheet.open_contour`, `sheet.overlapping_curves`,
-    `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop`, `zero_length_entity` and
-    `units_not_set`;
+    `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop` and `zero_length_entity`
+    (a file that declares no units is `NOT CHECKED`, `units_not_set`, until `--units` says them);
   - **the part's own soundness**: `not_watertight` (an open mesh; a part with an open shell or faces
     outside its solids) and `not_sound` (the kernel's validity check fails, or a part's solids share
     volume).
@@ -103,7 +115,10 @@ What to change:
     figure, named in the finding) and `rules_none_evaluated`;
   - a check the engine did not finish (above): `stopped`, `cancelled`, `over_time`, `over_memory`,
     `process_lost`, `no_kernel`, `superseded`, `error`, else `engine_stopped`, `engine_failed`,
-    `engine_unavailable` or `failed`.
+    `engine_unavailable` or `failed`;
+  - a check its caller measures -- a mesh's, a cut file's, a file's where no engine can be reached -- that
+    went past the same limits or was lost, a result like the whole source's: `over_time`, `over_memory`,
+    `process_lost`, `error`.
 
   A script that took exit 0 to mean "measured" reads `measurements` whenever `status` is not
   `not_checked` for the whole source, that is whenever `measurements.rules` is there.
@@ -124,9 +139,10 @@ What to change:
 
 ### The library's checks (tier 2)
 
-`cad.<type>.dfm` takes the same parameters but `units`, which is an STL's alone now: `cad.step.dfm`,
-`cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm`, `cad.glb.dfm` and `cad.dxf.dfm` (and the commands'
-`--units`) no longer take it, where 0.11 took it and refused every value but `mm` -- drop the argument.
+`cad.<type>.dfm` takes the same parameters but `units`, which is an STL's and a DXF's now (a DXF that
+declares none is not checked without it): `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm`
+and `cad.glb.dfm` (and the commands' `--units`) no longer take it, where 0.11 took it and refused every
+value but `mm` -- drop the argument.
 Its result changes as above: `result.status` and `result.reason` are new, `result.ok` is true for `ok`
 alone, and a check the engine did not finish still raises. `strict=True` fails on a warning. Each option
 is taken only as its kind: a count is an `int`, so `samples=2000.0`, which 0.11 read as 2000, is refused; a
@@ -173,16 +189,20 @@ again with other versions of the libraries a check measures with). A check outli
 cut off by a shell's time limit it runs on, and the same command again answers with its result, waiting for it if
 it still runs -- unless another check is waiting for its process meanwhile, which it then gives way to at once,
 keeping nothing. `cad status` lists the checks running, for which document, since when and whether their caller still
-waits. A check that does not complete says why and is never a result: its model was built again while it was
-measured (a run that changes nothing disturbs it not at all), the engine stopped under it (`cad stop`, or an
-update, which does not wait for it), its process was lost, or it went past a check's limits
+waits. A model built again while a check of it runs stops that check at once and has it asked again of the
+model as it is now, so its caller gets the new model's result (one line on stderr says the document changed; a
+run that changes nothing disturbs it not at all). A check that does not complete says why and is never a result:
+its model was built again under each of three tries (`superseded`), the engine stopped under it (`cad stop`, or
+an update, which does not wait for it), its process was lost, or it went past a check's limits
 (`CAD_ENGINE_CHECK_SECONDS`, half an hour by default, and `CAD_ENGINE_CHECK_RSS_MB`, by default the engine's
-memory cap): run the check again.
+memory cap): run the check again. A mesh's and a cut file's check, and a file's where no engine can be reached,
+are measured by the command itself, held to the same two limits.
 
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. It is not the drawing checks an export runs (`cad model
 export` of a DXF, unchanged), and reads the file its own way: of those checks' codes it keeps
-`units_not_set` and `zero_length_entity`; an entity drawn twice, the export's `duplicate_entity`, is
+`zero_length_entity`, and `units_not_set` for a file that declares no units (`NOT CHECKED` until `--units`
+gives them, then a warning); an entity drawn twice, the export's `duplicate_entity`, is
 `sheet.overlapping_curves` here (an error: the cutter goes over the line twice), with the outline it doubles
 still read as the part's; a file with nothing to cut, the export's `empty_drawing`, is `no_cut_geometry`
 (`NOT CHECKED`); and a drawing with dimensions, the export's `drawing_document`, is measured as any cut file,

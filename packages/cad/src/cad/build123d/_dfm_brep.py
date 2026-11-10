@@ -364,13 +364,14 @@ def every_occurrence(document: Document) -> Document:
 @dataclass(frozen=True)
 class Copy:
     """A part that is another's geometry moved: ``of`` the index of the first part with that geometry, and the
-    motion that takes a point of that part onto this one (``rotation @ point + shift``; ``proper`` False where it
-    mirrors). Their faces, edges and vertices correspond ordinal for ordinal."""
+    motion that takes a point of that part onto this one (``rotation @ point + shift``: a turn and a shift, never
+    a mirror -- a mirrored part is no copy, ``copies``). Their faces, edges and vertices correspond ordinal for
+    ordinal. ``proper`` is True of every copy: what ``_dfm_cnc`` still passes and reads, and nothing else."""
 
     of: int
     rotation: np.ndarray
     shift: np.ndarray
-    proper: bool
+    proper: bool = True
 
     def point(self, xyz: Any) -> list[float]:
         return [float(v) for v in self.rotation @ np.asarray(xyz, dtype=float) + self.shift]
@@ -459,14 +460,15 @@ COPY_TOLERANCE = 1e-7
 COPY_MEASURES = 1e-6
 
 
-def copies(parts: list[Part], mirrored: bool = True) -> dict[int, Copy]:
-    """The parts that are an earlier part's geometry moved -- turned and shifted, mirrored too where
-    ``mirrored`` -- by their index: what a check measures once and says at every copy. A part is a copy when its
-    counts and faces' kinds match and every probe (``_probes``: its vertices, edges' and faces' middles, ordinal
-    for ordinal) lies where the first's moved (the best rigid motion of the probes, ``COPY_TOLERANCE`` of the
-    size), and its volume and area are the first's (``COPY_MEASURES``): the same geometry, moved, its faces in the
-    same order. Probes that lie in one plane leave a turn and its mirror alike: such a part is no copy. Instances of
-    one shape are one part already."""
+def copies(parts: list[Part]) -> dict[int, Copy]:
+    """The parts that are an earlier part's geometry moved -- turned and shifted -- by their index: what a check
+    measures once and says at every copy. A part is a copy when its counts and faces' kinds match and every probe
+    (``_probes``: its vertices, edges' and faces' middles, ordinal for ordinal) lies where the first's moved (the
+    best turn and shift of the probes, ``COPY_TOLERANCE`` of the size), and its volume and area are the first's
+    (``COPY_MEASURES``): the same geometry, moved, its faces in the same order. A mirror image is no copy: where a
+    feature is handed (a left and a right bracket) it is another part, so it is measured on its own. Probes that
+    lie in one plane leave a turn and its mirror alike: such a part is no copy either. Instances of one shape are
+    one part already."""
     groups: dict[tuple[Any, ...], list[int]] = {}
     for index, part in enumerate(parts):
         try:
@@ -489,7 +491,7 @@ def copies(parts: list[Part], mirrored: bool = True) -> dict[int, Copy]:
                 # its volume and area its first's too: a copy is the same geometry, not one that shares its probes
                 if any(abs(m - n) > COPY_MEASURES * max(abs(n), 1e-9) for m, n in zip(measures, sizes)):
                     continue
-                copy = _moved(theirs, probes, mirrored)
+                copy = _moved(theirs, probes)
                 if copy is not None:
                     found[index] = Copy(first, *copy)
                     break
@@ -498,8 +500,9 @@ def copies(parts: list[Part], mirrored: bool = True) -> dict[int, Copy]:
     return found
 
 
-def _moved(a: np.ndarray, b: np.ndarray, mirrored: bool) -> tuple[np.ndarray, np.ndarray, bool] | None:
-    """The rigid motion taking the points ``a`` onto ``b`` (ordinal for ordinal), or None where none does."""
+def _moved(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+    """The turn and the shift taking the points ``a`` onto ``b`` (ordinal for ordinal), or None where none does
+    (a mirror image's: no turn fits it)."""
     if a.shape != b.shape or len(a) < 3:
         return None
     ca, cb = a.mean(axis=0), b.mean(axis=0)
@@ -507,15 +510,14 @@ def _moved(a: np.ndarray, b: np.ndarray, mirrored: bool) -> tuple[np.ndarray, np
     if spread[-1] <= 1e-9 * max(float(spread[0]), 1e-300):
         return None  # probes in one plane (or line): a turn and its mirror fit alike, so which it is is unknown
     u, _, vt = np.linalg.svd((a - ca).T @ (b - cb))
-    proper = float(np.linalg.det(vt.T @ u.T)) > 0.0
-    if not proper and not mirrored:
-        return None
-    rotation = vt.T @ np.diag([1.0, 1.0, 1.0 if proper else -1.0]) @ u.T
+    # The best turn (Kabsch's): never a mirror, so a mirror image's probes lie off it and it is no copy.
+    turn = 1.0 if float(np.linalg.det(vt.T @ u.T)) > 0.0 else -1.0
+    rotation = vt.T @ np.diag([1.0, 1.0, turn]) @ u.T
     shift = cb - rotation @ ca
     size = float(np.ptp(a, axis=0).max()) or 1.0
     if float(np.abs(a @ rotation.T + shift - b).max()) > COPY_TOLERANCE * max(size, 1.0):
         return None
-    return rotation, shift, proper
+    return rotation, shift
 
 
 # --- surfaces --------------------------------------------------------------------------------------------

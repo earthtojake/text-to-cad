@@ -69,6 +69,12 @@ class RulesTest(unittest.TestCase):
         self.assertIn("(and 1 more at this ref)", found[2].message)
         self.assertEqual(([item["value"] for item in found[2].items], found[2].value), ([0.2, 0.4], 0.2))
         self.assertEqual(record["failing"]["error"], {"cnc.sharp": 3})
+        # a ref is one element: an item's words that name several, or one without the part the item names, are
+        # none (in an assembly ``face 6`` is a face of every part)
+        worded = {"radius_mm": 0.0, "location": "asm/p/face 6", "faces": ["asm/p/face 6", "asm/p/face 7"],
+                  "between": "asm/p/face 6 and asm/p/face 7", "leaning": "face 6", "others": "face 6, face 7"}
+        found, _ = evaluate({"corners": {"items": [worded]}}, _set(rule), {})
+        self.assertEqual(found[0].refs, ["asm/p/face 6", "asm/p/face 7"])
         # the record keeps every failure at its item's own place, with its refs (the feature first) and its item
         self.assertEqual([(failure["item"], failure["location"], failure["refs"][0])
                           for failure in record["outcomes"][0]["failures"]],
@@ -199,6 +205,26 @@ class RulesTest(unittest.TestCase):
         twice = Rule("r", "g", "v", "min", 1.0, "mm", "v", "s")
         _, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}]}}, _set(rule, twice), {})
         self.assertEqual((record["outcomes"][0]["status"], record["absent"]), ("passed", {"g": ["r"]}))
+
+    def test_features_left_unjudged_are_said_once_and_are_the_finding_s_refs(self) -> None:
+        """Two rules that read one figure leave the same features unjudged: one finding, naming both rules, the
+        features its ``refs`` (a mesh's place, which is no ref, in its words alone) -- never one finding a rule."""
+        rules = (Rule("cnc.narrow", "pockets", "width_mm", "min", 1.0, "mm", "pocket width", "s"),
+                 Rule("cnc.wide", "pockets", "width_mm", "max", 50.0, "mm", "pocket width", "s", severity="warning"),
+                 Rule("cnc.deep", "pockets", "depth_mm", "max", 9.0, "mm", "pocket depth", "s"))
+        pockets = [{"width_mm": 5.0, "depth_mm": 2.0, "location": "p/face 1"},
+                   {"width_mm": None, "depth_mm": 2.0, "location": "p/face 2"},
+                   {"width_mm": None, "depth_mm": 2.0, "location": "p/face 3", "edge": "p/edge 9"},
+                   {"width_mm": None, "depth_mm": None, "xyz": [1.0, 2.0, 3.0]}]
+        found, record = evaluate({"pockets": {"items": pockets}}, _set(*rules), {})
+        self.assertEqual([(f.code, f.location, f.refs) for f in found],
+                         [("rule_partly_judged", "p/face 2", ["p/face 2", "p/edge 9"]),
+                          ("rule_partly_judged", "1, 2, 3", [])])
+        self.assertEqual(found[0].message, "cnc.narrow, cnc.wide judged 1 of 4 pockets: 3 carry no width_mm "
+                                           "(p/face 2, p/edge 9, 1, 2, 3), which was not measured, so the rules "
+                                           "give them no verdict")
+        self.assertIn("cnc.deep judged 3 of 4 pockets: 1 carry no depth_mm (1, 2, 3)", found[1].message)
+        self.assertEqual(record["partial"], ["cnc.narrow", "cnc.wide", "cnc.deep"])
 
     def test_text_to_cad_s_own_limits_cite_one_source_in_every_table(self) -> None:
         from cad._internal import dfm
@@ -512,6 +538,64 @@ class RefsTest(unittest.TestCase):
             nub = next(part for part in document.parts if part.name == "nub")
             self.assertAlmostEqual(nub.shape.center().X, 5.0, places=6)  # placed where it stands
             self.assertAlmostEqual(nub.shape.center().Y, 20.0, places=6)
+
+    def test_every_ref_of_every_finding_resolves_in_every_process(self) -> None:
+        """What a finding says is a ref is one ``cad step inspect DOC REF`` takes (``refs.resolve_structure``,
+        its resolver): each of its ``refs``, its ``location`` where it names a face, an edge or a vertex, and
+        each ref and place of its overflow ``items`` -- one element each, never a bare ``face 13`` of an
+        assembly's part nor two refs joined in one string. Small parts that fail rules of every process: sharp
+        pockets past the findings shown, a hole through a block's side placed in an assembly beside two tees,
+        a sheet with holes, an embossed text."""
+        import copy
+        import re
+
+        from cad.build123d import _dfm_check
+        from cad.engine import refs
+        from cad.engine.document import Loaded
+
+        plate = bd.Box(60, 40, 10)
+        for k in range(3):
+            plate -= bd.Pos(-20 + 20 * k, 0, 3) * bd.Box(10, 20, 4.01)
+        holed = bd.Box(20, 20, 20) - bd.Rotation(0, 90, 0) * bd.Cylinder(3, 20)
+        tee = bd.Box(10, 10, 20) + bd.Pos(0, 0, 12.5) * bd.Box(40, 40, 5)
+        sheet = bd.Box(60, 40, 2) - bd.Pos(27, 0, 0) * bd.Cylinder(1.0, 2) - bd.Cylinder(0.4, 2)
+        text = bd.Box(60, 20, 5) + bd.Pos(0, 0, 2.5) * bd.extrude(bd.Text("AB", 10), 1)
+        for shape, label in ((plate, "plate"), (holed, "holed"), (tee, "tee"), (sheet, "sheet"), (text, "text")):
+            shape.label = label
+        asm = bd.Compound(label="asm", children=[
+            *(copy.copy(tee).moved(bd.Location((60 * k, 0, 0))) for k in range(2)),
+            copy.copy(holed).moved(bd.Location((0, 80, 0)))])
+        named = re.compile(r"\b(?:face|edge|vertex) \d+")
+        checked = 0
+        with tempfile.TemporaryDirectory() as folder:
+            for shape, processes in ((plate, ("cnc", "molding")), (asm, ("molding", "printing")),
+                                     (sheet, ("sheet", "cnc", "printing")), (text, ("cnc", "sheet", "printing"))):
+                path = Path(folder) / f"{shape.label}.step"
+                bd.export_step(shape, str(path))
+                structure = Loaded(path).structure()
+                for process in processes:
+                    resolved = manufacturing.options("step", process, {})
+                    report = _dfm_check.measure("step", path, process, resolved, False)
+                    result = manufacturing.finish(path, {"process": process, **report}, process, resolved, False)
+                    unresolved: dict[tuple[str, str, str], None] = {}
+                    for finding in result.findings:
+                        given = [("refs", ref) for ref in finding.refs]
+                        given += [("location", str(finding.location))] if named.search(str(finding.location)) else []
+                        for item in finding.items:
+                            given += [("items.refs", ref) for ref in item.get("refs") or ()]
+                            if named.search(str(item.get("location"))):
+                                given.append(("items.location", str(item["location"])))
+                        for field, ref in given:
+                            checked += 1
+                            try:
+                                hits = refs.resolve_structure(structure, ref, path)
+                            except refs.RefError:
+                                hits = []
+                            if len(hits) != 1:
+                                unresolved[(str(finding.code), field, ref)] = None
+                    with self.subTest(part=shape.label, process=process):
+                        self.assertEqual(list(unresolved), [], "(code, field, ref) of each ref that does not resolve")
+        self.assertGreater(checked, 300, "the parts fail rules whose findings carry refs")
 
     def test_a_live_shape_reads_as_its_document_would(self) -> None:
         document = brep.parts_of(self._assembly())
@@ -1111,6 +1195,22 @@ class CopiesTest(unittest.TestCase):
             np.testing.assert_allclose(found[index].point(corner),
                                        [c * 20.0 - s_ * 12.0 + x, s_ * 20.0 + c * 12.0 + y, 4.0 + z], atol=1e-9)
 
+    def test_a_mirror_image_is_no_copy_and_the_same_part_turned_is_one(self) -> None:
+        """A left and a right bracket are two parts: no turn takes a handed feature onto its mirror image, so
+        the mirrored one is measured on its own, while the same part turned is the first's copy."""
+        import copy
+
+        handed = _bracket() - bd.Pos(-15, 8, 0) * bd.Cylinder(1.5, 8)  # a hole off both of its planes of symmetry
+        left = copy.deepcopy(handed)
+        right = bd.Pos(70, 0, 0) * bd.mirror(copy.deepcopy(handed), bd.Plane.YZ)
+        turned = bd.Pos(0, 60, 0) * bd.Rot(0, 0, 90) * copy.deepcopy(handed)
+        left.label, right.label, turned.label = "left", "right", "turned"
+        document = brep.parts_of(bd.Compound(children=[left, right, turned]), "kit")
+        self.assertEqual([part.name for part in document.parts], ["left", "right", "turned"])
+        found = brep.copies(document.parts)
+        self.assertEqual({index: found[index].of for index in found}, {2: 0})
+        self.assertAlmostEqual(float(np.linalg.det(found[2].rotation)), 1.0, places=9)
+
     def test_a_different_part_that_shares_its_ends_and_middles_is_no_copy(self) -> None:
         # two plates whose curved edge is a Bezier with the same ends and middle, its other poles apart
         def plate(poles: list[tuple[float, float]]) -> bd.Shape:
@@ -1267,6 +1367,63 @@ class StatesTest(unittest.TestCase):
         missing = manufacturing.measure("stl", str(Path(tempfile.gettempdir()) / "no-such-part.stl"), "printing",
                                         manufacturing.options("stl", "printing", {}), False)
         self.assertEqual((missing.status, missing.reason), ("not_checked", "invalid_target"))
+
+    def test_a_check_its_caller_measures_is_held_to_a_check_s_limits_from_outside(self) -> None:
+        """A check its caller measures itself (a mesh's, a cut file's, a file's with no engine to reach) is
+        measured in a process of its own, which the caller stops past the engine's limits for a check --
+        whatever call it is in: it is killed from outside -- and says not checked for (``over_time``,
+        ``over_memory``); one whose process exits with no answer is ``process_lost``, one whose measuring raised
+        ``error``, in one line; under its limits it answers what the integration measures. The process ends
+        with its caller: once the pipe its caller holds is closed it is gone, measuring for no one."""
+        import json
+        import os
+        import subprocess
+        import sys
+        from unittest import mock
+
+        from cad.trimesh import _check
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "block.stl")
+            bd.export_stl(bd.Box(20, 20, 20), path)
+            resolved = manufacturing.options("stl", "printing", {})
+
+            def checked(**environment: str):
+                # how often it looks is the test's: it waits on the look, not on the clock
+                with mock.patch.object(manufacturing, "WATCH_SECONDS", 0.01), mock.patch.dict(os.environ, environment):
+                    return manufacturing.measure("stl", path, "printing", resolved, False)
+
+            late = checked(CAD_ENGINE_CHECK_SECONDS="1e-9")
+            self.assertEqual((late.ok, late.status, late.reason), (False, "not_checked", "over_time"))
+            self.assertIn("over a check's time limit of 1e-09 s", late.findings[0].message)
+            self.assertIn("CAD_ENGINE_CHECK_SECONDS", late.findings[0].message)
+            large = checked(CAD_ENGINE_CHECK_RSS_MB="1e-3")
+            self.assertEqual((large.status, large.reason), ("not_checked", "over_memory"))
+            self.assertIn("CAD_ENGINE_CHECK_RSS_MB", large.findings[0].message)
+            with mock.patch.object(manufacturing, "_CHILD", "raise SystemExit(7)"):
+                lost = checked()
+            self.assertEqual((lost.status, lost.reason), ("not_checked", "process_lost"))
+            self.assertIn("exited (7) before it answered", lost.findings[0].message)
+            with mock.patch.object(manufacturing, "_CHILD", manufacturing._CHILD.replace(
+                    "_child()", "import cad.trimesh._check as c; c.measure = lambda *a: 1 / 0; _child()")):
+                raised = checked()
+            self.assertEqual((raised.status, raised.reason), ("not_checked", "error"))
+            self.assertIn("ZeroDivisionError: division by zero (raised in ", raised.findings[0].message)
+            self.assertEqual(len(raised.findings[0].message.splitlines()), 1)
+            measured = checked(CAD_ENGINE_CHECK_SECONDS="0", CAD_ENGINE_CHECK_RSS_MB="0")  # no limit
+            here = _check.measure("stl", path, "printing", resolved, False)
+            self.assertEqual((measured.status, measured.measurements["mesh"]), ("ok", here["mesh"]))
+
+            # a measuring that never ends, its caller gone: the process leaves at the end of its caller's pipe
+            answer = Path(folder) / "answer.json"
+            forever = manufacturing._CHILD.replace(
+                "_child()", "import cad.trimesh._check as c, time; c.measure = lambda *a: time.sleep(3600); _child()")
+            request = {"type": "stl", "source": path, "process": "printing", "resolved": resolved, "candidates": False}
+            orphan = subprocess.Popen([sys.executable, "-c", forever, json.dumps(request), str(answer)],
+                                      stdin=subprocess.PIPE, env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+            self.addCleanup(orphan.kill)
+            orphan.stdin.close()
+            self.assertEqual((orphan.wait(120), answer.exists()), (1, False))
 
     def test_a_result_holds_its_state(self) -> None:
         from cad.results import CheckFinding, CheckResult
@@ -1502,11 +1659,12 @@ class PythonCallTest(unittest.TestCase):
 
         import cad
 
-        for document_type in ("step", "xbf", "model", "threemf", "glb", "dxf"):
+        for document_type in ("step", "xbf", "model", "threemf", "glb"):
             self.assertNotIn("units", inspect.signature(getattr(cad, document_type).dfm).parameters, document_type)
             with self.assertRaises(TypeError):
                 getattr(cad, document_type).dfm("part", units="in")
         self.assertIn("units", inspect.signature(cad.stl.dfm).parameters)
+        self.assertIn("units", inspect.signature(cad.dxf.dfm).parameters)  # and a DXF's, which may declare none
         self.assertTrue(all("strict" in inspect.signature(getattr(cad, kind).dfm).parameters
                             for kind in ("step", "stl", "dxf")))
 

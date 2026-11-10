@@ -17,9 +17,11 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
 finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
-processes (``_held``, ``cad.engine.api.check``), a file in this process only where no engine can be reached;
-an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), in this process, each finding at
-``x, y, z``. The report is the result's ``measurements``, facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
+processes (``_held``, ``cad.engine.api.check``), a file by this caller only where no engine can be reached;
+an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), by this caller, each finding at
+``x, y, z``. What a caller measures itself it measures in a process of its own that it holds to a check's
+limits (``_watched``), the engine's: no check runs unwatched. The report is the result's ``measurements``,
+facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
 practice, no shop's -- every rule a limit on one measured figure with the published guide that states it, a
 failing one a finding whose code is the rule's id and whose hint says what to change; the record of every
 rule is ``measurements["rules"]``. A shop's own limits are no option here: they are compared with the
@@ -53,6 +55,7 @@ import inspect
 import json
 import os
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Literal, get_args
@@ -74,8 +77,9 @@ PROCESSES = dfm.PROCESSES
 #: a sheet's cut file, checked by the build123d integration's DXF library (ezdxf).
 BREP_TYPES = ("model", "step", "xbf")
 CUT_TYPES = ("dxf",)
-#: Length units a mesh file may carry, as a factor to millimetres. An STL is unitless, so the caller says
-#: which one; the other types declare theirs.
+#: Length units a file may carry, as a factor to millimetres. An STL is unitless, so the caller says which
+#: one (millimetres unless said); a DXF may declare none (``$INSUNITS`` unset: every R12 file), and is then
+#: read in the one the caller says, or not measured. The other types declare theirs.
 UNITS_MM = dict(zip(get_args(Unit), (1.0, 10.0, 1000.0, 25.4, 304.8), strict=True))
 
 
@@ -110,11 +114,12 @@ def processes_for(document_type: str) -> tuple[str, ...]:
     if document_type in BREP_TYPES:
         return PROCESSES
     return tuple(process for process in PROCESSES if "mesh" in dfm.module(process).MEASURED_FROM)
-# The types that declare their own units, read as millimetres: a units option is the STL's alone.
+# The types that always declare their own units, read as millimetres: a units option is the STL's and the
+# DXF's.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
              "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
-             "model": "a model is in millimetres",
-             "dxf": "a DXF declares its units ($INSUNITS)"}
+             "model": "a model is in millimetres"}
+_UNITS_OF = "--units is an STL's or a DXF's, which may declare none"
 # Why a mesh is not checked for each process measured on exact geometry alone, and what to check instead.
 _MESH_REFUSED = {
     "cnc": "a cnc check measures exact geometry -- radii, axes, thicknesses -- that a mesh does not hold",
@@ -256,11 +261,13 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     if candidates and given.get("pull") is not None:
         raise ArgumentRefused("--candidates ranks every pull: give it no --pull")
     resolved = {name: given[name] if given.get(name) is not None else default for name, default in own.items()}
+    if document_type in CUT_TYPES:
+        resolved["units"] = given.get("units")  # a DXF's default is its own ($INSUNITS): none here
     units = resolved["units"]
-    if units not in UNITS_MM:
+    if units is not None and units not in UNITS_MM:
         raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
     if units != "mm" and document_type in _DECLARED:
-        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: {_UNITS_OF}")
     module.validate(resolved, document_type)
     _plausible(process, resolved)
     return resolved
@@ -279,7 +286,7 @@ def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> N
     if units is not None and units != "mm":
         if units not in UNITS_MM:
             raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
-        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: {_UNITS_OF}")
     return None
 
 
@@ -519,27 +526,183 @@ def measure(document_type: str, source: Any, process: str | None, resolved: dict
 
 def _here(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
           given: dict[str, Any] | None, label: Path, strict: bool = False) -> CheckResult:
-    """``source`` (a path) measured in this process by its integration, and finished."""
-    if process is None:
-        from cad.build123d._dfm_check import measure_declared
+    """``source`` (a path) measured by its integration for this caller -- in a process of its own, held to a
+    check's limits (``_watched``) -- and finished here. One stopped at a limit, or whose process was lost, is
+    not checked (``over_time``, ``over_memory``, ``process_lost``: the engine's words for the same)."""
+    found = _watched({"type": document_type, "source": os.fspath(source), "process": process, "resolved": resolved,
+                      "candidates": bool(candidates), "given": (given or {}) if process is None else {}})
+    if "refused" in found:
+        raise ArgumentRefused(found["refused"])
+    if "unmeasured" in found:
+        return _failed(label, found["unmeasured"]["message"], found["unmeasured"]["code"])
+    measured = found["measured"]
+    return finish(label, {"process": measured["process"], **measured["report"]}, measured["process"],
+                  measured["resolved"], candidates, strict)
 
-        try:
-            process, resolved, report = measure_declared(document_type, source, given or {}, candidates)
-        except dfm.Unmeasured as failure:
-            return _failed(label, failure.message, failure.code)
-        return finish(label, {"process": process, **report}, process, resolved, candidates, strict)
-    assert resolved is not None
-    if document_type in BREP_TYPES:
-        from cad.build123d._dfm_check import measure as measured
-    elif document_type in CUT_TYPES:
-        from cad.build123d._dfm_dxf import measure as measured
-    else:
-        from cad.trimesh._check import measure as measured
+
+def _measured_here(request: dict[str, Any]) -> dict[str, Any]:
+    """A check of a file (``_watched``'s ``request``) measured in this process by its integration: plain data,
+    as the engine's checks processes answer one (``_dfm_check.held``) -- ``{"measured": {"process", "resolved",
+    "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}`` (what ``declared`` refuses
+    of a document given no process)."""
+    document_type, source, process = request["type"], request["source"], request.get("process")
+    resolved, candidates = request.get("resolved"), bool(request.get("candidates"))
     try:
-        report = measured(document_type, source, process, resolved, candidates)
+        if process is None:
+            from cad.build123d._dfm_check import measure_declared
+
+            process, resolved, report = measure_declared(document_type, source, request.get("given") or {}, candidates)
+        else:
+            if document_type in BREP_TYPES:
+                from cad.build123d._dfm_check import measure as measured
+            elif document_type in CUT_TYPES:
+                from cad.build123d._dfm_dxf import measure as measured
+            else:
+                from cad.trimesh._check import measure as measured
+            report = measured(document_type, source, process, resolved, candidates)
     except dfm.Unmeasured as failure:
-        return _failed(label, failure.message, failure.code)
-    return finish(label, {"process": process, **report}, process, resolved, candidates, strict)
+        return {"unmeasured": {"code": failure.code, "message": failure.message}}
+    except ArgumentRefused as refused:
+        return {"refused": str(refused)}
+    return {"measured": {"process": process, "resolved": resolved, "report": report}}
+
+
+#: How often a caller looks at the process that measures its check (``_watched``).
+WATCH_SECONDS = 1.0
+#: What a caller is told of a check it stopped, or lost, by the reason it is not checked for (the engine's
+#: reasons, ``cad.engine.api.check``).
+_STOPPED = {
+    "over_time": "the manufacturing check was stopped after {seconds:.0f} s, over a check's time limit of "
+                 "{limit:g} s: nothing was measured. Check a smaller part or fewer samples, or raise the limit "
+                 "(CAD_ENGINE_CHECK_SECONDS, in this environment; 0 for none)",
+    "over_memory": "the manufacturing check was stopped with its process at {resident:.0f} MB, over a check's "
+                   "memory limit of {limit:.0f} MB: nothing was measured. The part may be too large to check on "
+                   "this machine; check a smaller part, or raise the limit (CAD_ENGINE_CHECK_RSS_MB, in this "
+                   "environment; 0 for none)",
+    "process_lost": "the process measuring the manufacturing check exited ({code}) before it answered{why}: "
+                    "nothing was measured",
+}
+# What the measuring process runs (``_child``): by this module's name, so nothing is run as ``__main__`` twice.
+_CHILD = "from cad._internal.manufacturing import _child; _child()"
+
+
+def _watched(request: dict[str, Any]) -> dict[str, Any]:
+    """A check of a file this caller measures itself (``request``: ``{"type", "source", "process", "resolved",
+    "candidates", "given"}``, plain data), measured in a process of its own (``_child``, this interpreter's)
+    that this one starts and holds to a check's limits from outside, as the engine holds its checks processes:
+    the same limits (``cad.engine.worker.check_limits``: ``CAD_ENGINE_CHECK_SECONDS``,
+    ``CAD_ENGINE_CHECK_RSS_MB``, the same defaults), read each ``WATCH_SECONDS``, the time from the process's
+    start and its memory as the system counts it. From outside, because nothing inside can stop it: a kernel
+    call holds the interpreter until it returns, and one that never returns would hold a watchdog there too.
+    The process ends with its caller: it holds the read end of a pipe this one keeps open, and leaves when
+    that closes (a caller a shell's time limit killed leaves no check running on, measured for no one).
+
+    Its answer, ``_measured_here``'s; or ``{"unmeasured": {"code", "message"}}`` for one stopped at a limit
+    (``over_time``, ``over_memory``: its process killed), whose process exited with no answer
+    (``process_lost``) or whose measuring itself failed there (``error``: what was raised, in one line) -- the
+    engine's reasons for the same. An integration this environment lacks is raised here as there
+    (``ModuleNotFoundError``, by the module's name). Where there is no interpreter to start
+    (``sys.executable`` empty: an embedded one) the check is measured in this process, unwatched."""
+    if not sys.executable:
+        return _measured_here(request)
+    import site
+    import subprocess
+    import tempfile
+    import time
+
+    from cad.engine.places import windowless
+    from cad.engine.worker import check_limits, resident_of
+
+    seconds, memory, notes = check_limits()
+    for note in notes:
+        print(f"cad: {note}", file=sys.stderr, flush=True)
+    # This library first on the child's path where its interpreter would not find it by itself (a checkout, a
+    # test's path); never a site-packages folder, which on PYTHONPATH would come before the standard library.
+    root = Path(__file__).resolve().parents[2]
+    env = dict(os.environ)
+    if root not in {Path(found).resolve() for found in (*site.getsitepackages(), site.getusersitepackages())}:
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(root), env.get("PYTHONPATH")]))
+
+    def stopped(reason: str, **said: Any) -> dict[str, Any]:
+        return {"unmeasured": {"code": reason, "message": _STOPPED[reason].format(**said)}}
+
+    began = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="cad-check-") as folder:
+        written = Path(folder) / "answer.json"
+        process = subprocess.Popen([sys.executable, "-P", "-c", _CHILD, json.dumps(request), str(written)],
+                                   stdin=subprocess.PIPE, env=env, **windowless())
+        try:
+            while True:
+                try:
+                    process.wait(timeout=WATCH_SECONDS)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                elapsed, limit = time.monotonic() - began, memory()
+                resident = resident_of(process.pid) if limit is not None else None
+                if seconds is not None and elapsed > seconds:
+                    return stopped("over_time", seconds=elapsed, limit=seconds)
+                if limit is not None and resident is not None and resident > limit:
+                    return stopped("over_memory", resident=resident, limit=limit)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            if process.stdin is not None:
+                process.stdin.close()
+        try:
+            answer = json.loads(written.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            answer = None
+    if not isinstance(answer, dict):
+        killed = process.returncode is not None and process.returncode < 0
+        return stopped("process_lost", code=process.returncode,
+                       why=" (killed by the system, usually for memory -- the part may be too large to check on "
+                           "this machine)" if killed else "")
+    missing = answer.get("missing")
+    if isinstance(missing, dict):
+        raise ModuleNotFoundError(missing["words"], name=missing["name"])
+    return answer
+
+
+def _child() -> None:
+    """The process ``_watched`` starts: the request in its first argument measured (``_measured_here``) and
+    answered in the file its second names, written whole as it ends. Its standard output is its standard error's
+    (the kernel's and a library's prints never reach its caller's answer), and its standard input the pipe its
+    caller holds open: at its end of file the caller is gone, and so is this process, as soon as the interpreter
+    runs. What the integration raised is the check's answer, not checked for ``error``: its type, its words and
+    where it was raised, in one line; a module this environment lacks is answered as such (``missing``)."""
+    import threading
+
+    os.dup2(2, 1)
+
+    def orphaned() -> None:
+        try:
+            while os.read(0, 4096):  # the descriptor itself: no lock of ``sys.stdin``'s is held as this process ends
+                pass
+        except OSError:
+            pass
+        os._exit(1)
+
+    threading.Thread(target=orphaned, name="cad-check-caller", daemon=True).start()
+    try:
+        answer = _measured_here(json.loads(sys.argv[1]))
+    except ModuleNotFoundError as error:
+        answer = {"missing": {"words": str(error), "name": error.name}}
+    except Exception as error:  # noqa: BLE001 - a measuring that failed is the check's answer: not checked
+        import traceback
+
+        raised = traceback.extract_tb(error.__traceback__)
+        where = f" (raised in {Path(raised[-1].filename).name}:{raised[-1].lineno})" if raised else ""
+        answer = {"unmeasured": {"code": "error", "message": "the manufacturing check failed where it was "
+                                                             f"measured: {type(error).__name__}: {error}{where}"}}
+    try:
+        # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
+        line = json.dumps(answer, separators=(",", ":"), allow_nan=False)
+    except ValueError as error:
+        line = json.dumps({"unmeasured": {"code": "not_finite", "message": "a measurement was not a finite number, "
+                                                                           f"so the report is not JSON: {error}"}})
+    Path(sys.argv[2]).write_text(line, encoding="utf-8")
 
 
 def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
@@ -549,7 +712,7 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     file, each read once -- or answered from the result the engine kept for an unchanged document, then
     finished here.
 
-    None -- measured in this process instead, as before the engine measured checks -- for a file when no
+    None -- measured by this caller instead (``_here``), as before the engine measured checks -- for a file when no
     engine can be reached, when the engine is of a release that measures no check in memory, or when another
     release of the library measured it (its report could differ from what this release finishes). A model's,
     then, is exported by the engine and read back here (``_exported``), as before; with no engine at all it
@@ -662,7 +825,8 @@ _HELP = {
     "material": "the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's "
                 "limits; default the material the part declares (part.material = metals.aluminum()), when every "
                 "part agrees.",
-    "units": "the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.",
+    "units": "the file's length units (mm, cm, m, in, ft): an STL's (default mm), or a DXF's (default the "
+             "ones it declares; needed where it declares none, as an R12 file).",
     "axes": "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
     "turning": "cnc: the part is turned on a lathe (its axis found), not milled.",
     "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner "
@@ -764,7 +928,8 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
     """``cad.<document_type>.dfm``'s signature -- the source, the type's processes, and the options of those
     processes alone (a mesh's help offers no ``--axes``) -- and its docstring, built for the type."""
     processes = processes_for(document_type)
-    # ``units`` is an STL's alone: a type that declares its units takes no option it would refuse every value of
+    # ``units`` is an STL's and a DXF's: a type that always declares its units takes no option it would refuse
+    # every value of
     names = [name for name in KINDS if (name in dfm.COMMON and (name != "units" or document_type not in _DECLARED))
              or any(name in OPTIONS[process] for process in processes)]
     ranked = any(process in _RANKED for process in processes)

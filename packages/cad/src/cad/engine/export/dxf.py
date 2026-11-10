@@ -305,7 +305,10 @@ def _check_pinned(text: str, named: str) -> None:
 # Layer intent, by WHOLE tokens of the name (split on non-alphanumerics), never substrings:
 # PREFORM is not "ref". An explicit cut token wins: CUT_SECTION is a cut path whose name mentions
 # a view. A dimensioned drawing's furniture is reference (dimensions, sections, hidden and centre
-# lines, title blocks, text).
+# lines, title blocks, text), and so is what a CAD's flat pattern export writes beside the cut and the
+# bend centre lines: Autodesk Inventor's layers (its "Layer Mapping for Export Flat Pattern Reference":
+# IV_ARC_CENTERS and IV_TOOL_CENTER marks, IV_FEATURE_PROFILES edges that are no outline, IV_ALTREP
+# punch representations, IV_UNCONSUMED_SKETCHES, IV_ROLL centre lines).
 _INTENT_BY_TOKEN = {
     "cut": "cut", "profile": "cut",
     "bend": "bend", "fold": "bend",
@@ -314,8 +317,13 @@ _INTENT_BY_TOKEN = {
         "ref", "reference", "note", "notes", "annotation", "construction", "dim", "dims", "dimension",
         "dimensions", "section", "sections", "hidden", "center", "centre", "centerline", "centreline",
         "phantom", "title", "titleblock", "border", "frame", "viewport", "hatch", "text", "label", "labels",
-        "leader", "axis")},
+        "leader", "axis", "centers", "centres", "feature", "altrep", "sketch", "sketches", "unconsumed", "roll")},
 }
+# A bend's extent lines -- its two tangent lines, where the radius starts -- are reference though the name may
+# say bend: neither cut nor a bend's centre line. Inventor writes them on IV_TANGENT (and IV_ROLL_TANGENT);
+# Fusion's flat pattern export puts its "extent lines" on a layer of their own, which its help does not name
+# (a BEND_EXTENT layer reads so by its ``extent`` token).
+_BEND_EXTENT_TOKENS = frozenset({"tangent", "extent", "extents"})
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 _ANNOTATION_TYPES = frozenset({"TEXT", "MTEXT", "DIMENSION", "LEADER", "MULTILEADER", "HATCH"})
 _TOLERANCE = 1e-6
@@ -346,9 +354,12 @@ class DrawingValidationError(ValueError):
 
 def layer_intent(layer_name: str) -> str:
     """A layer name's intent: ``cut``, ``bend``, ``engrave`` or ``reference`` (``cut`` when no
-    token says otherwise)."""
+    token says otherwise; a bend's extent lines, ``_BEND_EXTENT_TOKENS``, are reference before they are
+    bend)."""
     tokens = [token for token in _TOKEN_SPLIT.split(str(layer_name or "").strip().lower()) if token]
-    for intent in ("cut", "bend", "engrave", "reference"):
+    for intent in ("cut", "extent", "bend", "engrave", "reference"):
+        if intent == "extent" and _BEND_EXTENT_TOKENS.intersection(tokens):
+            return "reference"
         if any(_INTENT_BY_TOKEN.get(token) == intent for token in tokens):
             return intent
     return "cut"

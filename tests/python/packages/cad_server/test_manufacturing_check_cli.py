@@ -90,7 +90,8 @@ class ManufacturingCheckCommand(unittest.TestCase):
                     path.write_bytes(b"")
                 code, out, _ = _run(document_type, str(path), "--process", "molding", "--json")
                 found = json.loads(out)
-                self.assertEqual((code, found["ok"], found["reason"]), (2, False, "invalid_argument"))
+                self.assertEqual((code, found["ok"], found["reason"], found["status"]),
+                                 (2, False, "invalid_argument", "usage"))
                 self.assertIn("a molding check is judged on exact geometry", found["error"])
                 self.assertIn("check the part's STEP or model instead (cad step dfm part.step --process molding",
                               found["error"])
@@ -171,10 +172,31 @@ class ManufacturingCheckCommand(unittest.TestCase):
                 self.assertEqual(payload["error"], str(error))
                 code, out, err = _run("step", str(step), "--process", "printing")
                 self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {step}: {reason}"))
-                self.assertIn(str(error), err)
+                # one line, which says the state and the reason: no part failed, and no frame is the reader's
+                self.assertEqual(err.splitlines(), [f"cad step dfm: NOT CHECKED ({reason}): {error}"])
+        with mock.patch.object(api, "check", side_effect=TypeError("a bug in the check")):
+            code, out, err = _run("step", str(step), "--process", "printing")
+        self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {step}: failed"))
+        self.assertEqual(err.splitlines(), ["cad step dfm: NOT CHECKED (failed): TypeError: a bug in the check"])
         with mock.patch.object(api, "check", side_effect=serve.NotHeld("no document is held")):
             code, out, _ = _run("model", "01234567-89ab-5def-8123-456789abcdef", "--process", "printing", "--json")
-        self.assertEqual((code, json.loads(out)["reason"]), (2, "not_found"))
+        self.assertEqual((code, json.loads(out)["reason"], json.loads(out)["status"]), (2, "not_found", "usage"))
+
+    def test_a_check_measured_here_past_a_check_s_limit_is_stopped_and_not_checked(self) -> None:
+        """A mesh's check is measured by the command, in a process it holds to the engine's limits for a check:
+        past one it is stopped, exit 3 with the limit's reason, never left to run on."""
+        import os
+
+        from cad._internal import manufacturing
+
+        with mock.patch.object(manufacturing, "WATCH_SECONDS", 0.01), \
+                mock.patch.dict(os.environ, {"CAD_ENGINE_CHECK_SECONDS": "1e-9"}):
+            code, out, _ = _run("stl", str(self.box), "--process", "printing")
+            self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {self.box}: over_time"))
+            code, out, _ = _run("stl", str(self.box), "--process", "printing", "--json")
+        payload = json.loads(out)
+        self.assertEqual((code, payload["status"], payload["reason"]), (3, "not_checked", "over_time"))
+        self.assertIn("CAD_ENGINE_CHECK_SECONDS", payload["findings"][0]["message"])
 
     def test_strict_fails_on_a_warning(self) -> None:
         from build123d import Box, export_step
@@ -209,7 +231,8 @@ class ManufacturingCheckCommand(unittest.TestCase):
             with self.subTest(argv=argv):
                 code, out, _ = _run("stl", *argv, "--json")
                 found = json.loads(out)
-                self.assertEqual((code, found["ok"], found["reason"]), (2, False, reason))
+                # a result says its state in ``status``, and so does the command line's mistake: one field
+                self.assertEqual((code, found["ok"], found["reason"], found["status"]), (2, False, reason, "usage"))
                 self.assertIn(words, found["error"])
         # units are an STL's alone: a type that declares its own takes no such flag
         (self.folder / "box.3mf").write_bytes(b"")
@@ -237,7 +260,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("unrecognized arguments: --rules generic", err)
         code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "printing", "--json")
-        self.assertEqual((code, json.loads(out)["reason"]), (2, "not_found"))
+        self.assertEqual((code, json.loads(out)["reason"], json.loads(out)["status"]), (2, "not_found", "usage"))
 
     def test_a_step_is_measured_on_its_exact_geometry(self) -> None:
         from build123d import Box, export_step

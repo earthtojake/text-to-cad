@@ -264,6 +264,39 @@ class UnfoldTest(unittest.TestCase):
         self.assertEqual(len(lines.edges()), 2)
         round_holes = [i for i in items(report, "holes") if i["kind"] == "round"]
         self.assertEqual([i["diameter_mm"] for i in round_holes], [6.0])
+        # a flat plate has no bend line, and unfolds to the same two layers, one of them empty
+        cut = sheet.unfold(bd.Box(100, 60, 2), bend_lines=True)
+        self.assertEqual([child.label for child in cut.children], ["CUT", "BEND"])
+        outline, lines = cut.children
+        self.assertAlmostEqual(outline.area, 6000.0, places=6)
+        self.assertEqual(len(lines.edges()), 0)
+
+    def test_the_flat_overlaps_where_flanges_collide_in_it_and_not_where_a_fuse_loses_area(self) -> None:
+        t, r = 2.0, 2.0
+
+        def eared(side: float) -> bd.Part:
+            """A wall bent up at the plate's edge x = 0, an ear on its side reaching 20 mm past the plate's corner."""
+            return _wall(t, r, 60, 20) + bd.Pos(r + t / 2, side * 40, t + r + 10) * bd.Box(t, 20, 20)
+
+        # one wall bent up at x = 0 and one down at y = 30, each with an ear past their shared corner: clear of
+        # each other as bent, and on one another in the flat over the square the two ears share
+        down = bd.mirror(bd.Pos(-30, 30, 0) * bd.Rot(0, 0, 90) * eared(-1.0), bd.Plane.XY.offset(t / 2))
+        part = (bd.Pos(-30, 0, t / 2) * bd.Box(60, 60, t) + eared(1.0) + down).clean()
+        part.label = "eared"
+        allowance = math.pi / 2 * (r + 0.4 * t)
+        flat = items(measured(part), "parts")[0]
+        self.assertAlmostEqual(flat["flat_overlap_mm2"], (20 - allowance) ** 2, places=2)
+        self.assertIn("sheet.flat_overlap", [f.code for f in checked(part).findings if f.severity == "error"])
+        # a bracket with a hole in its wall, its planes and cylinders written as NURBS (as some CAD writes a STEP):
+        # the fused flat's area is a square millimetre short of its pieces', and nothing lies on anything
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        bracket = bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 50)
+        bracket = bracket - bd.Pos(43, 12, 20) * bd.Rot(0, 90, 0) * bd.Cylinder(2.75, 20)
+        nurbs = bd.Part(BRepBuilderAPI_NurbsConvert(bracket.wrapped, True).Shape())
+        nurbs.label = "bracket"
+        self.assertIsNone(items(measured(nurbs), "parts")[0]["flat_overlap_mm2"])
+        self.assertEqual(verdicts(checked(nurbs)), [])
 
     def test_not_sheet_refuses_to_unfold(self) -> None:
         with self.assertRaisesRegex(ValueError, "not sheet metal"):
@@ -317,6 +350,29 @@ class HoleTest(unittest.TestCase):
             result = checked(turn * plate, material="aluminum")
             self.assertEqual({f.severity for f in result.findings if f.code == "sheet.hole_spacing"}, {"warning"})
             self.assertAlmostEqual(failed(result, "sheet.hole_spacing")[0]["value"], 2.0, places=3)
+
+
+class GrilleTest(unittest.TestCase):
+    def test_a_grilles_bars_are_webs_judged_once(self) -> None:
+        t = 3.0
+
+        def grille(pitch: float) -> bd.Part:
+            plate = bd.Pos(0, 0, t / 2) * bd.Box(140, 120, t)
+            for i in range(17):  # slots 4 mm wide: 16 bars between them, pitch - 4 mm each
+                plate -= bd.Pos(-8 * pitch + i * pitch, 0, t / 2) * bd.Box(4, 100, 3 * t)
+            plate.label = "grille"
+            return plate
+
+        # bars half the thickness wide: one feature, one finding -- not one for each pair of slots
+        thin = checked(grille(5.5))
+        self.assertEqual(verdicts(thin), [("warning", "sheet.web_width")])
+        (finding,) = [f for f in thin.findings if f.code == "sheet.web_width"]
+        self.assertIn("1.5 mm is under the 3 mm recommended minimum (between 17 cutouts)", finding.message)
+        (web,) = [item for item in items(thin.measurements, "webs") if "cutouts" in item]
+        self.assertEqual((web["width_mm"], web["cutouts"]), (1.5, 17))
+        self.assertEqual(items(thin.measurements, "hole_spacing"), [])
+        # bars over the thickness and under the two a pair of round holes is asked: a grille as grilles are made
+        self.assertEqual(verdicts(checked(grille(8.0))), [])
 
 
 class ReliefTest(unittest.TestCase):
@@ -402,6 +458,19 @@ class TypeSideTest(unittest.TestCase):
         self.assertEqual([(f.code, f.severity) for f in assumed], [("sheet.flat_length", "warning")])
         self.assertIn("give --sheet-size", assumed[0].hint)
 
+    def test_a_flat_no_plate_holds_is_an_error_of_text_to_cads_own(self) -> None:
+        # longer than a 10 x 40 ft plate, the largest stocked: cut from no one plate, wherever it lies
+        for placed in (bd.Box(20000, 3000, 2), turned(bd.Box(20000, 3000, 2))):
+            result = checked(placed)
+            (limit,) = [f for f in result.findings if f.severity == "error"]
+            self.assertEqual((limit.code, limit.value, limit.limit), ("sheet.flat_length_limit", 20000.0, 12192.0))
+            self.assertTrue(limit.source.startswith("text-to-cad, its own figure"), limit.source)
+        # one such a plate holds is over the standard sheet assumed, a warning; and the shop's own sheet rules
+        self.assertEqual({code for severity, code in verdicts(checked(bd.Box(12000, 3000, 2)))},
+                         {"units_suspect", "sheet.flat_length", "sheet.flat_width"})
+        self.assertEqual(verdicts(checked(bd.Box(20000, 3000, 2), sheet_size="20000x3000")),
+                         [("warning", "units_suspect")])
+
     def test_a_bend_relief_is_as_wide_as_the_thickness(self) -> None:
         from cad._internal.dfm import rules
 
@@ -441,6 +510,26 @@ class TypeSideTest(unittest.TestCase):
                 if finding.location and "/face " in finding.location:
                     hits = refs.resolve_structure(structure, finding.location, path)
                     self.assertEqual(len(hits), 1, finding.location)
+            # what no rule's verdict says names its faces as data too: a sharp corner's, a chamfered edge's, a
+            # block's -- each ref one `cad step inspect` resolves, the finding's location the first
+            sharp = _boxes_bracket()
+            chamfered = bd.Pos(100, 0, 0) * bd.chamfer(bd.Box(80, 40, 3).edges(), 0.5)
+            chamfered.label = "chamfered"
+            block = bd.Pos(0, 100, 0) * bd.Box(50, 40, 30)
+            block.label = "block"
+            path = Path(folder) / "three.step"
+            bd.export_step(bd.Compound(children=[sharp, chamfered, block]), str(path))
+            result = step.dfm(path, process="sheet")
+            structure = Loaded(path).structure()
+            found = {f.code: f for f in result.findings}
+            for code, count in (("sheet.sharp_bend", 4), ("sheet.edge_break", 16), ("sheet.not_sheet", 1)):
+                finding = found[code]   # (the corner's two faces inside and two outside; the skins' chamfers)
+                self.assertEqual(len(finding.refs), count, (code, finding.refs))
+                self.assertEqual(finding.refs[0], finding.location)
+                for ref in finding.refs:
+                    self.assertEqual(len(refs.resolve_structure(structure, ref, path)), 1, ref)
+            self.assertEqual((found["sheet.sharp_bend"].value, found["sheet.sharp_bend"].unit), (90.0, "deg"))
+            self.assertEqual((found["sheet.edge_break"].value, found["sheet.edge_break"].unit), (0.5, "mm"))
 
 
 def checked(shape: bd.Shape, **options):
@@ -469,7 +558,9 @@ class RecognitionTest(unittest.TestCase):
     def test_a_small_bracket_and_a_narrow_strip_are_sheet_in_every_placement(self) -> None:
         bracket = bent([("line", 4), ("bend", 90, 3), ("line", 4)], 3.0, 30)  # 10 mm legs: Hubs's 2 t + r is 9
         for shape, summary in ((bracket, "sheet 3 mm, 1 bend(s), flat 30 x 14.5031 mm"),
-                               (bd.Box(100, 7, 2), "sheet 2 mm, 0 bend(s), flat 100 x 7 mm")):
+                               (bd.Box(100, 7, 2), "sheet 2 mm, 0 bend(s), flat 100 x 7 mm"),
+                               # twice as wide as it is thick, with no wider face: a laser-cut strip, no bar
+                               (bd.Box(100, 4, 2), "sheet 2 mm, 0 bend(s), flat 100 x 4 mm")):
             for placed in self.placements(shape):
                 result = checked(placed)
                 self.assertTrue(result.ok, result.summary)
@@ -486,22 +577,35 @@ class RecognitionTest(unittest.TestCase):
                 self.assertIn(said, finding.message)  # the same words wherever it stands
         for placed in self.placements(bd.Box(100, 100, 12)):
             self.assertEqual(verdicts(checked(placed)), [("warning", "sheet.thickness_max")])
-        # past an inch it is plate, no sheet shop's work: text-to-cad's own floor, said as its own
-        (plate,) = [f for f in checked(bd.Box(160, 120, 30)).findings if f.severity in ("error", "warning")]
+        # past an inch it is plate, no sheet shop's work: text-to-cad's own floor, said as its own -- and an
+        # inch plate is within the inch its note says
+        self.assertEqual(verdicts(checked(bd.Box(160, 120, 25.4))), [("warning", "sheet.thickness_max")])
+        (plate,) = [f for f in checked(bd.Box(160, 120, 26)).findings if f.severity in ("error", "warning")]
         self.assertEqual((plate.severity, plate.code), ("error", "sheet.thickness_limit"))
         self.assertTrue(plate.source.startswith("text-to-cad, its own figure"), plate.source)
 
-    def test_a_tube_is_a_closed_section_and_a_slit_one_a_rolled_sheet_at_its_wall(self) -> None:
+    def test_a_tube_is_a_closed_section_and_a_rolled_sheet_is_sheet_not_checked(self) -> None:
         tube = bd.Cylinder(20, 100) - bd.Cylinder(18, 100)
+        for placed in (tube, turned(tube)):
+            result = checked(placed)
+            (finding,) = [f for f in result.findings if f.severity == "error"]
+            self.assertEqual((result.status, finding.code), ("failed", "sheet.not_sheet"))
+            self.assertIn("a closed section, a tube of 2 mm wall and 18 mm inside radius", finding.message)
+        # a sheet rolled round with no flat flange is sheet -- no error says it is not -- and is not unrolled here:
+        # what was not measured is said once, and the check is no pass
         slit = tube - bd.Pos(20, 0, 0) * bd.Box(10, 1, 120)
-        for shape, said in ((tube, "a closed section, a tube of 2 mm wall and 18 mm inside radius"),
-                            (slit, "a 2 mm sheet rolled to a 18 mm inside radius with no flat flange")):
-            for placed in (shape, turned(shape)):
-                result = checked(placed)
-                (finding,) = [f for f in result.findings if f.severity == "error"]
-                self.assertEqual(finding.code, "sheet.not_sheet")
-                self.assertIn(said, finding.message)
-                self.assertAlmostEqual(result.measurements["parts"]["items"][0]["thickness_mm"], 2.0, places=6)
+        guard = bent([("bend", 120, 100)], 2.0, 200, "guard")
+        for shape, radius in ((slit, 18), (turned(slit), 18), (guard, 100), (turned(guard), 100)):
+            result = checked(shape)
+            self.assertEqual((result.status, result.reason), ("not_checked", "measurement_failed"))
+            (finding,) = [f for f in result.findings if f.severity in ("error", "warning")]
+            self.assertIn(f"a 2 mm sheet rolled to a {radius} mm inside radius with no flat flange is rolled on plate "
+                          "rolls", finding.message)
+            self.assertNotIn("not one sheet", finding.message)
+            (part,) = result.measurements["parts"]["items"]
+            self.assertEqual((part["is_sheet"], part["thickness_mm"]), (True, 2.0))
+        with self.assertRaisesRegex(ValueError, "rolled on plate rolls"):
+            sheet.unfold(guard)
 
     def test_a_grille_s_slot_walls_do_not_outvote_its_skins(self) -> None:
         t = 3.0  # webs half the sheet's thickness between long slots: the walls face each other 1.5 mm apart
@@ -685,6 +789,22 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertEqual(failed(result, "sheet.bend_radius"), [])
         lid = bent([("line", 8), ("bend", 180, 0.5), ("line", 25), ("bend", 90, 1.0), ("line", 60)], 1.0, 50, "lid")
         self.assertNotIn("sheet.bend_radii_mixed", {f.code for f in checked(lid, thickness=1).findings})
+
+    def test_a_u_bend_round_a_wide_radius_is_no_hem(self) -> None:
+        # a saddle clamp: a strap bent half round a 25 mm pipe, between two feet
+        clamp = bent([("line", 15), ("bend", 90, 2), ("line", 5), ("bend", -180, 12.5), ("line", 5), ("bend", 90, 2),
+                      ("line", 15)], 1.5, 20, "clamp")
+        for placed in (clamp, turned(clamp)):
+            result = checked(placed)
+            self.assertEqual(verdicts(result), [])
+            self.assertEqual(sorted(b["kind"] for b in result.measurements["bends"]["items"]), ["bend"] * 3)
+            self.assertEqual(result.measurements["hems"]["items"], [])
+        # a fold whose return lies four thicknesses off the panel is still a hem, and one wider is not
+        for radius, kind in ((2.0, "hem"), (2.1, "bend")):
+            fold = bent([("line", 80), ("bend", 180, radius), ("line", 4)], 1.0, 120, "fold")
+            (bend,) = items(measured(fold), "bends")
+            self.assertEqual(bend["kind"], kind)
+            self.assertEqual(verdicts(checked(fold)), [("warning", "sheet.hem_return")] if kind == "hem" else [])
 
     def test_the_shops_radius_is_given_and_said_once_a_bend(self) -> None:
         # no radius is assumed for a shop: given (--bend-radius), each bend modelled otherwise is one warning

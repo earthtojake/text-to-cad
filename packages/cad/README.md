@@ -793,11 +793,16 @@ if found.status != "ok":                                       # "ok", "failed" 
 | `not_checked` | 3 | the check did not judge what it was asked to, so it is no verdict and never a pass: a source that does not read or holds nothing to measure (`document_unreadable`, `document_empty`, `not_solid`, a mesh's `mesh_unreadable` or `mesh_empty`, a cut file's `no_cut_geometry`, a file that is not there: `invalid_target`), a family that could not be measured (`measurement_failed`), faces the kernel failed to intersect rays with (`rays_unintersected`), a rule whose features carry no figure that should have been measured (`rule_partly_judged`), rules that judged nothing (`rules_none_evaluated`), a report with a figure that is no finite number (`not_finite`). `reason` is the code of the finding that says so |
 
 `ok` is true for `ok` alone. An error found wins over what was not checked: the part fails whatever else
-was not judged, and the line says both. The command exits 3 too for a check that did not run to its end --
-the engine stopped it (its document changed under it, it went past its time or its memory), lost its process
+was not judged, and the line says both. Read the state from `status` (or the exit), never from a finding's
+severity: a `not_checked` result carries an `error` finding too, the one whose code is its `reason`, which
+says why nothing was judged. The command exits 3 too for a check that did not run to its end --
+the engine stopped it (its document changed under every try of it, it went past its time or its memory), lost its process
 or stopped itself, its environment gave no answer, it crashed -- where `--json` is the failure's document with `"status": "not_checked"` and a
-`reason`; a library call raises those. Exit 2 stays the command line's mistake: an option refused by name,
-a file of another type or not there, a document the engine does not hold.
+`reason`, and one line on stderr says `NOT CHECKED (<reason>)` and why; a library call raises those. A check its
+caller measures (a mesh's, a cut file's, a file's with no engine to reach) runs in a process of its own held to
+the same limits (`CAD_ENGINE_CHECK_SECONDS`, `CAD_ENGINE_CHECK_RSS_MB`): past one its result is `not_checked`,
+`over_time` or `over_memory`. Exit 2 stays the command line's mistake (`"status": "usage"` in its `--json`
+document): an option refused by name, a file of another type or not there, a document the engine does not hold.
 
 - **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
   points, counterbores, threads), pockets and slots, internal corners against tool radius and depth, sharp
@@ -818,7 +823,7 @@ a file of another type or not there, a document the engine does not hold.
 **Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
 `build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
 (`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
-holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), in the calling process, each at `x, y, z` in
+holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
 millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
 one table of rules: general practice from published design guides, each rule citing its guide as the
@@ -834,7 +839,7 @@ command says a rule once -- its hint, its source and how many places -- then a s
 last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2
 warning(s); cnc ...; failed: cnc.internal_corner_sharp x4`. Every rule's outcome, its source and every
 failure (with the index of its item in its family) are `measurements["rules"]`, and a figure not measured is
-never a pass: a rule that could not judge some of its features says which (`rule_partly_judged`) and the
+never a pass: a rule that could not judge some of its features says which (`rule_partly_judged`, its `refs`) and the
 check is not checked. What does not apply is no gap: a figure that cannot exist of a feature (a lone rib's
 gap to a neighbour) is named in the feature's `not_applicable`, and what a source does not hold (a mesh's
 holes, pins and details; a cut file's bends, reliefs, hems and thickness) is said once as a fact
@@ -854,8 +859,8 @@ Several parts are said (`several_bodies`); one part of several solids says so in
 xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,
 `plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
 `bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
-`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's alone (the other types
-declare their own, and take no such option); an option of another process, a value of another kind
+`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's, and a DXF's where it
+declares none or the wrong ones (the other types declare their own, and take no such option); an option of another process, a value of another kind
 (`axes=3.7`, `turning="no"`) and a value no machine has (an end mill over 100 mm, an FDM layer taller than
 its nozzle) are refused by name, never coerced -- by the flag on the command line (`--tools`), by the
 parameter in Python (`tools`), where a list of numbers is given as one (`tools=[3, 6]`, `stock=(100, 60,

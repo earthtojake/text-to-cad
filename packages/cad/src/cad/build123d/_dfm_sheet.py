@@ -57,11 +57,18 @@ ITEM_CAP = 300
 _PARALLEL = 0.9995
 #: A sheet's skin is at least this many times as wide as the sheet is thick (text-to-cad's own line, for which
 #: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
-#: 100 x 8 x 6 mm bar, a block and a tube's two ends are not). Read on each face in its own frame, so the same
-#: wherever the part stands.
+#: grille's webs, a bar's sides, a block's faces and a tube's two ends are not). Read on each face in its own
+#: frame, so the same wherever the part stands.
 SKIN_WIDTHS = 2.5
-#: A bend this far round or more is a hem (to 185 degrees) or a curl: its mold lines meet at no finite point, so
-#: it has no setback, bend deduction or distance from a mold line.
+#: Where no face is that wide, one this many times as wide, and ``STRIP_LENGTHS`` times as long, as the part is
+#: thick there still makes it a strip of sheet (a 100 x 4 mm strip of 2 mm sheet is laser cut; it has no wider
+#: face to outvote). Narrower it is as much a bar on its side (100 x 8 x 6 mm); shorter, a block (40 x 30 x 15
+#: mm). text-to-cad's own lines too.
+STRIP_WIDTHS = 2.0
+STRIP_LENGTHS = 10.0
+#: A bend this far round or more is a hem (to 185 degrees, its inside diameter within ``sheet.HEM_DIAMETER_T``
+#: thicknesses), a U-bend (as far round, wider) or a curl: its mold lines meet at no finite point, so it has no
+#: setback, bend deduction or distance from a mold line.
 HEM_DEG = 175.0
 
 
@@ -429,6 +436,31 @@ def _unslivered(face: Any) -> Any:
     return face if len(kept) == len(inner) else bd.Face(face.outer_wire(), kept)
 
 
+def _overlap(pieces: list[Any]) -> float:
+    """The area of the flat pattern's pieces that lies on another piece: the common area of each two whose
+    boxes overlap (two that meet along a line share none), measured by intersecting them -- never by the
+    pieces' areas less the fused pattern's, which counts whatever a fuse loses of faces that are not exact
+    (a STEP's planes and cylinders written as NURBS)."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    boxes = [piece.bounding_box() for piece in pieces]
+    lo = np.array([(box.min.X, box.min.Y) for box in boxes])
+    hi = np.array([(box.max.X, box.max.Y) for box in boxes])
+    total = 0.0
+    for i in range(len(pieces)):
+        within = (np.minimum(hi[i], hi[i + 1:]) - np.maximum(lo[i], lo[i + 1:]) > 1e-6).all(axis=1)
+        for j in np.nonzero(within)[0] + i + 1:
+            common = BRepAlgoAPI_Common(pieces[i].wrapped, pieces[int(j)].wrapped)
+            if not common.IsDone():
+                raise RuntimeError("two pieces of the flat pattern could not be intersected")
+            props = GProp_GProps()
+            BRepGProp.SurfaceProperties_s(common.Shape(), props)
+            total += max(0.0, float(props.Mass()))
+    return total
+
+
 def _simplify(points: np.ndarray) -> np.ndarray:
     """A closed polygon without repeated or collinear points."""
     kept = [p for i, p in enumerate(points) if i == 0 or np.linalg.norm(p - points[i - 1]) > 1e-9]
@@ -537,16 +569,18 @@ class _Analysis:
                     found.append(_Hit(sample.area, hit[0], self.part.face_ordinal(hit[1]), sample.point))
             self.hits[ordinal] = found
 
-    def _width(self, a: int) -> float:
-        """How wide face ``a`` is, in its own frame: a plane's outline's smallest rectangle's short side, a
-        cylinder's length along its axis."""
+    def _width(self, a: int) -> tuple[float, float]:
+        """How wide and how long face ``a`` is, in its own frame: a plane's outline's smallest rectangle's short
+        and long sides, a cylinder's length along its axis (both)."""
         surface = self.surfaces[a - 1]
         points = np.array([(p.X, p.Y, p.Z) for edge in self.faces[a - 1].outer_wire().edges()
                            for p in (edge.position_at(float(u)) for u in np.linspace(0.0, 1.0, 9))])
         if surface.kind == "cylinder":
-            return float(np.ptp(points @ np.array(surface.axis)))
+            along = float(np.ptp(points @ np.array(surface.axis)))
+            return along, along
         u = _perpendicular(np.array(surface.normal))
-        return plane.min_rectangle(np.column_stack([points @ u, points @ np.cross(surface.normal, u)]))[1]
+        long, short, _ = plane.min_rectangle(np.column_stack([points @ u, points @ np.cross(surface.normal, u)]))
+        return short, long
 
     def classify(self) -> None:
         # The votes for the thickness: every ray between a face and the face opposite it -- an antiparallel
@@ -556,15 +590,21 @@ class _Analysis:
         opposite = {a: [h for h in hs if h.distance is not None and h.face and self._opposite(a, h.face)]
                     for a, hs in self.hits.items()}
         opposite = {a: hs for a, hs in opposite.items() if hs}
-        widths = {a: self._width(a) for a in opposite}
+        sizes = {a: self._width(a) for a in opposite}
+        widths = {a: size[0] for a, size in sizes.items()}
         planar = [(h.distance, h.area) for a, hs in opposite.items() for h in hs
                   if widths[a] >= SKIN_WIDTHS * h.distance * (1.0 - 1e-9)]
+        # a strip's faces vote only where no wider face does
+        planar = planar or [(h.distance, h.area) for a, hs in opposite.items() for h in hs
+                            if widths[a] >= STRIP_WIDTHS * h.distance * (1.0 - 1e-9)
+                            and sizes[a][1] >= STRIP_LENGTHS * h.distance * (1.0 - 1e-9)]
         if not planar and opposite:
             # no skin: the facts are read as before, off the opposite faces there are, and the part is not sheet
             widest = max(opposite, key=lambda a: (widths[a], self.areas[a - 1]))
             apart = float(np.median([h.distance for h in opposite[widest]]))
-            self.why = (f"no face is {SKIN_WIDTHS:g} times as wide as it is from the face opposite it (the widest "
-                        f"is {widths[widest]:.4g} mm wide and {apart:.4g} mm across): a bar or a block, not sheet")
+            self.why = (f"no face is {STRIP_WIDTHS:g} times as wide and {STRIP_LENGTHS:g} times as long as it is "
+                        f"from the face opposite it (the widest is {widths[widest]:.4g} mm wide and {apart:.4g} mm "
+                        "across): a bar or a block, not sheet")
             self.block = True
             planar = [(h.distance, h.area) for hs in opposite.values() for h in hs]
         if not planar:
@@ -700,11 +740,13 @@ class _Analysis:
                 point = np.array([centre.X, centre.Y, centre.Z])
             self._not_sheet(a, kind, local, max(deviation, tol), point, self.areas[a - 1])
 
-    def rolled(self) -> str:
-        """Why a part with no flat skin whose cylinders are a thickness apart is no brake part: a closed
-        section (a tube), or a sheet rolled round with no flat flange -- "" for any other part."""
+    def rolled(self) -> tuple[str, str]:
+        """What a part with no flat skin whose cylinders are a thickness apart is, and what that means here:
+        ("tube", why it is no sheet part) for a closed section; ("rolled", what was not measured) for a sheet
+        rolled round with no flat flange, which is sheet, and which this check does not unroll; ("", "") for
+        any other part."""
         if self.skins or not self.bend_faces:
-            return ""
+            return "", ""
         t = float(self.thickness)
         inside = min(float(self.surfaces[a - 1].radius) for a in self.bend_faces)
         axis = np.array(self.surfaces[min(self.bend_faces) - 1].axis)
@@ -712,10 +754,11 @@ class _Analysis:
         slit = any(self.surfaces[a - 1].kind != "plane" or abs(float(np.dot(self.surfaces[a - 1].normal, axis))) < _PARALLEL
                    for a in self.edge_set)
         if slit:
-            return (f"a {t:.4g} mm sheet rolled to a {inside:.4g} mm inside radius with no flat flange: rolled "
-                    "(on plate rolls), not bent on a brake, and not unfolded here")
-        return (f"a closed section, a tube of {t:.4g} mm wall and {inside:.4g} mm inside radius: no flat blank "
-                "bends into it")
+            return "rolled", (f"a {t:.4g} mm sheet rolled to a {inside:.4g} mm inside radius with no flat flange is "
+                              "rolled on plate rolls, not bent on a brake: this check unfolds a part from a flat "
+                              "flange, so its roll, its holes and its flat pattern were not measured")
+        return "tube", (f"a closed section, a tube of {t:.4g} mm wall and {inside:.4g} mm inside radius: no flat "
+                        "blank bends into it")
 
     def _step(self, a: int, thickness: float, tol: float) -> tuple[str, float, np.ndarray] | None:
         """For a face standing square on a skin beside it (a plane square to it, a cylinder about its normal):
@@ -1199,10 +1242,9 @@ class _Analysis:
                 pieces.extend(self._strip(bend))
         if not pieces:
             return
-        total = sum(piece.area for piece in pieces)
+        overlap = _overlap(pieces)
+        self.overlap = overlap if overlap > 1e-6 * sum(piece.area for piece in pieces) + 1e-6 else 0.0
         fused = pieces[0].fuse(*pieces[1:], tol=1e-6).clean() if len(pieces) > 1 else pieces[0]
-        flat_area = sum(face.area for face in fused.faces())
-        self.overlap = max(0.0, total - flat_area) if total - flat_area > 1e-6 * total + 1e-6 else 0.0
         if broken:  # the breaks of both skins lie over each other: the overlap is the flanges' and strips' alone
             try:
                 fused = bd.Compound(children=[_unslivered(face) for face in
@@ -1512,7 +1554,9 @@ def _bend_item(analysis: _Analysis, bend: _Bend) -> dict[str, Any]:
     t = float(analysis.thickness)
     angle = bend.angle
     tangent = math.tan(math.radians(angle) / 2) if angle < HEM_DEG else None
-    kind = "hem" if HEM_DEG <= angle <= 185.0 else "curl" if angle > 185.0 else "bend"
+    # a fold flat on itself, or a few thicknesses off it, is a hem; one round a wide radius is a U-bend
+    hem = HEM_DEG <= angle <= 185.0 and 2.0 * bend.inside_radius <= rules_side.HEM_DIAMETER_T * t * (1.0 + 1e-9)
+    kind = "hem" if hem else "curl" if angle > 185.0 else "bend"
     lines = []
     for end in (0, 1):
         for radius in (bend.inside_radius, bend.outside_radius):
@@ -1808,6 +1852,8 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
     for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
         if nearest is not None:
             key = (min(i, nearest[1]), max(i, nearest[1]))
+            if holes[key[0]]["kind"] != "round" and holes[key[1]]["kind"] != "round":
+                continue  # the bar between two cutouts is a web (``_outline_features``), not two holes' spacing
             pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
                                    "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
     spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
@@ -1836,7 +1882,10 @@ def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float
 def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thickness: float | None,
                       locate: Callable[[Any], tuple[str, list[float]]]) -> dict[str, list[dict]]:
     """Notches, tabs, webs and gaps of a flat outline (``loops``: outer loops labelled ``outer``, holes
-    ``hole``), each located by ``locate`` (a flat point to a ref and a point)."""
+    ``hole``), each located by ``locate`` (a flat point to a ref and a point). A web is the narrowest material
+    within an outline (a neck), or the bar between a cutout that is no round hole and the cutout nearest it
+    (a grille's slots, two windows side by side): the bars of one width are one item, with how many cutouts
+    they lie between (``cutouts``) -- one feature, where ``hole_spacing`` would say each pair of slots."""
     least = max(1e-3, 0.01 * (thickness or 0.1))
     notches, tabs, webs, gaps = [], [], [], []
     outer = [loop for loop in loops if loop.label == "outer"]
@@ -1857,7 +1906,7 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             if a != b or loops[a].label != "outer":
                 continue  # between two contours: hole_to_edge and hole_spacing measure it
             ref, xyz = locate(width.start)
-            webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
+            webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz, "said": "a neck of the outline",
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
             # across a hole its least width is the hole's size (``holes.size_mm``) but where it necks in: a gap
@@ -1868,6 +1917,20 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             ref, xyz = locate(width.start)
             gaps.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "between": "one contour" if a == b else "two contours"})
+    cutouts = [loop for loop in loops if loop.label == "hole" and loop.circle is None]
+    bars: dict[int, tuple[dict[str, Any], set[int]]] = {}
+    for k, found in enumerate(plane.nearest(cutouts)):
+        if found is None:
+            continue
+        if round(found[0] * 1000) not in bars:
+            _, start, end = plane.distance(cutouts[k], cutouts[found[1]])
+            ref, xyz = locate(start)
+            bars[round(found[0] * 1000)] = ({"width_mm": _r(found[0]), "location": ref, "xyz": xyz,
+                                             "across": [_r(float(v)) for v in (*start, *end)]}, set())
+        bar, between = bars[round(found[0] * 1000)]
+        between.update((k, found[1]))
+        bar.update(cutouts=len(between), said=f"between {len(between)} cutouts")
+    webs.extend(bar for bar, _ in bars.values())
     return {"notches": notches, "tabs": tabs, "webs": webs, "gaps": gaps}
 
 
@@ -1892,8 +1955,18 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
         "not_sheet_faces": len(analysis.not_sheet), "bent": False, "location": part.ref("face", largest),
     }
     is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5 and not analysis.block
+    kind, said = analysis.rolled() if t is not None and not analysis.block else ("", "")
+    if kind == "rolled":
+        # sheet, rolled: no error of the part's, and no pass of what this check does not unroll -- its bends
+        # are not measured (the one family that says so: the rest hold nothing of it)
+        item.update(is_sheet=True, rolled=True)
+        out.update({family: [] for family in FAMILIES}, parts=[item], not_sheet=analysis.not_sheet,
+                   bends=Unmeasured("rolled", said), _lost={}, _failed={})
+        for record in analysis.not_sheet:
+            record["face"] = analysis.ref(record["face"])
+        return out
     if t is not None and not is_sheet:
-        analysis.why = analysis.why or analysis.rolled() or \
+        analysis.why = analysis.why or said or \
             f"only {100 * analysis.sheet_fraction:.0f}% of its area is a {t:.4g} mm sheet"
     item["is_sheet"] = is_sheet
     if analysis.why:
@@ -2103,7 +2176,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         for part, result in zip(document.parts, results):
             value = result.get(family, [])
             if isinstance(value, Exception):
-                failure = failure or f"{part.owner or part.name}: {type(value).__name__}: {value}"
+                # what this check does not measure says itself; anything else, with what raised it
+                said = str(value) if isinstance(value, Unmeasured) else f"{type(value).__name__}: {value}"
+                failure = failure or ": ".join(filter(None, (part.owner or part.name, said)))
                 continue
             items.extend(value)
         if failure is not None:
@@ -2158,7 +2233,8 @@ def _unfolded(shape: Any, thickness: float | None, k_factor: float | None,
         analysis.probe()
         analysis.classify()
         if analysis.thickness is None or not analysis.skins:
-            raise ValueError(f"{part.name or 'the shape'} is not sheet metal: {analysis.why or 'no thickness'}")
+            raise ValueError(f"{part.name or 'the shape'} is not sheet metal: "
+                             f"{analysis.why or analysis.rolled()[1] or 'no thickness'}")
         if thickness is not None and abs(analysis.thickness - float(thickness)) > max(0.01, 0.005 * float(thickness)):
             raise ValueError(f"{part.name or 'the shape'} is {analysis.thickness:.4g} mm thick, not {float(thickness):g}")
         analysis.find_bends()
@@ -2200,8 +2276,9 @@ def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None
     thickness (the shop's, from its bend table; default Hubs's air-bending chart by ``material`` and each
     bend's radius). One part gives its flat ``Face`` (or a ``Compound`` of the
     pieces that do not join); several parts, a ``Compound`` of each one's. With ``bend_lines`` the result
-    is a ``Compound`` of the cut outline labelled ``CUT`` and the bends' centre lines labelled ``BEND``: a
-    DXF writes each label as its own layer. ``ValueError`` for a shape that is not one thickness of sheet.
+    is a ``Compound`` of the cut outline labelled ``CUT`` and the bends' centre lines labelled ``BEND`` (an
+    empty one for a flat plate, which has none): a DXF writes each label as its own layer. ``ValueError`` for a
+    shape that is not one thickness of sheet.
     """
     import build123d as bd
 
@@ -2212,6 +2289,6 @@ def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None
         return cut
     cut.label = "CUT"
     lines = [line for item in found for line in item.bend_lines]
-    bends = bd.Compound(children=lines) if lines else bd.Compound()
+    bends = bd.Compound(children=lines) if lines else bd.Compound([])  # (Compound() of nothing is refused)
     bends.label = "BEND"
     return bd.Compound(children=[cut, bends])
