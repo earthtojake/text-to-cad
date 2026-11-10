@@ -135,6 +135,16 @@ class OpenInRoutesTest(unittest.TestCase):
         self.assertEqual(self.post({"id": MODEL, "target": "export:glb", "app": "blender"}), (204, None))
         self.opener.assert_called_once_with(str(glb), FOUND["blender"], app_id="blender")
 
+    def test_solidworks_is_offered_for_a_step_alone_and_opens_it(self) -> None:
+        # SOLIDWORKS imports a STEP a person saves as a part: text-to-cad writes no SLDPRT.
+        self.found["solidworks"] = "C:/Program Files/SOLIDWORKS Corp/SOLIDWORKS/SLDWORKS.exe"
+        targets = {item["target"]: item["apps"] for item in self.get(MODEL)[1]["targets"]}
+        self.assertEqual(targets["export:step"], [entry("solidworks"), entry("freecad"), entry("bambu")])
+        self.assertNotIn(entry("solidworks"), targets["export:stl"])
+        self.assertEqual(self.post({"id": MODEL, "target": "export:step", "app": "solidworks"}), (204, None))
+        self.opener.assert_called_once_with(str(self.step), self.found["solidworks"], app_id="solidworks")
+        self.assertEqual(self.post({"id": MODEL, "target": "export:stl", "app": "solidworks"})[0], 400)
+
     def kicad_file(self, name: str, stamp: int) -> str:
         """A KiCad file of the format ``stamp``, as a document: its id."""
         path = Path(self.fixture.root) / name

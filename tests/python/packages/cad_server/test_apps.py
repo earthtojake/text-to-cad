@@ -449,6 +449,34 @@ class WindowsTest(Tree):
         # A folder variable that is not absolute is no folder.
         self.assertEqual(apps.windows({"LOCALAPPDATA": "Local", "ProgramFiles": "Program Files"}, lambda exe: None), {})
 
+    def test_solidworks_by_app_paths_else_its_installers_folder_the_newest_of_parallel_installations(self) -> None:
+        program_files = self.root / "Program Files"
+        environ = {"ProgramFiles": str(program_files)}
+        default = executable(program_files / "SOLIDWORKS Corp" / "SOLIDWORKS" / "SLDWORKS.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidworks": default})
+        # A parallel installation with its version in a folder's name, written later than the other: the newer.
+        os.utime(default, (1_000_000, 1_000_000))
+        parallel = executable(program_files / "SOLIDWORKS Corp (2026)" / "SOLIDWORKS" / "SLDWORKS.exe")
+        executable(program_files / "SOLIDWORKS Corp" / "eDrawings" / "eDrawings.exe")  # not SOLIDWORKS
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidworks": parallel})
+        # App Paths, where it names one, comes first, wherever it is.
+        registered = executable(self.root / "D" / "CAD" / "SLDWORKS.exe")
+        found = apps.windows(environ, {"SLDWORKS.exe": registered}.get)
+        self.assertEqual(found, {"solidworks": registered})
+        # And it is started on the STEP as every Windows app is: its executable, the file the one argument.
+        spawn = mock.Mock()
+        apps.open_file("C:/m/part.step", found["solidworks"], app_id="solidworks", platform="win32", spawn=spawn)
+        spawn.assert_called_once_with([registered, "C:/m/part.step"], creationflags=0x00000008 | 0x00000200,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                      close_fds=True)
+
+    def test_solidworks_is_windows_alone(self) -> None:
+        # No macOS or Linux build: no bundle, identifier or command is looked for.
+        self.assertNotIn("solidworks", {**apps.MAC_BUNDLES, **apps.MAC_IDS, **apps.LINUX_COMMANDS})
+        bundle(self.root / "SOLIDWORKS.app")
+        self.assertNotIn("solidworks", apps.mac([self.root]))
+        self.assertNotIn("solidworks", apps.linux(lambda name: f"/usr/bin/{name}"))
+
 
 class LinuxTest(unittest.TestCase):
     def test_each_app_by_its_first_command_found(self) -> None:
@@ -467,7 +495,7 @@ class KindsTest(unittest.TestCase):
         ids = {kind: [entry["id"] for entry in apps.apps_for(kind, every)]
                for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
-                               "step": ["fusion", "freecad", "bambu", "orca", "prusa"],
+                               "step": ["fusion", "solidworks", "freecad", "bambu", "orca", "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
                                "3mf": ["bambu", "orca", "prusa", "freecad"],
                                "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
@@ -475,7 +503,7 @@ class KindsTest(unittest.TestCase):
         self.assertEqual(apps.apps_for("step", {"bambu": "/b", "vscode": "/v"}), [{"id": "bambu", "name": "Bambu Studio"}])
         self.assertEqual(apps.APPS, {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed",
                                      "pycharm": "PyCharm", "sublime": "Sublime Text", "fusion": "Autodesk Fusion",
-                                     "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
+                                     "solidworks": "SOLIDWORKS", "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
                                      "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
                                      "kicad-nightly": "KiCad nightly"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],

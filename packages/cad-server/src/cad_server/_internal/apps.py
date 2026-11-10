@@ -64,16 +64,18 @@ __all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "KINDS", "REFRESH_SECONDS", "De
 
 # Every app Open in offers: its id and the name the menu shows.
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
-        "sublime": "Sublime Text", "fusion": "Autodesk Fusion", "freecad": "FreeCAD", "bambu": "Bambu Studio",
-        "orca": "OrcaSlicer", "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
+        "sublime": "Sublime Text", "fusion": "Autodesk Fusion", "solidworks": "SOLIDWORKS", "freecad": "FreeCAD",
+        "bambu": "Bambu Studio", "orca": "OrcaSlicer", "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
         "kicad-nightly": "KiCad nightly"}
 # The apps that take each kind of file, in the menu's order. A kind not here takes none: the file
 # manager and the default app alone.
+# SOLIDWORKS takes a STEP, which it imports as a part or an assembly a person saves as its own (FeatureWorks
+# recovers the features): text-to-cad writes no SLDPRT, a closed format.
 # Blender takes what its import script does (``BLENDER_SCRIPT``): a GLB and an STL, never a 3MF, which no
 # Blender reads without an add-on.
 _MESHES = ("bambu", "orca", "prusa", "freecad")
 KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
-         "step": ("fusion", "freecad", "bambu", "orca", "prusa"),
+         "step": ("fusion", "solidworks", "freecad", "bambu", "orca", "prusa"),
          "stl": (*_MESHES, "blender"), "3mf": _MESHES, "glb": ("blender",),
          "kicad_pcb": ("kicad", "kicad-nightly"), "kicad_sch": ("kicad", "kicad-nightly")}
 
@@ -94,7 +96,7 @@ _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 # macOS: each app's bundles, as globs under each folder of ``MAC_FOLDERS``, in order of preference,
-# and its bundle identifiers, which Spotlight finds a bundle by wherever it is.
+# and its bundle identifiers, which Spotlight finds a bundle by wherever it is (SOLIDWORKS has no macOS build).
 MAC_BUNDLES = {
     "vscode": ("Visual Studio Code.app",),
     "cursor": ("Cursor.app",),
@@ -130,8 +132,8 @@ MAC_KICAD_ID = "org.kicad.kicad"
 # Windows: each app's executable as App Paths names it, then where its installers put it, each
 # under the folder an environment variable names (globs: the newest file a glob finds).
 WINDOWS_EXES = {"vscode": "Code.exe", "cursor": "Cursor.exe", "zed": "Zed.exe", "pycharm": "pycharm64.exe",
-                "sublime": "sublime_text.exe", "fusion": "Fusion360.exe", "freecad": "FreeCAD.exe",
-                "bambu": "bambu-studio.exe", "orca": "orca-slicer.exe", "prusa": "prusa-slicer.exe",
+                "sublime": "sublime_text.exe", "fusion": "Fusion360.exe", "solidworks": "SLDWORKS.exe",
+                "freecad": "FreeCAD.exe", "bambu": "bambu-studio.exe", "orca": "orca-slicer.exe", "prusa": "prusa-slicer.exe",
                 "blender": "blender.exe"}
 WINDOWS_FOLDERS = {
     "vscode": (("LOCALAPPDATA", "Programs", "Microsoft VS Code", "Code.exe"),
@@ -143,6 +145,8 @@ WINDOWS_FOLDERS = {
     "sublime": (("ProgramFiles", "Sublime Text", "sublime_text.exe"),
                 ("ProgramFiles", "Sublime Text 3", "sublime_text.exe")),
     "fusion": (("LOCALAPPDATA", "Autodesk", "webdeploy", "production", "*", "Fusion360.exe"),),
+    # SOLIDWORKS Corp\SOLIDWORKS, its installer's; a parallel installation's may carry its version in either name.
+    "solidworks": (("ProgramFiles", "SOLIDWORKS Corp*", "SOLIDWORKS*", "SLDWORKS.exe"),),
     "freecad": (("LOCALAPPDATA", "Programs", "FreeCAD*", "bin", "FreeCAD.exe"),
                 ("ProgramFiles", "FreeCAD*", "bin", "FreeCAD.exe")),
     "bambu": (("ProgramFiles", "Bambu Studio", "bambu-studio.exe"),),
@@ -155,7 +159,7 @@ _APP_PATHS = r"Software\Microsoft\Windows\CurrentVersion\App Paths"
 WINDOWS_KICAD_FOLDERS = (("ProgramFiles", "KiCad"), ("LOCALAPPDATA", "Programs", "KiCad"))
 _UNINSTALL = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
-# Linux: each app's commands, in order of preference (Fusion has no Linux build).
+# Linux: each app's commands, in order of preference (Fusion and SOLIDWORKS have no Linux build).
 LINUX_COMMANDS = {"vscode": ("code",), "cursor": ("cursor",), "zed": ("zed", "zeditor"),
                   "pycharm": ("pycharm", "pycharm-community", "pycharm-professional"), "sublime": ("subl",),
                   "freecad": ("freecad", "FreeCAD"), "bambu": ("bambu-studio",), "orca": ("orca-slicer",),
