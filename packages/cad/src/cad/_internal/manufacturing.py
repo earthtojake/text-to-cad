@@ -479,22 +479,15 @@ def _unmeasured_families(report: dict[str, Any], record: dict[str, Any]) -> list
     """What the rules could not judge for want of a whole family: one this source does not measure by its nature
     (the report's ``not_measured``: a mesh's holes, a cut file's bends), said once as a fact with the rules it
     leaves unjudged (``families_not_measured``, info); and one the report lacks though a rule that applies
-    reads it (an outcome's ``absent``), which no one has said: ``measurement_failed``, so the check is not
+    reads it (the record's ``absent``), which no one has said: ``measurement_failed``, so the check is not
     checked."""
     found: list[CheckFinding] = []
     by_nature = report.get("not_measured") or {}
-    unjudged: dict[str, list[str]] = {}
-    absent: dict[str, list[str]] = {}
-    for outcome in record["outcomes"]:
-        if outcome["status"] != "not_evaluated":
-            continue
-        if outcome.get("absent"):
-            absent.setdefault(outcome["family"], []).append(outcome["rule"])
-        elif outcome["family"] in by_nature:
-            unjudged.setdefault(outcome["family"], []).append(outcome["rule"])
+    unjudged: dict[str, list[str]] = record.get("not_measured") or {}
+    absent: dict[str, list[str]] = record.get("absent") or {}
     if unjudged:
         reasons = "; ".join(dict.fromkeys(str(by_nature[family]) for family in unjudged))
-        rules_said = ", ".join(rule for rules_of in unjudged.values() for rule in rules_of)
+        rules_said = ", ".join(dict.fromkeys(rule for rules_of in unjudged.values() for rule in rules_of))
         found.append(CheckFinding(
             "info", "families_not_measured",
             f"{', '.join(unjudged)} {'is' if len(unjudged) == 1 else 'are'} not measured on this source "

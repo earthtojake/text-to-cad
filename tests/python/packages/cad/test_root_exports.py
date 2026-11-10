@@ -29,8 +29,8 @@ NAMESPACES = {
                       "posed", "animation", "memo", "paint", "GeometryError", "GeometryIssue", "ClosestPoints",
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
-                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", "cnc", "sheet_metal",
-                      "molding", "printing", "unfold"),
+                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", "dfm", "cnc",
+                      "sheet_metal", "molding", "printing", "unfold"),
 }
 
 
@@ -110,7 +110,7 @@ class RootExports(unittest.TestCase):
                    "screw_pair": mechanism, "posed": mechanism,
                    **{name: _geometry for name in _geometry.__all__},
                    **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)},
-                   **{name: _dfm_check for name in ("cnc", "sheet_metal", "molding", "printing")},
+                   **{name: _dfm_check for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
                    "unfold": _dfm_sheet}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)

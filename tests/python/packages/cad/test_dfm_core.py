@@ -188,12 +188,17 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(record["outcomes"][0]["status"], "not_evaluated")
         self.assertEqual([(f.code, f.location) for f in found], [("rule_partly_judged", "p/face 1")])
         self.assertIn("r judged 0 of 1 f", found[0].message)
-        # a family the report lacks is marked for the check to say; one its source does not measure says why
+        # a family the report lacks is named for the check to say; one its source does not measure says why
         _, record = evaluate({}, _set(rule), {})
-        self.assertEqual((record["outcomes"][0]["status"], record["outcomes"][0].get("absent")), ("not_evaluated", True))
+        self.assertEqual((record["outcomes"][0]["status"], record["absent"], record["not_measured"]),
+                         ("not_evaluated", {"f": ["r"]}, {}))
         _, record = evaluate({"not_measured": {"f": "a mesh holds none"}}, _set(rule), {})
-        self.assertEqual((record["outcomes"][0]["reason"], "absent" in record["outcomes"][0]),
-                         ("f was not measured: a mesh holds none", False))
+        self.assertEqual((record["outcomes"][0]["reason"], record["absent"], record["not_measured"]),
+                         ("f was not measured: a mesh holds none", {}, {"f": ["r"]}))
+        # a rule that reads two families, one of them lacking: its other variant's verdict does not hide it
+        twice = Rule("r", "g", "v", "min", 1.0, "mm", "v", "s")
+        _, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}]}}, _set(rule, twice), {})
+        self.assertEqual((record["outcomes"][0]["status"], record["absent"]), ("passed", {"g": ["r"]}))
 
     def test_text_to_cad_s_own_limits_cite_one_source_in_every_table(self) -> None:
         from cad._internal import dfm

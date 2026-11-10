@@ -27,8 +27,9 @@ and never a pass: the rule is ``partial`` (it judged the rest) or ``not_evaluate
 is the same: one a source does not measure by its nature is named in the report's ``not_measured`` (a mesh's
 holes, a cut file's bends: ``{family: why}``), its rules ``not_evaluated`` with that reason and said once
 (``families_not_measured``); one that failed is ``{"error": ...}`` (``measurement_failed``); one a report
-simply lacks, where a rule that applies reads it, was not measured either, and its outcome says so
-(``absent``), which ``finish`` says as ``measurement_failed`` too. A table whose rules come in
+simply lacks, where a rule that applies reads it, was not measured either: the record names it with the rules
+that read it (``absent``, as ``not_measured`` names the first kind's), which ``finish`` says as
+``measurement_failed`` too. A table whose rules come in
 variants by one context key (``RuleSet.selector``: printing's ``technology``) has no figure for a value none
 of a rule id's variants names: that rule is ``not_evaluated`` too, and a check that evaluated nothing is said
 (``rules_none_evaluated``) rather than read as a pass. Whatever its variants, the record holds one outcome
@@ -315,6 +316,9 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     # each item once
     judged: dict[int, tuple[dict[int, None], dict[int, str]]] = {}
     feature: dict[int, str] = {}  # each failure's feature, its finding's place; the record keeps the item's own
+    # the families not measured, each with the rules that read it: by the source's nature, or lacking
+    by_nature: dict[str, dict[str, None]] = {}
+    absent: dict[str, dict[str, None]] = {}
     for rule in rule_set.rules:
         if not rule.applies(context):
             # Recorded, never dropped: a rule that does not apply here is not a pass either.
@@ -336,13 +340,14 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             continue
         if items is None:
             # Not measured: by the source's nature (the report says why), because it failed (its own error), or
-            # because the report lacks it -- which no one has said yet (``absent``: ``finish`` does).
+            # because the report lacks it -- which no one has said yet (the record's ``absent``: ``finish`` does).
             family = report.get(rule.family)
-            by_nature = (report.get("not_measured") or {}).get(rule.family)
-            outcome.update(status="not_evaluated", reason=f"{rule.family} was not measured"
-                           + (f": {by_nature}" if by_nature else ""))
-            if not by_nature and not (isinstance(family, Mapping) and "error" in family):
-                outcome["absent"] = True
+            why = (report.get("not_measured") or {}).get(rule.family)
+            outcome.update(status="not_evaluated", reason=f"{rule.family} was not measured" + (f": {why}" if why else ""))
+            if why:
+                by_nature.setdefault(rule.family, {})[rule.id] = None
+            elif not (isinstance(family, Mapping) and "error" in family):
+                absent.setdefault(rule.family, {})[rule.id] = None
             outcomes.append(outcome)
             continue
         if not readable:
@@ -460,6 +465,9 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         "partial": [outcome["rule"] for outcome in outcomes if outcome["status"] == "partial"],
         "failed": [outcome["rule"] for outcome in outcomes if outcome["status"] == "failed"],
         "failing": counts,
+        # the families not measured and the rules that read each: what the source does not hold, what is lacking
+        "not_measured": {family: list(read_by) for family, read_by in by_nature.items()},
+        "absent": {family: list(read_by) for family, read_by in absent.items()},
         "outcomes": outcomes,
         "sources": [source.as_data() for source in rule_set.sources],
     }

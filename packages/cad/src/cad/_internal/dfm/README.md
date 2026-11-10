@@ -240,6 +240,7 @@ finding counts the rest (`value` None, `location` `measurements.rules`, `items` 
  "partial": false, "partial_sections": [],
  "rules": {"title", "version", "note", "context", "evaluated", "failed": [ids], "partial": [ids],
            "none_found": [ids], "failing": {"error": {id: n}, "warning": {id: n}},
+           "not_measured": {family: [ids]}, "absent": {family: [ids]},
            "outcomes": [{"rule", "family", "field", "op", "limit", "unit", "severity", "source", "status",
                          "evaluated", "unmeasured", "unmeasured_faces",
                          "failures": [{"value", "location", "xyz", "refs", "item", "limit"}], "reason",
@@ -328,7 +329,8 @@ count a summary says.
   same), `not_evaluated` (the rules give no limit for this material or technology; or the figure was not
   measured of any item, which `rule_partly_judged` says too; or the family was not measured: by the
   source's nature, its reason the report's `not_measured`; because it failed; or because the report lacks
-  it, `absent`, which is `measurement_failed`: unverified)
+  it, which is `measurement_failed` -- `rules.not_measured` and `rules.absent` name each such family with the
+  rules that read it: unverified)
   or `not_applicable` (the rule is for another context -- turning, a sheet given, a cut file -- or reads a
   figure this source's items do not carry, which another rule judges). Rules that come in variants by one
   key (`RuleSet.selector`, printing's `technology`) with no variant of a rule id for the part's value leave
