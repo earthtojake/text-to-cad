@@ -48,6 +48,9 @@ FACE_SAMPLES = 16
 MESH_SHARE = 0.003
 #: The ray grids kept, one per direction, the least recently used dropped first.
 GRIDS_KEPT = 64
+#: Rays whose boxes are tested together: as many as keep rays x faces under this (a slab test holds a few arrays
+#: of that many numbers), 256 at most -- so a part of any face count takes bounded memory a batch.
+BATCH_PAIRS = 1_000_000
 
 
 def unit(vector: Iterable[float]) -> np.ndarray:
@@ -738,8 +741,9 @@ class Model:
                 givens[row] = self._candidates(o, d, skip, 1e9)  # along a world axis: its own slab test
             else:
                 general.append(row)
-        for start in range(0, len(general), 256):
-            rows = general[start:start + 256]
+        chunk = self._batch()
+        for start in range(0, len(general), chunk):
+            rows = general[start:start + chunk]
             mask, enter = self._slabs(origins[rows], ways[rows], skip, 1e9)
             for k, row in enumerate(rows):
                 index = np.flatnonzero(mask[k])
@@ -770,10 +774,15 @@ class Model:
         world = any(abs(float(d @ w)) > 1 - 1e-12 for w in WORLD[::2])
         return self.projected(d, build=world or count >= 4)
 
+    def _batch(self) -> int:
+        """How many rays' boxes are tested together (``BATCH_PAIRS``)."""
+        return max(8, min(256, BATCH_PAIRS // max(1, self.n)))
+
     def escape_all(self, points: np.ndarray, normals: np.ndarray, direction: np.ndarray,
-                   skip: float = 1e-4, chunk: int = 256) -> np.ndarray:
+                   skip: float = 1e-4) -> np.ndarray:
         """``escapes`` for many points along one direction, their boxes tested together."""
         d = unit(direction)
+        chunk = self._batch()
         found = np.zeros(len(points), dtype=bool)
         origins = points + normals * LIFT
         grid = self._shared(d, len(points))
@@ -792,10 +801,10 @@ class Model:
                 found[start + row] = not len(given[0]) or self._cast(block[row], d, skip, 1e9, False, given) is None
         return found
 
-    def first_all(self, origins: np.ndarray, directions: np.ndarray, skip: float = 1e-4,
-                  chunk: int = 256) -> list[Hit | None]:
+    def first_all(self, origins: np.ndarray, directions: np.ndarray, skip: float = 1e-4) -> list[Hit | None]:
         """``first`` for many rays, each its own direction, their boxes tested together."""
         found: list[Hit | None] = []
+        chunk = self._batch()
         dirs = directions / np.maximum(np.linalg.norm(directions, axis=1), 1e-300)[:, None]
         same = len(dirs) > 0 and bool(np.all(np.abs(dirs - dirs[0]) < 1e-12))  # a plane's samples share one
         grid = self._shared(dirs[0], len(dirs)) if same else None

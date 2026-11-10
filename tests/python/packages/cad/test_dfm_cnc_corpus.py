@@ -13,8 +13,11 @@ case, a limit of the measurement that the case shows).
 Edge cases: fillets everywhere, a freeform (spline) surface, an assembly, an inch STEP, a 2 mm part and a
 2.2 m one, a turned part, a part that needs six setups, a T-slot and a dovetail (through and blind), a closed
 void, an inclined hole and an inclined pocket on three axes and on five, a sharp-cornered window, a hole a
-slot splits, an offset cross hole on a turned part, creases either side of the ball end mill's angle, and
-engraved text.
+slot splits, an offset cross hole on a turned part, creases either side of the ball end mill's angle,
+engraved text, and a rounded chamber no tool gets into behind a bore beside one a keyseat cutter does.
+
+Every case is checked again tilted a third of a degree off the world's axes: a verdict never turns with the
+part's placement.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ import build123d as bd
 
 import cad.step
 from cad.build123d import _dfm_brep as brep
+from cad.build123d import cnc
 
 A = bd.Align
 Box3 = tuple[tuple[float, float, float], tuple[float, float, float]]
@@ -333,6 +337,16 @@ def webs() -> Any:
     return _labelled(part, "webs")
 
 
+def chambers() -> Any:
+    """Two rounded chambers, each behind a 10 mm bore from the top: one 24 mm across, which no cutter that
+    passes the bore reaches the wall of (planted), and one 16 mm across, a keyseat cutter's."""
+    part = bd.Box(80, 40, 40)
+    for x, radius in ((-20, 12.0), (20, 8.0)):
+        chamber = bd.fillet(bd.Cylinder(radius, 6).edges(), 1.0)
+        part -= bd.Pos(x, 0, 10) * bd.Cylinder(5, 30) + bd.Pos(x, 0, -5) * chamber
+    return _labelled(part, "chambers")
+
+
 def knife() -> Any:
     """A block whose +x end is bevelled to an 18.4-degree knife edge (planted)."""
     profile = bd.Polygon((0, 0), (40, 0), (40, 10), (30, 10), align=None)
@@ -358,14 +372,18 @@ CASES = [
                  ("cnc.pocket_depth_to_width", None, box(-42, -21.5, 5, -18, -18.5, 20)),
                  ("cnc.corner_radius_to_depth", None, box(-42, -21.5, 5, -18, -18.5, 20)),
                  ("cnc.corner_reach", None, box(-42, -21.5, 5, -18, -18.5, 20))]),
+    # each rib stands 15 mm: 19, 12 and 5 times its thickness, tall thin features all (a warning)
     Case("ribs", walls, {"material": "abs"},
          expect=[("cnc.wall_thickness", None, box(-25, -12.4, 0, 25, -11.6, 15)),
                  ("cnc.wall_thickness_recommended", None, box(-25, -12.4, 0, 25, -11.6, 15)),
-                 ("cnc.wall_thickness_recommended", None, box(-25, -0.6, 0, 25, 0.6, 15))]),
+                 ("cnc.wall_thickness_recommended", None, box(-25, -0.6, 0, 25, 0.6, 15)),
+                 ("cnc.tall_feature", None, box(-25, -12.4, 0, 25, -11.6, 15)),
+                 ("cnc.tall_feature", None, box(-25, -0.6, 0, 25, 0.6, 15)),
+                 ("cnc.tall_feature", None, box(-25, 10.5, 0, 25, 13.5, 15))]),
     Case("drilled", holes, {"material": "steel"},
          expect=[("cnc.drill_size", None, box(2.8, -2.2, 10, 7.2, 2.2, 25)),
                  ("cnc.hole_depth", None, box(19, -1, -12, 21, 1, 25)),
-                 ("cnc.hole_diameter", None, box(29.6, -0.4, 21, 30.4, 0.4, 25)),
+                 ("cnc.hole_diameter_small", None, box(29.6, -0.4, 21, 30.4, 0.4, 25)),
                  ("cnc.hole_depth", None, box(39.5, -0.5, -21, 40.5, 0.5, 25)),
                  ("cnc.hole_depth_limit", None, box(39.5, -0.5, -21, 40.5, 0.5, 25))]),
     # the T open at both ends is in line of sight along x, but only a T-slot cutter makes it: an undercut too
@@ -443,8 +461,13 @@ CASES = [
                  ("cnc.pocket_depth_to_width", None, box(0.98, -1, 0.8, 1.02, 1, 1)),
                  ("cnc.wall_thickness", None, box(-0.7, -1, 0.75, -0.55, 1, 1)),
                  ("cnc.wall_thickness_recommended", None, box(-0.7, -1, 0.75, -0.55, 1, 1))]),
-    # 2.2 m: no general limit on a part's size (a machine's is a shop's)
-    Case("huge", huge, {"material": "aluminum"}),
+    # 2.2 m: longer than the cited network's mills take (a warning), within what a gantry mill does
+    Case("huge", huge, {"material": "aluminum"}, expect=[("cnc.part_size", None, None)]),
+    # the 24 mm chamber's faces: no straight line reaches them and no disc that passes its bore does (an error,
+    # one finding); the 16 mm one's a keyseat cutter reaches (an undercut, a warning)
+    Case("chambers", chambers, {"material": "aluminum"},
+         expect=[("cnc.no_line_of_sight", None, box(-32, -12, -8, -8, 12, -2)),
+                 ("cnc.undercut", None, box(12, -8, -8, 28, 8, -2))]),
     Case("tooled", tooled, {"material": "aluminum", "tools": "3,6"},
          expect=[("cnc.internal_corner_radius", None, box(-10, -7, 3, 10, 7, 6))]),
     Case("windows", windows, {"material": "aluminum", "tools": "3,6,10"},
@@ -569,6 +592,20 @@ class CorpusTest(unittest.TestCase):
 
     def test_no_rule_fails_where_nothing_was_planted(self) -> None:
         self.assertEqual(self.false, [])
+
+    def test_a_tilt_off_the_world_s_axes_changes_no_verdict(self) -> None:
+        # each part again, a third of a degree off the axes it was drawn along: the rules that fail and the
+        # setups it takes are the part's, not its placement's
+        tilt = bd.Rot(0.3, 0.2, 0)
+        for name, (case, result, _) in self.results.items():
+            if case.unit is not None:
+                continue
+            with self.subTest(case=name):
+                tilted = cnc(tilt * case.build(), **case.options)
+                self.assertEqual(sorted(tilted.measurements["rules"]["failed"]),
+                                 sorted(result.measurements["rules"]["failed"]))
+                self.assertEqual(sorted(item["setup_count"] for item in tilted.measurements["setups"]["items"]),
+                                 sorted(item["setup_count"] for item in result.measurements["setups"]["items"]))
 
     def test_every_family_is_measured(self) -> None:
         for name, (_, result, _) in self.results.items():
