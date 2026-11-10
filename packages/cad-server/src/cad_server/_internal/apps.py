@@ -64,12 +64,12 @@ __all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "KINDS", "REFRESH_SECONDS", "De
 
 # Every app Open in offers: its id and the name the menu shows.
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
-        "sublime": "Sublime Text", "fusion": "Autodesk Fusion", "solidworks": "SOLIDWORKS", "freecad": "FreeCAD",
+        "sublime": "Sublime Text", "fusion": "Autodesk Fusion", "solidworks": "SolidWorks", "freecad": "FreeCAD",
         "bambu": "Bambu Studio", "orca": "OrcaSlicer", "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
         "kicad-nightly": "KiCad nightly"}
 # The apps that take each kind of file, in the menu's order. A kind not here takes none: the file
 # manager and the default app alone.
-# SOLIDWORKS takes a STEP, which it imports as a part or an assembly a person saves as its own (FeatureWorks
+# SolidWorks takes a STEP, which it imports as a part or an assembly a person saves as its own (FeatureWorks
 # recovers the features): text-to-cad writes no SLDPRT, a closed format.
 # Blender takes what its import script does (``BLENDER_SCRIPT``): a GLB and an STL, never a 3MF, which no
 # Blender reads without an add-on.
@@ -96,7 +96,7 @@ _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 # macOS: each app's bundles, as globs under each folder of ``MAC_FOLDERS``, in order of preference,
-# and its bundle identifiers, which Spotlight finds a bundle by wherever it is (SOLIDWORKS has no macOS build).
+# and its bundle identifiers, which Spotlight finds a bundle by wherever it is (SolidWorks has no macOS build).
 MAC_BUNDLES = {
     "vscode": ("Visual Studio Code.app",),
     "cursor": ("Cursor.app",),
@@ -159,7 +159,7 @@ _APP_PATHS = r"Software\Microsoft\Windows\CurrentVersion\App Paths"
 WINDOWS_KICAD_FOLDERS = (("ProgramFiles", "KiCad"), ("LOCALAPPDATA", "Programs", "KiCad"))
 _UNINSTALL = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
-# Linux: each app's commands, in order of preference (Fusion and SOLIDWORKS have no Linux build).
+# Linux: each app's commands, in order of preference (Fusion and SolidWorks have no Linux build).
 LINUX_COMMANDS = {"vscode": ("code",), "cursor": ("cursor",), "zed": ("zed", "zeditor"),
                   "pycharm": ("pycharm", "pycharm-community", "pycharm-professional"), "sublime": ("subl",),
                   "freecad": ("freecad", "FreeCAD"), "bambu": ("bambu-studio",), "orca": ("orca-slicer",),

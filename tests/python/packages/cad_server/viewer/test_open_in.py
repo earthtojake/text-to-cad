@@ -136,7 +136,7 @@ class OpenInRoutesTest(unittest.TestCase):
         self.opener.assert_called_once_with(str(glb), FOUND["blender"], app_id="blender")
 
     def test_solidworks_is_offered_for_a_step_alone_and_opens_it(self) -> None:
-        # SOLIDWORKS imports a STEP a person saves as a part: text-to-cad writes no SLDPRT.
+        # SolidWorks imports a STEP a person saves as a part: text-to-cad writes no SLDPRT.
         self.found["solidworks"] = "C:/Program Files/SOLIDWORKS Corp/SOLIDWORKS/SLDWORKS.exe"
         targets = {item["target"]: item["apps"] for item in self.get(MODEL)[1]["targets"]}
         self.assertEqual(targets["export:step"], [entry("solidworks"), entry("freecad"), entry("bambu")])

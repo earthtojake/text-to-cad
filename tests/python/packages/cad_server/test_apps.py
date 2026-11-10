@@ -457,7 +457,7 @@ class WindowsTest(Tree):
         # A parallel installation with its version in a folder's name, written later than the other: the newer.
         os.utime(default, (1_000_000, 1_000_000))
         parallel = executable(program_files / "SOLIDWORKS Corp (2026)" / "SOLIDWORKS" / "SLDWORKS.exe")
-        executable(program_files / "SOLIDWORKS Corp" / "eDrawings" / "eDrawings.exe")  # not SOLIDWORKS
+        executable(program_files / "SOLIDWORKS Corp" / "eDrawings" / "eDrawings.exe")  # not SolidWorks
         self.assertEqual(apps.windows(environ, lambda exe: None), {"solidworks": parallel})
         # App Paths, where it names one, comes first, wherever it is.
         registered = executable(self.root / "D" / "CAD" / "SLDWORKS.exe")
@@ -503,7 +503,7 @@ class KindsTest(unittest.TestCase):
         self.assertEqual(apps.apps_for("step", {"bambu": "/b", "vscode": "/v"}), [{"id": "bambu", "name": "Bambu Studio"}])
         self.assertEqual(apps.APPS, {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed",
                                      "pycharm": "PyCharm", "sublime": "Sublime Text", "fusion": "Autodesk Fusion",
-                                     "solidworks": "SOLIDWORKS", "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
+                                     "solidworks": "SolidWorks", "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
                                      "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
                                      "kicad-nightly": "KiCad nightly"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],
