@@ -90,7 +90,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   itself where nothing in it can open (the web viewer's), else each such entry — the card's Browser
   needs no source and stays enabled, its Finder disabled. The source's apps and Default app are
   disabled the same way; an export on disk still opens. Open in's entries are one list, each with
-  whether it opens now and why not (`openInMenu`). No ⋯ where there is nothing. The home has no file and no ⋯. The name has
+  whether it opens now and why not (`openInMenu`). Each Open in row leads with its mark, 14px in the
+  row's muted icon colour, so every row reads alike (`OpenInMark`, `navigation/appMarks.jsx`): an app's
+  own single-colour mark where one is published under a licence the package can ship (provenance:
+  `src/assets/README.md`), else Lucide's `AppWindow`, never a mark drawn by hand; **Browser** `Globe`,
+  the file manager `Folder`, **Default app** `ExternalLink`. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
