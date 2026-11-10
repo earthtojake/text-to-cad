@@ -107,6 +107,27 @@ class MacTest(Tree):
         toolbox = bundle(self.root / "PyCharm 2025.2.app")
         self.assertEqual(apps.mac([self.root], None), {"pycharm": toolbox})
 
+    def test_rhino_its_newest_named_release_first_and_plasticity_by_its_bundle_or_identifier(self) -> None:
+        bundle(self.root / "Rhino 7.app")
+        rhino = bundle(self.root / "Rhino 8.app")
+        self.assertEqual(apps.mac([self.root], None), {"rhino": rhino})
+        plasticity = bundle(self.root / "elsewhere" / "Plasticity.app", "com.electron.plasticity")
+        asked = []
+
+        def spotlight(idents):
+            asked.append(idents)
+            return [plasticity]
+
+        self.assertEqual(apps.mac([self.root], spotlight), {"rhino": rhino, "plasticity": plasticity})
+        self.assertNotIn("com.mcneel.rhinoceros.8", asked[0])
+        self.assertIn("com.electron.plasticity", asked[0])
+        # A Rhino whose release no name here says, by the glob.
+        other = self.root / "other"
+        self.assertEqual(apps.mac([other], None), {})
+        self.assertEqual(apps.mac([other], lambda idents: []), {})
+        nine = bundle(other / "Rhino 9.app")
+        self.assertEqual(apps.mac([other], None), {"rhino": nine})
+
 
 class MacKiCadTest(Tree):
     def test_both_channels_at_once_each_its_newest_of_the_folders_and_spotlight(self) -> None:
@@ -470,6 +491,19 @@ class WindowsTest(Tree):
                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                       close_fds=True)
 
+    def test_rhino_by_its_releases_folder_and_plasticity_by_its_installers_the_users_first(self) -> None:
+        local, program_files = self.root / "Local", self.root / "Program Files"
+        environ = {"LOCALAPPDATA": str(local), "ProgramFiles": str(program_files)}
+        seven = executable(program_files / "Rhino 7" / "System" / "Rhino.exe")
+        os.utime(seven, (1_000_000, 1_000_000))
+        eight = executable(program_files / "Rhino 8" / "System" / "Rhino.exe")
+        machine = executable(program_files / "Plasticity" / "Plasticity.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"rhino": eight, "plasticity": machine})
+        user = executable(local / "Plasticity" / "Plasticity.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None)["plasticity"], user)
+        # The MSI's App Paths entry, where there is one, first.
+        self.assertEqual(apps.windows(environ, {"Plasticity.exe": machine}.get)["plasticity"], machine)
+
     def test_solidworks_is_windows_alone(self) -> None:
         # No macOS or Linux build: no bundle, identifier or command is looked for.
         self.assertNotIn("solidworks", {**apps.MAC_BUNDLES, **apps.MAC_IDS, **apps.LINUX_COMMANDS})
@@ -485,8 +519,10 @@ class LinuxTest(unittest.TestCase):
         self.assertEqual(apps.linux(commands.get), {"vscode": "/usr/bin/code", "zed": "/usr/bin/zeditor",
                                                     "pycharm": "/snap/bin/pycharm-community",
                                                     "freecad": "/opt/freecad/FreeCAD", "blender": "/usr/bin/blender"})
-        # Fusion has no Linux build: no command finds it.
-        self.assertNotIn("fusion", apps.linux(lambda name: f"/usr/bin/{name}"))
+        # Fusion, SolidWorks and Rhino have no Linux build: no command finds them. Plasticity's packages put `plasticity` on PATH.
+        everything = apps.linux(lambda name: f"/usr/bin/{name}")
+        self.assertFalse({"fusion", "solidworks", "rhino"} & set(everything))
+        self.assertEqual(everything["plasticity"], "/usr/bin/plasticity")
 
 
 class KindsTest(unittest.TestCase):
@@ -495,7 +531,7 @@ class KindsTest(unittest.TestCase):
         ids = {kind: [entry["id"] for entry in apps.apps_for(kind, every)]
                for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
-                               "step": ["fusion", "solidworks", "freecad", "bambu", "orca", "prusa"],
+                               "step": ["fusion", "solidworks", "rhino", "plasticity", "freecad", "bambu", "orca", "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
                                "3mf": ["bambu", "orca", "prusa", "freecad"],
                                "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
@@ -505,7 +541,7 @@ class KindsTest(unittest.TestCase):
                                      "pycharm": "PyCharm", "sublime": "Sublime Text", "fusion": "Autodesk Fusion",
                                      "solidworks": "SolidWorks", "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
                                      "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
-                                     "kicad-nightly": "KiCad nightly"})
+                                     "kicad-nightly": "KiCad nightly", "rhino": "Rhino", "plasticity": "Plasticity"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],
                          ["finder", "explorer", "files"])
 
