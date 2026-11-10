@@ -1,6 +1,6 @@
 # Feedback on text-to-cad, from building `models/galatea`
 
-Notes kept while modelling a 851-part articulated humanoid with the cad skill
+Notes kept while modelling an articulated humanoid of 700 to 850 parts with the cad skill
 (`cad-server 0.11.4-dev.0` from this checkout, 4 cores, 15 GB). Each entry says what
 happened, where, and what would have helped. Newest findings are appended to each section.
 
@@ -46,6 +46,23 @@ the rails through the shin guard (190 mm3), slivers of the foot frame in the foo
 fairing whose rear edge crossed the femur's plates without touching them. The shin and
 thigh casings were reshaped to hold their structure inside with 3 mm of air.
 
+**A second lesson, on looks and on parts.** The first two versions were detailed before
+anyone had agreed what the robot should look like or what it was made of. The person then
+asked for the opposite of both: a plain two-tone body in the manner of current production
+humanoids instead of an ornamental one, and real actuators instead of housings I had
+dimensioned myself. Most of the exterior and every drive bracket was redone. What I do now:
+
+- Before detailing, a styling model: the outside alone as plain solids on the joint layout
+  (`models/galatea/src/styling.py`, 17 s to build), sent as a sheet of four views. Three
+  passes of it took fifteen minutes and settled what weeks of detail had not.
+- Before designing a bracket, the real part it carries, from its maker's drawing. The real
+  drives were up to 20 mm larger across than my invented ones; that moved five joint
+  centres, changed two linkages and made one travel limit depend on another joint.
+- A measure that needs no kernel for the question asked most often. `fit.py` answers
+  "does this skin hold the mechanism, through its travel, with 3 mm of air" from the
+  sections and the meshes in seconds, where a build and an exact check take minutes.
+- Say what I am doing while I do it. Long silent runs were read, rightly, as not listening.
+
 **For the skill.** `SKILL.md` already says an assembly is clear when `overlap_volume` is 0
 for every pair. What it lacks is a gate: nothing asks for a per-part and per-link review
 before composition, and nothing says "plant a known overlap and watch the check fail".
@@ -86,8 +103,11 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    whole prism: 1,118,501 mm3 where the answer is about 306,000. `is_valid` is true, nothing
    is raised, and `loft - prism` agreed with it (it removed the prism's full volume). The
    same prism against the same sections lofted 0.8 mm smaller, or without the extra end
-   section, is right; a box in place of the prism is right. Later a cut left *more* volume
-   than it started with (242,837 from 241,598). This is OCCT under build123d, not the
+   section, is right; a box in place of the prism is right. Later the difference of two
+   lofts through sections that step in sharply came back as two invalid solids of a
+   seventh of the right volume. (A third case I first put here, a cut that seemed to leave
+   more volume than it started with, was the measurement and not the boolean: bug 9.) This
+   is OCCT under build123d, not the
    plugin's code, but the plugin is where a model's author meets it, and it was the cause
    of a visor drawn as a 180 mm bar and of a trim that silently did nothing. The skill
    says of `overlap_volume` that "a failed boolean is an error, never a zero-volume
@@ -119,9 +139,23 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    another that only touches it. Wanted: measure both orders and refuse to answer when
    they disagree, or settle it with what a cut leaves.
 
+9. **`shape.volume` is good to about one per cent on a thin lofted shell.** It is a
+   fixed-order quadrature. For a 2.6 mm skin between two lofted surfaces the three volumes
+   of a correct cut (what was there, what is left, what was removed) disagreed by 2,600 mm3
+   in 334,000, which looks exactly like a wrong boolean and is not: the adaptive integral
+   (`BRepGProp.VolumeProperties_s(shape.wrapped, props, 1e-3, False, True)`) makes them add
+   up to 5 mm3. It costs 0.2 to 2 s a solid where `.volume` costs nothing. A model that
+   reports masses of skins, or guards its booleans by volume, needs to know; a
+   `cad.build123d` helper with a tolerance would be the place to say it.
+
+10. **One boolean, two result types.** The same `shell & prism` returned a `Part` in plain
+    Python and a `Compound` under `cad run`, and `Compound(children=[...])` then failed on
+    it with a bare `AssertionError` from the tree library, no message. Taking `.solids()`
+    of every boolean's result before labelling it is the workaround.
+
 ## Gaps that cost real time
 
-9. **No interference check.** The skill's rule (overlap volume 0 for every pair, posed
+11. **No interference check.** The skill's rule (overlap volume 0 for every pair, posed
    too) is right, and the plugin offers the primitive, but an assembly of 851 parts has
    thousands of near pairs, poses, a mirrored side, and solids that take 0.3 to 40 s
    each to intersect. I wrote that machinery twice, and the first version was wrong
@@ -133,45 +167,67 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    pair (a lofted back plate against the frame under it) four minutes by itself, so a
    check needs a per-pair time limit and must report what it could not measure.
 
-10. **A motion cannot be drawn.** `cad model snapshot` takes a pose, not a
+12. **A motion cannot be drawn.** `cad model snapshot` takes a pose, not a
    configuration sequence and a time, and has no frame output. To review the gait I
    recomputed each frame's joint values in my own code and called the command sixty
    times. `--motion walk --at 0.6`, or `--frames 30` into a folder, would make motion
    reviewable. The first posed snapshots of a session also took 18 s each ("Making the
    scene" per pose) against 4 s later.
 
-11. **The snapshot's tessellation is fixed.** 0.25 % of a part's box and 28.5 degrees
+13. **The snapshot's tessellation is fixed.** 0.25 % of a part's box and 28.5 degrees
    (`cad/engine/mesh.py`) is right for the viewer and coarse for a still: a 400 mm lofted
    skin shows a faceted silhouette and wavy shading in a close-up, and only STL and 3MF
    exports take `--tolerance`. A `--tolerance` (or a quality level) on `snapshot` and on
    the GLB export would fix it.
 
-12. **A fixed camera across pictures needs hand arithmetic.** The presets and
+14. **A fixed camera across pictures needs hand arithmetic.** The presets and
    `azimuth:elevation` refit every picture, `--json` does not return the camera it
    settled on, and a camera object in an orthographic view is refitted to the whole
    model. For frames that must not jitter I derived eye positions from the film gauge
    maths in the renderer's source. Returning the resolved camera in `--json`, and a
    `fit: false`, would remove that.
 
-13. **`hidden` and `isolated` take only exact occurrence paths.** Leaving the skins off
+15. **`hidden` and `isolated` take only exact occurrence paths.** Leaving the skins off
    meant listing 47 refs, each numbered among its siblings (`chest/skin_screw.3`). A
    selector by label (`*/skin_screw`) or by material would make "show me the structure"
    one flag.
 
-14. **`cad run` chooses a script's integrations from the script's own imports.** A check
+16. **`cad run` chooses a script's integrations from the script's own imports.** A check
     that reaches build123d only through the model it imports fails with
     `ModuleNotFoundError: No module named 'build123d'`. The message does name the remedy
     (`cad[build123d]` in the header), which is good; the engine already traces
     first-party imports for its build keys, so `cad run` could do the same.
 
-15. **A worker retired for memory makes the next run cold without saying so.** With the
+17. **A worker retired for memory makes the next run cold without saying so.** With the
     default 3.9 GB budget the 1.2 GB worker of a 68 s model was retired several times
     (`retired: galatea.py (RSS)` in `cad status`). The next `cad run` just reports
     `cold in 67.73s`. Say why in the run's own line, and name `CAD_ENGINE_MEMORY_MB`.
 
-16. **Loft seams are drawn as edges in shaded pictures.** Every lofted skin shows a line
+18. **Loft seams are drawn as edges in shaded pictures.** Every lofted skin shows a line
     where its sections close. I rotated each seam under a cut-out. An option to draw
     only sharp edges would be the real fix.
+
+19. **A still for a person needs a studio, and the command line has none.** `cad model
+    snapshot` draws "technical OCCT images": flat light, no shadow, no reflection, so a
+    gloss-black part is a black silhouette and a white one has no form but its edges. The
+    viewer has a photographic Preview, but a checkout serves no built client (the page is
+    "Not found" until the web app is built), and a headless session has no other way to
+    it. I composite a backdrop and a contact shadow under each picture myself. A
+    `--render` on `snapshot`, however slow, would change what a model can be shown as.
+
+20. **A part that lets light through fights the part behind it.** `transmission` between
+    0 and 1 draws as a tint, which is exactly right for smoked glass, but where the glass
+    lay on a liner (two surfaces from one loft, in contact) the picture mottled. An air
+    gap of a few millimetres cures it; a line in the materials reference would save the
+    hour.
+
+21. **One memory limit, many heavy things.** An exact interference crew of four, the
+    engine's worker for the robot, another for nine posed copies and a snapshot at twice
+    size together passed the machine's memory, and the kernel killed the robot's worker
+    mid-picture (`the worker for galatea.py exited (-9) ... Drawing the picture`: the
+    message is exact). Its memo went with it: the next build was 133 s cold instead of
+    22 s. `cad status` could show each worker's memory against the budget, and the
+    engine could refuse a new job rather than lose a warm worker.
 
 ## What worked well
 
@@ -188,3 +244,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   an assembly, would make the review above the path of least effort.)
 - A finish-only change rebuilds in 0.65 s (every kernel call a hit), and
   `transmission=1` draws a visor one can see through.
+- Re-basing nineteen joints on real actuators was an edit to one table and one builder
+  for the housings, then twenty minutes of the build line's part count and the exact
+  check saying which brackets no longer fitted. A parametric model in a real language is
+  what made a change of that size affordable in an afternoon.

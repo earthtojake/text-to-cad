@@ -28,8 +28,8 @@ KNEE_CRANK_PSI = -62.5                            # deg from +Y (back) at knee =
 KNEE_RANGE = (0.0, 125.0)                         # transmission angle 27.5 deg at both ends
 KNEE_ROD_R = 6.0                                  # a solid titanium rod: it pushes when the knee holds the body up
 
-# Ankle pitch drive: a double-ended actuator between the shin rails turns the ankle gimbal
-# through twin parallel pushrods (again a parallelogram: crank angle == ankle pitch).
+# Ankle pitch drive: an actuator across the calf, between the shin rails, turns the ankle gimbal
+# through a crank and a pushrod (again a parallelogram: crank angle == ankle pitch).
 ANKLE_ACT = (HIP_X, 12.0, 345.0)
 ANKLE_ROD = math.hypot(ANKLE_ACT[1] - ANKLE[1], ANKLE_ACT[2] - ANKLE[2])   # 255.3: the drive stands 12 behind the ankle, as a calf does
 ANKLE_CRANK_R = 45.0                              # crank and gimbal arm point straight back (+Y)
@@ -39,6 +39,20 @@ ANKLE_ROD_R = 4.5                                 # steel, behind the ankle like
 SHIN_RAIL_X = (40.0, 48.0)                        # shin rails: inner and outer face, from the centre plane
 FEMUR_PLATE_X = (18.0, 26.0)                      # femur plates: inner and outer face
 CRADLE_CHEEK_X = (27.0, 35.0)                     # hip cradle cheeks: inner and outer face
+
+# Hip: the yoke's rear plate stands HIP_YOKE_Y behind the hip's centre and carries the roll drive behind it. The drive's
+# can swings with the hip's yaw: turned out by a degrees, its inner edge stands R cos a + B sin a inboard of the hip,
+# R the can's radius and B how far its end stands behind the hip (`hip_can_reach`). The two legs' cans must not meet
+# on the centre plane, which bounds the two yaws together: both feet turn out 10 degrees, or one 20 and the other none.
+HIP_YOKE_Y = 70.0
+HIP_ROLL_CAN = (60.0, HIP_YOKE_Y + 8.0 + 39.0)       # an RS04's radius, and its main body's end behind the hip (plate 8, body 39)
+
+
+def hip_can_reach(yaw):
+    """How far inboard of its hip a roll drive's can reaches with the hip turned out `yaw` degrees."""
+    a = math.radians(max(yaw, 0.0))
+    return HIP_ROLL_CAN[0] * math.cos(a) + HIP_ROLL_CAN[1] * math.sin(a)
+
 
 # Pelvis
 PELVIS_Z = (1009.0, 1075.0)                       # underside and top of the pelvis casting
@@ -81,7 +95,7 @@ THUMB_IP = tuple(b + THUMB_BONES[1] * k for b, k in zip(THUMB_MCP, THUMB_DIR))
 # --------------------------------------------------------------------------------------------
 # Neck and head
 # --------------------------------------------------------------------------------------------
-NECK_BASE = (0.0, 14.0, 1497.0)                   # neck yaw (Z): the drive's output face, in the collar
+NECK_BASE = (0.0, 14.0, 1497.0)                   # neck yaw (Z): the drive's output face, at the chest's top
 NECK_ROLL = (0.0, 32.0, 1531.0)                   # neck roll (Y): the neck leans from its root
 NECK = (0.0, 14.0, 1586.0)                        # neck pitch (X): the head nods at the skull's base, 55 over the roll's can
 HEAD_TOP_Z = 1752.0
@@ -168,8 +182,8 @@ ANKLE_ARM_PIN = _polar(ANKLE, ANKLE_CRANK_R, 0.0)
 
 SIDE_JOINTS = {
     # leg ------------------------------------------------------------------------------
-    "hip_yaw": ("pelvis", "hip_yoke", HIP, Z, (-25.0, 40.0)),             # + turns the toes outward
-    "hip_roll": ("hip_yoke", "hip_cradle", HIP, NY, (-20.0, 25.0)),       # + abducts (leg outward)
+    "hip_yaw": ("pelvis", "hip_yoke", HIP, Z, (-25.0, 20.0)),             # + turns the toes outward (see HIP_ROLL_CAN)
+    "hip_roll": ("hip_yoke", "hip_cradle", HIP, NY, (-20.0, 16.0)),       # + abducts (leg outward): the pitch drive's can rises under the pelvis
     "hip_pitch": ("hip_cradle", "thigh", HIP, NX, (-30.0, 100.0)),        # + flexes (thigh forward)
     "knee_pivot": ("thigh", "shin", KNEE, X, KNEE_RANGE),                 # + flexes (heel to the back)
     "knee_crank": ("thigh", "knee_crank", KNEE_ACT, X, KNEE_RANGE),

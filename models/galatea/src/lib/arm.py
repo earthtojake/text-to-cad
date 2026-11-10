@@ -2,8 +2,8 @@
 
 Shoulder: three axes through one point. The pitch drive sits in the chest and turns the
 yoke; the roll drive on the back of the yoke turns the shoulder block, which wears the
-ivory ball; the yaw drive sits in the top of the upper arm, its output bolted up into
-the block, so the arm turns under the ball.
+shoulder's pod; the yaw drive sits in the top of the upper arm, its output bolted up into
+the block, so the arm turns under the pod.
 
 Elbow, wrist pitch and wrist yaw are in-line hinges: the drive is the joint's hub, its
 stator on one link's side plate and its output on the next link's lug. The forearm turns
@@ -16,7 +16,7 @@ import build123d as bd
 
 from . import geo, skin
 from .dims import CHEST_SIDE_X, ELBOW, PLATE_T, SHOULDER, WRIST, WRIST_ROLL, WRIST_YAW
-from .hardware import mount_bores
+from .hardware import mount_bores, rotor_counterbores
 from .kit import part
 
 SX, SZ = SHOULDER[0], SHOULDER[2]
@@ -60,7 +60,7 @@ def _skin_mounts(hw, cavity, outer, seats, size="M3", radius=5.0, reach=80.0):
 
 
 # ---------------------------------------------------------------------------------------------
-# Shoulder: yoke (pitch), block and ball (roll)
+# Shoulder: yoke (pitch), block and pod (roll)
 # ---------------------------------------------------------------------------------------------
 def _shoulder(hw, links):
     pitch_at = (CHEST_SIDE_X[0], 0.0, SZ)
@@ -77,19 +77,26 @@ def _shoulder(hw, links):
                                *hw.rotor_screws("RS03", pitch_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0)), *stator]
 
     lug = geo.plate_xz(geo.bones([(SX, SZ, 30)], links=[(0,)], holes=[(SX, SZ, 6)]), 23, 33)
+    yaw_at = (SX, 0.0, SZ - 45)
     cup = geo.tube(22, 17, 17, (SX, 0, SZ - 36), (0, 0, 1)) + geo.tube(22, 5, 10, (SX, 0, SZ - 36), (0, 0, 1))
     neck = geo.box(24, 12, 9, (SX, 18, SZ - 25.5))
+    block = lug + cup + neck - rotor_counterbores("RS00", yaw_at, (0, 0, 1), 10.0, x_dir=(1, 0, 0))     # the yaw output's screws, sunk
     # The shoulder's pod: a body of revolution about the roll axis, so that it turns with the arm
     # round the yoke's ring and the roll drive behind it without meeting either. A slot round it
     # lets the yoke's arm through over the whole of the roll's travel; the arm leaves it below.
     t = skin.PANEL_T
-    profile = [(0, -POD_FRONT), (24, -POD_FRONT + 5), (40, -POD_FRONT + 16), (POD_R, -POD_FRONT + 36), (POD_R, POD_BACK - 28),
-               (45, POD_BACK - 10), (28, POD_BACK - 2), (0, POD_BACK)]
-    inner = [(0, -POD_FRONT + t), (22.5, -POD_FRONT + 5 + t), (38, -POD_FRONT + 17.5), (POD_R - t, -POD_FRONT + 37), (POD_R - t, POD_BACK - 29),
-             (43, POD_BACK - 11.5), (26.5, POD_BACK - 2 - t), (0, POD_BACK - t)]
+    def dome(radius, front, back, steps=7):
+        """A capsule's (r, y) outline: an elliptical cap 36 deep before and 30 behind a cylinder."""
+        fore = [(radius * math.sin(math.radians(90.0 * k / steps)), -front + 36.0 * (1.0 - math.cos(math.radians(90.0 * k / steps))))
+                for k in range(steps + 1)]
+        aft = [(radius * math.cos(math.radians(90.0 * k / steps)), back - 30.0 * (1.0 - math.sin(math.radians(90.0 * k / steps))))
+               for k in range(steps + 1)]
+        return fore + aft
+
+    profile, inner = dome(POD_R, POD_FRONT, POD_BACK), dome(POD_R - t, POD_FRONT - t, POD_BACK - t)
     turned = lambda points: geo.revolve(points, SHOULDER, (0, 1, 0), x_dir=(1, 0, 0))
     pod = turned(profile) - turned(inner)
-    slot = geo.plate_xz(geo.polygon(*[(SX + x, SZ + z) for x, z in _sector(-43.0, 151.0, 80.0)]), 30, 46)
+    slot = geo.plate_xz(geo.polygon(*[(SX + x, SZ + z) for x, z in _sector(-54.0, 164.0, 80.0)]), 30, 46)
     pod = geo.carve(pod, slot, "shoulder pod's slot")                     # the yoke's arm, through the roll's travel
     pod -= geo.cyl(36, 80, (SX, 0, SZ - 90), (0, 0, 1))                   # round opening for the arm
     pads = None
@@ -98,10 +105,10 @@ def _shoulder(hw, links):
         pads = pad if pads is None else pads + pad
     yaw_at = (SX, 0.0, SZ - 45)
     yaw_stator, yaw_rotor = hw.actuator("RS00", yaw_at, (0, 0, 1), x_dir=(1, 0, 0), name="shoulder_yaw")
-    links["shoulder_block"] += [part(lug + cup + neck, "shoulder_block", "gunmetal"), part(skin.solids(pads - (lug + cup + neck)), "pad_shoulder", "gunmetal"),
+    links["shoulder_block"] += [part(block, "shoulder_block", "gunmetal"), part(skin.solids(pads - block), "pad_shoulder", "gunmetal"),
                                 *rotor, *hw.rotor_screws("RS06", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)),
                                 part(skin.solids(pod), "panel_shoulder", "shell"), *yaw_rotor,
-                                *hw.rotor_screws("RS00", yaw_at, (0, 0, 1), 10.0, x_dir=(1, 0, 0))]
+                                *hw.rotor_screws("RS00", yaw_at, (0, 0, 1), 10.0, x_dir=(1, 0, 0), sunk=3.0)]
     links["upper_arm"] += yaw_stator
 
 

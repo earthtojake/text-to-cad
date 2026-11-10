@@ -1,4 +1,4 @@
-"""Galatea: a 1.75 m ivory-and-bronze humanoid. The whole robot, its mechanism and its poses."""
+"""Galatea: a 1.76 m humanoid in pearl and black, on real drives. The whole robot, its mechanism and its poses."""
 
 from cad import model
 from cad.build123d import memo

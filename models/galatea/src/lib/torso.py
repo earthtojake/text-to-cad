@@ -9,7 +9,7 @@ between two uprights (roll, driven from behind); the chest hangs on the spider's
 arms between two lugs (pitch, driven from both sides, the stators on the chest).
 
 Chest: a frame carrying the shoulder and neck drives, the compute module in front of the
-spine and the battery behind it, under a breastplate, a backplate and a ribbed midriff.
+spine and the battery behind it, under a liner and one pearl vest: breastplate, back and straps.
 """
 
 import build123d as bd
@@ -75,7 +75,7 @@ def _pelvis(hw, links):
              geo.plate_xy(back_edge, 980, 1110),                         # open at the back: the sacral panel
              *[geo.cyl(110, 400, (s * HX, 0, HIP[2]), (0, 1, 0), centered=True) for s in (1, -1)]]   # arches over the hips
     liner = skin.trim(form.liner, tools, "pelvis liner")
-    plate = skin.from_front(geo.hull([(-92, 1066, 8), (92, 1066, 8), (-78, 1022, 8), (78, 1022, 8)]))
+    plate = skin.from_front(geo.hull([(-92, 1066, 8), (92, 1066, 8), (-80, 1029, 8), (80, 1029, 8)]))     # clear of the thighs at full flexion
     panel = geo.common(form.panel, plate, "pelvis plate")
     pads = None
     for origin, direction in ([((s * 124, -20, 1042), (s, 0, 0)) for s in (1, -1)] + [((s * 46, -50, 1042), (0, -1, 0)) for s in (1, -1)]):
@@ -196,6 +196,7 @@ def _chest(hw, links):
     form = skin.Form(CHEST_ROWS)
     cavity = form.cavity
     tools = [geo.half_space((0, 0, CHEST_BOTTOM), (0, 0, -1)),
+             bd.Pos(*WAIST) * bd.Sphere(BELLY_R + 3.0),                   # the belly's shield turns inside the chest's lower edge
              *[geo.cyl(SHOULDER_HOLE, 100, (s * 150, 0, SHZ), (1, 0, 0), centered=True) for s in (1, -1)]]   # round openings about the shoulders
     flank = geo.polygon((-22, 1150), (-10, 1376), (10, 1438), (62, 1438), (66, 1150))
     front_edge = geo.polygon((-260, 1100), (-260, 1296), (0, 1250), (260, 1296), (260, 1100))

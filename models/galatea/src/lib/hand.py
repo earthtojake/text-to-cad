@@ -65,7 +65,7 @@ class _Bones:
         if key not in self._made:
             root = width if kind == "prox" else width - 7.0
             tip = kind == "dist"
-            bone = proto(_bone(length, width, root, tip), "ivory" if tip else "slate")
+            bone = proto(_bone(length, width, root, tip), "shell" if tip else "slate")
             pad = proto(_pad(length, width, tip), "rubber") if (tip or length - 25.0 > 6.0) else None
             hinge = proto(geo.cyl(2.5, width, (0, 0, 0), (1, 0, 0), centered=True), "steel")
             self._made[key] = (bone, pad, hinge)
@@ -98,7 +98,7 @@ def build_hand(hw, wrist_output):
 def _palm(hw, links):
     # Frame: a slab from the knuckles to the wrist, notched for the thumb's pivot.
     slab = geo.plate_yz(geo.hull([(-36, 840, 8), (31, 840, 8), (-37, 778, 6), (33, 778, 6)]), SX - 9, SX + 9)
-    slab -= geo.box(40, 34, 31, (SX, THUMB_BASE[1] - 7, THUMB_BASE[2] - 4.5))
+    slab -= geo.box(40, 34, 45, (SX, THUMB_BASE[1] - 7, THUMB_BASE[2] - 11.5))       # deep enough for the thumb swung across the palm
     ear = geo.hull([(SX, KNUCKLE_Z, 8.0), (SX, KNUCKLE_Z + 14, 8.0)])
     for y0, y1 in ((-41.5, -38.5), (-21.5, -18.5), (-1.5, 1.5), (18.5, 21.5), (36.5, 39.5)):
         slab += geo.plate_xz(ear, y0, y1)
@@ -109,7 +109,7 @@ def _palm(hw, links):
     back = geo.plate_yz(geo.hull([(-30, 824, 8), (28, 824, 8), (-32, 784, 6), (30, 784, 6)]), SX + 9, SX + 12.5)
     back = bd.fillet(back.edges().group_by(bd.Axis.X)[-1], 2.0)
     pad = geo.plate_yz(geo.hull([(-14, 830, 8), (24, 830, 8), (-14, 796, 8), (26, 796, 8)]), SX - 12, SX - 9)
-    links["palm"] += [part(slab + lug + bridge, "palm_frame", "slate"), part(back, "hand_back", "ivory"),
+    links["palm"] += [part(slab + lug + bridge, "palm_frame", "slate"), part(back, "hand_back", "shell"),
                       part(pad, "palm_pad", "rubber"),
                       pin((SX, -42.0, KNUCKLE_Z), (0, 1, 0), 2.5, 82.0, label="knuckle_pin"),
                       pin((THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 10), (0, 0, 1), 4.0, 30.0, label="thumb_pivot")]

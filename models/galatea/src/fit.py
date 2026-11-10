@@ -26,10 +26,8 @@ from galatea import galatea  # noqa: E402
 from lib import skin  # noqa: E402
 
 STEP = 4.0        # spacing of the points sampled along a mesh's edges, mm
-# The skins of the model's earlier dress, left out while a link still wears them.
-OLD_SKINS = ("pelvis_belt", "apron", "breastplate", "backplate", "collar", "neck_deck", "midriff", "sternum_inlay", "thigh_fairing",
-             "shin_guard", "foot_shell", "toe_cap", "shoulder_ball", "upper_arm_fairing", "forearm_cuff", "forearm_fairing",
-             "hand_back", "skin_screw")
+# Skins that are single shells rather than a panel on a liner: no form has to hold them either.
+OLD_SKINS = ("foot_shell", "toe_cap", "hand_back")
 
 
 def points_of(parts, skip=()):

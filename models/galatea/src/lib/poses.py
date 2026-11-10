@@ -52,7 +52,7 @@ POSES = {
     # Weight on the right leg, the left knee eased, the chest and head turned.
     "contrapposto": {
         **READY,
-        **leg("r", forward=-18, drop=8, yaw=10, roll=-5), **leg("l", forward=74, drop=8, yaw=22, roll=5),
+        **leg("r", forward=-18, drop=8, yaw=3, roll=-5), **leg("l", forward=74, drop=8, yaw=13, roll=5),
         **side("l", shoulder_pitch=0, shoulder_roll=12, shoulder_yaw=8, elbow=24, wrist_roll=12),
         **side("r", shoulder_pitch=-8, shoulder_roll=7, shoulder_yaw=6, elbow=14),
         "waist_yaw": -12, "waist_roll": -5, "waist_pitch": 1, "neck_yaw": 24, "neck_roll": 6, "neck_pitch": 3,

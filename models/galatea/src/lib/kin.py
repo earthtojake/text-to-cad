@@ -9,8 +9,8 @@ name to its value (a knee or an ankle in degrees, a finger's curl from 0 to 1).
 import math
 
 from .dims import (
-    CENTRE_JOINTS, CENTRE_LINKS, FINGER_CURL, FINGERS, HIP_X, SHIN_LEN, SIDE_JOINTS, THIGH_LEN, THUMB_CURL, hand_joints,
-    mirror_joint,
+    CENTRE_JOINTS, CENTRE_LINKS, FINGER_CURL, FINGERS, hand_joints, hip_can_reach, HIP_X, mirror_joint, SHIN_LEN,
+    SIDE_JOINTS, THIGH_LEN, THUMB_CURL,
 )
 
 SIDES = ("l", "r")
@@ -92,6 +92,10 @@ def check_limits(pose, name="pose"):
         low, high = joints[joint][4]
         if not low - 1e-6 <= value <= high + 1e-6:
             raise ValueError(f"{name}: {joint} = {value:.1f} is outside {low}..{high}")
+    # The two hips' roll drives stand behind them and swing inward as the feet turn out: they must not meet.
+    reach = sum(hip_can_reach(pose.get(f"{side}_hip_yaw", 0.0)) for side in SIDES)
+    if reach > 2 * HIP_X - 4.0:
+        raise ValueError(f"{name}: the feet turn out too far together: the hips' roll drives would meet ({reach:.0f} of {2 * HIP_X - 4:.0f} mm)")
     return pose
 
 

@@ -1,6 +1,6 @@
 """Neck and head, on the centre plane at the zero pose.
 
-Neck: the yaw drive sits in the chest's collar. On its output stands the neck's root, an
+Neck: the yaw drive hangs under the chest's top. On its output stands the neck's root, an
 in-line hinge that leans the neck sideways (roll); the stem above it carries a second
 in-line hinge at the base of the skull that nods the head (pitch).
 

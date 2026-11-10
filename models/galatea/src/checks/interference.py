@@ -7,7 +7,8 @@
     cad run src/checks/interference.py ready stride    named poses: link against link
     cad run src/checks/interference.py --poses         every named pose
     cad run src/checks/interference.py --limits        every control swept through its travel, alone:
-                                                       a joint's own neighbourhood (links within 3 joints)
+                                                       a joint's own neighbourhood (links within 3 joints);
+                                                       or only the controls named after it
     cad run src/checks/interference.py --motions       every motion, at its waypoints and between them
 
 The verdict is the kernel's: two parts interfere when their solids share volume
@@ -112,13 +113,13 @@ def main(argv):
         pairs = near_crossing_pairs(boxed)
         print(f"as built: {len(boxed)} pairs of parts whose boxes meet, {len(pairs)} near enough to measure", flush=True)
         count += report("as built", *interferences(pairs, progress=250))
-    elif argv == ["--limits"]:
+    elif argv[0] == "--limits":
         # A joint's travel is its neighbours' business: the links within three joints of each
         # other. An arm swung into a leg is a whole-body matter, which the poses and motions test.
         distances = kin.link_distances()
         far = lambda a, b: distances[a, b] > 3
         for control, low, high in control_limits():
-            if control.startswith("r_"):
+            if control.startswith("r_") or (argv[1:] and control not in argv[1:]):
                 continue
             steps = [{control: low + (high - low) * step / SWEEP} for step in range(SWEEP + 1)]
             overlaps, unmeasured = sweep(links, [pose for pose in steps if abs(pose[control]) > 1e-9], skip=far)

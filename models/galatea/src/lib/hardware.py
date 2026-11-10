@@ -95,7 +95,7 @@ class Hardware:
         return [inst(self.screws[size], loc * bd.Pos(x, y, z) * turn, label or f"{size.lower()}_screw")
                 for x, y in ring_positions(n, radius, phase)]
 
-    def pivot_cap(self, radius, origin, axis, finish="bronze_trim", label="pivot_cap"):
+    def pivot_cap(self, radius, origin, axis, finish="joint", label="pivot_cap"):
         key = (round(radius, 2), finish)
         if key not in self._caps:
             self._caps[key] = proto(_pivot_cap(radius), finish)
