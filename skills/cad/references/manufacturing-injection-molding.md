@@ -22,16 +22,17 @@ Protolabs Network's guides; a molder's own figures move them):
 
   Every wall wants 2 degrees (Hubs' and Protolabs' recommendation; 0.5 at least on a vertical face,
   Protolabs: a warning under either; a light texture takes 3, a heavier one 5 or more) to eject cleanly,
-  and a wall or a rib deeper than 10 mm with no draft at all is an error; a face square to the pull is
-  not a wall and takes none. A hole or a boss is drafted the same way.
+  and a broad wall of the shell with next to none for its depth is an error (below); a face square to
+  the pull is not a wall and takes none. A hole or a boss is drafted the same way.
 - **One wall.** A nominal wall in the resin's range (ABS 1.1 to 3.6 mm, PC 1.0 to 3.8, nylon 0.8 to 2.9;
   the material table has the rest) and no section thicker than 1.7 times it: core out thick spots. A
-  wall under half the range's minimum or over twice its maximum is an error.
+  broad wall under half the range's minimum is an error; one over twice its maximum is warned louder
+  (it sinks, voids and cools slowly).
   Change thickness over a length of three times the step, never a sharp step.
 - **Ribs and bosses.** A rib is 50 to 60% of the wall it stands on, at most three walls tall, at least
   2.5 walls from the next, drafted 0.5 degree or more, with a fillet of a quarter of the rib's own
   thickness at its root. Run a rib well into the wall it meets or stop it clear: a square end a hair off
-  a drafted wall is a crevice no steel fills (`crevices`). A boss is a drafted tube whose wall is 60% of the base wall at most, its hole
+  a drafted wall is a crevice whose steel is a knife edge (`crevices`, a warning). A boss is a drafted tube whose wall is 60% of the base wall at most, its hole
   along the pull, a fillet at the root (a sharp root is `molding.boss_root_fillet`, a warning) and
   gussets to the wall rather than a thick foot. A snap arm is a rib with a barb: the check reads it as a
   snap (`kind: snap`, at least half the wall thick, Hubs) and its barb as the undercut it is.
@@ -63,24 +64,32 @@ The options that change the verdicts:
   the `--pull` to try). Without a confirmed pull, rank the pulls with `--candidates` (it judges
   nothing) and report draft as unverified rather than failing every vertical-looking face.
 - `--material`: the resin's wall range and clamp factor. Without it the resin's recommended range is not
-  evaluated (`resin_unknown`), and a wall fails only outside every resin's range (under 0.5 mm, over
-  25.4 mm).
+  evaluated (`resin_unknown`), and a broad wall fails only under every resin's range (0.5 mm).
 - `--cavities`: the clamp-force estimate.
 - `--wall-limit` (45 degrees: a face steeper from the pull is no wall) and `--zero-tol` (0.05
-  degrees: under it is zero draft).
+  degrees: under it a face is counted as zero draft; no rule turns on it).
 
-**What fails a part.** A warning is a published guide's recommendation broken: the part is made, at a
-cost or a risk. An error is a floor -- it cannot be molded as drawn, or a general shop sends it back:
+**What fails a part.** A warning is a published guide's recommendation broken, or a cost: the part is
+made. An error is what a general molder sends back, and there are few, so that one is never noise:
 
 | error | the floor | whose |
 |---|---|---|
 | `molding.undercut_unreleasable` | a feature no slide, lifter or core frees | geometry |
-| `molding.draft_zero` | no draft at all (under `--zero-tol`) on a wall or a rib deeper than 10 mm | text-to-cad's own |
-| `molding.wall_too_thin` | a wall under half the resin's recommended minimum (no resin named: under 0.5 mm) | text-to-cad's own |
-| `molding.wall_too_thick` | a wall over twice the resin's recommended maximum (no resin named: over 25.4 mm) | text-to-cad's own |
+| `molding.draft_zero` | a broad wall of the shell with too little draft for its depth: none is asked up to 10 mm deep in one mold half, then 0.01 degree for every millimetre past that, 0.25 degree at most (0.2 at 30 mm) | text-to-cad's own |
+| `molding.wall_too_thin` | a broad wall under half the resin's recommended minimum (no resin named: under 0.5 mm) | text-to-cad's own |
+| `molding.clamp_beyond_press` | a projected area that takes over 10 000 US tons even at a ton per square inch (over 6.45 m2 a cavity): no injection press built clamps it (check the units first) | text-to-cad's own |
 
 The guides only recommend (0.5 to 2 degrees, a wall range by resin), so the last three cite text-to-cad,
 never a publisher: say so when you report one, and do not quote it as Protolabs' or Hubs' limit.
+
+What the floors do not judge is as much the point. **Broad** is ten wall thicknesses across: a boss, a
+bore, a pin, a standoff, a gear's teeth, a snap arm, a rib and a window's sides are no shell walls, so
+their missing draft is the recommendation's warning (`molding.draft_min`), not an error; and a text
+stroke, a ridge's crest, a gear's top land, a snap's barb and a living hinge's web are features, not
+walls, so their width is `molding.wall_min`'s warning at most. Depth is a mold half's: a wall the
+parting line runs up is split where the parting plane stands. A wall over twice the resin's recommended
+maximum (`molding.wall_too_thick`) and an estimated clamp force over 1 000 tons
+(`molding.clamp_large_press`: a press few molders run) are warnings.
 
 The rules are general, no shop's: a press's and a mold's own limits -- projected area, part size,
 depth from the parting line, shot volume, a side action's travel -- are compared with the measurements
@@ -98,7 +107,10 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
 `envelope`, `parting`, `clamp`, `pull_check`; `pulls` with `--candidates`.
 
 - `draft` items carry `draft_deg` and `opens` (`+pull`, `-pull`, `none` for zero draft, `split` where
-  the parting crosses the face). Faces square to the pull are not walls and appear in no draft figure.
+  the parting crosses the face), `half_depth_mm` (how deep the face runs in one mold half), `broad`
+  (a wall of the shell: what the draft floor judges) and `feature` (`turn`: a round or a sphere the
+  parting line crosses, no wall along the pull). Faces square to the pull are not walls and appear in no
+  draft figure.
 - `undercuts` items carry the `release` each needs: `side_action` (its `side_actions`: the slide's
   direction, the feature's own axis where it has one, `angled` where it leaves the parting plane, and
   its `stroke_mm`), `lifter`, `collapsible_core`, `bump_off`, or `none`; its `kind` (`external`: a slide
@@ -112,35 +124,50 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
   (an error) is a feature no action tried frees, its lip deeper than that. Distinguish a need for side
   actions from impossibility.
 - `thickness.nominal_mm` and `thick_sections` (a face's `feature` says whether it is a wall's, a rib's or
-  a boss's: the wall range judges walls alone); `transitions` (a step between two walls read on its
+  a boss's: the wall range judges walls alone; `broad_wall_mm` is a broad wall's own thickness, what the
+  thin-wall floor judges, and none on a feature's face); `transitions` (a step between two walls read on its
   stepped side, `basis: step`: its run over its change, `min_mm`, `max_mm`, the two points in `at_xyz`,
   judged by `molding.wall_transition`; a free-form face's from the rolling ball, `basis: ball`); `ribs`
   (`kind` rib or snap) and `bosses` as ratios to the wall they stand on; `corners` as radius over the
   wall. These are sink and stress signals, not a fill simulation. Walls drafted with `extrude(taper=...)`
   are B-splines that the check reads as the planes and cylinders they are.
-- `parting.flat_parting_possible`, and `stepped_parting` where it is not.
+- `parting.flat_parting_possible`, and `stepped_parting` where it is not (a part split along its
+  axis -- a barb, a handle -- parts flat).
 - `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a molder's
   factor for the resin.
 - Several parts (`several_bodies`, every occurrence counted) are an assembly: each is checked on its
-  own, and the areas, the clamp force and the `--candidates` rows count a part once for each time it
-  occurs. Say so rather than reviewing an assembly as a part. A part of several solids is warned too
+  own, along its own pull -- the one given unless one of the part's own directions does better for it
+  (`part_pull`, a warning, names each such part and its pull; `measurements.pulls` lists them), so a part
+  that lies differently in the assembly does not fail it -- and the areas, the clamp force and the
+  `--candidates` rows count a part once for each time it occurs. Say so rather than reviewing an
+  assembly as a part. A part of several solids is warned too
   (`several_solids`; where its solids touch without being fused their contacts are left out of draft
   and undercuts, `measurements.touching`): a component
   model whose contacts sit inside its housing reads its pins as walls and ribs and its slots as
   undercuts, so check the housing alone (one fused solid gives no such signal: say so).
 
-`pull_better` (a warning) says another pull does better than the one measured -- it traps no more,
-needs no more actions, leaves no more wall without draft and steps the parting no more, and is better
-in one of them -- and names it with its axis: confirm the pull (`--pull` with that axis, or the
-mold's own) before budgeting side actions or drafting walls. `pull_check.chosen` is the measured
-pull's own figures and `pull_check.candidates` what each other pull was read to. No `pull_better` is not
-a confirmed pull: the check compares x, y, z and the part's principal axes, no others.
+`pull_better` (a warning) says another pull does better than the one measured -- it leaves fewer
+features nothing releases (that decides: it turns a part that cannot be molded into one that can) or,
+with as many, traps no more, needs no more actions, leaves no more wall without draft and steps the
+parting no more, and is better in one of them -- and names it with its axis: confirm the pull (`--pull`
+with that axis, or the mold's own) before budgeting side actions or drafting walls. `pull_check.chosen`
+is the measured pull's own figures and `pull_check.candidates` what each other pull was read to. The
+pulls compared are the part's own, whichever way it lies in its model: the directions most of its
+surface is square to or turns about (`face0`..) and its principal axes (`principal0`..), each named `x`,
+`y` or `z` where it runs along one. No `pull_better` is not a confirmed pull.
 
-Two more findings say what was not judged; none is a pass. `crevices` (info): two faces closer than
-steel can stand between them (a rib's end a hair off a wall), no undercut -- join them or part them.
-`undercuts_unsearched` (a warning): undercuts whose release the search did not reach; whether a slide
-frees them is not known. A part that occurs several times in an assembly is judged each way it stands
-against the pull, and the projected area and the clamp force count every occurrence.
+Three more findings say what was not judged; none is a pass. `crevices` (a warning): two faces closer
+than steel can stand between them (a rib's end a hair off a wall), no undercut but a knife edge of
+steel -- join them or part them. `undercuts_unsearched` (a warning): "N feature(s) not searched" -- the
+search for what releases the trapped features is budgeted, and these, the smallest, it did not reach.
+Each is an undercut all the same (warned as one, at its ref); whether a slide frees it is not known.
+Where the search judged most of what is trapped the verdict is of that, and stands; where it did not,
+the check is `NOT CHECKED`. To judge them: a feature shaped like one that was searched releases as it
+does; or check again with `--pull` along the slide you expect to free them (a feature that withdraws
+along it is no undercut there). `undercuts_unconfirmed` (info): places that read trapped on a few points
+and not again on denser ones -- look there for a small re-entrant feature. A part that occurs several
+times in an assembly is judged each way it stands, and the projected area and the clamp force count
+every occurrence.
 
 ## Review the part
 
@@ -168,6 +195,7 @@ The following numbers are illustrative inputs, not default process limits.
 `molding.draft_min at cover/face 4: wall draft 0 deg is under the 0.5 deg recommended minimum`, along
 the confirmed `--pull z`, on a wall 6 mm deep. A recommendation, not a limit: report the wall as at risk
 of sticking and scuffing and propose at least the rule's draft, more if the selected texture needs it,
-keeping the mating face fixed. The same wall 25 mm deep is `molding.draft_zero`, an error: the part goes
-back for draft, and the report says the 10 mm floor is text-to-cad's own, no guide's. Along an
-unconfirmed pull, report either figure as unverified.
+keeping the mating face fixed. The same wall 25 mm deep, a broad wall of the shell, is
+`molding.draft_zero`, an error: the part goes back for draft, and the report says the floor (0.15 degree
+at that depth) is text-to-cad's own, no guide's. The same on a 25 mm boss is the warning again: a boss is
+no shell wall. Along an unconfirmed pull, report either figure as unverified.
