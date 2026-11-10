@@ -492,6 +492,226 @@ class OpenMeshTest(unittest.TestCase):
         self.assertTrue(all(item["escape_holes"] is None for item in trapped["items"]))
 
 
+def _written(mesh: trimesh.Trimesh, tmp: Path, name: str) -> str:
+    path = tmp / f"{name}.stl"
+    mesh.export(path)
+    return str(path)
+
+
+class GateTest(unittest.TestCase):
+    """One gate ahead of the families: a mesh with no inside is one finding, never a family's exception; what is
+    unambiguous is repaired, and said."""
+
+    def test_a_file_with_nothing_to_read_is_one_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            for name, content in (("empty", b""), ("cut-off", b"solid x\nfacet normal 0 0 0\nouter loop\nvertex 0 0 nan\n")):
+                path = Path(td) / f"{name}.stl"
+                path.write_bytes(content)
+                result = cad.stl.dfm(path, process="printing")
+                with self.subTest(file=name):
+                    self.assertFalse(result.ok)
+                    [found] = result.findings
+                    self.assertEqual(found.severity, "error")
+                    self.assertIn(found.code, ("mesh_empty", "mesh_unreadable"))
+
+    def test_a_mesh_with_no_surface_or_a_broken_corner_is_refused(self) -> None:
+        import numpy as np
+
+        from cad._internal.dfm import Unmeasured
+        from cad.trimesh import _mesh
+
+        line = trimesh.Trimesh(vertices=[[0, 0, 0], [1, 0, 0], [2, 0, 0]], faces=[[0, 1, 2]], process=False)
+        broken = trimesh.creation.box((10, 10, 10))
+        vertices = np.array(broken.vertices)
+        vertices[0, 2] = np.nan
+        broken = trimesh.Trimesh(vertices, broken.faces, process=False)
+        # a sheet doubled back on itself: closed by its edges, with no inside
+        sheet = trimesh.Trimesh([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+                                [[0, 1, 2], [0, 2, 3], [0, 2, 1], [0, 3, 2]], process=False)
+        # a band with a half turn: one-sided, no winding of its triangles is consistent
+        count, band = 24, []
+        for k in range(count):
+            turn = 2 * math.pi * k / count
+            across = np.array([math.cos(turn) * math.cos(turn / 2), math.sin(turn) * math.cos(turn / 2), math.sin(turn / 2)])
+            centre = 10 * np.array([math.cos(turn), math.sin(turn), 0.0])
+            band += [centre - 2 * across, centre + 2 * across]
+        faces = []
+        for k in range(count):
+            a, b = 2 * k, 2 * k + 1
+            c, d = (2 * (k + 1), 2 * (k + 1) + 1) if k + 1 < count else (1, 0)  # the turn: the ends meet crossed
+            faces += [[a, c, b], [b, c, d]]
+        one_sided = trimesh.Trimesh(band, faces, process=False)
+        for mesh, code in ((line, "mesh_empty"), (broken, "mesh_unreadable"), (sheet, "mesh_no_volume"),
+                           (one_sided, "inconsistent_normals")):
+            with self.subTest(code=code), self.assertRaises(Unmeasured) as refused:
+                _mesh.prepared(mesh)
+            self.assertEqual(refused.exception.code, code)
+
+    def test_triangles_wound_wrongly_are_turned_and_said(self) -> None:
+        import numpy as np
+
+        box = trimesh.creation.box((20, 20, 20))
+        mixed = box.copy()
+        faces = np.array(mixed.faces)
+        faces[:5] = faces[:5, ::-1]
+        mixed.faces = faces
+        inside_out = box.copy()
+        inside_out.invert()
+        twice = trimesh.util.concatenate([box, box.copy()])
+        with tempfile.TemporaryDirectory() as td:
+            for name, mesh, said in (("mixed", mixed, "5 triangle(s) wound against their neighbours turned"),
+                                     ("inside-out", inside_out, "1 closed shell(s) wound inside out turned"),
+                                     ("twice", twice, "12 triangle(s) doubled in place dropped")):
+                result = cad.stl.dfm(_written(mesh, Path(td), name), process="printing")
+                with self.subTest(mesh=name):
+                    [repaired] = [f for f in result.findings if f.code == "mesh_repaired"]
+                    self.assertEqual(repaired.severity, "warning")
+                    self.assertIn(said, repaired.message)
+                    self.assertTrue(result.ok, "the cube it stands for prints")
+                    self.assertEqual(result.measurements["mesh"]["volume_mm3"], 8000.0)
+                    self.assertEqual(result.measurements["mesh"]["body_count"], 1)
+                    self.assertEqual(result.measurements["wall_thickness"]["min_mm"], 20.0)
+                    self.assertFalse({"internal_void", "measurement_failed", "printing.bridge_length"}
+                                     & {f.code for f in result.findings}, "no figure of a surface read inside out")
+            # a void's shell is wound inward and stays so: a cavity, not a repair
+            hollow = trimesh.util.concatenate([box, trimesh.creation.box((8, 8, 8)).copy()])
+            faces = np.array(hollow.faces)
+            faces[12:] = faces[12:, ::-1]
+            hollow.faces = faces
+            sealed = cad.stl.dfm(_written(hollow, Path(td), "hollow"), process="printing", technology="sls")
+            self.assertNotIn("mesh_repaired", {f.code for f in sealed.findings})
+            [void] = sealed.measurements["trapped_volumes"]["items"]
+            self.assertEqual((void["exact"], void["sealed"], void["volume_mm3"]), (True, True, 512.0))
+
+    def test_bodies_that_pass_through_each_other_are_said(self) -> None:
+        box = trimesh.creation.box((20, 20, 20))
+        with tempfile.TemporaryDirectory() as td:
+            for shift, crossing in (((10, 0, 0), True), ((20, 20, 0), False)):  # half through; touching along an edge
+                other = trimesh.creation.box((20, 20, 20), transform=trimesh.transformations.translation_matrix(shift))
+                result = cad.stl.dfm(_written(trimesh.util.concatenate([box, other]), Path(td), "two"),
+                                     process="printing")
+                found = {f.code: f for f in result.findings}
+                with self.subTest(shift=shift):
+                    self.assertEqual("bodies_intersect" in found, crossing)
+                    self.assertEqual("printing.clearance" in found, not crossing, "one finding a pair")
+                    if crossing:
+                        self.assertEqual(found["bodies_intersect"].severity, "warning")
+                        self.assertIn("the bodies' sum", found["bodies_intersect"].message)
+
+    def test_a_mesh_over_the_ceiling_is_refused_before_it_is_read(self) -> None:
+        from unittest import mock
+
+        from cad.trimesh import _mesh
+
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(_mesh, "MAX_TRIANGLES", 10):
+            result = cad.stl.dfm(_written(trimesh.creation.box((20, 20, 20)), Path(td), "box"), process="printing")
+        self.assertEqual([(f.severity, f.code) for f in result.findings], [("error", "mesh_too_large")])
+        self.assertIn("12 triangles, over the 10", result.findings[0].message)
+        self.assertIn("decimate it", result.findings[0].message)
+
+
+class BoundedTest(unittest.TestCase):
+    def test_a_ray_costs_the_triangles_near_it_not_the_mesh(self) -> None:
+        """82 000 triangles, 2000 rays: every ray lands, and the cast's tables stay within megabytes (trimesh's
+        own engine without embree held 2.4 GB on this mesh, and ran out of memory on 1.3 million triangles)."""
+        import tracemalloc
+
+        import numpy as np
+
+        from cad._internal import meshops_printing as mo
+
+        sphere = trimesh.creation.icosphere(subdivisions=6, radius=30.0)
+        vertices, faces = np.asarray(sphere.vertices, dtype=float), np.asarray(sphere.faces, dtype=int)
+        origins, on = trimesh.sample.sample_surface(sphere, 2000, seed=1)
+        directions = -sphere.face_normals[on]
+        tracemalloc.start()
+        caster = mo.Caster(vertices, faces)
+        distance, hit = caster.first(origins + directions * 1e-4, directions)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        self.assertEqual(len(faces), 81920)
+        self.assertTrue((hit >= 0).all())
+        np.testing.assert_allclose(distance, 60.0, atol=0.05, err_msg="across the sphere, through its middle")
+        self.assertLess(peak, 250e6)
+        # the same crossings as every ray against every triangle, on a small soup
+        rng = np.random.default_rng(5)
+        soup = rng.uniform(-10, 10, (300, 1, 3)) + rng.uniform(-2, 2, (300, 3, 3))
+        few = mo.Caster(soup.reshape(-1, 3), np.arange(900).reshape(-1, 3))
+        start, way = rng.uniform(-12, 12, (200, 3)), rng.normal(size=(200, 3))
+        way /= np.linalg.norm(way, axis=1, keepdims=True)
+        found, which = few.first(start, way)
+        e1, e2 = soup[:, 1] - soup[:, 0], soup[:, 2] - soup[:, 0]
+        p = np.cross(way[:, None, :], e2[None])
+        det = np.einsum("tj,rtj->rt", e1, p)
+        s0 = start[:, None, :] - soup[None, :, 0]
+        u = np.einsum("rtj,rtj->rt", s0, p) / det
+        q = np.cross(s0, e1[None])
+        v = np.einsum("rj,rtj->rt", way, q) / det
+        t = np.einsum("tj,rtj->rt", e2, q) / det
+        every = np.where((u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0), t, np.inf).min(axis=1)
+        np.testing.assert_allclose(found, every, rtol=1e-9)
+        self.assertEqual(int((which >= 0).sum()), int(np.isfinite(every).sum()))
+
+
+class MeshAccuracyTest(unittest.TestCase):
+    """A triangle is a chord of the surface: what is read off it is the surface's within the mesh's own turn."""
+
+    def test_every_triangle_of_a_45_degree_cone_reads_45_within_its_own_tolerance(self) -> None:
+        import numpy as np
+        from build123d import Cone
+
+        from cad._internal import meshops_printing as mo
+
+        with tempfile.TemporaryDirectory() as td:
+            for tolerance, angular in ((0.01, 0.1), (0.01, 0.2), (0.1, 0.4)):
+                path = Path(td) / f"cone-{angular}.stl"
+                export_stl(Cone(5, 15, 10), str(path), tolerance=tolerance, angular_tolerance=angular)
+                mesh = dfam_tool._load(str(path))
+                surface = dfam_tool._smooth(mesh)
+                tilt, slack = mo.angles(surface.normals), surface.slopes()
+                side = (surface.normals[:, 2] < -0.1) & (np.abs(tilt - 45.0) < 10.0)
+                with self.subTest(angular=angular):
+                    self.assertGreater(int(side.sum()), 50)
+                    self.assertGreater(float(np.abs(tilt[side] - 45.0).max()), 0.2, "the chords do read off 45")
+                    self.assertTrue((np.abs(tilt[side] - 45.0) <= slack[side]).all(),
+                                    "each reading's tolerance holds the cone's 45 deg")
+                    self.assertLess(float(slack[side].max()), 5.0, "a tolerance, not a licence")
+            # a plane has none but its coordinates' noise: a wedge turned 37 deg about Z reads 45 as exactly
+            path = Path(td) / "wedge.stl"
+            export_stl(Rotation(0, 0, 37) * _wedge(45.0), str(path))
+            flat = dfam_tool._smooth(dfam_tool._load(str(path))).slopes()
+            self.assertLess(float(flat.max()), 1e-3)
+            self.assertGreater(float(flat.max()), 0.0)
+
+    def test_a_cavity_s_throat_is_measured_on_the_triangles(self) -> None:
+        # 40 x 40 x 6 mm of air behind a 2 mm vent, and behind one of 3.5 mm -- the limit, which its polygon of
+        # chords reads a hair under: the hole's own diameter within its chords' sag, a warning and none
+        block = Box(50, 50, 16) - Box(40, 40, 6)
+        with tempfile.TemporaryDirectory() as td:
+            for diameter, warned in ((2.0, True), (3.5, False)):
+                part = block - Pos(0, 0, 5) * Cylinder(diameter / 2, 8)
+                result = cad.stl.dfm(_stl(part, Path(td), f"vent{diameter}"), process="printing", technology="sls")
+                [cavity] = result.measurements["trapped_volumes"]["items"]
+                with self.subTest(vent=diameter):
+                    self.assertEqual((cavity["sealed"], cavity["escape_holes"]), (False, 1))
+                    self.assertLess(cavity["min_escape_hole_mm"], diameter, "a polygon inside its circle")
+                    self.assertLessEqual(diameter - cavity["min_escape_hole_mm"], cavity["escape_hole_uncertainty_mm"])
+                    self.assertLess(cavity["escape_hole_uncertainty_mm"], 0.1)
+                    self.assertAlmostEqual(cavity["volume_mm3"], 9600.0, delta=0.05 * 9600)
+                    self.assertEqual("printing.escape_hole_diameter" in {f.code for f in result.findings}, warned)
+                    self.assertEqual(cavity["escape_at_limit"], not warned)
+
+    def test_one_hole_is_one_gap(self) -> None:
+        # a 0.4 mm hole through 30 mm: a mesh has no axis to call it a hole, and reads it as a gap -- once
+        part = Box(40, 30, 30) - Pos(-10, 0, 0) * Cylinder(0.2, 30)
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.dfm(_stl(part, Path(td), "hole"), process="printing", technology="sls")
+        gaps = result.measurements["gaps"]
+        self.assertEqual(gaps["count"], 1)
+        self.assertAlmostEqual(gaps["items"][0]["gap_mm"], 0.4, delta=0.01)
+        self.assertEqual([f.code for f in result.findings if f.code == "printing.gap"], ["printing.gap"])
+
+
 class CheckTest(unittest.TestCase):
     def test_the_check_emits_every_fact_family(self) -> None:
         with tempfile.TemporaryDirectory() as td:

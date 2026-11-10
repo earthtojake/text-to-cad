@@ -954,14 +954,23 @@ def cavities(grid: Grid, ball_radius: float, cap: int = 32, caster: Caster | Non
         cores = fits & ~reached[level]
         if not cores.any() or len(found) >= cap:
             continue
-        # the outside as its ball of this radius touches it: grown without regard to walls, a voxel past the
-        # ball (into the surface's own voxels, never through them), so it stops at an opening the ball does not fit
-        outside = (_dilate(reached[level], everywhere, level + 1) & air) if level else reached[0]
+        # the outside as its ball of this radius touches it: the ball itself (all air: its centres are that
+        # deep), then one voxel on through a face -- into the surface's own voxels, never through them: two air
+        # voxels either side of a wall thinner than a voxel and askew can touch at a corner, never at a face
+        # (``voxels``: every line between two centres that crosses the surface marks one of them) -- so it stops
+        # at an opening the ball does not fit
+        if level:
+            ball = _dilate(reached[level], everywhere, level)
+            outside = (ball | _near(ball, full=False)) & air
+        else:
+            outside = reached[0]
         room = air & ~outside & (labels == -1)
-        joined = _flood(cores, room)
+        joined = _flood(cores & room, room)
+        if not joined.any():
+            continue
         box = _box(joined, 1)
         pieces = components(joined[box])
-        for piece in np.unique(pieces[cores[box]]):
+        for piece in np.unique(pieces[(cores & joined)[box]]):
             region = np.zeros(shape, dtype=bool)
             region[box] = pieces == piece
             deepest = int(depth[region].max())

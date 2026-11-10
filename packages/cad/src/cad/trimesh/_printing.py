@@ -1130,10 +1130,12 @@ def _clearance_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], 
                     best = (float(distance[k]), (probes[near][k] + closest[k]) / 2.0)
             if best[1] is None or best[0] > CLEARANCE_REACH:
                 continue
-            # one body's surface inside the other's material: they pass through each other (a void's shell is
-            # its solid's own, never a body here)
-            overlap = bool(b.is_watertight and _inside(b, _some(a.vertices)).any()) or bool(
-                a.is_watertight and _inside(a, _some(b.vertices)).any())
+            # one body's corners inside the other's material: they pass through each other (a void's shell is
+            # its solid's own, never a body here). Each corner is read a hair inside its own body: bodies that
+            # only touch -- along a face, an edge -- share no inside
+            hair = 1e-4 * float(np.linalg.norm(mesh.extents))
+            overlap = bool(b.is_watertight and _inside(b, _some(a.vertices - a.vertex_normals * hair)).any()) or bool(
+                a.is_watertight and _inside(a, _some(b.vertices - b.vertex_normals * hair)).any())
             kind = "overlap" if overlap else ("contact" if best[0] <= 1e-6 else "gap")
             items.append({"xyz": _p(best[1]), "distance_mm": _r(0.0 if overlap else best[0], mo.JUDGED), "kind": kind,
                           "bodies": [i, j]})
