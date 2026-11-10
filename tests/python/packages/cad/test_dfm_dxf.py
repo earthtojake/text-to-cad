@@ -521,6 +521,34 @@ class CutFileTest(unittest.TestCase):
             # exactly 2 t from the line is at the limit, and passes
             self.assertEqual(self.errors(self.bent_plate(f"bend_at{turn}", holes=[(43.5, 30, 5)], turn=turn)), [])
 
+    def test_a_cad_flat_pattern_exports_layers_are_read_as_what_they_are(self) -> None:
+        allowance = math.pi / 2 * (1.0 + 0.4 * 2.0)   # a 90 degree bend of 1 mm inside radius in 2 mm sheet
+
+        def flat(layers):
+            outer, inner, bend, extent, marks = layers
+
+            def build(msp, document):
+                for layer in layers:
+                    document.layers.add(layer)
+                length = 70 + allowance
+                msp.add_lwpolyline([(0, 0), (length, 0), (length, 50), (0, 50)], close=True, dxfattribs={"layer": outer})
+                msp.add_circle((15, 25), 2.75, dxfattribs={"layer": inner})
+                msp.add_point((15, 25), dxfattribs={"layer": marks})
+                msp.add_line((40 + allowance / 2, 0), (40 + allowance / 2, 50), dxfattribs={"layer": bend})
+                for x in (40, 40 + allowance):   # the bend's two tangent lines: no cut, and no bend
+                    msp.add_line((x, 0), (x, 50), dxfattribs={"layer": extent})
+            return build
+
+        for name, layers in (
+                ("inventor", ("IV_OUTER_PROFILE", "IV_INTERIOR_PROFILES", "IV_BEND", "IV_TANGENT", "IV_ARC_CENTERS")),
+                ("fusion", ("OUTER_PROFILES", "INTERIOR_PROFILES", "BEND", "BEND_EXTENT", "MARKS_CENTERS"))):
+            result = self.check(self.write(name, flat(layers)), thickness=2.0)
+            self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.bend_lines_read"}, name)
+            cut = result.measurements["cut_file"]
+            self.assertEqual((cut["bend_line_count"], cut["contour_count"], cut["cut_layer_count"]), (1, 2, 2), name)
+            intents = {layer["layer"]: layer["intent"] for layer in cut["layers"]}
+            self.assertEqual([intents[layer] for layer in layers], ["cut", "cut", "bend", "reference", "reference"])
+
     def test_a_window_across_a_bend_line_ends_the_bend_and_is_no_hole_beside_it(self) -> None:
         result = self.bent_plate("bend_window", split=(27, 33))
         self.assertTrue(result.ok, [f.human_line() for f in result.findings])
