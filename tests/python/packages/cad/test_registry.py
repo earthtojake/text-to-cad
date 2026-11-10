@@ -57,8 +57,12 @@ class TheTableIsTheSource(unittest.TestCase):
                     # A program the person installs, which ships no package: found by its probe alone.
                     self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
                     self.assertFalse(integration.modules or integration.distributions)
+                    self.assertFalse(integration.python or integration.platforms or integration.homes,
+                                     "what a tool decides of its environment is its extra's environment's")
                 else:
                     self.assertTrue(integration.modules and integration.distributions)
+                self.assertRegex(integration.python or "3.13", r"^3\.\d+$", "a Python line, as uv is asked for one")
+                self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
@@ -90,6 +94,23 @@ class TheTableIsTheSource(unittest.TestCase):
             self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
+        # Blender's bpy is an extra like any other, cad[blender]: what only bpy decides is the one Python it is built
+        # for, its platforms and the folders its settings are read from. A program's import of bpy, or of cad's own
+        # namespace for it, finds the integration, and one run without it is told the extra in the one line all are.
+        blender = registry.INTEGRATIONS["blender"]
+        self.assertEqual((blender.extra, blender.process, blender.python), ("blender", "in-process", "3.13"))
+        self.assertEqual(("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"), blender.platforms)
+        self.assertTrue(blender.homes and all(name.startswith("BLENDER_USER_") for name in blender.homes))
+        self.assertEqual(["blender"], [name for name, found in registry.INTEGRATIONS.items() if found.python])
+        self.assertEqual(("blender", "blender", "blender"),
+                         (integrations.for_module("bpy.ops"), integrations.for_distribution("bpy"),
+                          integrations.for_name("cad.blender.load")))
+        self.assertIsNone(integrations.for_command("bpy"))
+        self.assertEqual(integrations.missing(ModuleNotFoundError("no bpy", name="bpy")),
+                         "bpy comes with cad's blender integration: add `cad[blender]` to the script's header")
+        self.assertEqual(["macOS x86-64", "Linux arm64", "Windows x86-64", "macOS arm64"],
+                         [registry.platform_of(*given) for given in (("darwin", "x86_64"), ("linux", "aarch64"),
+                                                                     ("win32", "AMD64"), ("darwin", "arm64"))])
 
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone

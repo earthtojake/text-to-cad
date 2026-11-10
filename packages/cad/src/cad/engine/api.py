@@ -201,12 +201,13 @@ class Document:
             raise TypeError(f"{verb} of {self.name}: the body that calls it is building it; {verb} the "
                             "document the model call returns, once the build is done")
 
-    def export(self, *destinations: Any, tolerance: float | None = None, zero: str | None = None) -> list[Written]:
-        """``export(handle, *destinations)``: the document written to each destination; an STL or a
-        3MF meshed to within ``tolerance`` (mm) when one is given, a robot description taken at the
-        mechanism state ``zero`` when one is given, as ``export`` does."""
+    def export(self, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
+               zero: str | None = None) -> list[Written]:
+        """``export(handle, *destinations)``: the document written to each destination; a GLB, an STL or a
+        3MF meshed to within ``tolerance`` (mm) and ``angle`` (degrees) when either is given, a robot
+        description taken at the mechanism state ``zero`` when one is given, as ``export`` does."""
         self._outside("export")
-        return _said(_exporting(self, destinations, tolerance=tolerance, zero=zero), destinations)
+        return _said(_exporting(self, destinations, tolerance=tolerance, angle=angle, zero=zero), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
                  pose: Any = None, width: int | None = None, height: int | None = None,
@@ -510,7 +511,8 @@ def _source(source: Any) -> dict[str, Any]:
     return {"path": str(path)}
 
 
-def export(source: Any, *destinations: Any, tolerance: float | None = None, zero: str | None = None,
+def export(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
+           zero: str | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
@@ -524,16 +526,18 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, zero
     with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF, MJCF or URDF is made from one). Several
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
-    carries every configuration sequence the document defines, as a clip. An STL and a 3MF are
-    meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part), unless
-    ``tolerance`` gives an absolute ceiling in millimetres (at least ``export.MIN_TOLERANCE``), for a
-    print whose fits are finer: each part is then meshed again at the finer of the two for these
-    files, and each file says it; every destination is then an STL or a 3MF. An MJCF and a URDF are
-    the robot description at the as-built state, unless ``zero`` names a mechanism state to take every
-    joint's zero at (``describe``'s **The zero**: the bodies posed there, each joint's value there its
-    zero, its limits and the other states around it); every destination is then an MJCF or a URDF.
-    Each robot file's ``Written.robot`` says what it holds, and the program's own call says it on
-    stderr after the file's line (``said.robot``). A call the program's own
+    carries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are
+    meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part and 28.5
+    degrees), unless ``tolerance`` gives an absolute ceiling in millimetres (at least
+    ``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or
+    ``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then
+    meshed again at the finer of each for these files, and each file says it; every destination is
+    then a GLB, an STL or a 3MF. An MJCF and a URDF are the robot description at the as-built state,
+    unless ``zero`` names a mechanism state to take every joint's zero at (``describe``'s **The zero**:
+    the bodies posed there, each joint's value there its zero, its limits and the other states around
+    it); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it
+    holds, and the program's own call says it on stderr after the file's line (``said.robot``). A call
+    the program's own
     code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
@@ -544,7 +548,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, zero
     if bar is not None:
         log = bar.around(log or (lambda _text: None))  # a line of the log goes above the bar
     try:
-        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, zero), destinations)
+        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, angle, zero), destinations)
     finally:
         if bar is not None:
             bar.close()
@@ -566,15 +570,15 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
                progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
-               zero: str | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, kind_of, tolerance_of, zero_of
+               angle: float | None = None, zero: str | None = None) -> list[Written]:
+    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of, zero_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
     resolved = [Path(os.fspath(destination)).resolve() for destination in destinations]
     for destination in resolved:
         kind_of(destination)
-    tolerance = tolerance_of(tolerance, resolved)
+    tolerance, angle = tolerance_of(tolerance, resolved), angle_of(angle, resolved)
     zero = zero_of(zero, resolved)
     source = _called(source, daemon)
     spec = _source(source)
@@ -589,12 +593,16 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     shown = log or (lambda _text: None)
     order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd,
              **({"tolerance": tolerance} if tolerance is not None else {}),
+             **({"angle": angle} if angle is not None else {}),
              **({"zero": zero} if zero is not None else {})}
     done = _exported(order, spec, shown, daemon, progress)
-    if tolerance is not None and any(row.get("tolerance") != tolerance for row in done["files"]):
-        # A server of a release before the tolerance writes the files at its own, and says no tolerance.
+    unmet = [option for option, asked in (("tolerance", tolerance), ("angle", angle))
+             if asked is not None and any(row.get(option) != asked for row in done["files"])]
+    if unmet:
+        # A server of a release before the option writes the files at its own, and says none.
         raise EngineError(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
-                          "own tolerance: it is older than this library. Update it (cad update) and export again")
+                          f"own {' and '.join(unmet)}: it is older than this library. Update it (cad update) and "
+                          "export again")
     if zero is not None and any(row.get("zero") != zero for row in done["files"]):
         # A server of a release before the zero describes the robot as built, and says no zero.
         raise EngineError(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
@@ -1041,8 +1049,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
     materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
-    and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); its
-    joints,
+    and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); the
+    parts whose texture maps are not drawn (``untextured``); its joints,
     mechanism states, configuration sequences and animations; and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
@@ -1131,6 +1139,9 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
         "unweighed": unweighed if materials or declared else [],
         **({"declared": declared} if declared is not None else {}),
+        # Each part whose materials' texture maps are drawn as their scalar look (``untextured``).
+        "untextured": [{"part": prototype.get("name") or prototype["key"], "materials": prototype["untextured"]}
+                       for prototype in prototypes if prototype.get("untextured")],
         "joints": joints,
         "couplings": couplings_of(kinematics),
         "states": [{"name": name, "values": values} for name, values in (kinematics.get("configurations") or {}).items()],

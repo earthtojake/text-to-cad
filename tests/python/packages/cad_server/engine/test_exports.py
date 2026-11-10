@@ -287,8 +287,13 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(by_name[metals.aluminum().name]['pbrMetallicRoughness']['metallicFactor'], 1.0)
         self.assertIn(metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).name, by_name)
         self.assertIn([1.0, 0.0, 0.0, 1.0], [look["pbrMetallicRoughness"]["baseColorFactor"] for look in looks])
-        rack = next(node for node in placed if node["name"] == "rack/peg0")
-        self.assertEqual(rack["matrix"][12:15], [-10.0, 0.0, 6.0])
+        # The tree as nodes: the rack lifted 6 mm, its pegs placed along it in its frame.
+        rack = next(node for node in gltf["nodes"] if node["name"] == "rack")
+        self.assertNotIn("mesh", rack)
+        self.assertEqual(rack["matrix"][12:15], [0.0, 0.0, 6.0])
+        peg = next(node for node in placed if node["name"] == "rack/peg0")
+        self.assertIn(gltf["nodes"].index(peg), rack["children"])
+        self.assertEqual(peg["matrix"][12:15], [-10.0, 0.0, 0.0])
         self.assertEqual({gltf["accessors"][primitive["indices"]]["componentType"] for entry in gltf["meshes"]
                           for primitive in entry["primitives"]}, {5123}, "a small mesh is indexed in 16 bits")
         # The root shows the document's Z-up millimetres in glTF's Y-up metres.

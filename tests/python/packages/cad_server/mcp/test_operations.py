@@ -98,10 +98,14 @@ class OperationsTest(unittest.TestCase):
         with patch('cad.engine.api.export', return_value=[]) as export:
             self.finish(jobs, jobs.call('cad_export', {**args, 'tolerance': 0.01}))
         self.assertEqual(export.call_args.kwargs['tolerance'], 0.01)
-        for tolerance in ('0.01', 0.0001, True):
-            with self.subTest(tolerance=tolerance):
+        with patch('cad.engine.api.export', return_value=[]) as export:
+            self.finish(jobs, jobs.call('cad_export', {**args, 'requestId': 'export-tolerance-03', 'angle': 5}))
+        self.assertEqual(export.call_args.kwargs['angle'], 5)
+        for option, value in (('tolerance', '0.01'), ('tolerance', 0.0001), ('tolerance', True),
+                              ('angle', '5'), ('angle', 0.5), ('angle', 29)):
+            with self.subTest(option=option, value=value):
                 self.assertEqual(jobs.call('cad_export', {**args, 'requestId': 'export-tolerance-02',
-                                                          'tolerance': tolerance})['status'], 400)
+                                                          option: value})['status'], 400)
 
     def test_a_snapshot_and_an_inspection_hand_the_engine_their_progress_taker(self):
         from cad.engine.api import Drawn

@@ -70,9 +70,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
-    # A document's export (a model's, an xbf's, a STEP's) meshes an STL or a 3MF to a tolerance and takes a
-    # robot description's joints from a zero state; a mesh's, to the other mesh kinds, does neither.
-    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "zero", "json"})
+    # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
+    # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does
+    # neither.
+    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "angle", "zero", "json"})
        for document_type in ("model", "xbf", "step")},
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},

@@ -240,6 +240,20 @@ class SummaryTextTest(unittest.TestCase):
                     self.assertIn("Imported paint: no density, part", summary_text(summary))
                 self.assertNotIn("no material:", summary_text(summary))
                 self.assertEqual(summary["materials"], [row])
+                self.assertEqual(summary["untextured"], [])
+
+    def test_a_part_whose_texture_maps_are_not_drawn_is_listed(self) -> None:
+        from cad.engine.api import _summary
+        from cad_server.engine.cli import summary_text
+
+        structure = {"name": "box", "prototypes": [{"key": "k", "name": "lid",
+                                                    "untextured": {"Hardwood_ASH": ["color", "normal"]}}],
+                     "instances": [{"prototype": 0, "path": "box/lid"}], "tree": {"name": "box"}}
+        summary = _summary(structure, Path("box.xbf"), lambda *_: {}, "id", measured=False)
+        self.assertEqual(summary["untextured"], [{"part": "lid", "materials": {"Hardwood_ASH": ["color", "normal"]}}])
+        lines = summary_text(summary).splitlines()
+        at = lines.index("textures    not drawn yet: these parts wear their material's scalar look")
+        self.assertEqual(lines[at + 1], "  lid: Hardwood_ASH's color and normal maps")
 
     def test_a_part_inside_out_is_named(self) -> None:
         # A solid whose faces point inward (a build123d boolean can make one) has a negative volume; the

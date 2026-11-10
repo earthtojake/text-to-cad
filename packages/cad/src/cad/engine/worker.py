@@ -330,15 +330,16 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     it; a mesh file read as its triangles, no kernel loaded) -- written
     to each destination, and drawn into ``draw``'s
     PNG where the request has one (``{"out", option: value}``, the snapshot verb's: a
-    model's picture is drawn from the document in this worker's memory). An STL or a 3MF is
-    meshed to within the request's ``tolerance`` where it gives one (``export/__init__.py``), and its
-    row says it; a robot description (an MJCF, a URDF) is taken at the request's ``zero`` state where it
-    gives one, its row saying it, and its row carries what it holds (``robot``: ``Description.summary``,
-    with its notes). Answers what was written."""
+    model's picture is drawn from the document in this worker's memory). A GLB, an STL or a 3MF is
+    meshed to within the request's ``tolerance`` and ``angle`` where it gives either
+    (``export/__init__.py``), and its row says it; a robot description (an MJCF, a URDF) is taken at the
+    request's ``zero`` state where it gives one, its row saying it, and its row carries what it holds
+    (``robot``: ``Description.summary``, with its notes). Answers what was written."""
     from cad.engine import build as engine_build
     from cad.engine import export
 
     tolerance = export.tolerance_of(request.get("tolerance"), request["destinations"])
+    angle = export.angle_of(request.get("angle"), request["destinations"])
     zero = export.zero_of(request.get("zero"), request["destinations"])
     source_spec = request["source"]
     built: list[dict[str, Any]] = []
@@ -406,12 +407,13 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
             from cad.engine.export.viewer import original
             size = original(source, target, request["expected"])
         else:
-            size = export.translate(source, None, target, tolerance, log, zero, robot.append)
+            size = export.translate(source, None, target, tolerance, log, angle, zero, robot.append)
         seconds = time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
         files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
                       "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
                       **({"tolerance": tolerance} if tolerance is not None else {}),
+                      **({"angle": angle} if angle is not None else {}),
                       **({"zero": zero} if zero is not None else {}),
                       **({"robot": robot[0]} if robot else {})})
     drawn = None

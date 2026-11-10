@@ -237,7 +237,7 @@ class TabServerTest(_Session):
             with self.subTest(url=url):
                 blocked = request(url, {"x-cad-viewer": "1", "range": "bytes=0-20", "if-range": "guessed"})
                 self.assertTrue(blocked["isError"])
-                self.assertNotIn("structuredContent", blocked)
+                self.assertEqual(blocked["structuredContent"], {"refused": "capability"})  # why alone, nothing routed
         for bad in ("guessed", other._app_token):
             self.assertTrue(request("/api/v1/settings", {"x-cad-app": bad})["isError"])
         self.assertEqual(request("/api/v1/server", {"X-Cad-App": token})["structuredContent"]["status"], 200)
@@ -883,11 +883,16 @@ class InlineServerTest(_Session):
             with self.subTest(method=method, url=url):
                 refused = agent(method, url, b'{"telemetry":{"share":false}}' if method != "GET" else b"")
                 self.assertTrue(refused["isError"])
-                self.assertNotIn("structuredContent", refused)
+                # Nothing a route says: only why, which the card reads to say it cannot connect.
+                self.assertEqual(refused["structuredContent"], {"refused": "capability"})
+                self.assertEqual(refused["content"][0]["text"], "Only a CAD view calls this tool.")
         # A wrong capability is refused in words; another session's is wrong here.
         stale = agent("GET", "/api/v1/server", headers={"x-cad-app": token[:-1] + "x"})
         self.assertTrue(stale["isError"])
         self.assertIn("open CAD again", stale["content"][0]["text"])
+        self.assertEqual(stale["structuredContent"], {"refused": "stale"})
+        # Claude Desktop's card reads it from the launch alone: no tool's metadata carries it.
+        self.assertNotIn(token, json.dumps(self.server.handle("tools/list", {}, None)))
         other = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state-other"))
         other.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": self.offered,
                                                      "clientInfo": self.client}), None)
@@ -896,6 +901,84 @@ class InlineServerTest(_Session):
         # With it, the page reaches every viewer route; the header never reaches the route.
         reply = agent("GET", "/api/v1/server", headers={"x-cad-app": token})["structuredContent"]
         self.assertEqual(reply["status"], 200)
+
+
+class CursorServerTest(_Session):
+    """Cursor (``cursor-vscode``, declaring MCP Apps) hands its card a result rebuilt from its transcript, content
+    and structuredContent alone, and the tool that launched it in ``ui/initialize``'s host context: the launching
+    tool's own metadata carries the page's capability there, and nowhere the agent reads."""
+
+    client = {"name": "cursor-vscode", "version": "1.0.0"}
+    offered = RENDERS_APPS
+
+    def test_cursor_s_card_takes_its_capability_from_the_launching_tool_and_the_agent_never_sees_it(self) -> None:
+        tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
+        token = self.server._app_token
+        self.assertEqual(tools["cad_show"]["_meta"]["dev.texttocad/httpToken"], token)
+        self.assertEqual(tools["cad_show"]["_meta"]["ui"]["resourceUri"], self.server.page.uri)
+        # The launching tool alone, and only in its metadata: not in what Cursor's agent reads of a tool (its name,
+        # description and arguments), in another tool, in the resource it can read, or in the result it is given.
+        for name, tool in tools.items():
+            self.assertNotIn(token, json.dumps({key: value for key, value in tool.items() if key != "_meta"}), name)
+            if name != "cad_show":
+                self.assertNotIn(token, json.dumps(tool), name)
+        self.assertNotIn(token, json.dumps(self.server.handle("resources/read", {"uri": self.server.page.uri}, None)))
+        self.assertNotIn(token, json.dumps(self.server.handle("resources/list", {}, None)))
+        shown = self.call("cad_show", {"source": self.bracket})
+        self.assertNotIn(token, json.dumps({key: value for key, value in shown.items() if key != "_meta"}))
+        # The page's calls still need it: the agent's, without it, are refused before anything routes them.
+        view = shown["structuredContent"]["launch"]["view"]
+        refused = self.server.handle("tools/call", {"name": "cad_sync", "arguments": {"view": view, "surface": "inline"}},
+                                     RequestContext(1, {"progressToken": "toolu_1"}))
+        self.assertEqual(refused["structuredContent"], {"refused": "capability"})
+        self.assertNotIn(view, self.server.views)
+        self.assertFalse(self.call("cad_sync", {"view": view, "surface": "inline", "model": self.bracket}).get("isError"))
+
+    def test_every_other_host_keeps_its_catalog_as_it_was(self) -> None:
+        for client, offered in ((CLAUDE, RENDERS_APPS), (CODEX, RENDERS_APPS), ({"name": "cursor-vscode"}, {})):
+            with self.subTest(client=client["name"], offered=offered):
+                server = Server(page=self.server.page, recents=RecentStore(self.tmp / "state"))
+                server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": offered,
+                                                               "clientInfo": client}), None)
+                self.assertNotIn(server._app_token, json.dumps(server.handle("tools/list", {}, None)))
+
+
+class ClaudeCodeSessionTest(_Session):
+    """A server Claude Code started (``CLAUDE_CODE_ENTRYPOINT`` in the transport's environment, the terminal's
+    or the desktop app's Code tab's): no tools, and the instructions name the cad skill and the `cad` command.
+    ``CAD_MCP_CARDS=1`` keeps every tool; Claude Desktop's own server, which never sees the variable, keeps them."""
+
+    client = {"name": "claude-code", "title": "Claude Code", "version": "2.1.316"}
+    offered = RENDERS_APPS
+    environ: dict = {"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"}
+
+    def setUp(self) -> None:
+        cleared = {key: "" for key in ("CLAUDE_CODE_ENTRYPOINT", "CAD_MCP_CARDS")}
+        patched = mock.patch.dict(os.environ, {**cleared, **self.environ})
+        patched.start()
+        self.addCleanup(patched.stop)
+        super().setUp()
+
+    def tools(self) -> list[str]:
+        return [tool["name"] for tool in self.server.handle("tools/list", {}, None)["tools"]]
+
+    def test_claude_code_s_session_lists_no_tool_and_says_to_use_the_skill(self) -> None:
+        self.assertEqual(self.tools(), [])
+        self.assertIn("cad skill", self.initialized["instructions"])
+        self.assertIn("`cad viewer`", self.initialized["instructions"])
+        # A Code tab missing Claude Desktop's own server, whose card works there: what makes it appear.
+        self.assertIn("run `cad setup` and ask the user to quit and reopen Claude Desktop", self.initialized["instructions"])
+        with self.assertRaises(RpcError):
+            self.call("cad_show", {"source": self.bracket})
+
+    def test_cad_mcp_cards_keeps_every_tool_and_desktop_s_own_server_has_them(self) -> None:
+        for environ in ({"CLAUDE_CODE_ENTRYPOINT": "cli", "CAD_MCP_CARDS": "1"}, {"CLAUDE_CODE_ENTRYPOINT": ""}):
+            with self.subTest(environ=environ), mock.patch.dict(os.environ, environ):
+                self.server = Server(page=self.server.page, recents=RecentStore(self.tmp / "state"))
+                said = self.server.handle("initialize", initialize_params(
+                    {"protocolVersion": "2025-06-18", "capabilities": self.offered, "clientInfo": CLAUDE}), None)
+                self.assertIn("cad_show", self.tools())
+                self.assertIn("cad_show", said["instructions"])
 
 
 class TextServerTest(_Session):

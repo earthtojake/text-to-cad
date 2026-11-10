@@ -15,7 +15,9 @@ which `-m unittest` would run silently.
     python scripts/test/unittest_files.py --top <repo root> [--jobs N] <test file>...
 
 ``--print-weights`` prints this run's measured per-file costs, the first thing to read
-when a run is slow.
+when a run is slow. ``--no-skips`` fails a run in which any test skipped: for a suite whose
+CI job exists to run it whole, where a test that skips is a job that passed having checked
+nothing.
 
 Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with an engine
 directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
@@ -367,7 +369,8 @@ def _read_all(stream) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
+def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False,
+              no_skips: bool = False) -> int:
     top = os.path.realpath(top)
     started = time.perf_counter()
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
@@ -491,7 +494,11 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
     if meanwhile:
         sys.stderr.write("another cadgen wrote where the developer's own keeps its state meanwhile, by what "
                          "each says of itself (no test's):\n" + "".join(f"  {where}\n" for where in meanwhile))
-    ok = (not failed_modules and not unparsed and not leaked and not tests_wrote
+    skipped = totals["skipped"] if no_skips else 0
+    if skipped:
+        sys.stderr.write(f"{skipped} test{'s' if skipped != 1 else ''} skipped in a run that takes none "
+                         "(--no-skips): each says why above\n")
+    ok = (not failed_modules and not unparsed and not leaked and not tests_wrote and not skipped
           and totals["failures"] == 0 and totals["errors"] == 0)
     verdict = "OK" if ok else "FAILED"
     sys.stderr.write(verdict + (f" ({', '.join(verdict_parts)})" if verdict_parts else "") + "\n")
@@ -518,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print one `WEIGHT<TAB>path<TAB>seconds` line per slow file on stdout",
     )
+    parser.add_argument("--no-skips", action="store_true", help="fail the run when any test skipped")
     # The runner's own: the interpreter it starts for one file, which runs it here.
     parser.add_argument("--file", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
@@ -533,7 +541,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.file:
         return run_in_process(args.files, args.top, args.verbose, args.hang_seconds,
                               tuple(args.places) if args.places else None)
-    return run_files(args.files, args.top, max(1, args.jobs), args.verbose, args.print_weights)
+    return run_files(args.files, args.top, max(1, args.jobs), args.verbose, args.print_weights, args.no_skips)
 
 
 if __name__ == "__main__":

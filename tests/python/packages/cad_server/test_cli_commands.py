@@ -170,12 +170,13 @@ class TheCommandTable(unittest.TestCase):
         code, _, err = _run(["model", "inspect", "arm"])
         self.assertEqual(2, code)
         self.assertIn("cad model takes a model's document id", err)
-        # A mesh's export meshes nothing: its parser has no --tolerance.
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as refused:
-            cli.main(["stl", "export", "part.stl", "part.glb", "--tolerance", "0.01"])
-        self.assertEqual(2, refused.exception.code)
-        self.assertIn("unrecognized arguments: --tolerance", err.getvalue())
+        # A mesh's export meshes nothing: its parser has no --tolerance or --angle.
+        for flag, value in (("--tolerance", "0.01"), ("--angle", "5")):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as refused:
+                cli.main(["stl", "export", "part.stl", "part.glb", flag, value])
+            self.assertEqual(2, refused.exception.code)
+            self.assertIn(f"unrecognized arguments: {flag}", err.getvalue())
 
     def test_a_types_own_option_before_its_file_is_no_file(self) -> None:
         """``--urdf robot.urdf`` is srdf validate's own option, wherever it stands: the file it validates is

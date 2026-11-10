@@ -49,7 +49,8 @@ class DocumentType(types.ModuleType):
 
         return DOCUMENT_TYPES[self.__name__.rpartition(".")[2]]
 
-    def __call__(self, out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
+    def __call__(self, out: Any, *, name: str | None = None, tolerance: float | None = None,
+                 angle: float | None = None) -> Any:
         """``@<type>("out.<ext>", name=...)`` (or ``@<type>(out="out.<ext>")``, the decorator's 0.10 signature):
         declare the file a model writes, of this type."""
         entry = self.entry
@@ -60,8 +61,10 @@ class DocumentType(types.ModuleType):
                             f"{how} (its operations: {', '.join(entry.operation_names)})")
         from cad.engine import model
 
-        # An STL's or a 3MF's own mesh tolerance goes to the engine's decorator, which alone takes it.
-        return getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}))
+        # A GLB's, an STL's or a 3MF's own mesh tolerance and angle go to the engine's decorator, which alone
+        # takes them.
+        return getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}),
+                                        **({} if angle is None else {"angle": angle}))
 
     def __getattr__(self, name: str) -> Any:
         entry = self.entry
@@ -169,8 +172,8 @@ class ModelType(DocumentType):
 
 def _operation(owner: DocumentType, name: str) -> Any:
     """``owner.<name>``: the engine's operation of that name (``cad.engine.api``), for a source of this type.
-    An export of a mesh to the other mesh kinds takes no ``tolerance`` and no ``zero``: only a document is meshed
-    or described as a robot."""
+    An export of a mesh to the other mesh kinds takes no ``tolerance``, ``angle`` or ``zero``: only a document is
+    meshed or described as a robot."""
     from cad.engine import api
 
     verb = getattr(api, name)
@@ -178,9 +181,9 @@ def _operation(owner: DocumentType, name: str) -> Any:
 
     if name == "export" and not meshed:
         def operation(source: Any, *destinations: Any, **options: Any) -> Any:
-            for option in ("tolerance", "zero"):  # a document's alone: a mesh is meshed by neither, nor described
+            for option in ("tolerance", "angle", "zero"):  # a document's alone: a mesh is meshed by none, nor described
                 if option in options:
-                    raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument {option!r}")
+                    raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument '{option}'")
             owner._own(source)
             return verb(source, *destinations, **options)
     else:

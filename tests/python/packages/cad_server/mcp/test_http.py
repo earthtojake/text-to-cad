@@ -195,7 +195,7 @@ class HttpSessionsTest(unittest.TestCase):
         # Over the real transport, a request without the page's capability is refused, never routed.
         refused = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/api/v1/settings'})
         self.assertTrue(refused['isError'])
-        self.assertNotIn('structuredContent', refused)
+        self.assertEqual(refused['structuredContent'], {'refused': 'capability'})  # why alone, nothing routed
         info = request({'op': 'status'})
         sessions = {item['id'] for item in info['sessions'] if item['kind'] == 'mcp'}
         self.assertTrue({first.session, second.session} <= sessions)

@@ -248,6 +248,8 @@ class NamingTest(unittest.TestCase):
             return env
 
         old = made("old", "0.8.0", ["pandas"])
+        dead = made("dead", "0.10.0", ["bpy"])
+        base.interpreter(dead).unlink()  # its Python, one uv managed, since uninstalled: no run can use it again
         superseded = made("edited", "0.10.0", ["/w/gears"], {"/w/gears": "before"})
         now = made("now", "0.10.0", ["/w/gears"], {"/w/gears": "after"})
         for name, release, given in (("held", "0.8.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
@@ -260,10 +262,12 @@ class NamingTest(unittest.TestCase):
             self.assertEqual(extras.kept(folder, "0.10.0"), {"0.10.0", "0.8.0"}, "the release the update came from")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
             self.assertEqual(sorted(extras._collect(folder, keep, made=now, spec=extras.Spec(requirements=("/w/gears",)),
-                                                    inputs={"release": "0.10.0"})), sorted([str(superseded), str(old)]))
+                                                    inputs={"release": "0.10.0"})),
+                             sorted([str(superseded), str(old), str(dead)]))
         self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "before", "held", "now", "same"],
                          "the release before's stay; a base is its release's to remove; one a process runs from "
-                         "goes at a later making; the environments of other packages stay")
+                         "goes at a later making; the environments of other packages stay; one whose Python is "
+                         "gone goes, of whatever release")
         self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, extras.Spec(requirements=("/w/gears",)),
                                          {"/w/gears": "later"}),
                          ["/w/gears"], "the line that makes it again names the local package edited")

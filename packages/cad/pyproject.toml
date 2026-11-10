@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.11.4"
+version = "0.11.6"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 authors = [{ name = "earthtojake" }]
 keywords = ["cad", "step", "glb", "build123d", "parametric", "agent-skills"]
 classifiers = [
@@ -17,6 +17,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Manufacturing",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Multimedia :: Graphics :: 3D Modeling",
   "Topic :: Scientific/Engineering",
@@ -141,6 +142,19 @@ mujoco = [
 coacd = [
   "coacd>=1.0.14,<1.1; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'win32' and platform_machine == 'AMD64')",
 ]
+# The blender integration's extra: Blender as a Python module (bpy, the Blender Foundation's wheel, GPL: a
+# script that imports it runs it, and the library links nothing of it), which cad.blender loads a GLB into
+# for a render. Pinned exactly, as kicode is: the loader leans on what Blender's own glTF importer does
+# with a file (a node's extras kept as its object's properties, one action a clip), which a release is
+# free to change, and it was checked against this one. bpy 5.2.3 publishes wheels for CPython 3.13 alone,
+# on macOS arm64, Linux x86_64 and Windows (x86_64 and arm64: every machine its Python runs on), and no sdist,
+# so the extra installs it only there: on another Python or platform it installs nothing, `cad run` refuses a
+# program that needs it in one line, and cad.blender says which extra a script lacks
+# (cad._internal.integrations.missing). 245 MB a download on macOS, 340 on Windows x86_64, 400 on Linux; bpy
+# brings cattrs, cython, requests and zstandard, and takes the numpy the library does.
+blender = [
+  "bpy==5.2.3; python_version == '3.13' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64') or sys_platform == 'win32')",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"
@@ -158,7 +172,9 @@ use-ignore-files = false
 # cad_ccx: the calculix extra's, imported where a study looks for the program (`cad/calculix/_program.py`), and the
 # package jobs that check types do not install it.
 # coacd: imported only by the decomposer's own process (`cad/coacd/_decomposer.py`), and it ships no type stubs.
-ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd"]
+# bpy, mathutils: the blender extra's, Blender's own modules (`cad/blender/_scene.py`), built for another Python than
+# the one the package jobs check types on.
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd", "bpy", "bpy.*", "mathutils"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
