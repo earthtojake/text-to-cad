@@ -3,8 +3,8 @@
 # ///
 """Galatea as a MuJoCo model: writes `sim/galatea.xml` and the meshes it draws, from the CAD model.
 
-    cad run sim/build.py            from models/galatea; half a minute while the engine holds the robot's document
-    cad run sim/build.py --poses    the file's keyframes alone, written again from lib/poses.py: two seconds
+    cad run sim/mjcf.py            from models/galatea; half a minute while the engine holds the robot's document
+    cad run sim/mjcf.py --poses    the file's keyframes alone, written again from lib/poses.py: two seconds
 
 It calls the model, so if the model's sources have changed since the engine last built it, the robot is
 built first (six minutes in an environment whose worker has not built it before). `--poses` is for when
@@ -248,7 +248,7 @@ def shaded(vertices, faces):
 
 
 def write_obj(path, vertices, normals, faces, face_normals):
-    lines = ["# Galatea, one link's parts of one look, in the link's frame. Millimetres. Written by sim/build.py."]
+    lines = ["# Galatea, one link's parts of one look, in the link's frame. Millimetres. Written by sim/mjcf.py."]
     lines += ["v %.3f %.3f %.3f" % tuple(row) for row in vertices]
     lines += ["vn %.4f %.4f %.4f" % tuple(row) for row in normals]
     lines += ["f %d//%d %d//%d %d//%d" % (a, d, b, e, c, f) for (a, b, c), (d, e, f) in zip(faces + 1, face_normals + 1)]
@@ -343,7 +343,7 @@ def shapes(links, origins):
 # The MJCF
 # ---------------------------------------------------------------------------------------------
 LEDGER = """
-Galatea, a 1.76 m humanoid, for MuJoCo. Written by sim/build.py from the CAD model (the engine's document
+Galatea, a 1.76 m humanoid, for MuJoCo. Written by sim/mjcf.py from the CAD model (the engine's document
 {document}): edit that, not this file.
 
 Units: metres, kilograms, seconds, radians. Meshes are in millimetres, scaled by 0.001.
@@ -541,7 +541,7 @@ def rekeyed():
     or imported. A file whose joints or couplings are not `lib/kin.py`'s as they are now is refused: the poses are
     not all that changed, and that wants the whole build."""
     if not XML.exists():
-        raise SystemExit(f"{XML} is not there: `cad run sim/build.py` writes it, and the meshes it draws")
+        raise SystemExit(f"{XML} is not there: `cad run sim/mjcf.py` writes it, and the meshes it draws")
     root = ET.parse(XML, ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))).getroot()
     joints, origins = kin.all_joints(), frames()
     have = {joint.get("name"): (body.get("pos"), joint.get("axis"), joint.get("range"))
@@ -557,7 +557,7 @@ def rekeyed():
     if have != want or tied != ties:
         differ = sorted(label for label in have.keys() | want.keys() if have.get(label) != want.get(label)) or sorted(j for j, _, _ in tied ^ ties)
         raise SystemExit(f"{XML.name} was written from another mechanism than lib/kin.py has now ({', '.join(differ[:6])}"
-                         f"{' ...' if len(differ) > 6 else ''}): `cad run sim/build.py` writes the whole of it again")
+                         f"{' ...' if len(differ) > 6 else ''}): `cad run sim/mjcf.py` writes the whole of it again")
 
     keyframe = root.find("keyframe")
     before = {key.get("name"): (key.get("qpos"), key.get("ctrl")) for key in keyframe}
@@ -571,15 +571,15 @@ def rekeyed():
     if ET.tostring(root, encoding="unicode") + "\n" == XML.read_text():
         return print(f"{XML.relative_to(HERE.parent)}: its {len(after)} keyframes are lib/poses.py's already; nothing written")
     if not changed:
-        raise SystemExit(f"{XML.name} does not read back as it was written, though its keyframes stand: it has been edited by hand, or by "
-                         "another build.py. `cad run sim/build.py` writes the whole of it again")
+        raise SystemExit(f"{XML.name} does not read back as it was written, though its keyframes stand: it has been edited by hand, or written "
+                         "by another state of this script. `cad run sim/mjcf.py` writes the whole of it again")
     model = written(root)
     print(f"{XML.relative_to(HERE.parent)}: {len(changed)} of its {model.nkey} keyframes written again from lib/poses.py "
           f"({', '.join(changed)}); nothing else in it has changed")
 
 
 def main(arguments):
-    parser = argparse.ArgumentParser(prog="cad run sim/build.py", description="Galatea as a MuJoCo model: sim/galatea.xml and its meshes.")
+    parser = argparse.ArgumentParser(prog="cad run sim/mjcf.py", description="Galatea as a MuJoCo model: sim/galatea.xml and its meshes.")
     parser.add_argument("--poses", action="store_true",
                         help="write only the keyframes again, from lib/poses.py as it is now: nothing of the CAD model is called")
     if parser.parse_args(arguments).poses:

@@ -6,14 +6,16 @@
     cad run sim/run.py                    every clip: simulate, report, render, and cut them together
     cad run sim/run.py crouch bow         the named clips
     cad run sim/run.py --dry              simulate and report: no picture
+    cad run sim/run.py crouch --stills 74 those frames of the named clips as PNG files, and nothing else
     cad run sim/run.py --cut              cut the clips' videos together again, as they are
     cad run sim/run.py --film crouch      the showcase film's clip alone, from that motion (bow unless one is named);
                        --dry              with it, its report and no picture; --stills 0,60,119: those frames as PNG files
     cad run sim/run.py --friction 1.0     an experiment, reports only: on another floor (the model's own is 0.7),
                        --stiffness 4      with every drive's servo so many times as stiff,
+                       --pace 2           with every motion played so many times as slow,
                        --still-legs       or with the legs' controls left at `ready` through every motion
 
-`build.py` writes the model this loads (`sim/galatea.xml`). A clip resets the robot to a keyframe
+`mjcf.py` writes the model this loads (`sim/galatea.xml`). A clip resets the robot to a keyframe
 (`ready`; `rest` for the motion that wakes it), standing on the floor with nothing holding it, lets it
 settle, and then feeds the servos a motion of `lib/poses.py`: the motion's waypoints in the model's
 controls, between them exactly as the CAD engine plays a configuration sequence (eased from waypoint
@@ -21,24 +23,30 @@ to waypoint, or straight from sample to sample of a sampled path). There is no b
 each servo follows its own joint's angle and knows nothing of the floor, of the other joints or of
 where the weight is. A robot that falls is shown falling, and the clip stops soon after.
 
-A clip marked `held` is the exception, and says so in its picture: the weld `hold_pelvis` is turned
-on and the pelvis hangs from a point over the floor, the feet clear of it. The motions the standing
-robot cannot do (the two that stand on one foot) are shown a second time so, and the walk only so:
-walking needs a controller this model does not have.
+The two motions that stand on one foot fall so. Each is shown three ways: as it falls; standing, on
+what `oneleg.py` found it takes (the motion at half its pace, each drive fed the torque the motion
+asks of it, the ankles' roll servos four times as stiff: still nothing fed back but each joint's own
+angle); and `held`, which says so in its picture: the weld `hold_pelvis` is turned on and the pelvis
+hangs from a point over the floor, the feet clear of it. The gait is shown held only: walking needs a
+controller this model does not have.
 
-`--film` makes one more clip, for the showcase film, and nothing else: the robot let go 30 mm over the
-floor, its landing, and then one motion, free-standing, in exactly five seconds and with nothing written
-on the picture. It is drawn to be read as a simulation: a grid on the floor, MuJoCo's own arrows for the
-floor's push at every point of contact, and a mark on the floor under the centre of mass.
+Every clip is drawn to be read as a simulation: a grid on the floor, MuJoCo's own arrows for the
+floor's push at every point of contact, a mark on the floor under the centre of mass, the robot in the
+middle and 0.8 of the picture high. `galatea-sim.mp4` is the clips of `CUT` in a row, each with its
+caption: what the motion is, what it shows, how the robot stood for it and what, if anything, was
+changed from the servos as assumed. `--film` makes one more clip, for the showcase film, and nothing
+else: the robot let go 30 mm over the floor, its landing, and then one motion, in exactly five seconds
+and with nothing written on the picture.
 
 Everything is written into `tmp/sim/`, which Git ignores: `<clip>.mp4`, `<clip>.npz` (the simulated
 trajectory and what was measured along it), `report.json` and `report.txt` (every clip's numbers, and
-the same as this script says them), `galatea-sim.mp4` (the clips in a row, each with its caption), and
-the film's `film_clip.mp4`, `film_clip.npz` and `film_clip.json`. The picture is MuJoCo's own renderer,
-offscreen: `MUJOCO_GL` chooses the context (`egl` unless set; `osmesa` works too).
+the same as this script says them), `galatea-sim.mp4`, and the film's `film_clip.mp4`, `film_clip.npz`
+and `film_clip.json`. The picture is MuJoCo's own renderer, offscreen: `MUJOCO_GL` chooses the context
+(`egl` unless set; `osmesa` works too).
 """
 
 import argparse
+import copy
 import itertools
 import json
 import math
@@ -71,7 +79,13 @@ FONTS = Path("/usr/share/fonts/opentype/inter")
 PELVIS = np.array([0.0, 0.0, dims.HIP[2]]) / 1000.0          # the pelvis's frame at the zero pose, m
 SETTLE = 1.5           # s a clip stands before anything is recorded
 LEAD, TAIL = 0.6, 1.0  # s recorded before a motion begins and after it ends
-AFTER = 2.5            # s recorded after a fall
+AFTER = 1.5            # s recorded after a fall
+VIEW = dict(elevation=-5.5, distance=4.1, lookat=(0.0, -0.05, 0.875))             # from chest height: a standing robot fills 0.8 of the picture
+# After a fall the camera's aim goes after the robot, so that one that falls to a side ends in the picture: it
+# starts `lead` s before the fall touches down and takes `over` s. It ends `aside` m to the picture's left of where
+# the pelvis comes to lie, which puts the robot in the right of the picture and clear of a caption, and `lower` m down.
+FOLLOW = dict(lead=0.6, over=1.6, aside=0.65, lower=0.2)
+STIFF = 8.0            # how many times as stiff every drive's servo is in the run a fed-ahead torque is taken from
 LIFT = 0.10            # m: how far over its place at the zero pose a held pelvis hangs
 SOLES = ("heel", "ball", "toe", "toe_cap", "upper")           # the shapes of a foot: anything else on the floor is a fall
 LEGS = ("hip_yaw", "hip_roll", "hip_pitch", "knee", "ankle_pitch", "ankle_roll", "toe")      # a leg's controls
@@ -79,7 +93,6 @@ STATE = mujoco.mjtState.mjSTATE_INTEGRATION                   # what a frame kee
 # The film's clip (`--film`): its length, how long the landing has before the motion begins, how far over the
 # floor the robot is let go, and the least a motion's hold is played for when the motion has to be fitted in.
 FILM_SECONDS, LAND, DROP, HOLD_LEAST = 5.0, 0.8, 0.03, 0.2
-FILM_VIEW = dict(elevation=-5.5, distance=4.1, lookat=(0.0, -0.05, 0.875))        # from chest height: the robot fills 0.8 of the picture
 # The floor's grid: a line each 100 mm and a heavier one each 500 mm. The heavy ones are in the floor's texture (their
 # width in mm, and how much lighter than the floor they are), so they run to the horizon. Near the robot, out to
 # `reach` metres from the origin and fading on the way, both are drawn again as lines of whole pixels, which stay
@@ -108,10 +121,15 @@ class Clip:
     lead: float = LEAD             # s recorded before the motion begins
     tail: float = TAIL             # s recorded after it ends
     fit: float = 0.0               # s the whole clip is to last, or 0: as long as its motion asks
+    # What a clip may change from the motion as it is written and the servos as `mjcf.py` assumes them (`oneleg.py`):
+    pace: float = 1.0              # the motion played this many times as slow
+    ahead: bool = False            # each drive fed ahead the torque the motion asks of it
+    ankle: float = 1.0             # the ankles' roll servos this many times as stiff
 
 
-# Every motion of `lib/poses.py`, free-standing. The two that stand on one foot fall so, and are shown again held;
-# the gait is shown held alone.
+# Every motion of `lib/poses.py`, free-standing on the servos as assumed. The two that stand on one foot fall so.
+# They are shown again as `oneleg.py` found they stand, still with no balance feedback, and again held; the gait
+# is shown held alone.
 CLIPS = [
     Clip("ready", "let go 30 mm over the floor: it lands, settles and stands", seconds=6.0, drop=0.03),
     Clip("wake", "asleep on its feet, it wakes", motion="wake", start="rest", orbit=(140.0, 118.0)),
@@ -121,17 +139,23 @@ CLIPS = [
     Clip("look", "the head looks round", motion="look", orbit=(102.0, 84.0)),
     Clip("grasp", "both hands close and open", motion="grasp", orbit=(86.0, 106.0)),
     Clip("crouch", "a squat and back up: the hips go back and down over feet that stay", motion="crouch", orbit=(132.0, 146.0)),
-    Clip("settle", "into contrapposto: the weight goes over the right foot first, and one ankle's roll drive cannot keep it there",
-         motion="settle", orbit=(104.0, 122.0)),
-    Clip("settle_held", "into contrapposto as it is written: on a floor the step wants balance feedback", motion="settle", held=True,
-         orbit=(104.0, 128.0)),
-    Clip("poise", "onto the left leg: the weight goes over it first, and one ankle's roll drive cannot keep it there", motion="poise",
+    Clip("poise", "onto the left leg: the legs' servos give under the weight, and one ankle cannot make it up", motion="poise",
          orbit=(108.0, 122.0)),
-    Clip("poise_held", "onto the left leg alone as it is written: on a floor it wants balance feedback", motion="poise", held=True,
-         orbit=(110.0, 130.0)),
+    Clip("settle", "into contrapposto by a step: the legs' servos give under the weight, and one ankle cannot make it up", motion="settle",
+         orbit=(104.0, 122.0)),
+    Clip("poise_stands", "onto the left leg alone, and back", motion="poise", pace=2.0, ahead=True, ankle=4.0, orbit=(108.0, 122.0)),
+    Clip("settle_stands", "into contrapposto: the left foot lifted, carried and set down", motion="settle", pace=2.0, ahead=True, ankle=4.0,
+         orbit=(104.0, 122.0)),
+    Clip("poise_held", "onto the left leg alone, as it is written", motion="poise", held=True, orbit=(110.0, 130.0)),
+    Clip("settle_held", "into contrapposto, as it is written", motion="settle", held=True, orbit=(104.0, 128.0)),
     Clip("walk_held", "the gait: walking needs a controller this model does not have", motion="walk", held=True, repeat=3,
          orbit=(150.0, 120.0)),
 ]
+# galatea-sim.mp4: the clips it shows, in order, and how many times as fast each is played. It ends on what the robot
+# can do: the eight motions that complete as assumed, one fall, the two one-leg motions standing, and the gait.
+CUT = [("ready", 1), ("wake", 1), ("bow", 1), ("wave", 1), ("reach", 1), ("look", 1), ("grasp", 1), ("crouch", 1), ("poise", 1),
+       ("poise_stands", 2), ("settle_stands", 2), ("walk_held", 1)]
+CAPTION = dict(shows=38, stood=44)     # the most characters in a line of each text, so that a caption ends left of the robot
 
 
 # ---------------------------------------------------------------------------------------------
@@ -151,7 +175,8 @@ class Servos:
         # MuJoCo's position servo is stiffness x (control - angle) - damping x the joint's own rate. Fed the angle
         # wanted plus damping / stiffness times the rate wanted, it is a servo on the error and on the error's rate:
         # stiffness x (wanted - angle) + damping x (wanted rate - rate), which does not lag a moving target.
-        self.lead = -model.actuator_biasprm[:, 2] / model.actuator_gainprm[:, 0]
+        self.stiffness = model.actuator_gainprm[:, 0].copy()
+        self.lead = -model.actuator_biasprm[:, 2] / self.stiffness
         self.range = model.actuator_ctrlrange.copy()
 
     def targets(self, pose):
@@ -169,7 +194,7 @@ def waypoints(clip):
     stops, poses = [], []
     for lap in range(clip.repeat):
         for at, pose in keys[(1 if lap else 0):]:
-            stops.append(lap * keys[-1][0] + at)
+            stops.append((lap * keys[-1][0] + at) * clip.pace)
             poses.append(POSES[pose] if isinstance(pose, str) else pose)
     tail = clip.tail
     if clip.fit:
@@ -238,8 +263,12 @@ def standing(pose):
 # ---------------------------------------------------------------------------------------------
 # Simulation
 # ---------------------------------------------------------------------------------------------
-def simulate(model, clip):
-    """Run a clip. Returns (frames: the state at FPS, series: what was measured at 100 Hz, report)."""
+def simulate(model, clip, ahead=None):
+    """Run a clip. Returns (frames: the state at FPS, series: what was measured at 100 Hz, report).
+
+    `ahead` is an experiment (`oneleg.py`): ([seconds], [N m for each servo]), a torque fed ahead to every servo
+    beside its angle, as these drives take one. A position servo gets it as an offset of the angle it is asked:
+    the torque over its stiffness. Nothing is fed back by it: it is a plan's torque, not a measurement."""
     servos, data = Servos(model), mujoco.MjData(model)
     times, poses, ease = waypoints(clip)
     keys, times = np.array([servos.targets(pose) for pose in poses]), np.array(times)
@@ -280,7 +309,13 @@ def simulate(model, clip):
         if t > last:
             break
         wanted, rate = eased(times, keys, ease, t)
-        data.ctrl[:] = servos.fed(wanted, rate)
+        if ahead is None:
+            data.ctrl[:] = servos.fed(wanted, rate)
+        else:
+            at = min(int(np.searchsorted(ahead[0], t, side="right")), len(ahead[0]) - 1)
+            share = 0.0 if at == 0 else min(1.0, (t - ahead[0][at - 1]) / (ahead[0][at] - ahead[0][at - 1]))
+            torque = ahead[1][at] if at == 0 else ahead[1][at - 1] + share * (ahead[1][at] - ahead[1][at - 1])
+            data.ctrl[:] = servos.fed(wanted + torque / servos.stiffness, rate)
         if t + step / 2 >= len(frames["qpos"]) / FPS:
             mujoco.mj_getState(model, data, state, STATE)
             frames["state"].append(state.copy())
@@ -373,6 +408,8 @@ def said(report):
     lines = [f"{report['clip']}: {report['seconds']:.1f} s, " + (
         "pelvis held" if report["held"] else
         f"FELL {fell['at_s'] - report['begins_s']:.2f} s into the motion ({fell['how']})" if fell else "on its feet throughout")]
+    if report.get("changed"):
+        lines.append("  changed from what is assumed: " + ", ".join(report["changed"]))
     if not report["held"]:
         start, low, high, end = pelvis["height_mm"]
         lines.append(f"  pelvis height {start:.1f} mm, between {low:.1f} and {high:.1f}, ends {end:.1f} "
@@ -410,18 +447,25 @@ def said(report):
 # Picture
 # ---------------------------------------------------------------------------------------------
 class Picture:
-    """MuJoCo's offscreen renderer on the model, and one free camera. With `forces`, a frame also shows what a
-    simulator knows and a picture does not: MuJoCo's own arrows for the floor's push at every point of contact, a
-    ring with a cross through it on the floor under the centre of mass, and the grid's lines near the robot."""
+    """MuJoCo's offscreen renderer and one free camera, on the model as it is drawn (`drawn`): a frame shows what a
+    simulator knows and a picture does not. A grid on the floor, MuJoCo's own arrows for the floor's push at every
+    point of contact, and a ring with a cross through it on the floor under the centre of mass."""
 
-    def __init__(self, model, forces=False):
-        self.model, self.data, self.forces = model, mujoco.MjData(model), forces
-        self.renderer = mujoco.Renderer(model, height=HEIGHT, width=WIDTH)
+    def __init__(self):
+        self.model = drawn()
+        self.data = mujoco.MjData(self.model)
+        self.renderer = mujoco.Renderer(self.model, height=HEIGHT, width=WIDTH)
         self.camera = mujoco.MjvCamera()
         self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
         self.shown = mujoco.MjvOption()
-        self.shown.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = self.shown.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = forces
-        self.lines = grid_lines() if forces else []
+        self.shown.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = self.shown.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = True
+        self.lines = grid_lines()
+
+    def like(self, model):
+        """Take the servos and the floor of the model a clip ran on. A frame's forces are worked out again from its
+        state, and they are the simulation's only on the simulation's servos."""
+        self.model.actuator_gainprm[:], self.model.actuator_biasprm[:] = model.actuator_gainprm, model.actuator_biasprm
+        self.model.geom_friction[:] = model.geom_friction
 
     def line(self, start, end, pixels, colour):
         """Add a line to the frame being drawn: unlit, `pixels` wide, between two points of the world."""
@@ -431,30 +475,47 @@ class Picture:
         mujoco.mjv_connector(geom, mujoco.mjtGeom.mjGEOM_LINE, pixels, np.array(start, dtype=float), np.array(end, dtype=float))
         scene.ngeom += 1
 
-    def frame(self, state, turn, azimuth, elevation=-7.0, distance=4.0, lookat=(0.0, -0.02, 0.87)):
-        """One frame: the simulation's state as `simulate` kept it, the camera `turn` (0 to 1) of the way from
-        azimuth[0] to azimuth[1]. The state is the whole of it, so the contact forces drawn are the simulation's."""
+    @staticmethod
+    def azimuth(turn, orbit):
+        """The camera's azimuth `turn` (0 to 1) of the way through a clip, eased from orbit[0] to orbit[1]."""
+        return orbit[0] + turn * turn * (3.0 - 2.0 * turn) * (orbit[1] - orbit[0])
+
+    def frame(self, state, turn, orbit, lookat=VIEW["lookat"]):
+        """One frame: the simulation's state as `simulate` kept it, the camera `turn` (0 to 1) of the way round its
+        orbit. The state is the whole of it, so the contact forces drawn are the simulation's."""
         mujoco.mj_setState(self.model, self.data, state, STATE)
         mujoco.mj_forward(self.model, self.data)
-        turn = turn * turn * (3.0 - 2.0 * turn)
-        self.camera.azimuth, self.camera.elevation, self.camera.distance = azimuth[0] + turn * (azimuth[1] - azimuth[0]), elevation, distance
+        self.camera.azimuth, self.camera.elevation, self.camera.distance = self.azimuth(turn, orbit), VIEW["elevation"], VIEW["distance"]
         self.camera.lookat[:] = lookat
         self.renderer.update_scene(self.data, camera=self.camera, scene_option=self.shown)
         for start, end, pixels, opacity in self.lines:
             self.line(start, end, pixels, (*GRID["colour"], opacity))
-        if self.forces:
-            x, y, _ = self.data.subtree_com[self.model.body("pelvis").id]
-            radius, lift = COM_MARK["radius"], 0.003
-            ring = [(x + radius * math.cos(a), y + radius * math.sin(a), lift) for a in np.linspace(0.0, 2.0 * math.pi, 25)]
-            for start, end in [*zip(ring, ring[1:]), (ring[0], ring[12]), (ring[6], ring[18])]:
-                self.line(start, end, COM_MARK["pixels"], COM_MARK["colour"])
+        x, y, _ = self.data.subtree_com[self.model.body("pelvis").id]
+        radius, lift = COM_MARK["radius"], 0.003
+        ring = [(x + radius * math.cos(a), y + radius * math.sin(a), lift) for a in np.linspace(0.0, 2.0 * math.pi, 25)]
+        for start, end in [*zip(ring, ring[1:]), (ring[0], ring[12]), (ring[6], ring[18])]:
+            self.line(start, end, COM_MARK["pixels"], COM_MARK["colour"])
         return self.renderer.render()
 
-    def film(self, path, frames, orbit, tag=None, plain=False, **view):
-        """Write frames as an mp4 through ffmpeg, the camera going round from orbit[0] to orbit[1]. The corners
-        are darkened a little, unless the picture is to be `plain`; `tag` is written into the picture itself, so
-        that it cannot be lost from it."""
-        look = [] if plain else ["vignette=angle=0.5"]
+    def aims(self, frames, orbit, fell):
+        """Where the camera looks at each frame: at VIEW's point, and after a fall (`fell`: the second it touched
+        down) on its way after the robot (FOLLOW)."""
+        count, aim = len(frames["state"]), np.array(VIEW["lookat"])
+        aims = np.tile(aim, (count, 1))
+        if fell is not None:
+            lies = frames["qpos"][-1][:2]                                   # where the pelvis comes to lie
+            for k in range(count):
+                gone = min(1.0, max(0.0, (k / FPS - fell + FOLLOW["lead"]) / FOLLOW["over"]))
+                turned = math.radians(self.azimuth(k / max(count - 1, 1), orbit))
+                right = np.array([math.sin(turned), -math.cos(turned)])        # the picture's right, on the floor
+                there = np.array([*(lies - FOLLOW["aside"] * right), aim[2] - FOLLOW["lower"]])
+                aims[k] = aim + gone * gone * (3.0 - 2.0 * gone) * (there - aim)
+        return aims
+
+    def film(self, path, frames, orbit, tag=None, fell=None):
+        """Write frames as an mp4 through ffmpeg, the camera going round from orbit[0] to orbit[1]. `tag` is written
+        into the picture itself, so that it cannot be lost from it. `fell`: the second at which a fall touched down."""
+        look = []
         if tag:
             note = OUT / "captions" / f"{path.stem}.tag.txt"
             note.parent.mkdir(exist_ok=True)
@@ -464,68 +525,119 @@ class Picture:
             ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{WIDTH}x{HEIGHT}", "-r", str(FPS),
              "-i", "-", "-an", *(["-vf", ",".join(look)] if look else []), "-c:v", "libx264", "-preset", "medium", "-crf", "15",
              "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(path)], stdin=subprocess.PIPE)
-        count = len(frames["state"])
+        count, aims = len(frames["state"]), self.aims(frames, orbit, fell)
         for k in range(count):
-            encoder.stdin.write(self.frame(frames["state"][k], k / max(count - 1, 1), orbit, **view).tobytes())
+            encoder.stdin.write(self.frame(frames["state"][k], k / max(count - 1, 1), orbit, aims[k]).tobytes())
         encoder.stdin.close()
         if encoder.wait():
             raise RuntimeError(f"ffmpeg failed on {path}")
 
 
-def headline(clip, report):
-    """A clip's three lines in the cut: the motion's name, what it shows, and how the robot stood for it."""
+def changed(clip):
+    """What a clip changes from the motion as it is written and the servos as they are assumed, in plain words."""
+    said = []
+    if clip.pace != 1.0:
+        said.append("half the pace" if clip.pace == 2.0 else f"the motion {clip.pace:g} times as slow")
+    if clip.ahead:
+        said.append("each drive fed the torque the motion asks of it")
+    if clip.ankle != 1.0:
+        said.append(f"the ankles' roll servos {clip.ankle:g} times as stiff")
+    return said
+
+
+def headline(clip, report, speed=1):
+    """A clip's three texts in the cut: the motion's name, what it shows, and how the robot stood for it."""
+    fast = f" Shown x{speed:g}." if speed != 1 else ""
     if clip.held:
-        return clip.motion, clip.caption, "pelvis held over the floor: the legs work in the air"
+        return clip.motion, clip.caption, "pelvis held over the floor: the legs work in the air." + fast
+    stood = "free-standing on position servos, no balance feedback"
     if report["fell"]:
-        return clip.name, clip.caption, f"free-standing: it falls {report['fell']['at_s'] - report['begins_s']:.1f} s into the motion"
-    return clip.name, clip.caption, "free-standing: position servos, no balance controller"
+        stood += f": it falls {report['fell']['at_s'] - report['begins_s']:.1f} s into the motion"
+    if report.get("changed"):
+        stood += ". Changed from what is assumed: " + ", ".join(report["changed"])
+    return clip.motion or clip.name, clip.caption, stood + "." + fast
 
 
-def cut(clips, reports):
-    """The clips in a row with a caption each: tmp/sim/galatea-sim.mp4."""
+def caption(clip, report, speed=1):
+    """The ffmpeg filters that write a clip's caption into its picture, bottom left and ending left of the robot:
+    the motion's name, what the clip shows, and how the robot stood for it, the last line lowest."""
     notes = OUT / "captions"
     notes.mkdir(exist_ok=True)
-    inputs, chains = [], []
-    plate = "box=1:boxcolor=black@0.5:boxborderw=7"   # a line stays legible where a fallen robot lies behind it
-    for k, clip in enumerate(clips):
-        name, shows, stood = headline(clip, reports[clip.name])
-        shows = textwrap.wrap(shows, 46)             # short lines, so that the words stay to the left of the robot's feet
-        written = []
-        for kind, text in (("title", name), ("line", "\n".join(shows)), ("stood", stood)):
-            written.append(notes / f"{clip.name}.{kind}.txt")
-            written[-1].write_text(text)
-        seconds = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                                        str(OUT / f"{clip.name}.mp4")], capture_output=True, text=True, check=True).stdout)
-        inputs += ["-i", str(OUT / f"{clip.name}.mp4")]
-        top = 76 + 34 * len(shows)                   # the caption's first line, from the picture's foot
-        chains.append(
-            f"[{k}:v]drawtext=fontfile={FONTS / 'Inter-SemiBold.otf'}:textfile={written[0]}:x=72:y=h-{top + 58}:fontsize=40:fontcolor=white@0.95,"
-            f"drawtext=fontfile={FONTS / 'Inter-Regular.otf'}:textfile={written[1]}:x=72:y=h-{top}:fontsize=24:line_spacing=8:"
+    title, shows, stood = headline(clip, report, speed)
+    shows, stood = textwrap.wrap(shows, CAPTION["shows"]), textwrap.wrap(stood, CAPTION["stood"])
+    files = []
+    for kind, text in (("title", title), ("line", "\n".join(shows)), ("stood", "\n".join(stood))):
+        files.append(notes / f"{clip.name}.{kind}.txt")
+        files[-1].write_text(text)
+    plate = "box=1:boxcolor=black@0.5:boxborderw=7"   # a line stays legible on the grid
+    low = HEIGHT - 36 - 28 * len(stood)               # the texts' tops, from the last up
+    mid = low - 14 - 32 * len(shows)
+    return (f"drawtext=fontfile={FONTS / 'Inter-SemiBold.otf'}:textfile={files[0]}:x=72:y={mid - 58}:fontsize=40:fontcolor=white@0.95,"
+            f"drawtext=fontfile={FONTS / 'Inter-Regular.otf'}:textfile={files[1]}:x=72:y={mid}:fontsize=24:line_spacing=8:"
             f"fontcolor=white@0.82:{plate},"
-            f"drawtext=fontfile={FONTS / 'Inter-Regular.otf'}:textfile={written[2]}:x=72:y=h-64:fontsize=21:fontcolor=white@0.58:{plate},"
-            f"fade=t=in:st=0:d=0.3,fade=t=out:st={seconds - 0.3:.3f}:d=0.3[v{k}]")
-    graph = ";".join(chains) + ";" + "".join(f"[v{k}]" for k in range(len(clips))) + f"concat=n={len(clips)}:v=1:a=0[v]"
+            f"drawtext=fontfile={FONTS / 'Inter-Regular.otf'}:textfile={files[2]}:x=72:y={low}:fontsize=21:line_spacing=7:"
+            f"fontcolor=white@0.62:{plate}")
+
+
+def cut(reports):
+    """The clips of CUT in a row with a caption each, a clip played faster where CUT says so: tmp/sim/galatea-sim.mp4."""
+    inputs, chains = [], []
+    for k, (name, speed) in enumerate(CUT):
+        clip = next(clip for clip in CLIPS if clip.name == name)
+        seconds = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                        str(OUT / f"{name}.mp4")], capture_output=True, text=True, check=True).stdout) / speed
+        inputs += ["-i", str(OUT / f"{name}.mp4")]
+        chains.append(f"[{k}:v]" + (f"setpts=PTS/{speed},fps={FPS}," if speed != 1 else "") + caption(clip, reports[name], speed)
+                      + f",fade=t=in:st=0:d=0.3,fade=t=out:st={seconds - 0.3:.3f}:d=0.3[v{k}]")
+    graph = ";".join(chains) + ";" + "".join(f"[v{k}]" for k in range(len(CUT))) + f"concat=n={len(CUT)}:v=1:a=0[v]"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *inputs, "-filter_complex", graph, "-map", "[v]", "-an", "-c:v", "libx264",
                     "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p", "-r", str(FPS), "-movflags", "+faststart",
                     str(OUT / "galatea-sim.mp4")], check=True)
 
 
 def written():
-    """The file `build.py` wrote, or the way to it."""
+    """The file `mjcf.py` wrote, or the way to it."""
     if not XML.exists():
-        raise SystemExit(f"{XML} is not there: `cad run sim/build.py` writes it, and the meshes it draws")
+        raise SystemExit(f"{XML} is not there: `cad run sim/mjcf.py` writes it, and the meshes it draws")
     return XML
 
 
 def load():
-    """The model `build.py` wrote."""
+    """The model `mjcf.py` wrote."""
     return mujoco.MjModel.from_xml_path(str(written()))
 
 
-def pictured(model, forces=False):
-    """A Picture of the model, or None, said plainly, where MuJoCo's renderer cannot start: no picture is made up."""
+def tuned(model, drives=1.0, ankle_roll=1.0):
+    """The model with every drive's servo `drives` times as stiff and the ankles' roll servos `ankle_roll` times
+    more, damping with stiffness: what an experiment changes from the servos as `mjcf.py` assumes them."""
+    scale = np.where(model.actuator_forcerange[:, 1] > 1.0, drives, 1.0)                 # the hand's servos are not a drive's
+    scale = scale * np.array([ankle_roll if model.actuator(i).name[2:] == "ankle_roll" else 1.0 for i in range(model.nu)])
+    model.actuator_gainprm[:, 0] *= scale
+    model.actuator_biasprm[:, 1] *= scale
+    model.actuator_biasprm[:, 2] *= scale
+    return model
+
+
+def performed(model, clip):
+    """Simulate a clip on the servos it asks for: (the model it ran on, frames, series, report). A clip that feeds
+    torque ahead is run first on servos STIFF times as stiff, which keep to its path, and what each drive gave there
+    is what it is fed: a plan's torque, worked out beforehand."""
+    ahead = None
+    if clip.ahead:
+        _, followed, kept = simulate(tuned(copy.deepcopy(model), drives=STIFF), clip)
+        if kept["fell"]:
+            raise SystemExit(f"{clip.name}: on servos {STIFF:g} times as stiff it falls too, so there is no torque to feed ahead")
+        ahead = (followed["t"], followed["force"])
+    own = model if clip.ankle == 1.0 else tuned(copy.deepcopy(model), ankle_roll=clip.ankle)
+    frames, series, report = simulate(own, clip, ahead)
+    report["changed"] = changed(clip)
+    return own, frames, series, report
+
+
+def pictured():
+    """A Picture, or None, said plainly, where MuJoCo's renderer cannot start: no picture is made up."""
     try:
-        return Picture(model, forces)
+        return Picture()
     except Exception as error:  # noqa: BLE001  (whatever a missing GL context raises)
         print(f"no picture: MuJoCo's renderer could not start with MUJOCO_GL={os.environ['MUJOCO_GL']} "
               f"({type(error).__name__}: {error}). The simulated trajectories are written to {OUT}/<clip>.npz.")
@@ -537,11 +649,11 @@ def current(model, start="ready"):
     asked = Servos(model).targets(POSES[start])
     if float(np.abs(model.key(start).ctrl - asked).max()) > 1e-6:
         raise SystemExit(f"{XML.name} was written before lib/poses.py last changed (its keyframe {start} is not the pose {start}): "
-                         "`cad run sim/build.py --poses` writes its keyframes again")
+                         "`cad run sim/mjcf.py --poses` writes its keyframes again")
 
 
 # ---------------------------------------------------------------------------------------------
-# The film's clip: the same simulation, drawn so that it reads as one
+# The look: the simulation drawn so that it reads as one
 # ---------------------------------------------------------------------------------------------
 def png(image):
     """An 8-bit RGB image (rows x columns x 3) as a PNG file's bytes."""
@@ -579,10 +691,10 @@ def grid_lines():
     return lines
 
 
-def film_model():
-    """The model as `build.py` wrote it, with what the film's clip is drawn with: the grid on the floor (and a
-    backdrop of the gridded floor's mean colour, so that still no horizon shows), and the contact forces' arrows
-    scaled and coloured to be read. Nothing of the mechanics is touched, and `galatea.xml` is not rewritten."""
+def drawn():
+    """The model as `mjcf.py` wrote it, with what every clip is drawn with: the grid on the floor (and a backdrop
+    of the gridded floor's mean colour, so that still no horizon shows), and the contact forces' arrows scaled and
+    coloured to be read. Nothing of the mechanics is touched, and `galatea.xml` is not rewritten."""
     root = ET.parse(written()).getroot()
     root.find("compiler").set("meshdir", str(HERE / "meshes"))
     asset = root.find("asset")
@@ -616,7 +728,7 @@ def film(motion, stills=(), dry=False):
                 settle=0.0, lead=LAND, tail=0.0, fit=FILM_SECONDS, orbit=(128.0, 122.0), start=begins if isinstance(begins, str) else "ready")
     times, _, _ = waypoints(clip)
     OUT.mkdir(parents=True, exist_ok=True)
-    model = film_model()
+    model = load()
     current(model, clip.start)
     frames, series, report = simulate(model, clip)
     count = round(FILM_SECONDS * FPS)
@@ -627,24 +739,35 @@ def film(motion, stills=(), dry=False):
           + (f", its holds played {asked - played:.2f} s shorter" if played < asked - 1e-9 else "")
           + (f"; THE CLIP ENDS {times[-2] - FILM_SECONDS:.2f} s BEFORE THE MOTION DOES" if times[-2] > FILM_SECONDS + 1e-9 else ""))
     print(said(report), flush=True)
+    if stills:
+        picture = pictured()
+        return picture and still(picture, clip, frames, report, stills)
     (OUT / "film_clip.json").write_text(json.dumps(report, indent=1) + "\n")
     np.savez_compressed(OUT / "film_clip.npz", fps=FPS, qpos=frames["qpos"], hanger=frames["hanger"],
                         joints=[model.joint(i).name for i in range(model.njnt)], servos=[model.actuator(i).name for i in range(model.nu)],
                         **series)
-    picture, started = None if dry else pictured(model, forces=True), time.time()
+    picture, started = None if dry else pictured(), time.time()
     if picture is None:
         return
-    for k in stills:
-        path = OUT / f"film_clip.{k:03d}.png"
-        path.write_bytes(png(picture.frame(frames["state"][k], k / (count - 1), clip.orbit, **FILM_VIEW)))
+    picture.film(OUT / "film_clip.mp4", frames, clip.orbit, fell=report["fell"]["at_s"] if report["fell"] else None)
+    print(f"{OUT / 'film_clip.mp4'}: {count} frames in {time.time() - started:.0f} s")
+
+
+def still(picture, clip, frames, report, wanted):
+    """Frames of a clip as PNG files, drawn as its video draws them: tmp/sim/<clip>.NNN.png."""
+    count = len(frames["state"])
+    aims = picture.aims(frames, clip.orbit, report["fell"]["at_s"] if report["fell"] else None)
+    for k in wanted:
+        if not 0 <= k < count:
+            print(f"{clip.name} has frames 0 to {count - 1}: none {k}")
+            continue
+        path = OUT / f"{clip.name}.{k:03d}.png"
+        path.write_bytes(png(picture.frame(frames["state"][k], k / max(count - 1, 1), clip.orbit, aims[k])))
         print(path)
-    if not stills:
-        picture.film(OUT / "film_clip.mp4", frames, clip.orbit, plain=True, **FILM_VIEW)
-        print(f"{OUT / 'film_clip.mp4'}: {count} frames in {time.time() - started:.0f} s")
 
 
 def trial_asked(options):
-    return options.friction is not None or options.stiffness is not None or options.still_legs
+    return options.friction is not None or options.stiffness is not None or options.pace is not None or options.still_legs
 
 
 def main(arguments):
@@ -655,30 +778,30 @@ def main(arguments):
     # Any motion but the gait: that one is shown held and labelled, and this clip holds nothing and says nothing.
     parser.add_argument("--film", nargs="?", const="bow", metavar="MOTION", choices=[name for name, _, _ in MOTIONS if name != "walk"],
                         help="make tmp/sim/film_clip.mp4 alone, from this motion (bow unless named), and stop")
-    parser.add_argument("--stills", metavar="FRAMES", help=f"with --film: these frames of its clip (0 to {round(FILM_SECONDS * FPS) - 1}, "
-                                                         "with commas) as PNG files, and no video")
+    parser.add_argument("--stills", metavar="FRAMES", help="these frames (numbers with commas) of the named clips, or of --film's, as PNG "
+                                                         "files: no video, and nothing else written")
     trial = parser.add_argument_group("experiments: another floor, other servos or a changed motion; reports only, nothing is written")
     trial.add_argument("--friction", type=float, help="the floor's friction (the model's own: 0.7)")
     trial.add_argument("--stiffness", type=float, help="every drive's servo this many times as stiff, its damping with it")
+    trial.add_argument("--pace", type=float, help="every motion played this many times as slow")
     trial.add_argument("--still-legs", action="store_true", help="the legs' controls left at the pose ready through every motion")
     options = parser.parse_args(arguments)
     unknown = sorted(set(options.clips) - {clip.name for clip in CLIPS})
     if unknown:
         parser.error(f"no clip {', '.join(unknown)}")
     if options.cut:
-        cut(CLIPS, json.loads((OUT / "report.json").read_text()))
+        cut(json.loads((OUT / "report.json").read_text()))
         return print(OUT / "galatea-sim.mp4")
-    if options.stills and not options.film:
-        parser.error("--stills goes with --film")
-    if options.film:
-        if options.clips or trial_asked(options):
-            parser.error("--film makes its one clip, of the model as it is: name no other clip and no experiment with it")
-        stills = [int(k) for k in options.stills.split(",")] if options.stills else []
-        if any(not 0 <= k < round(FILM_SECONDS * FPS) for k in stills):
-            parser.error(f"--stills: the clip's frames are 0 to {round(FILM_SECONDS * FPS) - 1}")
-        return film(options.film, stills, options.dry)
+    stills = [int(k) for k in options.stills.split(",")] if options.stills else []
     trial = trial_asked(options)
-    clips = [replace(clip, still_legs=options.still_legs) for clip in CLIPS if not options.clips or clip.name in options.clips]
+    if stills and (options.dry or trial or not (options.film or options.clips)):
+        parser.error("--stills draws frames of the clips it is given, or of --film's: name them, and no --dry and no experiment with it")
+    if options.film:
+        if options.clips or trial:
+            parser.error("--film makes its one clip, of the model as it is: name no other clip and no experiment with it")
+        return film(options.film, stills, options.dry)
+    clips = [replace(clip, still_legs=options.still_legs, pace=options.pace or clip.pace) for clip in CLIPS
+             if not options.clips or clip.name in options.clips]
     OUT.mkdir(parents=True, exist_ok=True)
     model = load()
     for start in sorted({clip.start for clip in clips}):
@@ -686,23 +809,27 @@ def main(arguments):
     if options.friction is not None:
         model.geom_friction[:, 0] = options.friction
     if options.stiffness is not None:
-        drives = model.actuator_forcerange[:, 1] > 1.0           # the drives' servos; the hand's are not a drive's
-        model.actuator_gainprm[drives, 0] *= options.stiffness
-        model.actuator_biasprm[drives, 1:3] *= options.stiffness
+        tuned(model, drives=options.stiffness)
     print(f"{XML.name}: {float(model.body_mass.sum()):.2f} kg, {model.nu} servos, step {model.opt.timestep * 1000:g} ms, "
           f"floor friction {model.geom_friction[model.geom('floor').id, 0]:g}"
           + (f", the drives' servos {options.stiffness:g} times as stiff" if options.stiffness is not None else "")
+          + (f", every motion {options.pace:g} times as slow" if options.pace is not None else "")
           + (", the legs' controls left at ready" if options.still_legs else ""))
 
-    picture = None if options.dry or trial else pictured(model)
+    picture = None if options.dry or trial else pictured()
     reports_file = OUT / "report.json"
     reports = json.loads(reports_file.read_text()) if reports_file.exists() else {}
     reports = {clip.name: reports[clip.name] for clip in CLIPS if clip.name in reports}       # none of a clip there no longer is
     for clip in clips:
         started = time.time()
-        frames, series, report = simulate(model, clip)
+        own, frames, series, report = performed(model, clip)
         print(said(report), flush=True)
         if trial:
+            continue
+        if stills:
+            if picture:
+                picture.like(own)
+                still(picture, clip, frames, report, stills)
             continue
         reports[clip.name] = report
         reports_file.write_text(json.dumps(reports, indent=1) + "\n")
@@ -711,10 +838,12 @@ def main(arguments):
                             joints=[model.joint(i).name for i in range(model.njnt)], servos=[model.actuator(i).name for i in range(model.nu)],
                             **series)
         if picture:
-            picture.film(OUT / f"{clip.name}.mp4", frames, clip.orbit, tag="pelvis held over the floor" if clip.held else None)
+            picture.like(own)
+            picture.film(OUT / f"{clip.name}.mp4", frames, clip.orbit, tag="pelvis held over the floor" if clip.held else None,
+                         fell=report["fell"]["at_s"] if report["fell"] else None)
             print(f"  {clip.name}.mp4: {len(frames['qpos'])} frames in {time.time() - started:.0f} s", flush=True)
-    if picture and all((OUT / f"{clip.name}.mp4").exists() and clip.name in reports for clip in CLIPS):
-        cut(CLIPS, reports)
+    if picture and not stills and all((OUT / f"{name}.mp4").exists() and name in reports for name, _ in CUT):
+        cut(reports)
         print(OUT / "galatea-sim.mp4")
 
 

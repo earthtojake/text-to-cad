@@ -1,8 +1,8 @@
 # Feedback on text-to-cad, from building `models/galatea`
 
 Notes kept while modelling an articulated humanoid of 700 to 850 parts with the cad skill,
-and then filming it with the render skill (`cad-server 0.11.4-dev.0` to `0.11.6-dev.0` from
-this checkout, 4 cores, 15 GB, no GPU). Each entry says what
+filming it with the render skill and simulating it in MuJoCo (`cad-server 0.11.4-dev.0` to
+`0.11.6-dev.0` from this checkout, 4 cores, 15 GB, no GPU). Each entry says what
 happened, where, and what would have helped. Newest findings are appended to each section.
 
 ## Review discipline (a note to the agent, and a suggestion for the skill)
@@ -81,6 +81,20 @@ dimensioned myself. Most of the exterior and every drive bracket was redone. Wha
   apron between the hips and a raked top edge on the thigh, lower toward the groin: the
   plane under every point of the skin that came up under the pelvis anywhere in the hip's
   travel, found without the kernel by taking the skin's mesh through 200 poses.
+
+- **A check of the poses is not a check of the motions, and a check of the motions under a
+  fixed pelvis is not a check on a floor.** Every pose balanced and no motion interfered,
+  and a simulation still found a squat that went over backward and feet that slid: the
+  path between two sound poses had never been looked at with the feet where a floor
+  holds them (entry 40). The check now follows each motion in time, standing on its
+  feet. The rule it leaves is the one above again: say what the check stands in for,
+  and then test the thing itself.
+- **The repository has checks of its own, and they are not the three I ran.** Before
+  each push I ran the tree's shipping contract and the policy tests I judged relevant.
+  The whole policy suite takes 37 s and had two failures waiting for the pull request,
+  both from this work: a file at the repository's root that no CI rule knew, and a
+  script named `build.py` under `models/`, a name the repository keeps for KiCad
+  project builds. Run all of `scripts/test/test-global.sh` before the first push.
 
 **For the skill.** `SKILL.md` already says an assembly is clear when `overlap_volume` is 0
 for every pair. What it lacks is a gate: nothing asks for a per-part and per-link review
@@ -468,14 +482,14 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 44. **There is no export for a simulator.** Three things in one: (a) no mesh per link.
     `references/meshes.md` assumes each link is a model of its own; Galatea is one
     assembly of 73 links with its joints in the document, so the engine knows each
-    link's parts and the joint that carries it, and the sim's `build.py` regroups the
+    link's parts and the joint that carries it, and the sim's `mjcf.py` regroups the
     GLB's nodes by link and moves each into its joint's frame in a hundred lines.
     `cad model export <id> --links DIR` (one mesh per link in the frame of the joint
     that carries it, optionally one per material) is the export a robot description
     needs, for URDF as much as MJCF. (b) A mesh export can only get finer:
     `export(tolerance=, angle=)` "meshes again at the finer of each". A simulator wants
     the opposite: the default mesh is 2.55 million triangles, 83 % of them in the five
-    vendor drive solids, and `build.py` decimates to 413,000 in its own process. A
+    vendor drive solids, and `mjcf.py` decimates to 413,000 in its own process. A
     ceiling the other way, or a triangle budget per part, would remove that step.
     (c) No OBJ. MuJoCo reads STL, OBJ and its own MSH; an STL has no normals, so a
     curved panel is drawn faceted or an edge smoothed away, and the script writes OBJ
@@ -503,7 +517,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     model's outputs a change reaches. The rewrite of the motions changed no solid, joint
     or mass, and the simulation's file needed only its twelve keyframes written again;
     but the model's key covers every source, so the only way to learn "the parts are as
-    they were" is to build. The sim's `build.py --poses` rewrites the keyframes and
+    they were" is to build. The sim's `mjcf.py --poses` rewrites the keyframes and
     trusts me that nothing else changed. A document that carried its parts' key apart
     from its states' and sequences' would let a derived file decide that itself.
 
@@ -512,7 +526,12 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     film's. But a build is done by one of the engine's workers, a child of the daemon at
     niceness 0: a script that calls a model under `nice` has its six-minute build done at
     full priority. There is no way to ask the engine for a build that yields to another
-    job on the machine, or to cap a worker's threads.
+    job on the machine, or to cap a worker's threads. Nor is `nice` enough where it does
+    reach: a software rasteriser at niceness 19 still cost a four-core Cycles render
+    beside it about a third of its speed (niceness shares out processor time, not the
+    caches or the memory's bandwidth), and nothing told the session that started it that
+    another session's long job had the machine. A line in `cad status` for the programs
+    `cad run` has running, with their start times, would have.
 
 48. **The robot-simulation skill has nothing on standing.** `references/guardrails.md`
     covers a description's sanity, not whether the robot it describes can stay up. Three
@@ -528,6 +547,19 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     the centre of pressure, and say plainly that a position servo with no torque fed
     ahead is a spring, and that a simulation which assumes one should say so where its
     conclusions hang on it.
+
+49. **A name is a convention somewhere, and only a test knew.** The script that writes the
+    MJCF was `sim/build.py` until the pull request, when
+    `tests/python/global/test_generated_kicad_files_untracked.py` read it as a KiCad
+    project's build and asked what it writes ("has a build.py but GENERATED does not
+    list what it writes"). `models/README.md` speaks of a KiCad sample's `cad run
+    build.py` and does not say the name is that convention's alone. The test could look
+    for a KiCad file beside the script before it claims it, or the corpus's README could
+    say that a `build.py` under `models/` means that and nothing else. The other thing
+    the suite caught, this file at the repository's root, is the same kind: the CI
+    table knows every tracked path, and a new root file is "unknown" until it is under a
+    folder a rule covers. Both are fair rules; neither is written where someone adding a
+    model would read it.
 
 ## What worked well
 
@@ -591,6 +623,6 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   (it went on counting the sprung toe, and printed 43 mm for a motion the model's check
   has at 27), and nothing failed.
 - `cad run` finds a script's integrations in the imports inside its functions too, so a
-  mode that calls nothing of the CAD model (`sim/build.py --poses`) could move those
+  mode that calls nothing of the CAD model (`sim/mjcf.py --poses`) could move those
   imports into the branch that builds, keep the script's environment, and start in a
   second and a half.

@@ -125,12 +125,12 @@ def main():
     check(model.eq_active0[model.equality("hold_pelvis").id] == 0, "nothing holds the pelvis: the weld is inactive as compiled")
     driven = len(kin.controls()) - 2                                           # every control but the two toes
     check(model.nu == driven, f"{model.nu} servos for the {driven} driven controls; the toes are sprung")
-    # A file written before the poses last changed has the old ones for keyframes: `build.py --poses` writes them again.
+    # A file written before the poses last changed has the old ones for keyframes: `mjcf.py --poses` writes them again.
     servos = run.Servos(model)
     stale = [name for name, pose in {"zero": {}, **POSES}.items()
              if name not in {model.key(i).name for i in range(model.nkey)} or float(np.abs(model.key(name).ctrl - servos.targets(pose)).max()) > 1e-6]
     check(not stale, f"its {model.nkey} keyframes are the zero pose and lib/poses.py's {len(POSES)} poses as they are now"
-          + (f": not {', '.join(stale)} (`cad run sim/build.py --poses` writes them again)" if stale else ""))
+          + (f": not {', '.join(stale)} (`cad run sim/mjcf.py --poses` writes them again)" if stale else ""))
 
     print("2. mass")
     total = float(model.body_mass.sum())

@@ -31,6 +31,9 @@ linkages close, and what holding each pose asks of each drive against its datash
 | `views.py` | none | the robot as the CAD viewer draws it, as frames for the film: solid on the grid, parts exploded, the walk in x-ray |
 | `checks/*.py` | none | drives, interference (and `planted`, the test of it), attachment, balance, linkages, loads |
 
+[`../FEEDBACK.md`](../FEEDBACK.md) is what building, filming and simulating it taught
+about the tooling: bugs, gaps that cost time, and what worked well.
+
 `../sim/` is the robot in MuJoCo ([its README](../sim/README.md)): the same links, joints,
 couplings, masses and drives, written from this model by a script, standing on a floor
 under gravity with a position servo for each drive. It is where the motions below were

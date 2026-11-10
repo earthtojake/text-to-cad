@@ -1,16 +1,20 @@
 # Galatea in MuJoCo
 
 The robot of `../src/` as a MuJoCo model, and what it does when the model's own motions are fed to
-its drives under gravity, with its feet on a floor and nothing holding it. `build.py` writes the
+its drives under gravity, with its feet on a floor and nothing holding it. `mjcf.py` writes the
 model from the CAD model, `check.py` holds what MuJoCo compiled to the CAD model's own numbers, and
 `run.py` simulates the motions, measures them and renders them.
 
 The short of it: on position servos alone, with no balance controller, Galatea stands, lands from a
 small drop, wakes, bows, waves, reaches, looks round, closes its hands and squats, and its feet stay
-where they stand to a millimetre. It cannot stand on one leg that way. `poise` and `settle`, the two
+where they stand to a millimetre. It does not stand on one leg that way. `poise` and `settle`, the two
 motions that lift a foot, carry the weight over the other foot first and still fall over its outside:
-one ankle's roll drive cannot keep the robot over itself without something that feels where the
-weight is. Those two are shown twice, falling and with the pelvis held, and the gait held only.
+as the weight arrives the legs' servos give a degree under it, and one ankle's roll drive, which
+holds the weight 25 mm from its axis and no further, cannot make that up. Drives that do not give and
+half the pace get the simulation through both, with nothing in hand (`oneleg.py`); what would give
+them margin is balance feedback, which this model does not have. Those two are shown three ways:
+falling, standing on what `oneleg.py` found it takes, and with the pelvis held. The gait is shown held
+only.
 
 This is the second run. The first, on the motions as they were first written, found three falls (the
 squat, contrapposto, the one-leg pose) and two motions that dragged their feet over the floor (the
@@ -20,29 +24,32 @@ simulation found the first time and what it finds now are both below.
 
 | File | What it is |
 | --- | --- |
-| `build.py` | reads the CAD model and writes `galatea.xml` and `meshes/`: links, joints, couplings, inertials, servos, collision shapes, keyframes. `--poses`: the keyframes alone, from `lib/poses.py`, with no CAD model |
+| `mjcf.py` | reads the CAD model and writes `galatea.xml` and `meshes/`: links, joints, couplings, inertials, servos, collision shapes, keyframes. `--poses`: the keyframes alone, from `lib/poses.py`, with no CAD model |
 | `check.py` | the compiled model against `lib/dims.py` and `lib/kin.py`: mass, joints, couplings, forward kinematics; each motion's balance by geometry; whether it stands where it is put |
 | `run.py` | the clips: simulates each, reports it, renders it with MuJoCo's own renderer, and cuts the clips together. `--film`: the showcase film's clip alone |
-| `galatea.xml`, `meshes/` | what `build.py` writes: the MJCF (122 kB) and 270 OBJ meshes (26 MB). Build output, so Git ignores both |
+| `oneleg.py` | an experiment on the two motions that lift a foot: what stiffness, what pace and what torque fed ahead it takes for them not to fall |
+| `galatea.xml`, `meshes/` | what `mjcf.py` writes: the MJCF (122 kB) and 270 OBJ meshes (26 MB). Build output, so Git ignores both |
 
 ```
-cad run sim/build.py              # from models/galatea; half a minute while the engine holds the robot's document
-cad run sim/build.py --poses      # only lib/poses.py has changed: the keyframes alone, written again. Two seconds, no CAD model
+cad run sim/mjcf.py               # from models/galatea; half a minute while the engine holds the robot's document
+cad run sim/mjcf.py --poses       # only lib/poses.py has changed: the keyframes alone, written again. Two seconds, no CAD model
 cad run sim/check.py              # ten seconds, no CAD kernel
-cad run sim/run.py --dry          # simulate every clip and report: a quarter of a minute
-cad run sim/run.py                # and render: half an hour on four busy cores with no GPU
+cad run sim/run.py --dry          # simulate every clip and report: twenty seconds
+cad run sim/run.py                # and render: twenty minutes on four cores, no GPU
 cad run sim/run.py bow wave       # the named clips
+cad run sim/run.py crouch --stills 74    # those frames of the named clips as PNG files, and nothing else
 cad run sim/run.py --cut          # the clips' videos as they are, cut together again
 cad run sim/run.py --film crouch  # the showcase film's clip alone, tmp/sim/film_clip.mp4, from that motion
                                   # (the bow unless one is named): two minutes
 cad run sim/run.py --film crouch --dry   # its report and no picture; --stills 0,70,119: those frames as PNG files
-cad run sim/run.py --friction 1   # an experiment, reports only: another floor; also --stiffness 4, --still-legs
+cad run sim/run.py --friction 1   # an experiment, reports only: another floor; also --stiffness 4, --pace 2, --still-legs
+cad run sim/oneleg.py             # what standing on one leg asks of the drives: three tables, a minute
 ```
 
-`build.py` calls the model, so it builds the robot first if its sources have changed since the engine
+`mjcf.py` calls the model, so it builds the robot first if its sources have changed since the engine
 last built it: six minutes in an environment whose worker has not built it before, which may also cost
 another session its warm worker. The poses reach nothing in `galatea.xml` but its keyframes, so when
-`lib/poses.py` is all that has changed, `build.py --poses` writes those again and neither calls nor
+`lib/poses.py` is all that has changed, `mjcf.py --poses` writes those again and neither calls nor
 imports the CAD model. It refuses a file whose joints or couplings are not `lib/kin.py`'s, and
 `check.py` holds the rest of the file as before. `check.py` and `run.py` need only `galatea.xml`.
 `run.py` starts a clip from a keyframe (`ready`, or `rest` for the motion that wakes it) and refuses
@@ -84,7 +91,7 @@ trajectories and says that it drew nothing.
   arm, forearm and every phalanx. They meet the floor. The meshes collide with nothing.
 - **The look.** Each link's parts are written as one mesh per finish, in the link's frame, with the
   finish's colour: pearl panels, the black under-body, frames and drives, steel, the champagne
-  accents, the smoked face. MuJoCo's renderer shades by Phong's model, so `build.py` turns a finish's
+  accents, the smoked face. MuJoCo's renderer shades by Phong's model, so `mjcf.py` turns a finish's
   metalness, roughness and clear coat into a highlight's strength and width, and its transmission into
   transparency; the PBR values themselves are written beside them for a renderer that reads them. The
   drives' own solids are 83 % of the model's 2.55 million triangles: a mesh finer than a 5 mm mean
@@ -95,11 +102,11 @@ trajectories and says that it drew nothing.
 ## What is assumed
 
 The CAD model does not hold these, so they are assumptions of the simulation, set at the top of
-`build.py` and named in `galatea.xml`:
+`mjcf.py` and named in `galatea.xml`:
 
 | What | Value | Why this |
 | --- | --- | --- |
-| a servo's stiffness | its drive's rated torque per degree of error: an RS04 2005 N m/rad, RS03 1203, RS06 630, RS00 286, RS05 103 | a stiff position loop: a drive sags a degree at its rated torque and reaches its peak at about three |
+| a servo's stiffness | its drive's rated torque per degree of error: an RS04 2005 N m/rad, RS03 1203, RS06 630, RS00 286, RS05 103 | a stiff position loop: a drive sags a degree at its rated torque and reaches its peak at about three. Nothing is fed ahead: a drive holds a load by giving under it, which is what decides the one-leg motions (`oneleg.py`) |
 | a servo's damping | stiffness x 0.03 s | well damped on the links' own inertia |
 | a rotor's inertia at its joint | RS04 0.040, RS03 0.018, RS06 0.010, RS00 0.0025, RS05 0.0006 kg m2 | the size a quasi-direct drive of each frame has; the maker's specification gives none |
 | the hand's servos | 2 N m/rad, limited to 0.6 N m | the fingers' tendon drives and the thumb's opposition are not in the CAD model |
@@ -141,14 +148,26 @@ where the motion begins. Heights are the pelvis frame's, 907.5 mm in `ready` by 
 | `settle` | falls over the outside of its right foot: a hand meets the floor at 3.97 s | | the left off the floor from 2.67 s, a third of a second before the motion lifts it | the right ankle's roll drive at its 14 N m from 2.61 s |
 | `poise` | falls over the outside of its left foot: a hand meets the floor at 3.63 s | | the right off the floor from 2.59 s, 0.4 s before the motion lifts it | the left ankle's roll drive at its 14 N m from 2.37 s |
 
-Held (`settle_held`, `poise_held`, `walk_held`): the weld `hold_pelvis` on, the pelvis 0.1 m over
+Standing on one leg (`poise_stands`, `settle_stands`): the same two motions, free-standing, on what
+`oneleg.py` found it takes (What it would take, below): the motion at half its pace, each drive fed
+the torque the motion asks of it, and the ankles' roll servos four times as stiff. Still nothing is
+fed back to a servo but its own joint's angle. `poise_stands` goes onto its left leg, lifts and folds
+the right, and comes back: the pelvis ends at 907.5 mm and 0.01 degrees, the foot it stood on has
+scrubbed 1.3 mm, the other is set down 1 mm from where it was, the stance hip's roll drive has held
+61 N m (51 % of its peak) and the knee 58, and the stance ankle's roll drive has been at its limit
+for 1.3 s on the way. `settle_stands` makes its step and ends in contrapposto: the left foot set down
+65 mm ahead and 48 mm nearer (the motion asks 67 and 48), the right ankle's roll drive at its limit
+for 1.4 s.
+
+Held (`poise_held`, `settle_held`, `walk_held`): the weld `hold_pelvis` on, the pelvis 0.1 m over
 where it is at the zero pose, the feet in the air. The legs' linkages, the servos and gravity are the
-same; the balance is the weld's. The two one-leg motions are held because free-standing they fall
-(below), and held they can be seen whole, as they are written. The gait is held because it is a gait
-under a fixed pelvis: its feet tread back under the pelvis and nothing carries the pelvis over a
-foot, so there is no walk in it to stand on, and walking wants a controller this model does not have.
-Held, nothing works hard: the gait asks 26 and 20 N m of the hips' pitch drives and 15 of the knees,
-the one-leg pose 21 N m of the lifted leg's hip, contrapposto's step 16 N m of the stepping leg's.
+same; the balance is the weld's. The two one-leg motions are held to show them as they are written,
+at their own pace and on the servos as assumed, where free-standing they fall. The gait is held
+because it is a gait under a fixed pelvis: its feet tread back under the pelvis and nothing carries
+the pelvis over a foot, so there is no walk in it to stand on, and walking wants a controller this
+model does not have. Held, nothing works hard: the gait asks 26 and 20 N m of the hips' pitch drives
+and 15 of the knees, the one-leg pose 21 N m of the lifted leg's hip, contrapposto's step 16 N m of
+the stepping leg's.
 
 The first run, on the motions as they were first written, is why the model's motions are what they
 are now. Each paragraph says what the motion was, what the simulation found, what was changed in the
@@ -213,40 +232,56 @@ right foot bears nothing from 2.2 s and is off the floor for good from 2.59 s, 0
 motion lifts it, the left ankle's roll drive is at its limit from 2.37 s, and a hand is on the floor
 at 3.63 s.
 
-**Why a path does not keep it on one foot.** Sideways, all that holds the robot over one foot is that
-ankle's roll drive. It is an RS00: at its peak, 14 N m, it carries the 56 kg that stand on it with
-their weight no further than 25 mm from its axis. And a position servo is a spring. The one assumed
-here is as stiff as its drive's rated torque per degree, 286 N m/rad (What is assumed), and that
-mass, its centre 0.85 m over the axis, topples at 470 N m/rad: over one ankle the robot is a pendulum
-stood on its head on a spring too soft to hold it, whatever torque the spring has. So as the weight
-arrives the ankle gives, the lean carries the weight further out, and nothing answers. In `poise` the
-left ankle has given 1.1 degrees by 2.0 s, which is 16 mm at the centre of mass, and 1.8 by 2.2 s,
-when the right foot has already come unloaded; at 2.4 s the drive is at its limit and the centre of
-mass 29 mm outside its axis. `settle` goes the same way over its right foot.
+**Why they fall.** Sideways, all that holds the robot over one foot is that ankle's roll drive. It is
+an RS00: at its peak, 14 N m, it holds the 56 kg that stand on it with their weight no further than
+25 mm from its axis. The paths respect that: the model's own check has the centre of pressure 19 mm
+inside the sole in `poise` and 24 in `settle`. What a path cannot allow for is that a position servo
+gives under its load, a degree for its drive's rated torque as they are assumed here. As the weight
+goes over in `poise`, the leg that takes it shortens (1.7 mm by 2.2 s, its knee holding 43 N m where
+it held 16), its ankle and both hips give sideways, and the pelvis leans a degree to the left where
+the path has it level. At 2.2 s the centre of mass is 7 mm outside the ankle's axis where the path
+has it 16 mm inside, and the right foot bears nothing, 0.8 s early; from 2.37 s the roll drive is at
+its limit, and the rest is a fall. `settle` goes the same way over its right foot.
 
-Stiffer servos get further and not there (`--stiffness 4`: 1146 N m/rad at that ankle, more than it
-topples at). `poise` then arrives over its foot, lifts the other at 3.2 s as it is written, and
-stands on one leg. It sways 14 mm inward as the knee comes up, the roll drive at its limit that way,
-then outward, the drive at its limit the other way from 4.9 s; at 5.2 s the weight is 25 mm outside
-the axis and still going, and a hand is on the floor at 7.1 s. `settle` makes its step in the air and
-comes down on the stepping foot at 3.9 s, 0.2 s early and with 167 N, which pushes it over the other
-foot; it is down at 5.3 s. Nor is it the pace. The rewrite first took 1.5 s over the shift, which by
-the model's own check put the centre of pressure 11 mm from the sole's edge, and the simulation fell
-at 2.4 and 2.6 s. At 3 s that check has 19 mm for `poise` and 24 for `settle`, and the simulation
-falls 1.3 and 1.4 s later, no more.
+**What it would take.** `cad run sim/oneleg.py` tries what could be otherwise, still with nothing fed
+back to a servo but its own joint's angle:
 
-So `checks/balance.py` is right that the path can be followed, and it can be only by a robot that
-corrects its lean as it goes: one that measures where the floor pushes, or how its pelvis leans, and
-drives the ankle and the hip from that. That is balance feedback, which neither the CAD model nor
-this simulation has. Until one of them does, these two motions are shown held, and the free-standing
-clips show what happens without.
+- **A slower motion alone: no.** On the servos as assumed both motions fall played twice and four
+  times as slow. The rewrite first took 1.5 s over the shift, which by the model's check put the
+  centre of pressure 11 mm from the sole's edge, and fell at 2.4 and 2.6 s; with 3 s it falls 1.3 and
+  1.4 s later.
+- **A stiffer ankle alone: no.** With only the ankles' roll servos sixteen times as stiff both fall
+  as before. What gives is the whole leg, and what the ankle is short of is torque.
+- **Stiffer servos and a slower motion together: yes.** With every drive's servo eight times as stiff
+  the robot keeps to the path (2 mm and 0.1 degrees off it at 2.2 s, where it was 23 mm and a
+  degree). At the written pace it still falls, later. `poise` stands on its one leg for the three
+  seconds it is asked to, swaying 8 mm one way and 14 the other with the roll drive at its limit
+  each way; then the lifted foot comes down 0.2 s early and hard, and tips it over the foot it stood
+  on, down at 7.7 s. `settle` is down at 5.6 s. At half the pace both complete, onto one leg and back
+  and into contrapposto by its step, the stance ankle's roll drive at its limit for 1.0 and 0.6 s on
+  the way. Four times as stiff (`--stiffness 4`) is not enough for `poise` at any pace tried.
+- **A torque fed ahead, in place of the stiffness: yes, with one joint stiffer.** These drives take a
+  torque beside the angle, and a plan knows what each will have to give. Fed that, at half the pace
+  and on servos as assumed, both motions still fall, later: one joint is then still too soft. The
+  ankle's roll servo gives 286 N m/rad, and what stands on that ankle, its centre 0.87 m over the
+  axis, topples at 484. With that one servo four times as stiff both motions complete. With it twice
+  or eight times as stiff `poise` completes and `settle` falls.
+
+So a robot on one foot can follow these paths without balance feedback, in this simulation, if its
+drives hold their angles under load (by a torque fed ahead, or by stiffness), if its ankle's roll
+loop is stiffer than the robot topples over it, and at half the pace. And it follows them with
+nothing in hand: the roll drive is at its limit for a second on the way, and whether `settle` stands
+turns on a factor of two in one gain. Margin is what feedback would give: an ankle and a hip driven
+by where the floor pushes, or by how the pelvis leans. Neither the CAD model nor this simulation has
+that, the servos assumed here are the plain ones, and the motions are written at the pace they are.
+So free-standing these two are shown falling, and they are shown whole with the pelvis held.
 
 What the first run's three falls and two scrubs shared: the poses were written with the pelvis fixed
 and the feet free, which is right for a document's mechanism and for a picture, and a robot on a
 floor is the other way round. The rewrite turned them round: poses that say where the pelvis goes
 over feet that stay, paths sampled so that the feet stay on the way, a foot lifted only once the
-weight has left it, and a check that follows every motion in time. What is left is what no path can
-do.
+weight has left it, and a check that follows every motion in time. What is left on one foot is not
+the path's to give: drives that hold their angle under load, and something that feels the weight.
 
 ## Checks
 
@@ -256,7 +291,7 @@ do.
    equalities for the 14 couplings; 44 servos for the 44 driven controls; the weld `hold_pelvis`
    inactive as compiled. Its twelve keyframes are the zero pose and the eleven poses of
    `lib/poses.py` as they are now: a file written before the poses last changed fails here, and
-   `build.py --poses` mends it.
+   `mjcf.py --poses` mends it.
 2. **Mass.** 57.38 kg against the 57.4 of `checks/balance.py`; the heaviest links are the chest
    11.43 kg, a thigh 3.86, the pelvis 3.60, a shin 3.59, as there. The centre of mass at each of the
    twelve poses, set on the floor as that check sets it: zero (0.0, 19.0, 929.4), ready (0.2, -4.5,
@@ -304,26 +339,13 @@ do.
 ## The picture
 
 MuJoCo's own renderer (4.0.0, the classic one), offscreen, 1600 x 900 at 24 frames a second, through
-EGL on Mesa's llvmpipe: no GPU, 0.8 s a frame beside another render. A dark floor with no highlight,
-in a backdrop of the lit floor's own colour so that no horizon shows; three lamps, of which the key
-casts the shadow; the floor mirrors a little. The camera goes a few degrees round the robot in each
-clip. `run.py` darkens the corners when it encodes, and writes `pelvis held over the floor` into the
-picture of every clip that is, so that the label cannot be lost from the file. `galatea-sim.mp4` adds
-three lines to each clip: the motion, what it shows, and how the robot stood for it, a fall's time
-taken from the simulation.
+EGL on Mesa's llvmpipe: no GPU, 0.4 s a frame. Every clip is drawn so that it reads as a simulation
+at a glance:
 
-**The film's clip** (`cad run sim/run.py --film`, `film_clip.mp4`) is for the showcase film, and is the
-same simulation drawn so that it reads as one. It is exactly 120 frames, five seconds, with nothing
-written on it and no darkened corners. The robot is let go 30 mm over the floor and lands; from 0.8 s
-it performs one motion, free-standing: the bow unless another is named (`--film crouch`; any motion
-but the gait, which is shown held and labelled or not at all). It is let go in the pose its motion
-begins from: `rest` for `wake`, `ready` for the others. A motion longer than the 4.2 s that leaves has
-its hold played shorter, down to 0.2 s (the squat's 5 s fits so), and what is still too long ends with
-the clip; a robot that falls is shown falling to the clip's end. The camera stands at chest height,
-three quarters in front, and goes six degrees round; the robot is in the middle and 0.8 of the picture
-high, and the lower left is left to the floor, for the film's own caption. What makes it a simulator's
-picture:
-
+- **The robot in the middle**, 0.8 of the picture high where it stands, seen from chest height and
+  three quarters in front; the camera goes a few degrees round it in each clip. Where the robot falls
+  the camera's aim goes after it and ends to the left of where it comes to lie, so that a fall to one
+  side ends in the picture and clear of the caption.
 - **A grid on the floor**, a line each 100 mm and a heavier one each 500 mm, a crossing at the world's
   origin between the feet. The heavy lines are in the floor's texture and run to the horizon; near the
   robot both are drawn again as lines a pixel or two wide, fading by 2.6 m, because a texture seen from
@@ -331,25 +353,62 @@ picture:
 - **The floor's push**, as MuJoCo itself draws it (`mjVIS_CONTACTFORCE`, `mjVIS_CONTACTPOINT`): an arrow
   at each point of contact, 0.30 m for 35 N. That is a sixteenth of the robot's weight, nearly all of
   which stands on the sixteen lower corners of its heel and ball pads' boxes, so standing still those
-  arrows are 0.2 to 0.4 m. The landing is one frame of arrows taller than the picture: the soles bear
-  3.6 kN in that frame, six and a half times the weight, and the weight alone in the next. Each frame
-  is drawn from the simulation's whole state at its instant, so the arrows are the forces the
-  simulation had. (MuJoCo draws an arrow at half the length its own scale gives: `run.py` allows for
-  it.)
+  arrows are 0.2 to 0.4 m; on one foot they are twice that, and a robot that has fallen lies on a few
+  points with arrows longer than the picture. Each frame is drawn from the simulation's whole state at
+  its instant, on the servos the clip ran on, so the arrows are the forces the simulation had.
+  (MuJoCo draws an arrow at half the length its own scale gives: `run.py` allows for it.)
 - **The centre of mass**, as a ring with a cross through it on the floor under it.
 
-`film_clip.json` is the clip's report, as `run.py` says it, and `film_clip.npz` its trajectory. The
-clip there now is the squat (`--film crouch`): the robot lands, goes down to 571.6 mm and comes back
-up on feet that scrub 1.4 mm, the hold at the bottom played 0.8 s shorter so that the whole of it
-fits.
+The floor is dark and has no highlight, in a backdrop of its own lit colour so that no horizon shows;
+three lamps, of which the key casts the shadow; the floor mirrors a little. `run.py` writes `pelvis
+held over the floor` into the picture of every clip that is, so that the label cannot be lost from
+the file.
+
+**The cut**, `galatea-sim.mp4`, is the one to watch: twelve clips in a row, 77 s. It shows what the
+robot can do and ends on it. First the eight motions that complete on the servos as assumed (`ready`,
+`wake`, `bow`, `wave`, `reach`, `look`, `grasp`, `crouch`); then `poise` as assumed, which falls;
+then the two one-leg motions standing (`poise_stands`, `settle_stands`); and the gait, held. One fall
+is enough to say what the servos as assumed make of one foot, so `settle`'s fall is a clip of its own
+and not in the cut; nor are the two held one-leg clips, since the standing ones show those motions
+whole. Each clip carries three texts, bottom left and ending before 35 % of the width, so clear of
+the robot: the motion's name, what the clip shows, and how the robot stood for it, a fall's time
+taken from the simulation. Where a clip is not on the servos as assumed, that last text says what was
+changed, all of it. The two standing clips run at half their motions' pace, 20.8 and 15.6 s, and the
+cut plays them twice as fast, which their captions say ("Shown x2").
+
+**The standing one-leg clips** are the row of `oneleg.py`'s third table at which both motions stand:
+the motion at half its pace, each drive fed the torque the motion asks of it, the ankles' roll servos
+four times as stiff, and every other servo as assumed. The torque fed is what each drive gave in a
+run of the same clip on servos eight times as stiff, which keeps to the path; `run.py` makes that run
+first. It is the row that changes least from what is assumed, since these drives take a torque beside
+an angle and one joint's gain is all else that moves; the other way, every servo eight times as
+stiff, asks every loop for a stiffness that is harder to believe of a drive. It is not a robust row:
+with the ankles' roll servos twice or eight times as stiff `settle` falls (What it would take,
+above), and the fed torque comes from this same simulated robot, which is the best a plan could know.
+
+**The film's clip** (`cad run sim/run.py --film`, `film_clip.mp4`) is for the showcase film, in the
+same look. It is exactly 120 frames, five seconds, with nothing written on it. The robot is let go
+30 mm over the floor and lands; from 0.8 s it performs one motion, free-standing on the servos as
+assumed: the bow unless another is named (`--film crouch`; any motion but the gait, which is shown
+held and labelled or not at all). It is let go in the pose its motion begins from: `rest` for `wake`,
+`ready` for the others. A motion longer than the 4.2 s that leaves has its hold played shorter, down
+to 0.2 s (the squat's 5 s fits so), and what is still too long ends with the clip; a robot that falls
+is shown falling to the clip's end. The camera goes six degrees round, and the lower left is left to
+the floor, for the film's own caption. The landing is one frame of arrows taller than the picture:
+the soles bear 3.6 kN in that frame, six and a half times the weight, and the weight alone in the
+next. `film_clip.json` is the clip's report, as `run.py` says it, and `film_clip.npz` its trajectory.
+The clip there now is the squat (`--film crouch`): the robot lands, goes down to 571.6 mm and comes
+back up on feet that scrub 1.4 mm, the hold at the bottom played 0.8 s shorter so that the whole of
+it fits.
 
 In `tmp/sim/`, which Git ignores:
 
 | File | What |
 | --- | --- |
-| `<clip>.mp4` | the thirteen clips: `ready`, `wake`, `bow`, `wave`, `reach`, `look`, `grasp`, `crouch`, `settle`, `settle_held`, `poise`, `poise_held`, `walk_held` |
-| `galatea-sim.mp4` | the thirteen in a row, captioned, 80 s |
+| `<clip>.mp4` | the fifteen clips. Free-standing on the servos as assumed: `ready`, `wake`, `bow`, `wave`, `reach`, `look`, `grasp`, `crouch`, which complete, and `poise` and `settle`, which fall. Free-standing with the pace and the servos changed: `poise_stands`, `settle_stands`. Held: `poise_held`, `settle_held`, `walk_held` |
+| `galatea-sim.mp4` | the cut: twelve of them in a row, captioned, 77 s |
 | `film_clip.mp4` | the film's clip: let go 30 mm over the floor, the landing, then one motion (the bow unless another was named), free-standing; 120 frames, nothing written on it |
 | `film_clip.json`, `film_clip.npz` | that clip's report and its trajectory |
 | `<clip>.npz` | the clip's state at 24 frames a second (`qpos`, with the joints' names) and what was measured at 100 Hz: the pelvis's height and tilt, the centre of mass, the floor's push on each of the soles' shapes, every servo's torque and error |
 | `report.json`, `report.txt` | every clip's numbers, and the same as `run.py` says them |
+| `check.log`, `oneleg.log` | what `check.py` and `oneleg.py` last printed |
