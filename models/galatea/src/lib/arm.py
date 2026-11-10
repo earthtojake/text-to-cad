@@ -137,7 +137,7 @@ def _upper_arm(hw, links):
 
     yaw_at, elbow_at = (SX, 0.0, SZ - 45), (SX + 17, 0.0, EZ)
     top = geo.tube(33.5, 8, PLATE_T, (SX, 0, SZ - 45), (0, 0, 1)) - mount_bores("RS00", yaw_at, (0, 0, 1), x_dir=(1, 0, 0))
-    housing = geo.tube(33.5, 29.3, 51, (SX, 0, SZ - 96), (0, 0, 1)) + geo.tube(33.5, 6, 8, (SX, 0, SZ - 104), (0, 0, 1))   # the yaw drive's sleeve
+    housing = geo.tube(33.5, 29.3, 52, (SX, 0, SZ - 97), (0, 0, 1)) + geo.tube(33.5, 6, 8, (SX, 0, SZ - 105), (0, 0, 1))   # the yaw drive's sleeve: an RS00 is 51.1 long
     plate = geo.plate_yz(geo.bones([(0, SZ - 124, 26), (6, 1240, 16), (10, 1182, 13), (0, EZ, 45)]), SX + 17, SX + 25)
     plate -= mount_bores("RS06", elbow_at, (1, 0, 0), x_dir=(0, 1, 0))
     ribs = geo.box(26, 6, 126, (SX + 12, 20, 1252))                       # one rib, behind: the forearm folds in front

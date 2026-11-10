@@ -102,33 +102,45 @@ HEAD_TOP_Z = 1752.0
 
 # --------------------------------------------------------------------------------------------
 # Actuators: RobStride quasi-direct drives (a frameless motor, a 7.75 to 10:1 planetary stage,
-# encoder and driver in one housing; 48 V, CAN). Dimensions, bolt circles, torques and masses are
-# the maker's (robstride.com product pages and its Product Specification Document, 2025-06-26):
+# encoder and driver in one housing; 48 V, CAN). Their shapes are the maker's own STEP models,
+# fetched into vendor/ by `vendor.py` and read by `lib/hardware.py`. The numbers here are what the
+# brackets and the checks need, measured on those models, with torques and masses from the maker's
+# Product Specification of 2026-10-09 (both in github.com/RobStride/Product_Information):
 #
-#   front  (radius, length)  the main body, whose front face is the mounting face
+#   front  (radius, length)  the main body behind the mounting face
 #   rear   (radius, length)  the cover behind it, over the driver board
-#   ears   radius over the mounting ears, or None for a plain can
-#   pilot  (radius, height)  the register standing proud of the mounting face
-#   mount  (screw, count, pitch radius)  tapped holes in the mounting face
-#   out    (screw, count, pitch radius)  tapped holes in the output flange
-#   peak, rated  N m at the output;  kg  the unit's mass
+#   ears   radius over the lobes its mounting screws run in, or None for a plain can
+#   pilot  (radius, height)  what stands proud of the mounting face round the output: the plate's hole clears it
+#   flange height of the output flange's face over the mounting face: the hub seats on it
+#   pins   (radius, circle radius, height over the mounting face) of locating pins standing on the flange
+#   mount  (screw, count, pitch radius)  tapped holes in the mounting face, the first 180 / count from local X,
+#          or at `mount_at`: the RS04 is stood with its cable connector on local +Y, which puts a hole on local X.
+#          (A connector on the frame's own mirror plane is on it on both sides of the robot.)
+#   out    (screw, count, pitch radius)  tapped holes in the output flange; `out_at` where they are not evenly spaced
+#   step   how the maker's file stands in the actuator's frame: (its output points along its own -Z,
+#          its z of the mounting face, degrees to turn it so the mounting holes lie as `mount` says)
+#   peak, rated  N m at the output. Rated is continuous, at 100 rpm (50 for the RS04), on the maker's
+#          aluminium heat sink of `sink` mm; the RS04 gives 40 on a 345 x 345 one and 35 on this
+#   kg     the unit's mass
 #   hub    radius of the adapter this robot bolts to the output flange: it stands through the
 #          parent's mounting plate and the child's lug bolts to it (not a RobStride part)
-#
-# Not from a drawing, and marked so in the README: the RS00's and RS05's rear cover step (the
-# maker gives their diameter and length only).
 # --------------------------------------------------------------------------------------------
 ACTUATORS = {
-    "RS04": dict(front=(60.0, 39.0), rear=(47.0, 13.2), ears=None, pilot=(25.0, 3.3), mount=("M4", 10, 53.0), out=("M5", 9, 18.0),
-                 peak=120.0, rated=40.0, kg=1.42, hub=26.0),
-    "RS03": dict(front=(49.0, 39.5), rear=(39.75, 12.1), ears=53.0, pilot=(35.0, 2.5), mount=("M4", 8, 49.0), out=("M4", 6, 15.18),
-                 peak=60.0, rated=20.0, kg=0.88, hub=22.0),
-    "RS06": dict(front=(40.0, 33.0), rear=(35.0, 14.5), ears=44.0, pilot=(26.0, 1.5), mount=("M3", 8, 41.0), out=("M4", 6, 12.0),
-                 peak=36.0, rated=11.0, kg=0.621, hub=19.0),
-    "RS00": dict(front=(28.5, 41.0), rear=(25.0, 10.0), ears=None, pilot=(17.5, 1.5), mount=("M3", 6, 25.0), out=("M3", 6, 13.5),
-                 peak=14.0, rated=5.0, kg=0.31, hub=20.0),
-    "RS05": dict(front=(23.0, 35.0), rear=(20.0, 9.0), ears=None, pilot=(15.0, 1.5), mount=("M3", 4, 20.75), out=("M4", 6, 12.0),
-                 peak=5.5, rated=1.6, kg=0.191, hub=17.0),
+    "RS04": dict(front=(60.0, 39.0), rear=(47.0, 13.2), ears=None, pilot=(25.0, 0.5), flange=0.5, pins=(3.0, 17.9, 3.5),
+                 mount=("M4", 10, 53.0), mount_at=0.0, out=("M5", 9, 18.0), out_at=(0, 30, 60, 120, 150, 180, 240, 270, 300),
+                 step=(False, 25.0, 15.0), peak=120.0, rated=35.0, sink="220 x 200", kg=1.51, hub=25.0),
+    "RS03": dict(front=(48.2, 39.5), rear=(39.75, 14.6), ears=53.0, pilot=(35.5, 2.5), flange=2.5, pins=None,
+                 mount=("M4", 8, 49.0), out=("M4", 6, 15.18), step=(True, 2.5, 0.0),
+                 peak=60.0, rated=21.0, sink="200 x 200", kg=0.928, hub=22.0),
+    "RS06": dict(front=(41.6, 33.0), rear=(35.0, 16.0), ears=44.0, pilot=(26.5, 1.5), flange=1.5, pins=None,
+                 mount=("M3", 8, 41.0), out=("M4", 6, 12.0), step=(True, 0.0, 0.0),
+                 peak=36.0, rated=11.0, sink="200 x 200", kg=0.615, hub=18.0),
+    "RS00": dict(front=(28.5, 35.8), rear=(27.5, 15.3), ears=None, pilot=(17.5, 1.0), flange=1.0, pins=None,
+                 mount=("M3", 6, 25.0), out=("M3", 6, 13.5), step=(True, -5.0, 30.0),
+                 peak=14.0, rated=5.0, sink="150 x 150", kg=0.31, hub=17.0),
+    "RS05": dict(front=(23.0, 44.0), rear=(23.0, 0.0), ears=None, pilot=(15.0, 0.0), flange=0.0, pins=(2.0, 9.5, 3.0),
+                 mount=("M3", 4, 20.8), out=("M4", 6, 12.0), step=(False, 30.5, 22.5),
+                 peak=5.5, rated=1.8, sink="150 x 150", kg=0.243, hub=15.0),
 }
 
 

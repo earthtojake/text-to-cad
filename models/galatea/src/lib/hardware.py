@@ -1,24 +1,38 @@
 """Hardware every link shares: cap screws, the RobStride actuators, pivot caps, pushrods.
 
-`Hardware()` builds each prototype once per run, in its own frame and symmetric about its
-local YZ plane, so it can be placed on both sides of the robot (`kit.inst`, `kit.mirror_tree`).
+`Hardware()` builds each prototype once per run, in its own frame, so it can be placed on both
+sides of the robot (`kit.inst`, `kit.mirror_tree`).
 
-An actuator's frame: local Z is its axis, z = 0 its mounting face (the front of its main
-body, where its tapped mounting holes are). The body lies behind the face (z < 0). The
+An actuator is its maker's own model: RobStride's STEP file, converted once to an xbf by
+`vendor.py` and read here. Its frame: local Z is its axis, z = 0 its mounting face (the front of
+its main body, where its tapped mounting holes are). The body lies behind the face (z < 0). The
 parent link's mounting plate (PLATE_T thick) lies on the face and is screwed to it from the
-far side, on the maker's bolt circle. The output flange is in the middle of the face; a hub
+far side, into the maker's holes. The output flange is in the middle of the face; a hub
 bolted to it stands through the plate and ROTOR_PROUD past the face, where the child
 link's lug bolts on, on the output flange's own bolt circle. The two smallest models are
-plain cans held by countersunk screws, which show no heads.
+held by countersunk screws, which show no heads.
+
+A drive is not its own mirror image (its connectors sit to one side), and the right side of the
+robot carries the same part as the left, not a reflection: `mirror_tree` places a prototype
+again, turned, and each model is stood in its frame so that its mounting holes are symmetric
+about the local YZ plane, which is what lets one bracket and its mirror image both meet them.
+
+RobStride draws each drive as one solid, so the output flange in it does not turn with the
+joint. The hub that bolts to the flange is this robot's part and does turn; where the flange
+carries locating pins the hub is relieved in a ring over them, where a real one has holes.
 """
 
 import math
+from pathlib import Path
 
 import build123d as bd
+from cad import xbf
 
 from . import finish, geo
 from .dims import ACTUATORS, DRIVES, PLATE_T, ROTOR_PROUD, SCREWS
 from .kit import frame, inst, part, proto
+
+VENDOR = Path(__file__).resolve().parents[2] / "vendor"
 
 
 def ring_positions(n, radius, phase=0.0):
@@ -33,33 +47,75 @@ def _screw_head(size):
     return head - socket
 
 
-def _housing(spec):
-    """The main body: a plain can to the maker's diameter and length, its register proud of the
-    mounting face, and the ribs its mounting screws run in where the model has them."""
-    (rf, lf), (rp, hp), hub = spec["front"], spec["pilot"], spec["hub"]
-    bore = hub + 0.6
-    pts = [(bore, -4.0), (bore, hp), (rp, hp), (rp, 0.0)] if rp > bore + 1.0 else [(bore, -4.0), (bore, 0.0)]
-    pts += [(rf - 0.8, 0.0), (rf, -0.8), (rf, -lf + 0.8), (rf - 0.8, -lf), (0.0, -lf), (0.0, -4.0)]
-    body = geo.revolve(pts)
-    if spec["ears"]:
-        _, count, pitch = spec["mount"]
-        for x, y in ring_positions(count, pitch, 180.0 / count):
-            body += bd.Pos(x, y, -lf / 2) * bd.Cylinder(spec["ears"] - pitch, lf)
+def _vendor(size, spec):
+    """RobStride's model of one drive, stood in the actuator's frame: mounting face at z = 0, output
+    toward +Z, turned so that its tapped mounting holes lie where the screws go."""
+    path = VENDOR / f"{size}.xbf"
+    if not path.exists():
+        raise FileNotFoundError(f"{path.name} is not in {VENDOR}: run `cad run src/vendor.py` once; it fetches "
+                                "RobStride's STEP files (53 MB, from github.com/RobStride/Product_Information)")
+    solids = sorted(xbf.read(path).solids(), key=lambda solid: -solid.volume)
+    body = solids[0]
+    for extra in solids[1:]:                       # the RS00's two connector sockets are solids of their own
+        body = geo.fuse(body, extra, f"{size}'s sockets")
+    return stood(size) * body
+
+
+def stood(size):
+    """How the maker's file stands in the actuator's frame (`dims.ACTUATORS[size]["step"]`): a prototype of
+    a drive carries this as its own location, so a placement of one is the actuator's frame times this."""
+    flip, face, turn = ACTUATORS[size]["step"]
+    return bd.Rot(0, 0, turn) * (bd.Rot(180, 0, 0) if flip else bd.Location()) * bd.Pos(0, 0, -face)
+
+
+def _sector(r0, r1, a0, a1, z0, z1, steps=6):
+    """An annular sector between two radii and two angles (degrees), from z0 to z1."""
+    arc = [math.radians(a0 + (a1 - a0) * k / steps) for k in range(steps + 1)]
+    outline = [(r1 * math.cos(a), r1 * math.sin(a)) for a in arc] + [(r0 * math.cos(a), r0 * math.sin(a)) for a in reversed(arc)]
+    return geo.plate_xy(geo.polygon(*outline), z0, z1)
+
+
+def envelope(size):
+    """A plain closed solid that holds the maker's model of a drive, for the checks: the exact
+    intersection of two parts is beyond this machine when one of them has three thousand faces.
+    Turned steps to the maker's radii, a cylinder over each screw lobe, a block over a connector
+    that stands proud; `checks/drives.py` shows that each holds its drive and by how little more."""
+    low = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
+    can = lambda radius, z0, z1: bd.Pos(0, 0, z0) * bd.Cylinder(radius, z1 - z0, align=low)
+    lobes = lambda count, at, radius, z0, z1: [bd.Pos(x, y, z0) * bd.Cylinder(radius, z1 - z0, align=low)
+                                                 for x, y in ring_positions(count, at, 180.0 / count)]
+    ring = lambda r0, r1, z0, z1: geo.revolve([(r0, z0), (r1, z0), (r1, z1), (r0, z1)])
+    if size == "RS04":
+        pieces = [can(60.1, -39.1, 0.0), can(47.2, -52.3, -39.0), _sector(46.0, 58.5, 84.0, 96.0, -49.6, -41.1),
+                  can(25.3, -0.5, 0.5), ring(14.9, 20.9, 0.0, 3.5)]
+    elif size == "RS03":
+        pieces = [can(48.3, -39.6, 0.0), _sector(44.0, 51.2, -114.0, -66.0, -39.6, 0.0), can(50.9, -2.7, 0.0),
+                  can(49.4, -40.1, -36.7), can(40.3, -54.2, -39.5), *lobes(8, 49.0, 4.3, -43.7, 0.0),
+                  can(35.55, -0.5, 0.25), can(35.1, 0.0, 2.5)]
+    elif size == "RS06":
+        pieces = [can(41.7, -33.1, 0.0), can(35.1, -49.1, -33.0), *lobes(8, 41.0, 3.2, -36.2, 0.0),
+                  _sector(40.0, 43.7, 166.0, 194.0, -33.1, 0.0), can(26.55, -0.5, 0.25), can(26.1, 0.0, 1.5)]
+    elif size == "RS00":
+        pieces = [can(28.6, -51.2, 0.0), can(17.6, -0.5, 1.0)]
+    elif size == "RS05":
+        pieces = [can(23.1, -44.1, 0.0), can(23.7, -39.6, -33.2), ring(7.1, 11.9, -0.5, 3.0)]
+    else:
+        raise KeyError(size)
+    body = pieces[0]
+    for piece in pieces[1:]:
+        body = body + piece
     return body
 
 
-def _cap(spec):
-    """The rear cover, over the driver board, with its connector on the rim at local +Y."""
-    (_, lf), (rr, lr) = spec["front"], spec["rear"]
-    cover = geo.revolve([(0.0, -lf), (rr, -lf), (rr, -lf - lr + 1.0), (rr - 1.0, -lf - lr), (0.0, -lf - lr)])
-    plug = bd.Pos(0, rr + 0.5, -lf - lr / 2) * bd.Box(0.5 * rr, 5.0, max(lr - 5.0, 3.0))
-    return cover + plug
-
-
 def _rotor(spec):
-    """The output: the actuator's own flange and the hub bolted to it, as one turned part."""
-    hub = spec["hub"]
-    return geo.revolve([(0.0, -4.0), (hub, -4.0), (hub, ROTOR_PROUD - 0.8), (hub - 0.8, ROTOR_PROUD), (0.0, ROTOR_PROUD)])
+    """The hub bolted to the output flange, seated on the flange's face. Over locating pins it is
+    relieved in a ring: the maker's solid does not turn, the hub does."""
+    hub, seat = spec["hub"], spec["flange"]
+    body = geo.revolve([(0.0, seat), (hub, seat), (hub, ROTOR_PROUD - 0.8), (hub - 0.8, ROTOR_PROUD), (0.0, ROTOR_PROUD)])
+    if spec["pins"]:
+        r, at, top = spec["pins"]
+        body -= geo.revolve([(at - r - 0.4, seat - 1.0), (at + r + 0.4, seat - 1.0), (at + r + 0.4, top + 0.4), (at - r - 0.4, top + 0.4)])
+    return body
 
 
 def _pivot_cap(radius):
@@ -77,10 +133,10 @@ class Hardware:
         self.screws = {size: proto(_screw_head(size), "black_oxide") for size in SCREWS}
         self.act = {}
         for size, spec in ACTUATORS.items():
-            housing, cap = _housing(spec), _cap(spec)
-            # One homogenised density for the unit, so that housing and cover weigh what the maker says.
-            look = finish.actuator(size, spec["kg"] / ((housing.volume + cap.volume) * 1e-9))
-            self.act[size] = dict(housing=proto(housing, look), cap=proto(cap, look), rotor=proto(_rotor(spec), "steel"))
+            housing = _vendor(size, spec)
+            # One homogenised density for the unit, so that the maker's solid weighs what the maker says.
+            look = finish.actuator(size, spec["kg"] / (housing.volume * 1e-9))
+            self.act[size] = dict(housing=proto(housing, look, stood=stood(size)), rotor=proto(_rotor(spec), "steel"))
         self._caps = {}
 
     # -- fasteners ----------------------------------------------------------------------
@@ -116,18 +172,21 @@ class Hardware:
         spec, protos = ACTUATORS[size], self.act[size]
         loc = frame(origin, axis, x_dir) * bd.Rot(0, 0, turn)
         tag = name or size.lower()
-        stator = [inst(protos["housing"], loc, f"{tag}_housing"), inst(protos["cap"], loc, f"{tag}_cap")]
+        stator = [inst(protos["housing"], loc, f"{tag}_housing")]
         screw, count, pitch = spec["mount"]
         if _heads_show(spec):
-            stator += self.bolt_circle(screw, loc, pitch, count, phase=180.0 / count, z=PLATE_T - SCREWS[screw][1])
+            stator += [inst(self.screws[screw], loc * bd.Pos(x, y, PLATE_T - SCREWS[screw][1]), f"{screw.lower()}_screw")
+                       for x, y in mount_positions(size)]
         rotor = [inst(protos["rotor"], loc, f"{tag}_output")]
         return stator, rotor
 
     def rotor_screws(self, size, origin, axis, lug_t, n=None, x_dir=None, sunk=0.0):
         """The screws that hold a child's lug (lug_t thick) on an actuator's output flange;
         `sunk` seats the heads that deep in counterbores (`rotor_counterbores` cuts them)."""
-        screw, radius, count = rotor_pattern(size, n)
-        return self.bolt_circle(screw, frame(origin, axis, x_dir), radius, count, z=ROTOR_PROUD + lug_t - sunk)
+        screw = ACTUATORS[size]["out"][0]
+        loc = frame(origin, axis, x_dir)
+        return [inst(self.screws[screw], loc * bd.Pos(x, y, ROTOR_PROUD + lug_t - sunk), f"{screw.lower()}_screw")
+                for x, y in rotor_positions(size, n)]
 
 
 def _heads_show(spec):
@@ -145,9 +204,16 @@ def mount_bores(size, origin, axis, x_dir=None, turn=0.0):
     low = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
     tool = loc * bd.Pos(0, 0, -1.0) * bd.Cylinder(max(spec["pilot"][0], spec["hub"]) + 0.6, PLATE_T + 2.0, align=low)
     if _heads_show(spec):
-        for x, y in ring_positions(count, pitch, 180.0 / count):
+        for x, y in mount_positions(size):
             tool += loc * bd.Pos(x, y, PLATE_T - h) * bd.Cylinder(d / 2 + 0.4, h + 1.0, align=low)
     return tool
+
+
+def mount_positions(size):
+    """Where a drive's tapped mounting holes are, in its frame."""
+    spec = ACTUATORS[size]
+    _, count, pitch = spec["mount"]
+    return ring_positions(count, pitch, spec.get("mount_at", 180.0 / count))
 
 
 def rotor_pattern(size, n=None):
@@ -156,13 +222,22 @@ def rotor_pattern(size, n=None):
     return screw, pitch, n or count
 
 
+def rotor_positions(size, n=None):
+    """Where the output flange's tapped holes are, in the hub's frame: evenly round the circle, or
+    as the maker spaces them (the RS04's nine keep clear of its three pins)."""
+    spec = ACTUATORS[size]
+    _, count, pitch = spec["out"]
+    if n is None and "out_at" in spec:
+        return [(pitch * math.cos(math.radians(a)), pitch * math.sin(math.radians(a))) for a in spec["out_at"]]
+    return ring_positions(n or count, pitch)
+
+
 def rotor_counterbores(size, origin, axis, lug_t, n=None, x_dir=None):
     """Cutting tool: counterbores that sink the rotor screws' heads flush in a lug."""
-    screw, radius, count = rotor_pattern(size, n)
-    d, h, _ = SCREWS[screw]
+    d, h, _ = SCREWS[ACTUATORS[size]["out"][0]]
     loc = frame(origin, axis, x_dir)
     tool = None
-    for x, y in ring_positions(count, radius):
+    for x, y in rotor_positions(size, n):
         bore = loc * bd.Pos(x, y, ROTOR_PROUD + lug_t - h) * bd.Cylinder(
             d / 2 + 0.4, h + 1.0, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
         tool = bore if tool is None else tool + bore
@@ -198,5 +273,5 @@ def pin(origin, axis, radius, length, head_r=None, head_t=2.5, label="pin", fini
     return part(body, label, finish)
 
 
-__all__ = ["Hardware", "pushrod", "pin", "ring_positions", "rotor_pattern", "rotor_counterbores", "mount_bores", "PLATE_T",
-           "ROTOR_PROUD"]
+__all__ = ["Hardware", "envelope", "stood", "mount_positions", "pushrod", "pin", "ring_positions", "rotor_pattern", "rotor_positions", "rotor_counterbores",
+           "mount_bores", "PLATE_T", "ROTOR_PROUD"]

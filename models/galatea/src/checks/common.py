@@ -6,6 +6,12 @@ each prototype once); the solids are the model's own (`handle.shape`), matched t
 meshes part by part. A pose never goes back to the server: every link is a rigid body, so
 `kin.link_transforms` places its parts.
 
+A drive is the exception. Its part is RobStride's own solid, some three thousand faces of
+it, and an exact intersection with one costs gigabytes; so where the solids are wanted
+(`exact`), each drive is stood for, mesh and solid, by its plain envelope
+(`hardware.envelope`), which `drives.py` shows to hold every cubic millimetre of the maker's.
+An envelope is at most an eighth larger than its drive, so the check errs toward finding.
+
 Two parts interfere when the solids share volume: `overlap_volume`, the kernel's exact
 intersection, which is 0 for parts that only touch. That is the verdict. The meshes serve
 two lesser purposes: to place parts, and to say which pairs need the kernel at all. A
@@ -23,6 +29,7 @@ speak of, so it passed a rail through a shin guard. It is gone.)
 import multiprocessing
 import os
 import queue
+import re
 import resource
 import signal
 import sys
@@ -35,7 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np  # noqa: E402
 import trimesh  # noqa: E402
 
-from lib import kin  # noqa: E402
+from lib import hardware, kin  # noqa: E402
+from lib.dims import ACTUATORS, DRIVES  # noqa: E402
 
 SHARED = 0.5         # two solids sharing more than this interfere, mm^3 (a boolean's own noise is far below it)
 PATIENCE = 900.0     # a pair's intersection may take this long, seconds, before it is given up as unmeasured
@@ -44,6 +52,15 @@ WORKERS = min(4, os.cpu_count() or 1)
 REACH = 0.5          # the least a mesh is pushed out to find what its solid could touch, mm
 DEEP = 0.6           # a mesh sunk deeper than this into another is no fit of a pin in its bore, mm
 GL_TO_CAD = np.array([[1000.0, 0, 0, 0], [0, 0, -1000.0, 0], [0, 1000.0, 0, 0], [0, 0, 0, 1]])   # a GLB node: metres, Y up
+
+
+def drive_model(label):
+    """The RobStride model a part's label names if it is a drive's housing ('knee_housing' is an 'RS04'), else None."""
+    name = re.sub(r"_\d+$", "", label)
+    if not name.endswith("_housing"):
+        return None
+    tag = name[:-len("_housing")]
+    return DRIVES[tag][0] if tag in DRIVES else (tag.upper() if tag.upper() in ACTUATORS else None)
 
 
 class Geometry:
@@ -98,8 +115,8 @@ def load_parts(handle, exact=False):
         placed, name = scene.graph[node]
         link = node.split("/")[0]
         links.setdefault(link, []).append(Part(link, node, geometries[name], placed))
-    open_meshes = sorted(name for name, g in geometries.items() if not g.watertight)
-    if open_meshes:
+    open_meshes = sorted(name for name, g in geometries.items() if not g.watertight and not drive_model(name))
+    if open_meshes:                                    # (a drive's own mesh has open seams; no check measures by it)
         print(f"note: {len(open_meshes)} meshes are not closed: {open_meshes[:8]}")
     if exact:
         _attach_solids(links, handle.shape)
@@ -108,13 +125,19 @@ def load_parts(handle, exact=False):
 
 def _attach_solids(links, tree):
     """Give each part the leaf of the model's tree it was meshed from: the one of its link
-    and label whose box sits where the mesh's does."""
+    and label whose box sits where the mesh's does. A drive gets its envelope, as mesh and as solid."""
+    shells = {}
     for group in tree.children:
         leaves = {}
         for leaf in group.children:
+            label, size = leaf.label, drive_model(leaf.label)
+            if size:                                   # the maker's solid is slow even to box: its envelope stands where it does
+                if size not in shells:
+                    shells[size] = hardware.envelope(size)
+                leaf = shells[size].located(leaf.location * hardware.stood(size).inverse())
             box = leaf.bounding_box()
             centre = np.array([(box.min.X + box.max.X) / 2, (box.min.Y + box.max.Y) / 2, (box.min.Z + box.max.Z) / 2])
-            leaves.setdefault(leaf.label, []).append((centre, leaf))
+            leaves.setdefault(label, []).append((centre, leaf, size))
         for part in links[group.label]:
             label = part.path.split("/")[-1]
             pool = leaves.get(label) or leaves[label.rsplit("_", 1)[0]]         # a repeated label's node is numbered
@@ -122,9 +145,18 @@ def _attach_solids(links, tree):
             nearest = min(range(len(pool)), key=lambda k: float(np.linalg.norm(pool[k][0] - centre)))
             # A label borne once is its part. One borne by several (screws, a pair of covers) is told
             # apart by place; their boxes are tight, where a lofted skin's own box is a loose one.
-            if len(pool) > 1 and np.linalg.norm(pool[nearest][0] - centre) > 3.0:
+            # (A drive's envelope is boxed in the model's axes and its mesh in its own, so theirs agree less closely.)
+            if len(pool) > 1 and np.linalg.norm(pool[nearest][0] - centre) > (20.0 if pool[nearest][2] else 3.0):
                 raise ValueError(f"{part.path}: no solid of the model sits where its mesh does")
-            part.solid = pool.pop(nearest)[1]
+            _, leaf, size = pool.pop(nearest)
+            # A leaf still in the model's tree drags the tree with it: `moved` copies a shape with its
+            # parents, which was 13 s and 2.5 GB for a thumb's pad. The same solid, on its own:
+            part.solid = type(leaf)(leaf.wrapped)
+            if size:
+                vertices, triangles = part.solid.tessellate(0.05, 0.3)
+                mesh = trimesh.Trimesh(np.array([(v.X, v.Y, v.Z) for v in vertices]), np.array(triangles), process=False)
+                part.geometry, part.rest = Geometry(f"{part.path} envelope", mesh), np.eye(4)
+                part.pose(part.moved)
 
 
 def _matrix(transform):

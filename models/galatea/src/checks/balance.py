@@ -17,11 +17,12 @@ import sys
 
 import build123d  # noqa: F401  (the model needs cad's build123d integration)
 import numpy as np
-from common import load_parts
+from common import drive_model, load_parts
 from scipy.spatial import ConvexHull
 
 from galatea import galatea
 from lib import kin
+from lib.dims import ACTUATORS
 from lib.poses import POSES
 
 STANDING = {"zero": {}, **{name: POSES[name] for name in ("ready", "stride", "contrapposto", "reach", "wave",
@@ -49,10 +50,13 @@ def weigh(handle):
         mass, moment = 0.0, np.zeros(3)
         for part in parts:
             label = re.sub(r"_\d+$", "", part.path.split("/")[-1])
-            mesh = part.geometry.mesh
-            kg = abs(mesh.volume) * 1e-9 * density[label]
+            mesh, drive = part.geometry.mesh, drive_model(label)
+            if drive:                                  # RobStride's solid: its maker's mass, at the middle of its box
+                kg, centre = ACTUATORS[drive]["kg"], mesh.bounds.mean(axis=0)
+            else:
+                kg, centre = abs(mesh.volume) * 1e-9 * density[label], mesh.center_mass
             mass += kg
-            moment += kg * (part.rest @ np.append(mesh.center_mass, 1.0))[:3]
+            moment += kg * (part.rest @ np.append(centre, 1.0))[:3]
         links[link] = (mass, moment / mass)
     return links
 

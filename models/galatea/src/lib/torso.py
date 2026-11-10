@@ -50,14 +50,14 @@ def build_trunk(hw, hip_yaw_stators):
 # ---------------------------------------------------------------------------------------------
 PORTS_X = (-60.0, 60.0)        # the charge and data ports, behind the pelvis
 PELVIS_ROWS = skin.register("pelvis", [
-    geo.S(1003, 0, 10, rx=142, ry=82, n=3.0, ryn=76),
-    geo.S(1040, 0, 10, rx=145, ry=84, n=3.0, ryn=78),
-    geo.S(1082, 0, 10, rx=140, ry=81, n=3.0, ryn=75),
+    geo.S(1003, 0, 10, rx=143, ry=82, n=3.0, ryn=77.5),
+    geo.S(1040, 0, 10, rx=146, ry=84, n=3.0, ryn=79.5),
+    geo.S(1082, 0, 10, rx=141, ry=81, n=3.0, ryn=76.5),
 ], covers=["pelvis"], within=((-200, -200, 1009), (200, 200, 1076)))
 
 
 def _pelvis(hw, links):
-    outline = geo.hull([(-HX, 0, 50), (HX, 0, 50), (0, 34, 50), (0, -14, 44)])
+    outline = geo.hull([(-HX, 0, 52), (HX, 0, 52), (0, 34, 50), (0, -14, 44)])     # 52 at the hips: an RS06 is 88 over its lobes, inside a 6 mm wall
     rotor_hole, cap_hole = 27.0, 33.0
 
     # The pelvis's skin: a black band round the casting, arched over each hip and pierced behind

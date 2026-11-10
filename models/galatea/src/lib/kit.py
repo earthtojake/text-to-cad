@@ -31,10 +31,14 @@ def part(shape, label, finish):
     return apply(shape, finish)
 
 
-def proto(shape, finish):
-    """A prototype to place with `inst`: finished, and marked symmetric about its local YZ plane."""
+def proto(shape, finish, stood=None):
+    """A prototype to place with `inst`: finished, and marked as one part for both sides of the robot.
+    Its frame is symmetric about its local YZ plane, in what matters to its neighbours (a screw wholly,
+    a drive in its mounting holes). `stood` is the location the shape already carries inside that
+    frame (a maker's file stood in an actuator's frame), which a mirrored placement has to keep."""
     apply(shape, finish)
     shape._sym = True
+    shape._stood = stood
     return shape
 
 
@@ -72,7 +76,11 @@ def mirror_tree(node, label=None):
     if node.children:
         return bd.Compound(children=[mirror_tree(child) for child in node.children], label=label or node.label)
     if getattr(node, "_sym", False):
-        twin = node.located(mirror_loc(node.location))
+        stood = getattr(node, "_stood", None)
+        if stood is None:
+            twin = node.located(mirror_loc(node.location))
+        else:                                          # mirror the frame the shape stands in, then stand it there again
+            twin = node.located(mirror_loc(node.location * stood.inverse()) * stood)
     else:
         twin = bd.mirror(node, about=bd.Plane.YZ)
         if node.material is not None:

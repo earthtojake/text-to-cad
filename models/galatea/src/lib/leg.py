@@ -2,7 +2,7 @@
 
 Hip: three actuators whose axes meet at one point. The yaw actuator sits in the pelvis
 and turns the hip yoke; the roll actuator on the back of the yoke turns the cradle; the
-pitch actuator on the outside of the cradle turns the femur.
+pitch actuator on the outside of the cradle turns the femur, under a cap on the cradle's cheek.
 
 Knee: a rotary actuator high on the femur turns a crank between the femur plates; a
 pushrod carries the motion down to the horn behind the knee hub. Crank and horn are
@@ -16,7 +16,7 @@ the gimbal's own axle, lying along the foot.
 Thigh and shin wear a skin of two layers (`skin.py`): a black liner that holds the
 mechanism with air round it, and pearl panels over its front and back. Each ends at a
 joint on the line that joint's travel needs, and is carried on pads that grow from the
-frame to the liner's inner surface. The hip's pitch drive wears a cap that turns with the thigh.
+frame to the liner's inner surface.
 """
 
 import math
@@ -42,8 +42,11 @@ LEG_LINKS = ("hip_yoke", "hip_cradle", "thigh", "knee_crank", "knee_rod", "shin"
              "ankle_gimbal", "foot", "toe")
 
 
-# The thigh's form. Its outer side swells over the knee drive (an RS04: 120 across, standing 78 out from the
-# leg's centre plane, at z 780); its back holds the pushrod, which stands 61 behind the axis at mid bend.
+# The thigh's form, drawn close: the femur's plates stand 26 either side of the leg's centre plane, and the
+# knee drive (an RS04: 120 across, 52 long, at z 780) on the outside of the outer one, so the outer side
+# swells from mid-thigh to hold it and the inner side runs straight. Its back holds the pushrod, which
+# stands 61 behind the axis at mid bend. The upper sections are squarer than the lower: a can seen end
+# on fills a rectangle.
 THIGH_TOP = 852.0                              # under the hip drive's can and its cap
 YOKE_Y = HIP_YOKE_Y                            # the hip yoke's rear plate: its front face, behind the hip's centre
 HIP_CAP_R = 65.6                               # the hip cap's outer radius: an RS04 is 60, with 3 of air
@@ -52,10 +55,11 @@ HIP_CAP_R = 65.6                               # the hip cap's outer radius: an 
 THIGH_RIM = ((-200.0, 446.0), (10.7, 593.5), (200.0, 779.0))
 THIGH_RAKE = (878.1, 0.40, 1.30)                # the thigh's raked top in front: the plane z = 878.1 + 0.40 x + 1.30 y
 THIGH_ROWS = skin.register("thigh", [
-    geo.S(520, HX + 3, 0, rx=44, rxn=50, ry=70, ryn=54, n=3.3),
-    geo.S(640, HX + 3, 0, rx=64, rxn=55, ry=74, ryn=64, n=3.3),
-    geo.S(716, HX + 3, 0, rx=88, rxn=57, ry=78, ryn=84, n=3.3),      # deep in front for the knee drive's can, 120 across at 780
-    geo.S(860, HX + 3, 0, rx=93, rxn=56, ry=79, ryn=68, n=3.3),      # and shallow above it: this swings up under the pelvis
+    geo.S(520, HX + 3, 0, rx=40, rxn=42, ry=58, ryn=50, n=3.5),
+    geo.S(640, HX + 3, 0, rx=58, rxn=40, ry=71, ryn=58, n=4.0),
+    geo.S(716, HX + 3, 0, rx=84, rxn=38, ry=75, ryn=68, n=6.0),
+    geo.S(780, HX + 3, 0, rx=85, rxn=38, ry=77, ryn=74, n=6.0),
+    geo.S(860, HX + 3, 0, rx=85, rxn=38, ry=73, ryn=66, n=6.0),
 ], covers=["l_thigh", "l_knee_crank", "l_knee_rod"], link="l_thigh", above=[THIGH_RIM[:2], THIGH_RIM[1:]],
     below=[((-100.0, THIGH_TOP), (100.0, THIGH_TOP))], poses=[{"l_knee": 40}, {"l_knee": 62.5}, {"l_knee": 90}, {"l_knee": 125}])
 # The shin's form: the rails stand 48 either side of the centre plane all the way down; the calf drive, an
@@ -125,13 +129,23 @@ def _hip(hw, links):
     back = geo.plate_xz(geo.bones([(xr(-25), 894, 10), (xr(25), 894, 10), (xr(25), 940, 10), (xr(-25), 940, 10)],
                                   links=[(0, 1, 2, 3)], holes=[(HX, HZ, 8)]), YOKE_Y - 11, YOKE_Y - 1)
     pitch_at = (xr(C1), 0.0, HZ)
-    outer = geo.plate_yz(geo.bones([(0, HZ, 60), (YOKE_Y - 24, HZ - 3, 23)]), xr(C0), xr(C1))
+    outer = geo.plate_yz(geo.bones([(0, HZ, HIP_CAP_R), (YOKE_Y - 24, HZ - 3, 23)]), xr(C0), xr(C1))
     inner = geo.plate_yz(geo.bones([(0, HZ, 40), (YOKE_Y - 24, HZ - 3, 23)], holes=[(0, HZ, 14)]), xr(-C1), xr(-C0))
-    cradle = back + outer + inner - mount_bores("RS04", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0))
-    pitch_stator, pitch_rotor = hw.actuator("RS04", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0), name="hip_pitch")
+    # The pitch drive is turned half round, so that its cable connector stands out underneath, away from the pelvis.
+    cradle = back + outer + inner - mount_bores("RS04", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0), turn=180.0)
+    pitch_stator, pitch_rotor = hw.actuator("RS04", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0), name="hip_pitch", turn=180.0)
+    # Its cap: a cup that stands on the cradle's cheek, flush with its rim, over the can and, stepped in, over its rear
+    # cover (the step is what lets the leg swing out under the pelvis), slotted where the connector stands out.
+    t, (rf, lf), (rr, lr) = skin.PANEL_T, ACTUATORS["RS04"]["front"], ACTUATORS["RS04"]["rear"]
+    small = rr + 5.0
+    cup = geo.revolve([(HIP_CAP_R - t, 0.0), (HIP_CAP_R, 0.0), (HIP_CAP_R, lf + 2.0 + t), (small + t, lf + 2.0 + t),
+                       (small + t, lf + lr + 3.0 + t), (0.0, lf + lr + 3.0 + t), (0.0, lf + lr + 3.0), (small, lf + lr + 3.0),
+                       (small, lf + 2.0), (HIP_CAP_R - t, lf + 2.0)], pitch_at, (1, 0, 0))
+    cup -= geo.box(13.0, 12.0, 30.0, (xr(C1) + 45.4, 0, HZ - rr - 12.0))            # the connector: 7 across, 41 to 49 behind the face
     links["hip_cradle"] += [part(cradle, "hip_cradle", "frame"), *roll_rotor,
                             *hw.rotor_screws("RS04", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)), *pitch_stator,
-                            hw.pivot_cap(19, (xr(-C1), 0, HZ), (-1, 0, 0), label="hip_bearing_cap")]
+                            hw.pivot_cap(19, (xr(-C1), 0, HZ), (-1, 0, 0), label="hip_bearing_cap"),
+                            part(cup, "panel_hip", "under")]
     links["thigh"] += [*pitch_rotor, *hw.rotor_screws("RS04", pitch_at, (-1, 0, 0), PLATE_T, x_dir=(0, -1, 0), sunk=5.0)]
 
 
@@ -154,22 +168,9 @@ def _thigh(hw, links):
             geo.plate_yz(geo.polygon((33, 880), (33, 852), (29, 846), (24, 838), (20, 830), (86, 792), (140, 792), (140, 880)), -400, 400)]
     liner = skin.trim(form.liner, cuts, "thigh liner")
     # Two pearl plates, one over the front and one over the back, with the thigh's sides (and its inside) left black between them.
-    inside = geo.box(60, 600, 600, (xr(-58), 0, 700))
+    inside = geo.box(60, 600, 600, (xr(-50), 0, 700))
     stripe = skin.from_side([(8, 900), (-8, 500)], [(22, 500), (38, 900)])
     panel = skin.trim(form.panel, [*cuts, inside, stripe], "thigh panels")
-    # The hip drive's cap: a cup over the can's end and round it, turning with the thigh about the can's own axis.
-    t, (rf, lf), (rr, lr) = skin.PANEL_T, ACTUATORS["RS04"]["front"], ACTUATORS["RS04"]["rear"]
-    small = rr + 5.0                                                      # over the rear cover and its connector
-    cup = geo.revolve([(HIP_CAP_R - t, 5.0), (HIP_CAP_R, 5.0), (HIP_CAP_R, lf + 2.0 + t), (small + t, lf + 2.0 + t),
-                       (small + t, lf + lr + 3.0 + t), (0.0, lf + lr + 3.0 + t), (0.0, lf + lr + 3.0), (small, lf + lr + 3.0),
-                       (small, lf + 2.0), (HIP_CAP_R - t, lf + 2.0)], (xr(C1), 0, HZ), (1, 0, 0))
-    end = xr(C1) + lf + lr + 3.0
-    cup += geo.box(t + 1.8, 24, HZ - small - THIGH_TOP, (end - 2.0, 0, (HZ - small + THIGH_TOP) / 2))   # its foot on the thigh's skin
-    # ... and a guard before the joint, between the thigh's front plate and the pelvis: the same cylinder, from 40 degrees
-    # under the horizontal to 20 over it, so that at full flexion its edge stops short of the roll drive behind the hip.
-    sector = [(0.0, HZ)] + [(-90.0 * math.cos(math.radians(a)), HZ + 90.0 * math.sin(math.radians(a))) for a in range(-40, 21, 5)]
-    cup += geo.tube(HIP_CAP_R, HIP_CAP_R - t, xr(C1) + 5.0 - xr(-20), (xr(-20), 0, HZ), (1, 0, 0)) \
-        & geo.plate_yz(geo.polygon(*sector), xr(-60), xr(C1) + 6.0)
     pads = None
     for origin, direction in [((xr(s * 20), -14, z), (s, 0, 0)) for s in (1, -1) for z in (630, 700)]:
         pad = geo.mount_pad(form.cavity, origin, direction)
@@ -196,8 +197,7 @@ def _thigh(hw, links):
                        hw.pivot_cap(17, (xr(P1), 0, KZ), (1, 0, 0), label="knee_cap"),
                        hw.pivot_cap(17, (xr(-P1), 0, KZ), (-1, 0, 0), label="knee_cap"),
                        part(skin.solids(pads - femur), "pad_thigh", "frame"),
-                       part(skin.solids(liner), "liner_thigh", "under"), part(skin.solids(panel), "panel_thigh", "shell"),
-                       part(cup, "panel_hip", "under")]
+                       part(skin.solids(liner), "liner_thigh", "under"), part(skin.solids(panel), "panel_thigh", "shell")]
     links["knee_crank"] += rotor
 
 
@@ -252,8 +252,8 @@ def _shin(hw, links):
     # its output outboard. Its crank carries one rod down the back of the shin.
     calf_at = (xr(CALF_FACE), CAY, CAZ)
     bracket = geo.plate_yz(geo.bones([(CAY, CAZ, 61), (-2, CAZ + 68, 14)]), xr(CALF_FACE), xr(CALF_FACE + PLATE_T))
-    bracket -= mount_bores("RS04", calf_at, (1, 0, 0), x_dir=(0, 1, 0))
-    stator, rotor = hw.actuator("RS04", calf_at, (1, 0, 0), x_dir=(0, 1, 0), name="ankle_pitch")
+    bracket -= mount_bores("RS04", calf_at, (1, 0, 0), x_dir=(0, 1, 0), turn=180.0)      # its connector underneath, clear of the wishbone
+    stator, rotor = hw.actuator("RS04", calf_at, (1, 0, 0), x_dir=(0, 1, 0), name="ankle_pitch", turn=180.0)
     tibia = core + flanges + wishbone + rails + beam + tie + bracket
     links["shin"] += [part(tibia, "tibia", "frame"), *stator,
                       pin((xr(-17), C[1], C[2]), (1, 0, 0), 5.0, 34.0, label="horn_pin"),
@@ -321,7 +321,7 @@ def _foot(hw, links):
     sole = geo.plate_xy(outline, 10, 20) - geo.box(240, 120, 40, (HX, edge - 60, 15))
     rear = geo.plate_xz(geo.bones([(HX, AZ, 19), (HX, 26, 15)], holes=[(HX, AZ, 4)]), 5, 15)
     front = geo.plate_xz(geo.bones([(HX, AZ, 12), (HX, 26, 12)]), -76, -66)
-    tail = geo.cyl(3.4, 11, (HX, -66, AZ), (0, 1, 0))                    # to the back of the roll drive's cover
+    tail = geo.cyl(3.4, 10.7, (HX, -66, AZ), (0, 1, 0))                  # to the back of the roll drive's cover
     keel = geo.box(12, 71, 12, (HX, -30.5, 26))
     foot = sole + rear + front + tail + keel + pads
     for a, b in ((-40, -24), (-8, 8), (24, 40)):
