@@ -434,7 +434,7 @@ def _validate_joint(
             path=joint_path,
         )
     for axis_element in axis_elements:
-        _validate_axis(axis_element, result, targets, f"{joint_path}/axis", joint_type=joint_type, axis_name="axis")
+        _validate_axis(axis_element, result, targets, f"{joint_path}/axis", joint_type=joint_type)
     for axis2_element in axis2_elements:
         if joint_type not in SECOND_AXIS_JOINT_TYPES:
             result.add(
@@ -443,7 +443,7 @@ def _validate_joint(
                 f"joint type {joint_type!r} does not support axis2 in the lightweight validator",
                 path=f"{joint_path}/axis2",
             )
-        _validate_axis(axis2_element, result, targets, f"{joint_path}/axis2", joint_type=joint_type, axis_name="axis2")
+        _validate_axis(axis2_element, result, targets, f"{joint_path}/axis2", joint_type=joint_type)
 
 
 def _validate_axis(
@@ -453,9 +453,7 @@ def _validate_axis(
     axis_path: str,
     *,
     joint_type: str,
-    axis_name: str,
 ) -> None:
-    del axis_name
     xyz_element = _first_child(axis_element, "xyz")
     if xyz_element is None:
         result.add("error", "missing_axis_xyz", "joint axis must contain <xyz>", path=axis_path)

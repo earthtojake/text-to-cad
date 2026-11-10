@@ -526,8 +526,3 @@ def text_canvas(text: str, font_px: float, color: str) -> np.ndarray:
     out[..., 3] = a
     out[a > 0, :3] = rgb
     return out
-
-
-def measure(text: str, font_px: float, weight: float = 500) -> float:
-    """``measureText(text).width`` for the viewer's face at ``font_px``: a text mark's quad width."""
-    return max(face(weight, font_px).width(line) for line in str(text).split("\n"))

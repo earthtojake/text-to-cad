@@ -58,6 +58,16 @@ class AliasTest(unittest.TestCase):
                                  "named": ["cad.build123d", "cad.engine.model"],
                                  "copies": []})
 
+    def test_the_library_s_module_keeps_its_own_spec(self) -> None:
+        found = run("""
+            import importlib.util, json
+            import cadgen.build123d
+            import cad.build123d
+            print(json.dumps({"spec": cad.build123d.__spec__.name,
+                              "found": importlib.util.find_spec("cad.build123d").name}))
+        """)
+        self.assertEqual(found, {"spec": "cad.build123d", "found": "cad.build123d"})
+
     def test_every_top_level_name_is_the_library_s(self) -> None:
         found = run("""
             import json

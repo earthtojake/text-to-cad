@@ -23,6 +23,9 @@ from cad._internal.aliases import warn as _warn
 
 _warn("cadgen", "cad")
 
+# A library module's own spec, kept while the import system stamps the alias's on it.
+_OWN_SPECS: dict[str, Any] = {}
+
 
 class _Alias(importlib.abc.MetaPathFinder, importlib.abc.Loader):
     """``cadgen.<x>`` found as the module ``cad.<x>``: imported under its own name, handed out as is."""
@@ -36,10 +39,14 @@ class _Alias(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return importlib.util.spec_from_loader(fullname, self)
 
     def create_module(self, spec: Any) -> Any:
-        return importlib.import_module("cad" + spec.name[len(__name__):])
+        module = importlib.import_module("cad" + spec.name[len(__name__):])
+        _OWN_SPECS[spec.name] = module.__spec__
+        return module
 
     def exec_module(self, module: Any) -> None:
-        pass  # run once already, as ``cad.<x>``
+        # Run once already, as ``cad.<x>``. The import system stamped the alias's spec on it: put its own
+        # back, so the module stays what it was (its name, its reload, its submodules).
+        module.__spec__ = _OWN_SPECS.pop(module.__spec__.name, module.__spec__)
 
 
 if not any(isinstance(finder, _Alias) for finder in sys.meta_path):

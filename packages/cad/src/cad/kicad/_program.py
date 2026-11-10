@@ -26,9 +26,8 @@ from typing import Any
 from cad.registry import INTEGRATIONS
 
 from cad._internal import programs
-from cad._internal.programs import version_tuple  # noqa: F401 - the tests' and callers' comparison
 
-__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "LIBRARY_VARIABLES", "STOCK_VARIABLES",
+__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "LIBRARY_VARIABLES", "STOCK_VARIABLES",
            "KicadMissingError", "KicadRunError", "carried", "check_api_server", "check_version", "find_kicad_cli",
            "headless_env", "install_hint", "kicad_version", "library_variables", "packaged", "private_run",
            "project_as_found", "quiet", "ready"]
@@ -151,7 +150,6 @@ KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: [
 API_SERVER_HINT = ("kicad_pcb.edit and kicad_sch.edit run kicad-cli's headless api-server, which kicode's kicad-cli (cad[kicad]) "
                    "and a KiCad nightly's (10.99) have; a check or an export needs only KiCad 9 or newer. Unset "
                    "CAD_KICAD_CLI to run kicode's, or set it to a nightly's kicad-cli")
-KICAD_MINIMUM = KICAD.minimum
 
 
 def _missing(error: programs.ProgramMissing) -> KicadMissingError:

@@ -567,7 +567,7 @@ class _Projection:
     itself, so dimension points land exactly where the geometry did."""
 
     def __init__(self, shape, name: str) -> None:
-        from build123d import Axis, Edge, Vector
+        from build123d import Edge, Vector
 
         direction, up = VIEW_DIRECTIONS[name]
         bbox = shape.bounding_box()

@@ -139,7 +139,7 @@ where = ["src"]
 include = ["cad", "cad.*", "cadgen"]
 
 [tool.setuptools.package-data]
-cad = ["py.typed", "*.pyi"]
+cad = ["py.typed"]
 # The engine's look lights the regular display modes with this environment image, which the
 # engine serves to the viewer and the OCCT stills read (cad.engine.render.look).
 "cad.engine.render" = ["studio.hdr"]

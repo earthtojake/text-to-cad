@@ -88,12 +88,6 @@ class Fields:
 
     # --- where nodes are -------------------------------------------------------------------------------------
 
-    def x(self, i: int) -> float:
-        return (self.i0 + i) * self.pitch
-
-    def y(self, j: int) -> float:
-        return (self.j0 + j) * self.pitch
-
     def span(self, box: tuple[float, float, float, float], grow: float) -> tuple[slice, slice] | None:
         """The region's nodes within ``box`` grown by ``grow``, as (rows, columns); None outside the region."""
         g = self.pitch

@@ -31,7 +31,6 @@ from cad.results import CheckFinding, CheckResult
 
 __all__ = ["check"]
 
-_DOCUMENTS = (".step", ".stp", ".xbf")
 _MESHES = (".3mf", ".glb")
 
 

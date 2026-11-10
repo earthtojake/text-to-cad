@@ -117,7 +117,7 @@ def read_urdf_robot(urdf_path: Path, result: FindingsReport) -> dict[str, object
                 f"paired URDF {display_path(urdf_path)} is not a single-rooted tree; "
                 "chain and adjacency checks were skipped",
                 path="/robot",
-                hint="Validate the URDF with the URDF skill validator first.",
+                hint="Validate the URDF first: cad urdf validate.",
             )
             return None
         result.add(
@@ -125,7 +125,7 @@ def read_urdf_robot(urdf_path: Path, result: FindingsReport) -> dict[str, object
             f"paired URDF {display_path(urdf_path)} is not valid: "
             f"{urdf_result.errors[0].message}",
             path="/robot",
-            hint="Validate the URDF with the URDF skill validator for the full report.",
+            hint="Run cad urdf validate on it for the full report.",
         )
         return None
     return {

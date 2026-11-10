@@ -166,7 +166,8 @@ def run_drc(cli: Path, board: Path, *, timeout: float = _TIMEOUT_SECONDS) -> lis
         report = scratch / "drc.json"
         command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "-o", str(report), str(board)]
         try:
-            completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout, check=False)
+            completed = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                       timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
             raise KicadRunError(f"kicad-cli pcb drc did not finish in {timeout:g} s") from None
         except OSError as error:

@@ -21,7 +21,8 @@ from pathlib import Path
 
 from cad.results import CheckFinding, CheckResult
 
-from ._program import KicadMissingError, KicadRunError, private_run, ready
+from ._export import _listing
+from ._program import KicadMissingError, KicadRunError, private_run, project_as_found, ready
 from ._program import quiet as _quiet
 
 __all__ = ["EXPORTS", "ErcFinding", "check", "commands", "export", "run_erc"]
@@ -33,8 +34,6 @@ _TIMEOUT_SECONDS = 600
 _BOM_FIELDS = "Reference,Value,Footprint,MPN,${QUANTITY},${DNP}"
 _BOM_LABELS = "Refs,Value,Footprint,MPN,Qty,DNP"
 _BOM_GROUPS = "Value,Footprint,MPN"
-# The project files kicad-cli makes beside a schematic it only reads, when they are missing.
-_PROJECT_FILES = (".kicad_prl", ".kicad_pro")
 
 
 @dataclass(frozen=True)
@@ -72,28 +71,11 @@ def _project_of(schematic: Path) -> Path:
     return root_of(schematic)
 
 
-class _AsFound:
-    """The project files a kicad-cli read makes beside the root sheet, removed after it when it made them."""
-
-    def __init__(self, schematic: Path):
-        self.made = [schematic.with_suffix(suffix) for suffix in _PROJECT_FILES if not schematic.with_suffix(suffix).exists()]
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_exc):
-        for path in self.made:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-
 def run_erc(cli: Path, schematic: Path, *, timeout: float = _TIMEOUT_SECONDS) -> list[ErcFinding]:
     """KiCad's ERC of ``schematic``'s hierarchy, every severity included. Raises
     :class:`~cad.kicad._program.KicadRunError` when ``kicad-cli`` cannot run or refuses the schematic."""
     root = _project_of(schematic)
-    with private_run("cad-erc-", cli) as (scratch, env), _AsFound(root):
+    with private_run("cad-erc-", cli) as (scratch, env), project_as_found(root):
         report = scratch / "erc.json"
         command = [str(cli), "sch", "erc", "--format", "json", "--units", "mm", "--severity-all", "-o", str(report),
                    str(root)]
@@ -247,15 +229,6 @@ def commands(cli: Path, schematic: Path, to: str, out_dir: Path) -> list[list[st
              "-o", str(out_dir / f"{stem}-bom.csv"), str(schematic)]]
 
 
-def _listing(out_dir: Path) -> dict[Path, tuple[int, int]]:
-    stamps = {}
-    for path in out_dir.rglob("*"):
-        if path.is_file():
-            info = path.stat()
-            stamps[path] = (info.st_mtime_ns, info.st_size)
-    return stamps
-
-
 def export(schematic: Path, to: str, out_dir: Path, *, cli: Path | None = None,
            timeout: float = _TIMEOUT_SECONDS) -> list[Path]:
     """Export the saved ``schematic``'s hierarchy as ``to`` (one of :data:`EXPORTS`) into ``out_dir``,
@@ -276,7 +249,7 @@ def export(schematic: Path, to: str, out_dir: Path, *, cli: Path | None = None,
     except OSError as error:
         raise KicadRunError(f"cannot write the {to} into {out_dir}: {error.strerror or error}") from None
     before = _listing(out_dir)
-    with private_run("cad-sch-export-", cli) as (_scratch, env), _AsFound(root):
+    with private_run("cad-sch-export-", cli) as (_scratch, env), project_as_found(root):
         for command in commands(cli, root, to, out_dir):
             try:
                 completed = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,

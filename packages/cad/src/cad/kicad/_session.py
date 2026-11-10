@@ -159,7 +159,7 @@ def _sandboxed(kind: "_Kind", why: str) -> KicadRunError:
 
 
 @contextmanager
-def _stopped_on_signals(server: subprocess.Popen) -> Iterator[None]:
+def _stopped_on_signals() -> Iterator[None]:
     """SIGTERM and SIGHUP (how agent hosts cancel a command) stop the api-server before the script exits, as
     Ctrl-C (SIGINT) does: each becomes SystemExit inside the run, so its ``finally`` stops the server and
     removes its folder; the earlier handlers come back afterwards. Only the main thread can set handlers;
@@ -509,7 +509,7 @@ def _serving(path: Path, kind: _Kind, create: bool, cli: Path | None, kicad: Any
                                            stderr=subprocess.STDOUT)
                 key = _project(path)
                 try:
-                    with _stopped_on_signals(process):
+                    with _stopped_on_signals():
                         client = _client(kicad, socket)
                         opened = _document(client, process, log, kind, path, create)
                         server = _Server(client, {path}, after, log=log)  # what a joining edit leaves undone goes there too
