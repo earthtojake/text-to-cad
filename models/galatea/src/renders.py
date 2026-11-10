@@ -22,6 +22,7 @@ from pathlib import Path
 import build123d  # noqa: F401  (the models need cad's build123d integration)
 from PIL import Image, ImageDraw, ImageFilter
 
+import actuators
 import stances
 from galatea import galatea
 from lib.hand import HAND_LINKS
@@ -69,6 +70,9 @@ STILLS = {
                   {"isolated": LEFT_HAND, "pose": {**HAND_OUT, "l_index_curl": 0.2, "l_middle_curl": 0.28, "l_ring_curl": 0.28,
                                                    "l_little_curl": 0.36, "l_thumb_opp": 24, "l_thumb_curl": 0.25}}),
     "back_detail": (galatea, {"position": [-420, 980, 1420], "target": [0, 60, 1240], "up": [0, 0, 1]}, (2000, 1800), {}),
+    # The five drive models on their bench, from the output side and from behind.
+    "actuators": (actuators.galatea_actuators, "28:22", (2400, 900), {}),
+    "actuators_back": (actuators.galatea_actuators, "152:22", (2400, 900), {}),
 }
 
 # name: (pose at a time, seconds in a loop, views as (azimuth, elevation) from the front, frame size, frames a second).
