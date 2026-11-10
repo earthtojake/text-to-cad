@@ -644,6 +644,15 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertAlmostEqual(p["flat_material_fraction"], 1.0, delta=0.002)
         self.assertEqual(len(p["flat_bend_lines"]), 2)
         self.assertEqual(items(report, "notches"), [])  # the second strip is in the flat: no gap where it was
+        # the window ends the bend either side: no hole beside it, its 3 mm a relief's width at each end
+        self.assertEqual(items(report, "hole_to_bend"), [])
+        self.assertEqual({item["width_mm"] for item in items(report, "reliefs")}, {3.0})
+        self.assertEqual(verdicts(checked(part)), [])
+        self.assertEqual(verdicts(checked(turned(part))), [])
+        # a hole in the bend line that leaves the flanges whole is a hole in the bend, and no relief missing
+        holed = bent([("line", 40), ("bend", 90, 2), ("line", 30)], 2.0, 50, "L") - (
+            bd.Pos(42, 25, 2) * bd.Rot(0, 45, 0) * bd.Cylinder(1.5, 20))
+        self.assertEqual(verdicts(checked(holed)), [("error", "sheet.hole_to_bend"), ("warning", "sheet.hole_in_bend")])
 
     def test_a_hem_is_judged_by_its_own_rule(self) -> None:
         hem = bent([("line", 40), ("bend", 180, 0.5), ("line", 8)], 1.0, 30, "hem")  # inside diameter = t

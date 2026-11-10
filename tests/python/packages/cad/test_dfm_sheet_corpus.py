@@ -155,8 +155,9 @@ def corpus() -> list[Case]:
     cases.append(Case("hole_across_tangent_line", _labelled(across, "across"),
                       [("sheet.hole_to_bend", (40, 25, 0)), ("sheet.hole_in_bend", None)], near=3))
     slotted = _bracket("slotted") - bd.Pos(40, 25, 4) * bd.Box(12, 3, 12)
-    cases.append(Case("slot_across_bend", _labelled(slotted, "slotted"), [("sheet.hole_to_bend", (42.8, 25, 1.2))],
-                      near=3))
+    # a window through the bend, across both tangent lines: the bend ends at it either side (its width a relief's,
+    # 3 mm on 2 mm sheet), and it is no hole beside the bend
+    cases.append(Case("slot_across_bend", _labelled(slotted, "slotted"), []))
     return cases
 
 

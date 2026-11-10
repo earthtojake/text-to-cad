@@ -234,14 +234,34 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
            fix="lengthen the flange: its height from the outside of the bend at least twice the thickness plus "
                "the inside radius ({limit:.3g} mm plus the radius)",
            note="minimum bend height 2 t + r; the page does not say where the height is measured, read here "
-                "from the outside mold line", **_SCALED),
+                "from the outside mold line", when={"scale_known": True, "cut_file": False}),
+        # a cut file's bend line is the bend's centre line, with no radius or angle: the least the same rule
+        # asks of the flat, whatever they are. For a bend of up to 90 degrees the height 2 t + r puts the edge
+        # t + (pi / 4)(r + K t) or more from the centre line in the flat, so under 1 t fails it at any radius.
+        _r("flange_length", "flanges", "length_centerline_mm", "min", 1.0, "mm",
+           "flange length in the flat, from the bend line to the edge", source, scale_by="rule_thickness_mm",
+           fix="move the bend line at least {limit:.3g} mm from the edge (more for the bend's radius: check the "
+               "bent part)",
+           note="minimum bend height 2 t + r, read on the flat: for a bend of up to 90 degrees the edge lies at "
+                "least t (1 + pi K / 4) from the bend's centre line at any radius, so under 1 t fails it",
+           when={"scale_known": True, "cut_file": True}),
         _r("bend_relief_width", "reliefs", "width_mm", "min", 1.0, "mm", "bend relief width", source,
            scale_by="rule_thickness_mm", item_when={"kind": "bend"}, fix="cut a relief at the bend's end at least {limit:.3g} mm wide, past the "
                                      "bend's tangent line", **_SCALED),
         _r("hole_to_bend", "hole_to_bend", "distance_tangent_mm", "min", 2.0, "mm",
            "hole-to-bend distance from the bend's tangent line", source, scale_by="rule_thickness_mm",
            fix="move the hole at least {limit:.3g} mm from where the bend's radius starts",
-           note="measured from the start of the bend radius (the tangent line)", **_SCALED),
+           note="measured from the start of the bend radius (the tangent line)",
+           when={"scale_known": True, "cut_file": False}),
+        # in a cut file the tangent line lies half a bend allowance nearer the hole than the bend line drawn, so
+        # a hole within 2 t of the line is within 2 t of the start of the radius whatever the radius and angle
+        _r("hole_to_bend", "hole_to_bend", "distance_centerline_mm", "min", 2.0, "mm",
+           "hole-to-bend distance from the bend line", source, scale_by="rule_thickness_mm",
+           fix="move the hole at least {limit:.3g} mm from the bend line (and half the bend allowance more: "
+               "check the bent part)",
+           note="2 t from the start of the bend radius, which lies half a bend allowance nearer the hole than "
+                "the bend's centre line: under 2 t from the line fails it at any radius and angle",
+           when={"scale_known": True, "cut_file": True}),
         *_holes(source, diameter=1.0, diameter_severity="warning", edge=1.0, spacing=2.0,
                 note="smaller holes are possible, with more risk of distortion",
                 edge_note="holes should be at least the sheet's thickness from the edge (a recommendation)"),
@@ -354,8 +374,8 @@ _FILE_DEFECTS = {
     "zero_area_loops": ("sheet.zero_area_loop", "error", "a closed loop encloses no area: a doubled-back line",
                         "delete the degenerate loop"),
     "annotations": ("sheet.annotation_on_cut_layer", "warning", "text, dimensions or other annotation on a cut "
-                                                                 "layer", "move it to a reference layer, or turn "
-                                                                          "engraved text into outlines on its own layer"),
+                                                                 "layer: it cuts nothing",
+                    "move it to a reference layer, or turn engraved text into outlines on its own layer"),
     "floating_interiors": ("sheet.floating_interior", "warning", "a closed contour inside a hole: that piece "
                                                                  "falls out when cut", "bridge it to the part, "
                                                                                        "or delete it"),
@@ -463,6 +483,30 @@ def _thickness_unknown(report: dict[str, Any], resolved: dict[str, Any]) -> list
     return [CheckFinding("warning", "sheet.thickness_unknown",
                          f"a cut file carries no thickness: {len(waiting)} rule(s) that scale with it were not "
                          f"evaluated ({names})", "rules", "give --thickness (the stock's, in mm)")]
+
+
+def _cut_file_notes(report: dict[str, Any]) -> list[CheckFinding]:
+    """A cut file's joints closed across a small gap (one warning for the file) and what its bend lines were
+    held to (an info: a flat drawing carries no bend radius or angle)."""
+    found = []
+    gaps = _items(report, "joined_gaps")
+    if gaps:
+        widest = max(gaps, key=lambda item: item.get("gap_mm") or 0.0)
+        count = (report.get("joined_gaps") or {}).get("count", len(gaps))
+        found.append(CheckFinding(
+            "warning", "sheet.joined_gap",
+            f"{count} joint(s) closed across a gap of up to {widest.get('gap_mm') or 0.0:.3g} mm: ends under 0.01 mm "
+            "apart are read as one point, and a cutter's software may read them as an open contour",
+            widest.get("location"), "snap the ends together: join the curves into one closed polyline"))
+    lines = (report.get("cut_file") or {}).get("bend_line_count")
+    if lines:
+        found.append(CheckFinding(
+            "info", "sheet.bend_lines_read",
+            f"{lines} bend line(s) read as bends' centre lines: a cut file carries no bend radius or angle, so each "
+            "hole and edge is held to the least any bend needs of it (2 t and 1 t from the line); the bend radius, "
+            "the reliefs at a bend's ends and the full hole-to-bend and flange distances are checked on the bent "
+            "part", "flanges", "check the bent part (its STEP) for the bending rules"))
+    return found
 
 
 def _joggle_webs(report: dict[str, Any], resolved: dict[str, Any]) -> None:
@@ -635,6 +679,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         if len(items) > 8:
             found.append(CheckFinding(severity, code, f"{len(items) - 8} more of the same", family))
     found.extend(_thickness_unknown(report, resolved))
+    found.extend(_cut_file_notes(report))
     if resolved.get("k_factor") is None and bends:
         sources = sorted({str(bend.get("k_factor_source")) for bend in bends if bend.get("k_factor_source")})
         if sources:
@@ -648,11 +693,17 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
     if "cut_file" in report:
         cut = report.get("cut_file") or {}
         parts = _items(report, "parts")
-        size = (f", {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
-                if len(parts) == 1 else "")
         unscaled = ("; no --thickness: the rules that scale with it not evaluated"
                     if resolved.get("thickness") is None else "")
-        return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}{unscaled}"
+        opened = (report.get("open_geometry") or {}).get("count") or 0
+        if opened:
+            # what closed is not the file's parts while a contour stands open: a hole's loop reads as an outline
+            return (f"cut file: {cut.get('contour_count', 0)} closed contour(s) and open geometry at {opened} "
+                    f"place(s){unscaled}")
+        size = (f", {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
+                if len(parts) == 1 else "")
+        bends = f", {cut['bend_line_count']} bend line(s)" if cut.get("bend_line_count") else ""
+        return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}{bends}{unscaled}"
     parts = _items(report, "parts")
     bends = _items(report, "bends")
     if len(parts) > 1:

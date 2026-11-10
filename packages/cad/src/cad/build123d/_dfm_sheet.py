@@ -1683,6 +1683,12 @@ def _reliefs(analysis: _Analysis, material: list[plane.Loop]) -> list[dict]:
     items = []
     t = float(analysis.thickness)
     eps = max(1e-4, 0.005 * t)
+    holes = [loop for loop in material if loop.label == "hole"]
+
+    def on_hole(point: np.ndarray) -> bool:
+        spot = _barrier(np.array([point, point]))  # in a hole (a bend's curved end reaches into it), or on its edge
+        return bool(plane.inside(point[None], holes)[0]) or any(plane.distance(hole, spot)[0] <= eps for hole in holes)
+
     for bend in analysis.bends:
         if bend.frame is None:
             continue
@@ -1704,6 +1710,10 @@ def _reliefs(analysis: _Analysis, material: list[plane.Loop]) -> list[dict]:
                     for point in np.vstack([probe_flange, probe_zone]))
                 item = {"bend": analysis.ref(bend.inner[0]), "end": end, "side": side,
                         "kind": "corner" if corner else "bend", "location": ref, "xyz": xyz}
+                if continues.any() and on_hole(_frame_points(bend, np.array([bend.allowance / 2]), np.array([w_end]))[0]):
+                    # the bend stops at a hole in the bend line and runs on past it: the hole's finding
+                    # (hole_to_bend, hole_in_bend), no relief missing
+                    continue
                 if continues.any():
                     item.update(needed=True, present=False, width_mm=0.0, depth_tangent_mm=0.0,
                                 depth_centerline_mm=0.0, depth_centerline_minus_radius_mm=0.0,
@@ -1751,21 +1761,33 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
         for bend in analysis.bends:
             if bend.frame is None:
                 continue
+            # the bend's two tangent lines and its centre line in the flat; a whole circle's distances are exact
+            lines = [_barrier(_frame_points(bend, np.array([x0, x0]), np.array([bend.w0, bend.w1])))
+                     for x0 in (0.0, bend.allowance, bend.allowance / 2)]
+            near, far, d_center = (plane.distance(loop, line)[0] for line in lines)
             origin, x, y = bend.frame
-            rel = loop.points - origin
-            xs = rel @ x
-            local = np.column_stack([xs, rel @ y])
-            segment = lambda x0: (np.array([[x0, bend.w0]]), np.array([[x0, bend.w1]]))  # noqa: E731
-            la, lb = local, np.roll(local, -1, axis=0)
-            if xs.max() <= 1e-9:
-                d_tangent = plane.segments_distance(la, lb, *segment(0.0))[0]
-            elif xs.min() >= bend.allowance - 1e-9:
-                d_tangent = plane.segments_distance(la, lb, *segment(bend.allowance))[0]
+            if loop.circle is not None:
+                at, radius = np.array(loop.circle[:2]) - origin, loop.circle[2]
+                reach = (float(at @ x) - radius, float(at @ x) + radius)
             else:
-                inside_ws = (local[:, 1] >= bend.w0) & (local[:, 1] <= bend.w1)
-                d_tangent = 0.0 if inside_ws.any() else min(plane.segments_distance(la, lb, *segment(0.0))[0],
-                                                             plane.segments_distance(la, lb, *segment(bend.allowance))[0])
-            d_center = plane.segments_distance(la, lb, *segment(bend.allowance / 2))[0]
+                reach = (float(((loop.points - origin) @ x).min()), float(((loop.points - origin) @ x).max()))
+            slack = 1e-6 * max(1.0, float(analysis.thickness))
+            if reach[1] <= slack:
+                d_tangent = near
+            elif reach[0] >= bend.allowance - slack:
+                d_tangent = far
+            else:
+                # it reaches between the tangent lines: in the bend where it does so along the bend's own length
+                rel = loop.points - origin
+                along = _span_within(np.column_stack([rel @ x, rel @ y]), 0.0, bend.allowance)
+                if along is not None and along[1] > bend.w0 + slack and along[0] < bend.w1 - slack:
+                    d_tangent = 0.0
+                elif reach[0] < -slack and reach[1] > bend.allowance + slack:
+                    # a cutout across both tangent lines past the bend's end: the bend ends at it -- a window through
+                    # the bend, a relief, which ``reliefs`` measures there -- and it is no hole beside this bend
+                    continue
+                else:
+                    d_tangent = min(near, far)
             if best is None or d_tangent < best[0]:
                 best = (d_tangent, d_center, bend)
         if best is not None:
@@ -1781,21 +1803,32 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
                 "inside_radius_mm": _r(bend.inside_radius), "bend_angle_deg": _r(bend.angle),
                 "location": item["location"], "xyz": item["xyz"]})
     pairs: dict[tuple[int, int], dict] = {}
-    for i, first in enumerate(analysis.holes):
-        checkpoint()
-        nearest = None
-        for j, second in enumerate(analysis.holes):
-            if i == j:
-                continue
-            d = plane.distance(first.loop, second.loop)[0]
-            if nearest is None or d < nearest[0]:
-                nearest = (d, j)
+    for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
         if nearest is not None:
             key = (min(i, nearest[1]), max(i, nearest[1]))
             pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
                                    "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
     spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
     return holes, spacing, to_bend
+
+
+def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float] | None:
+    """The range of the second coordinate over the part of a closed polyline whose first lies in ``lo`` to
+    ``hi`` (each segment clipped to the band), or None where none of it does."""
+    a, b = points, np.roll(points, -1, axis=0)
+    dx = b[:, 0] - a[:, 0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t0, t1 = (lo - a[:, 0]) / dx, (hi - a[:, 0]) / dx
+    level = np.abs(dx) < 1e-300  # a segment along the band: all of it in, or none
+    enter = np.where(level, 0.0, np.clip(np.minimum(t0, t1), 0.0, 1.0))
+    leave = np.where(level, 1.0, np.clip(np.maximum(t0, t1), 0.0, 1.0))
+    within = np.where(level, (a[:, 0] >= lo) & (a[:, 0] <= hi), np.maximum(t0, t1) >= 0.0) & \
+        np.where(level, True, np.minimum(t0, t1) <= 1.0)
+    if not within.any():
+        return None
+    dy = b[:, 1] - a[:, 1]
+    ends = np.concatenate([(a[:, 1] + enter * dy)[within], (a[:, 1] + leave * dy)[within]])
+    return float(ends.min()), float(ends.max())
 
 
 def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thickness: float | None,
@@ -1825,6 +1858,11 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
+            # across a hole its least width is the hole's size (``holes.size_mm``) but where it necks in: a gap
+            # then, narrower than the hole (a keyhole's slot, a dumbbell's waist)
+            if a == b and loops[a].label != "outer" and \
+                    width.width >= plane.feret(loops[a].points)[0] - max(2.0 * plane.CHORD_MM, 1e-6 * width.width):
+                continue
             ref, xyz = locate(width.start)
             gaps.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "between": "one contour" if a == b else "two contours"})

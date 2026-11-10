@@ -25,12 +25,15 @@ import numpy as np
 
 from cad._internal.dfm import checkpoint
 
-__all__ = ["CHORD_MM", "Loop", "Pocket", "Tab", "Width", "arc_points", "area", "cast", "crossings",
-           "distance", "feret", "hull", "inside", "min_rectangle", "nest", "pockets", "self_crossings",
-           "tabs", "widths"]
+__all__ = ["CHORD_MM", "PAIRS", "SELF_CROSSING_SEGMENTS", "Loop", "Pocket", "Tab", "Width", "arc_points", "area",
+           "cast", "crossings", "distance", "feret", "hull", "inside", "min_rectangle", "nearest", "nest", "pockets",
+           "self_crossings", "tabs", "widths"]
 
 #: The most a sampled curve's chord strays from its arc.
-CHORD_MM = 0.002
+CHORD_MM = 0.01
+#: The most pairs (a point and a segment, a ray and a circle) one numpy pass holds: every measure here works
+#: through its pairs this many at a time, so its memory is bounded whatever the outline.
+PAIRS = 1_000_000
 
 
 @dataclass
@@ -116,22 +119,33 @@ def _segments(loops: Iterable[Loop]) -> tuple[np.ndarray, np.ndarray, np.ndarray
 
 def inside(points: np.ndarray, loops: Sequence[Loop]) -> np.ndarray:
     """Whether each point lies inside an odd number of the loops (even-odd): inside a region's material
-    when ``loops`` are its outer loop and its holes."""
+    when ``loops`` are its outer loop and its holes. A whole circle is read exactly; a sampled loop only for
+    the points in its box."""
     checkpoint()
     points = np.asarray(points, dtype=float).reshape(-1, 2)
-    result = np.zeros(len(points), dtype=bool)
-    a, b, _, _ = _segments(loops)
-    if not len(a):
-        return result
-    chunk = max(1, 4_000_000 // max(1, len(a)))
-    for start in range(0, len(points), chunk):
-        p = points[start:start + chunk, None, :]
-        ya, yb = a[None, :, 1], b[None, :, 1]
-        crosses = (ya > p[..., 1]) != (yb > p[..., 1])
-        dy = np.where(np.abs(yb - ya) < 1e-300, 1e-300, yb - ya)
-        x_at = a[None, :, 0] + (p[..., 1] - ya) * (b[None, :, 0] - a[None, :, 0]) / dy
-        result[start:start + chunk] = (crosses & (p[..., 0] < x_at)).sum(axis=1) % 2 == 1
-    return result
+    count = np.zeros(len(points), dtype=np.int64)
+    if not len(points):
+        return count > 0
+    circles = np.array([loop.circle for loop in loops if loop.circle is not None], dtype=float).reshape(-1, 3)
+    for start in range(0, len(circles), max(1, PAIRS // len(points))):
+        c = circles[start:start + max(1, PAIRS // len(points))]
+        d2 = (points[:, None, 0] - c[None, :, 0]) ** 2 + (points[:, None, 1] - c[None, :, 1]) ** 2
+        count += (d2 < c[None, :, 2] ** 2).sum(axis=1)
+    for loop in loops:
+        if loop.circle is not None or not len(loop.points):
+            continue
+        lo, hi = loop.bbox()
+        near = np.nonzero(((points >= lo) & (points <= hi)).all(axis=1))[0]
+        a, b = loop.a, loop.b
+        for start in range(0, len(near), max(1, PAIRS // len(a))):
+            rows = near[start:start + max(1, PAIRS // len(a))]
+            p = points[rows, None, :]
+            ya, yb = a[None, :, 1], b[None, :, 1]
+            crosses = (ya > p[..., 1]) != (yb > p[..., 1])
+            dy = np.where(np.abs(yb - ya) < 1e-300, 1e-300, yb - ya)
+            x_at = a[None, :, 0] + (p[..., 1] - ya) * (b[None, :, 0] - a[None, :, 0]) / dy
+            count[rows] += (crosses & (p[..., 0] < x_at)).sum(axis=1)
+    return count % 2 == 1
 
 
 def _point_segment(p: np.ndarray, a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -212,51 +226,84 @@ def distance(first: Loop, second: Loop) -> tuple[float, np.ndarray, np.ndarray]:
 
 def cast(origins: np.ndarray, directions: np.ndarray, loops: Sequence[Loop], skip: float = 1e-7
          ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Rays from ``origins`` along unit ``directions`` against every segment of ``loops``: the distance to
-    the first crossing beyond ``skip`` (inf for none), the loop it crosses (-1 for none) and the segment's
-    index in that loop."""
+    """Rays from ``origins`` along unit ``directions`` against ``loops``: the distance to the first crossing
+    beyond ``skip`` (inf for none), the loop it crosses (-1 for none) and the segment's index in that loop
+    (-1 on a whole circle, which is crossed exactly). A sampled loop is tried only by the rays that cross
+    its box."""
+    checkpoint()
     origins = np.asarray(origins, dtype=float).reshape(-1, 2)
     directions = np.asarray(directions, dtype=float).reshape(-1, 2)
-    a, b, owner, index = _segments(loops)
     hit = np.full(len(origins), np.inf)
     which = np.full(len(origins), -1)
     seg = np.full(len(origins), -1)
-    if not len(a) or not len(origins):
+    if not len(origins):
         return hit, which, seg
-    e = b - a
-    chunk = max(1, 2_000_000 // max(1, len(a)))
-    for start in range(0, len(origins), chunk):
-        o = origins[start:start + chunk, None, :]
-        d = directions[start:start + chunk, None, :]
-        denom = _cross(d, e[None])
-        w = a[None] - o
-        with np.errstate(divide="ignore", invalid="ignore"):
-            t = _cross(w, e[None]) / denom
-            u = _cross(w, d) / denom
-        valid = (np.abs(denom) > 1e-14) & (t > skip) & (u >= -1e-12) & (u <= 1.0 + 1e-12)
-        t = np.where(valid, t, np.inf)
+    numbers = np.array([i for i, loop in enumerate(loops) if loop.circle is not None], dtype=int)
+    circles = np.array([loops[i].circle for i in numbers], dtype=float).reshape(-1, 3)
+    for start in range(0, len(circles), max(1, PAIRS // len(origins))):
+        c = circles[start:start + max(1, PAIRS // len(origins))]
+        # |o + t d - c|^2 = r^2, d a unit vector: t = -b -+ sqrt(b^2 - (|o - c|^2 - r^2))
+        w = origins[:, None, :] - c[None, :, :2]
+        along = (w * directions[:, None, :]).sum(axis=2)
+        root = along ** 2 - ((w * w).sum(axis=2) - c[None, :, 2] ** 2)
+        root = np.sqrt(np.where(root >= 0.0, root, np.nan))
+        near, far = -along - root, -along + root
+        t = np.where(near > skip, near, np.where(far > skip, far, np.inf))
+        t = np.where(np.isnan(t), np.inf, t)
         j = np.argmin(t, axis=1)
-        rows = np.arange(len(j))
-        best = t[rows, j]
-        hit[start:start + chunk] = best
-        found = np.isfinite(best)
-        which[start:start + chunk] = np.where(found, owner[j], -1)
-        seg[start:start + chunk] = np.where(found, index[j], -1)
+        best = t[np.arange(len(j)), j]
+        closer = best < hit
+        hit[closer], which[closer] = best[closer], numbers[start + j[closer]]
+    for number, loop in enumerate(loops):
+        if loop.circle is not None or not len(loop.points):
+            continue
+        lo, hi = loop.bbox()
+        # the rays whose line crosses the loop's box ahead of them (the slab test)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t1, t2 = (lo - origins) / directions, (hi - origins) / directions
+        t1 = np.where(np.isnan(t1), -np.inf, t1)
+        t2 = np.where(np.isnan(t2), np.inf, t2)
+        enter, leave = np.minimum(t1, t2).max(axis=1), np.maximum(t1, t2).min(axis=1)
+        slack = 1e-9 * max(1.0, float(np.abs(hi - lo).max()))
+        rows = np.nonzero((enter <= leave + slack) & (leave >= -slack) & (enter < hit))[0]
+        a, b = loop.a, loop.b
+        e = b - a
+        for start in range(0, len(rows), max(1, PAIRS // len(a))):
+            r = rows[start:start + max(1, PAIRS // len(a))]
+            d = directions[r, None, :]
+            denom = _cross(d, e[None])
+            w = a[None] - origins[r, None, :]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                t = _cross(w, e[None]) / denom
+                u = _cross(w, d) / denom
+            valid = (np.abs(denom) > 1e-14) & (t > skip) & (u >= -1e-12) & (u <= 1.0 + 1e-12)
+            t = np.where(valid, t, np.inf)
+            j = np.argmin(t, axis=1)
+            best = t[np.arange(len(j)), j]
+            closer = best < hit[r]
+            hit[r[closer]], which[r[closer]], seg[r[closer]] = best[closer], number, j[closer]
     return hit, which, seg
 
 
 def _stations(loop: Loop, spacing: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Points spread along a loop (at most ``spacing`` apart, at least one at each segment's middle),
-    the unit normal to the loop's left there, and the segment each lies on."""
+    """Points spread along a loop (at most ``spacing`` apart; one at least at the middle of each straight
+    segment, and of each curve's chord the spacing reaches: a curve's chords are its sampling's, not its
+    shape's), the unit normal to the loop's left there, and the segment each lies on."""
     a, b = loop.a, loop.b
     edge = b - a
     length = np.linalg.norm(edge, axis=1)
-    keep = np.nonzero(length > 1e-12)[0]
+    spacing = min(spacing, float(length.sum()) / 8.0) or spacing  # a small loop has eight stations at least
+    counts = np.where(length > 1e-12, np.maximum(1, np.ceil(length / spacing).astype(int)), 0)
+    # a chord of a curve gets a station where the run of chords up to it crosses another ``spacing``
+    along = np.cumsum(np.where(loop.straight, 0.0, length))
+    reached = np.floor(along / spacing) > np.floor((along - length) / spacing)
+    counts = np.where(loop.straight | reached | (length > spacing), counts, 0)
+    keep = np.nonzero(counts)[0]
     if not len(keep):
         return np.zeros((0, 2)), np.zeros((0, 2)), np.zeros(0, int)
-    counts = np.maximum(1, np.ceil(length[keep] / spacing).astype(int))
-    owners = np.repeat(keep, counts)
-    offsets = np.concatenate([(np.arange(count) + 0.5) / count for count in counts])
+    owners = np.repeat(keep, counts[keep])
+    first = np.cumsum(counts[keep]) - counts[keep]
+    offsets = (np.arange(len(owners)) - np.repeat(first, counts[keep]) + 0.5) / counts[owners]
     points = a[owners] + offsets[:, None] * edge[owners]
     normals = np.column_stack([-edge[owners, 1], edge[owners, 0]]) / length[owners, None]
     return points, normals, owners
@@ -278,8 +325,10 @@ def widths(loops: Sequence[Loop], outer: Sequence[bool], spacing: float = 0.5, m
     """The narrowest material and void about a region's loops (``outer[i]``: loop ``i`` is an outline, else
     a hole): rays from points along the loops, square to them, to the next loop they cross. From an
     outline, into the material (to any loop: a neck of the outline, or a web to a hole) and out into the
-    void (to an outline: a gap, a notch); from a hole, across it (to itself: its width). One ``Width`` per
-    kind and pair of loops: the least found."""
+    void (to an outline: a gap, a notch); from a hole, across it (to itself: its width -- none cast across a
+    whole circle, whose width is its diameter). One ``Width`` per kind and pair of loops: the least found.
+    The material lies inside an outline and outside a hole, so to the left of an outline that runs
+    anticlockwise and of a hole that runs clockwise."""
     total = sum(loop.length() for loop in loops)
     spacing = max(spacing, total / most) if total > 0 else spacing
     best: dict[tuple[str, int, int], Width] = {}
@@ -288,11 +337,12 @@ def widths(loops: Sequence[Loop], outer: Sequence[bool], spacing: float = 0.5, m
     outlines = [loop for loop, flag in zip(loops, outer) if flag]
     outline_index = [i for i, flag in enumerate(outer) if flag]
     for number, loop in enumerate(loops):
+        if loop.circle is not None and not outer[number]:
+            continue
         points, normals, _ = _stations(loop, spacing)
         if not len(points):
             continue
-        left_is_material = inside(points + normals * step * 10, loops)
-        into = np.where(left_is_material[:, None], normals, -normals)
+        into = normals if (area(loop) > 0) == bool(outer[number]) else -normals
         if outer[number]:
             runs = (("material", into, list(loops), list(range(len(loops)))),
                     ("void", -into, outlines, outline_index))
@@ -300,15 +350,51 @@ def widths(loops: Sequence[Loop], outer: Sequence[bool], spacing: float = 0.5, m
             runs = (("void", -into, [loop], [number]),)
         for kind, direction, targets, index in runs:
             hit, which, _ = cast(points, direction, targets, skip=step * 100)
-            for i in np.nonzero(np.isfinite(hit))[0]:
-                other = index[int(which[i])]
-                key = (kind, *sorted((number, other)))
-                found = best.get(key)
-                if found is None or hit[i] < found.width:
+            found = np.nonzero(np.isfinite(hit))[0]
+            others = np.array(index, dtype=int)[which[found]]
+            for other in np.unique(others):  # the least to each loop reached
+                i = found[others == other][np.argmin(hit[found[others == other]])]
+                key = (kind, *sorted((number, int(other))))
+                held = best.get(key)
+                if held is None or hit[i] < held.width:
                     end = points[i] + direction[i] * hit[i]
-                    best[key] = Width(kind, float(hit[i]), (number, other), (float(points[i][0]), float(points[i][1])),
-                                      (float(end[0]), float(end[1])))
+                    best[key] = Width(kind, float(hit[i]), (number, int(other)),
+                                      (float(points[i][0]), float(points[i][1])), (float(end[0]), float(end[1])))
     return sorted(best.values(), key=lambda width: width.width)
+
+
+def nearest(loops: Sequence[Loop]) -> list[tuple[float, int] | None]:
+    """Each loop's nearest other loop: (the distance between them, the other's index), or None where it is
+    alone. The others are tried nearest box first, and none whose box is further than the least found."""
+    if len(loops) < 2:
+        return [None] * len(loops)
+    lo = np.array([loop.bbox()[0] for loop in loops])
+    hi = np.array([loop.bbox()[1] for loop in loops])
+    found: list[tuple[float, int] | None] = []
+    few = min(len(loops) - 1, 16)
+    for i, loop in enumerate(loops):
+        checkpoint()
+        # two boxes are no further apart than what they hold
+        gap = np.linalg.norm(np.maximum(0.0, np.maximum(lo - hi[i], lo[i] - hi)), axis=1)
+        gap[i] = np.inf
+        order = np.argpartition(gap, few - 1)[:few]
+        order = order[np.argsort(gap[order])]
+        best = _closest(loop, loops, gap, order)
+        if best is not None and best[0] > gap[order[-1]] and few < len(loops) - 1:
+            best = _closest(loop, loops, gap, np.argsort(gap)[:-1])  # the nearest few boxes did not settle it
+        found.append(best)
+    return found
+
+
+def _closest(loop: Loop, loops: Sequence[Loop], gap: np.ndarray, order: np.ndarray) -> tuple[float, int] | None:
+    best: tuple[float, int] | None = None
+    for j in order:
+        if best is not None and gap[j] >= best[0]:
+            break
+        d = distance(loop, loops[int(j)])[0]
+        if best is None or d < best[0]:
+            best = (d, int(j))
+    return best
 
 
 def hull(points: np.ndarray) -> np.ndarray:
@@ -318,16 +404,20 @@ def hull(points: np.ndarray) -> np.ndarray:
     if len(order) < 3:
         return order
 
+    xs, ys = points[:, 0].tolist(), points[:, 1].tolist()
+
     def chain(indices: Iterable[int]) -> list[int]:
         kept: list[int] = []
         for i in indices:
-            while len(kept) >= 2 and float(_cross(points[kept[-1]] - points[kept[-2]],
-                                                  points[i] - points[kept[-2]])) <= 1e-12:
+            while len(kept) >= 2:
+                a, b = kept[-2], kept[-1]
+                if (xs[b] - xs[a]) * (ys[i] - ys[a]) - (ys[b] - ys[a]) * (xs[i] - xs[a]) > 1e-12:
+                    break
                 kept.pop()
-            kept.append(int(i))
+            kept.append(i)
         return kept
 
-    lower, upper = chain(order), chain(order[::-1])
+    lower, upper = chain(order.tolist()), chain(order[::-1].tolist())
     return np.array(lower[:-1] + upper[:-1])
 
 
@@ -339,18 +429,16 @@ def feret(points: np.ndarray) -> tuple[float, float, float]:
     if len(ring) < 3:
         span = float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
         return 0.0, span, 0.0
-    least, angle = math.inf, 0.0
-    for i in range(len(ring)):
-        edge = ring[(i + 1) % len(ring)] - ring[i]
-        size = float(np.linalg.norm(edge))
-        if size < 1e-12:
-            continue
-        n = np.array([-edge[1], edge[0]]) / size
-        width = float(np.ptp(ring @ n))
-        if width < least:
-            least, angle = width, math.atan2(edge[1], edge[0])
+    edges = np.roll(ring, -1, axis=0) - ring
+    sizes = np.linalg.norm(edges, axis=1)
+    edges, sizes = edges[sizes >= 1e-12], sizes[sizes >= 1e-12]
+    # the hull's width square to each of its edges: the least is across one of them
+    across = ring @ (np.column_stack([-edges[:, 1], edges[:, 0]]) / sizes[:, None]).T
+    widths_ = across.max(axis=0) - across.min(axis=0)
+    i = int(np.argmin(widths_))
     diffs = ring[:, None, :] - ring[None, :, :]
-    return least, float(np.sqrt((diffs ** 2).sum(axis=2)).max()), angle
+    return (float(widths_[i]), float(np.sqrt((diffs ** 2).sum(axis=2)).max()),
+            math.atan2(float(edges[i][1]), float(edges[i][0])))
 
 
 def min_rectangle(points: np.ndarray) -> tuple[float, float, float]:
@@ -361,19 +449,15 @@ def min_rectangle(points: np.ndarray) -> tuple[float, float, float]:
     if len(ring) < 3:
         span = np.ptp(points, axis=0) if len(points) else np.zeros(2)
         return float(max(span)), float(min(span)), 0.0
-    best = (math.inf, 0.0, 0.0, 0.0)
-    for i in range(len(ring)):
-        edge = ring[(i + 1) % len(ring)] - ring[i]
-        size = float(np.linalg.norm(edge))
-        if size < 1e-12:
-            continue
-        u = edge / size
-        v = np.array([-u[1], u[0]])
-        lu, lv = float(np.ptp(ring @ u)), float(np.ptp(ring @ v))
-        if lu * lv < best[0] - 1e-9:
-            best = (lu * lv, lu, lv, math.atan2(u[1], u[0]))
-    _, lu, lv, angle = best
-    return (lu, lv, angle) if lu >= lv else (lv, lu, angle + math.pi / 2)
+    edges = np.roll(ring, -1, axis=0) - ring
+    sizes = np.linalg.norm(edges, axis=1)
+    u = edges[sizes >= 1e-12] / sizes[sizes >= 1e-12, None]
+    along, across = ring @ u.T, ring @ np.column_stack([-u[:, 1], u[:, 0]]).T
+    lu, lv = along.max(axis=0) - along.min(axis=0), across.max(axis=0) - across.min(axis=0)
+    # the first edge whose rectangle is the smallest (by more than noise: a square's four are one)
+    i = int(np.argmax(lu * lv <= (lu * lv).min() + 1e-9))
+    angle = math.atan2(float(u[i][1]), float(u[i][0]))
+    return (float(lu[i]), float(lv[i]), angle) if lu[i] >= lv[i] else (float(lv[i]), float(lu[i]), angle + math.pi / 2)
 
 
 @dataclass(frozen=True)
@@ -530,54 +614,71 @@ def tabs(loop: Loop, material_left: bool) -> list[Tab]:
     return list(found.values())
 
 
-def self_crossings(loop: Loop, most: int = 6000) -> list[tuple[float, float]]:
+#: A loop of more segments than this is not sought for crossings of itself (``self_crossings``): its pairs
+#: are the square of its segments.
+SELF_CROSSING_SEGMENTS = 20_000
+
+
+def self_crossings(loop: Loop) -> list[tuple[float, float]] | None:
     """The points where a loop crosses itself (neighbouring segments meeting at their shared end not
-    counted); none sought in a loop of more than ``most`` segments."""
+    counted); None, not sought, for a loop of more than ``SELF_CROSSING_SEGMENTS`` segments."""
     a, b = loop.a, loop.b
     n = len(a)
-    if n < 4 or n > most:
+    if n < 4:
         return []
-    crossing = _segments_cross(a, b, a, b, proper=True)
-    i, j = np.nonzero(np.triu(crossing, 2))
-    keep = ~((i == 0) & (j == n - 1))
+    if n > SELF_CROSSING_SEGMENTS:
+        return None
     found = []
-    for p, q in zip(i[keep], j[keep]):
-        d1, d2 = b[p] - a[p], b[q] - a[q]
-        s = float(_cross(a[q] - a[p], d2) / _cross(d1, d2))
-        point = a[p] + s * d1
-        found.append((float(point[0]), float(point[1])))
+    for start in range(0, n, max(1, PAIRS // n)):
+        checkpoint()
+        stop = min(n, start + max(1, PAIRS // n))
+        crossing = _segments_cross(a[start:stop], b[start:stop], a, b, proper=True)
+        i, j = np.nonzero(crossing)
+        i = i + start
+        keep = (j > i + 1) & ~((i == 0) & (j == n - 1))
+        for p, q in zip(i[keep], j[keep]):
+            d1, d2 = b[p] - a[p], b[q] - a[q]
+            s = float(_cross(a[q] - a[p], d2) / _cross(d1, d2))
+            point = a[p] + s * d1
+            found.append((float(point[0]), float(point[1])))
     return found
 
 
 def crossings(first: Loop, second: Loop) -> list[tuple[float, float]]:
-    """The points where two loops cross through each other."""
-    if len(first.points) * len(second.points) > 9_000_000:
-        return []
-    crossing = _segments_cross(first.a, first.b, second.a, second.b, proper=True)
-    found = []
-    for p, q in np.argwhere(crossing):
-        d1, d2 = first.b[p] - first.a[p], second.b[q] - second.a[q]
-        s = float(_cross(second.a[q] - first.a[p], d2) / _cross(d1, d2))
-        point = first.a[p] + s * d1
-        found.append((float(point[0]), float(point[1])))
+    """The points where two loops cross through each other: sought among the segments of each in the
+    other's box."""
+    (lo1, hi1), (lo2, hi2) = first.bbox(), second.bbox()
+    found: list[tuple[float, float]] = []
+    one = np.nonzero((np.maximum(first.a, first.b) >= lo2).all(axis=1)
+                     & (np.minimum(first.a, first.b) <= hi2).all(axis=1))[0]
+    two = np.nonzero((np.maximum(second.a, second.b) >= lo1).all(axis=1)
+                     & (np.minimum(second.a, second.b) <= hi1).all(axis=1))[0]
+    if not len(one) or not len(two):
+        return found
+    a2, b2 = second.a[two], second.b[two]
+    for start in range(0, len(one), max(1, PAIRS // len(two))):
+        rows = one[start:start + max(1, PAIRS // len(two))]
+        a1, b1 = first.a[rows], first.b[rows]
+        for p, q in np.argwhere(_segments_cross(a1, b1, a2, b2, proper=True)):
+            d1, d2 = b1[p] - a1[p], b2[q] - a2[q]
+            s = float(_cross(a2[q] - a1[p], d2) / _cross(d1, d2))
+            point = a1[p] + s * d1
+            found.append((float(point[0]), float(point[1])))
     return found
 
 
-def nest(loops: Sequence[Loop]) -> list[int]:
-    """Each loop's depth: how many larger loops hold it (0: an outline, 1: a hole, 2: an island in a hole)."""
-    areas = [abs(area(loop)) for loop in loops]
-    boxes = [loop.bbox() for loop in loops]
-    depth = []
+def nest(loops: Sequence[Loop]) -> tuple[list[int], list[int]]:
+    """Each loop's depth -- how many larger loops hold it (0: an outline, 1: a hole, 2: an island in a hole)
+    -- and the loop that holds it directly, the smallest of them (-1 for none)."""
+    areas = np.array([abs(area(loop)) for loop in loops])
+    lo = np.array([loop.bbox()[0] for loop in loops]).reshape(-1, 2)
+    hi = np.array([loop.bbox()[1] for loop in loops]).reshape(-1, 2)
+    depth, parent = [], []
     for i, loop in enumerate(loops):
+        checkpoint()
         probe = loop.points[0]
-        count = 0
-        for j, other in enumerate(loops):
-            if i == j or areas[j] <= areas[i]:
-                continue
-            lo, hi = boxes[j]
-            if np.any(probe < lo - 1e-9) or np.any(probe > hi + 1e-9):
-                continue
-            if inside(probe[None], [other])[0]:
-                count += 1
-        depth.append(count)
-    return depth
+        around = np.nonzero((areas > areas[i]) & (lo <= probe + 1e-9).all(axis=1) & (hi >= probe - 1e-9).all(axis=1))[0]
+        holders = [int(j) for j in around if inside(probe[None], [loops[int(j)]])[0]]
+        depth.append(len(holders))
+        parent.append(min(holders, key=lambda j: areas[j]) if holders else -1)
+    return depth, parent
