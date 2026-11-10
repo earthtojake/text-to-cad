@@ -18,8 +18,8 @@ import numpy as np
 
 from cad.build123d import _dfm_brep as brep
 
-__all__ = ["Hit", "Model", "Stations", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "framed",
-           "machine_frame", "stations", "stations_at", "unit"]
+__all__ = ["DRAFT_MAX_DEG", "Hit", "Model", "RUNS_UP", "Stations", "WORLD", "about", "directions_for",
+           "edge_normals", "fibonacci", "framed", "machine_frame", "nearest_world", "stations", "stations_at", "unit"]
 
 #: The six directions a three-axis machine approaches from.
 WORLD = tuple(np.array(axis, dtype=float) for axis in
@@ -28,6 +28,18 @@ WORLD = tuple(np.array(axis, dtype=float) for axis in
 SAME = 0.9999
 #: A face whose every normal is within this (|cos|) of perpendicular to a direction lies along it.
 ALONG = 0.02
+#: A cavity's wall rises from its floor within this many degrees of the tool's axis (its draft): a drafted wall
+#: is a wall, cut by a tapered end mill's flank or stepped down with a ball -- the same pocket, the same reach.
+#: text-to-cad's own bound: tapered end mills are catalogued to about 20 degrees a side, and a face 30 degrees
+#: off the axis is a 60-degree chamfer mill's (a V groove's flank, a countersink), no wall. A face leaning over
+#: its floor (past ``ALONG`` the other way) is an undercut, never a wall.
+DRAFT_MAX_DEG = 25.0
+RISES = math.sin(math.radians(DRAFT_MAX_DEG))
+#: An edge between two walls of a cavity runs up it: within this (|cos|) of the tool's axis (the corner between
+#: two walls drafted ``DRAFT_MAX_DEG`` leans 34 degrees).
+RUNS_UP = math.cos(math.radians(45.0))
+#: Normals read over a face besides its samples' (``Model.normals``): at this many of its mesh's nodes.
+NORMAL_NODES = 12
 #: The direction a point's material is told along (``Model.solid``): oblique to every axis, so no ray of it runs
 #: along a face of a part drawn square.
 SOLID_RAY = np.array([0.2672612419124244, 0.5345224838248488, 0.8017837257372732])
@@ -43,6 +55,10 @@ LIFT = 1e-3
 SAMPLE_SCALE = 400.0
 SAMPLE_CAP = 6000
 FACE_SAMPLES = 16
+#: A freeform face (a swept, lofted or spline surface: no plane, cylinder, cone, sphere or torus) takes up to
+#: this many of the budget's points: one such face may be a whole part (a coil spring's wire is one helical
+#: face), and sixteen points say nothing of what a tool reaches of it.
+FREE_SAMPLES = 128
 #: The part is triangulated once, its chord deflection this share of its box's diagonal.
 MESH_SHARE = 0.003
 #: The ray grids kept, one per direction, the least recently used dropped first.
@@ -186,10 +202,15 @@ def machine_frame(faces: list[Any], surfaces: list[brep.Surface]) -> tuple[np.nd
         if score > best_score + 1e-9 * total:
             best, best_score = frame, score
     if best is not identity:
-        best = max((p @ best for p in _PERMUTATIONS), key=lambda m: float(np.trace(m)))
-        if np.allclose(best, identity, atol=1e-9):
-            best = identity  # the world's, to the kernel's own noise
+        best = nearest_world(best)
     return best, best_score / total
+
+
+def nearest_world(frame: np.ndarray) -> np.ndarray:
+    """Of the 24 rotations that are one square frame, the one nearest the world's: the identity itself where it
+    is that, to the kernel's own noise."""
+    best = max((p @ frame for p in _PERMUTATIONS), key=lambda m: float(np.trace(m)))
+    return np.eye(3) if np.allclose(best, np.eye(3), atol=1e-9) else best
 
 
 def framed(part: brep.Part, rotation: np.ndarray) -> brep.Part:
@@ -375,6 +396,8 @@ class Model:
         self._projected: OrderedDict[tuple[float, ...], _Projected] = OrderedDict()
         self._extents: dict[tuple[float, ...], tuple[float, float]] = {}
         self._sweeps: dict[int, np.ndarray] = {}
+        self._normals: dict[int, np.ndarray] = {}
+        self._spans: dict[int, float] = {}
         self._stations: dict[tuple[int, int], Stations] = {}
         self._classifier: Any = None
 
@@ -391,6 +414,7 @@ class Model:
         self._projected.clear()
         self._extents.clear()
         self._sweeps.clear()
+        self._normals.clear()
         self._stations.clear()
         self._classifier = None
 
@@ -449,7 +473,9 @@ class Model:
             areas = np.array([float(mesh[3].sum()) for mesh in self._mesh()])
             budget = min(float(SAMPLE_CAP), SAMPLE_SCALE * math.sqrt(max(1, self.n)))
             total = float(areas.sum()) or 1.0
-            self._quota = np.clip(np.rint(budget * areas / total), 1, FACE_SAMPLES).astype(int)
+            most = np.array([FACE_SAMPLES if s.kind in ("plane", "cylinder", "cone", "sphere", "torus")
+                             else FREE_SAMPLES for s in self.surfaces])
+            self._quota = np.clip(np.rint(budget * areas / total), 1, most).astype(int)
         return int(self._quota[ordinal - 1])
 
     def samples(self, ordinal: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -553,6 +579,42 @@ class Model:
         normals = self.samples(ordinal)[1]
         return len(normals) >= 3 and bool(np.all(np.abs(normals @ d) < ALONG))
 
+    def normals(self, ordinal: int) -> np.ndarray:
+        """Outward normals spread over the face: its samples' and those at ``NORMAL_NODES`` of its mesh's nodes
+        (its boundary's among them: a small face has one sample, and a wall's draft is read at its ends)."""
+        found = self._normals.get(ordinal)
+        if found is None:
+            rows = list(self.samples(ordinal)[1])
+            _, uvs, _, _ = self._mesh()[ordinal - 1]
+            if uvs is not None and len(uvs):
+                face = self.face(ordinal)
+                step = max(1, len(uvs) // NORMAL_NODES)
+                for u, v in uvs[::step][:NORMAL_NODES + 1]:
+                    try:
+                        normal = brep.point_normal(face, float(u), float(v))[1]
+                    except Exception:  # noqa: BLE001 - a singular point (a cone's apex) has no normal
+                        continue
+                    if abs(float(np.linalg.norm(normal)) - 1.0) < 1e-6:
+                        rows.append(normal)
+            found = np.array(rows).reshape(-1, 3)
+            self._normals[ordinal] = found
+        return found
+
+    def rises(self, ordinal: int, direction: np.ndarray) -> bool:
+        """Whether the face is a wall of a cavity cut along ``direction``: it lies along it (``along``) or
+        leans back from it by a draft of ``DRAFT_MAX_DEG`` at most, everywhere -- a tool on that axis cuts it
+        with its side (a tapered one's, or a ball stepped down it). A face leaning over the floor is none."""
+        if self.along(ordinal, direction):
+            return True
+        s = self.surface(ordinal)
+        d = unit(direction)
+        if s.kind == "plane":
+            return -ALONG < float(np.asarray(s.normal) @ d) < RISES
+        if s.kind in ("sphere", "torus"):
+            return False
+        lean = self.normals(ordinal) @ d
+        return len(lean) >= 3 and bool(np.all(lean > -ALONG) and np.all(lean < RISES))
+
     def sweep(self, ordinal: int) -> np.ndarray:
         """A surface of linear extrusion's direction (a unit vector)."""
         found = self._sweeps.get(ordinal)
@@ -575,11 +637,25 @@ class Model:
                 for edge in self.adjacent.get(ordinal, [])]
 
     def span_rad(self, ordinal: int) -> float:
-        """The angle a cylinder's or a cone's face sweeps about its axis (its u range)."""
-        from OCP.BRepTools import BRepTools
-
-        umin, umax, _, _ = BRepTools.UVBounds_s(self.face(ordinal).wrapped)
-        return float(min(2 * math.pi, max(0.0, umax - umin)))
+        """The angle a cylinder's or a cone's face sweeps about its axis: the turn less the widest gap between
+        the points of its outline about the axis (its (u, v) box says a full turn of a fillet on a leaning
+        edge, a quarter-round)."""
+        found = self._spans.get(ordinal)
+        if found is None:
+            s = self.surface(ordinal)
+            found = 2 * math.pi
+            points = self.outline(ordinal)
+            if s.axis is not None and s.origin is not None and len(points) >= 2:
+                a = unit(s.axis)
+                seed = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+                u = unit(np.cross(a, seed))
+                v = np.cross(a, u)
+                rel = points - np.asarray(s.origin, dtype=float)
+                angles = np.sort(np.arctan2(rel @ v, rel @ u))
+                gaps = np.diff(np.concatenate([angles, angles[:1] + 2 * math.pi]))
+                found = float(2 * math.pi - gaps.max())
+            self._spans[ordinal] = found
+        return found
 
     def size_mm(self, ordinal: int) -> float:
         """A face's width: twice its area over its perimeter (a strip's width, a disk's radius)."""

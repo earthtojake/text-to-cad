@@ -1146,9 +1146,11 @@ class CopiesTest(unittest.TestCase):
         self.assertEqual(together[1]["copy_of"], "b0")
         self.assertEqual((together[1]["axes"], together[1]["turned"]), (alone[0]["axes"], alone[0]["turned"]))
         self.assertTrue(together[1]["turned"])
-        # turned a right angle, it reads square to the world again: a frame of its own, so measured anew
-        _, count = frames(0, 90)
-        self.assertEqual(count, 2)
+        # turned a right angle it reads square to the world again, as it would alone, and is still measured once:
+        # machining is orientation-free, so a copy is its first however it is turned
+        square, count = frames(0, 90)
+        self.assertEqual(count, 1)
+        self.assertEqual((square[1]["copy_of"], square[1]["turned"]), ("b0", False))
 
     def test_a_row_of_copies_costs_one_part_and_reads_as_its_first_moved(self) -> None:
         from unittest import mock

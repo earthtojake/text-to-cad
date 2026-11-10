@@ -5,7 +5,8 @@ counterbore, a countersink, a drill point, a flat floor -- and the standard dril
 the planes square to that axis whose every neighbour is one of them (a counterbore's step, a flat floor);
 sets on one axis whose cylinders of one radius overlap along it are one hole (a hole a slot splits in two). At
 least one radius's cylinders must sweep 300 degrees or more about the axis together (a pocket's quarter-round
-corner or a slot's half-round end is not a hole). A wider cylinder with a narrower one of the hole beyond it
+corner or a slot's half-round end is not a hole), and nothing may stand inside the narrowest (``_cored``: a
+cylinder that goes round a boss or a core is an annular cavity's outer wall, a pocket's). A wider cylinder with a narrower one of the hole beyond it
 toward the opening (either way along a through hole) is an internal **groove**, no counterbore: it and the
 planes beside it leave the hole (``grooves`` lists it), a recess a keyseat cutter makes. Its **diameter** is its
 narrowest full cylinder's; its **depth** the drilled length -- that cylinder's axis between its two ends, each
@@ -29,6 +30,7 @@ from typing import Any
 
 import numpy as np
 
+from cad._internal.dfm import cnc as rules_side
 from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_model import WORLD, Model, unit
 
@@ -178,7 +180,7 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
             key = round(float(model.surface(i).radius), 6)
             by_radius[key] = by_radius.get(key, 0.0) + model.span_rad(i)
         full = sorted(radius for radius, span in by_radius.items() if span >= math.radians(300.0))
-        if not full:
+        if not full or _cored(model, group, full[0]):
             continue
         hole = _describe(model, group, full)
         if hole is not None:
@@ -194,6 +196,42 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
         if hole is not None:
             found.append(hole)
     return found, holed
+
+
+#: Places along a hole's axis, shares of its narrowest cylinder's run, where a core is looked for (``_cored``).
+CORE_PLACES = (0.05, 0.25, 0.5, 0.75, 0.95)
+
+
+def _cored(model: Model, group: set[int], radius: float) -> bool:
+    """Whether something stands inside the group's narrowest cylinder: a boss, a hub or a core the cylinder
+    goes round. From just inside its wall, four ways about the axis at ``CORE_PLACES`` along it, a ray toward
+    the axis meets a face before it gets there (a hole's own ray crosses to its far wall, a diameter away;
+    a flat or a slot in a hole's side lies past the axis). That cylinder is an annular cavity's outer wall --
+    an O-ring's face groove, a round pocket about a boss, a trepanned ring -- which an end mill cuts: a
+    pocket's wall (``_dfm_cnc._pockets``), no hole a drill makes, with no diameter, depth or standard drill
+    to judge."""
+    narrow = [i for i in group if model.surface(i).kind == "cylinder"
+              and abs(float(model.surface(i).radius) - radius) < 1e-6]
+    s = model.surface(narrow[0])
+    a = unit(s.axis)
+    lows, highs = zip(*(model.extent(i, a) for i in narrow))
+    low, high = min(lows), max(highs)
+    o = np.asarray(s.origin, dtype=float)
+    foot = o - a * float(o @ a)
+    seed = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = unit(np.cross(a, seed))
+    v = np.cross(a, u)
+    starts, ways = [], []
+    for share in CORE_PLACES:
+        for way in (u, v, -u, -v):
+            starts.append(foot + a * (low + share * (high - low)) + way * radius * (1.0 - 1e-3))
+            ways.append(-way)
+    starts_a, ways_a = np.array(starts), np.array(ways)
+    void = ~model.solid(starts_a)  # a start in the material (a flat in the hole's side) tells nothing
+    if not void.any():
+        return False
+    return any(hit is not None and hit.distance < 0.98 * radius
+               for hit in model.first_all(starts_a[void], ways_a[void]))
 
 
 def _grooves(model: Model, group: set[int], hole: dict[str, Any]) -> tuple[list[dict[str, Any]], set[int]]:
@@ -307,6 +345,9 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         "diameter_mm": round(diameter, 9), "depth_mm": round(depth, 4), "overall_depth_mm": round(high - low, 4),
         # a figure a rule reads is compared as measured (to a nanometre): rounding to display it is the message's
         "depth_to_diameter": round(depth / diameter, 9) if diameter > 0 else None,
+        # a drill under 1 mm across is a micro drill: it reaches less (``rules_side.reach_limit``)
+        "micro_tool": bool(diameter < rules_side.MICRO_TOOL_MM - 1e-9),
+        "reach_limit": rules_side.reach_limit(diameter, rules_side.HOLE_REACH),
         "through": through, "bottom": bottom, "point_angle_deg": round(point_angle, 4) if point_angle else None,
         "axis": brep.rounded(a), "aligned": aligned,
         "opening": brep.rounded(opening) if opening is not None else None,
