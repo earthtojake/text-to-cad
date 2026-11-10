@@ -25,6 +25,12 @@ shape, `cad.build123d.dfm(shape, process=...)` return the same result as data: `
 `"ok"`, `"failed"` or `"not_checked"`, numbers are given as numbers (`tools=[3, 6]`), and `strict=True`
 fails on a warning.
 
+Since 0.11.7 the check judges: a script or a prompt written for an earlier release, where it measured
+and passed whatever it read, meets a part that fails on a rule's `error` (exit 1), exit 3 where exit 1
+said "could not be measured", `not_watertight` as an error, a mesh refused for molding (check the STEP
+or the model: `cad.trimesh.molding` and `pulls` are gone) and `--units` on an STL and a DXF alone.
+Read `status` first and each finding's `rule`, `value`, `limit` and `refs`, never its message.
+
 Run the check on the part's own id: each part model has its own document, and an assembly's check
 names the assembly in every ref. An assembly's check judges every part, and a part used several times
 each way it stands (a print's overhangs and a molding's draft turn with it): an occurrence turned

@@ -1509,3 +1509,34 @@ wall under two beads and a part no machine holds.
   200 and the 24 thinnest of a body), the gaps' rays (20 000) and refinements (200), a knife chain's creases read
   one by one (4000), the stair-stepping regions listed (300). Past them all the caller's own limits stand: a
   check measured in its caller is held to a check's time and memory from outside and stopped there, not checked.
+
+## Since 0.11.7
+
+The check as this page describes it is 0.11.7's. An earlier release's `dfm` measured a mesh tessellated from
+the part and judged nothing: what a caller written for one reads differently now (the states and the exit,
+a finding's verdict as data, what is gone) is in the library README's **Manufacturing checks**. What that
+leaves to this page:
+
+**The rules whose severity is `error`, as of 0.11.7.** The tables are the code's (above), so a later
+release's are read from `RULES`, or from a result's `measurements.rules.outcomes`, each with its `severity`;
+never key a script on this list. Every other rule is a `warning`, and a rule marked * is one too in a
+variant of its own (another technology, a wall at the limit within a mesh's accuracy, an edge more axes or
+a special cutter makes, a machine assumed where none is given).
+
+| Process | Rules |
+| --- | --- |
+| cnc | `cnc.internal_corner_sharp`, `cnc.sharp_internal_edge`*, `cnc.internal_corner_radius`, `cnc.corner_reach_limit`, `cnc.pocket_depth_limit`, `cnc.wall_thickness`, `cnc.hole_diameter`, `cnc.hole_depth_limit`, `cnc.gap_width`, `cnc.no_line_of_sight`, `cnc.enclosed_void`, `cnc.groove_depth_limit` |
+| sheet | `sheet.uniform_thickness`, `sheet.thickness_limit`, `sheet.flange_length`, `sheet.bend_relief_width`, `sheet.hole_to_bend`, `sheet.hem_diameter`, `sheet.flat_length_limit`, `sheet.flat_width_limit` |
+| molding | `molding.draft_zero`, `molding.undercut_unreleasable`, `molding.wall_too_thin`, `molding.clamp_beyond_press` |
+| printing | `printing.wall_supported`*, `printing.wall_unsupported`*, `printing.wall`*, `printing.skin_layer`, `printing.hole_diameter`*, `printing.pin_diameter`*, `printing.gap`*, `printing.escape_holes`, `printing.build_volume`* |
+
+Beside the rules, an `error` is a process's own, which no rule's limit states (each process's findings of
+fact, above: `cnc.no_turning_axis`, `sheet.not_sheet`, a cut file's `sheet.open_contour`), or the part's
+soundness: `not_watertight` -- a warning on a mesh before -- and `not_sound`.
+
+**What an earlier release's report held and this one's does not.** A mesh is checked for printing alone, so
+molding's mesh findings went with its mesh check (`coarse_curved_face`, `mesh_folds`, `probe_resolution`), and
+on exact geometry so did what bounded a tessellation: `draft.min_facet_draft`, and `undercuts`' and
+`wall_thickness`' `per_body` and `body_count` (each item's `location` names its part, and `bodies` holds each
+part's facts). `sealed_voids`, one finding with a count, is `internal_void`, one for each void with its volume.
+`units` is taken by an STL and a DXF alone.

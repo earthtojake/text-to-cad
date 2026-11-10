@@ -888,6 +888,31 @@ gets the other; one that calls `cad.<type>.dfm` gets the type's -- `cad.stl.dfm`
 `cad run`'s scan of its source, with nothing in its header; a name the scan cannot see (imported by name at
 run time) the run says it lacks, in one line.
 
+**Since 0.11.7** a check judges; before, it measured, and a part passed whatever its figures were. What a
+script or a prompt written for an earlier release meets now:
+
+- **The exit and `status`.** 0 `ok`, 1 `failed`, 3 `not_checked`, 2 the command line's mistake. Exit 1 used to
+  say "could not be measured or read", which is 3 now, and a part that breaks a rule's feasibility limit, a
+  warning and a pass before, fails. `--json` gains `status` and `reason`, and every check's result carries
+  them (`drc`, `erc`, `validate` and `solve` too: `ok` or `failed`); `strict` is new.
+- **Findings.** A rule's verdict is data (`rule`, `value`, `limit`, `unit`, `op`, `source`, `refs`): read
+  those, never the message. On exact geometry a finding's `location` is a ref (`plate/face 7`) where it was
+  `x, y, z`, and the parts' facts are `measurements["document"]` and `measurements["bodies"]` where they were
+  `measurements["mesh"]`; a mesh's are as they were.
+- **What fails a part** is every finding of severity `error`, whatever its code: a rule whose `severity` is
+  `error` (`measurements["rules"]["outcomes"]`; [the manufacturing checks](src/cad/_internal/dfm/README.md#since-0117)
+  lists them as of this release), a process's own error (`sheet.not_sheet`), and the part's soundness:
+  `not_watertight`, a warning before, is an error on a mesh and on exact geometry alike, as `not_sound` is.
+- **Gone.** A mesh's molding check: `cad stl|threemf|glb dfm --process molding` is refused (exit 2), and
+  `cad.trimesh.molding` and `cad.trimesh.pulls` are not there -- molding is judged on exact geometry,
+  `cad.build123d.molding(shape)` or `cad.step.dfm(path, process="molding")`. With it went the findings
+  `coarse_curved_face`, `mesh_folds` and `probe_resolution`; `sealed_voids` is `internal_void`, one finding for
+  each void. Printing's `--candidates` answers the orientations alone, best first: run the check once without
+  it for the part's own figures.
+- **`units`** is an STL's and a DXF's (`--units`; a DXF that declares none is `not_checked` without it,
+  `units_not_set`). `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm` and `cad.glb.dfm` take
+  none, where they took `mm` alone.
+
 ## Stress studies
 
 A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its

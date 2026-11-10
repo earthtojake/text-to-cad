@@ -1,7 +1,7 @@
 """What the docs say of a manufacturing check is what the check has.
 
-An agent runs the CAD skill's manufacturing references verbatim and keys on the codes they name; the migration
-guide and the checks' own README name them too. A flag renamed or a rule retired leaves the page confidently
+An agent runs the CAD skill's manufacturing references verbatim and keys on the codes they name; the library's
+README and the checks' own README name them too. A flag renamed or a rule retired leaves the page confidently
 teaching it. So: every ``--flag`` a manufacturing reference names is one a ``dfm`` command's parser takes, and
 every ``<process>.<name>`` these pages name in code is a rule's id, a finding's code of that process, or a name
 of its module. Nothing is measured: the parsers and the rule tables are the type side's, the standard library
@@ -22,10 +22,10 @@ from cad._internal import dfm  # noqa: E402
 from cad_server import cli  # noqa: E402
 
 REFERENCES = sorted(Path(repo_path("skills/cad/references")).glob("manufacturing-*.md"))
-#: The pages that name rule ids and finding codes: the references, the skill, the migration guide of the release
-#: the checks ship in, and the checks' own README.
+#: The pages that name rule ids and finding codes: the references, the skill, the library's README and the
+#: checks' own README.
 PAGES = (*REFERENCES, Path(repo_path("skills/cad/SKILL.md")),
-         Path(repo_path("docs/migrations/migrating-0.11-to-next.md")),
+         Path(repo_path("packages/cad/README.md")),
          Path(repo_path("packages/cad/src/cad/_internal/dfm/README.md")))
 #: The types that answer ``dfm``: a B-rep's, a mesh's, a cut file's.
 TYPES = ("model", "step", "xbf", "stl", "threemf", "glb", "dxf")
