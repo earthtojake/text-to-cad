@@ -12,7 +12,8 @@ does one of theirs: ``compiler`` (radians, the mesh folder, ``autolimits``), ``o
 ``implicitfast`` integrator MuJoCo's guide recommends; a scene that attaches the model keeps its own),
 ``default`` (a class named for the model holding ``visual``, group 2 and colliding with nothing, and
 ``collision``, group 3: MuJoCo prefixes every class of an attached model, so the classes survive an
-attach), ``asset`` (a ``material`` per distinct material name and colour, a second colour of a name named for its
+attach; MuJoCo's class names are global, so a model named ``main``, ``visual`` or ``collision``, or with no name, has its
+class written ``<name>_model`` (``model`` for none) and said, ``childclass`` the same), ``asset`` (a ``material`` per distinct material name and colour, a second colour of a name named for its
 colour, ``Steel_a0a0a0``; a ``mesh`` per prototype),
 ``worldbody``, ``contact``, ``equality`` and ``keyframe``.
 
@@ -20,7 +21,9 @@ colour, ``Steel_a0a0a0``; a ``mesh`` per prototype),
 when the ground is MuJoCo's ``world``, else a body of its own with no joint; every other link a body
 at its joint's origin, which is the link's frame (the description's rule), so a joint stands at its
 body's origin on its Z (``axis="0 0 1"``) with ``ref`` zero. A revolute is a ``hinge`` with its
-range, a continuous one a hinge without; a prismatic a ``slide``; a cylindrical a hinge and a slide
+range, a continuous one a hinge without (a range with one end open has the other written and the open end
+``UNBOUNDED``, 1e16, which MuJoCo takes as a stop it never reaches while it enforces the end given, and said:
+``range`` holds both ends); a prismatic a ``slide``; a cylindrical a hinge and a slide
 on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a floating one (a base declared
 ``cad.build123d.free``) a ``freejoint``, its body a child of the world's; a fixed one no joint, so a part
 declared a body (``cad.build123d.body``) is a child ``<body>`` of its link's with none. A joint's drive
@@ -31,7 +34,11 @@ written (an actuator's own ``ctrlrange`` is the scene's). A joint's dynamics are
 declared; an actuator, its gains and contact tuning are the scene's. A link's
 ``inertial`` is written on its principal axes (a tensor whose moments miss MuJoCo's triangle
 inequality by rounding alone is nudged onto it; any further and MuJoCo says so); a link with none is
-given none, and MuJoCo computes one from its geoms (visual and collision alike). A visual is a geom
+given none, and MuJoCo computes one from its geoms (visual and collision alike). MuJoCo refuses a body that moves (one
+with a joint) whose mass or any principal moment is below its ``mjMINVAL`` (1e-15: zero, say, for a point mass with no
+``inertia=`` on a part with no density, or for point masses on one line) and takes one welded to its parent or to the
+world as it is: the export refuses such a link by name (``ExportRefused``) rather than write a file MuJoCo will not
+compile, and says to give the point mass an ``inertia=``, or the part a material or a declared mass. A visual is a geom
 of class ``visual``, a collision one of class ``collision`` named ``<part>_collision`` where its
 visual holds the part's name: a mesh, which MuJoCo hulls, or a primitive in MuJoCo's half sizes (a
 box's half extents, a sphere's radius, a cylinder's or a capsule's radius and half its length, the
@@ -46,7 +53,9 @@ contact friction (``cad.build123d.friction``: the sliding coefficient alone, the
 then MuJoCo's defaults, or all three) where it declares one, none where it does not, so MuJoCo's
 default (or a scene's ``default`` class) holds; a named frame a ``site``.
 Every name is unique in its kind -- bodies among bodies, joints among joints, MuJoCo's namespaces, so a
-body and a joint may share one -- a repeat given ``_2``, ``_3`` and said (``export.note``). ``contact``
+body and a joint may share one -- a repeat given ``_2``, ``_3`` and said (``export.note``); a mesh's file
+name is unique ignoring case as well (``Arm`` and ``arm`` are one file on macOS' and Windows' default filesystems, so
+the second is ``..._arm_2.stl``, said), and only a file's: the names inside the file stay as they are. ``contact``
 excludes each body pair that touches at rest across a joint that moves (``export/contact.py``'s rule:
 MuJoCo's ``filterparent`` passes the pair at a robot's first joint, whose parent is welded to the
 world) and each pair the model declares (``cad.build123d.exclude``), in that order, each once. A coupling is an
@@ -114,6 +123,15 @@ NUDGE = 1e-9
 SNAP = 1e-12
 #: How far along a turn that closes a loop its second pair of sites stands, metres (the module's **Loops**).
 AXIS_SPAN = 0.1
+#: A bound the description leaves open, written where MJCF wants one: MuJoCo's ``range`` holds both ends, and a stop this far
+#: off is none (the URDF writer's word for none as well).
+UNBOUNDED = 1e16
+#: MuJoCo's ``mjMINVAL``: a body that moves (it has a joint) refuses a mass or a principal moment of inertia below it.
+MINVAL = 1e-15
+#: The classes MuJoCo already holds at the top of a model's ``default``: ``main`` is its own, and the writer nests
+#: ``visual`` and ``collision`` in the model's (the names of its classes are global, so a model of one of these names
+#: gets its class under another one).
+RESERVED_CLASSES = ("main", "visual", "collision")
 #: The scene an export writes beside the robot where there is none (the module's **The scene**).
 SCENE = "scene.xml"
 _RECORD = np.dtype([("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribute", "<u2")])
@@ -259,7 +277,8 @@ def _listed(folder: Path, name: str) -> set[str]:
 def _stale(path: Path, folder: Path, files: dict[str, bytes]) -> None:
     """The meshes the last export of ``path`` wrote and this one no longer names, removed, and this export's listed
     (``WRITTEN``): a writer removes only files it can show it wrote, its own list naming them, never one another
-    file's list still names (two robots sharing a folder) nor any other file. Said where it removes any."""
+    file's list still names (two robots sharing a folder) nor any other file, nor a name that is a wanted one's file
+    under another case (one file on a case-insensitive filesystem). Said where it removes any."""
     wanted = set(files)
     gone = _listed(folder, path.name) - wanted
     if gone:
@@ -268,6 +287,10 @@ def _stale(path: Path, folder: Path, files: dict[str, bytes]) -> None:
                 gone -= _listed(folder, other.name[1:-len(".meshes")])
     removed = 0
     for name in sorted(gone):
+        # A name that differs from a wanted one by case alone is that file on a case-insensitive filesystem (macOS,
+        # Windows): the mesh this export just wrote, not a stale one.
+        if any(found.casefold() == name.casefold() and _same_file(folder / found, folder / name) for found in wanted):
+            continue
         try:
             (folder / name).unlink()
             removed += 1
@@ -280,6 +303,13 @@ def _stale(path: Path, folder: Path, files: dict[str, bytes]) -> None:
     if removed:
         note(f"removed {removed} mesh{'es' if removed != 1 else ''} from {folder.name}/ that the last export of "
              f"{path.name} wrote and this one no longer names")
+
+
+def _same_file(first: Path, second: Path) -> bool:
+    try:
+        return first.samefile(second)
+    except OSError:
+        return False
 
 
 def same_text(path: Path, text: str) -> bool:
@@ -337,18 +367,37 @@ def rendered(description: Description, assets: str = "assets", *,
 
 
 class _Names:
-    """Names unique within one of MuJoCo's namespaces: a repeat gets ``_2``, ``_3``, ..."""
+    """Names unique within one of MuJoCo's namespaces: a repeat gets ``_2``, ``_3``, ... Given ``fold``, a name
+    is a repeat of one that differs by case alone (file names: ``Arm.stl`` and ``arm.stl`` are one file on the
+    case-insensitive filesystems of macOS and Windows)."""
 
-    def __init__(self) -> None:
+    def __init__(self, fold: bool = False) -> None:
         self.taken: set[str] = set()
+        self.fold = fold
+        self._keys: set[str] = set()
+
+    def _key(self, name: str) -> str:
+        return name.casefold() if self.fold else name
 
     def __call__(self, wanted: str) -> str:
         name, at = wanted, 1
-        while name in self.taken:
+        while self._key(name) in self._keys:
             at += 1
             name = f"{wanted}_{at}"
         self.taken.add(name)
+        self._keys.add(self._key(name))
         return name
+
+
+def mesh_file(names: _Names, model: str, mesh: str) -> str:
+    """The file a mesh is written to, ``<model>_<mesh>.stl``, its stem unique among ``names`` (which folds case: a
+    mesh file's name is a filesystem's, not MuJoCo's or URDF's); a stem that is not the one wanted said."""
+    wanted = f"{_stem(model)}_{_stem(mesh)}"
+    found = names(wanted)
+    if found != wanted:
+        note(f"mesh file {wanted + '.stl'!r} is written {found + '.stl'!r}: another mesh's file holds its name, "
+             "ignoring case (macOS and Windows keep one file of two that differ by case)")
+    return found + ".stl"
 
 
 def material_name(names: _Names, wanted: str, rgba: tuple) -> str:
@@ -393,7 +442,10 @@ class _Writer:
         self.assets = assets
         self.touching = touching
         self.geoms, self.sites, self.materials_named, self.meshes_named = _Names(), _Names(), _Names(), _Names()
-        self.files_named = _Names()
+        self.files_named = _Names(fold=True)
+        self.model_class = model_class(description.name)
+        self.unweighed: list[str] = []  # moving links whose inertia MuJoCo refuses, said when the file is rendered
+        self.open_ends: list[str] = []  # joints with a range of one end, said when the file is rendered
         # Bodies and joints, each its own namespace (MuJoCo's): a body and a joint may share a name.
         self.bodies, self.joints = _Names(), _Names()
         self.body_of: dict[str, str] = {}
@@ -424,17 +476,21 @@ class _Writer:
         d = self.description
         world = _Element("worldbody")
         root = d.root
+        if self.model_class != d.name:
+            note(f"the default class of model {d.name!r} is written {self.model_class!r}: MuJoCo's class names are "
+                 f"global, and {', '.join(map(repr, RESERVED_CLASSES))} (and none) are taken")
         if root.name == "world":
             self.body_of[root.name] = self.bodies("world")
             self._content(world, root, np.asarray(root.frame, dtype=float))
             for joint in d.children(root.name):
-                self._body(world, joint, childclass=d.name)
+                self._body(world, joint, childclass=self.model_class)
         else:
-            body = world.add("body", [("name", self._named(root.name)), ("childclass", d.name),
+            body = world.add("body", [("name", self._named(root.name)), ("childclass", self.model_class),
                                       *_placement(root.frame)])
             self._content(body, root, np.eye(4))
             for joint in d.children(root.name):
                 self._body(body, joint)
+        self._unsaid()
         sections = [
             _Element("compiler", [("angle", "radian"), ("meshdir", self.assets), ("autolimits", "true")]),
             _Element("option", [("integrator", "implicitfast")]),
@@ -471,7 +527,7 @@ class _Writer:
 
     def _default(self) -> _Element:
         default = _Element("default")
-        own = default.add("default", [("class", self.description.name)])
+        own = default.add("default", [("class", self.model_class)])
         own.add("default", [("class", "visual")]).add("geom", [("contype", "0"), ("conaffinity", "0"), ("group", "2")])
         own.add("default", [("class", "collision")]).add("geom", [("group", "3")])
         return default
@@ -494,18 +550,43 @@ class _Writer:
         body = parent.add("body", [("name", self._named(link.name)), ("childclass", childclass),
                                    *_placement(joint.origin)])
         if link.inertial is not None:
-            body.children.append(_inertial(link))
+            element, moments = _inertial(link)
+            body.children.append(element)
+            if joint.kind != "fixed" and not positive(link.inertial.mass, moments):
+                self.unweighed.append(f"{link.name!r} (joint {joint.name!r}: mass {_number(link.inertial.mass, snap=0)} kg, "
+                                      f"principal moments {_numbers(moments, snap=0)} kg*m^2)")
         self._joint(body, joint)
         self._content(body, link, np.eye(4))
         for child in self.description.children(link.name):
             self._body(body, child)
 
+    def _unsaid(self) -> None:
+        """What the rendering found and cannot write: a moving link MuJoCo refuses (``ExportRefused``), and the open
+        ends of ranges, written ``UNBOUNDED`` and said once for every joint (``export.note``)."""
+        if self.unweighed:
+            raise ExportRefused(
+                f"{self.description.name}: MuJoCo refuses a body that moves whose mass or principal moments of inertia are "
+                f"below {MINVAL:g}, and {len(self.unweighed)} link{'s' if len(self.unweighed) != 1 else ''} here "
+                f"{'have' if len(self.unweighed) != 1 else 'has'} no inertia to speak of: {', '.join(self.unweighed)}. A "
+                "point mass with no inertia= on a part with no density, or point masses on one line, weigh something "
+                "and turn about nothing: give the point mass an inertia=(ixx, iyy, izz), or the part a material (its "
+                "density) or a declared mass, so the link has a body's inertia")
+        if self.open_ends:
+            note(f"range of {len(self.open_ends)} joint{'s' if len(self.open_ends) != 1 else ''} has one end open, and "
+                 f"MuJoCo's range holds both: the open end is written {_number(UNBOUNDED)} (a stop it never reaches; "
+                 f"the end given is enforced): {', '.join(self.open_ends)}")
+
     def _joint(self, body: _Element, joint: Joint) -> None:
-        def ranged(index: int) -> str | None:
+        def ranged(index: int, named: str) -> str | None:
             if index >= len(joint.limits):
                 return None
             lower, upper = joint.limits[index]
-            return None if lower is None or upper is None else _numbers((lower, upper))
+            if lower is None and upper is None:
+                return None
+            if lower is None or upper is None:
+                self.open_ends.append(f"{named} ({'lower' if lower is None else 'upper'} open)")
+                lower, upper = -UNBOUNDED if lower is None else lower, UNBOUNDED if upper is None else upper
+            return _numbers((lower, upper))
 
         axis = ("axis", "0 0 1")
         if joint.kind == "fixed":
@@ -516,15 +597,15 @@ class _Writer:
             ("armature", joint.armature), ("damping", joint.damping), ("frictionloss", joint.friction))]
         if joint.kind in ("revolute", "continuous"):
             body.add("joint", [("name", name), ("type", "hinge"), axis,
-                               ("range", ranged(0) if joint.kind == "revolute" else None), effort, *dynamics])
+                               ("range", ranged(0, name) if joint.kind == "revolute" else None), effort, *dynamics])
             self.qpos.append((joint, 1))
         elif joint.kind == "prismatic":
-            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0)), effort, *dynamics])
+            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0, name)), effort, *dynamics])
             self.qpos.append((joint, 1))
         elif joint.kind == "cylindrical":
-            body.add("joint", [("name", name), ("type", "hinge"), axis, ("range", ranged(0))])
-            body.add("joint", [("name", self._joint_name(f"{name}/slide")), ("type", "slide"), axis,
-                               ("range", ranged(1))])
+            body.add("joint", [("name", name), ("type", "hinge"), axis, ("range", ranged(0, name))])
+            slide = self._joint_name(f"{name}/slide")
+            body.add("joint", [("name", slide), ("type", "slide"), axis, ("range", ranged(1, slide))])
             self.qpos.append((joint, 2))
         elif joint.kind == "spherical":
             body.add("joint", [("name", name), ("type", "ball")])
@@ -589,7 +670,7 @@ class _Writer:
         found = self.meshes[(key, scale)] = self.meshes_named(wanted)
         file = self.mesh_files.get(key)
         if file is None:
-            file = self.mesh_files[key] = self.files_named(f"{_stem(self.description.name)}_{_stem(mesh.name)}") + ".stl"
+            file = self.mesh_files[key] = mesh_file(self.files_named, self.description.name, mesh.name)
             self.files[file] = _stl(f"{self.description.name}/{mesh.name}", mesh.positions, mesh.triangles)
         self.mesh_rows.append((found, file, scale, mesh.open))
         return found
@@ -684,9 +765,10 @@ def _product(a: np.ndarray, b: np.ndarray) -> np.ndarray:
                      w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2, w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2])
 
 
-def _inertial(link: Link) -> _Element:
-    inertial = link.inertial
-    assert inertial is not None
+def principal(inertial: Any) -> tuple[np.ndarray, np.ndarray]:
+    """An inertial's principal moments and axes (columns): the tensor as it is where it is diagonal, else its
+    eigenvectors, each signed alike every time; a tensor whose moments miss MuJoCo's triangle inequality by rounding
+    alone nudged onto it."""
     tensor = np.asarray(inertial.inertia, dtype=float)
     tensor = (tensor + tensor.T) / 2
     scale = max(float(np.abs(tensor).max()), 0.0)
@@ -703,13 +785,26 @@ def _inertial(link: Link) -> _Element:
         others = moments[(at + 1) % 3] + moments[(at + 2) % 3]
         if 0 < moments[at] - others <= NUDGE:
             moments[at] = others
+    return moments, axes
+
+
+def positive(mass: float, moments: np.ndarray) -> bool:
+    """Whether a mass and principal moments are a body's to MuJoCo: none below its ``mjMINVAL``."""
+    return bool(mass >= MINVAL and float(np.min(moments)) >= MINVAL)
+
+
+def _inertial(link: Link) -> tuple[_Element, np.ndarray]:
+    """A link's ``inertial`` on its principal axes, and the principal moments written."""
+    inertial = link.inertial
+    assert inertial is not None
+    moments, axes = principal(inertial)
     rotation = np.eye(4)
     rotation[:3, :3] = axes
     quat = _quaternion(rotation)
     return _Element("inertial", [("pos", _numbers(inertial.center)),
                                  ("quat", None if _numbers(quat) == "1 0 0 0" else _numbers(quat)),
                                  ("mass", _number(inertial.mass, snap=0)),
-                                 ("diaginertia", _numbers(moments, snap=0))])
+                                 ("diaginertia", _numbers(moments, snap=0))]), moments
 
 
 def _placement(matrix: Any) -> list[tuple[str, str | None]]:
@@ -756,6 +851,12 @@ def _numbers(values: Iterable[Any], *, snap: float = SNAP) -> str:
 def _stem(name: str) -> str:
     """A name as a file name's part: letters, digits, ``.``, ``-`` and ``_``, the rest ``_``."""
     return re.sub(r"[^A-Za-z0-9._-]", "_", name).strip(".") or "mesh"
+
+
+def model_class(name: str) -> str:
+    """The default class a model's ``visual`` and ``collision`` classes are nested in: its name, where that is no
+    class MuJoCo already holds (``RESERVED_CLASSES``, or none: MuJoCo's class names are global); else ``<name>_model``."""
+    return name if name and name not in RESERVED_CLASSES else (f"{name}_model" if name else "model")
 
 
 def _stl(name: str, positions: Any, triangles: Any) -> bytes:

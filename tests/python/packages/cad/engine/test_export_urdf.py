@@ -8,7 +8,8 @@ a kind, a ball refused by name, a joint that closes a loop left out and said; a 
 world's frame, hung from an empty ``base_link`` there and a free base the root; a root part turned in its
 placement standing where the MJCF stands it; and a jointed model built by the engine and exported to ``.urdf``, its
 links moving as the mechanism moves them, and a free arm taken at a state, its links at zero where the
-mechanism puts them there."""
+mechanism puts them there; a link whose inertia is not positive written as it is and said, and meshes whose file
+names differ by case alone written as two files."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ import shutil
 import tempfile
 import textwrap
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -261,6 +263,54 @@ class HandBuiltTest(_Folder):
         finger = robot.placements(values)["finger"]
         expected = SHOULDER @ _frame(about="z", angle=1.2) @ TIP @ _frame(about="z", angle=0.5 * 1.2 + 0.1)
         np.testing.assert_allclose(finger[:3, 3], 1000 * expected[:3, 3], atol=1e-6)
+
+    def test_a_link_whose_inertia_is_not_positive_is_written_as_it_is_and_said_once_and_the_mjcf_refuses_it(self) -> None:
+        # A point mass with no inertia= weighs something and turns about nothing: legal URDF, which a simulator rejects.
+        description = Description("pm", [Link("world", np.eye(4)),
+                                         Link("arm", np.eye(4), inertial=Inertial(0.05, np.zeros(3), np.zeros((3, 3)))),
+                                         Link("hand", np.eye(4), inertial=Inertial(0.1, np.zeros(3),
+                                                                                     np.diag([1e-4, 1e-4, 0.0]))),
+                                         Link("good", np.eye(4), inertial=Inertial(0.1, np.zeros(3), np.eye(3) * 1e-4))],
+                                  [Joint("j", "revolute", "world", "arm", np.eye(4)),
+                                   Joint("k", "revolute", "arm", "hand", np.eye(4)),
+                                   Joint("l", "revolute", "hand", "good", np.eye(4))])
+        path = self.folder / "pm.urdf"
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            write_description(description, path)
+        said = [str(found.message) for found in caught if issubclass(found.category, ExportWarning)]
+        self.assertEqual(len(said), 1, said)
+        self.assertRegex(said[0], r"^inertia of 2 links is not positive .*written as it is: legal URDF, which a simulator "
+                                  r"rejects .*give a point mass an inertia=, or its part a material or a declared mass: "
+                                  r"arm, hand$")
+        self.assertIn('<mass value="0.05"/>', path.read_text(encoding="utf-8"))
+        with self.assertRaisesRegex(ExportRefused, "MuJoCo refuses a body that moves"):
+            mjcf.rendered(description)
+        # A link with a body's inertia, and one with none, say nothing.
+        description.links[1].inertial = description.links[2].inertial = None
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            write_description(description, self.folder / "ok.urdf")
+        self.assertEqual([found for found in caught if issubclass(found.category, ExportWarning)], [])
+
+    def test_meshes_whose_file_names_differ_by_case_alone_are_two_files(self) -> None:
+        def mesh(name: str, size: float) -> Mesh:
+            return Mesh(name, name, np.array([[0, 0, 0], [size, 0, 0], [0, size, 0], [0, 0, size]], np.float32),
+                        np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]], np.uint32))
+
+        visuals = [Visual(name, Geometry("mesh", np.eye(4), mesh=name), (0.5, 0.5, 0.5, 1.0), None)
+                   for name in ("Arm", "arm")]
+        description = Description("robot", [Link("world", np.eye(4), visuals=visuals)], [],
+                                  meshes={"Arm": mesh("Arm", 0.1), "arm": mesh("arm", 0.2)})
+        path = self.folder / "robot.urdf"
+        with self.assertWarnsRegex(ExportWarning, "mesh file 'robot_arm.stl' is written 'robot_arm_2.stl'"):
+            write_description(description, path)
+        files = sorted(child.name for child in (self.folder / "meshes").glob("*.stl"))
+        self.assertEqual(files, ["robot_Arm.stl", "robot_arm_2.stl"])
+        self.assertEqual(len({name.lower() for name in files}), 2)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('filename="meshes/robot_Arm.stl"', text)
+        self.assertIn('filename="meshes/robot_arm_2.stl"', text)
 
     def test_a_package_names_the_meshes_as_ros_resolves_them(self) -> None:
         path = self.folder / "arm_description" / "arm.urdf"

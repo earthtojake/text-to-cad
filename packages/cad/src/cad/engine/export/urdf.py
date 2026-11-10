@@ -2,7 +2,7 @@
 
 ``write(view, path)`` describes the document (``describe``) and writes it; ``write_description``
 writes a description it is handed. The file is one URDF at ``path`` and its meshes beside it,
-binary STLs in metres in ``<path.parent>/<meshes>/``, each named ``<model>_<mesh>.stl``, the bytes
+binary STLs in metres in ``<path.parent>/<meshes>/``, each named ``<model>_<mesh>.stl`` (unique ignoring case, as MJCF's, one file on a case-insensitive filesystem), the bytes
 MJCF's writer makes of them (``export/mjcf.py``: one file per prototype, the same description the
 same bytes), staged and moved into place as it moves its own. A mesh is named by the relative path
 ``<meshes>/<file>.stl``, which every URDF reader resolves beside the file, or, given ``package``,
@@ -37,7 +37,9 @@ inertial at the world's frame is the root as it is.
 and a collision's ``<origin>`` is its placement in the link frame, and a link's ``<inertial>`` is
 its centre (``rpy`` zero) with its mass and the tensor about the centre in the link frame's axes, as
 the description holds it; a link with no mass is given no ``<inertial>`` (the URDF validator warns
-of a moving one: a simulator wants one, a viewer does not). A shape is a ``<mesh>`` (its ``scale``
+of a moving one: a simulator wants one, a viewer does not); one whose mass or principal moment is not positive (below
+MuJoCo's ``mjMINVAL``: a point mass with no ``inertia=`` on a part with no density) is written as it is, legal
+URDF that a simulator rejects, and said once for every such link (``export.note``; the MJCF refuses the export). A shape is a ``<mesh>`` (its ``scale``
 the geometry's) or a primitive in URDF's full sizes: a ``<box size>``, a ``<sphere radius>``, a
 ``<cylinder radius length>``; a capsule, which URDF has no word for, is its cylinder and a sphere at
 each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``. A decomposed part
@@ -63,7 +65,7 @@ it); a joint that declares one of the two and not the other has the other writte
 such joint (``export.note``). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its ``<dynamics damping
 friction>``, each where declared; URDF has no armature, so a declared one is not written, and said
 once for every joint that declares one (``export.note``: an MJCF carries it). A bound the description leaves open is written
-``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
+``1e16`` (SDFormat's own word for none; ``mjcf.UNBOUNDED``, which an MJCF's range writes for its open end), since URDF ranges a revolute and a prismatic joint at both
 ends. A spherical joint is refused by name: URDF has no ball (export an MJCF, which has one).
 A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`` its offset), its
 leader a joint that moves. URDF has no named states: the description's poses are not written (an
@@ -100,12 +102,10 @@ import numpy as np
 
 from cad.engine.description import Description, DescriptionError, Geometry, Inertial, Joint, Link
 from cad.engine.export import ExportRefused, note
-from cad.engine.export.mjcf import SNAP, _Names, _number, _numbers, _stem, _stl, material_name, place
+from cad.engine.export.mjcf import (MINVAL, SNAP, UNBOUNDED, _Names, _number, _numbers, _stl, material_name,
+                                    mesh_file, place, positive, principal)
 
 __all__ = ["UNBOUNDED", "rendered", "rooted", "write", "write_description"]
-
-#: A bound the description leaves open, written where URDF wants one: SDFormat's word for no limit.
-UNBOUNDED = 1e16
 
 
 def write(view: Any, path: Path) -> None:
@@ -269,7 +269,7 @@ class MeshFiles:
 
     def __init__(self, description: Description) -> None:
         self.description = description
-        self.named = _Names()
+        self.named = _Names(fold=True)  # a file's name, which a case-insensitive filesystem folds
         self.files: dict[str, bytes] = {}
         self.by_key: dict[str, str] = {}
 
@@ -277,7 +277,7 @@ class MeshFiles:
         found = self.by_key.get(key)
         if found is None:
             mesh = self.description.meshes[key]
-            found = self.by_key[key] = self.named(f"{_stem(self.description.name)}_{_stem(mesh.name)}") + ".stl"
+            found = self.by_key[key] = mesh_file(self.named, self.description.name, mesh.name)
             self.files[found] = _stl(f"{self.description.name}/{mesh.name}", mesh.positions, mesh.triangles)
         return found
 
@@ -317,6 +317,9 @@ class _Writer:
         # What URDF has no word for, said once a kind when the file is rendered (``_unwritten``): the joints
         # that declare an armature, the parts that declare a contact friction.
         self.unwritten: dict[str, list[str]] = {"armature": [], "contact friction": []}
+        # The links whose inertia is not positive (a mass or a principal moment below MuJoCo's mjMINVAL): legal URDF
+        # that a simulator rejects, said once when the file is rendered.
+        self.unweighed: list[str] = []
         # The joints that declare an effort and no velocity, or a velocity and no effort: the other written 0.
         self.zeroed: dict[str, list[str]] = {"velocity": [], "effort": []}
         # The description's own links are named first, then its joints, each in tree order; what the writer
@@ -373,6 +376,11 @@ class _Writer:
             if names:
                 note(f"{what} of {len(names)} {of}{'s' if len(names) != 1 else ''} not written (a URDF has none; "
                      f"an MJCF carries it): {', '.join(names)}")
+        if self.unweighed:
+            note(f"inertia of {len(self.unweighed)} link{'s' if len(self.unweighed) != 1 else ''} is not positive (a "
+                 f"mass or a principal moment below {MINVAL:g}) and is written as it is: legal URDF, which a simulator "
+                 "rejects (MuJoCo refuses a body that moves of it, and the MJCF export refuses it); give a point mass "
+                 f"an inertia=, or its part a material or a declared mass: {', '.join(self.unweighed)}")
         shared = sorted(self.link_names.taken & self.joint_names.taken)
         if shared:
             # Each kind keeps its names apart, as URDF does; a tool that names links and joints in one namespace
@@ -465,6 +473,8 @@ class _Writer:
             inertial.add("origin", [("xyz", _numbers(link.inertial.center)), ("rpy", "0 0 0")])
             inertial.add("mass", [("value", _number(link.inertial.mass, snap=0))])
             inertial.add("inertia", inertia_terms(link.inertial))
+            if not positive(link.inertial.mass, principal(link.inertial)[0]):
+                self.unweighed.append(name)
         visuals, collisions = _Names(), _Names()
         for visual in link.visuals:
             # A painted part is a visual per look, as the viewer draws its faces (``Visual.drawn``).

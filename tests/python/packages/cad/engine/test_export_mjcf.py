@@ -8,15 +8,19 @@ slides alone refused by name, and a mesh file refused as a source; and models bu
 exported to ``.xml``: a four-bar whose loop two connects close as built and hold closed as it falls, two
 slides a pinion of no part couples as one control, a hinge whose bodies stand where the mechanism puts
 its links, as built and at a state, and a free arm taken at a state, a freejoint in the scene written beside it
-once, its bodies at qpos 0 where the mechanism puts its links there."""
+once, its bodies at qpos 0 where the mechanism puts its links there; and what MuJoCo refuses or reads otherwise, written
+so it compiles or refused by name: a moving link with no inertia, a model named as a default class MuJoCo holds, a range
+with one end open, and two meshes whose file names differ by case alone."""
 
 from __future__ import annotations
 
 import math
+import os
 import shutil
 import tempfile
 import textwrap
 import unittest
+import warnings
 from pathlib import Path
 
 import mujoco
@@ -28,6 +32,7 @@ from cad.engine.description import (Closure, Collision, Description, Geometry, I
 from cad.engine.export import ExportRefused, ExportWarning, kind_of, refused
 from cad.engine.describe import describe
 from cad.engine.export import Source
+from cad.engine.export import mjcf
 from cad.engine.export.mjcf import rendered, write_description
 from cad.mujoco import spec
 
@@ -243,6 +248,136 @@ class HandBuiltTest(_Folder):
         with self.assertRaisesRegex(ExportRefused, "no MJCF export is made from one"):
             api.export(self.folder / "part.glb", self.folder / "robot.xml", daemon=False, progress=False)
         self.assertFalse((self.folder / "robot.xml").exists())
+
+
+def _one_link(name: str, kind: str = "revolute", inertia: np.ndarray | None = None, mass: float = 0.05,
+              limits: tuple = ((None, None),)) -> Description:
+    """A world and one link on a joint of ``kind`` with ``limits``, its inertial ``mass`` and ``inertia`` (zero)."""
+    inertial = Inertial(mass, np.zeros(3), np.zeros((3, 3)) if inertia is None else inertia)
+    return Description(name, [Link("world", np.eye(4)), Link("arm", np.eye(4), inertial=inertial)],
+                       [Joint("j", kind, "world", "arm", np.eye(4), limits=limits)])
+
+
+def _said(description: Description, path: Path) -> list[str]:
+    """The notes an export of ``description`` to ``path`` makes."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        write_description(description, path)
+    return [str(found.message) for found in caught if issubclass(found.category, ExportWarning)]
+
+
+class MuJocoRefusesTest(_Folder):
+    def test_a_moving_link_whose_inertia_is_not_positive_is_refused_by_name_and_a_welded_one_is_written(self) -> None:
+        # A point mass alone has a mass and no inertia; two on one line have one zero moment: MuJoCo refuses either on a
+        # body with a joint, whatever the joint, and takes them on a body fixed to its parent.
+        for label, inertia in (("a point mass", None), ("point masses on a line", np.diag([1e-4, 1e-4, 0.0]))):
+            for kind in ("revolute", "prismatic", "cylindrical", "spherical", "floating"):
+                with self.subTest(label=label, kind=kind):
+                    path = self.folder / kind / "x.xml"
+                    with self.assertRaisesRegex(ExportRefused, r"MuJoCo refuses a body that moves .* 'arm' \(joint 'j': "
+                                                               r"mass 0.05 kg, principal moments .*give the point mass an "
+                                                               r"inertia=.*or the part a material .* or a declared mass"):
+                        write_description(_one_link("x", kind, inertia), path)
+                    self.assertFalse(path.parent.exists())
+        path = self.folder / "welded" / "x.xml"
+        write_description(_one_link("x", "fixed"), path)
+        self.assertEqual(mujoco.MjModel.from_xml_path(str(path)).nbody, 2)
+        # Each link that moves is named, in one refusal.
+        two = _one_link("x")
+        two.links.append(Link("hand", np.eye(4), inertial=Inertial(0.1, np.zeros(3), np.zeros((3, 3)))))
+        two.joints.append(Joint("k", "revolute", "arm", "hand", np.eye(4)))
+        with self.assertRaisesRegex(ExportRefused, "2 links here have no inertia to speak of: 'arm' .*, 'hand' "):
+            write_description(two, self.folder / "two.xml")
+        # A tiny inertia that is a body's is written, and compiles.
+        path = self.folder / "light" / "x.xml"
+        write_description(_one_link("x", inertia=np.diag([1e-12, 1e-12, 1e-12]), mass=1e-9), path)
+        self.assertEqual(mujoco.MjModel.from_xml_path(str(path)).nbody, 2)
+
+    def test_a_model_named_as_a_default_class_mujoco_holds_has_its_class_written_under_another_name_and_said(self) -> None:
+        for name in ("main", "visual", "collision"):
+            with self.subTest(name=name):
+                path = self.folder / name / f"{name}.xml"
+                said = _said(_one_link(name, inertia=np.eye(3) * 1e-4), path)
+                self.assertEqual(len(said), 1)
+                self.assertIn(f"the default class of model '{name}' is written '{name}_model'", said[0])
+                text = path.read_text(encoding="utf-8")
+                self.assertIn(f'<mujoco model="{name}">', text)
+                self.assertIn(f'<default class="{name}_model">', text)
+                self.assertIn(f'childclass="{name}_model"', text)
+                self.assertEqual(mujoco.MjModel.from_xml_path(str(path)).nbody, 2)
+        # Any other name keeps Menagerie's layout, and says nothing.
+        path = self.folder / "mainframe" / "mainframe.xml"
+        self.assertEqual(_said(_one_link("mainframe", inertia=np.eye(3) * 1e-4), path), [])
+        self.assertIn('<default class="mainframe">', path.read_text(encoding="utf-8"))
+        # A scene that includes one compiles beside it.
+        path = self.folder / "visual" / "visual.xml"
+        write_description(_one_link("visual", inertia=np.eye(3) * 1e-4), path, scene=True)
+        self.assertEqual(mujoco.MjModel.from_xml_path(str(path.parent / "scene.xml")).nbody, 2)
+
+    def test_a_range_with_one_end_open_keeps_the_end_it_has_and_the_open_one_is_written_as_none_and_said(self) -> None:
+        light = np.eye(3) * 1e-4
+        for kind, limits, expected in (("prismatic", ((0.0, None),), (0.0, mjcf.UNBOUNDED)),
+                                       ("revolute", ((None, 0.5),), (-mjcf.UNBOUNDED, 0.5))):
+            with self.subTest(kind=kind):
+                path = self.folder / kind / "x.xml"
+                said = _said(_one_link("x", kind, light, limits=limits), path)
+                self.assertEqual(len(said), 1)
+                self.assertRegex(said[0], r"range of 1 joint has one end open, and MuJoCo's range holds both: the open "
+                                          r"end is written 1e\+16 .*: j \((upper|lower) open\)")
+                model = mujoco.MjModel.from_xml_path(str(path))
+                joint = model.joint("j")
+                self.assertEqual(model.jnt_limited[joint.id], 1)
+                np.testing.assert_allclose(model.jnt_range[joint.id], expected)
+        # The end given is enforced: a slide held at its lower stop of zero falls no further.
+        model = mujoco.MjModel.from_xml_path(str(self.folder / "prismatic" / "x.xml"))
+        model.opt.gravity[:] = (0, 0, -9.81)
+        data = mujoco.MjData(model)
+        model.body_mass[1], model.body_inertia[1] = 1.0, 1e-3
+        for _ in range(1000):
+            mujoco.mj_step(model, data)
+        self.assertGreater(data.qpos[0], -1e-2)
+        # A cylindrical joint's turn and slide are each its own; a range open at both ends is none.
+        path = self.folder / "cylindrical" / "x.xml"
+        said = _said(_one_link("x", "cylindrical", light, limits=((0.0, None), (None, None))), path)
+        self.assertIn("j (upper open)", said[0])
+        self.assertNotIn("j/slide", said[0])
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('<joint name="j" type="hinge" axis="0 0 1" range="0 1e+16"/>', text)
+        self.assertIn('<joint name="j/slide" type="slide" axis="0 0 1"/>', text)
+        mujoco.MjModel.from_xml_path(str(path))
+        self.assertEqual(_said(_one_link("x", "revolute", light, limits=((-1.0, 1.0),)), self.folder / "both" / "x.xml"), [])
+
+    def test_meshes_whose_file_names_differ_by_case_alone_are_two_files_and_their_names_stay_as_they_are(self) -> None:
+        def mesh(key: str, name: str, size: float) -> Mesh:
+            return Mesh(key, name, np.array([[0, 0, 0], [size, 0, 0], [0, size, 0], [0, 0, size]], np.float32),
+                        np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]], np.uint32))
+
+        def shapes(*names: str) -> Description:
+            visuals = [Visual(name, Geometry("mesh", np.eye(4), mesh=name), (0.5, 0.5, 0.5, 1.0), None) for name in names]
+            link = Link("arm", np.eye(4), visuals=visuals, inertial=Inertial(1.0, np.zeros(3), np.eye(3) * 1e-3))
+            return Description("robot", [Link("world", np.eye(4)), link],
+                               [Joint("j", "revolute", "world", "arm", np.eye(4))],
+                               meshes={name: mesh(name, name, 0.1 * (at + 1)) for at, name in enumerate(names)})
+
+        path = self.folder / "robot.xml"
+        said = _said(shapes("Arm", "arm", "ARM"), path)
+        files = sorted(child.name for child in (self.folder / "assets").glob("*.stl"))
+        self.assertEqual(files, ["robot_ARM_3.stl", "robot_Arm.stl", "robot_arm_2.stl"])
+        self.assertEqual(len({name.lower() for name in files}), 3)
+        self.assertTrue(any("mesh file 'robot_arm.stl' is written 'robot_arm_2.stl'" in text for text in said), said)
+        # The elements' names are MuJoCo's, case-sensitive, and stay as they are.
+        model = mujoco.MjModel.from_xml_path(str(path))
+        self.assertEqual([model.mesh(at).name for at in range(model.nmesh)], ["Arm", "arm", "ARM"])
+        self.assertEqual(len({model.geom_dataid[at] for at in range(model.ngeom)}), 3)
+        # An earlier export's file that is the one just written under another case (one file on macOS' and Windows'
+        # default filesystems, here a second name for it) is not removed as stale.
+        assets = self.folder / "assets"
+        write_description(shapes("Arm"), path)
+        (assets / ".robot.xml.meshes").write_text("robot_arm.stl\n", encoding="utf-8")  # the last export's list
+        os.link(assets / "robot_Arm.stl", assets / "robot_arm.stl")
+        write_description(shapes("Arm"), path)
+        self.assertTrue((assets / "robot_arm.stl").exists())
+        self.assertEqual((assets / ".robot.xml.meshes").read_text(encoding="utf-8"), "robot_Arm.stl\n")
 
 
 def jointed() -> Description:
