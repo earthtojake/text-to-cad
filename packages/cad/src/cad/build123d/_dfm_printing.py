@@ -406,6 +406,8 @@ def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, out
         item[key] = _r(length, JUDGED)
         item["xyz"] = _xyz(pa)
         item["refined"] = True
+        if not outward:
+            item["_least"] = (pa, -way, length)  # a wall's least: where, the way out of the material there, and it
         return
 
 
@@ -978,16 +980,19 @@ def _walls(ctx: Context) -> dict[str, Any]:
     for item in sorted(items, key=lambda item: item["thickness_mm"]):
         part = item.pop("_at")[0]
         sample, sampled = item.pop("_sample")
+        # the wall's thinnest place: its refined least, else its thinnest sample
+        place, outward, thickness = item.pop("_least", (sample.point, sample.normal, sampled))
         pair = tuple(sorted((item["location"], item["opposite"])))
         if pair not in seen:
             seen.add(pair)
             unique.append(item)
             # a wall a verdict can turn on (under the unsupported minimum) has its support read off the wall
-            # itself, as a mesh's is (``mo.wall_support``): where it runs into the part, and on how many sides
+            # itself, as a mesh's is (``mo.wall_support``): its thin region's outline, and what it is joined to
             if minimum is not None and item["thickness_mm"] < minimum and len(unique) <= CAP:
-                found = mo.wall_support(_cast(ctx, part), sample.point, sample.normal, sampled)
+                found = mo.wall_support(_cast(ctx, part), place, outward, thickness)
                 if found["supported"] is not None:
-                    item.update(supported=found["supported"], joined_sides=found["joined_sides"])
+                    item.update(supported=found["supported"], joined_sides=found["joined_sides"],
+                                free_fraction=found["free_fraction"])
     items, count = _capped(unique, lambda item: item["thickness_mm"])
     thinnest = sorted(where, key=lambda pair: pair[0])[:8]
     # the least is the thinner of the field's and a refined item's: the summary never reads thicker than a finding

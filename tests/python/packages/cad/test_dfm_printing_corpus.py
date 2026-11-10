@@ -340,6 +340,11 @@ def _primitives() -> dict:
         "cube": (bd.Box(15, 15, 15, align=A), "fdm", [], False),
         "fin": (bd.Box(16, 16, 4, align=A) + bd.Pos(0, 0, 4) * bd.Box(0.7, 16, 8, align=A), "sla",
                 [("printing.wall_unsupported", error)], False),                    # 0.7: over 0.5, under 1.0
+        # two holes countersunk 90 deg to a 0.6 mm land: joined to the plate all round, a supported wall (SLA's
+        # 0.5) at both holes and on both paths
+        "lands": (bd.Box(40, 30, 2.2, align=A) - bd.Pos(-12, 0, 0) * bd.Cylinder(1.6, 10)
+                  - bd.Pos(12, 0, 0) * bd.Cylinder(1.6, 10) - bd.Pos(-12, 0, 0.6) * bd.Cone(1.6, 3.2, 1.6, align=A)
+                  - bd.Pos(12, 0, 0.6) * bd.Cone(1.6, 3.2, 1.6, align=A), "sla", [], False),
         "thinbox": (bd.Box(16, 16, 16, align=A) - bd.Pos(0, 0, 0.5) * bd.Box(15.4, 15.4, 16, align=A), "sla",
                     [("printing.wall_supported", error)], False),                  # 0.3 walls joined on three sides
         "wedge44": (_wedge(44), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)], False),

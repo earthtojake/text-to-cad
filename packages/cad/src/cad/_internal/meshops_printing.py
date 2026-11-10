@@ -425,141 +425,187 @@ class Caster:
 # --- a wall's support -------------------------------------------------------------------------------------
 
 
-#: Directions a wall is walked in from its thinnest place (``wall_support``), every 22.5 degrees in its plane.
-_WALL_FAN = 16
-#: Stretches a walk follows a curved wall for, at most: round a tube in about forty.
-_WALL_STEPS = 64
 #: A wall has run into the part where the material across it is over this many times its own thickness.
 _JOINED = 2.0
+#: Places a wall's thin region is laid out in, at most, at one spacing (``wall_support``), and the spacings
+#: tried, in wall thicknesses: a region too large for the last is not read.
+_WALL_PLACES = 384
+_WALL_SPACINGS = (0.5, 2.0, 8.0, 32.0)
+#: Stretches one step follows a curved wall for, at most (each as far as the wall's own face lets a straight
+#: line run in it).
+_WALL_BENDS = 8
+#: The four ways on from a place: along the wall's two directions, either way.
+_WAYS = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
 
 
 def wall_support(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]], point: np.ndarray,
                  normal: np.ndarray, thickness: float) -> dict[str, Any]:
     """Whether the wall of ``thickness`` under ``point`` (on its face, of outward ``normal``) is **supported**:
     joined to the part on two or more sides (the guides' word: Hubs, "connected to other structures on at least
-    two sides"), read off the wall itself, the same on exact geometry and on a mesh. ``cast(origins,
+    two sides"), read off the wall's own outline, the same on exact geometry and on a mesh. ``cast(origins,
     directions)`` answers each ray's distance to the surface from inside the material (inf where none) and the
     surface's outward normal there.
 
-    From the middle of the wall under the point it is walked in ``_WALL_FAN`` directions in its own plane. Each
-    walk ends where the wall does: **joined**, where the material across it grows past ``_JOINED`` times its
-    thickness (it runs into a floor, a rib, the body: the place is kept); **free**, where it ends in a face
-    across the way with the wall still thin (an edge in the air), or thins away to nothing; or it comes back to
-    where it started (a **ring**: a tube's wall, joined all round). A curved wall is followed: where a walk
-    leaves through the wall's own face it is put back in the middle and turned along the wall.
+    The wall's **thin region** is laid out from the middle of the wall under the point: places a spacing apart
+    (half the wall's thickness; four times that where the region has more than ``_WALL_PLACES`` of them, and
+    again), each a step on from the one before in the wall's own plane, put back in the wall's middle and turned
+    with it (a curved wall is followed), for as long as the material across stays under ``_JOINED`` times the
+    thickness. The region's **outline** is every step that leaves it: **joined**, where the material across
+    grows past that (the wall runs into a floor, a rib, another wall, the body), or where the region comes
+    round on itself (a tube's wall: a ``ring``); **free**, where the wall ends in a face across the way (an edge
+    in the air) or thins away to nothing.
 
-    Supported: a ring; two or more separate runs of joined directions (a web between two posts); or one run
-    that is no one straight side's -- it takes up half the circle or more (a straight side, seen from the wall,
-    takes up less), or its joins do not lie along one line (a floor and a side wall: round a corner; a skin
-    over a cavity: all round). One run along one line is one side (a fin on its base), none is none:
-    unsupported. A walk that reaches no end leaves an unsupported reading unknown (``supported`` None), never
-    supported."""
+    Supported: an outline with nothing free (a skin over a cavity, a tray's floor: joined all round); a ring;
+    joins that lie along no one straight line -- two sides round a corner (a floor and a side wall), all round
+    (the land a countersink leaves, joined to the plate round its whole rim); or joins along one line with the
+    region's middle between them (a web between two posts: two sides opposite). Joins along one line with the
+    region to one side of it are one side (a fin on its base, a pin on its foot), none is none: unsupported.
+    ``free_fraction`` is the share of the outline that is free. A region no spacing holds, or a step no ray
+    answers, leaves an unsupported reading unknown (``supported`` None), never supported."""
     n0 = np.asarray(normal, dtype=float) / (np.linalg.norm(normal) or 1.0)
     t0 = float(thickness)
-    seed = np.array([1.0, 0.0, 0.0]) if abs(n0[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
-    u = np.cross(n0, seed)
-    u /= np.linalg.norm(u)
-    v = np.cross(n0, u)
-    turn = np.linspace(0.0, 2.0 * math.pi, _WALL_FAN, endpoint=False)
-    d = np.cos(turn)[:, None] * u[None, :] + np.sin(turn)[:, None] * v[None, :]
+    unread = {"supported": None, "joined_sides": 0, "joined_links": 0, "free_links": 0, "unread_links": 1,
+              "free_fraction": None, "ring": False, "places": 0, "spacing_mm": None}
     start = np.asarray(point, dtype=float) - n0 * t0 / 2.0
-    m, n = np.tile(start, (_WALL_FAN, 1)), np.tile(n0, (_WALL_FAN, 1))
-    WALKING, FREE, JOINED, RING, LOST = range(5)
-    state = np.full(_WALL_FAN, WALKING)
-    joins = np.full((_WALL_FAN, 3), np.nan)
-    walked = np.zeros(_WALL_FAN)
-
-    def across(points: np.ndarray, normals: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        up, face_up = cast(points, normals)
-        down, face_down = cast(points, -normals)
-        return up, down, face_up, face_down
-
-    near, far = np.array([1 / 16, 1 / 8, 1 / 4, 1 / 2, 3 / 4]), np.array([1.0, 1 / 2, 1 / 4, 1 / 8, 1 / 16])
-    for _step in range(_WALL_STEPS):
-        active = np.flatnonzero(state == WALKING)
-        if not len(active):
+    reach, faces = cast(np.array([start, start]), np.array([n0, -n0]))
+    if not np.isfinite(reach).all():
+        return unread
+    across = faces[0] - faces[1]
+    m0 = across / np.linalg.norm(across) if np.linalg.norm(across) > 1e-6 and float(across @ n0) > 0 else n0
+    centre = start + n0 * (reach[0] - reach[1]) / 2.0
+    for spacing in (factor * t0 for factor in _WALL_SPACINGS):
+        found = _wall_outline(cast, centre, m0, t0, spacing)
+        if found is not None:
             break
-        length, ahead = cast(m[active], d[active])
-        state[active[~np.isfinite(length)]] = LOST
-        keep = np.isfinite(length)
-        active, length, ahead = active[keep], length[keep], ahead[keep]
-        if not len(active):
-            break
-        # the material across the wall at places along the walk, the more of them near its end
-        x = np.concatenate([length[:, None] * near[None, :], length[:, None] - t0 * far[None, :]], axis=1)
-        x = np.sort(np.clip(x, length[:, None] * 1e-3, length[:, None] * (1.0 - 1e-3)), axis=1)
-        places = m[active][:, None, :] + x[:, :, None] * d[active][:, None, :]
-        up, down, _, _ = across(places.reshape(-1, 3), np.repeat(n[active], x.shape[1], axis=0))
-        thick = ((up + down) > _JOINED * t0).reshape(x.shape)
-        thick &= np.isfinite(up + down).reshape(x.shape)
-        first = thick.argmax(axis=1)
-        met = np.flatnonzero(thick.any(axis=1))
-        if len(met):
-            who = active[met]
-            lo = np.where(first[met] > 0, x[met, np.maximum(first[met] - 1, 0)], 0.0)
-            hi = x[met, first[met]]
-            for _halving in range(6):
-                middle = (lo + hi) / 2.0
-                a, b, _, _ = across(m[who] + middle[:, None] * d[who], n[who])
-                grown = ~np.isfinite(a + b) | ((a + b) > _JOINED * t0)
-                lo, hi = np.where(grown, lo, middle), np.where(grown, middle, hi)
-            joins[who] = m[who] + hi[:, None] * d[who]
-            state[who] = JOINED
-        rest = np.flatnonzero(~thick.any(axis=1))
-        if not len(rest):
-            continue
-        # the face the walk left through: across the way (an end: the wall stops in the air), or the wall's own
-        # (its normal the wall's: the wall curves away under the walk)
-        ends = np.abs(np.einsum("ij,ij->i", ahead[rest], n[active[rest]])) < math.cos(math.radians(45.0))
-        state[active[rest[ends]]] = FREE
-        rest = rest[~ends]
-        if not len(rest):
-            continue
-        # the walk left through the wall's own face: the wall curves. Back to its middle, turned along it
-        who = active[rest]
-        half = 0.5 * length[rest]
-        at = m[who] + half[:, None] * d[who]
-        a, b, face_a, face_b = across(at, n[who])
-        found = np.isfinite(a + b)
-        state[who[~found]] = LOST
-        thinned = found & ((a + b) < 0.25 * t0)
-        state[who[thinned]] = FREE
-        go = found & ~thinned
-        who, at, a, b, half = who[go], at[go], a[go], b[go], half[go]
-        if not len(who):
-            continue
-        centre = at + n[who] * ((a - b) / 2.0)[:, None]
-        turned = face_a[go] - face_b[go]
-        turned /= np.maximum(np.linalg.norm(turned, axis=1, keepdims=True), 1e-300)
-        way = d[who] - np.einsum("ij,ij->i", d[who], turned)[:, None] * turned
-        way /= np.maximum(np.linalg.norm(way, axis=1, keepdims=True), 1e-300)
-        walked[who] += np.linalg.norm(centre - m[who], axis=1)
-        m[who], n[who], d[who] = centre, turned, way
-        reach = np.maximum(half, t0)
-        state[who[(np.linalg.norm(centre - start, axis=1) < reach) & (walked[who] > 4.0 * reach)]] = RING
-    state[state == WALKING] = LOST
-    joined = state == JOINED
-    # the runs of joined directions round the circle
-    runs = int(np.count_nonzero(joined & ~np.roll(joined, 1))) if not joined.all() else 1
-    supported: bool | None
-    if (state == RING).any() or runs >= 2 or int(joined.sum()) > _WALL_FAN // 2:
-        supported = True
-    elif runs == 1 and int(joined.sum()) >= 3:
-        places = joins[joined] - joins[joined].mean(axis=0)
-        _, _, axes = np.linalg.svd(places, full_matrices=False)
-        along = places @ axes[0]
-        off = np.linalg.norm(places - along[:, None] * axes[0][None, :], axis=1)
-        # round a corner: the joins stand off their own line by a fifth of its length (a fin's on a round base
-        # lie a few hundredths off)
-        supported = bool(off.max() > max(0.2 * float(np.ptp(along)), 0.5 * t0))
     else:
+        return unread
+    joins, free, lost, ring, places = found
+    supported: bool | None
+    if not free or ring:
+        supported = True
+    elif not len(joins):
         supported = False
-    if supported is False and (state == LOST).any():
+    else:
+        # the joins' own line, and how far they stand off it: along one line where that is under a fifth of
+        # its length (a fin's on a round base lie a few hundredths off) or under the spacing they were read at
+        middle = joins.mean(axis=0)
+        _, _, axes = np.linalg.svd(joins - middle, full_matrices=False)
+        along = (joins - middle) @ axes[0]
+        beside = np.linalg.norm(joins - middle - along[:, None] * axes[0][None, :], axis=1)
+        if beside.max() > max(0.2 * float(np.ptp(along)), spacing):
+            supported = True
+        else:
+            # one line: two sides where the region's middle lies on it between the joins, one where it lies off
+            # it (a fin above its base) or past them (a pin beyond its foot)
+            rel = places.mean(axis=0) - middle
+            at = float(rel @ axes[0])
+            supported = bool(float(np.linalg.norm(rel - at * axes[0])) <= spacing and
+                             along.min() <= at <= along.max())
+    if supported is False and lost:
         supported = None
-    # sides as the guides count them: none, one, or two and more (a run round a corner is two)
-    return {"supported": supported, "joined_sides": 2 if supported else min(runs, 1),
-            "joined_directions": int(joined.sum()), "free_directions": int((state == FREE).sum()),
-            "unread_directions": int((state == LOST).sum()), "ring": bool((state == RING).any())}
+    return {"supported": supported, "joined_sides": 2 if supported else min(len(joins), 1),
+            "joined_links": len(joins), "free_links": free, "unread_links": lost,
+            "free_fraction": round(free / (free + len(joins)), 4) if free + len(joins) else 0.0,
+            "ring": ring, "places": len(places), "spacing_mm": round(spacing, 6)}
+
+
+def _wall_steps(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]], c: np.ndarray,
+                m: np.ndarray, d: np.ndarray, t0: float, spacing: float) -> tuple[np.ndarray, ...]:
+    """Each place ``c`` (the wall's normal there ``m``) taken one step of ``spacing`` along the wall in the
+    direction ``d``: what it comes to -- 0 the wall still (its middle there, the wall's normal and the step's
+    direction turned with it), 1 joined (the material across it grown past ``_JOINED`` times ``t0``), 2 free (a
+    face across the way with the wall still thin, or the wall thinned away), 3 not read (a ray met nothing) --
+    and where. A step the wall's own face cuts short (the wall curves away) goes on from there, back in the
+    wall's middle and turned along it, ``_WALL_BENDS`` stretches at most."""
+    c, m, d = c.copy(), m.copy(), d.copy()
+    WALL, JOINED, FREE, LOST, WALKING = range(5)
+    kind = np.full(len(c), WALKING)
+    left = np.full(len(c), float(spacing))
+    square = math.cos(math.radians(45.0))
+    for _bend in range(_WALL_BENDS):
+        go = np.flatnonzero(kind == WALKING)
+        if not len(go):
+            break
+        ahead, face = cast(c[go], d[go])
+        near = ahead <= left[go] * (1.0 + 1e-9)  # a step that would end on the face ahead stops short of it
+        # the face ahead is across the way (an end, or what the wall runs into head on), or the wall's own
+        ends = near & (np.abs(np.einsum("ij,ij->i", face, m[go])) < square)
+        step = np.where(ends, np.maximum(ahead - t0 / 2.0, ahead / 2.0), np.where(near, 0.8 * ahead, left[go]))
+        q = c[go] + step[:, None] * d[go]
+        up, face_up = cast(q, m[go])
+        down, face_down = cast(q, -m[go])
+        read = np.isfinite(ahead) & np.isfinite(up) & np.isfinite(down)
+        thick = read & ((up + down) > _JOINED * t0)
+        gone = read & ~thick & (ends | ((up + down) < 0.25 * t0) | (near & (step < 0.05 * t0)))
+        on = read & ~thick & ~gone
+        kind[go[~read]], kind[go[thick]], kind[go[gone]] = LOST, JOINED, FREE
+        # back in the wall's middle, turned with it
+        turned = face_up - face_down
+        length = np.linalg.norm(turned, axis=1)
+        keep = (length > 1e-6) & (np.einsum("ij,ij->i", turned, m[go]) > 0.5 * length)
+        turned = np.where(keep[:, None], turned / np.maximum(length, 1e-300)[:, None], m[go])
+        way = d[go] - turned * np.einsum("ij,ij->i", d[go], turned)[:, None]
+        way /= np.maximum(np.linalg.norm(way, axis=1, keepdims=True), 1e-300)
+        c[go] = np.where(on[:, None], q + m[go] * ((up - down) / 2.0)[:, None], q)
+        m[go[on]], d[go[on]] = turned[on], way[on]
+        left[go] -= step
+        kind[go[on & (left[go] <= 1e-9 * spacing)]] = WALL
+    kind[kind == WALKING] = WALL  # a wall bent tighter than the stretches reach: as far as it got
+    return kind, c, m, d
+
+
+def _wall_outline(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]], centre: np.ndarray,
+                  normal: np.ndarray, t0: float, spacing: float,
+                  ) -> tuple[np.ndarray, int, int, bool, np.ndarray] | None:
+    """The outline of the thin region about ``centre`` (the middle of a wall of thickness ``t0``, ``normal``
+    across it) laid out at ``spacing`` (``wall_support``): where its joined steps end, the count of its free
+    steps and of those no ray answered, whether it comes round on itself, and its places. None where it has
+    more than ``_WALL_PLACES`` places."""
+    seed = np.array([1.0, 0.0, 0.0]) if abs(normal[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u0 = np.cross(normal, seed)
+    C, M, U = [np.asarray(centre, dtype=float)], [np.asarray(normal, dtype=float)], [u0 / np.linalg.norm(u0)]
+    IJ = [(0, 0)]
+    index = {(0, 0): 0}
+    joins: list[np.ndarray] = []
+    free = lost = 0
+    ring = False
+    frontier = [0]
+    while frontier:
+        parent = np.repeat(np.array(frontier), 4)
+        way = np.tile(_WAYS, (len(frontier), 1))
+        key = np.array([IJ[k] for k in parent]) + way
+        fresh = np.array([tuple(k) not in index for k in key.tolist()])
+        parent, way, key = parent[fresh], way[fresh], key[fresh]
+        if not len(parent):
+            break
+        c, m, u = np.array([C[k] for k in parent]), np.array([M[k] for k in parent]), np.array([U[k] for k in parent])
+        d = way[:, :1] * u + way[:, 1:] * np.cross(m, u)
+        kind, c, m, d = _wall_steps(cast, c, m, d, t0, spacing)
+        lost += int((kind == 3).sum())
+        free += int((kind == 2).sum())
+        joins.extend(c[kind == 1])
+        frontier = []
+        for k in np.flatnonzero(kind == 0):
+            ij = (int(key[k, 0]), int(key[k, 1]))
+            if ij in index:
+                continue  # reached this round by another way
+            # round on itself: a place already laid here that is none of this one's neighbours
+            close = np.flatnonzero(np.linalg.norm(np.array(C) - c[k], axis=1) < 0.5 * spacing)
+            if any(max(abs(IJ[o][0] - ij[0]), abs(IJ[o][1] - ij[1])) > 2 for o in close):
+                ring = True
+                joins.append(c[k])
+                continue
+            # the place's own first direction: the step's, turned with the wall, taken back to it
+            first = d[k] * way[k, 0] if way[k, 0] else np.cross(d[k] * way[k, 1], m[k])
+            index[ij] = len(C)
+            frontier.append(len(C))
+            C.append(c[k])
+            M.append(m[k])
+            U.append(first)
+            IJ.append(ij)
+            if len(C) > _WALL_PLACES:
+                return None
+    return np.array(joins).reshape(-1, 3), free, lost, ring, np.array(C)
 
 
 # --- the raster -------------------------------------------------------------------------------------------
@@ -1162,17 +1208,17 @@ def nearest_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray,
     return found, which
 
 
-def spread_points(tri: np.ndarray, cap: int = 4000) -> np.ndarray:
+def spread_points(tri: np.ndarray, cap: int = 4000, owners: bool = False) -> Any:
     """About ``cap`` points spread over the triangles ``tri`` (k, 3, 3) by area: each triangle's corners and a
     grid across it about the spacing the cap gives -- rows from the corner opposite its shortest side to that
     side, each row as many points across as its width needs (at most 60 rows, 60 a row). A sliver (a long thin
     facet of a strut) is laid out along its length alone: a square grid by its longest side put 1891 points on
-    each, 183000 on a 97-triangle region of a lattice."""
+    each, 183000 on a 97-triangle region of a lattice. With ``owners``, each point's triangle too."""
     edges = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     areas = 0.5 * np.linalg.norm(edges, axis=1)
     total = float(areas.sum())
     if total <= 0:
-        return tri.reshape(-1, 3)
+        return (tri.reshape(-1, 3), np.repeat(np.arange(len(tri)), 3)) if owners else tri.reshape(-1, 3)
     spacing = math.sqrt(total / cap)
     tri = np.array(tri, dtype=float)  # a plain array: a mesh's tracked one costs a hash a slice
     sides = np.stack([np.linalg.norm(tri[:, (k + 2) % 3] - tri[:, (k + 1) % 3], axis=1) for k in range(3)], axis=1)
@@ -1191,7 +1237,8 @@ def spread_points(tri: np.ndarray, cap: int = 4000) -> np.ndarray:
     first = np.cumsum(count + 1) - (count + 1)
     w = np.where(count[row] > 0, (np.arange(len(row)) - first[row]) / np.maximum(count[row], 1), 0.0)[:, None]
     k, sr = owner[row], s[row][:, None]
-    return a[k] + sr * ((1.0 - w) * (b[k] - a[k]) + w * (c[k] - a[k]))
+    points = a[k] + sr * ((1.0 - w) * (b[k] - a[k]) + w * (c[k] - a[k]))
+    return (points, k) if owners else points
 
 
 def in_triangles_xy(tri: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:

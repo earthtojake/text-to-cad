@@ -857,7 +857,7 @@ class MeshopsTest(unittest.TestCase):
         self.assertEqual(set(np.unique(labels)), {-2, -1, 0}, "material, air that is no cavity, the cavity")
 
     def test_a_wall_s_support_is_read_off_the_wall(self) -> None:
-        # the walk from the wall's thinnest place: where it runs into the part, and on how many sides
+        # the outline of the wall's thin region: where it runs into the part, and on how many sides
         def read(shape, point, normal, thickness: float) -> tuple:
             V, F, _ = brep.triangles(shape, 0.05)
             caster = mo.Caster(V, F)
@@ -869,7 +869,7 @@ class MeshopsTest(unittest.TestCase):
                 return distance, normals
 
             found = mo.wall_support(cast, np.array(point, dtype=float), np.array(normal, dtype=float), thickness)
-            self.assertEqual(found["unread_directions"], 0, found)
+            self.assertEqual(found["unread_links"], 0, found)
             return found["supported"], found["joined_sides"]
 
         base = bd.Box(30, 20, 2, align=A)
@@ -886,6 +886,17 @@ class MeshopsTest(unittest.TestCase):
         skin = bd.Box(30, 30, 30) - bd.Pos(0, 0, 3.3) * bd.Sphere(11)
         self.assertEqual(read(skin, (0, 0, 15), (0, 0, 1), 0.7), (True, 2), "a skin over a cavity: all round")
         self.assertEqual(read(bd.Box(20, 20, 0.5), (1, 2, 0.25), (0, 0, 1), 0.5), (False, 0), "a plate alone: none")
+        pin = base + bd.Pos(0, 0, 2) * bd.Cylinder(0.25, 10, align=A)
+        self.assertEqual(read(pin, (0.25, 0, 7), (1, 0, 0), 0.5), (False, 1), "a pin on its foot: one side")
+        cup = bd.Cylinder(10, 20, align=A) - bd.Pos(0, 0, 2) * bd.Cylinder(9.3, 20, align=A)
+        self.assertEqual(read(cup, (10, 0, 12), (1, 0, 0), 0.7), (True, 2), "a cup's wall: its floor all round")
+        # the land a 90 deg countersink leaves round a hole, 0.6 mm: joined to the plate round its whole rim,
+        # whichever of its faces it is read from and whichever side of the hole
+        land = bd.Box(30, 20, 3, align=A) - bd.Cylinder(1.7, 3, align=A) - bd.Pos(0, 0, 0.6) * bd.Cone(1.7, 4.1, 2.4, align=A)
+        for x in (1.75, -1.75):
+            self.assertEqual(read(land, (x, 0, 0), (0, 0, -1), 0.65), (True, 2), "a countersink's land, from below")
+        slope = np.array([-1.0, 0.0, 1.0]) / math.sqrt(2.0)
+        self.assertEqual(read(land, (1.9, 0, 0.8), slope, 0.8 * math.sqrt(2.0) / 2.0), (True, 2), "from its cone")
 
     def test_the_mesh_check_answers_the_same_families(self) -> None:
         drained = TrappedTest.sealed - bd.Pos(0, 0, -1) * bd.Cylinder(2.5, 5, align=A)
