@@ -51,7 +51,9 @@ the child a `RigidJoint` at the frame that joint places it at: a revolute's own 
 where it was built; connected at another value, it moves there, and that value is as
 built. The server enforces it where angle 0 cannot be as built: a child whose `RigidJoint` stood
 at its joint's origin with its Z on the joint's axis, and that `connect_to` turned about that axis
-at 0, fails the run, naming the joint, the turn and the frame to use instead. A `RigidJoint`
+at 0, fails the run, naming the joint, the turn and the frame to use instead. A child drawn at a
+value and connected at it (an arm drawn raised 30 degrees, `angle=30`) is not moved by `connect_to`,
+and that value is as built. A `RigidJoint`
 elsewhere, or one whose Z is not the joint's axis, is a placement: `connect_to` puts the child on
 the joint (a wheel built at the origin with `bd.RigidJoint("axle", wheel, bd.Location())`, put on
 its axle), and nothing is checked. A `RigidJoint` on `bd.Plane(origin=axis.position, z_dir=axis.direction)` takes its X

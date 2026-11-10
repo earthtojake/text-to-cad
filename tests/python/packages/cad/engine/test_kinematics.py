@@ -719,6 +719,26 @@ def placed():
 """
 
 
+# An arm drawn raised 30 degrees about its hinge, connected at 30: connect_to moves nothing, though the pair's
+# zero turns it, so 30 is as built -- for a revolute and a cylindrical joint alike.
+IN_PLACE = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/raised.xbf")
+def raised():
+    base = bd.Box(40, 40, 10)
+    base.label = "base"
+    arm = bd.Pos(0, 0, 40) * bd.Box(10, 10, 60)
+    arm.label = "arm"
+    hinge = bd.{joint}("shoulder", base, axis=bd.Axis((0, 0, 10), (1, 0, 0)), angular_range=(-90, 90))
+    bd.RigidJoint("shoulder", arm, {frame} * bd.Rot(0, 0, 30))
+    hinge.connect_to(arm.joints["shoulder"], angle=30{position})
+    return bd.Compound(children=[base, arm], label="raised")
+"""
+
+
 class RefusalTest(_Folder):
     def test_a_child_turned_at_its_joint_s_zero_is_refused_and_one_at_the_joint_s_own_frame_stays(self) -> None:
         import build123d as bd
@@ -743,6 +763,16 @@ class RefusalTest(_Folder):
         found = document.Loaded(self.folder / "XBF/placed.xbf").mechanism
         self.assertEqual(found.as_built["axle"], (0.0,))
         self.assertAlmostEqual(found.as_built["elbow"][0], 60.0, places=6)
+
+    def test_a_child_built_in_place_at_a_value_and_connected_at_it_is_as_built(self) -> None:
+        own = ("base.location * bd.Location(bd.Plane(origin=hinge.relative_axis.position, x_dir=hinge.angle_reference, "
+               "z_dir=hinge.relative_axis.direction))")
+        for joint, frame, position, values in (("RevoluteJoint", "hinge.location", "", (30.0,)),
+                                               ("CylindricalJoint", own, ", position=0", (30.0, 0.0))):
+            with self.subTest(joint=joint):
+                self.build("raised", IN_PLACE.format(joint=joint, frame=frame, position=position))
+                found = document.Loaded(self.folder / "XBF/raised.xbf").mechanism
+                np.testing.assert_allclose(found.as_built["shoulder"], values, atol=1e-6)
 
     def test_a_child_frame_at_the_revolute_s_own_frame_is_joint_zero(self) -> None:
         # A rigid frame made of the world datum turns about the axis from the revolute's own by the

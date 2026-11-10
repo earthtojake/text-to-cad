@@ -88,8 +88,10 @@ These do break, where a program relies on them:
   `RigidJoint` at the joint's origin with its Z on the joint's axis, its X another way, as a
   `bd.Plane` of the axis on a turned part gives), built in 0.10 with the child turned. It now fails
   the run, naming the joint, the turn and the frame to build the `RigidJoint` at: a revolute's own
-  frame, `hinge.location`, or a slide's position in its rail's orientation. A `RigidJoint` whose Z
-  is not the axis, or that stood elsewhere, places the child on the joint, as in 0.10.
+  frame, `hinge.location`, or a slide's position in its rail's orientation. A `connect_to` that left
+  the child where it was built (a child drawn at a value and connected at it, which is then as built)
+  builds as in 0.10, and so does a `RigidJoint` whose Z is not the axis, or that stood elsewhere: it
+  places the child on the joint.
 
 ## The `cad` command (tier 1)
 
