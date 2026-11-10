@@ -21,7 +21,7 @@ texture drawn on it.
   viewer's feature edges (``buffer.py``, three's rounding at 1e-4 of the file's metres).
 - **Materials**: each primitive's ``XCAFDoc_VisMaterial`` -- base colour (linear), metallic,
   roughness, emission, alpha (a ``BLEND`` material's; an opaque one is opaque, a transmissive one
-  previewed: ``gltf.preview_alpha``, the alpha an xbf's still starts from) -- with what OCCT
+  previewed: ``gltf.preview_alpha``, the alpha an xbf's still draws it at) -- with what OCCT
   does not read of the file's material (the engine's KHR extensions: IOR, transmission, clear coat,
   anisotropy, emissive strength) taken from the file's own JSON, the material matched by its name
   and factors. A primitive without one is the look's fill. Its base colour texture is OCCT's own

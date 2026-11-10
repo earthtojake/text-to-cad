@@ -188,6 +188,51 @@ class MaterialsTest(unittest.TestCase):
             look = plastics.pmma(opacity=opacity).pbr
             self.assertEqual(preview_alpha(1.0, look.values.transmission), look.interpolate_color()[3], "the setter's own")
 
+    def test_the_viewer_previews_a_transmissive_look_as_the_engine_does_case_for_case(self):
+        """``@cad/core``'s ``previewOpacity.js`` is the viewer's copy of the one fade; its
+        ``previewOpacity.parity.json`` is asserted there and here, so the two cannot drift."""
+        from cad.engine.export.glb import _alpha
+        from cad.engine.formats.gltf import preview_alpha
+        from cad.engine.render.finish import finish
+        from tests.python.support.paths import repo_path
+
+        cases = json.loads(repo_path("packages", "core", "src", "lib", "render", "previewOpacity.parity.json")
+                           .read_text(encoding="utf-8"))
+        self.assertTrue(cases["previewCases"] and cases["lookCases"])
+        for case in cases["previewCases"]:
+            with self.subTest(why=case["why"]):
+                self.assertEqual(preview_alpha(case["alpha"], case["transmission"]), case["preview"])
+        for case in cases["lookCases"]:
+            with self.subTest(why=case["why"]):
+                fade = {} if case["opacity"] is None else {"opacity": case["opacity"]}
+                look = FinishedMaterial(plastics.pmma().material, pbr=PbrProperties.create(
+                    "case", color="#ffffff", transmission=case["transmission"], **fade))
+                self.assertEqual(look.pbr.interpolate_color()[3], case["preview"], "build123d's setter infers it")
+                for alpha in (1.0, case["preview"], 0.3):  # whatever the colour's alpha
+                    self.assertEqual(_alpha((1.0, 1.0, 1.0, alpha), look.pbr.values), case["transmitted"], "a GLB")
+                    self.assertAlmostEqual(finish((1.0, 1.0, 1.0, alpha), document.material_json(look))["alpha"],
+                                           case["preview"], places=9, msg="a still")
+                self.assertEqual(preview_alpha(case["transmitted"], case["transmission"]), case["preview"],
+                                 "what reads the GLB and draws no transmission")
+
+    def test_a_still_draws_a_clear_lens_at_its_preview_and_a_faded_one_at_its_own_fade(self):
+        from cad.build123d import materials
+        from cad.engine.render.finish import finish
+
+        def still(look, rgba=None):
+            return finish(rgba if rgba is not None else document.material_color(look),
+                          document.material_json(look))["alpha"]
+
+        lens = materials.led_lens()
+        self.assertEqual(lens.pbr.values.transmission, 1.0)
+        self.assertAlmostEqual(still(lens), 0.3, places=6, msg="a clear lens is drawn, not gone")
+        self.assertAlmostEqual(still(lens, (1.0, 1.0, 1.0, 1.0)), 0.3, places=6, msg="whatever its colour's alpha")
+        self.assertAlmostEqual(still(lens, (1.0, 1.0, 1.0, 0.3)), 0.3, places=6, msg="the setter's preview, not twice")
+        faded = plastics.pmma()
+        faded.pbr = faded.pbr.override(opacity=0.5)
+        self.assertAlmostEqual(still(faded), 0.5, places=6, msg="the author's fade, as a GLB writes it")
+        self.assertAlmostEqual(still(metals.brass(), (0.5, 0.5, 0.5, 0.4)), 0.4, places=6, msg="no transmission")
+
     def test_a_glb_s_transmissive_part_reads_as_the_xbf_s_in_a_still_and_a_3mf(self):
         from cad.engine import formats
         from cad.engine.render.finish import finish
@@ -210,9 +255,10 @@ class MaterialsTest(unittest.TestCase):
         material = prototype["material"] or next(iter(prototype["faceMaterials"].values()))
         self.assertEqual(material["pbr"]["values"]["transmission"], 0.6, "matched by name and factors at alpha 1")
         rgba = prototype["color"] or next(iter(prototype["faceColors"].values()))
-        self.assertAlmostEqual(finish(rgba, material)["alpha"], 0.232, places=5)
+        # A still draws no transmission: the preview alpha, once, not faded again by the transmission.
+        self.assertAlmostEqual(finish(rgba, material)["alpha"], 0.58, places=5)
         (own,) = document.Loaded(self.folder / "pane.xbf").structure()["prototypes"]
-        self.assertAlmostEqual(finish(own["color"], own["material"])["alpha"], 0.232, places=5, msg="the xbf's still")
+        self.assertAlmostEqual(finish(own["color"], own["material"])["alpha"], 0.58, places=5, msg="the xbf's still")
         direct, converted = self.folder / "direct.3mf", self.folder / "converted.3mf"
         export.translate(self.folder / "pane.xbf", None, direct)
         export.translate(self.folder / "pane.glb", None, converted)

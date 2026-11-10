@@ -220,7 +220,8 @@ def preview_alpha(alpha: float, transmission: float) -> float:
     transmissive one previews as build123d's material setter infers
     (``threejs_materials.PbrProperties.interpolate_color``), which the engine's GLB does not repeat in
     the file (``export/glb.py``, ``_alpha``); an alpha below 1 is kept, an earlier release's GLB's or an
-    authored ``opacity``. The viewer's is ``glbMeshData.js``'s ``previewOpacity``."""
+    authored ``opacity``. The viewer's is ``previewOpacity.js``'s ``previewOpacity``; the OCCT still's
+    (``render/finish.py``) is this one, of the look's PBR ``opacity``."""
     return round(max(0.15, 1.0 - 0.7 * transmission), 4) if alpha >= 1.0 and transmission > 0 else alpha
 
 

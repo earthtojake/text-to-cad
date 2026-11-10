@@ -5,6 +5,7 @@
 import { AnimationMixer, LoadingManager, Box3, Group, LoopOnce, Matrix3, Matrix4, Vector3 } from "three";
 
 import { isOccurrenceToken } from "../cadRefs.js";
+import { previewOpacity } from "./previewOpacity.js";
 
 const GLB_CAD_UNIT_SCALE = 1000;
 
@@ -70,19 +71,20 @@ function colorFromMaterial(material, useSourceColors, { rawMaterial = null } = {
   };
 }
 
-// What a transmissive material at alpha 1 previews at where a look draws no transmission, or null: as
-// build123d's material setter infers (`threejs_materials.PbrProperties.interpolate_color`), which the
-// engine's GLB does not repeat in the file. An alpha below 1 is kept: an earlier release's GLB's, or an
-// authored `opacity`. The engine's is `formats/gltf.py`'s `preview_alpha`.
-function previewOpacity(material) {
+// What a transmissive material previews at where a look draws no transmission, or null for one that
+// does not transmit: at alpha 1 as build123d's material setter infers, which the engine's GLB does not
+// repeat in the file; an alpha below 1 is kept, an earlier release's GLB's or an authored `opacity`
+// (`previewOpacity.js`).
+function transmissivePreview(material) {
   const transmission = Number(material?.transmission);
-  return transmission > 0 && Number(material?.opacity) >= 1 ? Math.max(0.15, 1 - 0.7 * transmission) : null;
+  const opacity = Number(material?.opacity);
+  return transmission > 0 && Number.isFinite(opacity) ? previewOpacity(Math.min(Math.max(opacity, 0), 1), transmission) : null;
 }
 
 function materialOpacity(material, rawMaterial = null) {
   const materialValue = Number(material?.opacity);
   if (Number.isFinite(materialValue)) {
-    return previewOpacity(material) ?? Math.min(Math.max(materialValue, 0), 1);
+    return transmissivePreview(material) ?? Math.min(Math.max(materialValue, 0), 1);
   }
   const rawAlpha = rawBaseColorFactor(rawMaterial)?.[3];
   const rawValue = Number(rawAlpha);
@@ -671,7 +673,7 @@ function markGlbMaterials(gltf) {
       // An explicit glTF material owns its PBR finish, including Standard materials.
       // GLTFLoader's implicit no-material default still takes the viewer's finish.
       material.userData.cadAuthoredFinish = Boolean(rawMaterial && material.isMeshStandardMaterial);
-      const preview = previewOpacity(material);
+      const preview = transmissivePreview(material);
       if (preview !== null) material.userData.cadPreviewOpacity = preview;
     }
   });

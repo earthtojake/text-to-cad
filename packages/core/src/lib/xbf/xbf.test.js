@@ -288,13 +288,38 @@ test("a document's materials: a physical material per look, kept in the shaded l
   plain.release();
 });
 
+test("a transmissive part is one fade in every look: its GLB's opacity with transmission, its preview without", async () => {
+  // As build123d's setter writes it: the colour's alpha its preview (0.3 for transmission 1).
+  const structure = structuredClone(STRUCTURE);
+  structure.prototypes[1].material = GLASS;
+  structure.prototypes[1].color = [1, 1, 1, 0.3];
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
+  const scene = createXbfScene(THREE, document);
+  const peg = scene.object3D.children[1].children[0].children.find(child => child.isMesh);
+  const worn = () => [peg.material].flat()[0];
+  for (const [name, look, opacity, transmission] of [
+    ["Render", { ...LOOK, authored: true }, 1, 1],
+    ["Solid", LOOK, 1, 1],
+    ["Flat", { ...LOOK, surface: { style: "flat", opacity: 1 } }, 0.3, undefined],
+    ["Parts", { ...LOOK, materialSettings: { ...LOOK.materialSettings, overrideSourceColors: true } }, 0.3, 0],
+    ["X-ray", { ...LOOK, surface: { style: "shaded", opacity: 0.22 } }, 0.3 * 0.22, 0]]) {
+    scene.setSurfaceLook(look);
+    const material = worn();
+    assert.ok(Math.abs(material.opacity - opacity) < 1e-9, `${name}: opacity ${material.opacity}, not ${opacity}`);
+    assert.deepEqual([material.transmission, material.transparent], [transmission, opacity < 1], name);
+  }
+  scene.dispose();
+  document.release();
+});
+
 test("a translucent part on an opaque one is drawn whole: back faces then front, writing no depth, a hair in front of what it lies on", async () => {
   // The pegs stand on the plate's top face: made translucent, as the orbit clock's diffuser is on its baffle,
   // their faces there lie at the plate's depth. Stepped back as the plate is, the two were decided pixel by
   // pixel, in shards along each one's triangles; a see-through surface steps a hair forward instead.
+  // Faded by its material's own opacity: a transmissive look's colour alpha is its preview, not a second fade.
   const structure = structuredClone(STRUCTURE);
   structure.prototypes[1].color = [0.96, 0.95, 0.93, 0.8];
-  structure.prototypes[1].material = { pbr: { values: { transmission: 0.6, roughness: 0.55, ior: 1.5 }, textures: {} } };
+  structure.prototypes[1].material = { pbr: { values: { transmission: 0.6, roughness: 0.55, ior: 1.5, opacity: 0.8 }, textures: {} } };
   const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
   const scene = createXbfScene(THREE, document);
   const [plate, peg] = scene.object3D.children.map(carrier => carrier.children[0].children.find(child => child.isMesh));

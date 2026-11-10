@@ -2648,17 +2648,18 @@ For a project's own material, use a native factory such as `metals.custom_metal`
 "Coating", color="#202830", roughness=0.7))`. Unknown density remains unknown in
 inspection. Assign materials and paints after geometric operations. Native material
 assignment infers a preview alpha for transmission (`transmission=1` gives `0.3`), even
-when its PBR `opacity=1`. The viewer's scene and an xbf's still draw that alpha; for an opaque base
-colour with physical transmission there, assign an opaque shape colour after the material. A GLB writes
-a transmissive look (`transmission` above zero) `OPAQUE` at alpha 1, so a path tracer refracts the part
-and does not also fade it, unless its PBR `opacity` is below 1: that is an author's fade, written `BLEND`
-at that alpha. A translucent shape colour on a transmissive look is not one: the document holds only
-the colour's value, and an inferred preview cannot be told from it (the same value by hand, or a preview
-left from the transmission before a later `pbr.override`). What reads a GLB and draws no transmission puts
-the preview back: a transmissive material at alpha 1 previews at the same inference, `max(0.15, 1 - 0.7 *
-transmission)` (`formats/gltf.py`'s `preview_alpha`, `glbMeshData.js`'s `previewOpacity`), in the viewer's
-Flat and an Inspect without finishes, a still's alpha, and the colour of a 3MF converted from it; one below 1
-keeps its alpha. Native assignments,
+when its PBR `opacity=1`. A transmissive look (`transmission` above zero) is one fade, never two, and
+the same part looks the same whichever file of it is opened. What draws transmission draws the part at
+alpha 1 with it, so a path tracer refracts the part and does not also fade it: a GLB writes the look
+`OPAQUE` at alpha 1, and the viewer's Render and its shaded modes (which keep a material's finish) draw an
+xbf's part, and a GLB's, so. The one exception is a PBR `opacity` below 1, an author's fade, drawn at that
+alpha everywhere (a GLB writes it `BLEND`). A translucent shape colour on a transmissive look is not one:
+the document holds only the colour's value, and an inferred preview cannot be told from it (the same value
+by hand, or a preview left from the transmission before a later `pbr.override`). What draws no
+transmission draws the preview instead, once: the same inference, `max(0.15, 1 - 0.7 * transmission)`, or
+the author's fade (`formats/gltf.py`'s `preview_alpha`, the viewer's `previewOpacity.js`), in the viewer's
+Flat, X-ray and Parts, an OCCT still of an xbf or a GLB (`render/finish.py`), and the colour of a 3MF
+converted from a GLB. Native assignments,
 inheritance and copying follow build123d; a child whose inherited value has already been
 read can retain that cached value, so assign assembly materials before reading children.
 
