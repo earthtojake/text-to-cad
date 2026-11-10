@@ -1,55 +1,27 @@
 """What a change can break: changed paths in, the Test jobs and test files to run out.
 
 `test.yml`'s first job runs this. Every changed path -- added, modified or deleted -- goes
-through RULES, a table of what READS that path: the tests that open it, scan it, import it,
-build it or run it, and the jobs that build or ship it. A path selects the union of the
-rules it matches, except that a FINAL rule ends the search (prose in a code tree). A path
-no rule matches runs everything: a new kind of file is tested whole until someone writes
-down what reads it. VERSION, the shared test machinery, the dependency manifests and
-packages/core (which every runtime and app is built from) run everything too.
+through RULES, a short table of components: the directories whose change a job or a suite
+has to see. A path selects the union of the rules it matches, except that a FINAL rule ends
+the search (prose in a code tree). A path no rule matches runs everything, as do VERSION, the
+dependency manifests, packages/core and the test machinery. Selection is by path, never by
+what a file says: a comment in a module selects what the module's code would, and no rule
+reads a file to decide.
 
-One flag, one job: a job runs whole on its flag or is skipped, and no step inside it reads
-another. The `static` job needs no flag: the version and tree checks, the light contracts
-(every policy test but HEAVY_POLICY, and the skill suites in LIGHT_SKILL_TESTS: tests that
-need nothing but Python's standard library, Node and the repository's text) and the API's
-tests run on every change with nothing installed, so a path only they read needs no rule
-beyond saying so. `--light policy` and `--light skills` print those lists for it.
+One flag, one job: a job runs whole on its flag or is skipped. `static` needs none: the
+version and tree checks, the light contracts (every policy test but HEAVY_POLICY, and
+LIGHT_SKILL_TESTS: tests that need nothing installed) and the API's tests run on every change,
+so a path only they read selects nothing. The release tier (`floor`, `installer`) runs on a
+full run: a VERSION change, the nightly schedule, a dispatch, Publish Release's call.
 
-The release tier -- the packages' suites on their oldest Python (`floor`) and the installer
-rehearsals (`installer`) -- runs on a full run: a VERSION change, the nightly schedule, a
-manual dispatch, Publish Release's call. The rehearsals also run on a change to the
-installer or what it runs.
-
-Selection is by path, never by diff content: a comment in a module selects what the
-module's code would.
-
-Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
-
-    packages  packages_tests      packages (Linux), packages (Windows): the library's, the server's
-      linux_shards                and the shim's suites, split over the shards these name ("1/2",
-      windows_shards              "2/2"; one shard when the selection is narrowed)
-      changed_tests               the package test files the change itself touches, run first
-    floor                         packages (Python 3.13 floor): the same suites, whole
-    fea                           fea (the stress study's suite, with netgen and CalculiX installed)
-    bpy                           blender (cad.blender.load and Open in's Blender script in the
-                                  environment cad run makes for bpy)
-    kicad                         kicad
-    routing                       routing (macOS): the router's unit files, on the third C library
-    core_js  web_ui  web_client  mcp   js-core, js-ui, js-web, js-mcp
-    skills  skills_policy  skills_tests   skills: the policy tests and skill suites that load the packages
-    docs
-    packaging                     packaging: the bundle, the wheels, the installed commands
-    web_viewer                    viewer-e2e: the bundled viewer through the real backend
-    installer                     install-linux, install-windows (the installer rehearsals)
-    full
-    record                        the artifact name recording what this run tests
-
-Test paths are repo-relative and space-separated; a suite's own directory means the whole
-suite. A run's record is `tested-<tree>-<scope>`: the git tree it checked out, and `full`
-or a digest of the selection. On a push, a successful run of this repository that already
-recorded the same tree and scope (its pull request's, normally) stands in for this one, and
-nothing runs again (tested_tree.py); the nightly run stands down the same way for a tree a
-run already tested in full.
+Outputs (GITHUB_OUTPUT): a flag per job (FLAGS, and `packages`, `skills`), the test paths the
+package and skills jobs take (`packages_tests`, `skills_policy`, `skills_tests`: repo-relative,
+space-separated, a suite's own directory meaning all of it), the shards the package suites are
+split over (`linux_shards`, `windows_shards`), the package test files the change itself touches
+(`changed_tests`, run first), `full`, and `record`, the artifact naming what this run tests:
+`tested-<tree>-<scope>`. A push whose tree a successful run already recorded with the same
+scope runs nothing again, and neither does the nightly run for a tree tested in full
+(tested_tree.py).
 
     python3 scripts/github-workflows/select_checks.py            # in CI: FULL, BEFORE, GITHUB_*
     python3 scripts/github-workflows/select_checks.py --paths a b  # the selection for some paths
@@ -117,9 +89,8 @@ NOTHING = select()
 # ---- the table ---------------------------------------------------------------------------------
 
 # Policy tests that need the CAD kernel or the built runtime. Every other file in
-# tests/python/global is a LIGHT contract: a new policy test is assumed light, and the light
-# phase runs with nothing installed, so one that is not fails there until it is listed here
-# with a rule for what it reads.
+# tests/python/global is a LIGHT contract: a new policy test is assumed light, and `static`
+# runs with nothing installed, so one that is not fails there until it is listed here.
 HEAVY_POLICY = {
     "test_cli_stream_contract.py",          # the server's commands, run
     "test_viewer_renders_emitted_dxf.py",   # a DXF the library emits, through the kernel
@@ -131,13 +102,18 @@ LIGHT_SKILL_TESTS = (
     f"{SKILL_SUITES}/sendcutsend",
 )
 
-# Whatever runs the packages: their suites on both platforms (the engine's, the viewer backend's
-# and the CAD app server's among them), the policy tests that load them, the viewer gates that
-# serve and draw through them, the wheels. A skill's commands are the server's, and the light
-# contracts that check what a skill documents run on every change.
+# The three distributions, the deprecated alias, and the bundle the server's wheel carries.
+PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
+PACKAGES = (*(f"{project}/**" for project in PACKAGE_PROJECTS), "packages/aliases/**", "scripts/bundle/**")
+# Whatever runs the packages: their suites on both platforms, the policy tests and skill suites
+# that load them, the wheels, the bundled viewer served through them, and the jobs that run them
+# with a tool installed as a person has it (netgen and CalculiX, KiCad, Blender) or on the third
+# C library. Those four are minutes together and never the longest job, so every package change
+# runs them: a list of the modules each one reaches was the table's most intricate part, and
+# the one a new import silently outgrew.
 PACKAGE_CONSUMERS = select(
-    flags=["web_viewer", "packaging"], packages=[PACKAGES_SUITE],
-    policy=[f"{POLICY_SUITE}/{name}" for name in sorted(HEAVY_POLICY)],
+    flags=["packaging", "web_viewer", "fea", "kicad", "bpy", "routing"],
+    packages=[PACKAGES_SUITE], policy=[POLICY_SUITE], skills=[SKILL_SUITES],
 )
 
 
@@ -159,159 +135,6 @@ def _test_file(suite: str, whole: str | None = None) -> Callable[[str], Select]:
         return select(skills=[target])
     return choose
 
-
-# The CAD Viewer's backend and the CAD app's server are leaves of the server: outside them and
-# the commands that start them, nothing in it imports either, except viewer.recents (the state
-# directory's one definition) -- tests/python/global/test_viewer_and_mcp_boundary.py holds
-# that. So a change confined to one of them reaches only the package tests that import or
-# start it, which name it (or a support module that does), and the tests that read or import
-# all of the packages at once; and, for the viewer, the gates that serve the bundled client. The
-# skill suites and the heavy policy tests reach neither. The shim (cad-mcp) is a leaf too:
-# nothing imports it but its own suite and the tests that name it.
-LIBRARY_SRC = "packages/cad/src/cad"
-SERVER_SRC = "packages/cad-server/src/cad_server"
-VIEWER_CODE = (f"{SERVER_SRC}/viewer/**", f"{SERVER_SRC}/cli/viewer.py")
-MCP_CODE = (f"{SERVER_SRC}/mcp/**",)
-VIEWER_SHARED = (f"{SERVER_SRC}/viewer/__init__.py", f"{SERVER_SRC}/viewer/recents.py")
-SHIM_CODE = ("packages/cad-mcp/**",)
-_NAMES_VIEWER = r"cad_server\.viewer|cad_server\.mcp|cli\.viewer|cli\.mcp|[\"'](?:viewer|mcp)[\"' ]"
-_NAMES_MCP = r"cad_server\.mcp|cli\.mcp|[\"']mcp[\"' ]"
-_NAMES_SHIM = r"\bcad_mcp\b"
-# A test that reads every package source, or imports modules it computes -- every command in
-# the registry, say -- reaches both.
-_READS_ALL = (r"_COMMANDS|walk_packages|iter_modules|r?glob\(\s*[\"'](?:\*\*/)?\*\.py[\"']"
-              r"|import_module\(\s*(?![\"'])|__import__\(\s*(?![\"'])")
-
-
-def _package_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
-    """The package tests a change to a leaf can reach: those in `directories`, and those whose
-    text names it, names a support module that does, or reads all of the packages."""
-    support = [path.stem for path in sorted((ROOT / "tests/python/support").glob("*.py"))
-               if re.search(names, path.read_text(encoding="utf-8", errors="replace"))]
-    pattern = re.compile("|".join([names, _READS_ALL] + [rf"\b{re.escape(stem)}\b" for stem in support]))
-    found = []
-    for path in sorted((ROOT / PACKAGES_SUITE).rglob("test*.py")):
-        relative = path.relative_to(ROOT).as_posix()
-        inside = any(relative.startswith(f"{PACKAGES_SUITE}/{directory}/") for directory in directories)
-        if inside or pattern.search(path.read_text(encoding="utf-8", errors="replace")):
-            found.append(relative)
-    return found
-
-
-def _viewer_change(path: str) -> Select:
-    return select(flags=["web_viewer", "packaging"],
-                  packages=_package_tests_naming(_NAMES_VIEWER, ("cad_server/viewer", "cad_server/mcp")))
-
-
-def _mcp_change(path: str) -> Select:
-    return select(flags=["packaging"], packages=_package_tests_naming(_NAMES_MCP, ("cad_server/mcp",)))
-
-
-def _shim_change(path: str) -> Select:
-    return select(flags=["packaging"], packages=_package_tests_naming(_NAMES_SHIM, ("cad_mcp",)))
-
-
-# The manufacturing checks: their type side (cad._internal.dfm and the check's signature, manufacturing),
-# their exact measurements (the build123d integration's _dfm_* modules, and the numpy geometry they measure
-# with: molding's, a sheet's plane, a print's mesh) and their mesh measurements (the trimesh integration) are
-# imported by the 3D types' `dfm` and by the engine's worker, which measures a B-rep's check where it holds
-# the document (cad.engine.worker._check), and by nothing else. A change to them reaches the tests that name
-# them, the engine's check among them, and those that read every command (the generated command lines) -- and
-# the packaging job, which checks them from a built wheel (their imports are the build123d extra's). A change
-# to the engine reaches them too: ENGINE_CODE below.
-DFM_CODE = (f"{LIBRARY_SRC}/_internal/dfm/**", f"{LIBRARY_SRC}/_internal/manufacturing.py",
-            f"{LIBRARY_SRC}/_internal/molding_geometry.py", f"{LIBRARY_SRC}/_internal/sheet_plane.py",
-            f"{LIBRARY_SRC}/_internal/meshops_printing.py", f"{LIBRARY_SRC}/build123d/_dfm_*.py",
-            f"{LIBRARY_SRC}/trimesh/**")
-_NAMES_DFM = r"\bdfm|_dfm|manufactur|trimesh|\bunfold\b|DOCUMENT_TYPES"
-
-
-def _dfm_change(path: str) -> Select:
-    return select(flags=["packaging"], packages=_package_tests_naming(_NAMES_DFM, ()))
-
-
-# The engine (cad.engine, and the server's half, cad_server.engine) is no leaf: every build,
-# export and snapshot a skill runs is its, the viewer serves every STEP and .xbf through it
-# (``cad_server.viewer.xbf``), the CAD app's views open them through the viewer's routes, and the
-# library's root names are its. A change to it reaches whatever the packages reach.
-ENGINE_CODE = (f"{LIBRARY_SRC}/engine/**", f"{SERVER_SRC}/engine/**")
-# Native KiCad boards and schematics: the library's readers, their flat stills, their document types
-# (cad.kicad_pcb, cad.kicad_sch) and the kicad integration (kicode's kicad-cli found and run, by the one helper
-# for external programs: DRC, ERC, the exports), and the server's commands and the environment of cad[kicad]
-# it runs them in, `cad run kicad-cli` among them (cad run and the integrations table it reads). Each also reaches what its package reaches (the rules below); the KiCad job, which makes
-# that environment, runs on these, its own suite and runner, and a full run.
-KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/render/board.py",
-              f"{LIBRARY_SRC}/engine/render/schematic.py",
-              f"{LIBRARY_SRC}/kicad_pcb/**", f"{LIBRARY_SRC}/kicad_sch/**", f"{LIBRARY_SRC}/kicad/**",
-              f"{LIBRARY_SRC}/_internal/programs.py",
-              f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/boards.py",
-              f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/cli/run.py",
-              f"{LIBRARY_SRC}/_internal/integrations.py",
-              f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py",
-              # The library's project pins kicode, the integration itself. Selection is by path: any
-              # change to the file runs the job.
-              "packages/cad/pyproject.toml")
-KICAD_SUITE = "tests/python/packages/kicad"
-# The stress study (cad <type> solve): its operation and orchestration, the netgen and calculix integrations, its
-# result type, the library's extras (netgen's and ccx's pins among them), and the server's command and the environment
-# of cad[build123d,calculix,netgen] it runs a study in. Each also reaches what its package reaches; the fea job, which
-# installs netgen and ccx, runs on these, its own suite and runner, and a full run.
-FEA_CODE = (f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**",
-            f"{LIBRARY_SRC}/results.py", f"{LIBRARY_SRC}/_internal/document_type.py",
-            f"{LIBRARY_SRC}/_internal/operation.py", "packages/cad/pyproject.toml",
-            f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/_internal/integration_env.py")
-# What a study reads a document, finds CalculiX and writes its results through, of the engine's and shared modules:
-# the pictures are the engine's stills of a GLB (its reader and the snapshot).
-FEA_SHARED = (f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.py",
-              f"{LIBRARY_SRC}/engine/kernel/bounds.py", f"{LIBRARY_SRC}/engine/executables.py",
-              f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/build.py",
-              f"{LIBRARY_SRC}/engine/formats/glb.py", f"{LIBRARY_SRC}/engine/snapshot.py",
-              f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/programs.py",
-              f"{SERVER_SRC}/_internal/cli_from_function.py")
-FEA_SUITE = "tests/python/packages/fea"
-# Blender as a Python module, the blender integration: cad.blender.load, the library's GLB reader it reads a file
-# through, and the environment `cad run` makes for a script that imports bpy (bpy's Python line and platforms in the
-# registry, its pin and markers in the library's project, the library's integrations table, the environment's making
-# in the server's extras and base, `cad run` and the import scan that chooses it), on a GLB the engine writes and
-# `cad model export` meshes finer (the command's options, the export's dispatch and its meshing, the GLB writer and
-# the clips it bakes: motions, animations and their keys). Open in's Blender script runs in bpy there too (the opener
-# that finds a person's Blender does not). Each also reaches what its package reaches; the blender job,
-# which makes that environment from PyPI, runs on these, its own suite and runner, and a full run.
-BLENDER_CODE = (f"{LIBRARY_SRC}/blender/**", f"{LIBRARY_SRC}/registry.py", f"{LIBRARY_SRC}/_internal/integrations.py", "packages/cad/pyproject.toml",
-                f"{SERVER_SRC}/_internal/extras.py", f"{SERVER_SRC}/_internal/base.py",
-                f"{SERVER_SRC}/_internal/scan.py", f"{SERVER_SRC}/cli/run.py",
-                f"{SERVER_SRC}/_internal/open_in_blender.py")
-# The engine's modules among them, which the engine's final rule would end at. And the daemon's and the supervisor's:
-# the bpy suite is the one test of a daemon on the server's Python starting a worker on bpy's (the daemon's
-# ``caller``, the supervisor's ``start`` with ``python=``).
-BLENDER_GLB = (f"{LIBRARY_SRC}/engine/formats/gltf.py",
-               f"{LIBRARY_SRC}/engine/export/__init__.py", f"{LIBRARY_SRC}/engine/export/mesh.py",
-               f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/export/motion.py",
-               f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py",
-               f"{SERVER_SRC}/engine/cli.py", f"{SERVER_SRC}/engine/daemon.py", f"{SERVER_SRC}/engine/supervisor.py")
-BLENDER_SUITE = "tests/python/packages/blender"
-# The installer and what it runs: the two one-line installers, the commands they run (`cad setup`,
-# its doctor and its uninstall) and where an installation is found, registered and started. The
-# rehearsals (install-linux.yml, install-windows.yml: this tree's wheel installed on a fresh machine,
-# the way a person does) run on these and on a full run. Each also reaches what its package reaches.
-INSTALLER_CODE = (".github/workflows/install-linux.yml", ".github/workflows/install-windows.yml",
-                  "scripts/install/install.sh", "scripts/install/install.ps1",
-                  f"{SERVER_SRC}/cli/setup.py", f"{SERVER_SRC}/cli/uninstall.py", f"{SERVER_SRC}/cli/doctor.py",
-                  f"{SERVER_SRC}/_internal/providers.py", f"{SERVER_SRC}/_internal/launch.py",
-                  f"{SERVER_SRC}/_internal/installations.py")
-
-# The router (cad.kicad.route) and what it reads a board's numbers through: the board readers, their geometry
-# and the parser, and the numpy the library pins. Its copper must be the same
-# bits on every OS: the packages jobs run its unit files on Linux and Windows, and the routing job on macOS, whose
-# C library is the third (test-routing.sh). Each also reaches what its package reaches.
-ROUTING_CODE = (f"{LIBRARY_SRC}/kicad/_route.py", f"{LIBRARY_SRC}/kicad/_routing/**",
-                f"{LIBRARY_SRC}/engine/formats/kicad/geometry.py", f"{LIBRARY_SRC}/engine/formats/kicad/board_index.py",
-                f"{LIBRARY_SRC}/engine/formats/kicad/sexpr.py",
-                "packages/cad/pyproject.toml")
-ROUTING_TESTS = "tests/python/packages/cad/test_kicad_routing*.py"
-# The packages' projects, and the alias distribution (a one-file project, a pin of the library).
-PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
-ALIAS_PROJECTS = ("packages/aliases/cadgen",)
 
 _MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 
@@ -341,17 +164,13 @@ class Rule:
 
 
 RULES: tuple[Rule, ...] = (
-    # Prose inside a code tree is read by the policy contracts alone (the package boundary
-    # law, documented commands), never by a build or a test of the code beside it. The one
-    # exception, each distribution's README, is its wheel's long description.
+    # Prose inside a code tree is read by the light contracts alone, never by a build or a test
+    # of the code beside it. The exceptions: each distribution's README and LICENSE ship in its
+    # wheel, and apps/web's Markdown links are resolved by its client tests.
     Rule((*(f"{project}/{name}" for project in PACKAGE_PROJECTS for name in ("README.md", "LICENSE")),
-          *(f"{project}/README.md" for project in ALIAS_PROJECTS)), select(flags=["packaging"]), final=True),
-    Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
+          "packages/aliases/*/README.md"), select(flags=["packaging"]), final=True),
+    Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
-
-    # The installer rehearsals, which test.yml calls: the workflows themselves, the installers and
-    # what they run. Not final: the server's modules among them reach what their package reaches.
-    Rule(INSTALLER_CODE, select(flags=["installer"])),
 
     # Shared by every job, or the selection itself: everything runs.
     Rule((
@@ -362,103 +181,73 @@ RULES: tuple[Rule, ...] = (
         "scripts/github-workflows/ci_gate.py",
         "scripts/test/common.sh", "scripts/test/unittest_files.py",
         "tests/python/support/**",
-        "packages/core/**",              # bundled into cadgen's runtime and every app
+        "packages/core/**",              # bundled into the server's runtime and every app
         "scripts/build/**",              # core's and ui's library build
     ), EVERYTHING),
 
-    # The packages, and the runtime bundle the server executes. The viewer's backend, the CAD
-    # app's server and the shim reach only what names them (above). KiCad's code reaches the KiCad
-    # job too, beside what its package reaches.
-    Rule(KICAD_CODE, select(flags=["kicad"])),
-    Rule(ROUTING_CODE, select(flags=["routing"])),
-    Rule(VIEWER_SHARED, PACKAGE_CONSUMERS, final=True),
-    Rule(VIEWER_CODE, _viewer_change, final=True),
-    Rule(MCP_CODE, _mcp_change, final=True),
-    Rule(SHIM_CODE, _shim_change, final=True),
-    # The engine and shared modules a stress study reads a document, finds CalculiX and writes its result through:
-    # a change there runs the solves too. Before the engine's final rule, which adds the rest.
-    Rule(FEA_SHARED, select(flags=["fea"])),
-    # The GLB cad.blender.load reads and imports, how it is exported and meshed, and the clips in it.
-    Rule(BLENDER_GLB, select(flags=["bpy"])),
-    Rule(ENGINE_CODE, PACKAGE_CONSUMERS, final=True),
-    Rule(DFM_CODE, _dfm_change, final=True),
-    Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
-         PACKAGE_CONSUMERS),
-    # The stress study's code runs what its package runs, and the fea job, which installs netgen and CalculiX.
-    Rule(FEA_CODE, select(flags=["fea"])),
-    # cad.blender, bpy's environment and how cad run chooses it: what its package runs, and the blender job.
-    Rule(BLENDER_CODE, select(flags=["bpy"])),
-    Rule((f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**"),
-         select(skills=[f"{SKILL_SUITES}/fea"])),
-
-    # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
-    # reaches the two hosts and the wheel, not the packages' suites.
+    # The components.
+    Rule(PACKAGES, PACKAGE_CONSUMERS),
+    # The snapshot runtime is built from core alone, so the UI reaches the two hosts and the
+    # wheel, not the packages' suites.
     Rule(("packages/ui/**",), select(flags=["web_ui", "web_client", "web_viewer", "mcp", "packaging"])),
     Rule(("apps/web/**",), select(flags=["web_client", "web_viewer", "packaging"])),
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
     Rule(("apps/api/**",), NOTHING),  # its tests need no install: static runs them on every change
-    Rule(("apps/docs/**",), select(flags=["docs"])),
-    # check-dependencies.mjs walks every app's source and runs in js-core, the cheapest job
-    # that has it.
-    Rule(("apps/docs/src/**",), select(flags=["core_js"])),
-    # The robot renderer's browser fixtures are the payloads the server resolves for its descriptions:
-    # the payload suite asserts they are current.
-    Rule(("packages/ui/src/renderers/robot/__fixtures__/**",),
-         select(packages=[f"{PACKAGES_SUITE}/cad_server/test_robot_payload.py"])),
-    # The board renderer's fixture is the test board's plot payload: the plot suite asserts it is current.
-    Rule(("packages/ui/src/renderers/board/__fixtures__/**",),
-         select(packages=[f"{PACKAGES_SUITE}/cad/test_pcb_plot.py"])),
-    Rule(("tests/browser/**",), select(flags=["web_viewer"])),
-
-    # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
-    # installed), never the package jobs'.
-    Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
-    Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
-         final=True),
-    Rule((f"{BLENDER_SUITE}/**", "scripts/test/test-blender.sh"), select(flags=["bpy"]), final=True),
-    # The floor's suites are the release tier's: a full run, and a change to their runner.
-    Rule(("scripts/test/test-floor.sh",), select(flags=["floor"]), final=True),
-    # The router's unit files run themselves in the packages jobs (below) and all of them in the routing job.
-    Rule((ROUTING_TESTS, "scripts/test/test-routing.sh"), select(flags=["routing"])),
-    Rule((f"{PACKAGES_SUITE}/**",), _test_file(PACKAGES_SUITE, whole=PACKAGES_SUITE)),
-    Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
-    Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
-
-    # Skills. Their prose and metadata are read by the policy contracts (light, always): the
-    # commands a skill documents among them; scripts by their skill's suite, each a light one.
-    Rule(("skills/**",), NOTHING),
+    # js-core, beside docs: check-dependencies.mjs walks every app's source, and the web and mcp
+    # jobs run it for theirs.
+    Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
+    Rule(("skills/**",), NOTHING),  # prose and scripts the light contracts and light suites read
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
-
-    # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(packages=[PACKAGES_SUITE], skills=[SKILL_SUITES])),
-    Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
-    Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
-    Rule(("scripts/test/test-api.sh",), NOTHING),  # static runs it on every change
-    Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
-    Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"),
-         select(flags=["web_viewer"])),
-    Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
-    Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
-
-    # The one-line installer: its tests read both scripts, and the docs site serves copies of them
-    # (and the rehearsals run them: INSTALLER_CODE, above).
+    # The installer rehearsals (install-linux.yml, install-windows.yml, which test.yml calls): the
+    # workflows and the installers. The server's commands they run are rehearsed with every
+    # release, a full run.
+    Rule((".github/workflows/install-linux.yml", ".github/workflows/install-windows.yml", "scripts/install/**"),
+         select(flags=["installer"])),
+    # The one-line installers: the docs site serves copies of them, and the setup suite reads both.
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
          select(flags=["docs"], packages=[f"{PACKAGES_SUITE}/cad_server/test_setup.py"])),
 
+    # A fixture one language writes and another asserts is current: the robot renderer's browser
+    # fixtures are the payloads the server resolves, the board renderer's the test board's plot.
+    Rule(("packages/ui/src/renderers/robot/__fixtures__/**",),
+         select(packages=[f"{PACKAGES_SUITE}/cad_server/test_robot_payload.py"])),
+    Rule(("packages/ui/src/renderers/board/__fixtures__/**",),
+         select(packages=[f"{PACKAGES_SUITE}/cad/test_pcb_plot.py"])),
+
+    # Tests. A suite with a job of its own (a tool installed, the floor's Python) is that job's
+    # alone; a package, policy or skill test file runs itself, and anything else in its suite
+    # (a helper, a fixture) the suite.
+    Rule((f"{PACKAGES_SUITE}/kicad/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
+    Rule((f"{PACKAGES_SUITE}/fea/**", "scripts/test/test-fea.sh"), select(flags=["fea"]), final=True),
+    Rule((f"{PACKAGES_SUITE}/blender/**", "scripts/test/test-blender.sh"), select(flags=["bpy"]), final=True),
+    Rule(("scripts/test/test-floor.sh",), select(flags=["floor"]), final=True),
+    # The router's unit files run themselves in the packages jobs (below), and all of them on macOS.
+    Rule((f"{PACKAGES_SUITE}/cad/test_kicad_routing*.py", "scripts/test/test-routing.sh"), select(flags=["routing"])),
+    Rule((f"{PACKAGES_SUITE}/**",), _test_file(PACKAGES_SUITE, whole=PACKAGES_SUITE)),
+    Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
+    Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
+    Rule(("tests/browser/**",), select(flags=["web_viewer"])),
+
+    # The runners, and what each one feeds.
+    Rule(("scripts/test/test-python.sh",), select(packages=[PACKAGES_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
+    Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
+    Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
+    Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
     # What builds and checks the wheel: bundle.sh stamps metadata with sync-version.mjs.
     Rule((
-        "scripts/release/sync-version.mjs", "scripts/release/check-wheel-contents.sh",
-        "scripts/release/wheel_contents.py", "scripts/github-workflows/check-builds.sh",
+        "scripts/test/test-installed.sh", "scripts/release/sync-version.mjs",
+        "scripts/release/check-wheel-contents.sh", "scripts/release/wheel_contents.py",
+        "scripts/github-workflows/check-builds.sh",
     ), select(flags=["packaging"])),
 
-    # Read by the policy contracts alone (light, always) -- or by nothing a test runs: the
-    # release scripts and workflows the contracts pin, the plugin manifests, configs and
-    # root prose, the deploy, the manual bake of the look's environment (its image is
-    # the library's), the manual benchmarks and their inputs (a light test reads their pure
-    # helpers), and the sample models no test may read.
+    # Read by the light contracts alone, which every change runs -- or by nothing a test runs: the
+    # runners static calls, the release scripts and workflows the contracts pin, the plugin
+    # manifests, configs and root prose, the manual benchmarks, and the sample models no test
+    # may read.
     Rule((
-        "scripts/release/**", "scripts/install/**", "scripts/github-workflows/deploy-vercel-app.sh",
-        "scripts/look/**",
+        "scripts/test/test-api.sh", "scripts/test/test.sh",
+        "scripts/release/**", "scripts/github-workflows/deploy-vercel-app.sh", "scripts/look/**",
         "scripts/git-hooks/**", "scripts/bench/**", "scripts/README.md",
         ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
         ".github/workflows/deploy-docs.yml", ".github/workflows/deploy-api.yml",
@@ -470,7 +259,6 @@ RULES: tuple[Rule, ...] = (
         "models/**",
     ), NOTHING),
 )
-
 
 
 def compile_glob(pattern: str) -> re.Pattern[str]:

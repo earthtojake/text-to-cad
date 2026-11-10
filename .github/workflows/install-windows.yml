@@ -9,8 +9,8 @@ name: Windows installer rehearsal
 # page link's token), arguments cmd would have parsed, cad.exe rewritten while it runs, and the
 # uninstall; then the same again into a state folder named with accents and a non-Latin script.
 # test.yml calls it, as it does the Linux one, on a full run (so before a release ships) and on a
-# change to the installer or what it runs: the selector's `installer` flag
-# (scripts/github-workflows/select_checks.py, INSTALLER_CODE). Dispatched by hand with `published`,
+# change to the installers: the selector's `installer` flag
+# (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`,
 # the same steps run against what people install today: the docs site's install.ps1 and the newest
 # release on PyPI, no wheel built.
 on:

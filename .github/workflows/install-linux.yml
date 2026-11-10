@@ -5,8 +5,8 @@ name: Linux installer rehearsal
 # and no uv. uv comes from its own installer. The checks are the `cad` command's: `cad --version` and `cad
 # doctor`. The Windows rehearsal goes further, through models and the uninstall (install-windows.yml); the
 # release smoke runs the wheels. test.yml calls it, as it does the Windows one, on a full run (so before
-# a release ships) and on a change to the installer or what it runs: the selector's `installer` flag
-# (scripts/github-workflows/select_checks.py, INSTALLER_CODE). Dispatched by hand with `published`, the
+# a release ships) and on a change to the installers: the selector's `installer` flag
+# (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the
 # same steps run against what people install today: the site's install.sh and the newest release on PyPI,
 # no wheel built.
 on:

@@ -1,7 +1,7 @@
 # One job per concern, one flag per job. What a change can break decides what runs:
-# scripts/github-workflows/select_checks.py maps every changed path through an explicit table
-# of the tests that read it, and each job below runs whole on its own flag or is skipped; no
-# step inside a job reads another flag. A path the table does not know runs everything, and so
+# scripts/github-workflows/select_checks.py maps every changed path to its component (the
+# packages, the UI, an app, a suite), and each job below runs whole on its own flag or is
+# skipped; no step inside a job reads another flag. A path the table does not know runs everything, and so
 # does a VERSION change, a manual run or the nightly one -- a release is tested whole.
 #
 # The tiers:
@@ -191,9 +191,9 @@ jobs:
   # ---- unit and platform: the packages' suites ---------------------------------------------------
 
   # The library's, the server's (the engine's and the CAD Viewer backend's included) and the
-  # shim's suites, or the files of them a change selected (a test edited, a document a test
-  # reads). Run whole they are split over shards, each taking its share of every suite
-  # (CAD_TEST_SHARD); a narrowed selection is one shard. The first shard also checks the types,
+  # shim's suites, or the test files of them a change itself edits. Run whole they are split
+  # over shards, each taking its share of every suite (CAD_TEST_SHARD); a narrowed selection is
+  # one shard. The first shard also checks the types,
   # and runs the test files the change itself touches before the suite, so a break in a pull
   # request's own test is reported in a minute or two.
   packages-linux:
@@ -209,6 +209,9 @@ jobs:
     env:
       # Test files at a time: each is a kernel-loading interpreter (~450 MB).
       CAD_TEST_JOBS: "4"
+      # A test file's budget in seconds: the runner names one that takes longer (it never fails
+      # for it), and such a file is split. A shard cannot finish sooner than its slowest file.
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -272,6 +275,8 @@ jobs:
       # Four, the core count. Six was measured: every file slowed by ~40% and the
       # run failed on timeouts -- the spawn-bound tail is not idle CPU to fill.
       CAD_TEST_JOBS: "4"
+      # The same files take about twice as long here as on Linux.
+      CAD_TEST_FILE_BUDGET: "240"
 
     steps:
       - name: Check out repository
@@ -316,9 +321,9 @@ jobs:
 
   # The router's copper is the same bits on every OS, or it is not deterministic: its unit files hold one
   # board's copper to a digest (test_kicad_routing_determinism.py). The packages jobs run them on Linux
-  # (glibc) and Windows (the MSVC runtime); this job runs them on macOS, the third C library, on a change
-  # to the router, the board readers it reads through, its tests or the library's numpy pin. The library
-  # alone (numpy; no kernel, no KiCad): about a minute, most of it the runner and Python starting.
+  # (glibc) and Windows (the MSVC runtime); this job runs them on macOS, the third C library, with every
+  # change to the packages. The library alone (numpy; no kernel, no KiCad): under a minute, most of it
+  # the runner and Python starting.
   routing-macos:
     name: routing (macOS)
     needs: changes
@@ -362,6 +367,8 @@ jobs:
     if: needs.changes.outputs.floor == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -390,7 +397,7 @@ jobs:
 
   # The installer rehearsals: install.sh and install.ps1 on a fresh machine, the way a person
   # runs them, against the wheel this tree builds (install-linux.yml, install-windows.yml).
-  # Before a release ships, and on a change to the installer or what it runs.
+  # Before a release ships (a full run), and on a change to the installers themselves.
   install-linux:
     name: install (Linux)
     needs: changes
@@ -421,6 +428,8 @@ jobs:
     if: needs.changes.outputs.fea == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -466,6 +475,8 @@ jobs:
     if: needs.changes.outputs.bpy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -491,8 +502,8 @@ jobs:
 
   # Native KiCad boards through kicode's kicad-cli and KiPy, in the environment of cad[kicad] the server
   # makes, as on a person's computer: DRC, every export, a STEP and mesh round trip of a saved board, and a
-  # board's and a schematic's edit through the headless api-server. Only KiCad's code, its suite and its runner
-  # select it (and a full run): viewing and drawing a board need no KiCad and are the package suites'.
+  # board's and a schematic's edit through the headless api-server. It runs with every change to
+  # the packages, as fea and blender do: viewing and drawing a board need no KiCad and are the package suites'.
   # kicode is ~110 MB from PyPI for Linux (kicode-pcb and kicode-sch), some 10 s; no apt, no PPA.
   kicad:
     name: kicad
@@ -500,6 +511,8 @@ jobs:
     if: needs.changes.outputs.kicad == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -528,6 +541,7 @@ jobs:
     timeout-minutes: 20
     env:
       CAD_TEST_JOBS: "4"
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository

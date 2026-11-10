@@ -22,7 +22,10 @@ Each is held by a test where one can hold it.
 5. **No flakes.** A flaky test is fixed by mechanism or deleted, never retried, skipped or tuned.
 6. **CI time is a budget.** A change that lengthens a job says what it costs and why in its pull
    request; each `js-ui` job stays within 7 minutes.
-7. **One required check.** `main` requires `CI`, which fails when any job did: no job can fail without
+7. **A test file has a time budget.** 120 seconds on Linux CI, 240 on Windows (where the same files
+   take about twice as long). One that outgrows it is split: a shard cannot finish sooner than its
+   slowest file. The runner names a file over its budget and never fails for it.
+8. **One required check.** `main` requires `CI`, which fails when any job did: no job can fail without
    stopping a merge.
 
 ## What runs where
@@ -30,11 +33,25 @@ Each is held by a test where one can hold it.
 | Tier | Jobs | Runs | What it is for |
 | --- | --- | --- | --- |
 | static | `static` | every change, nothing installed but Python and Node | The version and tree checks, the policy tests that read only the repository's text, the API's tests: under a minute |
-| unit | `packages (Linux)`, `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`, `skills` | when a change reaches its code | Behaviour of one package or app |
-| platform | `packages (Windows)`, `routing (macOS)` | with the packages' suites; with the router | What differs by operating system: paths, locks, subprocesses, line endings, the C library |
-| integration | `fea`, `kicad`, `blender`, `packaging`, `viewer-e2e` | when a change reaches what each drives | A third-party tool installed as a person has it; the wheels as they ship; the bundled viewer through the real backend |
+| unit | `packages (Linux)`, `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`, `skills` | when its component changes | Behaviour of one package or app |
+| platform | `packages (Windows)`, `routing (macOS)` | with every change to the packages | What differs by operating system: paths, locks, subprocesses, line endings, the C library |
+| integration | `fea`, `kicad`, `blender`, `packaging`, `viewer-e2e` | with every change to the packages; the last two with the UI and the apps too | A third-party tool installed as a person has it; the wheels as they ship; the bundled viewer through the real backend |
 | release | `packages (Python 3.13 floor)`, `install (Linux)`, `install (Windows)` | a full run: a `VERSION` change, nightly, a dispatch | Rare breaks that must not reach a release, at a cost not worth paying on every push |
 | gate | `CI` | always | The one required check |
+
+**The release tier's criterion.** A job runs on a full run only, not on every push, when both hold:
+it rarely catches what a per-push job does not, and catching it before a release ships is soon
+enough. Every other job runs on the changes that reach it. The two there now:
+
+- `packages (Python 3.13 floor)` is a third run of suites the packages jobs already run on the Python
+  the server's installations use. It guards one kind of break, a call the floor's standard library
+  lacks, of which the repository has had one (argparse's `suggest_on_error`), at 11 minutes a run.
+- The installer rehearsals install this tree's wheel on a fresh machine. What they exercise changes in
+  few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
+  one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
+  so no release ships unrehearsed. They also run on a change to the installers themselves.
+
+A job moves into the tier, or out of it, with that argument in its pull request.
 
 Ask the selector what a change runs:
 
@@ -99,6 +116,13 @@ python3 scripts/github-workflows/select_checks.py --paths packages/cad/src/cad/r
    `scripts/test/test-python.sh --print-weights` prints what the slow files cost,
    the first thing to read when a run is slow.
 
+   A test file has a budget: 120 seconds on Linux CI, 240 on Windows. Add to a file near it and
+   the file is split, by subject, into files that run beside each other: the suites are split over
+   shards, and a shard cannot finish sooner than its slowest file. The package jobs set
+   `CAD_TEST_FILE_BUDGET=<seconds>`; the runner then names each file over it on a line `OVER BUDGET`
+   after the summary, and as a warning on the run. It never fails a run for it: a wall-clock bound
+   that failed one would be a flake.
+
 5. **Write it for every platform it runs on.** The packages' suites run on Windows too, and most
    Windows failures are a pull request's own new test, not the code under test. Build paths with
    `pathlib` or `os.path`, never a POSIX literal; compare text read from a file or a process with its
@@ -107,11 +131,13 @@ python3 scripts/github-workflows/select_checks.py --paths packages/cad/src/cad/r
    runs the test files a change touches before the suite, on each platform, so such a break reports in
    a minute or two.
 
-6. **Wire it only where it reads something new.** A test that reads a kind of path no rule names gets
-   that path in its rule in `scripts/github-workflows/select_checks.py`, or a change to the path would
-   not run it. A policy test that needs the CAD kernel or the built runtime is listed in the selector's
-   `HEAVY_POLICY`, with a rule for what it reads; every other policy test runs in `static` with nothing
-   installed, and one that needs more fails there.
+6. **Wire it only where the table cannot see it.** The selector knows components, not tests: a new
+   test file in a suite's folder runs with that suite, whatever it imports. A rule in
+   `scripts/github-workflows/select_checks.py` is needed only when a test reads a file of another
+   component (a fixture one language writes and another asserts is current), and names that path and
+   the one test. A policy test that needs the CAD kernel or the built runtime is listed in the
+   selector's `HEAVY_POLICY`; every other policy test runs in `static` with nothing installed, and one
+   that needs more fails there.
 
 ## Adding a CI job
 
@@ -132,8 +158,8 @@ A new job:
 - has a timeout of about twice its slowest run (with Python test files, at least its slowest run and
   11 minutes), and a timeout on every install step;
 - is in `CI`'s `needs` (`test_ci_workspace_selection.py` fails one that is not);
-- says in its pull request what it costs each run, and which tier it belongs to: a job that guards a
-  rare break at a high cost belongs to the release tier, not to every push.
+- says in its pull request what it costs each run, and which tier it belongs to
+  ([the release tier's criterion](#what-runs-where)).
 
 ## CI
 
@@ -141,31 +167,43 @@ A new job:
 flag or is skipped, and no step inside it reads another, so a green job ran all
 of itself. Its first job, `Changed paths`, puts every path the change touches —
 added, modified or deleted, against the target branch as it is now — through
-`scripts/github-workflows/select_checks.py`: a table of the tests that READ each
-path (open it, scan it, import it, build it or run it). A path selects the union
-of every rule it matches. Selection is by path, never by diff content: a comment
-in a module selects what the module's code would. The table is the one place the
-path lists live; ask it what a change runs:
+`scripts/github-workflows/select_checks.py`: a short table of components, the
+directories whose change a job or a suite has to see. A path selects the union of
+every rule it matches. Selection is by path, never by what a file says: a comment
+in a module selects what the module's code would, and no rule reads a file to
+decide which tests reach it. The components:
+
+- **The packages** (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`,
+  `packages/aliases`, `scripts/bundle`): their suites whole on Linux and Windows,
+  `skills`, `packaging`, `viewer-e2e`, and the jobs that run them with a tool
+  installed or on the third C library (`fea`, `kicad`, `blender`,
+  `routing (macOS)`: minutes together, never the longest job).
+- **The UI** (`packages/ui`): `js-ui`, `js-web`, `js-mcp`, `packaging`, `viewer-e2e`.
+  **An app**: its own job, and for `apps/web` and `apps/mcp` the wheel that ships it.
+- **A test file** runs itself; anything else in a suite's folder, the suite. A suite
+  with a job of its own (`fea`, `kicad`, `blender`) is that job's alone.
+- **A runner** under `scripts/test/` runs what it feeds.
+- **Prose and metadata** run `static` and nothing else.
 
 | Job | Runs on | What it runs |
 | --- | --- | --- |
 | `static` | every change | With Python and Node alone: the version check (canonical version, derived metadata, the release's pins; on a pull request, what merging it releases, see [Shipping a release](../../CONTRIBUTING.md#shipping-a-release)), the shipping contract's tree rules, the light contracts (every policy test that reads only the repository's text, and the print3d, render and sendcutsend suites) and the API's tests |
-| `packages (Linux I/2)` | the three packages, a package test, prose a package test reads | The library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's suites under Xvfb, or the files of them the change selected; the type check |
+| `packages (Linux I/2)` | the packages, a package test | The library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's suites under Xvfb, or the files of them the change selected; the type check |
 | `packages (Windows I/3)` | the same | The same suites and the type check on Windows: paths, locks, subprocesses, file URLs and the daemon are platform-sensitive |
-| `routing (macOS)` | the router and what it reads a board through | The router's unit files on the third C library (its copper is held to a digest on all three) |
+| `routing (macOS)` | the packages, the router's unit files | The router's unit files on the third C library (its copper is held to a digest on all three) |
 | `skills` | the packages, `scripts/bundle`, the fea skill | The policy tests and skill suites that load the CAD kernel or the built runtime |
-| `js-core` | `packages/core`, the dependency checks | `@cad/core`'s units, the dependency and kit-boundary checks |
+| `js-core` | `packages/core`, the dependency checks, `apps/docs` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | `js-ui (units)`, `js-ui (browser)` | `packages/ui` | The UI's type check and units; its browser specs |
 | `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
-| `docs` | `apps/docs`, `scripts/brand`, the installers | Lint, the Next build, icon verification, the brand marks |
-| `fea` | the stress study's code and what it reads through | `test-fea.sh`, with netgen and CalculiX installed |
-| `kicad` | KiCad's code | `test-kicad.sh`, in the environment of `cad[kicad]` |
-| `blender` | `cad.blender`, bpy's environment, the GLB export | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
-| `packaging` | whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
-| `viewer-e2e` | whatever the served client or the backend reads | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
+| `docs` | `apps/docs`, `scripts/brand`, the one-line installers | Lint, the Next build, icon verification, the brand marks |
+| `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed |
+| `kicad` | the packages, its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
+| `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
+| `packaging` | the packages, the UI, `apps/web`, `apps/mcp`: whatever ships in a wheel | Clean bundle, layout, the wheels' contents, the installed commands |
+| `viewer-e2e` | the packages, the UI, `apps/web`, `tests/browser` | The bundle's viewer through the real backend: the launch smoke test and the format and camera gates in Chromium |
 | `packages (Python 3.13 floor)` | a full run | The three suites on the packages' oldest Python (`test-floor.sh`) |
-| `install (Linux)`, `install (Windows)` | a full run; the installer and what it runs | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
+| `install (Linux)`, `install (Windows)` | a full run; `scripts/install`, the two workflows | `install-linux.yml` and `install-windows.yml`: the one-line installers on a fresh machine, against this tree's wheel |
 | `CI` | always | The one required check: every job that ran passed (`scripts/github-workflows/ci_gate.py`) |
 
 **A full run** is every job on every suite. `VERSION` (a release is tested
@@ -180,13 +218,11 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 `apps/api` and `models/` run `static` and nothing else.
 
 **The release tier** runs on a full run only, so before a release ships and not
-on every push: the packages' suites on Python 3.13, a third run of suites the
-packages jobs already run on the Python the server's installations use, for a
-rare kind of break (a call the floor's standard library lacks); and the installer
-rehearsals, which also run on a change to the installer or what it runs
-(`INSTALLER_CODE` in the selector). The nightly run, on `main`, is that tier for
-whatever merged without a release; it runs nothing when a run already tested
-`main`'s tree in full.
+on every push ([its criterion](#what-runs-where)): the packages' suites on Python
+3.13, and the installer rehearsals, which also run on a change to the installers
+themselves (`scripts/install`, the two workflows). The nightly run, on `main`, is
+that tier for whatever merged without a release; it runs nothing when a run
+already tested `main`'s tree in full.
 
 **Shards.** Run whole, the packages' suites are split over two jobs on Linux and
 three on Windows, each taking its share of every suite (`CAD_TEST_SHARD=I/N`,
@@ -200,15 +236,15 @@ the Node tests and Vitest (`test-js.sh --select ui-units`), and `js-ui (browser)
 the browser specs, one at a time because each renders WebGL in software
 (`--select ui-browser`).
 
-Adding a test that reads a new path means adding the path to the test's rule in
-`select_checks.py`; `tests/python/global/test_ci_workspace_selection.py` holds
-the table and the workflow to the tree: every policy test that is not a light
-contract is selected by some rule, every test path a rule names exists, every
-rule matches a tracked file, every job runs on one flag and no step on any, and
-the routing of each kind of change is pinned. A new job goes in `CI`'s `needs`
-(the same test fails one that is not there). Each job installs only what its
-tests need: npm workspaces by job, Python and the two Playwright browsers on
-request, system packages through `setup-deps`'s `apt` input, and nothing beyond
+`tests/python/global/test_ci_workspace_selection.py` holds the table and the
+workflow to the tree by what must stay true, not by how the workflow is laid out:
+every test file is collected by a runner and every runner called by a job, every
+rule matches a tracked file and names tests that exist, every job runs on one flag
+and no step on any, a full run runs everything, and `CI` needs every job. A job
+is added, renamed, split or retimed without an edit there; a new job goes in
+`CI`'s `needs` (the same test fails one that is not there). Each job installs only
+what its tests need: npm workspaces by job, Python and the two Playwright browsers
+on request, system packages through `setup-deps`'s `apt` input, and nothing beyond
 Python and Node for `static`.
 
 Every run records the tree it tested as an artifact, `tested-<tree>-<scope>`
@@ -244,12 +280,6 @@ lacks one, and apt gives up on a connection that says nothing for 30 seconds.
 Within a Python suite, a test file still running after 10 minutes prints every
 thread's stack and fails by name, the run starts no further file or suite
 (`--keep-going` included), and a line a minute says which files are running.
-
-The CAD Viewer's backend and the CAD app's server are leaves of the server:
-outside them and the commands that start them, nothing in the server imports either
-but `cad_server.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
-change confined to one of them can run the package tests that reach it instead of
-the whole suite.
 
 Viewer browser failures upload bounded renderer-state JSON for three days.
 CI sets `VIEWER_TEST_DIAGNOSTICS_DIR` for this evidence; it does not enable the

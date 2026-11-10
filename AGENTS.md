@@ -218,7 +218,8 @@ which points both at the checkout.
   once, at the cheapest level that exercises the real path: a unit or jsdom test
   first, a real browser (WebGL) only for what needs one. Await the condition, never
   a fixed sleep or a wall-clock bound; a flaky test is fixed or deleted, never
-  retried. CI time is a budget: each `js-ui` job stays within 7 minutes, and a
+  retried. CI time is a budget: each `js-ui` job stays within 7 minutes, a test file
+  within 120 seconds on Linux CI (240 on Windows; one that outgrows it is split), and a
   change that lengthens any job says what it costs and why in its PR.
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
@@ -307,8 +308,8 @@ when touching shared surfaces or before handoff:
   [`scripts/README.md`](scripts/README.md).
 - In GitHub Actions, `test.yml` runs one job per concern, each whole on its one
   flag and only when the change reaches it: `scripts/github-workflows/select_checks.py`
-  maps every changed path to the tests that read it, and the Python jobs run just
-  those files. A test that reads a new kind of path gets a rule there
+  maps every changed path to its component (the packages, the UI, an app, a suite), a
+  component to the jobs that run it, and a changed test file to itself
   ([docs/contributing/testing.md](docs/contributing/testing.md#ci)); an unknown path, `VERSION`, `packages/core`, the
   lockfiles and the test machinery run everything, as do a manual dispatch and the
   nightly run. `main` requires one check, `CI`, which fails when any job did, so a
