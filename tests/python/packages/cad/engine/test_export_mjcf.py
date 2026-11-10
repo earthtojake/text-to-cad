@@ -30,6 +30,7 @@ from cad.engine.describe import describe
 from cad.engine.export import Source
 from cad.engine.export.mjcf import rendered, write_description
 from cad.mujoco import spec
+from tests.python.support import opengl
 
 
 def _frame(x: float = 0, y: float = 0, z: float = 0, about: str | None = None, angle: float = 0.0) -> np.ndarray:
@@ -602,6 +603,7 @@ class EngineTest(_Folder):
     def test_a_painted_wire_is_its_paint_in_mujoco_and_in_the_still(self) -> None:
         from PIL import Image
 
+        from cad.engine.render import context
         from cad.engine.snapshot import snapshot
 
         xbf = self.built("wire", WIRE)
@@ -614,7 +616,11 @@ class EngineTest(_Folder):
         np.testing.assert_allclose(model.geom_rgba[paint.id], [0.8, 0.0667, 0.0, 1.0], atol=1e-3)
 
         # The still draws the wire red, as the viewer draws a robot's link meshes: faces alone. Its triangles'
-        # folds, lines a pixel apart along a 1.2 mm wire, hid half the red under them.
+        # folds, lines a pixel apart along a 1.2 mm wire, hid half the red under them. Only where an OpenGL
+        # context can be made: the MJCF's paint above is checked everywhere.
+        if not opengl.draws(context.available(), "the MJCF's paint is checked; the still needs an OpenGL context"):
+            return
+
         def red(display: dict[str, str]) -> int:
             png = self.folder / f"{display['mode']}.png"
             snapshot(out, png, daemon=False, size=(800, 600), display=display)
