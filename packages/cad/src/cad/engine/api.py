@@ -684,11 +684,13 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     - an ``EngineError`` whose ``reason`` is ``cancelled`` (every caller of it had gone and its process was given
       to another check), ``over_time`` or ``over_memory`` (past a check's limits, ``CAD_ENGINE_CHECK_SECONDS``
       and ``CAD_ENGINE_CHECK_RSS_MB``), ``process_lost`` (its checks process exited under it), ``no_kernel``
-      (none could be started), ``superseded`` (its document was built again, or its file rewritten, while it
-      was measured) or ``error`` (the measuring itself failed).
+      (none could be started), ``superseded`` (its document was built again, or its file rewritten, under each
+      try of it: a check whose model is built again is stopped and asked again of the model as it is now, which
+      one line on stderr says) or ``error`` (the measuring itself failed).
 
     After ``Unreached`` (of a file) or ``Unanswered`` a caller with the kernel may measure the document
-    itself, and says ``IN_CALLER`` in its result: one line on stderr says, there, why the engine measures
+    itself (in a process it holds to the same limits, ``manufacturing._watched``), and says ``IN_CALLER`` in
+    its result: one line on stderr says, there, why the engine measures
     nothing and that such a check is kept by no one, so it is measured again each time it is asked."""
     from cad.engine import client
     from cad.engine.contract import measuring, release

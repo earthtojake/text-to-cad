@@ -1105,10 +1105,15 @@ that fails its rules:
 - `process_lost`: its checks process exited under it (one the system killed: usually for memory, and said so);
   the check is not run again, and the next starts a fresh process;
 - `no_kernel`: no checks process could be started;
-- `superseded`: its document changed under it -- a model built again (its generation, read before its bytes and
-  again after the check, differs), a file rewritten while it was read -- so nothing of it is kept or answered. A
-  run that changes nothing keeps the generation and disturbs no check; a build that lands before anything is
-  measured only has the document read again;
+- `superseded`: its document changed under it -- a model built again, a file rewritten while it was read -- so
+  nothing of it is kept or answered. The daemon tells the runner of each document a build registers, a hand-over
+  replaces or a deletion removes (`Runner.built`): a check asked at a generation now gone stops there, its
+  process killed and its slot free, never measured to its end for a result no one can use (the generation, read
+  before its bytes and again after the check, catches a build the runner was not told of). While a caller of it
+  is still there the check is asked again, of the document as it is now, three times at most (`READS`), and its
+  callers -- the ones attached to it too -- get that result, saying once on stderr that the document changed;
+  `superseded` is answered only past those tries, or where no caller is left to ask again for. A run that changes
+  nothing keeps the generation and a build of another model is another document: neither disturbs a check;
 - `error`: the measuring itself raised: its type and words, in one line.
 
 A request that is no check -- a process the type has none of, options not resolved -- is refused in one line
@@ -1158,7 +1163,8 @@ a caller is attached and how many are: `callers`, a caller gone never counted).
 
 A part an edit left untouched is
 measured again with its document: a check is the document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
-the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
+the library's readers), by its caller, in a process of its own the caller holds to a check's limits
+(`cad._internal.manufacturing._watched`: the engine's, `worker.check_limits`). The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
 practice, each rule cited, no shop's limits), and the result is
 a `CheckResult` whose `measurements` is the report with every rule's outcome (`measurements["rules"]`). A

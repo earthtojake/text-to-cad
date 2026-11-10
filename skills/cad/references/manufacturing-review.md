@@ -57,7 +57,10 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
 ## Read the result
 
 - **The state and the exit.** The last line leads with one of three, and the exit status is it
-  (`"status"` in `--json`: `ok`, `failed`, `not_checked`; `"ok"` is true for the first alone):
+  (`"status"` in `--json`: `ok`, `failed`, `not_checked`; `"ok"` is true for the first alone). Key on
+  `status` (or the exit), never on a finding's severity: a `NOT CHECKED` result carries an `error`
+  finding too -- the one whose code is its `reason` -- which says why nothing was judged, not that the
+  part fails:
 
   | Last line | Exit | It says |
   | --- | --- | --- |
@@ -70,14 +73,18 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
   `document_empty`, a mesh's `mesh_unreadable` or `mesh_empty`, a cut file's `no_cut_geometry`), a family
   that could not be measured (`measurement_failed`: the rest is still reported), faces the kernel failed
   to intersect rays with (`rays_unintersected`: rebuild the face it names), a rule whose features carry
-  no figure that should have been measured (`rule_partly_judged`: it names them -- judge them by hand
-  from `measurements.<family>`, or simplify the feature and check again), rules that judged nothing
-  (`rules_none_evaluated`), or a check the engine did not finish (its model was built again while it was
-  measured, the server stopped, it went past its time or memory: run it again). A part that both fails and was not
-  wholly checked is `FAILED`, its line ending `; not checked: <code> xN`. Exit 2 means the command itself
-  was refused -- an option of another process or kind, a value no machine has (`--tools 1000`), no process
-  where none is declared or the parts declare several, a file that is not there, a mesh asked for cnc or
-  sheet: fix the command, not the part.
+  no figure that should have been measured (`rule_partly_judged`: its `refs` are those features -- judge
+  them by hand from `measurements.<family>`, or simplify the feature and check again), rules that judged
+  nothing (`rules_none_evaluated`), or a check that did not run to its end: it went past its time or
+  memory (`over_time`, `over_memory`: a smaller part, or a higher `CAD_ENGINE_CHECK_SECONDS` or
+  `CAD_ENGINE_CHECK_RSS_MB`), the server stopped, or its model was built again under every try of it
+  (`superseded`: a model built again under its check has the check run again on the new model, so this is
+  rare) -- run it again. Such a check has no result: `--json` is `{"ok": false, "error", "reason",
+  "status": "not_checked"}`, and one line on stderr says `NOT CHECKED (<reason>)` and why. A part that both
+  fails and was not wholly checked is `FAILED`, its line ending `; not checked: <code> xN`. Exit 2 means the
+  command itself was refused (`"status": "usage"` in `--json`) -- an option of another process or kind, a
+  value no machine has (`--tools 1000`), no process where none is declared or the parts declare several, a
+  file that is not there, a mesh asked for cnc or sheet: fix the command, not the part.
 - **One count.** The line's errors and warnings count features, one finding each, and `failed: <rule>
   xN` is the same count by rule; a rule's features past eight are one more finding that lists them.
 - **Fix by code.** What puts every figure in doubt comes first, whatever its severity (what was not

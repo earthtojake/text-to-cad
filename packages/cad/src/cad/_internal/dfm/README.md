@@ -31,10 +31,11 @@ caller's release), which answers the report, which the caller finishes into its 
   small pool of warm kernels of their own, never a model's worker, so checks of different documents run at once,
   a build or an inspection of a model waits for no check of it, and a long check or its crash costs no document
   anything.
-- Otherwise it is another library's check, answered at once with no report. A file is then measured in the calling
-  process, a model's document exported by the engine and read back there; a command whose environment holds no
-  kernel sends either to the base's environment. So is a file where no engine can be reached. One line on stderr
-  says so: nothing keeps such a check, so it is measured again each time.
+- Otherwise it is another library's check, answered at once with no report. A file is then measured by its
+  caller (in a process of its own, held to a check's limits: below), a model's document exported by the engine
+  and read back there; a command whose environment holds no kernel sends either to the base's environment. So is
+  a file where no engine can be reached. One line on stderr says so: nothing keeps such a check, so it is
+  measured again each time.
 
 Each part is measured on a copy that shares nothing with the document read (`_dfm_brep.of_source`), its result
 equal to the same document's read from its file. The engine keeps each clean result by the version it measured -- a model's generation, a file's bytes'
@@ -50,10 +51,19 @@ that does not complete is never a result: the engine's answer is a failure with 
 `stopped` (the engine stopped), `cancelled` (its callers all gone, its process given to a check someone waits
 for), `over_time` and `over_memory` (past a check's limits, `CAD_ENGINE_CHECK_SECONDS`, half an hour by default,
 and `CAD_ENGINE_CHECK_RSS_MB`, by default the engine's memory cap), `process_lost` (its process exited under it),
-`no_kernel`, `superseded` (its model was built again, or its file rewritten, while it was measured) and `error`
-(the measuring raised). A run of a model's script that changes nothing disturbs no check of it.
+`no_kernel`, `superseded` and `error` (the measuring raised). A model built again while a check of it runs
+stops that check as the build registers -- its process killed, so it holds neither a slot nor its caller for a
+result of a version that is gone -- and the check is asked again of the model as it is now for the callers still
+waiting, who get that result; `superseded` is the answer only where the model is built again under each of three
+tries (or a file is rewritten each time it is read), or no caller is left to ask it for. A run of a model's
+script that changes nothing, or a build of another model, disturbs no check.
 
-A mesh and a DXF are measured in the calling process (or the integration's environment) always. A mesh is read
+A mesh and a DXF are measured by their caller (or in the integration's environment) always, and so is a file
+where no engine can be reached: in a process of its own that the caller starts and holds to the same limits from
+outside (`manufacturing._watched`: `CAD_ENGINE_CHECK_SECONDS` and `CAD_ENGINE_CHECK_RSS_MB`, the same defaults,
+read each second), since a kernel call that never returns can be stopped from nowhere else. Past one the check is
+`not_checked` with the engine's reason for the same (`over_time`, `over_memory`); a process that exits with no
+answer is `process_lost`, and a measuring that raised is `error`, in one line. A mesh is read
 and cleaned (`cad/trimesh/_mesh.py`): corners at one place welded into one
 vertex, a triangle two of whose corners became one dropped (it opens nothing), a sliver (under 1e-8 of the
 diagonal squared) on an edge more than two triangles use dropped where its edges stay used once each way or
@@ -176,8 +186,9 @@ report.
   be measured (`measurement_failed`: the family is `{"error": "..."}` and named in `partial_sections`, or the
   report lacks it where a rule that applies reads it), faces the kernel failed to intersect rays with
   (`rays_unintersected`: a family's `unmeasured_faces`, so its rules are `partial` or `not_evaluated` there),
-  a rule whose items carry no figure that should have been measured (`rule_partly_judged`, naming them), or
-  rules that judged nothing at all (`rules_none_evaluated`).
+  a rule whose items carry no figure that should have been measured (`rule_partly_judged`: its `refs` are
+  those features, said once for the features several rules leave unjudged), or rules that judged nothing at all
+  (`rules_none_evaluated`).
 
 So a process's module marks what it did not measure through the report alone: raise `Unmeasured(code,
 message)` for the whole source, answer `{"error": ...}` for a family and name it in `partial_sections`,
@@ -223,7 +234,9 @@ read out of its message:
 made); `op` is `min` (the figure is at least the limit) or `max`; `location` is the feature's most specific
 ref -- an item's `edge` (or `vertex`) before its `location`, so a corner is its edge and two corners of one
 face are two findings -- and `refs` every ref the item names, `location` first, then the rest (`rules._refs`:
-any field that holds a ref or a list of them). Failures of one rule at one feature are one finding, the
+any field that holds a ref or a list of them). A ref is one element, as `cad step inspect DOC REF` takes it:
+words that name several (`plate/face 3 and plate/face 4`, a figure written out for the message) are none, nor
+is an element named without its part (`face 6`) beside one named with it. Failures of one rule at one feature are one finding, the
 worst (`and N more at this ref`, each in `items`: `value`, `xyz`). Past eight features of one rule, one more
 finding counts the rest (`value` None, `location` `measurements.rules`, `items` each remaining feature's
 `location`, `value` and `refs`).
