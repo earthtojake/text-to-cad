@@ -146,7 +146,8 @@ def _draft_rules(source: str, least: float, severity: str, preferred: tuple[floa
         # The floor: a deep wall, or a deep rib, with no draft at all. Its limit is --zero-tol (``scale_by``).
         Rule("molding.draft_zero", "draft", "draft_deg", "min", 1.0, "deg", "draft of a deep wall", "text-to-cad",
              scale_by="zero_tol_deg", item_when={**_WALL_FACE, "deep": True}, note=_DRAFT_FLOOR_NOTE,
-             detail=f"no draft on a wall {{depth_mm:g}} mm deep along the pull, over {DRAFT_FLOOR_DEPTH_MM:g} mm",
+             detail=f"no draft on a wall {{zero_draft_depth_mm:g}} mm deep along the pull, over "
+                    f"{DRAFT_FLOOR_DEPTH_MM:g} mm",
              fix="draft this wall: {taper}; " + f"{least:g} deg at least, 2 deg where the design allows"),
         Rule("molding.draft_zero", "ribs", "draft_deg", "min", 1.0, "deg", "draft of a tall rib", "text-to-cad",
              scale_by="zero_tol_deg", item_when={"deep": True}, note=_DRAFT_FLOOR_NOTE,
@@ -476,13 +477,14 @@ def _taper(opens: Any, axis: Any) -> str:
 def _hint_fields(report: dict[str, Any]) -> None:
     """What the rules read of an item beyond its measurement: for their hints (``Rule.fix``), a draft item's
     ``taper`` (which way to lean it) and a corner's ``radius_target_mm`` (the radius the rule asks, in
-    millimetres); for the draft floor, whether a wall or a rib is ``deep`` (over ``DRAFT_FLOOR_DEPTH_MM`` along the
-    pull); for an undercut's message, what releases it in words (``release_said``)."""
+    millimetres); for the draft floor, whether a wall runs ``deep`` with no draft (``zero_draft_depth_mm`` over
+    ``DRAFT_FLOOR_DEPTH_MM`` along the pull) or a rib stands that tall; for an undercut's message, what releases
+    it in words (``release_said``)."""
     draft = report.get("draft")
     if isinstance(draft, dict) and "error" not in draft:
         for item in draft.get("items") or ():
             item["taper"] = _taper(item.get("opens"), draft.get("pull_axis"))
-            item["deep"] = float(item.get("depth_mm") or 0.0) > DRAFT_FLOOR_DEPTH_MM
+            item["deep"] = float(item.get("zero_draft_depth_mm") or 0.0) > DRAFT_FLOOR_DEPTH_MM
     ribs = report.get("ribs")
     if isinstance(ribs, dict) and "error" not in ribs:
         for item in ribs.get("items") or ():

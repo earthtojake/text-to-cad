@@ -89,6 +89,13 @@ def _r(value: float | None, digits: int = 4) -> float | None:
     return round(float(value), digits) + 0.0
 
 
+def _length(value: float | None) -> float | None:
+    """A sampled length at the precision it is good to (``_LENGTH``), for a ratio a rule reads; one that
+    precision would round to nothing (a part drawn in metres and read as millimetres) as it is."""
+    rounded = _r(value, _LENGTH)
+    return rounded if rounded or value is None or not math.isfinite(float(value)) else float(value)
+
+
 def _xyz(point: Any) -> list[float]:
     return [round(float(value), 4) + 0.0 for value in point]
 
@@ -634,9 +641,18 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
             wall += area
             opening[face.opens] += area
             low, high = _extent(geo, face.ordinal, pull)
+            # How far along the pull the face runs with no draft: its whole depth where its draft is one figure
+            # (a plane, a cylinder along the pull); else the span of its points that read none -- a dome's rim,
+            # tangent to the pull along a line, has no draft there and no depth without it.
+            if face.exact:
+                undrafted = high - low if face.draft < zero_tol else 0.0
+            else:
+                heights = geo.points[mine][face.sample_drafts < zero_tol] @ pull
+                undrafted = float(heights.max() - heights.min()) if len(heights) else 0.0
             item = {"location": geo.ref(face.ordinal), "draft_deg": _r(face.draft, _JUDGED), "area_mm2": _r(area, 2),
                     "opens": face.opens, "surface": geo.surfaces[face.ordinal - 1].kind,
-                    "exact": face.exact, "depth_mm": _r(high - low, 3), "xyz": _centroid(geo, face.ordinal)}
+                    "exact": face.exact, "depth_mm": _r(high - low, 3), "zero_draft_depth_mm": _r(undrafted, 3),
+                    "xyz": _centroid(geo, face.ordinal)}
             items.append(item)
             mine = geo.owner == face.ordinal
             share = geo.weights[mine] / max(float(geo.weights[mine].sum()), 1e-12) * area
@@ -1487,7 +1503,7 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
             item = {"location": geo.ref(ordinal), "thickness_mm": _r(face["median"], _LENGTH),
                     "min_mm": _r(face["low"], _LENGTH), "max_mm": _r(face["max"], _LENGTH),
                     "nominal_mm": _r(nominal, _LENGTH),
-                    "ratio_to_nominal": _r(_r(face["max"], _LENGTH) / _r(nominal, _LENGTH), _JUDGED),
+                    "ratio_to_nominal": _r(_length(face["max"]) / _length(nominal), _JUDGED),
                     "thin_ratio": _r((face["median"] or 0) / nominal, 3), "feature": "wall",
                     "refined": bool(face.get("refined")), "xyz": _xyz(face["at"])}
             items.append(item)
@@ -1815,8 +1831,8 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
                     - {base, fa, fb, 0} if float(np.ptp(geo.vertices(end) @ na)) <= 1.5 * root + geo.eps}
             end_roots = [root for end in ends for root in _roots(geo, end, base, links)]
             used.update(ends | {fillet_face for _radius, fillet_face in end_roots} - {0})
-            wall = _r(_face_wall(thick, base) or nominal, _LENGTH)
-            root, height = float(_r(root, _LENGTH)), float(_r(height, _LENGTH))
+            wall = _length(_face_wall(thick, base) or nominal)
+            root, height = float(_length(root)), float(_length(height))
             gaps = []
             for face in (a, b):
                 own = geo.owner == face
@@ -1824,7 +1840,7 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
                 finite = outward[np.isfinite(outward)]
                 if len(finite) >= 0.5 * own.sum():
                     gaps.append(float(np.median(finite)))
-            gap = _r(min(gaps), _LENGTH) if gaps else None
+            gap = _length(min(gaps)) if gaps else None
             fillet = float(_r(min([fillet_a, fillet_b] + [radius for radius, _f in end_roots]), 4))
             # the rib's draft: the least of its sides' and its ends' (its top, square to the pull, has none to give)
             draft = min(drafts[face - 1].draft for face in (a, b, *ends))
@@ -1915,8 +1931,8 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
         taken.add(ordinal)
         used.update({ordinal, fillet_face} - {0})
         kinds.update({face: "boss" for face in {ordinal, fillet_face, inner[0] if inner else 0} - {0}})
-        wall_ref = _r(_face_wall(thick, base) or nominal, _LENGTH)
-        wall = float(_r(radius - inner[1] if inner else 2.0 * radius, _LENGTH))
+        wall_ref = _length(_face_wall(thick, base) or nominal)
+        wall = float(_length(radius - inner[1] if inner else 2.0 * radius))
         items.append({
             "location": geo.ref(ordinal), "faces": [geo.ref(ordinal), geo.ref(base)] + ([geo.ref(inner[0])] if inner else []),
             "od_mm": _r(2 * radius, 3), "id_mm": _r(2 * inner[1], 3) if inner else None, "hollow": inner is not None,
@@ -1935,7 +1951,7 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
 
     def wall(*faces: int) -> float | None:
         values = [value for face in faces if (value := _face_wall(thick, face))]
-        return _r(min(values) if values else nominal, _LENGTH)
+        return _length(min(values) if values else nominal)
 
     for edge in geo.edges:
         checkpoint()
@@ -2300,8 +2316,15 @@ def _principal_axes(geos: list[_Geometry]) -> list[np.ndarray]:
     props = GProp_GProps()
     BRepGProp.VolumeProperties_s(geos[0].part.shape.wrapped, props)
     principal = props.PrincipalProperties()
+    moments = [float(moment) for moment in principal.Moments()]
     axes = []
-    for getter in (principal.FirstAxisOfInertia, principal.SecondAxisOfInertia, principal.ThirdAxisOfInertia):
+    for index, getter in enumerate((principal.FirstAxisOfInertia, principal.SecondAxisOfInertia,
+                                    principal.ThirdAxisOfInertia)):
+        # An axis whose moment another shares is any direction of their plane (a cube's three, a round part's
+        # two): the kernel's pick of it is no axis of the part, and no pull to offer.
+        if any(abs(moments[index] - other) <= _ISOTROPIC * max(abs(moments[index]), abs(other), 1e-12)
+               for k, other in enumerate(moments) if k != index):
+            continue
         d = getter()
         axes.append(np.array([d.X(), d.Y(), d.Z()]))
     return axes

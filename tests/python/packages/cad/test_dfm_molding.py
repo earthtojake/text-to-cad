@@ -167,6 +167,11 @@ class DraftTest(unittest.TestCase):
         (rib,) = [f for f in ribbed.findings if f.code == "molding.draft_zero"]
         self.assertIn("rib 12 mm tall", rib.message)
         self.assertNotIn("molding.rib_draft", {f.code for f in ribbed.findings})
+        # a dome 15 mm deep is tangent to the pull along its rim: no draft there, on a line -- no depth without it
+        dome = _check(bd.Sphere(15) - bd.Sphere(13) - bd.Pos(0, 0, -20) * bd.Box(60, 60, 40))
+        self.assertEqual({item["zero_draft_depth_mm"] for item in dome.measurements["draft"]["items"]}, {0.0})
+        self.assertNotIn("molding.draft_zero", {f.code for f in dome.findings})
+        self.assertTrue(dome.ok, dome.summary)
 
 
 class UndercutTest(unittest.TestCase):
@@ -428,6 +433,13 @@ class ThicknessTest(unittest.TestCase):
         self.assertAlmostEqual(thickness["nominal_mm"], 3.0, places=3)
         for item in thickness["items"]:
             self.assertAlmostEqual(item["thickness_mm"], 3.0, delta=0.15, msg=item["location"])
+
+    def test_a_part_under_a_micron_is_measured_whole(self) -> None:
+        # drawn in metres and read as millimetres: its lengths are under the micron a sampled length is good to,
+        # and are kept as they are (rounded to it they were 0, and every ratio of them a division by it)
+        tiny = _check(bd.Box(0.0005, 0.00025, 0.00001) + bd.Pos(0, 0, 0.00001) * bd.Box(0.00002, 0.0002, 0.00002))
+        self.assertEqual(tiny.measurements["partial_sections"], [])
+        self.assertEqual(tiny.findings[0].code, "units_suspect")
 
     def test_a_pad_is_a_thick_section_and_a_step_an_abrupt_transition(self) -> None:
         plate = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
@@ -931,6 +943,9 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(zero.severity, "info")
         self.assertNotIn("pull_better", {f.code for f in box.findings})
         self.assertIsNone(box.measurements["pull_check"]["better"])
+        # a cube's principal axes are any three: the kernel's pick (its diagonals) is no pull to offer
+        cube = _check(bd.Box(40, 40, 40)).measurements["pull_check"]
+        self.assertEqual(([row["pull"] for row in cube["candidates"]], cube["better"]), (["x", "y"], None))
 
     def test_a_limit_is_compared_unrounded(self) -> None:
         (thick,) = [rule for rule in type_side.RULES.rules if rule.id == "molding.thick_section"]
