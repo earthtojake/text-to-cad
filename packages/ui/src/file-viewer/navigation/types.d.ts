@@ -89,7 +89,7 @@ export const ViewerNavbar: ComponentType<{
   file?: string | null;
   /** The document's name where its path does not give it (a model's). */
   name?: string;
-  /** What the open document is: a model (built from code) or a file. Its glyph before the name, and the name menu's first tab. */
+  /** What the open document is: a model (built from code) or a file. The name menu's first tab. */
   kind?: "model" | "file";
   /** The name menu's Files: the explorer, rooted at `folder` where given (a model's: where it was last, else home). */
   explorer?: { source: Pick<FileSource, "list" | "search">; folder?: string | null; onOpen: (path: string) => void; onFolderChange?: (folder: string) => void } | null;

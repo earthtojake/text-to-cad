@@ -13,14 +13,13 @@ import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 
 // TEST SCAFFOLDING. This renderer is never registered in a product: it exists so
 // the shell's own tools can be driven in a real browser under a frame that is
-// nothing else. The only shipping tool the shell owns is Annotate, and the only
-// format that has it is STEP, which is still the pre-shell renderer — so without
-// this there is nowhere to exercise shell-level Annotate behaviour (a fullscreen drag
-// while an annotation is open, say) that STEP cannot reach yet. It draws one triangle,
-// reads no bytes and talks to no backend.
+// nothing else. The tools the shell owns are the drawing tools (Pencil and Shapes), and
+// every real renderer offers them; this is the frame that exercises shell-level behaviour
+// (a fullscreen drag while an annotation is open, say) with no file format in the way. It
+// draws one triangle, reads no bytes and talks to no backend.
 //
-// It also stands in for a renderer that USES the shell surfaces STEP will need
-// when it moves: a viewport context menu of its own (and word of when it is up), the
+// It also stands in for a renderer that USES the shell surfaces a real one does:
+// a viewport context menu of its own (and word of when it is up), the
 // host's capture request (its own snapshot builder), the camera-settled report,
 // a scene that ARRIVES in place (`complete`, `viewport.commitScene()`), and what
 // happens to the WebGL runtime under it (`runtimeLifecycle`). Each is exercised here
@@ -29,8 +28,7 @@ import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 // It is registered by `harness/index.tsx` alone (`*.harness` files) and lives
 // here rather than under `renderers/harness/` only because the library build
 // does not compile a `harness` directory, and a browser test must drive the
-// COMPILED package. When STEP moves onto the shell, delete this and drive those
-// cases through STEP.
+// COMPILED package.
 
 // Pencil and Shapes and nothing else: with no tool taken up, "" is the mode, exactly as the
 // shell records for a renderer that hands over no tools at all.

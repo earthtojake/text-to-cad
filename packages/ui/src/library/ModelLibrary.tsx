@@ -83,11 +83,6 @@ const matches = (item: LibraryModel, words: readonly string[]) => {
 };
 const wordsOf = (query: string) => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
-export function filterModels<Model extends LibraryModel>(items: readonly Model[], query: string): Model[] {
-  const words = wordsOf(query);
-  return items.filter(item => matches(item, words));
-}
-
 /** What the type filter over the list shows: everything, the documents built from code, or the files. */
 export type LibraryKind = "all" | "models" | "files";
 const ofKind = (item: LibraryModel, kind: LibraryKind) => kind === "all" || (kind === "models") === deletes(item);

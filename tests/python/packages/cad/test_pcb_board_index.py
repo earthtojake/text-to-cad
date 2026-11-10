@@ -1,4 +1,4 @@
-"""`pcb.read_board`: a KiCad board read back as what a person points at, without KiCad.
+"""`cad.kicad_pcb.read`: a KiCad board read back as what a person points at, without KiCad.
 
 The test board (`tests/python/support/kicad_board.py`) is in the format KiCad 11's headless
 API saves: footprints placed by a `transform`, one of them turned and one through-hole, a

@@ -119,6 +119,18 @@ it('a host that keeps its page through the restart ends it on a switch that fail
   expect(onFailed).toHaveBeenCalledOnce();
 });
 
+it('stops asking once the page is gone, though a read still in flight then fails', async () => {
+  let fail: (error: Error) => void = () => {};
+  const read = vi.fn<UpdateCall>(() => new Promise<UpdateReply>((_, reject) => { fail = reject; }));
+  const { unmount } = render(<Host read={read} start={async () => working(0)} />);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(UPDATE_POLL_MS); });
+  expect(read).toHaveBeenCalledOnce();
+  unmount();
+  await act(async () => { fail(new Error('engine restarting')); await vi.advanceTimersByTimeAsync(UPDATE_POLL_MS * 4); });
+  expect(read).toHaveBeenCalledOnce();
+});
+
 it('draws with the page from what the host knew, and reads the server again only when the person comes back', async () => {
   const read = vi.fn<UpdateCall>(async () => reply(null, null as never));
   render(<Host read={read} start={read} />);

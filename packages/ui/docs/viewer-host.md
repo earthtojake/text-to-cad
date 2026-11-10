@@ -90,14 +90,15 @@ are for reading and maintaining the contracts.
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@cad/ui/renderers/dxf` |
-| `BoardRendererOptions` (KiCad boards, drawn flat; declines camera and Display commands), `BoardLiveController`, `BoardLiveState` | [Board registration](../src/renderers/board/index.ts) | `@cad/ui/renderers/board` |
+| `BoardRendererOptions` (KiCad boards; declines a camera while drawn flat, and Display commands), `BoardLiveController`, `BoardLiveState` | [Board registration](../src/renderers/board/index.ts) | `@cad/ui/renderers/board` |
+| `SchematicRendererOptions` (KiCad schematics; declines camera and Display commands), `SchematicLiveController`, `SchematicLiveState` (`schematicDisplay`: the sheet shown) | [Schematic registration](../src/renderers/schematic/index.ts) | `@cad/ui/renderers/schematic` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@cad/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@cad/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: one control row of 24px controls — Recent, then at the right the type filter ("All ▾": All, Models, Files, where both are listed), the search, the grid/list switch and, where `pick` is given (a computer with a file chooser), Open — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as tiles (the picture, its kind's glyph, its name and its age with no verb) or as a table's rows (Name, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
-| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
+| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: one control row of 24px controls — Recent, then at the right the type filter ("All ▾": All, Models, Files, where both are listed), the search, the grid/list switch and, where `pick` is given (a computer with a file chooser), Open — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as tiles (the picture, its kind's glyph, its name and its last activity with its verb, Edited or Viewed) or as a table's rows (Name, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path, Copy link (every card's) and a file's Reveal where `fileActions` can, Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
+| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the seven CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@cad/ui/links` |
 | `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@cad/ui/build-id` |
@@ -114,7 +115,7 @@ use the [explicit fake host](../src/host/testing/host.ts).
 `ViewerHost.downloads` is an optional `DownloadPort`: `save(url, filename)` hands the
 browser a ready job's same-origin file URL (`ExportService.fileUrl`) as a plain download,
 so the browser's own download setting decides where it goes. Optional `remember`/`restore`
-persist the page's export records (request, filename, whether the file was handed over),
+persist the page's export records (the request and the filename),
 never a file, handle or server path. A request names the session's epoch
 (`ExportService.epoch`, asked as its export starts), so a record restored after the server
 restarted is refused, never run again. No shared UI detects a browser or writes to the host
@@ -532,8 +533,8 @@ is open, a pointer cursor, and no tooltip. The name opens the name menu where th
 show another document: Models, where the host hands FileViewer its library (`recent`, which
 `CadViewer` makes of its `library`), and Files, the explorer, where the host's files can be
 browsed (`files.list` and `files.search`) from the file's folder or a model's `folder`; it is
-plain text where there is neither; the ⋯ offers Copy path and Reveal in Finder / Show in Explorer / Show in file
-manager, each where `fileActions` can do it, and is absent where it can do none (no
+plain text where there is neither; the ⋯ offers Copy path, Copy link, and Open in (Browser, the file manager by its plain name — Finder, File Explorer,
+File manager — and the apps that open the file), each where `fileActions` can do it, and is absent where it can do none (no
 right-click on the name). Right, only what a host or a file adds: the renderer's navigation
 actions first, then the host's actions (`navbarActions`: `CadViewer` hands it the host's
 `fullSize`, the CAD app's Full size), and last, outermost, the host's update button (`update`,
@@ -574,7 +575,7 @@ language for the app menu's Language row: `choice` null is Automatic, `inferred`
 means; both apps keep the choice in the person's settings (`/api/v1/settings`' `language`, the
 `language` section of `settings.json`), so it holds for every CAD view. `appSettings` (`{ id, label, checked, info?, disabled?, onCheckedChange }[]`, `info` the
 hint of an info icon beside the name; a `CadViewer` prop) are the host's own on/off settings: checkbox items of the app menu, in the
-order they come (Telemetry, in both apps), the same in the
+order they come (Telemetry, then Automatic updates, in both apps), the same in the
 logo's menu and the home's; nothing of them reaches a renderer, and Display holds none. The
 host owns what each one does and where it is kept.
 `@cad/ui/consent` is the usage stats toggle both apps share:

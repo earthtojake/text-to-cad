@@ -5,7 +5,7 @@ A Quick Edit packet from a board names what the person picked (``references``: b
 over the board in the viewer's highlight (``@cad/core``'s ``board2d/boardOverlay.js``): a part's
 outline and pads, a pad, a net's copper, a track, a via, a zone, a text's and a dimension's box, a
 graphic's ink, a point's crosshair, an area's box. Each is resolved against the board as it is
-saved now (``cad.kicad_pcb.read_board``); one that names nothing there any more is said in the
+saved now (``cad.kicad_pcb.read``); one that names nothing there any more is said in the
 still's warnings, and the rest are lit.
 """
 from __future__ import annotations

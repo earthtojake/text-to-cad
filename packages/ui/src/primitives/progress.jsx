@@ -3,10 +3,8 @@ import { Progress as ProgressPrimitive } from "radix-ui"
 import { cn } from "@cad/ui/utils"
 
 /**
- * shadcn/ui Progress, smui-styled.
- *
- * smui rules that apply here: zero border radius (`--radius: 0`), the frost-blue
- * `--primary` as the fill, and a muted track. The track is deliberately thin — this sits
+ * shadcn/ui Progress: square-ended, `--primary` as the fill over the same colour at 20% as
+ * the track. The track is deliberately thin — this sits
  * over a live 3D scene, so it reads as a status line rather than a widget.
  *
  * `value` of `null` is INDETERMINATE per the radix contract, and callers that have no

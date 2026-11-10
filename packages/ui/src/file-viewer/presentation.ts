@@ -18,5 +18,5 @@ export interface ViewerLoadingOverlayProps {
 }
 /** The original CAD loading artwork, available before loading the renderer. */
 export function ViewerLoadingOverlay({ viewerLoading, progress }: ViewerLoadingOverlayProps) {
-  return createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, operationKey: "preparing-document" });
+  return createElement(Overlay, { loading: { opening: viewerLoading, progress }, operationKey: "preparing-document" });
 }

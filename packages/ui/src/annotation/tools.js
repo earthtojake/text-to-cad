@@ -1,3 +1,19 @@
+/**
+ * What Pencil draws with: the pen, the highlighter and the eraser.
+ * @typedef {'freedraw' | 'highlighter' | 'eraser'} PencilTool
+ */
+/**
+ * What Shapes draws with (`SHAPE_TOOLS`).
+ * @typedef {'rectangle' | 'line' | 'arrow' | 'ellipse' | 'text'} ShapeTool
+ */
+/**
+ * A drawing tool: what one of the two strip tools draws with.
+ * @typedef {PencilTool | ShapeTool} AnnotationTool
+ */
+/**
+ * The strip tools that draw (`toolFamily`).
+ * @typedef {'pencil' | 'shapes'} AnnotationFamily
+ */
 
 /** @type {readonly ShapeTool[]} */
 export const SHAPE_TOOLS = Object.freeze(['rectangle', 'line', 'arrow', 'ellipse', 'text']);

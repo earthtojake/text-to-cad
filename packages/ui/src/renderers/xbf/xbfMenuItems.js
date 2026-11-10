@@ -36,7 +36,7 @@ function zoomEntries(menu, { disabled = false, actions = {}, t = english } = {})
 
 /**
  * The entries of the part menu for the descriptor the workspace builds for a node
- * (`assemblyNodeMenu` in `CadFileView`): `{ id, label, disabled, separatorBefore, onSelect }`.
+ * (`xbfPartMenu` in `xbfMenus.js`): `{ id, label, disabled, separatorBefore, onSelect }`.
  *
  * `actions` holds the handlers, each called with the descriptor. `disabled` disables every
  * item at once, for a tree whose selection is blocked.

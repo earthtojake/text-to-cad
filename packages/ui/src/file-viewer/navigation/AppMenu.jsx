@@ -40,7 +40,7 @@ const languageOptions = (language, t) => [
  * person's rather than a file's. First, where the host has a home, Back to home (`onHome`). Then the
  * person's settings, a press keeping the menu open: Language (`language`), one row naming the language in
  * force, whose submenu offers Automatic (the language the context infers, named) and each language under
- * its own name; the host's on/off settings (`appSettings`: Telemetry), a checkbox at the right, filled while on, and
+ * its own name; the host's on/off settings (`appSettings`: Telemetry and Automatic updates), a checkbox at the right, filled while on, and
  * an info icon whose hint says what the setting means; then Theme (`colorScheme`), its System, Light and
  * Dark a segmented control, the one in force lit; then Send feedback (a new issue on the host's tracker, naming the version and the
  * `platform`), GitHub and Discord; and last, in gray, the version this host runs (a link to its

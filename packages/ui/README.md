@@ -6,7 +6,7 @@ app), or the host's home with none, under a navbar — the logo that opens the a
 menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@cad/ui/cad-viewer`) is the CAD viewer every app shows:
-FileViewer over a CAD client, with the six CAD renderers, the home (the model
+FileViewer over a CAD client, with the seven CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
@@ -86,7 +86,7 @@ these peers are not bundled into UI.
 src/
   host/              explicit host ports, prompt actions and React binding
   annotation/        the drawing tools' (Pencil and Shapes) session, toolbar and ink geometry (its 3D ink is renderers/kit/tools/annotate)
-  cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
+  cad-viewer/        CadViewer (FileViewer + the seven CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
     navigation/     the navbar, the app menu and its links, the folder explorer, the file menu
   library/           a host's home: the models opened before, to open again, and their pictures
@@ -96,6 +96,8 @@ src/
     robot/          URDF, SRDF and SDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
+    board/          a KiCad board (.kicad_pcb), flat or in 3D
+    schematic/      a KiCad schematic (.kicad_sch), a sheet at a time
     workspace/      a viewer file's catalog entry and document load
     harness/, shell-harness/  surfaces the browser suites drive
   primitives/       shared controls: buttons, menus, selects, sheets, tooltips, tree rows
@@ -107,8 +109,9 @@ dist/               generated ESM, declarations, CSS, assets and worker modules
 ```
 
 The loading icon's and the marks' provenance is [src/assets/README.md](src/assets/README.md);
-the DXF and robot renderers' fixtures are described beside them
-([dxf](src/renderers/dxf/__fixtures__/README.md), [robot](src/renderers/robot/__fixtures__/README.md)).
+the DXF, board, schematic and robot renderers' fixtures are described beside them
+([dxf](src/renderers/dxf/__fixtures__/README.md), [board](src/renderers/board/__fixtures__/README.md),
+[schematic](src/renderers/schematic/__fixtures__/README.md), [robot](src/renderers/robot/__fixtures__/README.md)).
 
 `FileViewer` has no concrete renderer imports. A registration describes matching,
 priority, asynchronous preparation, lazy component loading and disposal.
@@ -144,7 +147,7 @@ const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer
 ```
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`,
-`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
+`/renderers/dxf`, `/renderers/board`, `/renderers/schematic`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
 `/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/i18n/locale` (which locale a person reads in, with no dictionary: for a page that says a few words before anything else loads), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
@@ -270,8 +273,8 @@ Nets and Hierarchy, a drawing's Layers — and, under the lists, the Selected pa
 what it is connected to, the same component as its Quick Edit chip's card (`kit/inspector/ItemDetail.jsx`,
 from the view's one description of a pick, `kit/inspector/inspect.js`), with the hover tip over the
 canvas, both the frame's (`kit/shell/ViewFrame.jsx`). A file's routines play from the playbar under the model. The panel
-is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; on a
-phone the pill opens it as the whole view. Its tabs stay mounted, so a tree keeps its scroll and expansion;
+is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; a phone
+has none. Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see
 [robot links](docs/cad-renderer.md#robot-links).
@@ -309,12 +312,12 @@ is no Materials editor or persisted material override. See [View styles](docs/re
 
 The navbar leads with the logo (the C mark, over the home and over a document alike), which
 opens the app's menu: Back to home where the host
-has a home, the person's settings (Language, Telemetry, Theme), Send feedback
+has a home, the person's settings (Language, Telemetry, Automatic updates, Theme), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. Where the host keeps the view's own history (the CAD
 app's views), Back and Forward follow on a desktop (a phone has no room for them), disabled where they have nowhere to go. It names the
-file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path; Open in,
-a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
+file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path; Copy link; Open in,
+a submenu of Browser where the host has one, Finder, File Explorer or File manager, and the apps that open the file; then
 Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
 or a file adds, kept for the update's nudge: a dismissed alert's icon, the host's actions (the

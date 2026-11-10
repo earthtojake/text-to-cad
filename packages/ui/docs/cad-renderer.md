@@ -20,7 +20,8 @@ renderer composes, none of which asks what it is showing. There is one renderer
 per file family, each a vertical slice over the kit: `src/renderers/board` (a KiCad board),
 `src/renderers/dxf` ([DXF renderer](#dxf-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
 `src/renderers/mesh` (STL and 3MF, [Mesh renderer](#mesh-renderer)),
-`src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)) and
+`src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)),
+`src/renderers/schematic` (a KiCad schematic) and
 `src/renderers/xbf` (an `.xbf`, a STEP and an STP, [Engine document renderer](#engine-document-renderer)). The kit imports itself, shared UI
 (`primitives`, `lib`, `drawing`) and the format-blind half of `@cad/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
@@ -599,10 +600,10 @@ the loader asks which format it was.
   that name one mesh.
 - **Loading** (`robot/useRobotDocument.js`, over core's `lib/urdf/loadRobot.js`):
   `loadRenderRobot` (the payload, cached by the description's
-  revision), then every distinct mesh URL it names (`loadRenderMeshByUrl`, at most six
-  at a time; a primitive is served by the engine by its digest, its document's `parts/<hash>`).
-  Progress reads "Loading URDF", "Loading meshes 3/13",
-  "Building robot". The robot is published once, whole. A mesh that cannot be fetched
+  revision), then every distinct mesh URL it names (`loadRenderMeshByUrl`, at most eight
+  at a time, fewer on a machine with fewer cores; a primitive is served by the engine by its digest, its document's `parts/<hash>`).
+  Progress reads "Reading model", "Loading geometry 3/13",
+  "Preparing view" (`kit/status/loadingState.js`). The robot is published once, whole. A mesh that cannot be fetched
   fails the load. A warm file is on screen on the first render; a new revision loads
   behind the robot on screen and keeps the pose it was left in while its controls and
   named poses are unchanged (`poseLogic`), and opens at its opening pose when they
@@ -650,8 +651,7 @@ the loader asks which format it was.
   Select, as a STEP's does: a pick in Links returns to Select first, and leaving Select keeps
   it. Picking in the viewport is Select's while its filter ticks Links. Escape clears the
   selection. Hover and selection are drawn by the scene (`setHighlight`), with
-  the highlight ink a STEP part wears; hover is not React state. A robot has no
-  viewport menu and so no framing items; opening the file again fits it afresh.
+  the highlight ink a STEP part wears; hover is not React state.
 - **Panel**: the view's panel's tabs, whatever the tool: **Links**
   ([Robot links](#robot-links): headed by its filter), **SDF** for an `.sdf`
   (`SdfSection.jsx`), then **Position** where a control can be driven. No tool panels.
@@ -1391,7 +1391,7 @@ player advances the time by what the frame took (`advanceAnimationElapsed` in co
 
 Drawing is the viewer's own ink ([annotations](annotation.md)), with no drawing SDK
 behind it, and two strip tools: **Pencil** (the Pen, the Highlighter, the Eraser) and **Shapes** (the Rectangle,
-Line, Arrow, Ellipse, Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF and a KiCad board offer them. (The tools themselves are the
+Line, Arrow, Ellipse, Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF, a KiCad board and a KiCad schematic offer them. (The tools themselves are the
 SHELL's — `kit/tools/annotate`, `shell.tools.drawing` — and a renderer puts them on its strip;
 `renderers/shell-harness` also mounts them, for tests.)
 
@@ -1635,7 +1635,7 @@ its chip card names its four-bar driver instead of an affine mimic formula.
 The authoring contract specifies the namespace, geometry and range constraints.
 
 A link's chip card (`LinkDetails.jsx`), headed by the link's name, reads back what the
-description says about the link, in sections: its SRDF planning groups (`groupNamesByLink`) and end effectors;
+description says about the link, in sections: its SRDF planning groups (the payload's `srdf.groupsByLink`) and end effectors;
 **Inertial** (mass, centre of mass in the link frame, and the six inertia terms
 laid out as the symmetric tensor); **Geometry** (each visual and collision as
 its mesh path or its primitive with dimensions, plus only what the description

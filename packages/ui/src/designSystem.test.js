@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // (markdown, code) keeps its own content styles and is not chrome.
 const root = fileURLToPath(new URL(".", import.meta.url));
 const CHROME = ["file-viewer", "host", "primitives", "loading", "annotation", "library", "cad-viewer", "renderers/kit", "renderers/glb", "renderers/mesh", "renderers/dxf",
-  "renderers/board", "renderers/workspace"];
+  "renderers/board", "renderers/schematic", "renderers/xbf", "renderers/robot", "renderers/workspace"];
 const sources = dir => readdirSync(dir).flatMap(name => {
   const path = join(dir, name);
   if (statSync(path).isDirectory()) return name === "__fixtures__" ? [] : sources(path);
@@ -39,7 +39,7 @@ const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/naviga
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];
-  for (const dir of [...CHROME, "renderers/xbf", "renderers/robot"]) for (const file of sources(join(root, dir))) {
+  for (const dir of CHROME) for (const file of sources(join(root, dir))) {
     if (PAGES.includes(relative(root, file))) continue;
     readFileSync(file, "utf8").split("\n").forEach((line, index) => {
       if (NATIVE_SCROLLER.test(line)) found.push(`${relative(root, file)}:${index + 1}: ${line.trim().slice(0, 120)}`);

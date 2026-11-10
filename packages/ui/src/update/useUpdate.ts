@@ -106,7 +106,7 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
     stopPolling();
     polling.current = setTimeout(() => {
       polling.current = null;
-      void read().then(reply => { if (apply(reply) === "working") follow(); }, () => follow());
+      void read().then(reply => { if (apply(reply) === "working") follow(); }, () => { if (alive.current) follow(); });
     }, UPDATE_POLL_MS);
   }, [read, apply]);
   const update = useCallback(() => {

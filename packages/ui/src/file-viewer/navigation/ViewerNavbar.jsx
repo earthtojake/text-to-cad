@@ -254,7 +254,7 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  * @param {import("../types.js").ViewerHistory | null} [props.history] The view's own history, where the host keeps one: Back and Forward after the logo.
  * @param {string | null} [props.file] The open file, by its absolute path (a document with no file of its own: its id).
  * @param {string} [props.name] The document's name where its path does not give it (a model's).
- * @param {"model" | "file"} [props.kind] What the open document is: its glyph, and the name menu's first tab.
+ * @param {"model" | "file"} [props.kind] What the open document is: the name menu's first tab.
  * @param {{ source: Pick<import("../types").FileSource, "list" | "search">, folder?: string | null, onOpen(path: string): void } | null} [props.explorer]
  *   Where the host's files can be browsed: the name menu's Files, from `folder` where given.
  * @param {{ list(): Promise<readonly import("../types").RecentDocument[]>, onOpen(path: string): void } | null} [props.recent]

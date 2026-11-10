@@ -44,7 +44,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   named Menu, with no chevron: the "C" mark, 16px, in the row's 24px button, the same over the
   home and over a document (no wordmark, and nothing that changes between the two). Its left edge
   is the page's 16px gutter, over the home and over a page alike (the
-  row starts 12px in, the button's padding is 4px). The logo opens the
+  row starts 10px in, the button's padding is 4px). The logo opens the
   **app menu** (see [Settings](#settings)) — a host with no home has it too — then, where the
   host keeps the view's own history (`history`: the CAD app's views, which no browser holds),
   **Back** and **Forward**, two arrows walking it as a browser's do, from file to file and to
@@ -118,7 +118,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   navbar out (`chrome: "bare"`), and Preview hides it.
 
   A host's home has the same navbar, with only the logo and its app menu (without Back to
-  files) and, where the host keeps the view's history, **Back** and **Forward** at the left
+  home) and, where the host keeps the view's history, **Back** and **Forward** at the left
   (a desktop's alone) and, at the right end, the host's actions and, last, its update, when there is one — the same
   buttons, sizes and places as over a file. Under it,
   the page, after Figma's Recents, with no hero (no wordmark, tagline or links: GitHub and

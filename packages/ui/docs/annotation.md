@@ -2,7 +2,7 @@
 
 The drawing tools — Pencil and Shapes — are the CAD viewer's own ink, with no drawing SDK behind it. A view has one
 annotation: its marks are projected into the model in 3D, so they stay where they
-were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot, DXF and board renderers offer them
+were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot, DXF, board and schematic renderers offer them
 ([Pencil and Shapes](cad-renderer.md#pencil-and-shapes)).
 
 ## Pieces
@@ -22,10 +22,10 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   `sameView`: less than 2° of turn, 5% of zoom or pan, nothing else changed),
   or a new one.
 - `annotation/views.js` — a view as a prompt carries it, in a snapshot job's own
-  words: the camera (always orthographic), Clip when on, the one motion on
-  screen (Explode, or the pose off its default as `kinematics` or
-  `jointValues`), the parts hidden and isolated, and the picture's size. Never
-  how it looks.
+  words: the camera with its projection and lens, the display mode and the Grid
+  switch, Clip when on, the one motion on screen (Explode, or the pose off its
+  default as `kinematics` or `jointValues`), the parts hidden and isolated, and
+  the picture's size.
 - `annotation/tools.js` — the two strip tools that draw and their tools: Pencil (`freedraw`, `highlighter`,
   `eraser`) and Shapes (`line`, `arrow`, `rectangle`, `ellipse`, `text`); `toolFamily(tool)`, `styleSlot(tool)` (the style slot a tool draws with; none for the eraser).
 - `annotation/toolbar.jsx` — `AnnotationToolbar`, the sub-toolbar both strip tools share: one row (at every width; a phone's

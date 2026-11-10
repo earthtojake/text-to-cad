@@ -217,7 +217,7 @@ export interface FileViewerProps {
    */
   appSettings?: readonly AppSetting[];
   /**
-   * The host's update button (`@cad/ui/update`'s `UpdateButton`), first among the navbar's
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), last, outermost, among the navbar's
    * controls, while the host's install is behind; nothing otherwise.
    */
   update?: ReactNode;

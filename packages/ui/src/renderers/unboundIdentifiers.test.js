@@ -32,7 +32,7 @@ const traverse = traverseModule.default ?? traverseModule;
 const CLIENT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 // Every file family, so a missing one is a failure rather than a smaller number.
-const SLICES = ["xbf", "kit", "dxf", "glb", "mesh", "robot", "workspace"];
+const SLICES = ["xbf", "kit", "dxf", "board", "schematic", "glb", "mesh", "robot", "workspace"];
 
 // Globals the browser (and the test runner, for the few node-facing modules here) provides.
 // Deliberately explicit: an allowlist that grows by hand is the point — a new name showing up

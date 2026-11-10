@@ -141,11 +141,11 @@
 .cad-library-search { position: relative; width: 200px; }
 .cad-library-search > svg { position: absolute; left: 8px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
 .cad-library-search input { padding-left: 28px; padding-right: 8px; }
-/* Grid or list: two 24px icon buttons, the chosen one on the muted fill, as "Recent" is. */
+/* Grid or list: two 24px icon buttons, the chosen one on the muted fill. */
 .cad-library-layout { display: flex; gap: 2px; }
 .cad-library-layout button { color: var(--muted-foreground); }
 .cad-library-layout button[aria-pressed=true] { background: var(--muted); color: var(--foreground); }
-/* Figma's tiles: at least 240px a column (four across a 1280px window), 24px apart both ways. A tile is
+/* Figma's tiles: at least 280px a column (three across the full column), 24px apart both ways. A tile is
    transparent on the page in both themes, its 1px border the border token and its 12px radius the same
    at rest and under the pointer, with no shadow; its picture on its own muted fill. */
 .cad-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; gap: 24px; margin: 0; padding: 0; list-style: none; }
@@ -163,8 +163,7 @@
 .dark .cad-library-thumbnail[data-drawing] img { filter: invert(1) hue-rotate(180deg); }
 .cad-library-thumbnail > svg { width: 24px; height: 24px; opacity: .7; }
 .cad-library-card .cad-library-thumbnail { width: 100%; aspect-ratio: 330 / 185; }
-/* The caption, 12px by 16px: the kind's glyph in a 24px column, then the name (text-ui, 500) over its age. */
-/* A tile's caption is compact: 8px by 12px around the glyph, 8px before the name, the age right under it. */
+/* A tile's caption is compact: 8px by 12px around the kind's glyph, 8px before the name (text-ui, 500), the age right under it. */
 .cad-library-body { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; }
 .cad-library-text { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1px; min-width: 0; }
 .cad-library-card .cad-library-glyph { box-sizing: content-box; width: 16px; height: 16px; padding: 0 2px; }
@@ -189,9 +188,9 @@
 .cad-library-pin[aria-pressed=true] { color: var(--foreground); }
 @media (hover: none) { .cad-library-actions button { opacity: 1; } }
 /* The list, Figma's table: one type in every cell (text-ui, 13px), the header's labels (Name, Updated,
-   Opened) muted in a 32px row over 40px rows, each its glyph and name, then its two ages, muted, in fixed
+   Created) muted in a 32px row over 40px rows, each its glyph and name, then its two ages, muted, in fixed
    160px columns; rows transparent, the hover fill under the pointer, the pin and ⋯ at the row's end. A
-   narrow page drops Opened. */
+   narrow page drops Created. */
 .cad-library-table { --cad-library-columns: minmax(0, 1fr) 160px 160px; }
 .cad-library-columns { display: grid; grid-template-columns: var(--cad-library-columns); align-items: center; height: 32px; padding: 0 64px 0 12px;
   border-bottom: 1px solid var(--border); font-size: var(--text-ui); line-height: 1; color: var(--muted-foreground); user-select: none; }

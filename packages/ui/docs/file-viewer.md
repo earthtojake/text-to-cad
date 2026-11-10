@@ -6,7 +6,7 @@ absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu
 It imports no concrete renderer. Applications compose registrations from the
 separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
-`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the six
+`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the seven
 CAD renderers, the home and the standard error pages ([viewer host](viewer-host.md)).
 
 ```tsx
@@ -98,8 +98,8 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 - the open file's name, alone (no glyph; its chevron where it opens the name menu): a
   button that opens the name menu where the view can show another document, and plain text
   otherwise;
-- the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
-  and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
+- the ⋯ file menu: Copy path; Copy link; Open in, a submenu of Browser (`fileActions.perform.browser`),
+  the file manager by its name (Finder, File Explorer, File manager: `reveal`) and the apps that open the file; then the
   host's own items (`fileMenuItems`: the CAD viewer's Export submenu). Each only where the
   host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
   model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
