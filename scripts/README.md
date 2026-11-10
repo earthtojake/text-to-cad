@@ -96,7 +96,9 @@ where those files ship, so these scripts are what produces them.
 - `test-installed.sh` — builds the library's, the server's and the shim's wheels (or accepts
   `--wheels DIR` to test the exact artifacts already built), installs them together into a
   scratch venv and exercises them from outside the repo, including `cad-mcp` serving the
-  packaged CAD app over stdio. Called by `test.yml` and `release-publish.yml`.
+  packaged CAD app over stdio and a manufacturing check of a built part for each process
+  (the checks' measuring modules, loaded from the wheel). Called by `test.yml` and
+  `release-publish.yml`.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`.
