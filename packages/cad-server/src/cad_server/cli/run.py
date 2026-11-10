@@ -32,10 +32,13 @@ An integration whose tool is built for one Python alone (the registry's ``python
 integration's, 3.13) has its environment made on that line (``extras.on``: a Python uv manages, where the
 engine's own is another), cad pinned in it beside any other integration the program uses, and the program run
 as any other is. A ``--python`` or a header's ``requires-python`` that leaves that line out, and a platform the
-tool has no build for, are refused in one line before anything is made (``_line``, ``extras.supported``). Such
-a tool's own settings folders (the registry's ``homes``: ``BLENDER_USER_CONFIG`` and the rest) are private
-folders in the cache folder unless the caller set them (``_homes``), so a person's preferences and add-ons
-never load into a run.
+tool has no build for, are refused in one line before anything is made (``_line``, ``extras.supported``); a
+``--python`` that admits the line is narrowed to it (``extras.narrowed``): ``--python 3.13`` and ``--python
+'>=3.12'`` make the one environment no ``--python`` makes, never another, nor one on a Python of another line.
+Such a tool's own settings folders (the registry's ``homes``: ``BLENDER_USER_CONFIG`` and the rest) are folders
+of cad's in the cache folder unless the caller set them (``_homes``): every run of cad's shares them, so what
+one run writes there (an extension it installs, preferences it saves) is there for the next, and a person's own
+preferences and add-ons never load into a run.
 
 The ``cad`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
 """
@@ -490,13 +493,17 @@ def _homes(names: tuple[str, ...], environ: dict[str, str]) -> dict[str, str]:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
+        from cad.registry import INTEGRATIONS
+
+        lines = "".join(f" A script that imports {integration.modules[0]} gets the {name} integration, on Python "
+                        f"{integration.python}, the one its tool is built for."
+                        for name, integration in INTEGRATIONS.items() if integration.python and integration.modules)
         sys.stdout.write(USAGE + "\nRun a program as `uv run` does, with cad pinned at this device's release: a "
                                  "script's `# /// script` header names its own packages, and cad's integrations "
                                  "are worked out from its imports (a header naming `cad[...]` decides them); a "
                                  "command an integration declares (`kicad-cli`) gets that integration and runs "
-                                 "headless. A script that imports bpy gets the blender integration, on Python "
-                                 "3.13, the one Blender is built for. The environment is made once, by the "
-                                 "device's engine, and used again. uv run's options are taken as uv takes them.\n")
+                                 f"headless.{lines} The environment is made once, by the device's engine, and "
+                                 "used again. uv run's options are taken as uv takes them.\n")
         return 0
     from cad_server._internal import base, extras
 

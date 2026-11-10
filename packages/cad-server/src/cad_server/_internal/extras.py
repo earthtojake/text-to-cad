@@ -109,6 +109,9 @@ _VERSION = (r"(?P<release>[0-9]+(?:\.[0-9]+)*)"
 _CLAUSE = re.compile(rf"\s*(?P<operator>~=|===|==|!=|<=|>=|<|>)\s*(?P<version>{_VERSION})(?P<star>\.\*)?\s*", re.I)
 # The pre-releases in PEP 440's order.
 _PRE = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
+# A ``--python`` that asks for a version of CPython, as uv reads one: ``3.13``, ``cpython@3.13``, ``cp3.13``,
+# ``>=3.12``.
+_REQUEST = re.compile(r"(?:(?:cpython|cp)[-@]?)?(?P<request>[0-9<>=!~].*)", re.I)
 # A URL's scheme, and a Windows drive, which a scheme's spelling also matches.
 _SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 _DRIVE = re.compile(r"[A-Za-z]:[\\/]")
@@ -336,14 +339,41 @@ def on(names: Iterable[str], engine: str, python: str | None = None,
     ``python`` (``--python``) and ``options`` as given. With no ``--python`` it is the engine's own (None; its
     version is ``engine``), unless one of the integrations is built for another line (``python_line``): then
     that line, a Python uv manages (``--managed-python``, fetched by uv into its own folder on first need)
-    where ``options`` do not already say which kind."""
+    where ``options`` do not already say which kind. A ``--python`` every release of that line meets (``3.13``,
+    ``>=3.12``) is no request beyond the line, and makes the environment no ``--python`` makes; one only some
+    meet is narrowed to them (``narrowed``), so uv never picks a Python of another line for it."""
     options = tuple(options)
     found = python_line(names)
+    if found is not None and python is not None:
+        python = narrowed(python, found[0])
+        if python == found[0]:
+            python = None
     if python is not None or found is None or admits(f"=={found[0]}.*", engine):
         return python, options
     if not {"--managed-python", "--no-managed-python"} & set(options):
         options = (*options, "--managed-python")
     return found[0], options
+
+
+def narrowed(python: str, line: str) -> str:
+    """A ``--python`` request, as uv reads one, for an environment that must be on the Python minor version
+    ``line``, narrowed to that line: the line itself (``3.13``) for a request every release of it meets (``3``,
+    ``3.13``, ``cpython@3.13``, ``>=3.12``, ``==3.13.*``); the request and the line together for one only some
+    meet (``>=3.13.5``: ``>=3.13.5,==3.13.*``); else the request as it is -- a release (``3.13.5``), a path, a
+    command's name, or one of another line, which ``cad run`` refuses first."""
+    found = _REQUEST.fullmatch(python.strip())
+    if found is None:
+        return python
+    request = found["request"]
+    if request[0].isdigit():
+        if re.fullmatch(r"\d+(?:\.\d+)*", request) is None:
+            return python
+        asked, mine = request.split("."), line.split(".")
+        return line if len(asked) <= len(mine) and mine[:len(asked)] == asked else python
+    meets = [admits(request, f"{line}.{patch}") for patch in range(100)]
+    if None in meets or not any(meets):
+        return python
+    return line if all(meets) else f"{request},=={line}.*"
 
 
 def integration_spec(installation: base.Installation, names: Iterable[str]) -> "Spec":
@@ -1026,10 +1056,10 @@ def kept(folder: Path, current: str) -> set[str]:
 def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec | None = None,
              inputs: dict[str, Any] | None = None) -> list[str]:
     """The environments of a model's packages in ``folder`` of releases other than ``keep`` (``kept``: the
-    current one and the one before it) removed, and those the one just ``made`` supersedes -- of its
-    installation's base (``inputs``) and ``spec``, a local package since edited --, but one a process runs
-    from (``releases.running``), which goes at a later making: the paths removed. The bases are their
-    releases' to remove (``releases.collect``)."""
+    current one and the one before it) removed, those whose Python is gone (``base.marked``: dead, no way
+    back), and those the one just ``made`` supersedes -- of its installation's base (``inputs``) and ``spec``,
+    a local package since edited --, but one a process runs from (``releases.running``), which goes at a later
+    making: the paths removed. The bases are their releases' to remove (``releases.collect``)."""
     from cad_server._internal.releases import running
 
     removed = []
@@ -1038,10 +1068,10 @@ def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec 
     except OSError:
         return removed
     for env in entries:
-        marker = base.complete(env) if env != made else None
+        marker = base.marked(env) if env != made else None
         if marker is None or not isinstance(marker.get("with"), list):
             continue
-        other = (marker.get("inputs") or {}).get("release") not in keep
+        other = (marker.get("inputs") or {}).get("release") not in keep or not base.interpreter(env).exists()
         superseded = (made is not None and spec is not None and marker.get("spec") == spec.keyed()
                       and marker.get("inputs") == inputs)
         if not (other or superseded) or running(env):

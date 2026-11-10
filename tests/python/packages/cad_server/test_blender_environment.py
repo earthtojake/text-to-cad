@@ -2,13 +2,15 @@
 (``cad_server._internal.extras.on``, ``cad_server.cli.run``). What a program's imports choose, the Python its
 environment is made on and how uv is asked for it, what is refused in one line before anything is made (a
 ``--python`` or a ``requires-python`` that leaves that line out, a platform bpy has no build for), its private
-settings folders, and ``cad doctor``'s row. Its environment is one of cad's like any other: cad pinned in it,
+settings folders, and ``cad doctor``'s row. A ``--python`` that admits that line is narrowed to it: one
+environment for the line, however it is asked for. Its environment is one of cad's like any other: cad pinned in it,
 keyed by the release. Nothing is made here: no uv. The real environment, with the real bpy, is the blender
 job's (``tests/python/packages/blender``)."""
 
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import shutil
 import tempfile
@@ -98,7 +100,22 @@ class ChoosingTest(unittest.TestCase):
                 self.assertEqual(self.refused("--python", given, "render.py"),
                                  "render.py uses cad's blender integration, which runs on Python 3.13 alone: --python "
                                  f"{given} is another; drop --python")
-        self.assertEqual(self.prepared("--python", ">=3.12", "render.py").spec.python, ">=3.12")
+        # A request every 3.13 meets is no request beyond the line: the one environment no --python makes, on a
+        # Python uv manages -- never a second one, nor one uv would make on a 3.14 for `>=3.12`, with no bpy in it.
+        inferred = self.prepared("render.py").spec
+        for given in ("3.13", "3", "cpython@3.13", "cpython-3.13", "cp3.13", ">=3.12", "==3.13.*", ">=3.11,<3.15"):
+            with self.subTest(given=given):
+                spec = self.prepared("--python", given, "render.py").spec
+                self.assertEqual((spec.python, spec.python_options), ("3.13", ("--managed-python",)))
+                self.assertEqual(extras.key(base.Installation.here(), spec),
+                                 extras.key(base.Installation.here(), inferred))
+                self.assertEqual(self.prepared("--python", given, "render.py", engine=OWN).spec.python, None,
+                                 "on an engine of that line, its own Python, as with no --python")
+        # One only some 3.13s meet is narrowed to them; a kind of Python named is kept.
+        self.assertEqual(self.prepared("--python", ">=3.13.5", "render.py").spec.python, ">=3.13.5,==3.13.*")
+        kind = self.prepared("--python", "3.13", "--no-managed-python", "render.py").spec
+        self.assertEqual((kind.python, kind.python_options), ("3.13", ("--no-managed-python",)))
+        self.assertEqual(extras.narrowed("3.12", "3.13"), "3.12", "another line, which cad run refuses first")
 
     def test_a_header_s_requires_python_that_leaves_3_13_out_is_refused(self) -> None:
         for wanted in ("==3.13.*", ">=3.13.5", ">=3.11,<3.14"):
@@ -178,8 +195,26 @@ class ChoosingTest(unittest.TestCase):
             self.assertEqual((status, line), ("ok", "blender this installation carries it (cad[blender])"))
         else:
             self.assertEqual(status, "info")
-            self.assertRegex(line, r"^blender cad\[blender\] \S+, made on first need in .+: the first command that "
-                                   r"needs it$")
+            # No command of cad's needs it: a run of a script that imports bpy makes it (the registry says so).
+            self.assertRegex(line, r"^blender cad\[blender\] \S+, made on first need in .+: the first `cad run` of a "
+                                   r"program that imports bpy and no other integration$")
+        if "kicad" in rows and rows["kicad"][0] == "info":
+            self.assertTrue(rows["kicad"][1].endswith(": the first command that needs it"), rows["kicad"])
+
+    def test_cad_doctor_says_an_environment_whose_python_is_gone_is_made_again(self) -> None:
+        from cad_server._internal import integration_env
+        from cad_server.cli import doctor
+
+        if integration_env.carries("blender"):
+            self.skipTest("this installation carries the blender integration itself")
+        _state, folder, _release = integration_env.found("blender")
+        env = Path(folder)
+        env.mkdir(parents=True)
+        (env / base.MARKER).write_text(json.dumps({"schema": base.SCHEMA, "key": env.name, "with": []}),
+                                       encoding="utf-8")  # made, and its Python since uninstalled
+        row = next(line for status, line in doctor._integrations() if line.startswith("blender "))
+        self.assertRegex(row, r"^blender cad\[blender\] \S+ in .+ has lost its Python: made again on first need, the "
+                              r"first `cad run` of a program that imports bpy and no other integration$")
 
 
 if __name__ == "__main__":
