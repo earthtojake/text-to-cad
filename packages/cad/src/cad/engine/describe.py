@@ -112,6 +112,7 @@ import numpy as np
 from cad.engine.declarations import DRIVE, MAX_HULLS
 from cad.engine.description import (COLLISIONS, Closure, Collision, Description, DescriptionError, Geometry, Inertial,
                                     Joint, Link, Look, Mesh, Pose, Visual, column_major, srgb)
+from cad.engine.weights import apportion
 
 __all__ = ["describe"]
 
@@ -883,81 +884,37 @@ class _Describer:
 
     def _masses(self) -> dict[int, tuple[float, np.ndarray, np.ndarray] | None]:
         """Each instance below a declared mass, its solids' mass (kg), centre (m) and inertia (kg*m^2) in its
-        prototype's frame, scaled as the module's **Mass** says; None where it carries none."""
-        chains: dict[int, list[tuple[int, ...]]] = {}
-        names: dict[tuple[int, ...], str] = {}
+        prototype's frame, scaled as the module's **Mass** says (``weights.apportion``, the rule ``inspect`` weighs
+        by too, over the solids as ``_measured`` measures them); None where it carries none."""
 
-        def walk(node: dict[str, Any], at: tuple[int, ...], above: list[tuple[int, ...]]) -> None:
-            names[at] = node.get("name") or "the model"
-            if "children" in node:
-                for position, child in enumerate(node["children"]):
-                    walk(child, at + (position,), above + [at])
-            else:
-                chains[int(node["instance"])] = above + [at]
+        def density(index: int) -> float | None:
+            prototype = self._declared(index)
+            return self._density(prototype, (prototype.get("material") or {}).get("material") or {})
 
-        walk(self.structure["tree"], (), [])
-        totals: dict[tuple[int, ...], float] = {}
-        owner: dict[int, tuple[int, ...]] = {}
-        for index, chain in chains.items():
-            entries = self._declared(index).get("mass") or ()
-            for up, grams in entries:
-                if not 0 <= int(up) < len(chain):
-                    raise DescriptionError(f"part {self._name(index)!r} is declared part of a mass {up} levels above "
-                                           "it, which the tree does not hold")
-                totals[chain[-1 - int(up)]] = float(grams)
-            if entries:
-                owner[index] = chain[-1 - int(min(int(up) for up, _grams in entries))]
+        def volume(index: int) -> float | None:
+            measured = self._measured(self._declared(index))
+            return None if measured is None else measured[0]
+
+        def unweighed(said: str, grams: float, indices: list[int]) -> None:
+            shown = ", ".join(repr(self._name(index)) for index in indices[:3]) + (
+                f" and {len(indices) - 3} more" if len(indices) > 3 else "")
+            one = len(indices) == 1
+            self.warn(f"{shown} below {said} {'has' if one else 'have'} no density, unlike the other parts "
+                      f"there: {'it carries' if one else 'they carry'} none of the {grams:g} g, which they make "
+                      f"up (give {'it' if one else 'them'} a material to share it)")
+
+        shared = apportion(self.structure, density, volume, unweighed)
+        if shared.refused is not None:
+            raise DescriptionError(shared.refused)
         found: dict[int, tuple[float, np.ndarray, np.ndarray] | None] = {}
-        for node in sorted(totals, key=len, reverse=True):
-            grams = totals[node]
-            said = f"{names[node]!r}, declared to weigh {grams:g} g,"
-            inner = [other for other in totals if len(other) > len(node) and other[:len(node)] == node
-                     and not any(len(node) < len(between) < len(other) and other[:len(between)] == between
-                                 for between in totals)]
-            own = [index for index, held in sorted(owner.items()) if held == node]
-            fixed = sum(totals[other] for other in inner)
-            fixed += sum(float(point["grams"]) for index in own
-                         for point in (self._declared(index).get("pointMasses") or {}).values())
-            solids: list[tuple[int, float, tuple[float, np.ndarray, np.ndarray]]] = []
-            weighed = []
-            for index in own:
-                prototype = self._declared(index)
-                material = (prototype.get("material") or {}).get("material") or {}
-                weighed.append((index, self._density(prototype, material)))
-            uniform = all(density is None for _index, density in weighed)
-            unweighed = [index for index, density in weighed if density is None and not uniform]
-            if unweighed:
-                shown = ", ".join(repr(self._name(index)) for index in unweighed[:3]) + (
-                    f" and {len(unweighed) - 3} more" if len(unweighed) > 3 else "")
-                one = len(unweighed) == 1
-                self.warn(f"{shown} below {said} {'has' if one else 'have'} no density, unlike the other parts "
-                          f"there: {'it carries' if one else 'they carry'} none of the {grams:g} g, which they make "
-                          f"up (give {'it' if one else 'them'} a material to share it)")
-            for index, density in weighed:
-                if density is None and not uniform:
-                    found[index] = None
-                    continue
-                measured = self._measured(self._declared(index))
-                if measured is None:
-                    found[index] = None
-                    continue
-                solids.append((index, 1.0 if density is None else density, measured))
-            weight = sum(volume * density * 1e-9 for _index, density, (volume, _c, _i) in solids)  # kg
-            rest = (grams - fixed) * 1e-3  # kg
-            slack = grams * 1e-12  # kg: a part in 10^9 of the total
-            if weight > 0 and rest <= slack:
-                raise DescriptionError(f"{said} holds point masses and inner masses of {fixed:g} g, which leave its "
-                                       "own solids nothing to weigh")
-            if weight <= 0 and abs(rest) > slack:
-                if own:
-                    raise DescriptionError(f"{said} has {grams - fixed:g} g left for its own parts after its point "
-                                           "masses and inner masses, and they have no volume to carry it")
-                raise DescriptionError(f"{said} holds inner masses and point masses of {fixed:g} g, and no solid of "
-                                       "its own to make up the rest")
-            scale = rest / weight if weight > 0 else 0.0
-            for index, density, (volume, center, inertia) in solids:
-                per_mm3 = density * scale * 1e-9
-                found[index] = (volume * per_mm3, center * MM, inertia * per_mm3 * 1e-6)
+        for index, share in shared.shares.items():
+            if share is None:
+                found[index] = None
+                continue
+            density_of, scale = share
+            measured, center, inertia = self._measured(self._declared(index))
+            per_mm3 = density_of * scale * 1e-9
+            found[index] = (measured * per_mm3, center * MM, inertia * per_mm3 * 1e-6)
         return found
 
     def _density(self, prototype: dict[str, Any], material: dict[str, Any]) -> float | None:
