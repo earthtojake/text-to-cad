@@ -10,15 +10,18 @@ builds for Python 3.13 alone).
     model.play("cycle")                     # another clip; model.play(None) stands still
 
 ``load`` imports the file with Blender's own glTF importer and answers a ``Model``: each node's object, the
-clips, and the box of the pose the file was written in. It undoes what that importer gets wrong with a file
+clips, and the box of the pose the file was written in. It sets the scene's frame rate first (``fps``, with
+``render.fps_base`` 1), which keys the clips' seconds. It undoes what that importer gets wrong with a file
 that has clips: it leaves a node a clip moves at its first clip's start, so a still shows a pose the file
-never held, with no error; only that first clip plays, and clearing it leaves its last pose; and its keys
-start wherever the scene's frames did. Here every node a clip moves stands where the file places it, and a
-clip plays alone (``Model.play``), the scene's frames 0 to its duration.
+never held, with no error; only that first clip plays, and clearing it leaves its last pose; and it keys
+every clip from frame 0, wherever the scene's range starts. Here every node a clip moves stands where the
+file places it, and a clip plays alone (``Model.play``), the scene's range set to its frames, 0 to its
+duration.
 
 It opens any GLB, cad's or another tool's (build123d's ``export_gltf``, KiCad's board): a node is known by
 its place in the file, never by the name Blender gives its object, so a node with no name, two of one name
-and a name Blender cuts short are each found.
+and a name Blender cuts short are each found. A skin's joints are no objects but bones, of the armature Blender
+makes for the skin (the skinned mesh's parent), found there by name; ``load`` places objects, never a bone.
 
 Everything loads on first use: ``import cad.blender`` imports no bpy, and a script whose environment lacks it
 is told which extra brings it. Nothing of Blender's is re-exported: ``import bpy`` stays Blender's.

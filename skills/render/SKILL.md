@@ -45,11 +45,13 @@ only just added, its server may still be starting: try again for up to a minute 
 `cad run render.py` sees `import bpy` and gives the script cad's blender integration: an
 environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)
 beside cad, made the first time and kept. The script imports what it likes of cad and build123d
-beside bpy, so one script can build a model, export it and render it. Blender's own preferences
-and add-ons folders are private to that run, so a person's Blender settings never load into it. bpy
-has no build for Intel Macs or Linux on ARM, where `cad run` refuses such a script by name. A
-`--python` or a header's `requires-python` that leaves 3.13 out is refused the same way. Nothing
-here starts the Blender app.
+beside bpy, so one script can build a model, export it and render it. Blender's own preferences,
+add-ons and extensions folders are cad's, never the person's, so their Blender settings never load
+into a run; every `cad run` shares them, so an extension or a preference one script installs or saves
+is there for the next, and a script that needs one sets it up itself. bpy has no build for Intel Macs
+or Linux on ARM, where `cad run` refuses such a script by name. A `--python` or a header's
+`requires-python` that leaves 3.13 out is refused the same way; one that admits it (`--python 3.13`)
+runs on the same environment as none. Nothing here starts the Blender app.
 
 ## Export the model
 
@@ -128,10 +130,10 @@ found by its place in the file, whatever Blender names its object.
 
 | Call | What it gives |
 | --- | --- |
-| `load(path, clip=None, fps=24)` | Imports into the current scene and returns the model; `clip` plays one, `fps` keys its seconds (set before the import, so a clip is in frames at that rate). |
+| `load(path, clip=None, fps=24)` | Imports into the current scene and returns the model; `clip` plays one, `fps` keys its seconds (the scene's `render.fps`, with `render.fps_base` 1, set before the import, so a clip is in frames at that rate). |
 | `model.root` | The document's root empty, at the origin, scale 0.001 (the parts are in mm below it). `model.roots` is every root's, for another tool's file with several. |
 | `model.objects["arm/head"]` | Each node's object by its path below the root, as the GLB names it. A node with no name is under the name Blender gave its object; of two nodes with one name (KiCad names every lens `lens`), the last. |
-| `model.nodes[7]` | Each node's object by its index in the file, which tells two of one name apart. |
+| `model.nodes[7]` | Each node's object by its index in the file, which tells two of one name apart. A skin's joints are bones of the armature Blender makes for it (the skinned mesh's `parent`), not objects, and `load` never places a bone. |
 | `model.clips` | Each clip by name: `kind` (`motion` or `animation`) and `duration` in seconds. |
 | `model.box`, `model.center`, `model.size` | The world box of the pose cad wrote, in metres, for framing (the root sits at the document's origin, not the model's middle). |
 | `model.play("sweep")` | That clip from frame 0, the scene's range 0 to its duration; `model.play(None)` stands every part where cad placed it. |

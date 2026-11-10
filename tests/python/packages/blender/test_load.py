@@ -13,7 +13,9 @@ Which object is which node is held on GLBs written here: build123d's (one node w
 rewritten as KiCad writes a board (its root with no name, a part named by itself rather than its path, two parts of
 one name, no clips), and one made by hand whose nodes have no name (a mesh, an empty, a camera, a light), the same
 name twice, two names longer than Blender keeps that differ only past where it cuts them, the name Blender gives
-another, three scene roots, and clips on a camera, on two of one name and one with no name. A glow on one pin, as
+another, three scene roots, and clips on a camera, on two of one name and one with no name; a skinned triangle,
+whose joints are bones that keep no tag and whose clip plays alone; one whose second buffer is a file named
+``scene.bin`` beside it; and one whose import fails partway, which leaves nothing of it. A glow on one pin, as
 the skill's recipe keys it, leaves the other, whose mesh it shares, as it was.
 
 Then a 64x64 Cycles still on the CPU, and an EEVEE one. EEVEE draws through OpenGL, which a machine with no graphics
@@ -235,6 +237,37 @@ def probe():
     except ValueError as error:
         said["refused"] = str(error)
 
+    # A skin: its joints are bones of the armature Blender makes for it, which keep no tag, and the shape the
+    # importer draws bones with is no part of the box. Its clip plays alone, as any.
+    fresh()
+    skin = load(HERE / "skinned.glb")
+    armature = skin.objects["skinned"].parent
+    said["skin"] = {"nodes": {index: item.name for index, item in skin.nodes.items()},
+                    "roots": [item.name for item in skin.roots],
+                    "armature": [armature.type, sorted(bone.name for bone in armature.pose.bones)],
+                    "tagged": sorted(f"{type(bone).__name__} {bone.name}"
+                                     for bone in (*armature.data.bones, *armature.pose.bones) if "cad_blender_node" in bone),
+                    "box": [list(skin.box[0]), list(skin.box[1])], "clips": sorted(skin.clips)}
+    skin.play("bend")
+    playing = armature.animation_data.action
+    skin.play(None)
+    said["skin"]["played"] = [playing.name if playing else None, armature.animation_data.action is None]
+
+    # A file of its own named scene.bin beside a GLB that has a binary chunk too: each its own.
+    fresh()
+    beside = load(HERE / "beside.glb")
+    said["beside"] = {"objects": sorted(beside.objects), "box": [list(beside.box[0]), list(beside.box[1])]}
+
+    # An import that fails partway (a buffer that is not there) leaves nothing of it: no object, mesh or material.
+    fresh()
+    held = {found.session_uid for found in bpy.data.user_map()}
+    try:
+        load(HERE / "broken.glb")
+    except RuntimeError as error:
+        said["broken"] = {"said": "Missing resource" in str(error),
+                          "left": sorted(f"{type(found).__name__} {found.name}" for found in bpy.data.user_map()
+                                         if found.session_uid not in held)}
+
     # Another rate: the keys and the range at 30 fps.
     scene = fresh()
     model = load(HERE / "scene.glb", clip="show", fps=30)
@@ -347,6 +380,58 @@ def _odd(clips: bool) -> bytes:
     return _glb(gltf, binary)
 
 
+def _skinned() -> bytes:
+    """A GLB of a skinned triangle (``skinned``) and its two joints, ``hip`` (a scene root) and ``knee`` 1 up from it,
+    which one clip, ``bend``, turns a quarter about Z over a second."""
+    points = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+    joints = struct.pack("<12B", 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+    weights = struct.pack("<12f", 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+    identity = (1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0)
+    binds = struct.pack("<32f", *identity, 0, 0, 0, 1, *identity, 0, -1, 0, 1)
+    times = struct.pack("<2f", 0.0, 1.0)
+    turns = struct.pack("<8f", 0, 0, 0, 1, 0, 0, HALF, HALF)
+    binary = points + joints + weights + binds + times + turns
+    views = [(0, 36), (36, 12), (48, 48), (96, 128), (224, 8), (232, 32)]
+    return _glb({
+        "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0, 1]}],
+        "nodes": [{"name": "skinned", "mesh": 0, "skin": 0}, {"name": "hip", "children": [2]},
+                  {"name": "knee", "translation": [0, 1, 0]}],
+        "skins": [{"joints": [1, 2], "inverseBindMatrices": 3}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2}}]}],
+        "buffers": [{"byteLength": len(binary)}],
+        "bufferViews": [{"buffer": 0, "byteOffset": at, "byteLength": length} for at, length in views],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 0]},
+            {"bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4"},
+            {"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4"},
+            {"bufferView": 3, "componentType": 5126, "count": 2, "type": "MAT4"},
+            {"bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0], "max": [1]},
+            {"bufferView": 5, "componentType": 5126, "count": 2, "type": "VEC4"},
+        ],
+        "animations": [{"name": "bend", "samplers": [{"input": 4, "output": 5}],
+                        "channels": [{"sampler": 0, "target": {"node": 2, "path": "rotation"}}]}],
+    }, binary)
+
+
+def _two_buffers(uri: str) -> bytes:
+    """A GLB of two triangles, ``inside`` on its binary chunk and ``outside`` 2 along on the file ``uri`` beside it
+    (``OUTSIDE``: three times as tall)."""
+    points = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+    triangle = {"componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0]}
+    return _glb({
+        "asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0, 1]}],
+        "nodes": [{"name": "inside", "mesh": 0}, {"name": "outside", "mesh": 1, "translation": [2, 0, 0]}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}, {"primitives": [{"attributes": {"POSITION": 1}}]}],
+        "materials": [{"name": "look"}],
+        "buffers": [{"byteLength": 36}, {"byteLength": 36, "uri": uri}],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}, {"buffer": 1, "byteOffset": 0, "byteLength": 36}],
+        "accessors": [{"bufferView": 0, **triangle, "max": [1, 1, 0]}, {"bufferView": 1, **triangle, "max": [1, 3, 0]}],
+    }, points)
+
+
+OUTSIDE = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 3, 0)
+
+
 def _nameless(source: Path, target: Path) -> None:
     """``source`` as KiCad writes a board's GLB: the root with no name, each part named by itself (``pin_1``, not
     ``arm/head/pin_1``), the bar named ``base`` as the base is (KiCad names 72 lenses ``lens``), and no clips."""
@@ -392,6 +477,10 @@ class LoadTest(unittest.TestCase):
         _nameless(cls.project / "scene.glb", cls.project / "nameless.glb")
         (cls.project / "odd.glb").write_bytes(_odd(clips=True))
         (cls.project / "still.glb").write_bytes(_odd(clips=False))
+        (cls.project / "skinned.glb").write_bytes(_skinned())
+        (cls.project / "beside.glb").write_bytes(_two_buffers("scene.bin"))
+        (cls.project / "scene.bin").write_bytes(OUTSIDE)
+        (cls.project / "broken.glb").write_bytes(_two_buffers("gone.bin"))
         (cls.project / "probe.py").write_text(textwrap.dedent(PROBE), encoding="utf-8")
         cls.cycles = cls.cad("run", "probe.py", "CYCLES")
         cls.said, cls.rendered = cls.lines(cls.cycles)
@@ -540,6 +629,27 @@ class LoadTest(unittest.TestCase):
         # Both parts named base are in the box: it is the named GLB's.
         self.assertNear(said["box"][0] + said["box"][1], self.said["box"][0] + self.said["box"][1], 1e-6, "the box")
         self.assertPlaced(said["arm"], [-0.02, 0.0, 0.0, 30.0], "the arm")
+
+    def test_a_skin_s_joints_are_bones_that_keep_no_tag_and_its_clip_plays_alone(self) -> None:
+        skin = self.said["skin"]
+        self.assertEqual((skin["nodes"], skin["roots"]), ({"0": "skinned"}, ["skinned"]),
+                         "the skinned mesh is a node's object; its joints, and the root that is one, are none")
+        self.assertEqual(skin["armature"], ["ARMATURE", ["hip", "knee"]], "the joints are the armature's bones")
+        self.assertEqual(skin["tagged"], [], "no bone and no pose bone keeps the tag it was found by")
+        # The triangle, (x, y, 0) in the file, stands in Blender's x and z; the importer's bone shape, a sphere
+        # 2 m across at the origin, is none of it.
+        low, high = skin["box"]
+        self.assertTrue(all(value > -0.2 for value in low) and all(value < 1.2 for value in high), skin["box"])
+        self.assertEqual((skin["clips"], skin["played"]), (["bend"], ["bend", True]), "played, then stopped")
+
+    def test_a_file_named_scene_bin_beside_the_glb_is_its_own(self) -> None:
+        beside = self.said["beside"]
+        self.assertEqual(beside["objects"], ["inside", "outside"])
+        self.assertNear(beside["box"][0] + beside["box"][1], [0, 0, 0, 3, 0, 3], 1e-6,
+                        "both triangles, the one beside the GLB three times as tall as its own chunk's")
+
+    def test_an_import_that_fails_partway_leaves_nothing_of_it(self) -> None:
+        self.assertEqual(self.said["broken"], {"said": True, "left": []})
 
     def test_a_glow_on_one_part_leaves_another_of_its_mesh_as_it_was(self) -> None:
         self.assertEqual(self.said["glow"], {"shared": True, "lit": True, "other": True})
