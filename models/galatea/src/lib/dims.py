@@ -51,7 +51,7 @@ ELBOW = (SHOULDER_X, 0.0, 1130.0)                 # elbow axis (X)
 WRIST_ROLL = (SHOULDER_X, 0.0, 1039.0)            # forearm rotation (Z), just under the elbow
 WRIST = (SHOULDER_X, 0.0, 915.0)                  # wrist pitch (Y)
 WRIST_YAW = (SHOULDER_X, 0.0, 871.0)              # wrist yaw / deviation (X), 44 below the pitch axis
-CHEST_SIDE_X = (136.0, 144.0)                     # chest side plates the shoulder actuators bolt to
+CHEST_SIDE_X = (132.0, 140.0)                     # chest side plates the shoulder actuators bolt to
 UPPER_ARM_LEN = SHOULDER[2] - ELBOW[2]            # 290
 FOREARM_LEN = ELBOW[2] - WRIST[2]                 # 215
 
@@ -71,7 +71,7 @@ THUMB_BONES = (38.0, 32.0, 26.0)                  # metacarpal, proximal, distal
 THUMB_CURL = (55.0, 75.0)                         # MCP, IP at a full curl
 _lean = math.radians(THUMB_LEAN)
 THUMB_DIR = (0.0, -math.sin(_lean), -math.cos(_lean))                       # the thumb's line at the zero pose
-THUMB_ROOT = tuple(b + 14.0 * k for b, k in zip(THUMB_BASE, THUMB_DIR))     # where the metacarpal's bone starts
+THUMB_ROOT = tuple(b + 20.0 * k for b, k in zip(THUMB_BASE, THUMB_DIR))     # where the metacarpal's bone starts
 THUMB_MCP = tuple(b + THUMB_BONES[0] * k for b, k in zip(THUMB_ROOT, THUMB_DIR))
 THUMB_IP = tuple(b + THUMB_BONES[1] * k for b, k in zip(THUMB_MCP, THUMB_DIR))
 
@@ -79,7 +79,7 @@ THUMB_IP = tuple(b + THUMB_BONES[1] * k for b, k in zip(THUMB_MCP, THUMB_DIR))
 # Neck and head
 # --------------------------------------------------------------------------------------------
 NECK_BASE = (0.0, 14.0, 1497.0)                   # neck yaw (Z): the drive's output face, in the collar
-NECK_ROLL = (0.0, 28.0, 1531.0)                   # neck roll (Y): the neck leans from its root
+NECK_ROLL = (0.0, 32.0, 1531.0)                   # neck roll (Y): the neck leans from its root
 NECK = (0.0, 14.0, 1580.0)                        # neck pitch (X): the head nods at the skull's base
 HEAD_TOP_Z = 1752.0
 
@@ -129,9 +129,9 @@ ANKLE_ARM_PIN = _polar(ANKLE, ANKLE_CRANK_R, 0.0)
 
 SIDE_JOINTS = {
     # leg ------------------------------------------------------------------------------
-    "hip_yaw": ("pelvis", "hip_yoke", HIP, Z, (-30.0, 40.0)),             # + turns the toes outward
+    "hip_yaw": ("pelvis", "hip_yoke", HIP, Z, (-25.0, 40.0)),             # + turns the toes outward
     "hip_roll": ("hip_yoke", "hip_cradle", HIP, NY, (-20.0, 25.0)),       # + abducts (leg outward)
-    "hip_pitch": ("hip_cradle", "thigh", HIP, NX, (-30.0, 110.0)),        # + flexes (thigh forward)
+    "hip_pitch": ("hip_cradle", "thigh", HIP, NX, (-30.0, 100.0)),        # + flexes (thigh forward)
     "knee_pivot": ("thigh", "shin", KNEE, X, KNEE_RANGE),                 # + flexes (heel to the back)
     "knee_crank": ("thigh", "knee_crank", KNEE_ACT, X, KNEE_RANGE),
     "knee_rod": ("knee_crank", "knee_rod", KNEE_CRANK_PIN, X, (-KNEE_RANGE[1], -KNEE_RANGE[0])),

@@ -78,18 +78,19 @@ POSES = {
         **both(shoulder_pitch=26, shoulder_roll=8, shoulder_yaw=-14, elbow=82, wrist_roll=-86, wrist_pitch=-6, wrist_yaw=0),
         **hands(curl=0.1, thumb=0.05, opp=18), "neck_pitch": 12,
     },
-    # A deep crouch on flat feet: the ankles at their dorsiflexion limit.
+    # A deep crouch on flat feet, the ankles at their dorsiflexion limit; the hips fold further
+    # than the knees and ankles undo, so the pelvis tips forward and keeps the weight over the feet.
     "crouch": {
         **READY,
-        **both(hip_yaw=10, hip_roll=5, hip_pitch=84, knee=114, ankle_pitch=30, ankle_roll=-5, toe=0),
-        **both(shoulder_pitch=62, shoulder_roll=8, shoulder_yaw=12, elbow=48, wrist_roll=10),
-        "waist_pitch": 24, "neck_pitch": -18,
+        **both(hip_yaw=0, hip_roll=0, hip_pitch=98, knee=112, ankle_pitch=30, ankle_roll=0, toe=0),
+        **both(shoulder_pitch=58, shoulder_roll=10, shoulder_yaw=12, elbow=50, wrist_roll=10),
+        "waist_pitch": 10, "neck_pitch": -22,
     },
-    # A bow from the hips and the waist.
+    # A bow from the hips and the waist, the ankles easing the hips back.
     "bow": {
         **READY,
-        **both(hip_yaw=5, hip_roll=2, hip_pitch=30, knee=4, ankle_pitch=0, ankle_roll=-2, toe=0),
-        **both(shoulder_pitch=30, shoulder_roll=7, shoulder_yaw=10, elbow=10),
+        **both(hip_yaw=0, hip_roll=0, hip_pitch=32, knee=3, ankle_pitch=-5, ankle_roll=0, toe=0),
+        **both(shoulder_pitch=34, shoulder_roll=7, shoulder_yaw=10, elbow=10),
         "waist_pitch": 34, "neck_pitch": 16,
     },
     # Both hands closed.

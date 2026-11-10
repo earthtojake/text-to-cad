@@ -24,10 +24,15 @@ def articulate(nodes):
         revolute(label, nodes[parent], nodes[child], origin, direction, limits)
 
 
-def animate(robot):
-    """Couplings, mechanism states and configuration sequences on the assembled robot."""
+def couple(robot):
+    """The couplings: the knee and ankle linkages, the fingers' tendons."""
     for name, ratios in kin.couplings().items():
         gear_pair(robot, name, **ratios)
+    return robot
+
+
+def animate(robot):
+    """Mechanism states and configuration sequences on the assembled, coupled robot."""
     for name, pose in POSES.items():
         mechanism_state(robot, name, **pose)
     for name, waypoints, ease in MOTIONS:

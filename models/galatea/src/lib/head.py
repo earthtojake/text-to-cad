@@ -43,15 +43,15 @@ def build_head(hw, neck_yaw_output):
 def _neck(hw, links):
     yaw_at = (0.0, NY, NECK_BASE[2] - 9.0)
     lug = geo.tube(28, 6, 10, (0, NY, NECK_BASE[2]), (0, 0, 1))
-    rear = geo.plate_xz(geo.bones([(0, RZ, 22), (0, RZ - 22, 20)], holes=[(0, RZ, 12.5)]), 28, 36)
+    rear = geo.plate_xz(geo.bones([(0, RZ, 22), (0, RZ - 22, 20)], holes=[(0, RZ, 12.5)]), 32, 40)
     rear -= geo.half_space((0, 0, NECK_BASE[2]), (0, 0, -1))
-    roll_at = (0.0, 28.0, RZ)
+    roll_at = (0.0, 32.0, RZ)
     stator, rotor = hw.actuator("A40", roll_at, (0, 1, 0), x_dir=(1, 0, 0), name="neck_roll")
     links["neck"] += [part(lug + rear, "neck_root", "gunmetal"),
                       *hw.rotor_screws("A70", yaw_at, (0, 0, 1), 10.0, x_dir=(-1, 0, 0)), *stator]
 
-    lug = geo.plate_xz(geo.bones([(0, RZ, 18), (22, RZ + 17, 12)], holes=[(0, RZ, 3)]), 37, 47)
-    side = geo.plate_yz(geo.bones([(NY, NZ, 30), (42, RZ + 17, 13)], holes=[(NY, NZ, 16)]), 18, 26)
+    lug = geo.plate_xz(geo.bones([(0, RZ, 18), (22, RZ + 17, 12)], holes=[(0, RZ, 3)]), 41, 51)
+    side = geo.plate_yz(geo.bones([(NY, NZ, 30), (46, RZ + 26, 12)], holes=[(NY, NZ, 16)]), 18, 26)
     pitch_at = (18.0, NY, NZ)
     p_stator, p_rotor = hw.actuator("A52", pitch_at, (1, 0, 0), x_dir=(0, 1, 0), name="neck_pitch")
     links["neck_stem"] += [part(lug + side, "neck_stem", "gunmetal"), *rotor,
@@ -77,7 +77,7 @@ def _head(hw, links):
     visor = (skin & band) - eyes
     lights = skin & eyes
     skull = skin - band
-    skull -= geo.box(2.2, 400, 400, (0, 150, 1700))                       # the crest's reveal, crown to nape
+    skull -= geo.box(2.2, 400, 100, (0, 150, 1750)) + geo.box(2.2, 200, 200, (0, 120, 1620))   # the crest's reveal, brow to nape
     grille = None
     for z in (1601, 1609, 1617):                                          # voice grille under the visor
         slit = geo.plate_xz(geo.slot(-15, z, 15, z, 1.2), -200, 0)
@@ -88,7 +88,7 @@ def _head(hw, links):
     lug = geo.plate_yz(geo.bones([(NY, NZ, 20), (NY, NZ + 44, 14)], holes=[(NY, NZ, 4)]), 27, 37)
     beam = geo.box(67, 16, 14, (3.5, NY, NZ + 43)) + geo.box(12, 70, 12, (0, -21, NZ + 44))
     riser = geo.box(12, 8, 44, (0, -52, NZ + 68))                         # carries the camera module
-    seats = [((s * 25, NY, NZ + 43), (s, 0, 0.12)) for s in (1, -1)] + [((s * 20, NY, NZ + 45), (s * 0.25, 0.2, 1)) for s in (1, -1)]
+    seats = [((s * 25, NY, NZ + 40), (s, 0, 0)) for s in (1, -1)] + [((s * 20, NY, NZ + 45), (s * 0.25, 0.2, 1)) for s in (1, -1)]
     pads, screws = None, []
     for origin, direction in seats:
         pad = geo.mount_pad(cavity, origin, direction, 5.0, 140.0)
@@ -97,7 +97,7 @@ def _head(hw, links):
     frame = lug + beam + riser + pads
 
     module = (geo.box(96, 30, 40, (0, -71, 1668)) & cavity) - geo.half_space((0, -56, 0), (0, 1, 0))
-    puck = geo.cyl(17, 22, (0, 13, HEAD_TOP_Z - 14), (0, 0, 1)) - outer
+    puck = geo.cyl(17, 19, (0, 13, HEAD_TOP_Z - 14), (0, 0, 1)) - outer
     puck = bd.fillet(puck.edges().group_by(bd.Axis.Z)[-1], 2.5)
     ear_ring = geo.tube(24, 16, 40, (50, 10, 1650), (1, 0, 0)) - outer - geo.half_space((84, 0, 0), (1, 0, 0))
     ear_core = geo.cyl(16, 40, (50, 10, 1650), (1, 0, 0)) - outer - geo.half_space((81, 0, 0), (1, 0, 0))

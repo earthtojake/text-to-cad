@@ -103,13 +103,15 @@ def _thigh(hw, links):
         geo.S(600, HX + 1, -6, rx=48, ry=42, n=2.6, rxn=45, ryn=57),
         geo.S(680, HX + 2, -7, rx=52, ry=46, n=2.5, rxn=48, ryn=64),
         geo.S(760, HX + 2, -7, rx=57, ry=50, n=2.5, rxn=53, ryn=70),
-        geo.S(835, HX + 2, -6, rx=58, ry=50, n=2.5, rxn=55, ryn=70),
+        geo.S(830, HX + 2, -6, rx=59, ry=50, n=2.5, rxn=55, ryn=71),
+        geo.S(890, HX + 2, -5, rx=58, ry=48, n=2.5, rxn=55, ryn=68),
     ]
     skin, cavity, shell_outer = geo.shell(rows, SKIN_T)
-    back_edge = geo.behind_curve([(8, 520), (26, 600), (30, 680), (22, 750), (0, 800), (-20, 840)], [(160, 840), (160, 520)])
+    back_edge = geo.behind_curve([(8, 520), (26, 600), (30, 680), (22, 750), (0, 800), (-22, 850), (-34, 910)], [(160, 910), (160, 520)])
     skin -= geo.plate_yz(back_edge, xr(-90), xr(90))                     # open to the back: the pushrod's channel
-    skin -= geo.half_space((HX, 0, 792), (0.33, 0.2, 1.0))               # top edge, falling toward the outside
-    skin -= geo.cyl(62, 240, KNEE_ACT, (1, 0, 0), centered=True)         # round opening about the knee actuator
+    skin -= geo.half_space((HX, 0, 856), (0.3, 0.0, 1.0))                # top edge, falling toward the outside
+    skin -= geo.cyl(62, 240, HIP, (1, 0, 0), centered=True)              # round openings about the hip drive
+    skin -= geo.cyl(62, 240, KNEE_ACT, (1, 0, 0), centered=True)         # and the knee drive
     skin -= geo.cyl(50, 240, KNEE, (1, 0, 0), centered=True)             # arch over the knee
     reveal = geo.band([(xr(-70), 706), (xr(-20), 692), (xr(30), 670), (xr(70), 640)], 2.2)
     skin -= geo.plate_xz(reveal, -200, -12)                              # a reveal line across the front
@@ -123,7 +125,7 @@ def _thigh(hw, links):
                          xr(P0), xr(P1))
     inner = geo.plate_yz(geo.bones(circles, chain, holes=[(0, KAZ, 12), (0, KZ, 10)], cuts=[window]), xr(-P1), xr(-P0))
     web_low = geo.box(2 * P0 + 2, 6, 190, (HX, -26, 640))
-    web_high = geo.box(2 * P0 + 2, 6, 46, (HX, -27, 866))
+    web_high = geo.box(2 * P0 + 2, 6, 42, (HX, -26, 864))
     spacer = geo.tube(22, 10, 2 * P0 + 2, (xr(-P0 - 1), 0, HZ), (1, 0, 0))
     stub = geo.cyl(14, C1 - P1, (xr(-P1), 0, HZ), (-1, 0, 0))
     femur = outer + inner + web_low + web_high + spacer + stub + pads
@@ -172,10 +174,10 @@ def _shin(hw, links):
     rows = [
         geo.S(118, HX, 0, rx=50, ry=28, n=2.6, ryn=40),
         geo.S(170, HX, -1, rx=51, ry=28, n=2.6, ryn=44),
-        geo.S(255, HX, -2, rx=54, ry=30, n=2.5, ryn=52),
-        geo.S(345, HX, -2, rx=58, ry=34, n=2.5, ryn=60),
-        geo.S(430, HX, -2, rx=56, ry=32, n=2.5, ryn=59),
-        geo.S(492, HX, -2, rx=49, ry=30, n=2.5, ryn=57),
+        geo.S(255, HX, -2, rx=54, ry=40, n=2.5, ryn=52),
+        geo.S(345, HX, -2, rx=58, ry=50, n=2.5, ryn=60),
+        geo.S(430, HX, -2, rx=56, ry=46, n=2.5, ryn=59),
+        geo.S(492, HX, -2, rx=49, ry=36, n=2.5, ryn=57),
         geo.S(536, HX, -2, rx=41, ry=26, n=2.6, ryn=50),
     ]
     skin, cavity, shell_outer = geo.shell(rows, SKIN_T)
@@ -191,8 +193,8 @@ def _shin(hw, links):
     core = geo.tube(17, 10, 34, (xr(-17), 0, KZ), (1, 0, 0))
     flange = geo.bones([(0, KZ, 30), (C[1], C[2], 12)], holes=[(0, KZ, 10), (C[1], C[2], 5)])
     flanges = geo.plate_yz(flange, xr(7.5), xr(17)) + geo.plate_yz(flange, xr(-17), xr(-7.5))
-    wishbone = geo.plate_xz(geo.bones([(HX, 488, 17), (xr(-44), 402, 11), (xr(44), 402, 11)], links=[(0, 1), (0, 2)]),
-                            -23, 7)
+    wishbone = geo.plate_xz(geo.bones([(HX, 488, 16), (HX, 452, 16), (xr(-42), 402, 9), (xr(42), 402, 9)],
+                                      links=[(0, 1), (1, 2), (1, 3)]), -23, 7)   # a neck between the femur's lobes, then the fork
     wishbone -= geo.cyl(10, 40, KNEE, (1, 0, 0), centered=True)          # the knee axle passes through
     rail = geo.bones([(-6, 404, 16), (0, CAZ, 24), (-2, 215, 15), (0, AZ, 22)], holes=[(0, CAZ, 9), (0, AZ, 12)])
     rails = geo.plate_yz(rail, xr(R0), xr(R1)) + geo.plate_yz(rail, xr(-R1), xr(-R0))
@@ -215,8 +217,8 @@ def _shin(hw, links):
     links["ankle_crank"] += [part(crank, "calf_crankshaft", "steel")]
     for s, name in ((1, "outer"), (-1, "inner")):
         x = xr(s * ANKLE_ROD_X)
-        links["ankle_rods"].append(pushrod((x, P[1], P[2]), (x, Q[1], Q[2]), 4.5, 8.0, 7.0, 4.0,
-                                           label=f"achilles_rod_{name}"))
+        links["ankle_rods"].append(pushrod((x, P[1], P[2]), (x, Q[1], Q[2]), 3.5, 8.0, 7.0, 4.0,
+                                           label=f"achilles_rod_{name}", nut_af=6.3))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -247,13 +249,13 @@ def _foot(hw, links):
 
     # Foot shell: a low rand round the sole, rising to a cup at the heel.
     rows = [
-        geo.S(-74, 0, 30, rx=31, ry=28, n=2.6, ryn=24),
-        geo.S(-45, 0, 30, rx=41, ry=30, n=2.6, ryn=24),
-        geo.S(0, 1, 27, rx=48, ry=24, n=2.6, ryn=21),
-        geo.S(60, 2.5, 24, rx=52, ry=20, n=2.7, ryn=18),
-        geo.S(112, 3, 22, rx=53, ry=16, n=2.8, ryn=16),
+        geo.S(-74, 0, 18, rx=31, ry=40, n=3.2, ryn=12),
+        geo.S(-45, 0, 18, rx=41, ry=42, n=3.2, ryn=12),
+        geo.S(0, 1, 17, rx=48, ry=34, n=3.2, ryn=11),
+        geo.S(60, 2.5, 16, rx=52, ry=28, n=3.2, ryn=10),
+        geo.S(112, 3, 15, rx=53, ry=23, n=3.2, ryn=9),
     ]
-    skin, cavity, shell_outer = (along * s for s in geo.shell(rows, SKIN_T, bottom=(0, 28, -85)))
+    skin, cavity, shell_outer = (along * s for s in geo.shell(rows, SKIN_T, bottom=(0, 20, -85)))
     rim = geo.polygon((95, 58), (62, 56), (36, 41), (0, 36), (-80, 34), (-125, 34), (-125, 140), (95, 140))
     skin -= geo.half_space((0, 0, 10.5), (0, 0, -1))
     skin -= geo.plate_yz(rim, xr(-90), xr(90))
@@ -263,7 +265,7 @@ def _foot(hw, links):
                                                          for s in (1, -1) for y in (34, -62)], size="M3", radius=4.5)
 
     edge = TY + 8.0                                            # the sole plate stops short of the hinge
-    outline = geo.hull([(HX, 40, 32), (xr(3), -40, 40), (xr(3), -88, 46)])
+    outline = geo.hull([(HX, 40, 31), (xr(3), -40, 38), (xr(3), -88, 44)])
     sole = geo.plate_xy(outline, 10, 20) - geo.box(240, 120, 40, (HX, edge - 60, 15))
     rear = geo.plate_xz(geo.bones([(HX, AZ, 19), (HX, 26, 15)], holes=[(HX, AZ, 4)]), 5, 15)
     front = geo.plate_xz(geo.bones([(HX, AZ, 12), (HX, 26, 12)]), -76, -66)
@@ -279,8 +281,8 @@ def _foot(hw, links):
             pad -= geo.box(140, 3, 4, (HX, y, 0))
         return pad
 
-    heel_pad = tread(geo.plate_xy(geo.hull([(HX, 40, 29), (xr(1), 2, 31)]), 0, 10), (60, 46, 32, 18, 4))
-    ball_pad = geo.plate_xy(geo.hull([(xr(3), -46, 37), (xr(3), -88, 43)]), 0, 10) - geo.box(240, 120, 40, (HX, edge - 60, 5))
+    heel_pad = tread(geo.plate_xy(geo.hull([(HX, 40, 28), (xr(1), 12, 30)]), 0, 10), (60, 46, 32, 18, 4))
+    ball_pad = geo.plate_xy(geo.hull([(xr(3), -62, 37), (xr(3), -88, 41)]), 0, 10) - geo.box(240, 120, 40, (HX, edge - 60, 5))
     ball_pad = tread(ball_pad, (-48, -62, -76, -90, -104))
     links["foot"] += [part(foot, "foot_frame", "gunmetal"), part(heel_pad, "heel_pad", "rubber"),
                       part(ball_pad, "ball_pad", "rubber"),
@@ -289,23 +291,23 @@ def _foot(hw, links):
 
     # Toe: a sprung plate on a barrel hinge under its own cap.
     rows = [
-        geo.S(126.5, 3, 22, rx=53, ry=16, n=2.8, ryn=16),
-        geo.S(150, 2.5, 21, rx=50, ry=15, n=2.7, ryn=15),
-        geo.S(168, 2, 19, rx=42, ry=12.5, n=2.5, ryn=13),
-        geo.S(180, 1.5, 17.5, rx=28, ry=9, n=2.3, ryn=11),
+        geo.S(126.5, 3, 15, rx=53, ry=23, n=3.2, ryn=9),
+        geo.S(150, 2.5, 15, rx=50, ry=21, n=3.1, ryn=9),
+        geo.S(168, 2, 14.5, rx=42, ry=17, n=2.9, ryn=8.5),
+        geo.S(180, 1.5, 14, rx=28, ry=12.5, n=2.6, ryn=8),
     ]
-    cap, cap_cavity, cap_outer = (along * s for s in geo.shell(rows, SKIN_T, top=(1.5, 17, 187), seam=270.0))
+    cap, cap_cavity, cap_outer = (along * s for s in geo.shell(rows, SKIN_T, top=(1.5, 14.5, 187), seam=270.0))
     cap -= geo.half_space((0, 0, 10.5), (0, 0, -1))
     cap -= geo.cyl(10, 240, TOE, (1, 0, 0), centered=True)
     back = TY - 8.0
     cap_pads, cap_screws = _skin_mounts(hw, cap_cavity, cap_outer, [((xr(s * 20), -146, 15), (s, 0, 0)) for s in (1, -1)],
                                         size="M3", radius=4.5)
-    toe_outline = geo.hull([(xr(-15), -152, 24), (xr(18), -150, 27), (xr(-38), back - 3, 3), (xr(44), back - 3, 3)])
+    toe_outline = geo.hull([(xr(-15), -152, 22), (xr(18), -150, 25), (xr(-37), back - 3, 3), (xr(43), back - 3, 3)])
     toe = geo.plate_xy(toe_outline, 10, 20) + cap_pads
     for a, b in ((-23, -9), (9, 23)):
         toe += geo.cyl(7, b - a, (xr(a), TY, TZ), (1, 0, 0)) + geo.box(b - a, 9, 10, (xr((a + b) / 2), TY - 4.5, 15))
     toe -= geo.cyl(3, 100, (xr(-50), TY, TZ), (1, 0, 0))
-    toe_pad = geo.plate_xy(geo.hull([(xr(-15), -152, 21), (xr(18), -150, 24), (xr(-36), back - 5, 3), (xr(42), back - 5, 3)]),
+    toe_pad = geo.plate_xy(geo.hull([(xr(-15), -152, 20), (xr(18), -150, 23), (xr(-35), back - 5, 3), (xr(41), back - 5, 3)]),
                            0, 10)
     toe_pad = tread(toe_pad, (-140, -154))
     links["toe"] += [part(toe, "toe_plate", "gunmetal"), part(toe_pad, "toe_pad", "rubber"),

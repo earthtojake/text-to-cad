@@ -43,6 +43,26 @@ def couplings():
     return table
 
 
+def link_distances():
+    """{(link a, link b): how many joints lie between them}, for every pair of links."""
+    joints = all_joints()
+    neighbours = {}
+    for parent, child, *_ in joints.values():
+        neighbours.setdefault(parent, set()).add(child)
+        neighbours.setdefault(child, set()).add(parent)
+    distances = {}
+    for start in neighbours:
+        seen, frontier = {start: 0}, [start]
+        while frontier:
+            link = frontier.pop(0)
+            for other in neighbours[link]:
+                if other not in seen:
+                    seen[other] = seen[link] + 1
+                    frontier.append(other)
+        distances.update({(start, other): hops for other, hops in seen.items()})
+    return distances
+
+
 def controls():
     """Every control a pose may set: the couplings, and the joints no coupling drives."""
     table = couplings()

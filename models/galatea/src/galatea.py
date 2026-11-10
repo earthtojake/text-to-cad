@@ -8,7 +8,7 @@ from lib.hardware import Hardware
 from lib.head import HEAD_LINKS, build_head
 from lib.kit import group, mirror_tree
 from lib.leg import LEG_LINKS, build_leg
-from lib.rig import animate, articulate
+from lib.rig import animate, articulate, couple
 from lib.torso import TRUNK_LINKS, build_trunk
 
 
@@ -31,11 +31,16 @@ def links():
     return nodes
 
 
-@model
-def galatea():
+def assemble():
+    """The robot at the zero pose with its joints and couplings, and no poses or motions yet."""
     nodes = links()
     articulate(nodes)
-    return animate(group("galatea", list(nodes.values())))
+    return couple(group("galatea", list(nodes.values())))
+
+
+@model
+def galatea():
+    return animate(assemble())
 
 
 if __name__ == "__main__":

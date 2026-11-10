@@ -46,7 +46,7 @@ def _bone(length, width, root_width, tip=False):
         body = geo.box(width - 2, THICK, length - 8 - 9, (0, 0, -8 - (length - 17) / 2))
         shape = _barrel(root_width) + neck + body + _ears(length, width)
         shape -= geo.cyl(2.5, width + 2, (0, 0, -length), (1, 0, 0), centered=True)
-    return shape
+    return shape - geo.cyl(2.5, width + 2, (0, 0, 0), (1, 0, 0), centered=True)      # the hinge pin's bore
 
 
 def _pad(length, width, tip=False):
@@ -98,21 +98,21 @@ def build_hand(hw, wrist_output):
 def _palm(hw, links):
     # Frame: a slab from the knuckles to the wrist, notched for the thumb's pivot.
     slab = geo.plate_yz(geo.hull([(-36, 840, 8), (31, 840, 8), (-37, 778, 6), (33, 778, 6)]), SX - 9, SX + 9)
-    slab -= geo.box(40, 30, 22, (SX, THUMB_BASE[1] - 5, THUMB_BASE[2]))
+    slab -= geo.box(40, 34, 31, (SX, THUMB_BASE[1] - 7, THUMB_BASE[2] - 4.5))
     ear = geo.hull([(SX, KNUCKLE_Z, 8.0), (SX, KNUCKLE_Z + 14, 8.0)])
     for y0, y1 in ((-41.5, -38.5), (-21.5, -18.5), (-1.5, 1.5), (18.5, 21.5), (36.5, 39.5)):
         slab += geo.plate_xz(ear, y0, y1)
     slab -= geo.cyl(2.5, 90, (SX, -45, KNUCKLE_Z), (0, 1, 0))             # the knuckle pin's bore
     slab -= geo.cyl(4.0, 40, (THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 20), (0, 0, 1))   # the thumb pivot's
     lug = geo.plate_yz(geo.bones([(0, YZ, 14), (0, YZ - 24, 12)], holes=[(0, YZ, 3)]), SX + 23, SX + 33)
-    bridge = geo.box(33, 24, 12, (SX + 16.5, 0, 842))
+    bridge = geo.box(33, 24, 12, (SX + 16.5, 0, 841))
     back = geo.plate_yz(geo.hull([(-30, 824, 8), (28, 824, 8), (-32, 784, 6), (30, 784, 6)]), SX + 9, SX + 12.5)
     back = bd.fillet(back.edges().group_by(bd.Axis.X)[-1], 2.0)
     pad = geo.plate_yz(geo.hull([(-14, 830, 8), (24, 830, 8), (-14, 796, 8), (26, 796, 8)]), SX - 12, SX - 9)
     links["palm"] += [part(slab + lug + bridge, "palm_frame", "slate"), part(back, "hand_back", "ivory"),
                       part(pad, "palm_pad", "rubber"),
                       pin((SX, -42.0, KNUCKLE_Z), (0, 1, 0), 2.5, 82.0, label="knuckle_pin"),
-                      pin((THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 14), (0, 0, 1), 4.0, 28.0, label="thumb_pivot")]
+                      pin((THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 10), (0, 0, 1), 4.0, 30.0, label="thumb_pivot")]
 
 
 def _thumb(links, bones):
@@ -125,6 +125,7 @@ def _thumb(links, bones):
     body = geo.box(width - 2, THICK, THUMB_BONES[0] - 9, (0, 0, -(THUMB_BONES[0] - 9) / 2))
     fork = _ears(THUMB_BONES[0], width) - geo.cyl(2.5, width + 2, (0, 0, -THUMB_BONES[0]), (1, 0, 0), centered=True)
     meta = ring + arm + loc * (body + fork)
+    meta -= geo.cyl(4.0, 30, (THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 15), (0, 0, 1))     # the pivot's bore
     links["thumb_meta"] += [part(meta, "thumb_meta", "slate")]
     links["thumb_prox"] += bones.place("mid", THUMB_BONES[1], width, frame(mcp, tuple(-k for k in d), (1, 0, 0)), "thumb_prox")
     links["thumb_dist"] += bones.place("dist", THUMB_BONES[2], width, frame(ip, tuple(-k for k in d), (1, 0, 0)), "thumb_dist")

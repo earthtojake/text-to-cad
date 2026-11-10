@@ -168,9 +168,12 @@ def rotor_counterbores(size, origin, axis, lug_t, n=None, x_dir=None):
     return tool
 
 
-def pushrod(p0, p1, tube_r, eye_r, eye_w, pin_r, pin_axis=(1.0, 0.0, 0.0), label="pushrod", finish="titanium"):
+def pushrod(p0, p1, tube_r, eye_r, eye_w, pin_r, pin_axis=(1.0, 0.0, 0.0), label="pushrod", finish="titanium",
+            nut_af=None):
     """A pushrod with a rod-end eye at each end: p0 and p1 are the pin centres, the eyes'
-    bores lie along `pin_axis`."""
+    bores lie along `pin_axis`. A jam nut (`nut_af` across flats) locks each rod end; it is
+    kept narrower than the eye, so the rod swings between a clevis's cheeks."""
+    nut_af = nut_af or 2.08 * tube_r
     a, b = bd.Vector(*p0), bd.Vector(*p1)
     u = (b - a).normalized()
     neck = eye_r * 0.8
@@ -178,7 +181,7 @@ def pushrod(p0, p1, tube_r, eye_r, eye_w, pin_r, pin_axis=(1.0, 0.0, 0.0), label
     for centre, sign in ((a, 1.0), (b, -1.0)):
         eye = geo.cyl(eye_r, eye_w, tuple(centre), pin_axis, centered=True)
         shank = geo.rod(tuple(centre + u * (sign * eye_r * 0.5)), tuple(centre + u * (sign * (neck + 14.0))), tube_r * 0.72)
-        nut = geo.hex_prism(tube_r * 2.5, 5.0, origin=tuple(centre + u * (sign * (neck + 8.0))), axis=tuple(u * sign))
+        nut = geo.hex_prism(nut_af, 5.0, origin=tuple(centre + u * (sign * (neck + 8.0))), axis=tuple(u * sign))
         body = body + eye + shank + nut
     for centre in (a, b):
         body = body - geo.cyl(pin_r, eye_w + 4.0, tuple(centre), pin_axis, centered=True)

@@ -71,8 +71,8 @@ def _pelvis(hw, links):
     belt -= geo.plate_xy(back_edge, 990, 1100)                           # open at the back: the sacral panel
     for s in (1, -1):                                                    # arches over the hips, about each roll axis
         belt -= geo.cyl(110, 400, (s * HX, 0, HIP[2]), (0, 1, 0), centered=True)
-    pads, screws = _mounts(hw, cavity, belt_outer, [((s * 100, -20, 1042), (s, 0, 0)) for s in (1, -1)]
-                           + [((s * 46, -30, 1042), (0, -1, 0)) for s in (1, -1)])
+    pads, screws = _mounts(hw, cavity, belt_outer, [((s * 124, -20, 1042), (s, 0, 0)) for s in (1, -1)]
+                           + [((s * 46, -50, 1042), (0, -1, 0)) for s in (1, -1)])
 
     lower = outline
     for x, y, r in ((-HX, 0, rotor_hole), (HX, 0, rotor_hole), (0, WAIST_AXIS_Y, cap_hole)):
@@ -82,19 +82,21 @@ def _pelvis(hw, links):
         upper -= bd.Pos(x, y) * bd.Circle(r)
     wall = geo.plate_xy(outline - bd.offset(outline, amount=-6.0), PZ0 + PLATE_T, PZ1 - PLATE_T)
     wall -= geo.plate_xz(geo.slot(-26, 1042, 26, 1042, 13), 40, 120)       # a window on the waist drive, at the back
-    strut = geo.box(16, 10, 76, (0, -47, PZ0 - 34))                      # carries the apron between the hips
+    strut = geo.box(16, 10, 70, (0, -43, PZ0 - 31))                      # carries the apron between the hips
     casting = geo.plate_xy(lower, PZ0, PZ0 + PLATE_T) + geo.plate_xy(upper, PZ1 - PLATE_T, PZ1) + wall + strut + pads
 
     # Apron: a shield hanging between the hips.
     apron_rows = [
-        geo.S(928, 0, -34, rx=26, ry=14, n=2.8, ryn=20),
-        geo.S(965, 0, -34, rx=36, ry=14, n=2.8, ryn=24),
-        geo.S(1009, 0, -34, rx=46, ry=14, n=2.8, ryn=27),
+        geo.S(915, 0, -38, rx=19, ry=10, n=4.5, ryn=14),
+        geo.S(968, 0, -38, rx=27, ry=10, n=4.5, ryn=17),
+        geo.S(1012, 0, -38, rx=34, ry=10, n=4.5, ryn=20),
     ]
-    apron, apron_cavity, apron_outer = geo.shell(apron_rows, SKIN_T, bottom=(0, -46, 912))
-    apron -= geo.half_space((0, -40, 0), (0, 1, 0))
+    apron, apron_cavity, apron_outer = geo.shell(apron_rows, SKIN_T)
+    apron -= geo.half_space((0, -42, 0), (0, 1, 0))
     apron -= geo.half_space((0, 0, PZ0 - 0.5), (0, 0, 1))
-    apron_pads, apron_screws = _mounts(hw, apron_cavity, apron_outer, [((0, -47, z), (0, -1, 0)) for z in (950, 992)])
+    apron -= geo.half_space((0, -55, 930), (0, 0.4, -1))                 # a raked lower edge
+    apron -= geo.plate_xz(geo.band([(-40, 975), (0, 968), (40, 975)], 2.0), -200, -44)
+    apron_pads, apron_screws = _mounts(hw, apron_cavity, apron_outer, [((0, -43, z), (0, -1, 0)) for z in (952, 994)])
     casting += apron_pads
 
     waist_at = (0.0, WAIST_AXIS_Y, PZ1 - PLATE_T)
@@ -118,6 +120,8 @@ def _waist(hw, links):
                                   holes=[(0, WY, 8)]), z0, z0 + 10)
     rear = geo.plate_xz(geo.bones([(0, WZ, 47), (0, z0 + 16, 30)], holes=[(0, WZ, 27)]), WY + 40, WY + 48)
     front = geo.plate_xz(geo.bones([(0, WZ, 22), (0, z0 + 16, 24)], holes=[(0, WZ, 12)]), WY - 48, WY - 40)
+    rear -= geo.half_space((0, 0, z0), (0, 0, -1))
+    front -= geo.half_space((0, 0, z0), (0, 0, -1))
     roll_at = (0.0, WY + 48, WZ)
     stator, rotor = hw.actuator("A86", roll_at, (0, -1, 0), x_dir=(1, 0, 0), name="waist_roll")
     links["lumbar_yoke"] += [part(base + rear + front, "lumbar_yoke", "gunmetal"), *stator,
@@ -176,7 +180,7 @@ def _chest(hw, links):
     # Midriff: a ribbed liner under the plates, down to the waist.
     liner_rows = _chest_rows(z_hi=1400)
     liner_cavity = geo.loft(liner_rows, shrink=10.0, extend=10.0)
-    liner = geo.loft(liner_rows, shrink=6.0) - liner_cavity - geo.half_space((0, 0, 1360), (0, 0, 1))
+    liner = geo.loft(liner_rows, shrink=6.0) - liner_cavity - geo.half_space((0, 0, 1350), (0, 0, 1))
     louvres = None                                                       # vent slits across the front and flanks
     for z in range(1216, 1330, 14):
         slit = geo.box(400, 250, 2.6, (0, -95, z))
@@ -184,37 +188,38 @@ def _chest(hw, links):
     liner -= louvres
     liner -= geo.plate_xz(geo.hull([(-74, 1226, 14), (74, 1226, 14), (-74, 1384, 14), (74, 1384, 14)]), 60, 200)   # battery bay
     liner -= geo.cyl(41, 400, WAIST, (1, 0, 0), centered=True)           # round openings about the waist's pitch drives
-    liner -= geo.cyl(52, 400, WAIST, (0, 1, 0), centered=True)           # and about its roll axis, front and back
+    liner -= geo.cyl(58, 400, WAIST, (0, 1, 0), centered=True)           # and about its roll axis, front and back
 
-    lug = geo.bones([(WY, WZ, 39), (WY, 1204, 30)], holes=[(WY, WZ, 22)])
+    lug = geo.bones([(WY, WZ, 39), (WY - 8, 1206, 24)], holes=[(WY, WZ, 22)])     # raked forward, clear of the roll drive
     frame = geo.plate_yz(lug, 40, 48) + geo.plate_yz(lug, -48, -40)
-    frame += geo.plate_xy(geo.hull([(-40, WY, 30), (40, WY, 30), (0, 46, 30)]), 1200, 1212)
-    frame += geo.box(92, 18, 240, (0, 57, 1332))                         # spine: y 48..66
-    frame += geo.plate_xz(geo.hull([(-100, SHZ, 44), (100, SHZ, 44), (0, 1452, 44)]), 50, 62)
-    ring = geo.bones([(0, SHZ, 45), (40, SHZ, 40)], holes=[(0, SHZ, 27)])
+    # The lugs' cross-tie and the spine start high enough to swing clear of the roll drive
+    # behind the waist when the chest leans back.
+    frame += geo.plate_xy(geo.hull([(-40, WY - 6, 26), (40, WY - 6, 26), (0, 50, 16)]), 1218, 1230)
+    frame += geo.box(92, 18, 230, (0, 57, 1337))                         # spine: y 48..66, z 1222..1452
+    frame += geo.plate_xz(geo.hull([(-96, SHZ, 44), (96, SHZ, 44), (0, 1452, 44)]), 50, 62)
+    ring = geo.bones([(0, SHZ, 45), (34, SHZ, 36)], holes=[(0, SHZ, 27)])
     frame += geo.plate_yz(ring, S0, S1) + geo.plate_yz(ring, -S1, -S0)
     neck_at = (0.0, NECK_BASE[1], 1488.0)
     frame += geo.plate_xy(geo.bones([(0, neck_at[1], 40), (0, 50, 32), (0, -20, 14)], links=[(0, 1), (0, 2)],
                                     holes=[(0, neck_at[1], 22)]), 1488, 1496)
     frame += geo.box(16, 8, 52, (0, -34, 1466)) + geo.box(16, 21.5, 14, (0, -40.75, 1447))   # the status light's bracket
     seats = ([((s * 30, 50, 1410), (s * 0.3, -1, 0)) for s in (1, -1)]
-             + [((s * 40, 57, 1300), (s, -0.42, 0)) for s in (1, -1)])
+             + [((s * 40, 57, 1360), (s, -0.75, 0)) for s in (1, -1)])
     pads, screws = _mounts(hw, cavity, chest_outer, seats, reach=180.0)
     back_seats = ([((s * 100, 56, 1440), (s * 0.3, 1, 0)) for s in (1, -1)]
-                  + [((s * 40, 57, 1300), (s, 0.15, 0)) for s in (1, -1)])
+                  + [((s * 40, 56, 1360), (s, 0, 0)) for s in (1, -1)])
     back_pads, back_screws = _mounts(hw, cavity, chest_outer, back_seats, reach=180.0)
     liner_pads = None
     for s in (1, -1):
         pad = geo.mount_pad(liner_cavity, (s * 40, WY, 1222), (s, 0, 0), 6.0)
         liner_pads = pad if liner_pads is None else liner_pads + pad
-    liner -= pads + back_pads                                            # the plates' standoffs pass through the liner
     frame += pads + back_pads + liner_pads
 
     battery = geo.box(160, 64, 176, (0, 98, 1305))                       # y 66..130, z 1217..1393
     battery = bd.fillet(battery.edges().filter_by(bd.Axis.Y), 10.0)
     for z in range(1240, 1380, 20):
         battery -= geo.box(120, 6, 6, (0, 130, z))
-    module = geo.box(110, 84, 110, (0, 6, 1305))                         # y -36..48, z 1250..1360, on the spine
+    module = geo.box(110, 84, 100, (0, 6, 1300))                         # y -36..48, z 1250..1350, on the spine
     bar = geo.plate_xz(geo.slot(-30, 1448, 30, 1448, 2.2), -54.5, -51.5)
     collar_rows = [geo.S(1498, 0, 16, rx=78, ry=50, n=2.6, ryn=44), geo.S(1524, 0, NECK_BASE[1], rx=50, ry=46, n=2.2, ryn=44)]
     collar = geo.shell(collar_rows, SKIN_T)[0] - geo.half_space((0, 0, 1498), (0, 0, -1)) \
