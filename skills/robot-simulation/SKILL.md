@@ -242,8 +242,8 @@ cad run src/gripper_mujoco.py
 cad mjcf validate sim/scene.xml --compile required
 ```
 
-`fit`, `decompose` and `collisions` are the only helpers: each names a part by its label path, as
-`cad model inspect` prints it. Everything else (`armature`, `damping`, `frictionloss`,
+`fit`, `decompose`, `collisions` and `parts` are the only helpers: the first three name a part by its
+label path, as `cad model inspect` prints it, and `parts(s)` lists every path. Everything else (`armature`, `damping`, `frictionloss`,
 `add_exclude`, `add_actuator`, sensors, keys) is MuJoCo's API, used directly. `save` writes the file
 with its meshes in `assets/` beside it, so the folder travels, and a `scene.xml` beside it when there
 is none. This file replaces the plain export: a robot's own file carries its actuators, as a

@@ -1,9 +1,10 @@
-"""A spec's parts, remembered: ``collisions``, ``fit`` and ``decompose`` on a spec ``spec`` made.
+"""A spec's parts, remembered: ``parts``, ``collisions``, ``fit`` and ``decompose`` on a spec ``spec`` made.
 
 A MuJoCo function chooses a part's collision by the part's label path, the path ``cad model inspect``
 prints (``hinge/arm``): a last segment is enough where only one part ends in it (``arm``), and any
 trailing run of segments names the parts it ends; one that names two is refused with their full paths,
-and one that names none with the parts there. A part is never named by a generated geom name
+and one that names none with the parts there (the first dozen: ``parts`` answers them all, for a function
+that chooses by a rule, as every fastener of a maker's assembly at once). A part is never named by a generated geom name
 (``arm_collision``): those follow writer rules a script should not depend on.
 
 **What ``spec`` remembers.** An ``MjSpec`` takes no new attributes, so each spec ``spec`` returns is a key
@@ -56,7 +57,7 @@ import numpy as np
 
 from cad.engine.hulls import MAX_HULLS
 
-__all__ = ["SOURCES", "attached", "collisions", "decompose", "fit", "remember_document", "remember_mjcf"]
+__all__ = ["SOURCES", "attached", "collisions", "decompose", "fit", "parts", "remember_document", "remember_mjcf"]
 
 #: The primitives ``fit`` makes: a geom of each kind of MuJoCo's.
 PRIMITIVES = ("box", "sphere", "cylinder", "capsule")
@@ -202,6 +203,12 @@ def _geoms(mujoco: Any, spec: Any, source: Source, part: Part) -> list[Any]:
 
 
 # --- the helpers ----------------------------------------------------------------------------------------------------
+
+
+def parts(spec: Any) -> list[str]:
+    """Every part ``spec`` remembers, by its label path, sorted: what ``collisions``, ``fit`` and ``decompose`` take.
+    A robot of many parts chooses by it (every screw's collision deleted, every part but these)."""
+    return sorted(_source(spec, "parts").parts)
 
 
 def collisions(spec: Any, part: str) -> list[Any]:

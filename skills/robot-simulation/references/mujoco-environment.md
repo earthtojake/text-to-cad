@@ -253,7 +253,9 @@ shape, a `.step`, an `.xbf`, or an MJCF path: an authored model, an export, a Me
 meshes its parts finer, in millimetres; `assets=` writes its meshes into a folder relative to the
 working directory instead of the engine's cache (a document only, for each of the three).
 
-**Choosing a collision.** Three helpers, each naming a part by its label path:
+**Choosing a collision.** Three helpers, each naming a part by its label path, and `parts(s)`, which
+lists every part's path, sorted, for a function that chooses by a rule (every fastener of a
+hundred-part assembly at once):
 
 - **`fit(s, part, kind)`** replaces the part's collision with a `box`, `sphere`, `cylinder` or
   `capsule` the kernel fits to the part's exact solid, its oriented bounding box: a capsule's axis
@@ -277,6 +279,12 @@ working directory instead of the engine's cache (a document only, for each of th
   return the same list for what they made.
 
 The part's mesh, unchanged, is the default: MuJoCo collides it as its convex hull.
+
+**The excludes follow the parts' meshes, not your choice.** `spec()` excludes each jointed pair of
+bodies whose parts touch as built, found before the function changes anything. After deleting or
+replacing collisions, read `s.excludes`: a pair that no longer touches is still excluded, and the
+exclude is between bodies, so it also stops every other part of those two bodies from colliding (a
+finger in a carriage's body against the palm the carriage runs in). `s.delete(exclude)` removes one.
 
 **Naming a part.** A part is its label path, as `cad model inspect` prints it (`gripper/left`); a
 last segment, or any trailing run of them, is enough where it names one part (`left`,
@@ -319,6 +327,10 @@ and is saved if its own file is wanted, before a scene attaches it.
 - `s.joint("typo")`, `s.geom("typo")` and `s.body("typo")` return `None`, and the error comes a line
   later, `'NoneType' object has no attribute ...`. `collisions` and `fit` refuse an unknown part by
   name instead.
+- A material's `textures` is one name a role, ten of them. `s.add_material(name=..., textures=["",
+  "grid"])` takes the short list unchecked and MuJoCo then reads past it, which can crash the process.
+  Make the material, then set one role: `material.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] =
+  "grid"`.
 - A new `mujoco.MjSpec()` reads angles in degrees: set `compiler.degree = False` before giving it
   a range or a key. A spec from `spec()` is in radians already.
 - `inheritrange=True` on a joint with no range (a continuous one) is refused when the spec

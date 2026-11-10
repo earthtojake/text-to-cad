@@ -13,8 +13,8 @@ handle, a build123d shape, a STEP or an xbf described as a robot and written as 
 export writes it (``cad.engine.export.mjcf``), for a scene to attach; an MJCF path read as it is.
 
 What it does for a MuJoCo function -- a plain function that makes a robot's spec with ``spec``, makes the
-simulator's choices on it in MuJoCo's own API and returns it: ``collisions``, ``fit`` and ``decompose`` find
-and replace one part's collision geoms by the part's label path (``_parts``: ``fit`` the kernel's primitive
+simulator's choices on it in MuJoCo's own API and returns it: ``parts`` lists the spec's parts by label path,
+and ``collisions``, ``fit`` and ``decompose`` find and replace one part's collision geoms by it (``_parts``: ``fit`` the kernel's primitive
 of the part's exact solid, ``decompose`` CoACD's convex hulls of its mesh), and ``save`` writes the spec as a
 folder that travels, by MuJoCo's own writer (``_save``).
 
@@ -24,7 +24,7 @@ extra is missing says so by name (``cad[mujoco]``), as every integration's does.
 
 from __future__ import annotations
 
-__all__ = ["collisions", "compile_findings", "compile_model", "decompose", "fit", "save", "spec"]
+__all__ = ["collisions", "compile_findings", "compile_model", "decompose", "fit", "parts", "save", "spec"]
 
 
 def compile_model(path):
@@ -56,6 +56,14 @@ def spec(thing, *, assets=None, tolerance=None, zero=None):
     from cad.mujoco._spec import spec as _spec
 
     return _spec(thing, assets=assets, tolerance=tolerance, zero=zero)
+
+
+def parts(spec):
+    """The label paths of every part of ``spec`` (a spec ``spec`` made), sorted: the names ``collisions``, ``fit``
+    and ``decompose`` take. A spec read from an MJCF answers its colliding meshes' names (``cad.mujoco._parts``)."""
+    from cad.mujoco._parts import parts as _listed
+
+    return _listed(spec)
 
 
 def collisions(spec, part):

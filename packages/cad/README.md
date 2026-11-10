@@ -1025,7 +1025,7 @@ What 0.11.8 adds:
   as keys, with a `scene.xml` beside an MJCF; `--zero STATE` counts every joint from a state. Its summary
   says how the parts collide, and that a MuJoCo function is where to choose otherwise.
 - **A MuJoCo function makes the simulation's choices** (`cad.mujoco`, `cad[mujoco]`): `spec` makes a
-  document a `mujoco.MjSpec`; `collisions`, `fit` (a box, sphere, cylinder or capsule fitted to the part's
+  document a `mujoco.MjSpec`; `parts` lists its parts' label paths; `collisions`, `fit` (a box, sphere, cylinder or capsule fitted to the part's
   exact solid) and `decompose` (CoACD's convex hulls of its mesh, `cad[coacd]`) find and replace a part's
   collision by its label path; everything else is MuJoCo's own API; `save` writes the spec as a folder that
   travels.

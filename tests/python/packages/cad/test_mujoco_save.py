@@ -27,7 +27,7 @@ from unittest import mock
 import mujoco
 import numpy as np
 
-from cad.mujoco import collisions, decompose, fit, save, spec
+from cad.mujoco import collisions, decompose, fit, parts, save, spec
 
 # The toy of the MuJoCo function's design: a model with only the hardware's facts, and a MuJoCo function with the
 # simulator's choices, which saves the robot's file.
@@ -169,6 +169,8 @@ class MuJoCoFunctionTest(unittest.TestCase):
 
     def test_fit_makes_the_kernel_s_capsule_and_collisions_finds_a_part_by_its_label_path(self) -> None:
         made = self.hinge()
+        # Every part by its label path, sorted: what a function that chooses by a rule iterates.
+        self.assertEqual(parts(made), ["hinge/arm", "hinge/base"])
         [mesh] = collisions(made, "hinge/arm")
         self.assertEqual((mesh.name, mesh.type), ("arm_collision", mujoco.mjtGeom.mjGEOM_MESH))
         mesh.friction = [0.7, 0.005, 0.0001]
@@ -212,6 +214,8 @@ class MuJoCoFunctionTest(unittest.TestCase):
             fit(made, "left/wheel", "decomposed")
         with self.assertRaisesRegex(ValueError, "not made by cad.mujoco.spec"):
             collisions(made.copy(), "left/wheel")
+        with self.assertRaisesRegex(ValueError, "parts: this MjSpec was not made by cad.mujoco.spec"):
+            parts(made.copy())
         with self.assertRaisesRegex(TypeError, "takes the mujoco.MjSpec cad.mujoco.spec made, not str"):
             fit("robot.xml", "arm", "box")
         with self.assertRaisesRegex(TypeError, "save writes a mujoco.MjSpec .*, not dict"):
@@ -219,6 +223,7 @@ class MuJoCoFunctionTest(unittest.TestCase):
         # Read from an MJCF, a spec has meshes and no solids: no primitive is fitted to one.
         self.saved(made, "cart/cart.xml")
         read = spec(self.folder / "cart" / "cart.xml")
+        self.assertEqual(parts(read), ["wheel"], "an MJCF's parts are the meshes its colliding geoms use")
         self.assertEqual(sorted(geom.name for geom in collisions(read, "wheel")),
                          ["wheel_collision", "wheel_collision_2"])
         with self.assertRaisesRegex(ValueError, "this spec was read from an MJCF, which holds meshes and no solids"):
@@ -248,7 +253,11 @@ class MuJoCoFunctionTest(unittest.TestCase):
         grid.parent.mkdir()
         grid.write_bytes(_png_1x1())
         made.add_texture(name="grid", type=mujoco.mjtTexture.mjTEXTURE_2D, file=str(grid))
-        made.add_material(name="checker", textures=["", "grid"])
+        # A material's textures are one name a role, all of them: MuJoCo 4.0.0 takes a shorter list through
+        # add_material's keyword unchecked and then reads past it (a crash on Linux), so the list is set whole.
+        roles = [""] * int(mujoco.mjtTextureRole.mjNTEXROLE)
+        roles[int(mujoco.mjtTextureRole.mjTEXROLE_RGB)] = "grid"
+        made.add_material(name="checker").textures = roles
         out = self.folder / "robot" / "hinge.xml"
         said = self.saved(made, "robot/hinge.xml")  # relative: the working directory's
         self.assertIn("wrote scene.xml beside it", said)

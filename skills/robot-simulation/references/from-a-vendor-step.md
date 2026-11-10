@@ -409,7 +409,10 @@ has each helper, what `save` does and MuJoCo 4.0.0's traps; read it before writi
 Name each part by its label path as `cad model inspect "$ID"` prints it (`base_link/screw`,
 `shoulder_servo/case`): a last segment is enough where it names one part, and a name that is
 ambiguous or names no part is refused with the parts there. Several parts of one label in one link
-(its screws) share one path, and `collisions` returns them all.
+(its screws) share one path, and `collisions` returns them all. A maker's assembly has a hundred
+parts or more, most of them fasteners: `parts(s)` lists every path, so choose by a rule over it
+(`for path in parts(s): ...`, deleting the collisions of every part that is not a printed part or a
+case) rather than naming each screw.
 
 **Collisions.** Every part collides as its own mesh (its convex hull) until the function chooses
 otherwise.
