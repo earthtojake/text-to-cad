@@ -411,7 +411,8 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     said so: the document does not know which links stand on something. What I did:
     a leg solver for feet that stay (`kin.standing`), the motions as paths of the pelvis
     over them, sampled, and a check that follows each motion in time
-    (`checks/balance.py`). What would have helped: a word in the skill where it tells a
+    (`checks/balance.py`). Every motion on two feet now stands in the simulation; the two
+    on one foot still fall, for a reason no path answers (entry 48). What would have helped: a word in the skill where it tells a
     robot's builder to fix the base link ("the fixed link is a choice of frame: a motion
     written under it needs checking in the frame of whatever the robot stands on"); a
     `plant=<link>` on `cad model snapshot` and on the viewer's playbar, so that a motion
@@ -427,7 +428,11 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     values) would make a second consumer exact by construction. The same docstring's
     best feature, that a sequence may be a function of time or a dense list of samples
     with `linear`, deserves an example: it is what makes a closed-chain motion possible
-    at all.
+    at all. A sampled path also has no rate: its straight segments are exact for a
+    picture, but a servo fed them takes a step in speed at every sample (the bow's waist
+    drive stepped by up to 5.5 N m, the soles' load by 31 N, until the simulation fed the
+    mean of the two segments' rates instead). A sequence that could say "I am a sampled
+    path" and be sampled with its derivative would spare each consumer that guess.
 
 42. **A check that follows a build closely builds the whole model again.** After a change
     to the motions my own environment built (cold, 420 s; on later edits warm, 2 s).
@@ -494,7 +499,35 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     header, a GLB beside a film) says which model and not which state of it. The
     closure's key on the handle, or printed on the `built ...` line, would let a derived
     file name its source exactly, and would have told me at a glance whether the GLB a
-    render was reading had the old motions or the new.
+    render was reading had the old motions or the new. Nor does anything say which of a
+    model's outputs a change reaches. The rewrite of the motions changed no solid, joint
+    or mass, and the simulation's file needed only its twelve keyframes written again;
+    but the model's key covers every source, so the only way to learn "the parts are as
+    they were" is to build. The sim's `build.py --poses` rewrites the keyframes and
+    trusts me that nothing else changed. A document that carried its parts' key apart
+    from its states' and sequences' would let a derived file decide that itself.
+
+47. **`nice` does not reach a build.** `nice -n 19 cad run script.py` runs the program
+    and what it starts at niceness 19, and a simulation's render ran that way beside the
+    film's. But a build is done by one of the engine's workers, a child of the daemon at
+    niceness 0: a script that calls a model under `nice` has its six-minute build done at
+    full priority. There is no way to ask the engine for a build that yields to another
+    job on the machine, or to cap a worker's threads.
+
+48. **The robot-simulation skill has nothing on standing.** `references/guardrails.md`
+    covers a description's sanity, not whether the robot it describes can stay up. Three
+    numbers said, before any simulation, whether position servos could take Galatea onto
+    one foot, and I had none of them written down: the ankle roll drive's peak torque
+    over the weight (14 N m / 553 N = 25 mm) against the sole's half-width (30 mm), which
+    is how far off the ankle's axis the floor's push may ever stand; the toppling
+    stiffness m g h of what stands on the ankle (484 N m/rad) against the servo's
+    stiffness there, below which the stance is unstable whatever the path; and what the
+    legs give when the weight goes from two feet to one (a servo's sag at the changed
+    load times the lever to the centre of mass: here a degree of lean, 23 mm of the 25).
+    The third decided it. A reference could give all three beside the static margin and
+    the centre of pressure, and say plainly that a position servo with no torque fed
+    ahead is a spring, and that a simulation which assumes one should say so where its
+    conclusions hang on it.
 
 ## What worked well
 
@@ -548,3 +581,16 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   robot-simulation skill's discipline (the ledger at the top of the file, "never type an
   inertia", the sanity gates of `references/inertials.md`, a mesh in its link's frame)
   carried over to a format the skill does not cover.
+- Kinematics kept apart from the kernel: `lib/kin.py` and `lib/poses.py` import nothing
+  of it, so when five motions became sampled paths over planted feet the simulation
+  followed with two small changes, re-keyed its four changed poses in two seconds and
+  simulated all thirteen clips in twelve, the kernel not loaded once. The skill's
+  guidance on a mechanism could recommend the split outright, and that what a check
+  counts as support, and how a pose is set on the floor, live there too: a copy of the
+  balance rule in the simulation's own check drifted from the model's within an hour
+  (it went on counting the sprung toe, and printed 43 mm for a motion the model's check
+  has at 27), and nothing failed.
+- `cad run` finds a script's integrations in the imports inside its functions too, so a
+  mode that calls nothing of the CAD model (`sim/build.py --poses`) could move those
+  imports into the branch that builds, keep the script's environment, and start in a
+  second and a half.
