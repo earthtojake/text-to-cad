@@ -10,12 +10,11 @@ export * from './origin.js';
 
 /**
  * @param {string} path
- * @param {{origin?: string, file?: string, params?: Record<string, string | number | boolean | null | undefined>}} options
+ * @param {{origin?: string, params?: Record<string, string | number | boolean | null | undefined>}} options
  * @returns {string}
  */
-export function cadApiUrl(path, { origin = '', file = '', params = {} } = {}) {
+export function cadApiUrl(path, { origin = '', params = {} } = {}) {
   const url = new URL(path, 'http://cad.local');
-  if (file) url.searchParams.set('file', file);
   for (const [key, value] of Object.entries(params)) {
     if (value !== null && value !== undefined && String(value) !== '') url.searchParams.set(key, String(value));
   }
@@ -147,14 +146,14 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     return request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body, operation }).finally(forgetSettings);
   }
 
-  async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, idempotent = false, operation = 'request' } = {}) {
+  async function request(path, { signal, params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, idempotent = false, operation = 'request' } = {}) {
     if (disposed || signal?.aborted) throw abortError();
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
     signal?.addEventListener('abort', abort, { once: true });
     requests.add(controller);
     try {
-      const payload = await requestViewerJson(cadApiUrl(path, { origin, file, params }), {
+      const payload = await requestViewerJson(cadApiUrl(path, { origin, params }), {
         method, headers, signal: controller.signal, cache: 'no-store',
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       }, operation, { timeoutMs, idempotent, fetch: fetchImpl });

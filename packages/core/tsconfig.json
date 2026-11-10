@@ -8,7 +8,6 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "jsx": "react-jsx",
     "allowJs": true,
     "checkJs": false,
     "strict": true,
@@ -27,8 +26,6 @@
     "src/**/*"
   ],
   "exclude": [
-    "src/**/*.test.*",
-    "src/**/*.spec.*",
-    "src/**/harness/**"
+    "src/**/*.test.*"
   ]
 }

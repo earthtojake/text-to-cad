@@ -23,8 +23,8 @@ function page() {
 test('a ready file is one plain same-origin download link, clicked once and removed', () => {
   const { clicked, body, document } = page();
   const port = createBrowserDownloads({ document, storage, key: 'test' });
-  port.save('http://127.0.0.1:4178/s/session/api/v1/exports/job/file', 'bracket.step');
-  assert.deepEqual(clicked, [{ href: 'http://127.0.0.1:4178/s/session/api/v1/exports/job/file', download: 'bracket.step', rel: 'noopener', attached: true }]);
+  port.save('http://127.0.0.1:4178/api/v1/exports/job/file', 'bracket.step');
+  assert.deepEqual(clicked, [{ href: 'http://127.0.0.1:4178/api/v1/exports/job/file', download: 'bracket.step', rel: 'noopener', attached: true }]);
   assert.equal(body.size, 0);
   assert.doesNotMatch(clicked[0].href, /token/);
 });
@@ -40,4 +40,20 @@ test('restoration keeps the exports under way, their requests and names; never a
   assert.deepEqual(port.restore(), [{ request: { requestId: 'b', epoch: 'e', source: { doc: 'd' }, format: 'stl' }, filename: 'y.stl' }]);
   port.remember([]);
   assert.equal(held, undefined);
+});
+
+test('an export under way comes back on reload after the page moved to another document', () => {
+  const held = new Map();
+  const shared = { getItem: key => held.get(key) ?? null, setItem: (key, value) => held.set(key, value), removeItem: key => held.delete(key) };
+  const value = [{ request: { requestId: 'a', epoch: 'e', source: { doc: 'd' }, format: 'stl' }, filename: 'x.stl' }];
+  const previous = globalThis.window;
+  try {
+    // The tab loaded at `/`, opened a document in place (history), then reloaded at its path.
+    globalThis.window = { location: { pathname: '/' } };
+    createBrowserDownloads({ document: page().document, storage: shared }).remember(value);
+    globalThis.window = { location: { pathname: '/0b1c2d3e-0000-4000-8000-000000000000' } };
+    assert.deepEqual(createBrowserDownloads({ document: page().document, storage: shared }).restore(), value);
+  } finally {
+    globalThis.window = previous;
+  }
 });

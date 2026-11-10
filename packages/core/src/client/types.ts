@@ -35,7 +35,6 @@ export interface CadOpenInTarget { target: string; kind: string; name: string; p
 /** `GET /api/v1/local/open-in`: a document's files and their apps, and which file manager this computer has. */
 export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'finder' | 'explorer' | 'files' }
 export interface CadServerInfo {
-  autoReload?: boolean;
   identityToken?: string;
   /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;

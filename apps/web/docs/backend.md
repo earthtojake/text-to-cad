@@ -188,7 +188,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | Route | Purpose |
 |---|---|
 | `GET /api/v1/server` | Server identity: `app` (`cad-viewer`), `release` (the release the engine runs: a page that reconnects to another reloads), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`; `instance`, a random token of this start of the engine (a page that reconnects to another reloads); `kinds` (`reads`, the document kinds, and `exports`, each kind's formats); and `notice` and `update` (below). |
-| `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}, updates: {automatic, reason}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks; whether the engine updates by itself, and why: `cad_server/auto_updates.py`). PUT takes part of it, `{language: {locale}}` (null is Automatic), `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept) or `{updates: {automatic}}` (the app menu's Automatic updates), and answers the whole; it takes what GET answers, the read-only `reason` and `policy` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
+| `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}, whats_new: {seen, release}, updates: {automatic, reason}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks; the releases whose What's new the person has seen, and the one this installation runs: `cad_server/whats_new.py`; whether the engine updates by itself, and why: `cad_server/auto_updates.py`). PUT takes part of it, `{language: {locale}}` (null is Automatic), `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept), `{whats_new: {seen}}` (added to what is kept, never taken from it) or `{updates: {automatic}}` (the app menu's Automatic updates), and answers the whole; it takes what GET answers, the read-only `reason`, `policy` and `release` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
 | `GET /api/v1/look`, `/api/v1/look/environment` | The look the regular display modes are drawn in, and its Radiance image. |
 | `GET /api/v1/documents` | The model library every CAD view shares, `{documents}`: pinned first, then by last activity; each row with `opened` (when a page last opened it) and `updated` (a file's time on disk, a model's run: a script is never read for it), its document's `id`, `kind` and `api`, and its record's kind (`record`: `file`, `model`, `shape`). `?kind=`, `?q=` (in its name or path), `?limit=`; `?path=<abs>` one file's envelope (above). `GET /api/v1/documents/<kind>` is that kind's rows. |
 | `POST /api/v1/documents` | `{path}` (or `{id}`): a file opened as a document (above). |
@@ -202,6 +202,8 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `GET /api/v1/local/files?path=...` | A CAD file's bytes, by its absolute path (a robot's link mesh, a file a model's file names beside it). |
 | `GET /api/v1/local/folder?path=...[&q=...]` | One folder's subfolders and CAD files; with `q`, the CAD files under it whose path holds `q`, bounded. |
 | `POST /api/v1/local/reveal` | `{path}`: show a file in the desktop's file manager. |
+| `GET /api/v1/local/open-in?id=<id>` | Open in's list for a document: `{targets, fileManager}`, each target one of its files (`source`, then a model's `export:<kind>`) with its `name`, whether it is there (`present`) and the apps this computer has for its kind (`apps`, as last found: never looked for on a request), and `default: false` where the system's own handler may not open it (`cad_server._internal.apps`). |
+| `POST /api/v1/local/open` | `{id, target, app}`: one of those files in an app found for it, or the system's own handler (`"default"`), started detached. |
 | `POST /api/v1/local/pick` | Open the machine's own file chooser (`cad_server._internal.picker`) and answer the file picked; the home offers it where the server's `pick` says there is one. |
 | `POST /api/v1/local/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
 | `GET /api/v1/local/link` | `{link, expires}`: a fresh link the page writes into its own address (`token=`), so the address copied into another browser on this machine opens the same page (`src/host/addressLink.js`). The page's alone: a CAD card's tunnel never reaches it. |
@@ -221,7 +223,7 @@ DNS-rebinding defense. The trust model is documented in
 `cad_server.viewer.http_app`; keep these gates intact.
 
 The service serves local bytes and JSON; its host-native actions are the ones above (reveal,
-clipboard, pick), and its one write to the person's machine is a browser download:
+open, clipboard, pick), and its one write to the person's machine is a browser download:
 `POST /api/v1/documents/<id>/exports` `{requestId, epoch, source: {doc, revision}, format}` queues an
 export (202) of the displayed document as its code built it -- the document of that id, which the
 request's `source` must name (a mesh file by its path)
@@ -258,11 +260,13 @@ not add one).
   "schemaVersion": 3,
   "units": { "insunits": 4, "name": "Millimeters", "toMillimetres": 1.0 },
   "bounds": [minX, minY, maxX, maxY],        // null when nothing was drawn
-  "layers": [{ "name": "CUT", "color": "#ff0000", "count": 12 }],
+  "layers": [{ "name": "CUT", "color": "#ff0000", "entities": 12 }],
+  "entities": [{ "handle": "2A", "type": "LINE", "layer": "CUT" },
+               { "handle": "2B", "type": "TEXT", "layer": "0" }],
   "fonts": [{ "family": "Arial", "weight": 400, "italic": false }],
-  "primitives": [{ "type": "lines", "layer": "CUT", "color": "#ff0000",
+  "primitives": [{ "type": "lines", "layer": "CUT", "color": "#ff0000", "entity": "2A",
                    "geometry": [[0, 0, 40, 0]] },
-                 { "type": "text", "layer": "0", "color": null, "text": "NOTE 1",
+                 { "type": "text", "layer": "0", "color": null, "entity": "2B", "text": "NOTE 1",
                    "font": 0, "height": 2.5, "width": 12.94,
                    "transform": [1, 0, 0, 1, 10, 20] }]
 }
@@ -293,7 +297,14 @@ not add one).
   Text inside a clipped block reference arrives outlined (`filled-paths`), since
   only paths can be clipped. Outlined, a line of text was ~23 KB; as `text` it is
   ~150 bytes.
-- **`layers`** lists only layers that drew something, in first-seen order.
+- **`layers`** lists only layers that drew something, in first-seen order, each with
+  `entities`, the number of modelspace entities that drew on it (not the primitives they
+  became).
+- **`entities`** lists each modelspace entity that drew something, in first-seen order:
+  its `handle`, its DXF `type`, its own `layer`, the `block` an INSERT places, and a
+  CIRCLE's or ARC's `center` and `radius`. Every primitive names the entity it came from
+  (`entity`, its handle: the top-level one, so a DIMENSION's lines and text, and everything
+  a block reference draws, name the DIMENSION or the INSERT).
 
 The route reads the file whole on every request and holds each answer in the
 viewer's memory by those bytes — the last 8, the one asked for least recently

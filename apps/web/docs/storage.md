@@ -23,8 +23,10 @@ in the URL.
 ## The tab record
 
 Everything the viewer keeps is one record in `sessionStorage`, under
-`text-to-cad:tab:v1`, and one more entry, `cadgen:exporting:<path>`, for the exports still
-under way (`src/host/downloads.ts`; [the app README](../README.md#export-and-job-status)) —
+`text-to-cad:tab:v1`, and two more entries: `cadgen:exporting`, for the exports still
+under way (`src/host/downloads.ts`; [the app README](../README.md#export-and-job-status)), and
+`text-to-cad.update.followed`, set while the page follows an update through the engine's restart
+and read and removed by the page loaded after it (`src/host/followedUpdate.js`) —
 sessionStorage is the browser's own tab: it survives a reload and goes with the tab. The host's part is the adapter,
 [tabRecord.ts](../src/persistence/tabRecord.ts): a synchronous read and write of
 the whole record, handed to `createTabStore` (`@cad/ui/tab-store`), which

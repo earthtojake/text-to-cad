@@ -60,7 +60,7 @@ test('fresh server reads observe restarts and transport errors while cached cons
   const client = createCadClient({ origin: 'http://one.test', fetch: async () => {
     calls += 1;
     if (unavailable) throw new TypeError('Backend is restarting');
-    return json({ identityToken, autoReload: true });
+    return json({ identityToken });
   } });
   try {
     assert.equal((await client.serverInfo()).identityToken, 'before-restart');

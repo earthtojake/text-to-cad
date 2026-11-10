@@ -24,7 +24,6 @@ const DEFAULT_DEV_PORT = 5173;
 function devPort() { const port=Number(process.env.PORT); return Number.isInteger(port) && port>0 ? port : DEFAULT_DEV_PORT; }
 
 const viewerAppRoot = path.dirname(fileURLToPath(import.meta.url));
-const viewerClientRoot = path.join(viewerAppRoot, "src", "client");
 const repoRoot = path.resolve(viewerAppRoot, "../..");
 const defaultDirectoryRoot = path.resolve(viewerAppRoot, "..");
 const directoryRoot = resolveDirectoryRoot();
@@ -206,7 +205,7 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
     chunkIdsPlugin(),
     licenses.plugin(),
   ],
-  resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },
+  resolve: { dedupe: ["react", "react-dom", "three", "lucide-react"] },
   build: {
     chunkSizeWarningLimit: 800,
     // Maps beside the chunks, named by no chunk (`hidden`), each chunk's debug id in it and in its map.

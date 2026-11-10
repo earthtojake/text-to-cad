@@ -354,7 +354,6 @@ export function resolveViewSceneSettings({
     render: { enabled, configuration },
     // A floor or custom background does not opt the model into studio lighting.
     theme: view.lighting.enabled ? null : neutralTheme,
-    materialOverrides: null,
     quality: view.lighting.enabled ? resolveRenderQuality(view.lighting.quality)
       : resolveSceneQuality(quality, { fallback: SCENE_QUALITY.INTERACTIVE }),
     camera: cameraSettings,

@@ -51,21 +51,16 @@ test("isAbsoluteViewerUrl separates the two URL shapes", () => {
   assert.equal(isAbsoluteViewerUrl(""), false);
 });
 
-test("cadApiUrl builds the catalog and artifact routes for both origins", () => {
+test("cadApiUrl builds the library and document routes for both origins", () => {
   assert.equal(cadApiUrl("/api/v1/documents"), "/api/v1/documents");
-  assert.equal(cadApiUrl("/api/v1/documents", { file: "STEP/arm.step" }), "/api/v1/documents?file=STEP%2Farm.step");
   assert.equal(
-    cadApiUrl("/api/v1/artifact", { params: { file: "STEP/arm.step", force: "1" } }),
-    "/api/v1/artifact?file=STEP%2Farm.step&force=1",
+    cadApiUrl("/api/v1/documents", { params: { path: "/abs/arm.step", limit: 1, q: "" } }),
+    "/api/v1/documents?path=%2Fabs%2Farm.step&limit=1",
   );
   assert.equal(cadApiUrl("/api/v1/documents", { origin: REMOTE }), `${REMOTE}/api/v1/documents`);
   assert.equal(
-    cadApiUrl("/api/v1/documents", { origin: `${REMOTE}/`, file: "STEP/arm.step" }),
-    `${REMOTE}/api/v1/documents?file=STEP%2Farm.step`,
-  );
-  assert.equal(
-    cadApiUrl("/api/v1/artifact", { origin: REMOTE, params: { file: "STEP/arm.step" } }),
-    `${REMOTE}/api/v1/artifact?file=STEP%2Farm.step`,
+    cadApiUrl("/api/v1/documents", { origin: `${REMOTE}/`, params: { path: "/abs/arm.step" } }),
+    `${REMOTE}/api/v1/documents?path=%2Fabs%2Farm.step`,
   );
   assert.equal(cadApiUrl("/api/v1/server", { origin: REMOTE }), `${REMOTE}/api/v1/server`);
 });
@@ -76,7 +71,6 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
     kind: "step",
     hash: "h1",
     url: "/api/v1/local/files?path=%2Fabs%2Fmodels%2Farm.step&v=h1",
-    poseUrl: "/api/v1/local/files?path=%2Fabs%2Fmodels%2Farm.step.json",
     relations: {
       glb: { url: "/api/v1/local/files?path=%2Fabs%2Fpkg&v=h2", hash: "h2", bytes: 3 },
       none: { hash: "h3" },
@@ -88,7 +82,6 @@ test("catalog entries are rebased onto the origin, and only their URL fields", (
   const rebased = applyViewerOriginToEntry(entry, REMOTE);
   assert.notEqual(rebased, entry, "a rebase never mutates the catalog entry");
   assert.equal(rebased.url, `${REMOTE}/api/v1/local/files?path=%2Fabs%2Fmodels%2Farm.step&v=h1`);
-  assert.equal(rebased.poseUrl, `${REMOTE}/api/v1/local/files?path=%2Fabs%2Fmodels%2Farm.step.json`);
   assert.equal(rebased.relations.glb.url, `${REMOTE}/api/v1/local/files?path=%2Fabs%2Fpkg&v=h2`);
   assert.equal(rebased.relations.glb.hash, "h2");
   assert.deepEqual(rebased.relations.none, { hash: "h3" });

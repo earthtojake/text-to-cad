@@ -1,15 +1,8 @@
 # Vite / Node
 node_modules
 .vite
-# Legacy Next.js build folders from prior runs
-.next
-.next-build
-.next-dev
-.next-verify
-.vercel
 *.tsbuildinfo
 dist
-dist-verify
 coverage
 tmp
 

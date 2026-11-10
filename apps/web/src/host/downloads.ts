@@ -8,10 +8,11 @@ function tabStorage(): Storage | undefined {
  * The plain web download: a same-origin link with `download`, clicked. The browser's own
  * download behaviour (its folder, or its Save dialog where the person asked for one) decides
  * where the file goes, in every browser. The session cookie authenticates the URL, so no token
- * is in it. Tab storage keeps the exports still under way across a reload, never a file.
+ * is in it. Tab storage keeps the exports still under way across a reload, never a file, under one
+ * key for the whole tab: the page moves between documents in place, and its exports go with it.
  */
 export function createBrowserDownloads({ document: page = window.document, storage = tabStorage(),
-  key = `cadgen:exporting:${window.location.pathname}` }: {
+  key = 'cadgen:exporting' }: {
   document?: Pick<Document, 'createElement' | 'body'>; storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>; key?: string;
 } = {}): DownloadPort {
   return {
