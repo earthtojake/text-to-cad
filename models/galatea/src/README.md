@@ -43,7 +43,7 @@ with its pelvis held.
 
 ```
 cad run src/vendor.py                        # once: RobStride's five STEP files, 53 MB, into vendor/ (Git keeps no CAD file)
-cad run src/galatea.py                       # about three minutes cold; a pose or a motion changed 1.5 s; unchanged 0.1 s
+cad run src/galatea.py                       # four minutes cold; a pose or a motion changed 2 s; unchanged 0.1 s
 cad run src/stances.py                       # the nine poses: the first builds the robot, the rest take 12 s each
 cad run src/fit.py                           # every skin against its mechanism
 cad run src/checks/interference.py --poses   # and the other checks, below

@@ -185,7 +185,7 @@ resident memory during the cold build.
 | `lyra` | 18 | 92 / 111 | 8.7 s | 1.3 s |
 | `juno` | 29 | 246 / 363 (the robot) | 32 s | 4.9 s |
 | `tendon_hand` | 56 in 5 scripts | | 20-257 s a script | 1.0-2.5 s |
-| `galatea` | the robot and its 9 standing poses | about 170 / 689 | about 3 min the robot (the drives' xbf files there already), 20 s more the nine poses (2026-11-10, 4 cores) | 0.1 s |
+| `galatea` | the robot and its 9 standing poses | about 170 / 689 | 4 min the robot (the drives' xbf files there already); the nine poses 6 min from nothing, the first of them building the robot again and the rest 12 s each (2026-11-10, 4 cores, nothing else running) | 0.1 s |
 | `moonwatch` case, dial, bracelet, finishing sampler | 4 | 8-54 | 5.7-49 s | 0.14-0.36 s |
 | `moonwatch` movement | 1 | | 178 s | 0.45 s |
 | `moonwatch` (the full watch) | 1 | 258 / 301 | 255 s | 4.3 s |
