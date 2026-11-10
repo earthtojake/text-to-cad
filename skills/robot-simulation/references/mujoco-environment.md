@@ -449,8 +449,9 @@ What each step does, and the traps:
   its own folder when it compiles, but the scene's writer names them bare, so a robot read with
   `MjSpec.from_file` and attached loses its meshes when the scene is saved. `spec()` names each mesh
   and texture absolutely and clears the spec's own folders: load a Menagerie robot through `spec()`
-  too, never `MjSpec.from_file`. A saved scene that cannot find a mesh fails `cad mjcf validate`
-  with `mesh_file_not_found`.
+  too, never `MjSpec.from_file`: `save` refuses a scene that attached one, in MuJoCo's words (`Error
+  opening file`) and naming `spec(path)`. A scene written another way that cannot find a mesh fails
+  `cad mjcf validate` with `mesh_file_not_found`.
 - **`save` makes the folder travel.** It copies every file the scene names, the attached robots'
   included, into `sim/assets/` beside `sim/pick.xml` and names each there (two files of one name
   become two, the second `_2`), so the folder loads on another computer. A scene has a floor of its

@@ -6,8 +6,8 @@ loaded after it is moved; the spec handed to ``save`` still attachable after it;
 and this one does not name removed, and nothing else; ``scene.xml`` written once and never over; a scene of two
 robots and a floor saved whole, with no ``scene.xml`` beside it; a body weighed by its collision told so once; and
 what is no spec, no part, two parts, several parts on one path, no solid or a robot a scene attached refused by
-name. Each in a fresh temporary folder, its
-cache a folder of its own."""
+name; a child read by ``MjSpec.from_file`` refused naming ``spec``; a heightfield's file saved with its spec.
+Each in a fresh temporary folder, its cache a folder of its own."""
 
 from __future__ import annotations
 
@@ -98,15 +98,20 @@ CAPSULE = {"size": (0.01, 0.05, 0.0), "pos": (-0.005, 0.06, 0.0), "quat": (0.5, 
 
 def _png_1x1() -> bytes:
     """A one-pixel RGBA PNG: what a texture is to MuJoCo."""
+    return _png(1)
+
+
+def _png(side: int) -> bytes:
+    """A square RGBA PNG ``side`` pixels across."""
     import struct
     import zlib
 
     def chunk(kind: bytes, body: bytes) -> bytes:
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
 
-    header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
-    pixel = zlib.compress(b"\x00" + bytes((200, 40, 40, 255)))
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixel) + chunk(b"IEND", b"")
+    header = struct.pack(">IIBBBBB", side, side, 8, 6, 0, 0, 0)
+    pixels = zlib.compress((b"\x00" + bytes((200, 40, 40, 255)) * side) * side)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
 
 
 class MuJoCoFunctionTest(unittest.TestCase):
@@ -362,6 +367,35 @@ class MuJoCoFunctionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing"):
             save(made, "broken/hinge.xml")
         self.assertFalse((self.folder / "broken").exists(), "refused before its folder is made")
+
+    def test_a_child_read_by_from_file_is_refused_naming_spec_and_one_read_by_spec_is_saved(self) -> None:
+        # A robot saved as a folder (its meshes relative, in assets/), then attached to a scene two ways.
+        self.saved(self.hinge(), "robot/hinge.xml")
+        robot = self.folder / "robot" / "hinge.xml"
+        scene = mujoco.MjSpec()
+        scene.attach(mujoco.MjSpec.from_file(str(robot)), prefix="a/", frame=scene.worldbody.add_frame())
+        with self.assertRaisesRegex(ValueError, r"(?s)opening file.*read it with cad\.mujoco\.spec\(path\)"):
+            save(scene, "lost/scene.xml")
+        self.assertFalse((self.folder / "lost").exists(), "refused before its folder is made")
+        scene = mujoco.MjSpec()
+        scene.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1, 1, 0.1])
+        scene.attach(spec(robot), prefix="a/", frame=scene.worldbody.add_frame())
+        self.saved(scene, "kept/scene.xml")
+        shutil.move(self.folder / "kept", self.folder / "kept-moved")
+        self.assertEqual(mujoco.MjModel.from_xml_path(str(self.folder / "kept-moved" / "scene.xml")).nmesh, 2)
+
+    def test_a_heightfield_s_file_is_saved_with_the_spec_and_loads_after_the_folder_is_moved(self) -> None:
+        terrain = self.folder / "terrain" / "hills.png"
+        terrain.parent.mkdir()
+        terrain.write_bytes(_png(2))  # a heightfield is two samples across at least
+        world = mujoco.MjSpec()
+        world.add_hfield(name="hills", file=str(terrain), size=[1, 1, 0.2, 0.05])
+        world.worldbody.add_geom(name="ground", type=mujoco.mjtGeom.mjGEOM_HFIELD, hfieldname="hills")
+        self.saved(world, "world/world.xml")
+        self.assertEqual(sorted(path.name for path in (self.folder / "world" / "assets").iterdir()),
+                         [".world.xml.meshes", "hills.png"])
+        shutil.move(self.folder / "world", self.folder / "world-moved")
+        self.assertEqual(mujoco.MjModel.from_xml_path(str(self.folder / "world-moved" / "world.xml")).nhfield, 1)
 
 
 if __name__ == "__main__":

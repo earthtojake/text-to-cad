@@ -18,7 +18,9 @@ made one spec (``_flat``: compiled to MuJoCo's text and read back), so a scene's
 it: a child's files resolve against the child's own folders, which the copy's ``meshdir`` does not reach. Its
 files are named bare, its folders set (``meshdir`` and ``texturedir`` ``assets``, ``modelfiledir`` the folder
 it is staged in), and it is compiled before anything is moved into place: MuJoCo's ``ValueError``, in its own
-words, is raised for a spec it refuses, and nothing is written. A spec a scene has attached is refused by name
+words, is raised for a spec it refuses, and nothing is written. Where its words are that a file does not open,
+the error adds the usual cause: a child read with ``MjSpec.from_file`` and attached names its files relative to
+its own folder, and ``spec(path)`` is what reads it with absolute ones. A spec a scene has attached is refused by name
 (``_parts.attached``): it is the scene's now, and MuJoCo 4.0.0 crashes compiling it.
 
 **What it removes.** As an export does (``mjcf``'s ``place``): the files are staged beside ``path`` and moved
@@ -64,7 +66,17 @@ def save(spec: Any, path: str | Path) -> Path:
     from cad.mujoco._parts import attached
 
     attached(spec, "save")
-    made = _flat(mujoco, spec)
+    try:
+        made = _flat(mujoco, spec)
+    except ValueError as error:
+        if "opening file" not in str(error):
+            raise
+        # An attached child read with MjSpec.from_file names its files relative to its own folder, which only
+        # the child knew: MuJoCo looks for them beside the working directory and says the file is not there.
+        raise ValueError(f"{error}\nsave: MuJoCo did not find a file this spec names. A robot read with "
+                         "mujoco.MjSpec.from_file and attached to a scene names its files relative to its own "
+                         "folder, which the scene does not hold: read it with cad.mujoco.spec(path), which names "
+                         "each file by its absolute path, and attach that") from None
     files = _files(made)
     target.parent.mkdir(parents=True, exist_ok=True)
     folder = target.parent / "assets"
