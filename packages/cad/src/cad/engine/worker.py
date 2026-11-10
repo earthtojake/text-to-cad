@@ -203,6 +203,92 @@ def rss_cap_mb() -> float | None:
     return None if physical is None else max(physical / 4, 2048.0)
 
 
+# --- a manufacturing check's limits ---------------------------------------------------------------
+
+# A manufacturing check measured this long is stopped (``check_limits``): ``CAD_ENGINE_CHECK_SECONDS``, by
+# default half an hour.
+CHECK_SECONDS = 1800.0
+
+
+def check_limits(cap: Callable[[], float | None] = rss_cap_mb) -> tuple[
+        float | None, Callable[[], float | None], tuple[str, ...]]:
+    """What one manufacturing check may take before whoever watches its process stops it -- the engine, of a
+    check in one of its checks processes, or a caller that measures one itself in a process it starts
+    (``cad._internal.manufacturing``): the seconds it may measure (None: no limit),
+    ``CAD_ENGINE_CHECK_SECONDS``, by default ``CHECK_SECONDS``; its process's resident memory in MiB, asked each
+    time it is looked at (None: no limit), ``CAD_ENGINE_CHECK_RSS_MB``, by default ``cap()`` -- the memory the
+    engine holds all its processes to together (``rss_cap_mb``: ``CAD_ENGINE_WORKER_RSS_MB``), which one check
+    alone never takes; ``0`` for no limit; and what is said of a setting that is no number of zero or more,
+    for which the default holds."""
+    notes: list[str] = []
+
+    def number(name: str) -> float | None:
+        given = os.environ.get(name, "").strip()
+        if not given:
+            return None
+        try:
+            value = float(given)
+        except ValueError:
+            value = -1.0
+        if value < 0:
+            notes.append(f"{name}={given!r} is no number of zero or more: the default holds")
+            return None
+        return value
+
+    seconds, memory = number("CAD_ENGINE_CHECK_SECONDS"), number("CAD_ENGINE_CHECK_RSS_MB")
+    return (CHECK_SECONDS if seconds is None else (seconds or None),
+            cap if memory is None else (lambda: memory or None), tuple(notes))
+
+
+def resident_of(pid: int | None) -> float | None:
+    """The resident memory of process ``pid`` now, in MiB, read from outside it (``/proc`` on Linux, the
+    system's own count on Windows, ``ps`` elsewhere), as whoever holds a manufacturing check to its limits
+    reads its process's (``check_limits``); None where the system does not say, which holds a check to no
+    memory limit there."""
+    if not pid:
+        return None
+    try:
+        if sys.platform.startswith("linux"):
+            with open(f"/proc/{pid}/statm", encoding="ascii") as handle:
+                return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 2**20
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS, as ``resident_mb`` reads its own
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
+                            ("PeakPagefileUsage", ctypes.c_size_t)]
+
+            kernel32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                counters = Counters()
+                counters.cb = ctypes.sizeof(Counters)
+                if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+                    return None
+                return counters.WorkingSetSize / 2**20
+            finally:
+                kernel32.CloseHandle(handle)
+        import subprocess
+
+        said = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
+                              check=False).stdout.split()
+        return int(said[0]) / 1024 if said else None
+    except Exception:  # noqa: BLE001 - a system that will not say holds a check to no memory limit
+        return None
+
+
 def request_cap(request: dict[str, Any]) -> float | None:
     """The memory cap a request holds this process to: the daemon's, which each request of its
     carries (``rssCapMb``; None: no cap); a request with none, this process's own (``rss_cap_mb``)."""

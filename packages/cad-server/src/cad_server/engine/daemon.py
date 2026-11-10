@@ -787,12 +787,18 @@ class Daemon:
         build: no document is marked failed by it (the worker's progress frame is its last
         build's, not this request's)."""
         self.models.register(worker, answer)
+        done = answer.get("done")
+        reports = done.get("reports") if isinstance(done, dict) else done
+        for root in reports if isinstance(reports, list) else []:
+            # Each document the run built: a check of it asked at a generation now gone stops at once
+            # (``checks_runner.Runner.built``); a run that changed nothing kept its generation, and stops none.
+            for report in [root, *(root.get("child_models") or {}).values()]:
+                if report.get("ok") and report.get("id"):
+                    self.checks.built(str(report["id"]))
         server = self.server
         if server is None or (verb and "failed" in answer):
             return
         outcomes: dict[str, Any] = {}
-        done = answer.get("done")
-        reports = done.get("reports") if isinstance(done, dict) else done
         for report in reports if isinstance(reports, list) else []:
             frame = report.get("progress") or {}
             failed = None if report.get("ok") else {"model": report.get("model"), "error": report.get("error"),
@@ -1238,6 +1244,7 @@ class Daemon:
             deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
             for ident in request.get("ids") or []:
                 self.checks.store.forget(f"model:{ident}")
+                self.checks.built(str(ident))  # a check of it measures a document that is gone: stopped
             send({"ok": True, "deleted": [found for found in deleted if found is not None]})
             return
         if op == "model_info":
@@ -1361,7 +1368,9 @@ class Daemon:
             # document was written in its caller's Python, and is read in the server's.
             try:
                 self.contracted(request)
-                send(self.models.hand_over(request))
+                handed = self.models.hand_over(request)
+                self.checks.built(str(request.get("id")))  # a check of the shape it replaces stops at once
+                send(handed)
             except ValueError as error:
                 send(refused(error))
             return

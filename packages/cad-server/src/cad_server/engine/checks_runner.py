@@ -13,7 +13,8 @@ under the runner's one lock:
 - ``ANSWERED``: its process answered, or was lost.
 - stopped by the engine, each the reason its callers are told (``FAILURES``): ``CANCELLED`` (every caller of
   it gone, its process given to a check someone waits for), ``STOPPED`` (the engine stops), ``OVER_TIME`` and
-  ``OVER_MEMORY`` (past a check's own limits, ``Limits``).
+  ``OVER_MEMORY`` (past a check's own limits, ``Limits``), ``SUPERSEDED`` (its model was built again under it,
+  ``Runner.built``).
 
 A check is stopped only before it has ended (``_stop``): one waiting leaves the pool's queue, one
 measuring has its process killed -- the process its own lease holds, signalled under the lock, which the
@@ -26,6 +27,13 @@ never a result: ``cancelled``, ``stopped``, ``over_time``, ``over_memory``, ``pr
 process exited under it), ``no_kernel`` (none could be started) and ``superseded`` (its document was built
 again, or its file rewritten, while it was measured: the result is of a version that is gone, so it is neither
 kept nor answered).
+
+**A document that moves on under its check.** A model built to a new generation while a check of it is asked
+is told by the daemon as the build registers (``Runner.built``): the check stops at once, its process killed,
+so it holds neither its slot nor its callers for a result no one can use. While a caller of it is still there
+the check is then asked again, of the document as it is now (``READS`` times at most: a document built again
+under each answers ``superseded``); with none it ends there. A build that changes nothing keeps its generation,
+and one of another model is another document: neither stops a check.
 """
 
 from __future__ import annotations
@@ -34,8 +42,6 @@ import enum
 import os
 import secrets
 import signal
-import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -43,6 +49,7 @@ from typing import Any, Callable
 
 from cad.engine.client import WORKER_STDERR
 from cad.engine.frames import failed_type
+from cad.engine.worker import CHECK_SECONDS, check_limits, resident_of
 
 from cad_server.engine.checks import Checks, Pool, Withdrawn, digest
 from cad_server.engine.supervisor import Gone
@@ -51,10 +58,11 @@ __all__ = ["FAILURES", "SECONDS", "STOPPED", "SUPERSEDED", "Asked", "Limits", "R
            "resident_of"]
 
 # A check measured this long is stopped (``Limits``): ``CAD_ENGINE_CHECK_SECONDS``, by default half an hour.
-SECONDS = 1800.0
+SECONDS = CHECK_SECONDS
 # How often the watchdog looks at the checks measuring (``Runner._watch``).
 WATCH_SECONDS = 1.0
-# How many times a check reads its document again because a build replaced it before anything was measured.
+# How many times a check is asked of its document as it is now because a build replaced it, or its file was
+# rewritten, before or while it was measured: past them it answers ``superseded``.
 READS = 3
 
 
@@ -68,6 +76,7 @@ class State(enum.Enum):
     STOPPED = "stopped"
     OVER_TIME = "over_time"
     OVER_MEMORY = "over_memory"
+    SUPERSEDED = "superseded"
 
 
 # The states a check can be stopped in: once it is in any other, it has ended.
@@ -88,53 +97,8 @@ FAILURES = {
                        "memory limit of {limit:.0f} MB: nothing was measured. The part may be too large to check "
                        "on this machine; check a smaller part, or raise the limit (CAD_ENGINE_CHECK_RSS_MB, in the "
                        "environment the CAD server starts in; 0 for none)",
+    State.SUPERSEDED: SUPERSEDED,
 }
-
-
-def resident_of(pid: int | None) -> float | None:
-    """The resident memory of process ``pid`` now, in MiB, read from outside it (``/proc`` on Linux, the
-    system's own count on Windows, ``ps`` elsewhere); None where the system does not say, which holds a check to
-    no memory limit there."""
-    if not pid:
-        return None
-    try:
-        if sys.platform.startswith("linux"):
-            with open(f"/proc/{pid}/statm", encoding="ascii") as handle:
-                return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 2**20
-        if os.name == "nt":
-            import ctypes
-            from ctypes import wintypes
-
-            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS, as ``worker.resident_mb`` reads its own
-                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
-                            ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
-                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
-                            ("PeakPagefileUsage", ctypes.c_size_t)]
-
-            kernel32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
-            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-            kernel32.OpenProcess.restype = wintypes.HANDLE
-            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-            psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
-            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if not handle:
-                return None
-            try:
-                counters = Counters()
-                counters.cb = ctypes.sizeof(Counters)
-                if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
-                    return None
-                return counters.WorkingSetSize / 2**20
-            finally:
-                kernel32.CloseHandle(handle)
-        said = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
-                              check=False).stdout.split()
-        return int(said[0]) / 1024 if said else None
-    except Exception:  # noqa: BLE001 - a system that will not say holds a check to no memory limit
-        return None
 
 
 class Limits:
@@ -148,27 +112,10 @@ class Limits:
 
     @classmethod
     def of_environment(cls, cap: Callable[[], float | None]) -> "Limits":
-        """The daemon's: ``CAD_ENGINE_CHECK_SECONDS`` (by default ``SECONDS``) and ``CAD_ENGINE_CHECK_RSS_MB``
-        (by default ``cap()``, the memory the engine holds all its processes to together,
-        ``CAD_ENGINE_WORKER_RSS_MB``: one check alone never takes it all); ``0`` for no limit."""
-        notes: list[str] = []
-
-        def number(name: str) -> float | None:
-            given = os.environ.get(name, "").strip()
-            if not given:
-                return None
-            try:
-                value = float(given)
-            except ValueError:
-                value = -1.0
-            if value < 0:
-                notes.append(f"{name}={given!r} is no number of zero or more: the default holds")
-                return None
-            return value
-
-        seconds, memory = number("CAD_ENGINE_CHECK_SECONDS"), number("CAD_ENGINE_CHECK_RSS_MB")
-        return cls(SECONDS if seconds is None else (seconds or None),
-                   cap if memory is None else (lambda: memory or None), tuple(notes))
+        """The daemon's (``worker.check_limits``): ``CAD_ENGINE_CHECK_SECONDS`` (by default ``SECONDS``) and
+        ``CAD_ENGINE_CHECK_RSS_MB`` (by default ``cap()``, the memory the engine holds all its processes to
+        together, ``CAD_ENGINE_WORKER_RSS_MB``: one check alone never takes it all); ``0`` for no limit."""
+        return cls(*check_limits(cap))
 
     def status(self) -> dict[str, Any]:
         return {"seconds": self.seconds, "rssMb": self.memory(), **({"notes": list(self.notes)} if self.notes else {})}
@@ -248,8 +195,9 @@ class Runner:
         it, ``measures``: ``contract.measures_for``): another's is answered at once with no ``checked``, and
         its caller measures the document its own way. A version is a model's generation, read before its bytes
         and again after the check, or the digest of the bytes a file's check measured: a result is kept under
-        the version it was measured at, or not at all, and a check whose document moved on under it answers
-        ``superseded``. A check runs to its end whoever asked it: its caller going leaves it running and its
+        the version it was measured at, or not at all, and a check whose document moved on under it is stopped
+        (``built``) and asked again of the document as it is now while a caller of it is there, ``READS`` times
+        at most, then answers ``superseded`` (the module). A check runs to its end whoever asked it: its caller going leaves it running and its
         result kept, unless a check whose caller is there needs its slot (``reap``)."""
         from cad.engine.contract import measures_for
         from cad.engine.ids import file_id
@@ -370,6 +318,14 @@ class Runner:
                     by = measured.get("measures")
                     if "done" in answer and before is not None and current and _clean(measured) and serves(by):
                         self.store.keep(document, before, key, _result(measured), durable, since, by)
+                if answer.get("reason") == State.SUPERSEDED.value:
+                    reads += 1
+                    if reads < READS and not asked.abandoned():
+                        # Nothing of the version gone is answered: the document as it is now is checked, for
+                        # its callers still there (those attached ask again as this one ends unanswered).
+                        told({"log": "the document changed while its manufacturing check ran: checking it as "
+                                     "it is now", "stream": "waiting"})
+                        continue
                 asked.answer = answer
                 told(answer)
                 return
@@ -489,6 +445,24 @@ class Runner:
             self._stop(victim, State.CANCELLED)
             if victim.same is not None and self.running.get(victim.same) is victim:
                 self.running.pop(victim.same)
+
+    def built(self, ident: str) -> None:
+        """Model document ``ident`` was built, handed over or deleted, as the daemon registers it: each check
+        of it asked at another generation than the one it has now is stopped -- one waiting leaves the queue,
+        one measuring has its process killed -- and leaves ``running``, so the same check asked from now on is
+        of the new generation (``check`` asks it again for the callers still there). A build that kept its
+        generation stops nothing, nor does one of another document."""
+        try:
+            now = self._version(ident)
+        except ValueError:
+            now = None
+        document = f"model:{ident}"
+        with self.lock:
+            for asked in self.asked.values():
+                if asked.same is None or asked.same[0] != document or asked.same[1] == now:
+                    continue
+                if self._stop(asked, State.SUPERSEDED) and self.running.get(asked.same) is asked:
+                    self.running.pop(asked.same)
 
     def halt(self) -> None:
         """Every check stopped as the engine stops (an update's drain, ``cad stop``): those waiting leave the

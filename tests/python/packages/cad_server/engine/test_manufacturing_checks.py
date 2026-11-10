@@ -884,10 +884,10 @@ class EngineTest(unittest.TestCase):
     def test_a_models_build_and_inspection_wait_for_no_check_of_it_and_only_a_new_version_supersedes_one(self) -> None:
         """A model's check is measured in a checks process: while it measures, an inspection of the model answers
         and a run of its script that changes nothing leaves the check alone, its result kept; a build that
-        changes the model lands at once too, and the check of the version gone answers ``superseded``, never a
-        result."""
+        changes the model lands at once too, and the check of the version gone is stopped as the build registers
+        -- its process killed, nothing of it measured to the end -- and its caller answered with the check of
+        the model as it is now, never a result of the version gone."""
         import cad
-        from cad.engine.api import EngineError
 
         _env, hold = held_engine(self)
         fixture = Fixture(self, MODELS)
@@ -905,14 +905,17 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"] + 1, before["reused"] + 1))
 
         hold.unlink()
-        check, _pid = held_check(self, hold, lambda: cad.model.dfm(plate, process="cnc", tools="4"))
+        check, pid = held_check(self, hold, lambda: cad.model.dfm(plate, process="cnc", tools="4"))
+        measured = _counts()["measured"]
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(44, 30, 10)"))  # an edit, built under the check
+        _until(self, lambda: pid not in _busy(), "the check of the version gone was stopped, still held at its seam")
+        self.assertTrue(check.is_alive(), "its caller waits for the check of the model as it is now")
         hold.write_text("", encoding="utf-8")
-        answered = check.result(self)
-        self.assertIsInstance(answered, EngineError)
-        self.assertEqual(answered.reason, "superseded")
-        edited = cad.model.dfm(plate, process="cnc", tools="4")
+        edited = check.result(self)
         self.assertAlmostEqual(edited.measurements["bodies"][0]["bbox_mm"][0], 44.0, delta=1e-6)
+        self.assertEqual(_counts()["measured"], measured + 1, "the version gone was never measured to its end")
+        again = cad.model.dfm(plate, process="cnc", tools="4")
+        self.assertEqual((_plain(again), _counts()["measured"]), (_plain(edited), measured + 1), "and it is kept")
 
     def test_a_check_outlives_its_caller_and_the_next_call_reuses_its_result(self) -> None:
         """Its caller killed (a shell's time limit), a check runs to its end and keeps its result: the same call
@@ -1410,22 +1413,67 @@ class RunnerTest(unittest.TestCase):
         self.assertTrue(engine.check({"id": DOC})["done"]["reused"], "kept under the version it was measured at")
 
         def built_under_it(order: dict[str, Any]) -> dict[str, Any]:
-            engine.versions[DOC] = "later"
+            engine.versions[DOC] = f"later-{len(engine.requests)}"  # a build the runner was not told of
             return engine.measured(order)
 
         engine.answer = built_under_it
+        engine.requests.clear()
         self.assertEqual(engine.check({"id": DOC}, process="sheet"), {"failed": SUPERSEDED, "reason": "superseded"})
+        self.assertEqual(len(engine.requests), READS, "asked again of each version, each one gone as it answered")
         engine.answer = engine.measured
         self.assertNotIn("reused", engine.check({"id": DOC}, process="sheet")["done"], "nothing of it was kept")
 
         file = self.file()
         engine.answer = lambda order: engine.measured(order, digest=None, changed=True)
-        self.assertEqual(engine.check(file)["reason"], "superseded", "a file rewritten while it was read")
+        self.assertEqual(engine.check(file)["reason"], "superseded", "a file rewritten each time it was read")
         engine.answer = lambda order: engine.measured(order, digest="another")
         self.assertIn("checked", engine.check(file)["done"], "rewritten before it was read: measured as it is now")
         engine.answer = engine.measured
         self.assertNotIn("reused", engine.check(file)["done"], "and kept under no digest but the one measured")
         self.assertTrue(engine.check(file)["done"]["reused"])
+
+    def test_a_build_of_its_model_stops_a_check_at_once_and_its_callers_get_the_new_version_s(self) -> None:
+        """The daemon says a document was built (``Runner.built``): a check measuring a generation now gone is
+        stopped there -- its process killed, its slot free -- and asked again of the document as it is now for
+        the callers still there, the one attached to it too, measured once; a build that kept the generation,
+        or of another document, stops nothing; and a check no one waits for ends ``superseded``, not run again."""
+        from cad_server.engine.checks_runner import SUPERSEDED
+
+        other = str(uuid.UUID(int=8))
+        engine = Engine()
+        engine.versions[other] = "o1"
+        engine.holding = True
+        first = engine.ask({"id": DOC})
+        _until(self, lambda: len(engine.requests) == 1, "the check measures")
+        second = engine.ask({"id": DOC})
+        _until(self, lambda: engine.runner.store.status()["waited"] == 1, "the same check attached to it")
+        engine.runner.built(DOC)  # the same code run again: the same generation
+        engine.versions[other] = "o2"
+        engine.runner.built(other)  # another model of the script
+        self.assertEqual((engine.killed, engine.states()), ([], ["measuring"]), "neither is this check's document")
+
+        engine.versions[DOC] = "v2"
+        engine.runner.built(DOC)
+        _until(self, lambda: len(engine.requests) == 2, "the check asked again, of the document as it is now")
+        self.assertEqual(len(engine.killed), 1, "the process measuring the version gone was killed")
+        self.assertEqual(engine.requests[1][1]["source"]["version"], "v2")
+        engine.let_go()
+        answers = [first.result(self), second.result(self)]
+        self.assertEqual([answer["done"]["checked"]["measured"]["report"] for answer in answers], [{"of": "v2"}] * 2)
+        self.assertEqual((len(engine.requests), engine.runner.store.status()["measured"]), (2, 1),
+                         "measured once for both, and the version gone counted as no measurement")
+        self.assertTrue(engine.check({"id": DOC})["done"]["reused"], "kept under the generation it was measured at")
+
+        engine.holding = True
+        gone = threading.Event()
+        abandoned = engine.ask({"id": DOC}, gone, process="sheet")
+        _until(self, lambda: len(engine.requests) == 3, "a check measures")
+        gone.set()
+        engine.versions[DOC] = "v3"
+        engine.runner.built(DOC)
+        self.assertEqual(abandoned.result(self), {"failed": SUPERSEDED, "reason": "superseded"})
+        self.assertEqual((len(engine.requests), len(engine.killed), engine.runner.status()["asked"]), (3, 2, 0),
+                         "stopped, and asked again for no one")
 
     def test_an_abandoned_check_gives_its_process_to_one_someone_waits_for_and_no_other_does(self) -> None:
         """A check whose callers have all gone is stopped only when a check whose caller is there can take no slot:
