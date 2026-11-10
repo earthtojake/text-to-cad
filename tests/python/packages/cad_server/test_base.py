@@ -208,7 +208,7 @@ class RunTest(unittest.TestCase):
         found = base.ensure(make=False)
         command = [found.python, "-P", "-m", "cad._internal.program", str(script), "--size", "2"]
         if os.name == "nt":
-            call.assert_called_once_with(command, env=None)  # the caller's environment, as exec keeps it
+            call.assert_called_once_with(command)
         else:
             execv.assert_called_once_with(found.python, command)
 
