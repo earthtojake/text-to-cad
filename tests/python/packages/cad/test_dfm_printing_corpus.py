@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 """3D printing's planted-defect corpus: parts built with known defects -- and clean controls -- checked for
-every technology through ``cad.step.dfm`` (and a mesh path through ``cad.stl.dfm``), each rule's
-verdicts compared with the construction: which rules must fire, where, and that nothing else does.
+every technology (each STEP read and measured once, its rules judged per technology; one of them through
+``cad.step.dfm`` too, the same verdicts) and a mesh path through ``cad.stl.dfm``, each rule's verdicts
+compared with the construction: which rules must fire, where, and that nothing else does.
 
 The ground truth is here, beside the parts: each planted defect is (rule id, the technologies whose
 rules have a limit it breaks, its place, a radius). A failure the rules record
@@ -28,6 +29,9 @@ import build123d as bd
 import numpy as np
 
 import cad
+from cad._internal import manufacturing
+from cad.build123d import _dfm_brep as brep
+from cad.build123d import _dfm_printing as measured
 
 A = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 TOP = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX)
@@ -70,11 +74,12 @@ def features():
         ("printing.engrave_width", ("sla", "pbf"), (25, 0, 4), 5.0),
         ("printing.gap", ALL, (25, 0, 4), 5.0),
     ]
-    # a mesh has no axes: the pin is a thin wall, the hole a gap, the steps not measured
+    # a mesh's walls are read as exact geometry's are, their support off the wall itself; it has no axes: the
+    # pin is a thin wall joined at its foot alone, the hole a gap, the steps not measured
     mesh = [
-        ("printing.wall", ALL, (-25, 10, 8), 7.0),
-        ("printing.wall", ALL, (-25, -10, 8), 8.0),
-        ("printing.wall", ALL, (-5, 12, 6), 3.0),
+        ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
+        ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
+        ("printing.wall_unsupported", ALL, (-5, 12, 6), 3.0),
         ("printing.gap", ALL, (-5, -12, 2), 3.0),
         ("printing.gap", ALL, (10, 10, 2.5), 7.0),
         ("printing.gap", ALL, (25, 0, 4), 5.0),
@@ -255,17 +260,28 @@ class CorpusTest(unittest.TestCase):
         cls.folder.cleanup()
 
     def test_every_planted_defect_and_nothing_else(self) -> None:
-        tally, started, facts = Tally(), time.monotonic(), {}
+        tally, started, facts, results = Tally(), time.monotonic(), {}, {}
         for name, (_, step, planted, _) in self.parts.items():
-            for technology in ALL:
-                result = cad.step.dfm(step, process="printing", technology=technology, samples=SAMPLES)
+            # read and measured once, judged per technology: what no option decides (the solids, the voxel
+            # fields and their cavities, the holes, the gaps) is not measured again (``measure_each``)
+            each = [manufacturing.options("step", "printing", {"technology": technology, "samples": SAMPLES})
+                    for technology in ALL]
+            reports = measured.measure_each(brep.read("step", step), each)
+            for technology, resolved, report in zip(ALL, each, reports):
+                result = manufacturing.finish(Path(name), {"process": "printing", **report}, "printing", resolved, False)
                 self.assertFalse(result.measurements.get("partial"), f"{name} {technology}: "
                                  f"{result.measurements.get('partial_sections')}")
                 tally.score(name, result, planted, technology)
                 facts[(name, technology)] = result.measurements
+                results[(name, technology)] = result
         print(f"\nprinting corpus, exact geometry ({time.monotonic() - started:.1f} s)\n{tally.table()}",
               file=sys.stderr)
         self.assertEqual(tally.misses, [], "\n".join(tally.misses))
+        # through the door a person uses, a technology that is not the first measured: the same verdicts
+        public = cad.step.dfm(self.parts["features"][1], process="printing", technology="sls", samples=SAMPLES)
+        self.assertEqual(sorted(_failures(public)), sorted(_failures(results[("features", "sls")])))
+        self.assertEqual([finding.code for finding in public.findings if finding.severity == "error"],
+                         [finding.code for finding in results[("features", "sls")].findings if finding.severity == "error"])
         # the facts the controls and edge cases stand for
         inch = facts[("inch", "fdm")]
         np.testing.assert_allclose(inch["solid"]["bbox_mm"], [40.0, 30.0, 30.0], atol=1e-3,
@@ -290,6 +306,153 @@ class CorpusTest(unittest.TestCase):
                     tally.score(f"{name}-{label}", result, planted, technology)
         print(f"\nprinting corpus, meshes ({time.monotonic() - started:.1f} s)\n{tally.table()}", file=sys.stderr)
         self.assertEqual(tally.misses, [], "\n".join(tally.misses))
+
+
+# --- parity: the same part on both paths ------------------------------------------------------------------------
+
+
+def _wedge(angle: float):
+    """A block whose one side leans out, ``angle`` from the plate: its top edge a tip of that angle."""
+    run = 10 / math.tan(math.radians(angle))
+    return bd.extrude(bd.Plane.XZ * bd.Polygon((0, 0), (5, 0), (5 + run, 10), (0, 10), align=None), -10)
+
+
+def _cone(angle: float):
+    """A cone flaring upward, its side ``angle`` from the plate all round."""
+    return bd.Cone(5, 5 + 10 / math.tan(math.radians(angle)), 10, align=A)
+
+
+def _primitives() -> dict:
+    """name: (shape, technology, the verdicts its construction calls for, whether its coarse STL is read too).
+    One defect each, or none."""
+    shell = bd.Sphere(12) - bd.Sphere(9)
+    warning, error = "warning", "error"
+    return {
+        "cube": (bd.Box(15, 15, 15, align=A), "fdm", [], False),
+        "fin": (bd.Box(16, 16, 4, align=A) + bd.Pos(0, 0, 4) * bd.Box(0.7, 16, 8, align=A), "sla",
+                [("printing.wall_unsupported", error)], False),                    # 0.7: over 0.5, under 1.0
+        "thinbox": (bd.Box(16, 16, 16, align=A) - bd.Pos(0, 0, 0.5) * bd.Box(15.4, 15.4, 16, align=A), "sla",
+                    [("printing.wall_supported", error)], False),                  # 0.3 walls joined on three sides
+        "wedge44": (_wedge(44), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)], False),
+        "wedge45": (_wedge(45), "fdm", [], False),
+        "wedge46": (_wedge(46), "fdm", [], False),
+        "cone43": (_cone(43), "fdm", [("printing.knife_edge", warning), ("printing.overhang_angle", warning)], True),
+        "cone45": (_cone(45), "fdm", [], True),
+        "tee": (bd.Box(5, 5, 16, align=A) + bd.Pos(0, 0, 16) * bd.Box(24, 5, 2, align=A), "sla",
+                [("printing.cantilever_length", warning), ("printing.overhang_angle", warning)], False),
+        "bridge": (bd.Box(30, 10, 10, align=A) - bd.Box(20, 10, 6, align=A), "fdm",
+                   [("printing.bridge_length", warning)], False),
+        "sphere": (shell, "sls", [("printing.escape_holes", error)], False),
+        "sphere_2mm": (shell - bd.Pos(0, 0, 10) * bd.Cylinder(1, 6), "sls",
+                       [("printing.escape_hole_diameter", warning)], True),
+        "sphere_3.5mm": (shell - bd.Pos(0, 0, 10) * bd.Cylinder(1.75, 6), "sls", [], False),  # at the limit
+        "flat_hollow": (bd.Box(50, 50, 16) - bd.Box(40, 40, 6) - bd.Pos(0, 0, 5) * bd.Cylinder(1, 8), "sls",
+                        [("printing.escape_hole_diameter", warning)], False),      # 6 mm high behind a 2 mm vent
+        "void": (bd.Box(40, 40, 40) - bd.Sphere(1.5), "sls", [("printing.escape_holes", error)], False),
+        "skin": (bd.Box(30, 30, 30) - bd.Pos(2.3, -3.1, 3.7) * bd.Sphere(11), "sla",  # 0.3 mm over the cavity
+                 [("printing.escape_holes", error), ("printing.hollow_wall", warning),
+                  ("printing.overhang_angle", warning), ("printing.wall_supported", error)], True),
+        "slot": (bd.Box(16, 16, 8, align=A) - bd.Pos(0, 0, 3) * bd.Box(0.3, 16, 8, align=A), "sls",
+                 [("printing.gap", error)], False),
+    }
+
+
+#: The verdicts that do not turn with how the part stands: a wall, a cavity, a gap are the part's own.
+_PLACED = ("printing.wall", "printing.escape", "printing.gap", "printing.hollow_wall")
+#: What a mesh may say it could not judge (``mesh_at_limit``) where exact geometry gives a verdict: an angle
+#: within its own chords' turn of the limit.
+_ANGLES = {("printing.overhang_angle", "warning"), ("printing.knife_edge", "warning")}
+
+
+class ParityTest(unittest.TestCase):
+    """The same part read as exact geometry and as its STL gives the same verdicts -- the same rule ids at the
+    same severities, and the ones its construction calls for -- fine and coarse, turned about Z and about an
+    odd axis; and the verdicts that are the part's own (walls, cavities, gaps) do not turn with it. Where a
+    mesh cannot tell an angle from its limit (its chords turn as far as the angle stands off it) it says so
+    (``mesh_at_limit``) in place of that verdict, and gives no other."""
+
+    def alike(self, mesh, exact: list[tuple[str, str]], why: str) -> None:
+        """The STL's verdicts are exact geometry's, but for an angle it says it could not judge."""
+        found = self.verdicts(mesh)
+        if found != exact:
+            self.assertFalse(set(found) - set(exact), f"{why}: a verdict exact geometry does not give")
+            self.assertLessEqual(set(exact) - set(found), _ANGLES, f"{why}: a verdict the STL does not give")
+            self.assertIn("mesh_at_limit", [finding.code for finding in mesh.findings], why)
+
+    @staticmethod
+    def verdicts(result) -> list[tuple[str, str]]:
+        return sorted({(finding.code, finding.severity) for finding in result.findings
+                       if finding.code.startswith("printing.")})
+
+    def both(self, shape, name: str, technology: str, tolerance: float, angular: float) -> tuple:
+        from cad.build123d._dfm_check import checked
+
+        shape.label = name
+        exact = checked(shape, "printing", {"technology": technology, "samples": SAMPLES})
+        path = Path(self.folder.name) / f"{name}-{tolerance}.stl"
+        bd.export_stl(shape, str(path), tolerance=tolerance, angular_tolerance=angular)
+        mesh = cad.stl.dfm(path, process="printing", technology=technology, samples=SAMPLES)
+        for result in (exact, mesh):
+            self.assertFalse(result.measurements.get("partial"), (name, result.measurements.get("partial_sections")))
+        return exact, mesh
+
+    def setUp(self) -> None:
+        self.folder = tempfile.TemporaryDirectory(prefix="dfm-printing-parity-")
+        self.addCleanup(self.folder.cleanup)
+
+    def test_a_dozen_primitives_read_alike_as_step_and_as_stl(self) -> None:
+        started, checks = time.monotonic(), 0
+        odd = bd.Axis((0, 0, 0), (1, 2, 3))
+        turned_z = ("thinbox", "wedge45", "cone45")
+        turned_odd = ("fin", "thinbox", "flat_hollow", "void")
+        for name, (shape, technology, expected, curved) in _primitives().items():
+            meshes = [("fine", 0.01, 0.1), *([("coarse", 0.1, 0.4)] if curved else [])]
+            for label, tolerance, angular in meshes:
+                exact, mesh = self.both(shape, name, technology, tolerance, angular)
+                checks += 2
+                with self.subTest(part=name, mesh=label):
+                    self.assertEqual(self.verdicts(exact), sorted(expected), "exact geometry")
+                    if label == "fine":
+                        self.assertEqual(self.verdicts(mesh), sorted(expected), "the STL")
+                    self.alike(mesh, sorted(expected), "the STL")
+            placed = [verdict for verdict in expected if verdict[0].startswith(_PLACED)]
+            for way, axis in ((("about z", bd.Axis.Z),) if name in turned_z else ()) + \
+                    ((("about an odd axis", odd),) if name in turned_odd else ()):
+                exact, mesh = self.both(shape.rotate(axis, 37), f"{name}-turned", technology, 0.01, 0.1)
+                checks += 2
+                with self.subTest(part=name, turned=way):
+                    self.alike(mesh, self.verdicts(exact), "both paths, turned")
+                    if axis is bd.Axis.Z:  # the plate's own axis: nothing of the part changes
+                        self.assertEqual(self.verdicts(exact), sorted(expected))
+                    self.assertEqual([v for v in self.verdicts(exact) if v[0].startswith(_PLACED)], sorted(placed),
+                                     "a wall, a cavity and a gap are the part's own, however it stands")
+        print(f"\nprinting parity: {checks} checks of {len(_primitives())} primitives "
+              f"({time.monotonic() - started:.1f} s)", file=sys.stderr)
+
+    def test_what_a_mesh_cannot_tell_from_its_limit_it_says(self) -> None:
+        # a 45 deg cone's triangles read 44 to 45.4 deg: at the limit within the mesh's own accuracy -- said (an
+        # info), never an overhang, a knife edge or a hair of a wall, coarse or fine
+        for tolerance, angular in ((0.01, 0.1), (0.1, 0.4)):
+            exact, mesh = self.both(_cone(45), "cone", "fdm", tolerance, angular)
+            self.assertEqual((self.verdicts(exact), self.verdicts(mesh)), ([], []))
+            said = [finding for finding in mesh.findings if finding.code == "mesh_at_limit"]
+            self.assertEqual([finding.severity for finding in said], ["info"])
+            self.assertGreater(mesh.measurements["overhangs"]["at_limit_area_mm2"], 50.0)
+            self.assertEqual(mesh.measurements["overhangs"]["down_facing_area_below_limit_mm2"], 0.0)
+            self.assertEqual(mesh.measurements["support_volume"]["estimated_support_volume_mm3"], 0.0)
+            self.assertEqual(exact.measurements["support_volume"]["estimated_support_volume_mm3"], 0.0)
+            self.assertGreater(mesh.measurements["wall_thickness"]["min_mm"], 0.8, "no sliver at the rim read as a wall")
+
+    def test_a_part_tilted_a_fraction_of_a_degree_and_moved_keeps_its_own_verdicts(self) -> None:
+        # the fin 0.3 deg off the plate's axes and far from the origin: its wall is the same wall, on both paths
+        shape, technology, expected, _ = _primitives()["fin"]
+        moved = bd.Pos(1000, -700, 300) * shape.rotate(bd.Axis.X, 0.3).rotate(bd.Axis.Y, 0.05)
+        exact, mesh = self.both(moved, "fin-tilted", technology, 0.01, 0.1)
+        for result in (exact, mesh):
+            walls = [verdict for verdict in self.verdicts(result) if verdict[0].startswith(_PLACED)]
+            self.assertEqual(walls, expected)
+        thin = min(item["thickness_mm"] for item in mesh.measurements["wall_thickness"]["items"])
+        self.assertAlmostEqual(thin, 0.7, delta=2e-3)
 
 
 if __name__ == "__main__":

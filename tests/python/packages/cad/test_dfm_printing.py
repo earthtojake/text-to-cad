@@ -358,6 +358,16 @@ class WallTest(unittest.TestCase):
         self.assertIn("printing.wall_unsupported", codes(self.result))
         self.assertFalse(self.result.ok)
 
+    def test_a_skin_over_a_cavity_is_supported(self) -> None:
+        # 0.7 mm of material between a round cavity and the face above it: joined to the part all round, though
+        # that face has no concave edge to count -- a supported wall (SLA's 0.5 mm), not a free one under 1.0 mm
+        part = bd.Box(30, 30, 30) - bd.Pos(2.3, -3.1, 3.3) * bd.Sphere(11)
+        result = check(part, "skin", technology="sla")
+        skin = min(items(result, "wall_thickness"), key=lambda item: item["thickness_mm"])
+        self.assertAlmostEqual(skin["thickness_mm"], 0.7, places=3)
+        self.assertEqual((skin["supported"], skin["joined_sides"]), (True, 2))
+        self.assertFalse([code for code in codes(result) if code.startswith("printing.wall")])
+
 
 class ExactWallTest(unittest.TestCase):
     def test_a_face_at_45_deg_across_a_wall_is_its_far_side_in_every_placement(self) -> None:
@@ -547,6 +557,28 @@ class TrappedTest(unittest.TestCase):
         self.assertIn("printing.escape_hole_diameter", codes(result), "Hubs SLA: 3.5 mm")
         self.assertNotIn("printing.escape_holes", codes(result))
 
+    def test_a_flat_hollow_behind_a_small_vent_is_a_cavity_whatever_its_shape(self) -> None:
+        # 40 x 40 x 6 mm of air behind one 2 mm vent: a ball a fifth of the part across does not fit in it, and
+        # it holds 9600 mm3 of powder all the same -- a cavity is air wider than its way out
+        block = bd.Box(50, 50, 16) - bd.Box(40, 40, 6)
+        for vent, read in ((bd.Pos(0, 0, 5) * bd.Cylinder(1, 8), "its exact hole"),
+                           (bd.Pos(0, 0, 5) * bd.Box(2, 2, 8), "a square vent, its throat measured")):
+            with self.subTest(opening=read):
+                result = check(block - vent, "hollow", technology="sls")
+                [cavity] = items(result, "trapped_volumes")
+                self.assertEqual((cavity["sealed"], cavity["escape_holes"]), (False, 1))
+                self.assertAlmostEqual(cavity["min_escape_hole_mm"], 2.0, delta=0.03)
+                self.assertAlmostEqual(cavity["volume_mm3"], 40 * 40 * 6, delta=0.05 * 9600)
+                self.assertEqual([f.severity for f in result.findings if f.code == "printing.escape_hole_diameter"],
+                                 ["warning"])
+                self.assertNotIn("printing.escape_holes", codes(result))
+
+    def test_powder_beds_other_than_sls_say_the_figure_is_applied(self) -> None:
+        for technology, applied in (("sls", False), ("mjf", True), ("pbf", True)):
+            failed = next(f for f in check(self.sealed, "sealed", technology=technology).findings
+                          if f.code == "printing.escape_holes")
+            self.assertEqual("Hubs's SLS figure, applied" in failed.message, applied, technology)
+
 
 class PlateTest(unittest.TestCase):
     def test_the_build_volume_in_the_best_axis_orientation(self) -> None:
@@ -563,6 +595,19 @@ class PlateTest(unittest.TestCase):
         self.assertFalse(given.ok)
         self.assertTrue(check(bar, "bar", build_volume="100x100x300").measurements["build_volume"]["fits"])
         self.assertTrue(check(bar, "bar", build_volume="900x600x900").ok, "an industrial FDM machine")
+
+    def test_a_part_past_the_largest_machine_listed_is_an_error(self) -> None:
+        # no machine given: over the typical machine is a warning (give yours), over the largest the guide lists
+        # in every orientation is no part any machine of the technology makes -- one finding either way
+        for length, severity, said in ((850, "warning", "an assumed typical fdm machine"),
+                                       (950, "error", "the largest fdm machine the guide lists is 900 x 600 x 900")):
+            result = check(bd.Box(length, 20, 10, align=A), "bar")
+            [found] = [f for f in result.findings if f.code == "printing.build_volume"]
+            self.assertEqual(found.severity, severity)
+            self.assertIn(said, found.message)
+            self.assertEqual(result.ok, severity == "warning")
+            self.assertEqual(result.measurements["build_volume"]["fits_largest"], severity == "warning")
+        self.assertTrue(check(bd.Box(950, 20, 10, align=A), "bar", build_volume="1000x500x500").ok)
 
     def test_bed_contact_and_warping(self) -> None:
         result = check(bd.Box(150, 40, 3, align=A), "flat", material="abs")
@@ -681,6 +726,34 @@ class RulesTest(unittest.TestCase):
             self.assertEqual(rule.by, "technology")
             self.assertTrue(set(rule.limit) <= set(rules.TECHNOLOGIES), rule.id)
 
+    def test_one_guide_gives_a_technology_each_figure(self) -> None:
+        # no row a rule can never apply: per rule id and technology, one source (the table's dead rows are gone)
+        sources: dict[tuple[str, str], set[str]] = {}
+        for rule in rules.RULES.rules:
+            if rule.scale_by is None:  # --angle-limit's and --nozzle's own variants restate the same rows
+                for technology in rule.limit:
+                    sources.setdefault((rule.id, technology), set()).add(rule.source)
+        self.assertEqual({key: found for key, found in sources.items() if len(found) > 1}, {})
+        self.assertEqual({source.id for source in rules.RULES.sources},
+                         {rule.source for rule in rules.RULES.rules} | {"hubs-geometry"}, "every source cited is used")
+
+    def test_fdm_s_wall_is_two_beads_of_the_nozzle(self) -> None:
+        # Hubs's 0.8 mm is two beads of the common 0.4 mm nozzle, and says so; with the nozzle given, two of its
+        fin = bd.Box(20, 20, 2, align=A) + bd.Pos(0, 0, 2) * bd.Box(0.6, 15, 10, align=A)
+        for nozzle, limit in ((None, 0.8), (0.25, 0.5), (0.6, 1.2)):
+            result = check(fin, "fin") if nozzle is None else check(fin, "fin", nozzle=nozzle)
+            walls = [f for f in result.findings if f.code == "printing.wall_unsupported"]
+            with self.subTest(nozzle=nozzle):
+                self.assertEqual(bool(walls), 0.6 < limit)
+                self.assertEqual(result.measurements["knife_edges"]["min_wall_mm"], limit)
+                if nozzle is None:
+                    self.assertIn("assuming the common 0.4 mm nozzle: give --nozzle", walls[0].message)
+                    self.assertIn("Protolabs Network (Hubs)", walls[0].message)
+                elif walls:
+                    self.assertIn("1.2 mm minimum", walls[0].message)
+                    self.assertIn("2 beads of the 0.6 mm nozzle given", walls[0].message)
+                    self.assertIn("text-to-cad's own figure", walls[0].message)
+
     def test_rules_with_no_figure_for_the_technology_judge_nothing_and_say_so(self) -> None:
         import dataclasses
         from unittest import mock
@@ -769,6 +842,47 @@ class MeshopsTest(unittest.TestCase):
         self.assertFalse(found[0].sealed)
         for opening in found[0].openings:
             self.assertAlmostEqual(opening["diameter_mm"], 4.0, delta=2 * pitch)
+            self.assertFalse(opening["exact"], "the voxels' reading, to two voxels")
+        # with the triangles' rays each throat is measured: the hole's own 4 mm, its chords' sag its uncertainty
+        grid = mo.voxels(V, F, pitch, pad=mo.ball_pad(ball, pitch))
+        [measured], labels = mo.cavities(grid, ball, caster=mo.Caster(V, F))
+        for opening in measured.openings:
+            self.assertTrue(opening["exact"])
+            self.assertLessEqual(abs(opening["diameter_mm"] - 4.0), opening["uncertainty_mm"] + 0.02)
+            self.assertLess(opening["uncertainty_mm"], 0.1)
+        self.assertAlmostEqual(measured.volume_mm3, 24 ** 3, delta=0.03 * 24 ** 3)
+        self.assertEqual(set(np.unique(labels)), {-2, -1, 0}, "material, air that is no cavity, the cavity")
+
+    def test_a_wall_s_support_is_read_off_the_wall(self) -> None:
+        # the walk from the wall's thinnest place: where it runs into the part, and on how many sides
+        def read(shape, point, normal, thickness: float) -> tuple:
+            V, F, _ = brep.triangles(shape, 0.05)
+            caster = mo.Caster(V, F)
+
+            def cast(origins, directions):
+                distance, hit = caster.first(origins, directions)
+                normals = np.zeros((len(distance), 3))
+                normals[hit >= 0] = caster.normals_of(hit[hit >= 0])
+                return distance, normals
+
+            found = mo.wall_support(cast, np.array(point, dtype=float), np.array(normal, dtype=float), thickness)
+            self.assertEqual(found["unread_directions"], 0, found)
+            return found["supported"], found["joined_sides"]
+
+        base = bd.Box(30, 20, 2, align=A)
+        fin = base + bd.Pos(0, 0, 2) * bd.Box(20, 0.7, 10, align=A)
+        self.assertEqual(read(fin, (0, 0.35, 7), (0, 1, 0), 0.7), (False, 1), "a fin on its base: one side")
+        self.assertEqual(read(fin, (9.5, 0.35, 2.3), (0, 1, 0), 0.7), (False, 1), "read from beside its foot too")
+        corner = fin + bd.Pos(10, 0, 2) * bd.Box(2, 8, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+        self.assertEqual(read(corner, (0, 0.35, 7), (0, 1, 0), 0.7), (True, 2), "its base and a rib: round a corner")
+        posts = bd.Pos(-12, 0, 0) * bd.Box(4, 8, 10, align=A) + bd.Pos(12, 0, 0) * bd.Box(4, 8, 10, align=A)
+        web = posts + bd.Pos(0, 0, 3) * bd.Box(20, 0.7, 4, align=A)
+        self.assertEqual(read(web, (0, 0.35, 5), (0, 1, 0), 0.7), (True, 2), "a web between two posts: two sides")
+        tube = bd.Cylinder(10, 20, align=A) - bd.Cylinder(9.3, 20, align=A)
+        self.assertEqual(read(tube, (10, 0, 6), (1, 0, 0), 0.7), (True, 2), "a tube's wall: a ring")
+        skin = bd.Box(30, 30, 30) - bd.Pos(0, 0, 3.3) * bd.Sphere(11)
+        self.assertEqual(read(skin, (0, 0, 15), (0, 0, 1), 0.7), (True, 2), "a skin over a cavity: all round")
+        self.assertEqual(read(bd.Box(20, 20, 0.5), (1, 2, 0.25), (0, 0, 1), 0.5), (False, 0), "a plate alone: none")
 
     def test_the_mesh_check_answers_the_same_families(self) -> None:
         drained = TrappedTest.sealed - bd.Pos(0, 0, -1) * bd.Cylinder(2.5, 5, align=A)
