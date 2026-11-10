@@ -369,8 +369,11 @@ def _parse(path: str) -> tuple[dict[str, Any], bytes]:
 
     refuse_external_files(reader, path)
     reader.Transfer(doc)
-    correct_step_densities(doc, path)
-    forget_step_attributes(doc, path)
+    with open(path, "rb") as file:
+        data = file.read()  # read once, for both
+    correct_step_densities(doc, path, data)
+    forget_step_attributes(doc, path, data)
+    del data
     from cad.engine.step_style import read_visual_styles
 
     read_visual_styles(reader, doc)

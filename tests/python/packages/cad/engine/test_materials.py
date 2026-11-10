@@ -137,6 +137,55 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual([product["material"]["material"]["density"] for product in header["products"]
                           if product.get("material")], [2700.0])
 
+    def test_every_density_with_a_unit_of_its_own_is_read_as_it_says_it_however_its_units_are_written(self):
+        """Each of a STEP's densities in kg/m^3 is read as it says it when each names units of its own, written
+        as CAD tools write them: a measure and entities across lines, complex entities spaced or not, a derived
+        unit's elements in either order, a number that another begins (``#90004`` and ``#900041``, the second
+        first); a STEP declaring no density reads none."""
+        import re
+
+        parts = []
+        for at, material in enumerate((metals.aluminum(), metals.mild_steel(), metals.copper())):
+            part = bd.Box(10, 10, 10).moved(bd.Location((20 * at, 0, 0)))
+            part.label, part.material = f"part{at}", material
+            parts.append(part)
+        self.roundtrip(bd.Compound(children=parts, label="parts"))
+        written = self.folder / "grams.step"
+        export.translate(export.Source.read(self.folder / "test.xbf"), "step", written)
+        density = lambda path: sorted(prototype["material"]["material"]["density"]  # noqa: E731
+                                      for prototype in export.Source.read(path).structure["prototypes"])
+        declared = density(written)
+        self.assertEqual(len(declared), 3)
+        text = written.read_text(encoding="latin-1")
+        items = re.findall(r"MEASURE_REPRESENTATION_ITEM\('density',([-+0-9.Ee]+),#\d+\)", text)
+        self.assertEqual(len(items), 3, "the engine's STEP names three densities")
+        rewritten, units = text, []
+        for index, value in enumerate(items):
+            at = 9000 + 100 * index  # a unit set of its own, each written differently
+            kilograms = round(float(value) * 1000.0, 6)  # g/cm^3 as kg/m^3
+            mass = (f"#{at}4 = (\nMASS_UNIT ( )\nNAMED_UNIT ( * )\nSI_UNIT ( .KILO. , .GRAM. )\n) ;" if index == 0
+                    else f"#{at}4=(MASS_UNIT()NAMED_UNIT(*)SI_UNIT(.KILO.,.GRAM.));")
+            length = f"#{at}5=( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT($,.METRE.) );"
+            elements = f"(#{at}3,#{at}2)" if index == 1 else f"(#{at}2,#{at}3)"
+            units += [f"#{at}41=(MASS_UNIT()NAMED_UNIT(*)SI_UNIT($,.GRAM.));",  # begins as #{at}4 does, and comes first
+                      f"#{at}1=DERIVED_UNIT(\n  {elements}\n);" if index == 2 else f"#{at}1=DERIVED_UNIT({elements});",
+                      f"#{at}2=DERIVED_UNIT_ELEMENT(#{at}4,1.);", f"#{at}3=DERIVED_UNIT_ELEMENT(#{at}5,-3.);",
+                      mass, length]
+            rewritten = re.sub(rf"MEASURE_REPRESENTATION_ITEM\('density',{re.escape(value)},#\d+\)",
+                               f"MEASURE_REPRESENTATION_ITEM('density measure',\nPOSITIVE_RATIO_MEASURE({kilograms!r}),"
+                               f"#{at}1)", rewritten, count=1)
+        rewritten = re.sub(r"ENDSEC;\s*END-ISO", lambda end: "\n".join(units) + "\n" + end.group(0), rewritten, count=1)
+        path = self.folder / "kilograms.step"
+        path.write_text(rewritten, encoding="latin-1")
+        self.assertEqual(density(path), declared)
+        header, _packed = reader._parse(str(path))
+        self.assertEqual(sorted(product["material"]["material"]["density"] for product in header["products"]
+                                if product.get("material")), declared)
+        plain = self.folder / "plain.step"
+        bd.export_step(bd.Box(10, 10, 10), str(plain))
+        self.assertEqual([prototype.get("material") for prototype in export.Source.read(plain).structure["prototypes"]],
+                         [None])
+
     def test_a_step_s_user_defined_attributes_are_no_materials(self):
         """A CAD tool writes a part's parameters as user-defined attributes, which OCCT's reader takes for materials
         named for the parameter: no material is read of one, by the document loader or the reader process's parse;

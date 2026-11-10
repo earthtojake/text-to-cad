@@ -1774,8 +1774,10 @@ def _read(path: Path) -> Any:
             refuse_external_files(reader, path)
             if not reader.Transfer(doc):
                 raise ValueError(f"cannot read {path}")
-            correct_step_densities(doc, path)
-            forget_step_attributes(doc, path)
+            data = path.read_bytes()  # read once, for both
+            correct_step_densities(doc, path, data)
+            forget_step_attributes(doc, path, data)
+            del data
             from cad.engine.step_style import read_visual_styles
 
             read_visual_styles(reader, doc)
@@ -1784,46 +1786,90 @@ def _read(path: Path) -> Any:
     return doc
 
 
-def correct_step_densities(doc: Any, path: Any) -> int:
-    """A read STEP's material densities as the file says them, where OCCT's reader dropped the mass
-    unit's prefix: returns how many it corrected.
+# What ``\s`` matches in a STEP's bytes decoded from latin-1, for the patterns run on the bytes themselves.
+_STEP_SPACE = rb"[\s\x1c-\x1f\x85\xa0]"
+_STEP_DENSITY_MEASURE = re.compile(
+    (rb"MEASURE_REPRESENTATION_ITEM~*\(~*'density[^']*'~*,~*(?:[A-Z_]+~*\(~*)?([-+0-9.Ee]+)~*\)?~*,~*#(\d+)~*\)")
+    .replace(b"~", _STEP_SPACE), re.IGNORECASE)
+_STEP_USER_ATTRIBUTE = re.compile(
+    rb"GENERAL_PROPERTY~*\(~*'[^']*'~*,~*'([^']*)'~*,~*'user defined attribute'".replace(b"~", _STEP_SPACE),
+    re.IGNORECASE)
 
-    The XCAF document holds a density in g/cm^3 (``_Materials`` writes it so, and ``_label_material``
-    reads it so). OCCT's STEP reader converts a density's length unit but not the prefix of its mass
-    unit: a file declaring kg/m^3 (``SI_UNIT(.KILO.,.GRAM.)`` over ``SI_UNIT($,.METRE.)``, what Fusion
-    360 and most CAD tools write) arrives 1000 times too small -- steel's 7850 kg/m^3 as 0.00785 g/cm^3
-    -- while a STEP the engine wrote (grams over centimetres) reads back right. So each density the
-    file declares is read here with its unit, what OCCT should have made of it and what it does make
-    of it are worked out, and a material whose density is the second and not the first is set to the
-    first. A file whose densities OCCT read right (a later OCCT, a file in grams) is left as it is.
-    The file's text is scanned once, for its density measures and the units they name alone."""
-    import re
 
-    from OCP.TCollection import TCollection_HAsciiString
-    from OCP.TDF import TDF_ChildIterator
-    from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
+def _contains_folded(data: bytes, needle: bytes, chunk: int = 1 << 20) -> bool:
+    """Whether ``data`` holds ``needle`` (lower case) in any letter case: a chunk at a time, so no
+    lowered copy of a large file is ever whole."""
+    overlap = len(needle) - 1
+    return any(needle in data[start:start + chunk + overlap].lower() for start in range(0, len(data), chunk))
 
-    text = Path(path).read_bytes().decode("latin-1")
-    measures = re.findall(r"MEASURE_REPRESENTATION_ITEM\s*\(\s*'density[^']*'\s*,\s*(?:[A-Z_]+\s*\(\s*)?"
-                          r"([-+0-9.Ee]+)\s*\)?\s*,\s*#(\d+)\s*\)", text, re.IGNORECASE)
+
+def _digit_alternation(numbers: Any) -> bytes:
+    """A pattern matching exactly the given digit strings, as a tree of their shared prefixes: the
+    regex engine walks a number's digits once, however many numbers there are."""
+    tree: dict = {}
+    for number in numbers:
+        node = tree
+        for digit in number:
+            node = node.setdefault(digit, {})
+        node[""] = {}
+
+    def pattern(node: dict) -> bytes:
+        branches = [digit.encode() + pattern(child) for digit, child in sorted(node.items()) if digit]
+        if not branches:
+            return b""
+        body = branches[0] if len(branches) == 1 else b"(?:" + b"|".join(branches) + b")"
+        return b"(?:" + body + b")?" if "" in node else body
+
+    return pattern(tree)
+
+
+def _step_entities(data: bytes, numbers: Any, found: dict[str, str]) -> None:
+    """Each of ``numbers``' entity in a STEP's bytes, what follows its ``#n=`` up to the next ``;``
+    (``""`` for one the file does not define), into ``found``: the first definition of each, as a
+    search from the file's start for it alone finds, in one pass over the file for them all."""
+    wanted = {number for number in numbers if number not in found}
+    if not wanted:
+        return
+    # The definition is a lookahead, so a match consumes only ``#n=``: one entity's text cannot hide another's.
+    definition = re.compile(b"#(" + _digit_alternation(wanted) + b")" + _STEP_SPACE + b"*=(?="
+                            + _STEP_SPACE + b"*([^;]*);)")
+    left = set(wanted)
+    for match in definition.finditer(data):
+        number = match.group(1).decode("ascii")
+        if number in left:
+            found[number] = match.group(2).decode("latin-1")
+            left.discard(number)
+            if not left:
+                break
+    for number in left:
+        found[number] = ""
+
+
+def _step_densities(data: bytes) -> list[tuple[float, float]]:
+    """Each density measure a STEP's bytes declare with a prefixed mass unit, as (what OCCT should
+    make of it, what it makes of it dropping the mass unit's prefix), both in g/cm^3. The file is
+    passed over once to find its measures, and once for each level of the units they name (the
+    derived unit, its elements, their SI units); a file naming no ``'density`` is not scanned."""
+    if not _contains_folded(data, b"'density"):
+        return []
+    measures = [(raw.decode("ascii"), unit.decode("ascii")) for raw, unit in _STEP_DENSITY_MEASURE.findall(data)]
     if not measures:
-        return 0
+        return []
     entities: dict[str, str] = {}
-
-    def entity(number: str) -> str:
-        if number not in entities:
-            found = re.search(rf"#{number}\s*=\s*([^;]*);", text)
-            entities[number] = found.group(1) if found else ""
-        return entities[number]
-
+    element = re.compile(r"\s*DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*([-+0-9.Ee]+)\s*\)")
+    _step_entities(data, (unit for _raw, unit in measures), entities)  # DERIVED_UNIT((#element, ...))
+    _step_entities(data, (number for _raw, unit in measures for number in re.findall(r"#(\d+)", entities[unit])),
+                   entities)
+    _step_entities(data, (part.group(1) for _raw, unit in measures for number in re.findall(r"#(\d+)", entities[unit])
+                          if (part := element.match(entities[number]))), entities)
     prefixes = {"EXA": 1e18, "PETA": 1e15, "TERA": 1e12, "GIGA": 1e9, "MEGA": 1e6, "KILO": 1e3, "HECTO": 1e2,
                 "DECA": 1e1, "DECI": 1e-1, "CENTI": 1e-2, "MILLI": 1e-3, "MICRO": 1e-6, "NANO": 1e-9}
     expected: list[tuple[float, float]] = []  # (what OCCT should give, what it gives dropping the mass prefix)
     for raw, unit in measures:
         mass = length = None
-        for element in re.findall(r"#(\d+)", entity(unit)):  # DERIVED_UNIT((#element, ...))
-            part = re.match(r"\s*DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*([-+0-9.Ee]+)\s*\)", entity(element))
-            si = re.search(r"SI_UNIT\s*\(\s*(?:\.([A-Z]+)\.|\$)\s*,\s*\.([A-Z]+)\.\s*\)", entity(part.group(1))) \
+        for number in re.findall(r"#(\d+)", entities[unit]):
+            part = element.match(entities[number])
+            si = re.search(r"SI_UNIT\s*\(\s*(?:\.([A-Z]+)\.|\$)\s*,\s*\.([A-Z]+)\.\s*\)", entities[part.group(1)]) \
                 if part else None
             if not si:
                 continue
@@ -1836,6 +1882,29 @@ def correct_step_densities(doc: Any, path: Any) -> int:
             continue
         right = float(raw) * mass / length ** 3
         expected.append((right, right / mass))
+    return expected
+
+
+def correct_step_densities(doc: Any, path: Any, data: bytes | None = None) -> int:
+    """A read STEP's material densities as the file says them, where OCCT's reader dropped the mass
+    unit's prefix: returns how many it corrected.
+
+    The XCAF document holds a density in g/cm^3 (``_Materials`` writes it so, and ``_label_material``
+    reads it so). OCCT's STEP reader converts a density's length unit but not the prefix of its mass
+    unit: a file declaring kg/m^3 (``SI_UNIT(.KILO.,.GRAM.)`` over ``SI_UNIT($,.METRE.)``, what Fusion
+    360 and most CAD tools write) arrives 1000 times too small -- steel's 7850 kg/m^3 as 0.00785 g/cm^3
+    -- while a STEP the engine wrote (grams over centimetres) reads back right. So each density the
+    file declares is read here with its unit, what OCCT should have made of it and what it does make
+    of it are worked out, and a material whose density is the second and not the first is set to the
+    first. A file whose densities OCCT read right (a later OCCT, a file in grams) is left as it is.
+    ``data`` is the file's bytes, when the caller has them (``forget_step_attributes`` reads the same):
+    the file is read otherwise. Its text is scanned in time linear in its size, however many densities
+    it declares (``_step_densities``), and not at all past a check for ``'density`` when it names none."""
+    from OCP.TCollection import TCollection_HAsciiString
+    from OCP.TDF import TDF_ChildIterator
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
+
+    expected = _step_densities(Path(path).read_bytes() if data is None else data)
     if not expected:
         return 0
     corrected = 0
@@ -1859,7 +1928,7 @@ def correct_step_densities(doc: Any, path: Any) -> int:
     return corrected
 
 
-def forget_step_attributes(doc: Any, path: Any) -> int:
+def forget_step_attributes(doc: Any, path: Any, data: bytes | None = None) -> int:
     """A read STEP's user-defined attributes that OCCT's reader took for materials, made no material: returns how
     many it forgot or named.
 
@@ -1870,18 +1939,18 @@ def forget_step_attributes(doc: Any, path: Any) -> int:
     carrying one was listed under it. Such a material -- its name an attribute's, no density -- is made nameless
     here, which ``_label_material`` reads as none; one whose attribute names a material (``PTC_MATERIAL_NAME``) and
     holds a value is named for that value instead. A material the file declares (a density, a material
-    designation) is left as it is."""
-    import re
-
+    designation) is left as it is. ``data`` is the file's bytes, when the caller has them
+    (``correct_step_densities`` reads the same): the file is read otherwise, and scanned as bytes, never
+    copied whole into text."""
     from OCP.TCollection import TCollection_HAsciiString
     from OCP.TDF import TDF_ChildIterator
     from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
 
-    data = Path(path).read_bytes()
+    if data is None:
+        data = Path(path).read_bytes()
     if b"user defined attribute" not in data:
         return 0
-    attributes = set(re.findall(r"GENERAL_PROPERTY\s*\(\s*'[^']*'\s*,\s*'([^']*)'\s*,\s*'user defined attribute'",
-                                data.decode("latin-1"), re.IGNORECASE))
+    attributes = {name.decode("latin-1") for name in _STEP_USER_ATTRIBUTE.findall(data)}
     forgotten = 0
     tool = XCAFDoc_DocumentTool.MaterialTool_s(doc.Main())
     children = TDF_ChildIterator(tool.Label())
