@@ -2,11 +2,12 @@
 limits, as-built value and pose in SI, each box's mass, centre and inertia from its aluminium; the
 description's frames composed at zero and at a state placing every part where the mechanism's
 forward kinematics does, a pair followed backwards and a chain with a slide too; a coupling written
-on the joints that follow; a part's collision and named frames, declared on the part and round-tripped
-through the xbf and through a warm build; a part kept a body of its own, an exclusion and a joint's drive
-limits and dynamics, declared, described and round-tripped through the xbf, and refused where they are
-wrong; limits on a joint an assembly holds (a link of several parts) described and round-tripped, and one no
-pair takes warned; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
+on the joints that follow; each part colliding as its mesh, and its named frames, declared on the part and
+round-tripped through the xbf and through a warm build; the kernel's primitive fit of a part's exact solid (a disc
+of any height a cylinder about its own axis); a part kept a body of its own and a joint's drive limits, declared,
+described and round-tripped through the xbf, and refused where they are wrong (the removed simulator choices
+refused as unknown); limits on a joint an assembly holds (a link of several parts) described and round-tripped,
+and one no pair takes warned; a declared mass scaling its solids with point masses and nested masses,
 a part with no density among parts that have one carrying none of their mass, said by the mass, and a mass that
 cannot be made refused; a turned link's inertia in its own frame, as the description, the
 MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop a tree and the closure
@@ -40,7 +41,7 @@ from cad.engine.export import Source
 HINGE = """
 import build123d as bd
 from bd_materials import metals
-from cad.build123d import collision, frame, mechanism_state
+from cad.build123d import frame, mechanism_state
 from cad.engine import xbf
 
 
@@ -433,73 +434,75 @@ class HingeTest(_Folder):
 
 
 class DeclarationsTest(_Folder):
-    def test_a_part_s_collision_and_frames_are_described_and_round_trip_through_the_xbf(self) -> None:
-        declare = """collision(base, "box")
-    collision(arm, "capsule")
-    frame(arm, "tool", bd.Pos(120, 0, 5))"""
-        description, _structure = self.described("hinge", HINGE.format(declare=declare))
+    def test_the_declarations_are_the_machine_s_seven(self) -> None:
+        from cad.engine import declarations
+
+        self.assertEqual(declarations.__all__, ["body", "frame", "free", "limits", "link", "mass", "point_mass"])
+
+    def test_a_simulation_s_choices_are_no_declaration_of_cad_build123d(self) -> None:
+        import cad.build123d
+
+        for name in ("collision", "exclude", "friction"):
+            with self.subTest(name):
+                self.assertNotIn(name, cad.build123d.__all__)
+                with self.assertRaises(ImportError):
+                    exec(f"from cad.build123d import {name}", {})
+
+    def test_each_part_collides_as_its_mesh_and_its_frames_are_described_and_round_trip_through_the_xbf(self) -> None:
+        description, _structure = self.described("hinge", HINGE.format(declare='frame(arm, "tool", bd.Pos(120, 0, 5))'))
         base, arm = description.links[1:]
-        (box,) = base.collisions
-        self.assertEqual(box.geometry.kind, "box")
-        self.assertEqual(sorted(box.geometry.size), sorted([0.1, 0.06, 0.02]))
-        np.testing.assert_allclose(box.geometry.placement[:3, 3], [0, 0, 0], atol=1e-9)
-        (capsule,) = arm.collisions
-        self.assertEqual(capsule.geometry.kind, "capsule")
-        np.testing.assert_allclose(capsule.geometry.size, [0.01, 0.1], atol=1e-9)  # 120 mm less a 10 mm radius each end
-        np.testing.assert_allclose(capsule.geometry.placement[:3, 3], [0.06, 0, 0.005], atol=1e-9)
-        np.testing.assert_allclose(abs(capsule.geometry.placement[:3, 2]), [1, 0, 0], atol=1e-9)  # along the arm
+        # Each part's collision is its own mesh, where its visual is: the shape a simulator collides it as is a
+        # MuJoCo function's choice.
+        for link in (base, arm):
+            (visual,), (collision,) = link.visuals, link.collisions
+            self.assertEqual((collision.name, collision.geometry.kind, collision.geometry.mesh, collision.path),
+                             (visual.name, "mesh", visual.geometry.mesh, visual.path))
+            np.testing.assert_array_equal(collision.geometry.placement, visual.geometry.placement)
         np.testing.assert_allclose(arm.frames["tool"][:3, 3], [0.12, 0, 0.005], atol=1e-12)
-        # A part's own declaration stands whatever the default.
-        bare = describe(Source.read(self.folder / "XBF/hinge.xbf").view(), collision_default="none")
-        self.assertEqual([c.geometry.kind for link in bare.links for c in link.collisions], ["box", "capsule"])
-        # The structure carries them, the same from the file as from the build's tree.
+        # The structure carries the frames, the same from the file as from the build's tree, and no collision.
         path = self.folder / "XBF/hinge.xbf"
         loaded = document.Loaded(path).structure()
         self.assertEqual(loaded["prototypes"], document.tree_structure(document.saved(path), path)["prototypes"])
         by_name = {prototype["name"]: prototype for prototype in loaded["prototypes"]}
-        self.assertEqual((by_name["base"]["collision"], by_name["base"]["frames"]), ("box", {}))
-        self.assertEqual(by_name["arm"]["collision"], "capsule")
+        self.assertEqual(by_name["base"]["frames"], {})
+        self.assertNotIn("collision", by_name["arm"])
         np.testing.assert_allclose(np.array(by_name["arm"]["frames"]["tool"]).reshape(4, 4).T[:3, 3], [120, 0, 5])
         # A shape rebuilt from the document (a handle's ``.shape``, a child's in another process) carries them
-        # too, as it carries its material: the collision as the word, each frame as a Location the harvest
-        # reads again, so describing that shape says the same.
+        # too, as it carries its material: each frame as a Location the harvest reads again, so describing that
+        # shape says the same.
         rebuilt = Source.read(path).shape()
-        parts = {leaf.label: leaf for leaf in rebuilt.leaves} if hasattr(rebuilt, "leaves") else \
-            {child.label: child for child in rebuilt.children}
-        self.assertEqual(parts["base"].__dict__.get("_collision"), "box")
-        self.assertEqual(parts["arm"].__dict__.get("_collision"), "capsule")
+        parts = {child.label: child for child in rebuilt.children}
         tool = parts["arm"].__dict__["_frames"]["tool"]
         np.testing.assert_allclose(tuple(tool.position), [120, 0, 5], atol=1e-9)
         self.assertEqual(list(document._frames({"tool": tool}, "arm")["tool"]), list(by_name["arm"]["frames"]["tool"]))
 
-    def test_a_part_that_declares_none_collides_as_nothing_and_a_wrong_declaration_is_refused(self) -> None:
+    def test_the_kernel_fits_each_primitive_to_a_part_s_exact_solid(self) -> None:
         import build123d as bd
 
-        from cad.build123d import collision, frame
+        from cad.build123d import frame
+        from cad.engine.describe import fit
 
-        description, _structure = self.described("hinge", HINGE.format(declare='collision(arm, "none")'))
-        self.assertEqual(description.link("arm").collisions, [])
-        # The base declares none: the default's primitive, fitted to its 100 x 60 x 20 mm box.
-        xbf = self.folder / "XBF/hinge.xbf"
-        for kind, size in (("sphere", (math.sqrt(0.05 ** 2 + 0.03 ** 2 + 0.01 ** 2),)), ("cylinder", (0.03, 0.1)),
-                           ("capsule", (0.03, 0.04))):
-            (fitted,) = describe(Source.read(xbf).view(), collision_default=kind).link("base").collisions
-            self.assertEqual(fitted.geometry.kind, kind)
-            np.testing.assert_allclose(fitted.geometry.size, size, atol=1e-9)
-            np.testing.assert_allclose(fitted.geometry.placement[:3, 3], [0, 0, 0], atol=1e-9)
-        self.assertEqual(describe(Source.read(xbf).view(), collision_default="none").link("base").collisions, [])
+        # A 100 x 60 x 20 mm box: each primitive centred on it, a box its extents, a sphere its half diagonal, a
+        # cylinder and a capsule along its longest side.
+        box = bd.Box(100, 60, 20).wrapped
+        for kind, size in (("box", (0.1, 0.06, 0.02)), ("sphere", (math.sqrt(0.05 ** 2 + 0.03 ** 2 + 0.01 ** 2),)),
+                           ("cylinder", (0.03, 0.1)), ("capsule", (0.03, 0.04))):
+            with self.subTest(kind):
+                placed, found = fit(box, "base", kind)
+                np.testing.assert_allclose(sorted(found) if kind == "box" else found,
+                                           sorted(size) if kind == "box" else size, atol=1e-9)
+                np.testing.assert_allclose(placed[:3, 3], [0, 0, 0], atol=1e-9)
         # A pancake motor, wider than it is tall, a connector boss on its side: a cylinder about the axis it is turned
         # about, its short side, not along a diameter (its longest side, past the boss).
-        (fitted,) = self.described("pancake", PANCAKE)[0].link("pancake").collisions
-        np.testing.assert_allclose(np.abs(fitted.geometry.placement[:3, 2]), [0, 0, 1], atol=1e-6)
-        self.assertAlmostEqual(fitted.geometry.size[1], 0.025, delta=1e-6)
-        self.assertTrue(0.041 <= fitted.geometry.size[0] <= 0.0425, fitted.geometry.size)
-        with self.assertRaisesRegex(ValueError, "collision 'cone' is none of mesh, box"):
-            collision(bd.Box(1, 1, 1), "cone")
+        motor = bd.Cylinder(41, 25) + bd.Pos(38, 0, 0) * bd.Box(10, 12, 10)
+        placed, found = fit(motor.wrapped, "pancake", "cylinder")
+        np.testing.assert_allclose(np.abs(placed[:3, 2]), [0, 0, 1], atol=1e-6)
+        self.assertAlmostEqual(found[1], 0.025, delta=1e-6)
+        self.assertTrue(0.041 <= found[0] <= 0.0425, found)
+        with self.assertRaisesRegex(DescriptionError, "part 'mesh' is a mesh: no box is fitted to it"):
+            fit(None, "mesh", "box")
         with self.assertRaisesRegex(TypeError, "Location"):
             frame(bd.Box(1, 1, 1), "tip", (1, 2, 3))
-        with self.assertRaisesRegex(ValueError, "collision_default 'hull'"):
-            describe(Source.read(self.folder / "XBF/hinge.xbf").view(), collision_default="hull")
 
     def test_a_disc_of_any_height_is_a_cylinder_about_its_own_axis_and_a_drilled_plate_is_not(self) -> None:
         import build123d as bd
@@ -525,26 +528,12 @@ class DeclarationsTest(_Folder):
                 self.assertAlmostEqual(size[1], 0.04 if name == "plate" else 0.06, delta=5e-4)  # the box's own fit
 
 
-PANCAKE = """
-import build123d as bd
-from cad.build123d import collision
-from cad.engine import xbf
-
-
-@xbf("XBF/pancake.xbf")
-def pancake():
-    motor = bd.Cylinder(41, 25) + bd.Pos(38, 0, 0) * bd.Box(10, 12, 10)
-    motor.label = "pancake"
-    return collision(motor, "cylinder")
-"""
-
-
-# A camera fastened to the arm's tip, kept a body of its own, excluded from the base; the elbow named as
-# its arm is, with its drive's limits.
+# A camera fastened to the arm's tip, kept a body of its own; the elbow named as its arm is, with its drive's
+# limits.
 BODIES = """
 import build123d as bd
 from bd_materials import metals
-from cad.build123d import body, exclude, limits
+from cad.build123d import body, limits
 from cad.engine import xbf
 
 
@@ -565,14 +554,13 @@ def bodies():
     bd.RigidJoint("seat", cam, bd.Location())
     arm.joints["tip"].connect_to(cam.joints["seat"])
     body(cam, "camera")
-    exclude(cam, "base")
     root = bd.Compound(children=[base, arm, cam], label="bodies")
-    return limits(root, "arm", effort=27, velocity=6.28, armature=0.012, damping=0.5, friction=0)
+    return limits(root, "arm", effort=27, velocity=6.28)
 """
 
 
 class BodiesTest(_Folder):
-    def test_a_body_an_exclusion_and_drive_limits_are_described_and_round_trip_through_the_xbf(self) -> None:
+    def test_a_body_and_drive_limits_are_described_and_round_trip_through_the_xbf(self) -> None:
         description, structure = self.described("bodies", BODIES)
         self.assertEqual([link.name for link in description.links], ["world", "base", "arm", "camera"])
         self.assertEqual([(joint.name, joint.kind, joint.parent, joint.child) for joint in description.joints],
@@ -587,11 +575,7 @@ class BodiesTest(_Folder):
         self.assertAlmostEqual(camera.inertial.mass, 1e-6 * _aluminium(), delta=1e-12)
         self.assertAlmostEqual(arm.inertial.mass, 0.12 * 0.02 * 0.01 * _aluminium(), delta=1e-9)
         elbow = description.joints[1]
-        self.assertEqual((elbow.effort, elbow.velocity, elbow.armature, elbow.damping, elbow.friction),
-                         (27.0, 6.28, 0.012, 0.5, 0.0))
-        self.assertEqual(description.excludes, (("base", "camera"),))
-        # And the two parts it names, by occurrence path: what a joint stop sweep sets aside, those two alone.
-        self.assertEqual(description.part_excludes, (("bodies/base", "bodies/cam"),))
+        self.assertEqual((elbow.effort, elbow.velocity), (27.0, 6.28))
         self.assertEqual(description.warnings, ())
         # The structure carries them, the same from the file as from the build's tree, and a shape rebuilt from
         # the document carries them as the model gave them.
@@ -599,33 +583,24 @@ class BodiesTest(_Folder):
         loaded = document.Loaded(path).structure()
         self.assertEqual(loaded["prototypes"], document.tree_structure(document.saved(path), path)["prototypes"])
         by_name = {prototype["name"]: prototype for prototype in loaded["prototypes"]}
-        self.assertEqual((by_name["cam"]["body"], by_name["cam"]["exclude"]), ("camera", ["base"]))
-        drive = {"effort": 27.0, "velocity": 6.28, "armature": 0.012, "damping": 0.5, "friction": 0.0}
+        self.assertEqual(by_name["cam"]["body"], "camera")
+        drive = {"effort": 27.0, "velocity": 6.28}
         self.assertEqual(by_name["base"]["drives"], {"arm": drive})
         self.assertNotIn("body", by_name["arm"])
         rebuilt = {child.label: child for child in Source.read(path).shape().children}
-        self.assertEqual((rebuilt["cam"].__dict__["_body"], rebuilt["cam"].__dict__["_exclude"]), ("camera", ("base",)))
+        self.assertEqual(rebuilt["cam"].__dict__["_body"], "camera")
         self.assertEqual(rebuilt["base"].__dict__["_drives"], {"arm": drive})
 
-    def test_a_wrong_body_exclusion_or_limit_is_refused_by_name(self) -> None:
+    def test_a_wrong_body_or_limit_is_refused_by_name(self) -> None:
         import build123d as bd
 
-        from cad.build123d import body, exclude, limits
+        from cad.build123d import body, limits
 
         part = bd.Box(1, 1, 1)
         part.label = "part"
         assembly = bd.Compound(children=[part], label="assembly")
         with self.assertRaisesRegex(ValueError, "body: assembly is an assembly"):
             body(assembly)
-        with self.assertRaisesRegex(ValueError, "'part' with itself"):
-            exclude(part, "part")
-        # Either way round, the shape keeps it; two labels have no shape to keep it on, and say which to give.
-        other = bd.Box(1, 1, 1)
-        self.assertIs(exclude("case_top", other), other)
-        self.assertEqual(other.__dict__["_exclude"], ("case_top",))
-        with self.assertRaisesRegex(TypeError, r"exclude\('jaw', 'case_top'\): one of the two is the part or the "
-                                               r"assembly itself.*exclude\(part, 'case_top'\)"):
-            exclude("jaw", "case_top")
         with self.assertRaisesRegex(ValueError, "no revolute or linear joint 'elbow' on assembly"):
             limits(assembly, "elbow", effort=1)
         bd.BallJoint("wrist", part)
@@ -634,63 +609,11 @@ class BodiesTest(_Folder):
         bd.RevoluteJoint("elbow", part)
         with self.assertRaisesRegex(ValueError, "effort is a positive number, not 0"):
             limits(assembly, "elbow", effort=0)
-        with self.assertRaisesRegex(ValueError, "damping is a non-negative number, not -1"):
-            limits(assembly, "elbow", damping=-1)
-        with self.assertRaisesRegex(ValueError, "give effort, velocity, armature, damping or friction"):
+        with self.assertRaisesRegex(ValueError, "give effort or velocity"):
             limits(assembly, "elbow")
-        with self.assertRaisesRegex(DescriptionError, "part 'cam' excludes 'nothing', which names no part"):
-            self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude(cam, "nothing")'))
-        # A label first and the shape second is the same declaration.
-        swapped, _structure = self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude("base", cam)'))
-        self.assertEqual((swapped.excludes, swapped.part_excludes), ((("base", "camera"),),
-                                                                     (("bodies/base", "bodies/cam"),)))
-
-
-# Two arms on a base, each link holding a part labelled "bracket", as a vendor's STEP repeats a part's label: the
-# base excludes the left arm's bracket, that shape, and (in the variant) the label "bracket".
-REPEATED = """
-import build123d as bd
-from cad.build123d import exclude
-from cad.engine import xbf
-
-
-@xbf("XBF/repeated.xbf")
-def repeated():
-    base = bd.Box(100, 60, 20)
-    base.label = "base"
-    links = []
-    for side, y in (("left", 20), ("right", -20)):
-        bracket = bd.Pos(0, y, 20) * bd.Box(10, 10, 20)
-        bracket.label = "bracket"
-        link = bd.Compound(children=[bracket], label=side)
-        joint = bd.RevoluteJoint(side, base, axis=bd.Axis((0, y, 10), (0, 1, 0)), angular_range=(-90, 90))
-        bd.RigidJoint(side, link, joint.location)
-        joint.connect_to(link.joints[side], angle=0)
-        links.append(link)
-    exclude(base, {other})
-    return bd.Compound(children=[base, *links], label="repeated")
-"""
-
-
-class RepeatedLabelsTest(_Folder):
-    def test_a_shape_excluded_names_that_occurrence_alone_and_a_label_every_part_of_it(self) -> None:
-        shape, structure = self.described("repeated", REPEATED.format(other="links[0].children[0]"))
-        # The left bracket alone: the right one, of the same label, still collides with the base.
-        self.assertEqual(shape.excludes, (("base", "left"),))
-        self.assertEqual(shape.part_excludes, (("repeated/base", "repeated/left/bracket"),))
-        by_name = {prototype["name"]: prototype for prototype in structure["prototypes"]}
-        self.assertEqual((by_name["base"].get("exclude"), by_name["base"]["excludePaths"]),
-                         (None, ["repeated/left/bracket"]))
-        # Rebuilt from the document, the base and the left bracket carry one mark, the right bracket none: placed in
-        # another model, the tree names that occurrence still.
-        rebuilt = Source.read(self.folder / "XBF/repeated.xbf").shape()
-        base, left, right = rebuilt.children[0], rebuilt.children[1].children[0], rebuilt.children[2].children[0]
-        self.assertEqual(len(base.__dict__["_exclude"]), 1)
-        self.assertEqual(base.__dict__["_exclude"], left.__dict__["_excluded"])
-        self.assertNotIn("_excluded", right.__dict__)
-        # The label names every part at or below a node of it: both brackets.
-        label, _structure = self.described("repeated", REPEATED.format(other='"bracket"'))
-        self.assertEqual(label.excludes, (("base", "left"), ("base", "right")))
+        # A joint's damping is a MuJoCo function's choice, not the drive's bound: no keyword takes it.
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'damping'"):
+            limits(assembly, "elbow", damping=1)
 
 
 # The hinge's links each a compound of parts, the moving joint on the base's compound: limits declared on the
@@ -716,7 +639,7 @@ def linked():
     bd.RevoluteJoint("spare", lower, axis=bd.Axis((0, 0, 0), (0, 0, 1)))
     limits(lower, "spare", effort=1)
     root = bd.Compound(children=[lower, upper], label="linked")
-    return limits(root, "elbow", effort=2, velocity=3, damping=0.1)
+    return limits(root, "elbow", effort=2, velocity=3)
 """
 
 
@@ -724,23 +647,22 @@ class CompoundLinkTest(_Folder):
     def test_limits_on_a_joint_an_assembly_holds_are_described_and_round_trip_and_an_unpaired_one_warned(self) -> None:
         description, _structure = self.described("linked", LINKED)
         elbow = next(joint for joint in description.joints if joint.name == "elbow")
-        self.assertEqual((elbow.effort, elbow.velocity, elbow.damping), (2.0, 3.0, 0.1))
+        self.assertEqual((elbow.effort, elbow.velocity), (2.0, 3.0))
         self.assertEqual(description.warnings, ("'lower' limits joint 'spare', which is no joint of the description: "
                                                 "the limits are left out",))
         # A shape rebuilt from the document carries them on the compound that holds the joint, as the model gave them.
         rebuilt = {child.label: child for child in Source.read(self.folder / "XBF/linked.xbf").shape().children}
         self.assertEqual(rebuilt["lower"].__dict__["_drives"],
-                         {"elbow": {"effort": 2.0, "velocity": 3.0, "damping": 0.1}, "spare": {"effort": 1.0}})
+                         {"elbow": {"effort": 2.0, "velocity": 3.0}, "spare": {"effort": 1.0}})
         self.assertNotIn("_drives", rebuilt["lower"].children[0].__dict__)
 
 
 # A filled housing with no material, declared to weigh 350 g with a 200 g motor inside it; a hand of
-# 120 g whose finger, two pads of aluminium and brass, weighs 50 g; contact friction on the hand and its
-# own on one pad.
+# 120 g whose finger, two pads of aluminium and brass, weighs 50 g.
 MASSES = """
 import build123d as bd
 from bd_materials import metals
-from cad.build123d import friction, mass, point_mass
+from cad.build123d import mass, point_mass
 from cad.engine import xbf
 
 
@@ -758,10 +680,8 @@ def masses():
     pad_b.label = "pad_b"
     palm.material = pad_a.material = metals.aluminum()
     pad_b.material = metals.brass()
-    friction(pad_b, (1.2, 0.01, 0.001))
     finger = mass(bd.Compound(children=[pad_a, pad_b], label="finger"), 50)
     hand = mass(bd.Compound(children=[palm, finger], label="hand"), {hand})
-    friction(hand, 0.9)
     return bd.Compound(children=[housing, hand], label="masses")
 """
 
@@ -800,10 +720,6 @@ class MassTest(_Folder):
                     + _moved(_box(pad_a, 0.01, 0.01, 0.01), pad_a, np.array([0.03, 0, 0]) - centre)
                     + _moved(_box(pad_b, 0.01, 0.01, 0.01), pad_b, np.array([0.03, 0.02, 0]) - centre))
         np.testing.assert_allclose(hand.inertial.inertia, expected, atol=1e-12)
-        # Friction: the hand's on every part below it, the pad's own over it; the housing declares none.
-        self.assertEqual([(c.name, c.friction) for c in hand.collisions],
-                         [("palm", (0.9,)), ("pad_a", (0.9,)), ("pad_b", (1.2, 0.01, 0.001))])
-        self.assertEqual(description.link("housing").collisions[0].friction, ())
         self.assertEqual(description.warnings, ())
         # The structure carries each mass on the parts below it, levels above them; a shape rebuilt from the
         # document puts each back on the node that declared it.
@@ -813,7 +729,6 @@ class MassTest(_Folder):
         by_name = {prototype["name"]: prototype for prototype in loaded["prototypes"]}
         self.assertEqual((by_name["palm"]["mass"], by_name["pad_b"]["mass"]), ([[1, 120.0]], [[2, 120.0], [1, 50.0]]))
         self.assertEqual(by_name["housing"]["pointMasses"]["motor"]["grams"], 200.0)
-        self.assertEqual(by_name["pad_a"]["friction"], [0.9])
         rebuilt = Source.read(path).shape()
         nodes = {node.label: node for node in [rebuilt, *rebuilt.descendants]}
         self.assertEqual({label: node.__dict__.get("_mass") for label, node in nodes.items()},
@@ -833,7 +748,7 @@ class MassTest(_Folder):
     def test_a_mass_its_lumps_or_its_inner_masses_cannot_make_is_refused_by_name(self) -> None:
         import build123d as bd
 
-        from cad.build123d import friction, mass, point_mass
+        from cad.build123d import mass, point_mass
 
         for housing, hand, said in ((150, 120, "'housing', declared to weigh 150 g, holds point masses and inner "
                                                 "masses of 200 g"),
@@ -849,8 +764,6 @@ class MassTest(_Folder):
             point_mass(bd.Compound(children=[part], label="assembly"), 10, bd.Location())
         with self.assertRaisesRegex(ValueError, "is no body's"):
             point_mass(part, 10, bd.Location(), inertia=(1, 0, 0))
-        with self.assertRaisesRegex(ValueError, "one coefficient, or three"):
-            friction(part, (1, 2))
 
 
 # A slab of aluminium turned off every axis, in a link whose frame is an anchor (no material) turned
@@ -924,7 +837,7 @@ class InertiaRotationTest(_Folder):
 # A declared part moved after its declarations: an edit of one rebuilds what the memo hands back.
 MOVED = """
 import build123d as bd
-from cad.build123d import collision, frame, free, link, mass
+from cad.build123d import body, frame, free, link, mass
 from cad.engine import xbf
 
 
@@ -932,7 +845,7 @@ from cad.engine import xbf
 def moved():
     block = bd.Box(10, 20, 30)
     block.label = "block"
-    collision(block, "{kind}")
+    body(block, "{kind}")
     frame(block, "tip", bd.Pos({at}, 0, 15))
     mass(block, {at} * 10)
     link(block, "{name}")
@@ -943,12 +856,12 @@ def moved():
 
 class WarmEditTest(_Folder):
     def test_an_edit_of_a_declaration_reaches_the_document_through_a_warm_build(self) -> None:
-        for kind, at, name, floats in (("box", 5, "alpha", False), ("sphere", 7, "alpha", True),
-                                       ("sphere", 7, "beta", True), ("sphere", 7, "beta", False)):
+        for kind, at, name, floats in (("first", 5, "alpha", False), ("second", 7, "alpha", True),
+                                       ("second", 7, "beta", True), ("second", 7, "beta", False)):
             source = MOVED.format(kind=kind, at=at, name=name, free="free(block)" if floats else "pass")
             path = self.build("moved", source)
             (prototype,) = document.Loaded(path).structure()["prototypes"]
-            self.assertEqual(prototype["collision"], kind)
+            self.assertEqual(prototype["body"], kind)
             self.assertEqual(prototype["frames"]["tip"][12:15], [at, 0, 15])
             self.assertEqual(prototype["mass"], [[0, at * 10.0]])
             self.assertEqual((prototype["link"], prototype.get("free")), ([[0, name]], [0] if floats else None))

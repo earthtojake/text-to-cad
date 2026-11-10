@@ -73,7 +73,6 @@ def tree_of(view: Any) -> Any:
                 key, _names(prototype), material=_material(prototype.get("material")),
                 face_materials={int(ordinal): _material(given)
                                 for ordinal, given in (prototype.get("faceMaterials") or {}).items() if given},
-                collision=prototype.get("collision"),
                 frames={name: tuple(float(value) for value in values)
                         for name, values in (prototype.get("frames") or {}).items()},
                 declared={key: prototype[key] for key in document.DECLARED if key in prototype})

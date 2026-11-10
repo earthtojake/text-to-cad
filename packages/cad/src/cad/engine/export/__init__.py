@@ -443,12 +443,8 @@ class Source:
             material = _material(prototype.get("material"))
             if material is not None:
                 made.material = material
-            # What the part declares for a simulator travels with it (``declarations``): its collision as
-            # the word, each frame as the Location the model gave, read back from its 16 floats.
-            if prototype.get("collision") is not None:
-                made.__dict__["_collision"] = prototype["collision"]
-            if prototype.get("decomposition"):
-                made.__dict__["_decomposition"] = dict(prototype["decomposition"])
+            # What the part declares for a robot description travels with it (``declarations``): each frame
+            # as the Location the model gave, read back from its 16 floats.
             if prototype.get("frames"):
                 frames = {}
                 for frame_name, values in prototype["frames"].items():
@@ -459,10 +455,6 @@ class Source:
                 made.__dict__["_frames"] = frames
             if prototype.get("body") is not None:
                 made.__dict__["_body"] = prototype["body"]
-            if prototype.get("exclude"):
-                made.__dict__["_exclude"] = tuple(prototype["exclude"])
-            if prototype.get("excludePaths"):
-                made.__dict__[_EXCLUDE_PATHS] = tuple(prototype["excludePaths"])  # marked once the tree is made
             if prototype.get("drives"):
                 # A joint's limits back on the node holding it, ``up`` levels above the part (``declare``).
                 own = {label: {key: value for key, value in bounds.items() if key != "up"}
@@ -483,8 +475,6 @@ class Source:
                     points[point_name] = (float(point["grams"]), Location(TopLoc_Location(trsf)),
                                           None if inertia is None else tuple(float(value) for value in inertia))
                 made.__dict__["_points"] = points
-            if prototype.get("friction"):
-                made.__dict__["_friction"] = tuple(float(value) for value in prototype["friction"])
             if prototype.get("mass"):
                 # Each mass back on the node that declared it, ``up`` levels above the part (``declare``).
                 made.__dict__[_MASSES] = [(int(up), float(grams)) for up, grams in prototype["mass"]]
@@ -517,7 +507,6 @@ class Source:
 
         made = node(self.structure["tree"], (), np.eye(4))
         declare(made, [])
-        _marked(made, instances, self.structure["prototypes"])
         return made
 
 
@@ -527,7 +516,6 @@ _STRUCTURES: dict[int, tuple[Any, Any, dict[str, Any]]] = {}
 _MASSES = "_cad_masses"
 _NODES = "_cad_nodes"
 _DRIVES = "_cad_drives"  # and the joints' limits an assembly above it holds
-_EXCLUDE_PATHS = "_cad_exclude_paths"  # the occurrences a part excludes, by path, until the tree is marked
 
 
 def structure_of(tree: Any, path: Path | None) -> dict[str, Any]:
@@ -689,30 +677,3 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     return size
 
 
-def _marked(made: Any, instances: list[dict[str, Any]], prototypes: list[dict[str, Any]]) -> None:
-    """The occurrences a part excludes by path (``excludePaths``: shapes given to ``exclude``) marked again on the
-    tree ``Source.shape`` made, a fresh mark a path (``declarations.exclude``), so that the tree placed in another
-    model still names those occurrences alone, wherever they then stand."""
-    import uuid
-
-    from cad.engine.declarations import EXCLUDE, EXCLUDED, MARK
-
-    wanted = {path for instance in instances for path in prototypes[instance["prototype"]].get("excludePaths") or ()}
-    if not wanted:
-        return
-    marks = {path: f"{MARK}{uuid.uuid4().hex}" for path in sorted(wanted)}
-
-    def visit(shape: Any, above: str) -> None:
-        path = f"{above}/{shape.label}" if above else str(shape.label)
-        if path in marks:
-            shape.__dict__[EXCLUDED] = tuple(sorted({*(shape.__dict__.get(EXCLUDED) or ()), marks[path]}))
-        children = shape.__dict__.get("_NodeMixin__children") or ()
-        for child in children:
-            visit(child, path)
-        if not children:
-            given = [mark for named, mark in marks.items() if named in (shape.__dict__.get(_EXCLUDE_PATHS) or ())]
-            if given:
-                shape.__dict__[EXCLUDE] = tuple(sorted({*(shape.__dict__.get(EXCLUDE) or ()), *given}))
-            shape.__dict__.pop(_EXCLUDE_PATHS, None)
-
-    visit(made, "")

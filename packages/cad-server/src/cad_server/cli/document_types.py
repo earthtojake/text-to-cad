@@ -26,7 +26,7 @@ type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step 
 the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
 DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
 CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` sweeps each joint of the
-document's mechanism against its parts' collision geometry and says where each stops (``cad step ranges arm.step``,
+document's mechanism against its parts' surfaces and says where each stops (``cad step ranges arm.step``,
 ``cad model ranges <id> --step 0.5 --json``), writing nothing; it runs here when this environment holds the kernel,
 else in the installation's base, which does. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
@@ -469,7 +469,7 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
 
         def swept() -> CheckResult:
             options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", RESOLUTION),
-                    geometry=keywords.get("geometry", "parts"), joint=tuple(keywords.get("joint") or ()))
+                    joint=tuple(keywords.get("joint") or ()))
             python = integration_env.environment(INTEGRATION, said)
             sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
                        for value in positional]

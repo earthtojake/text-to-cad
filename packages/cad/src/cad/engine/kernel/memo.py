@@ -3830,20 +3830,13 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get(CONFIGURATIONS) or {}, state),
         _normalize(state_dict.get(COUPLINGS) or {}, state),
         _normalize(state_dict.get(ANIMATIONS) or {}, state),
-        # What a part declares for a simulator (``declarations``): a hit hands back the attributes the
-        # first run's result held, so they are its input, as its material is.
-        # A decomposed collision's options beside its word (``_decomposition``), where it has any: a key
-        # of a shape that declares none is what it was.
-        (state_dict.get("_collision") if not state_dict.get("_decomposition")
-         else (state_dict.get("_collision"), _normalize(state_dict["_decomposition"], state))),
+        # What a part declares for a robot description (``declarations``): a hit hands back the attributes
+        # the first run's result held, so they are its input, as its material is.
         _normalize(state_dict.get("_frames") or {}, state),
         state_dict.get("_body"),
-        _normalize(state_dict.get("_exclude") or (), state),
-        _normalize(state_dict.get("_excluded") or (), state),
         _normalize(state_dict.get("_drives") or {}, state),
         _normalize(state_dict.get("_mass"), state),
         _normalize(state_dict.get("_points") or {}, state),
-        _normalize(state_dict.get("_friction") or (), state),
         bool(state_dict.get("_free")),
         state_dict.get("_link"),
     )

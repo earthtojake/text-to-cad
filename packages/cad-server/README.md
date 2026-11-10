@@ -115,7 +115,7 @@ meshed by the `netgen` integration and solved by the `calculix` integration's cc
 process where its environment holds the kernel, netgen and ccx, else in the environment of
 `cad[build123d,calculix,netgen]` the engine makes once. `cad run ccx ARGS` runs the same ccx on a deck of the
 person's own.
-`cad model|xbf|step ranges SRC [--step S] [--clearance MM] [--geometry parts|collision]` sweeps each joint of the
+`cad model|xbf|step ranges SRC [--step S] [--clearance MM] [--joint NAME]` sweeps each joint of the
 document's mechanism alone against its parts and says where each stops and which parts meet, writing nothing (the
 library's `cad.<type>.ranges`), run in this process where its environment holds the kernel, else in the
 installation's base.

@@ -26,30 +26,25 @@ on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a floatin
 declared a body (``cad.build123d.body``) is a child ``<body>`` of its link's with none. A joint's drive
 effort (``cad.build123d.limits``) is its ``actuatorfrcrange``, ``-effort effort`` (N*m, N), which bounds
 what any actuator on it applies; MJCF has no bound on a joint's speed, so a drive's velocity is not
-written (an actuator's own ``ctrlrange`` is the scene's). A joint's dynamics are its ``armature``,
-``damping`` and ``frictionloss`` (``limits``' ``armature``, ``damping`` and ``friction``), each where
-declared; an actuator, its gains and contact tuning are the scene's. A link's
+written (an actuator's own ``ctrlrange`` is the scene's). A joint's dynamics, an actuator, its gains
+and contact tuning are a MuJoCo function's (``cad.mujoco``), not the export's. A link's
 ``inertial`` is written on its principal axes (a tensor whose moments miss MuJoCo's triangle
 inequality by rounding alone is nudged onto it; any further and MuJoCo says so); a link with none is
 given none, and MuJoCo computes one from its geoms (visual and collision alike). A visual is a geom
 of class ``visual``, a collision one of class ``collision`` named ``<part>_collision`` where its
-visual holds the part's name: a mesh, which MuJoCo hulls, or a primitive in MuJoCo's half sizes (a
-box's half extents, a sphere's radius, a cylinder's or a capsule's radius and half its length, the
-capsule's length its cylinder's, as ``describe`` fits it); a decomposed part (``cad.build123d.collision(part,
-"decomposed")``) is a ``collision`` geom per convex hull, ``<part>_hull<i>``, each of the mesh asset of that
-name, a file of its own (``<model>_<part>_hull<i>.stl``), while its visual is the part whole. A part whose
+visual holds the part's name: the part's mesh, which MuJoCo collides as its convex hull (a primitive or
+convex hulls are chosen in a MuJoCo function: ``cad.mujoco.fit``, ``decompose``); a geometry a description
+gives as a primitive is written in MuJoCo's half sizes (a box's half extents, a sphere's radius, a
+cylinder's or a capsule's radius and half its length). A part whose
 faces are painted (``description.Visual.looks``) is a visual geom per look, as the viewer draws it: the part's
 own under its name, the others ``<part>_paint<i>``, each ``mass="0"`` (drawn, not weighed) on a mesh of that
-look's triangles with ``inertia="shell"``, an open surface having no volume. Each has its
-``friction`` the part's
-contact friction (``cad.build123d.friction``: the sliding coefficient alone, the torsional and rolling
-then MuJoCo's defaults, or all three) where it declares one, none where it does not, so MuJoCo's
-default (or a scene's ``default`` class) holds; a named frame a ``site``.
+look's triangles with ``inertia="shell"``, an open surface having no volume. No geom names a
+``friction``, so MuJoCo's default (or a scene's ``default`` class) holds; a named frame is a ``site``.
 Every name is unique in its kind -- bodies among bodies, joints among joints, MuJoCo's namespaces, so a
 body and a joint may share one -- a repeat given ``_2``, ``_3`` and said (``export.note``). ``contact``
 excludes each body pair that touches at rest across a joint that moves (``export/contact.py``'s rule:
 MuJoCo's ``filterparent`` passes the pair at a robot's first joint, whose parent is welded to the
-world) and each pair the model declares (``cad.build123d.exclude``), in that order, each once. A coupling is an
+world), each once; any other pair is a MuJoCo function's to exclude. A coupling is an
 ``equality`` of the follower on its leader (``polycoef`` its offset and ratio); a virtual pinion's racks follow
 the first of them (the description has no pinion), so the file holds the one control the hardware has.
 
@@ -525,14 +520,12 @@ class _Writer:
             return
         name = self.joint_names[joint.name] = self._joint_name(joint.name)
         effort = ("actuatorfrcrange", None if joint.effort is None else _numbers((-joint.effort, joint.effort), snap=0))
-        dynamics = [(key, None if value is None else _number(value, snap=0)) for key, value in (
-            ("armature", joint.armature), ("damping", joint.damping), ("frictionloss", joint.friction))]
         if joint.kind in ("revolute", "continuous"):
             body.add("joint", [("name", name), ("type", "hinge"), axis,
-                               ("range", ranged(0) if joint.kind == "revolute" else None), effort, *dynamics])
+                               ("range", ranged(0) if joint.kind == "revolute" else None), effort])
             self.qpos.append((joint, 1))
         elif joint.kind == "prismatic":
-            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0)), effort, *dynamics])
+            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0)), effort])
             self.qpos.append((joint, 1))
         elif joint.kind == "cylindrical":
             body.add("joint", [("name", name), ("type", "hinge"), axis, ("range", ranged(0))])
@@ -574,7 +567,6 @@ class _Writer:
             named = collision.name if collision.name not in self.geoms.taken else f"{collision.name}_collision"
             written = self.geoms(named)
             body.add("geom", [("class", "collision"), *self._shape(collision.geometry), ("name", written),
-                              ("friction", _numbers(collision.friction, snap=0) if collision.friction else None),
                               *_placement(frame @ collision.geometry.placement)])
             owned = self._owned(collision.path, named_body)
             if owned is not None:
@@ -633,7 +625,7 @@ class _Writer:
         contact = _Element("contact")
         seen: set[frozenset[str]] = set()
         found = touching(self.description) if self.touching is None else self.touching
-        for first, second in [*found, *self.description.excludes]:
+        for first, second in found:
             key = frozenset((first, second))
             if key in seen:
                 continue

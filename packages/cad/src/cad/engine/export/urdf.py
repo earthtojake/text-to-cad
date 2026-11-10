@@ -37,12 +37,10 @@ inertial at the world's frame is the root as it is.
 and a collision's ``<origin>`` is its placement in the link frame, and a link's ``<inertial>`` is
 its centre (``rpy`` zero) with its mass and the tensor about the centre in the link frame's axes, as
 the description holds it; a link with no mass is given no ``<inertial>`` (the URDF validator warns
-of a moving one: a simulator wants one, a viewer does not). A shape is a ``<mesh>`` (its ``scale``
-the geometry's) or a primitive in URDF's full sizes: a ``<box size>``, a ``<sphere radius>``, a
-``<cylinder radius length>``; a capsule, which URDF has no word for, is its cylinder and a sphere at
-each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``. A decomposed part
-(``cad.build123d.collision(part, "decomposed")``) is a ``<collision>`` per convex hull, ``<part>_hull<i>``,
-each hull's mesh a file of its own (``<model>_<part>_hull<i>.stl``), its visual the part whole. A part whose
+of a moving one: a simulator wants one, a viewer does not). A part's ``<collision>`` is its mesh, as its
+``<visual>`` is. A shape is a ``<mesh>`` (its ``scale`` the geometry's), or, where a description gives
+a primitive, one in URDF's full sizes: a ``<box size>``, a ``<sphere radius>``, a ``<cylinder radius
+length>``; URDF has no capsule, and one is refused by name. A part whose
 faces are painted is a ``<visual>`` per look, as the viewer draws it (``<part>``, ``<part>_paint<i>``). A visual's colour
 is a ``<material>`` declared once at the top and named in the visual: one per material name and
 colour (a part with no material is ``color``), a name's second colour named for it (``Steel_a0a0a0``). A named frame is a
@@ -60,17 +58,13 @@ massless link between them: ``<name>`` the turn (revolute or continuous) to ``<n
 ``velocity`` in rad/s or m/s), a continuous joint's only where it has one; where the model gives
 none, ``0``, which URDF requires and a ROS controller reads literally (``cad urdf validate`` warns of
 it); a joint that declares one of the two and not the other has the other written ``0``, said once for every
-such joint (``export.note``). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its ``<dynamics damping
-friction>``, each where declared; URDF has no armature, so a declared one is not written, and said
-once for every joint that declares one (``export.note``: an MJCF carries it). A bound the description leaves open is written
+such joint (``export.note``). A joint has no ``<dynamics>``: its damping and friction are a simulation's
+choice, not the machine's. A bound the description leaves open is written
 ``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
 ends. A spherical joint is refused by name: URDF has no ball (export an MJCF, which has one).
 A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`` its offset), its
 leader a joint that moves. URDF has no named states: the description's poses are not written (an
-SRDF's group states are where ROS keeps them). URDF has no contact exclusion: the description's
-(``cad.build123d.exclude``) are not written (an SRDF's ``disable_collisions`` is where MoveIt keeps
-them). URDF has no contact friction either (Gazebo's ``<gazebo>`` extensions are outside URDF): a
-part's (``cad.build123d.friction``) is not written, and said once for every part that declares one. URDF is a tree and cannot close a loop: a joint
+SRDF's group states are where ROS keeps them). URDF is a tree and cannot close a loop: a joint
 that closes one (``description``'s **Loops**) is left out and said (``export.note``), and the loop's links
 hang open from the tree (the MJCF closes it). The CAD Viewer's ``<tcad:four_bar>`` extension is not
 written: it derives one rocker's angle from its driver and places no coupler link, and a generated loop
@@ -238,21 +232,6 @@ def rpy(matrix: Any) -> tuple[float, float, float]:
     return math.atan2(r[2, 1], r[2, 2]), pitch, math.atan2(r[1, 0], r[0, 0])
 
 
-def shaped(geometry: Geometry) -> list[tuple[str, np.ndarray, Geometry]]:
-    """A shape as formats without a capsule write it: ``(suffix, placement, geometry)`` for each piece, a
-    capsule its cylinder and a sphere at each end of it along its Z (``_top`` at +Z)."""
-    placement = np.asarray(geometry.placement, dtype=float)
-    if geometry.kind != "capsule":
-        return [("", placement, geometry)]
-    radius, length = (float(value) for value in geometry.size[:2])
-    found = [("", placement, Geometry("cylinder", placement, size=(radius, length)))]
-    for suffix, z in (("_top", length / 2), ("_bottom", -length / 2)):
-        end = np.eye(4)
-        end[2, 3] = z
-        found.append((suffix, placement @ end, Geometry("sphere", placement @ end, size=(radius,))))
-    return found
-
-
 def inertia_terms(inertial: Inertial) -> list[tuple[str, str]]:
     """The six terms of a link's tensor about its centre, ``ixx ixy ixz iyy iyz izz``: symmetric, a term
     within 1e-12 of the largest of zero (the rounding of a product of frames) written as zero."""
@@ -314,9 +293,6 @@ class _Writer:
         self.materials: dict[tuple[str, str], str] = {}
         self.material_rows: list[Xml] = []
         self.files = MeshFiles(description)
-        # What URDF has no word for, said once a kind when the file is rendered (``_unwritten``): the joints
-        # that declare an armature, the parts that declare a contact friction.
-        self.unwritten: dict[str, list[str]] = {"armature": [], "contact friction": []}
         # The joints that declare an effort and no velocity, or a velocity and no effort: the other written 0.
         self.zeroed: dict[str, list[str]] = {"velocity": [], "effort": []}
         # The description's own links are named first, then its joints, each in tree order; what the writer
@@ -365,14 +341,8 @@ class _Writer:
         return "\n".join(lines) + "\n", self.files.files
 
     def _unwritten(self) -> None:
-        """A line a kind for what the file declares and URDF cannot say, naming every joint or part that
-        declares it: ``armature of 6 joints not written (a URDF has none; an MJCF carries it): ...``; and a line
-        for the joints whose velocity, or effort, is written 0 because they declare only the other."""
-        for what, of in (("armature", "joint"), ("contact friction", "part")):
-            names = list(dict.fromkeys(self.unwritten[what]))
-            if names:
-                note(f"{what} of {len(names)} {of}{'s' if len(names) != 1 else ''} not written (a URDF has none; "
-                     f"an MJCF carries it): {', '.join(names)}")
+        """A line for the names a link and a joint share, and a line for the joints whose velocity, or effort, is
+        written 0 because they declare only the other."""
         shared = sorted(self.link_names.taken & self.joint_names.taken)
         if shared:
             # Each kind keeps its names apart, as URDF does; a tool that names links and joints in one namespace
@@ -439,14 +409,6 @@ class _Writer:
                                   ("upper", _number(UNBOUNDED if upper is None else upper)), *driven])
         elif kind == "continuous" and (joint.effort is not None or joint.velocity is not None):
             element.add("limit", driven)
-        if kind in ("revolute", "continuous", "prismatic"):
-            dynamics = [(key, _number(value, snap=0)) for key, value in (("damping", joint.damping),
-                                                                         ("friction", joint.friction))
-                        if value is not None]
-            if dynamics:
-                element.add("dynamics", dynamics)
-            if joint.armature is not None:
-                self.unwritten["armature"].append(self.joint_of.get(joint.name, name))
         if mimic and joint.follows is not None:
             leader, ratio, offset = joint.follows
             if self.kinds.get(leader) not in ("revolute", "continuous", "prismatic", "cylindrical"):
@@ -471,19 +433,14 @@ class _Writer:
             for named, drawn, color, material_name in visual.drawn():
                 wanted = name_of(named, "visual")
                 material = self._material(material_name, tuple(float(value) for value in color))
-                for suffix, placement, geometry in shaped(drawn):
-                    piece = element.add("visual", [("name", visuals(wanted + suffix))])
-                    piece.add("origin", _origin(placement))
-                    piece.add("geometry").children.append(self._shape(geometry))
-                    piece.add("material", [("name", material)])
+                piece = element.add("visual", [("name", visuals(wanted))])
+                piece.add("origin", _origin(drawn.placement))
+                piece.add("geometry").children.append(self._shape(drawn))
+                piece.add("material", [("name", material)])
         for collision in link.collisions:
-            if collision.friction:
-                self.unwritten["contact friction"].append(collision.of)
-            wanted = name_of(collision.name, "collision")
-            for suffix, placement, geometry in shaped(collision.geometry):
-                piece = element.add("collision", [("name", collisions(wanted + suffix))])
-                piece.add("origin", _origin(placement))
-                piece.add("geometry").children.append(self._shape(geometry))
+            piece = element.add("collision", [("name", collisions(name_of(collision.name, "collision")))])
+            piece.add("origin", _origin(collision.geometry.placement))
+            piece.add("geometry").children.append(self._shape(collision.geometry))
         return element
 
     def _shape(self, geometry: Geometry) -> Xml:

@@ -30,8 +30,8 @@ NAMESPACES = {
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
                       "flatten_face", "flatten_faces", "union_faces", "offset_profile", "dfm", "cnc",
-                      "sheet_metal", "molding", "printing", "unfold", "collision", "frame", "leaves", "body",
-                      "exclude", "limits", "mass", "point_mass", "friction", "free", "link", "materials"),
+                      "sheet_metal", "molding", "printing", "unfold", "frame", "leaves", "body", "limits", "mass",
+                      "point_mass", "free", "link", "materials"),
 }
 # The namespaces' public submodules, offered with their names and imported on first use.
 SUBMODULES = {"cad.build123d": ("materials",)}
@@ -110,9 +110,8 @@ class RootExports(unittest.TestCase):
 
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model, "memo": model,
                    "paint": model, "gear_pair": mechanism, "rack_and_pinion_pair": mechanism,
-                   "screw_pair": mechanism, "posed": mechanism, "collision": declarations, "frame": declarations,
-                   "leaves": _leaves, "body": declarations, "exclude": declarations, "limits": declarations,
-                   "mass": declarations, "point_mass": declarations, "friction": declarations,
+                   "screw_pair": mechanism, "posed": mechanism, "frame": declarations, "leaves": _leaves,
+                   "body": declarations, "limits": declarations, "mass": declarations, "point_mass": declarations,
                    "free": declarations, "link": declarations,
                    **{name: _geometry for name in _geometry.__all__},
                    **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)},

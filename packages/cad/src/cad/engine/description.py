@@ -3,10 +3,10 @@ form every robot format is written from.
 
 A document holds parts with materials, their placements, and a mechanism (``mechanism.py``:
 links, pairs, couplings, states). A simulator wants the same facts as a tree of rigid bodies:
-each with its mass, centre and inertia, its visual meshes, its collision shapes and its named
+each with its mass, centre and inertia, its visual and collision meshes and its named
 frames; joints between them with axes, limits and couplings; named poses. ``describe`` builds
 that tree from a document (``description_of``, the engine's half that needs the kernel: mass
-properties and collision fits), and the writers of each format serialise it (``export/mjcf.py``,
+properties), and the writers of each format serialise it (``export/mjcf.py``,
 ``export/urdf.py``) without touching the kernel. Nothing in a description
 names a format: no MuJoCo group, no ROS package; those are each writer's
 reading of it.
@@ -42,14 +42,9 @@ is not positive is refused by name.
 **Geometry.** A ``Mesh`` is one prototype's triangles in the prototype's own frame, in metres:
 positions ``(n, 3)`` float32 and triangles ``(m, 3)`` uint32, with the key the document knows it
 by, so a writer writes each prototype once however many links place it. A visual is a mesh, with
-its colour; a collision is what the part's ``collision`` declaration asked for
-(``cad.build123d.collision``): the mesh itself (a simulator hulls it; the default), a ``box``, a
-``sphere``, a ``cylinder`` or a ``capsule`` fitted to the part by the kernel (an oriented bounding
-box, its axis the longest side), the convex hulls CoACD cuts the part's mesh into (``decomposed``: a
-collision per hull, each a mesh of its own, ``<part>_hull<i>``, its ``part`` the part's name), or
-none; its ``friction`` is the part's contact friction
-(``cad.build123d.friction``: sliding, or sliding, torsional and rolling), empty where it declares
-none and a simulator's default applies. Named frames (``cad.build123d.frame``) are kept on their
+its colour; a collision is the part's mesh too (a simulator hulls it): which shape a simulator
+collides a part as is a choice made for a simulation, not a fact of the machine, and a MuJoCo
+function makes it on the written file (``cad.mujoco``). Named frames (``cad.build123d.frame``) are kept on their
 link, in the link's frame, for a writer's sites or fixed frames. A part declared a body
 (``cad.build123d.body``) is a link of its own, at its own placement, hung by a ``fixed`` joint of its
 name from the link it would have merged into, with its own mass, geometry and frames.
@@ -68,8 +63,7 @@ first joint that holds no part) is no link and no joint here: its link carries n
 needs, so its racks follow the first of them, by the ratio of their ratios, and that rack is the
 coupling's control. A joint's ``effort`` and ``velocity`` are its drive's bounds
 (``cad.build123d.limits``): N*m and rad/s for a turn, N and m/s for a slide, None where the model
-gives none; its ``armature`` (kg*m^2, kg), ``damping`` (N*m*s/rad, N*s/m) and ``friction`` (N*m, N)
-are the joint's own dynamics, None where the model gives none.
+gives none.
 
 **Loops.** A mechanism whose pairs close a loop is a tree and its ``closures``: the tree is the pairs
 followed from the ground, breadth first, in the mechanism's pair order, and each pair that reaches a
@@ -80,10 +74,8 @@ close the loop with point constraints, and the slide is a joint of the tree. A c
 on each link, coincide as built (``describe`` refuses one that does not, by name), so the loop is closed
 at zero; a writer that can close it does (MJCF), one that cannot leaves it open and says so (URDF).
 
-**Contacts.** ``excludes`` are the link pairs a model says never collide (``cad.build123d.exclude``),
-each pair once, in link order; what a writer finds touching at rest is its own (``export/contact.py``).
-``part_excludes`` are the part pairs the same declarations name, by occurrence path: a joint stop sweep
-(``ranges``) sets aside those two parts, not the rest of their links.
+**Contacts.** A description names no pair that never collides: what a writer finds touching at rest
+is its own (``export/contact.py``), and any other pair a MuJoCo function excludes.
 
 **Poses.** The mechanism's named states, each as ``{joint: value}`` around zero, in radians or
 metres (a cylindrical or spherical joint's value is a tuple); taken at a ``zero`` state, every other
@@ -99,7 +91,7 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["COLLISIONS", "Closure", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint",
+__all__ = ["COLLIDES", "Closure", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint",
            "Link", "Look", "Mesh", "Pose", "Visual", "shown"]
 
 #: A label that names no part, only what kind of shape it is: a vendor STEP's ``SOLID``, a ``Body1``, a ``Part.2``.
@@ -119,9 +111,10 @@ def shown(path: str) -> str:
             return "/".join(names[at:])
     return "/".join(names)
 
-#: What a part's collision may be (``cad.build123d.collision``): the mesh itself, a fitted primitive, the
-#: convex hulls of a decomposition of its mesh, or none.
-COLLISIONS = ("mesh", "box", "sphere", "cylinder", "capsule", "decomposed", "none")
+#: How each part collides, as an export of each kind says it (``Description.summary``): as its own mesh.
+COLLIDES = {"mjcf": "each part collides as its mesh, which MuJoCo collides as its convex hull: a MuJoCo function "
+                    "chooses another collision",
+            "urdf": "each part collides as its mesh"}
 #: The joint kinds, in the words URDF uses where it has one; ``cylindrical`` and ``spherical`` are AP242's.
 JOINT_KINDS = ("fixed", "revolute", "continuous", "prismatic", "cylindrical", "spherical", "floating")
 #: The joints a closure may be: a slide is kept a joint of the tree where its loop has a turn or a ball.
@@ -198,14 +191,7 @@ class Visual:
 class Collision:
     name: str
     geometry: Geometry
-    friction: tuple[float, ...] = ()  # (sliding,) or (sliding, torsional, rolling); () where none is declared
-    part: str = ""  # the part it is one hull of (a decomposition: ``name`` is ``<part>_hull<i>``); "" where ``name`` is
     path: str = ""  # the part's occurrence path in the document, as its visual's (``Visual.path``); "" where it has none
-
-    @property
-    def of(self) -> str:
-        """The name of the part this collides for: its own, or the part it is one hull of."""
-        return self.part or self.name
 
 
 @dataclass(frozen=True)
@@ -240,9 +226,6 @@ class Joint:
     follows: tuple[str, float, float] | None = None  # (leader joint, ratio, offset): value = ratio * leader + offset
     effort: float | None = None  # the drive's bound: N*m for a turn, N for a slide; None where unbounded
     velocity: float | None = None  # rad/s for a turn, m/s for a slide; None where unbounded
-    armature: float | None = None  # the rotor's reflected inertia: kg*m^2 for a turn, kg for a slide
-    damping: float | None = None  # N*m*s/rad for a turn, N*s/m for a slide
-    friction: float | None = None  # the drive's dry friction: N*m for a turn, N for a slide
 
     def __post_init__(self) -> None:
         if self.kind not in JOINT_KINDS:
@@ -293,8 +276,8 @@ class Pose:
 @dataclass
 class Description:
     """A document as a robot: links in tree order (the ground first), joints parents-first, the meshes the
-    links' geometry names, the poses, the link pairs that never collide, and the joints that close the
-    mechanism's loops (``closures``: the module's **Loops**), which the tree leaves out."""
+    links' geometry names, the poses, and the joints that close the mechanism's loops (``closures``: the
+    module's **Loops**), which the tree leaves out."""
 
     name: str
     links: list[Link]
@@ -303,10 +286,6 @@ class Description:
     poses: list[Pose] = field(default_factory=list)
     closures: list[Closure] = field(default_factory=list)
     warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
-    excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)
-    #: The part pairs those declarations name, each by its two occurrence paths (``Visual.path``): what a joint stop
-    #: sweep sets aside (``ranges``), two parts alone where a simulator filters their links.
-    part_excludes: tuple[tuple[str, str], ...] = ()
     zero: str | None = None  # the mechanism state every joint's zero is at; None for the as-built state
 
     @property
@@ -326,11 +305,10 @@ class Description:
         """What the description holds, as an export of ``kind`` (``mjcf``, ``urdf``) says it (``said.robot``):
         its links but the ground (the robot's own), its joints but those it hangs from the ground by, whether
         its base floats, its couplings (``[follower, leader, ratio]``), closures, total mass (kg, None where no
-        link has one) and the links with none, named frames, collisions by kind (a decomposed part's hulls are
-        ``hull``), exclusions (``excludes``, the declared link pairs; ``touching``, the pairs a writer excludes
-        on its own, given as it found them, less the declared ones), the poses the file holds (an MJCF's keys; a
-        URDF holds none, and its ``unwritten`` names them), its zero state and its warnings. JSON's types
-        alone."""
+        link has one) and the links with none, named frames, how its parts collide (``collides``: ``COLLIDES``,
+        None where no link has a collision), the pairs a writer excludes because they touch at rest
+        (``touching``, given as it found them, each once), the poses the file holds (an MJCF's keys; a URDF holds
+        none, and its ``unwritten`` names them), its zero state and its warnings. JSON's types alone."""
         ground = self.root
         mounts = {joint.name for joint in self.joints if joint.parent == ground.name}
         links = [link for link in self.links if link is not ground or link.visuals or link.collisions
@@ -339,13 +317,8 @@ class Description:
         for joint in self.joints:
             if joint.name not in mounts:
                 joints.setdefault(joint.kind, []).append(joint.name)
-        collisions: dict[str, int] = {}
-        for link in links:
-            for collision in link.collisions:
-                kind_of = "hull" if collision.part else collision.geometry.kind
-                collisions[kind_of] = collisions.get(kind_of, 0) + 1
         weighed = [link.inertial.mass for link in links if link.inertial is not None]
-        seen = {frozenset(pair) for pair in self.excludes}
+        seen: set[frozenset[str]] = set()
         automatic: list[list[str]] = []
         for pair in touching:
             if frozenset(pair) not in seen:
@@ -359,7 +332,7 @@ class Description:
                 "mass": float(sum(weighed)) if weighed else None,
                 "massless": [link.name for link in links if link.inertial is None and link.parts],
                 "frames": [name for link in links for name in link.frames],
-                "collisions": collisions, "excludes": [list(pair) for pair in self.excludes],
+                "collides": COLLIDES.get(kind) if any(link.collisions for link in links) else None,
                 "touching": automatic,
                 "poses": [] if kind == "urdf" else [pose.name for pose in self.poses],
                 **({"unwritten": [pose.name for pose in self.poses]} if kind == "urdf" and self.poses else {}),
@@ -400,10 +373,6 @@ class Description:
             for geometry in [v.geometry for v in link.visuals] + drawn + [c.geometry for c in link.collisions]:
                 if geometry.kind == "mesh" and geometry.mesh not in self.meshes:
                     raise DescriptionError(f"link {link.name!r} names mesh {geometry.mesh!r}, which there is not")
-        for pair in self.excludes:
-            for end in pair:
-                if end not in known:
-                    raise DescriptionError(f"an exclusion names link {end!r}, which there is not")
         joints = {joint.name for joint in self.joints}
         for closure in self.closures:
             for end in (closure.parent, closure.child):

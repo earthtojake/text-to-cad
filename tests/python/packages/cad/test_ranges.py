@@ -1,12 +1,11 @@
-"""``cad.<type>.ranges``: each joint of a mechanism swept alone against the parts' collision geometry.
+"""``cad.<type>.ranges``: each joint of a mechanism swept alone against the parts' surfaces.
 
 A base with a wall, an arm on a hinge and a carriage on a slide, built to an xbf: the arm turns until it
 meets the wall one way and the base the other, the carriage slides until it meets the wall one way and an end
 stop the other (touching the base all along, as built, which stops nothing), each stop where an exact
 distance says the parts come within the clearance; the document is not changed. A smaller clearance only
-widens a range, and two parts declared never to collide are set aside, those two alone. A STEP with no joint has
-nothing to sweep: an error, said by code. An option out of range is refused by name. A part declared decomposed
-is cut into hulls for the collision geometry alone. The stops are said as a table, and a long sweep says each joint as
+widens a range. A STEP with no joint has nothing to sweep: an error, said by code. An option out of range is
+refused by name. The stops are said as a table, and a long sweep says each joint as
 it starts and ends; a verbose one says each step as it starts. A pair near as built, its gap narrowing a hair as the
 joint turns, stops nothing until it truly closes, and is reported with its gaps. A pair drawn one inside the other
 stops nothing where its overlap shrinks or slides, only where it deepens, and is reported with its volume and
@@ -22,14 +21,12 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
-from typing import Any
 from unittest import mock
 
 from cad._internal.refused import ArgumentRefused
 
 RIG = """
 import build123d as bd
-from cad.build123d import collision, exclude
 from cad.engine import xbf
 
 
@@ -51,7 +48,6 @@ def rig():
     bd.LinearJoint("slide", base, axis=bd.Axis((0, -25, 15), (1, 0, 0)), linear_range=(-100, 100))
     bd.RigidJoint("seat", carriage, bd.Location())
     base.joints["slide"].connect_to(carriage.joints["seat"], position=40)
-    {declare}
     return bd.Compound(children=[base, wall, end, arm, carriage], label="rig")
 """
 
@@ -85,33 +81,6 @@ def near():
     bd.RigidJoint("hinge", upper, hinge.location)
     hinge.connect_to(upper.joints["hinge"], angle=0)
     return bd.Compound(children=[base, upper], label="near")
-"""
-
-
-# A two-joint arm: an upper arm on a shoulder 2 mm over the base, a forearm on an elbow 1 mm over the upper arm. The
-# forearm turning meets the upper arm, its parent, which MuJoCo never collides it with (``filterparent``: the
-# upper arm hangs from the base by its joint, so neither is welded to the world); the upper arm meets the base, the
-# world's, which MuJoCo does collide it with.
-CHAIN = """
-import build123d as bd
-from cad.engine import xbf
-
-
-@xbf("XBF/chain.xbf")
-def chain():
-    base = bd.Box(80, 80, 10)
-    base.label = "base"
-    upper = bd.Pos(0, 0, 7) * bd.Box(10, 10, 60, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
-    upper.label = "upper"
-    fore = bd.Pos(0, 0, 69) * bd.Box(10, 10, 50, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
-    fore.label = "fore"
-    shoulder = bd.RevoluteJoint("shoulder", base, axis=bd.Axis((0, 0, 7), (0, 1, 0)), angular_range=(-180, 180))
-    bd.RigidJoint("shoulder", upper, shoulder.location)
-    shoulder.connect_to(upper.joints["shoulder"], angle=0)
-    elbow = bd.RevoluteJoint("elbow", upper, axis=bd.Axis((0, 0, 68), (0, 1, 0)), angular_range=(-180, 180))
-    bd.RigidJoint("elbow", fore, elbow.location)
-    elbow.connect_to(fore.joints["elbow"], angle=0)
-    return bd.Compound(children=[base, upper, fore], label="chain")
 """
 
 
@@ -237,11 +206,11 @@ class Ranges(unittest.TestCase):
         self.folder = Path(tempfile.mkdtemp(prefix="cad-ranges-")).resolve()
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
 
-    def rig(self, declare: str = "pass") -> Path:
+    def rig(self) -> Path:
         from cad.engine import build as engine_build
 
         script = self.folder / "rig.py"
-        script.write_text(textwrap.dedent(RIG.format(declare=declare)), encoding="utf-8")
+        script.write_text(textwrap.dedent(RIG), encoding="utf-8")
         os.utime(script, ns=(time.time_ns(), time.time_ns()))
         report = engine_build.build(script, ["rig"], cwd=self.folder)[0]
         self.assertTrue(report["ok"], report)
@@ -307,19 +276,6 @@ class Ranges(unittest.TestCase):
         # And it widens: at 2 mm the arm stops short of where it does at 0.3, the wall closing a degree's worth.
         self.assertLess(found[0.3]["elbow"][0], found[2.0]["elbow"][0])
         self.assertGreater(found[0.3]["slide"][1], found[2.0]["slide"][1])
-
-    def test_two_parts_declared_never_to_collide_are_set_aside_alone(self) -> None:
-        from cad import xbf
-
-        result = xbf.ranges(self.rig('exclude(arm, "wall")'))
-        joints = {found["joint"]: found for found in result.measurements["joints"]}
-        elbow, slide = joints["elbow"], joints["slide"]
-        # The arm passes the wall it stopped at (-30 degrees) and turns on until it meets the base; the carriage,
-        # a part of no excluded pair, still stops at that wall.
-        self.assertEqual("base", elbow["lower_contact"]["still"], elbow)
-        self.assertLess(elbow["lower"], -60.0)
-        self.assertEqual(101.0 - 1.0, elbow["upper"])
-        self.assertEqual("wall", slide["lower_contact"]["still"])
 
     def test_a_pair_near_as_built_stops_only_where_its_gap_closes(self) -> None:
         from cad import xbf
@@ -462,12 +418,12 @@ class Ranges(unittest.TestCase):
         heard = [line for line in said.getvalue().splitlines() if "re-estimated" not in line]
         self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 2): up to about "), heard)
         self.assertTrue(heard[1].startswith("ranges: elbow swept in "), heard)
-        # A sweep running long says each joint as it starts, though each is short (on the collision geometry too), and
-        # each joint it said as it ends: none goes unsaid, and none said starting goes unsaid ending.
+        # A sweep running long says each joint as it starts, though each is short, and each joint it said as it ends:
+        # none goes unsaid, and none said starting goes unsaid ending.
         said = io.StringIO()
         with mock.patch("cad.engine.ranges.LONG", 1e9), mock.patch("cad.engine.ranges.QUIET", 0.0), \
                 contextlib.redirect_stderr(said):
-            xbf.ranges(document, geometry="collision")
+            xbf.ranges(document)
         heard = said.getvalue().splitlines()
         self.assertEqual(["ranges: sweeping elbow (1 of 2)", "ranges: elbow swept in", "ranges: sweeping slide (2 of 2)",
                           "ranges: slide swept in"], [line.rsplit(" ", 2)[0] if " swept in " in line else line
@@ -495,62 +451,6 @@ class Ranges(unittest.TestCase):
         heard = [line.split(":")[1].strip().split(" ")[0] for line in said.getvalue().splitlines()]
         self.assertEqual(["reading", "sampling", "sweeping", "elbow", "sweeping", "slide"], heard, said.getvalue())
         self.assertIn("ranges: sampling 5 part surfaces to within 0.3 mm: about ", said.getvalue())
-
-    def test_a_decomposed_part_is_cut_for_the_collision_geometry_alone(self) -> None:
-        from cad import xbf
-
-        calls: list[int] = []
-
-        def stand_in(meshes: Any, _done: Any = None) -> list[list[tuple[Any, Any]]]:  # each mesh its own one hull
-            calls.append(len(meshes))
-            return [[(positions, triangles)] for positions, triangles, _options in meshes]
-
-        document = self.rig('collision(wall, "decomposed")')
-        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(self.folder / "cache")}), \
-                mock.patch("cad.engine.hulls._decompose", stand_in):
-            parts = xbf.ranges(document)
-            self.assertEqual(calls, [], "on the parts, nothing is decomposed")
-            collided = xbf.ranges(document, geometry="collision")
-            self.assertEqual(calls, [1])
-        lower = [{found["joint"]: found for found in result.measurements["joints"]}["elbow"]["lower"]
-                 for result in (parts, collided)]
-        self.assertEqual(lower[0], -30.0, "on the parts the arm still stops at the wall")
-        self.assertIsNotNone(lower[1], "and at the wall's hull on the collision geometry")
-
-    def test_on_the_collision_geometry_the_pairs_the_mjcf_never_collides_never_meet(self) -> None:
-        from cad import xbf
-        from cad.engine import build as engine_build
-
-        script = self.folder / "chain.py"
-        script.write_text(textwrap.dedent(CHAIN), encoding="utf-8")
-        self.assertTrue(engine_build.build(script, ["chain"], cwd=self.folder)[0]["ok"])
-        swept = {geometry: {found["joint"]: found
-                            for found in xbf.ranges(self.folder / "XBF/chain.xbf", geometry=geometry,
-                                                    step=2.0).measurements["joints"]}
-                 for geometry in ("parts", "collision")}
-        # The parts: the forearm meets the upper arm each way.
-        elbow = swept["parts"]["elbow"]
-        self.assertEqual(("upper", "upper"), (elbow["lower_contact"]["still"], elbow["upper_contact"]["still"]), elbow)
-        # MuJoCo filters a body against its parent: on the collision geometry the elbow turns all the way round,
-        # as it would in the simulator, where its range is what holds it.
-        elbow = swept["collision"]["elbow"]
-        self.assertEqual((None, None, None, None), (elbow["lower"], elbow["upper"], elbow["lower_clash"],
-                                                    elbow["upper_clash"]), elbow)
-        self.assertEqual("clear all the way round", elbow["why"])
-        # The shoulder's parent is the world's, which MuJoCo does collide: the base stops it either way, alike.
-        shoulder = [(swept[geometry]["shoulder"]["lower"], swept[geometry]["shoulder"]["upper"])
-                    for geometry in ("parts", "collision")]
-        self.assertEqual(shoulder[0], shoulder[1])
-        self.assertEqual("base", swept["collision"]["shoulder"]["upper_contact"]["still"])
-        # A pair touching as built across a joint from the world (the carriage seated on the base) is excluded in
-        # the MJCF, its two bodies whole: the carriage slides through the wall in MuJoCo, and on the collision
-        # geometry; the arm, clear of the base as built, still stops at the wall.
-        document = self.rig()
-        parts, collision = ({found["joint"]: found for found in xbf.ranges(document, geometry=geometry)
-                             .measurements["joints"]} for geometry in ("parts", "collision"))
-        self.assertEqual("wall", parts["slide"]["lower_contact"]["still"])
-        self.assertEqual((None, None), (collision["slide"]["lower"], collision["slide"]["upper"]), collision["slide"])
-        self.assertEqual(parts["elbow"]["lower"], collision["elbow"]["lower"])
 
     def test_one_joint_is_swept_alone_and_an_unknown_one_is_refused_by_name(self) -> None:
         from cad import xbf
@@ -580,8 +480,7 @@ class Ranges(unittest.TestCase):
         from cad import xbf
 
         for options, flag in (({"step": 0}, "--step"), ({"step": 90}, "--step"), ({"clearance": -1}, "--clearance"),
-                              ({"clearance": 0.2}, "--clearance 0.2 is under the sweep's resolution, 0.3 mm"),
-                              ({"geometry": "hull"}, "--geometry")):
+                              ({"clearance": 0.2}, "--clearance 0.2 is under the sweep's resolution, 0.3 mm")):
             with self.subTest(options), self.assertRaisesRegex(ArgumentRefused, flag):
                 xbf.ranges(self.folder / "missing.xbf", **options)
 

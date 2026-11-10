@@ -8,14 +8,12 @@ and the helpers a model calls with build123d objects:
 
 * ``memo``: a function worth replaying on a later build (the engine's **Memo functions**);
 * ``paint(shape, faces, material)``: a material or colour on some faces;
-* what a part declares for a simulator: ``collision(part, kind)``, what it collides as,
+* what a part declares for a robot description, each a fact of the machine:
   ``frame(part, name, location)``, a named frame in its own frame (a robot description's sites),
-  ``body(part, name=)``, a body of its own fixed to its link, ``exclude(a, b)``, a pair that never
-  collides, ``limits(assembly, joint, effort=, velocity=, armature=, damping=, friction=)``, a joint's
-  drive limits and dynamics, ``mass(shape, grams)``, what a part or an assembly weighs in all,
-  ``point_mass(part, grams, at, name=, inertia=)``, a lump its solids leave out,
-  ``friction(shape, coefficient)``, its surface's contact friction, ``free(shape)``, a base not bolted to
-  the world, and ``link(shape, name)``, the name of the link its parts make;
+  ``body(part, name=)``, a body of its own fixed to its link, ``limits(assembly, joint, effort=,
+  velocity=)``, a joint's drive limits, ``mass(shape, grams)``, what a part or an assembly weighs in
+  all, ``point_mass(part, grams, at, name=, inertia=)``, a lump its solids leave out, ``free(shape)``, a
+  base not bolted to the world, and ``link(shape, name)``, the name of the link its parts make;
 * the mechanism, as ISO 10303-242 (AP242) names its entities: ``mechanism_state``
   (``mechanism_state_representation``), ``configuration_sequence``
   (``interpolated_configuration_sequence``), ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``,
@@ -48,11 +46,8 @@ _NAMES = {
     "memo": "cad.engine.model",
     "paint": "cad.engine.model",
     "body": "cad.engine.declarations",
-    "collision": "cad.engine.declarations",
-    "exclude": "cad.engine.declarations",
     "frame": "cad.engine.declarations",
     "free": "cad.engine.declarations",
-    "friction": "cad.engine.declarations",
     "limits": "cad.engine.declarations",
     "link": "cad.engine.declarations",
     "mass": "cad.engine.declarations",
@@ -107,7 +102,6 @@ if TYPE_CHECKING:
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,
                                          self_intersections, topology_errors)
     from cad.build123d._leaves import leaves
-    from cad.engine.declarations import (body, collision, exclude, frame, free, friction, limits, link, mass,
-                                         point_mass)
+    from cad.engine.declarations import body, frame, free, limits, link, mass, point_mass
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint

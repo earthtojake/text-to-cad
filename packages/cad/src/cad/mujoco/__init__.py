@@ -70,8 +70,8 @@ def collisions(spec, part):
 
 def fit(spec, part, kind):
     """Replace the collision of the part ``part`` names in ``spec`` with the primitive ``kind`` (``box``, ``sphere``,
-    ``cylinder``, ``capsule``) the kernel fits to its exact solid, the fit a collision declared on the model is made
-    by; refused on a spec read from an MJCF (no solids) and for a part read from a mesh. Its collision geoms."""
+    ``cylinder``, ``capsule``) the kernel fits to its exact solid (``cad.engine.describe.fit``); refused on a spec
+    read from an MJCF (no solids) and for a part read from a mesh. Its collision geoms."""
     from cad.mujoco._parts import fit as _fit
 
     return _fit(spec, part, kind)

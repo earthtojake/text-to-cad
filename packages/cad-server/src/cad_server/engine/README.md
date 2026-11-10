@@ -655,7 +655,7 @@ failure: the next asker makes it again.
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
-| `description.py`, `describe.py`, `declarations.py`, `hulls.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), what a model declares for it (`collision`, `frame`, `body`, `exclude`, `limits`, `mass`, `point_mass`, `friction`, `free`, `link`), and a decomposed collision's convex hulls, kept in the engine's cache (`hulls`) |
+| `description.py`, `describe.py`, `declarations.py`, `hulls.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), what a model declares for it (`body`, `frame`, `free`, `limits`, `link`, `mass`, `point_mass`), and a part's convex hulls for `cad.mujoco.decompose`, kept in the engine's cache (`hulls`) |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF and a URDF with their meshes beside them from the robot description (`mjcf`, `urdf`), and the body pairs that touch at rest, which the MJCF excludes (`contact`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or a GLB's, an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
@@ -1256,28 +1256,22 @@ words. `--compile auto` compiles in the command's own process where it holds muj
 at the installation's release, made once by the engine (`mujoco-core` and `mujoco-studio`, about 20 MB: the
 compiler and the bindings, and Studio's web viewer, no GL), and fails `compile_unavailable` only where that cannot be had; `never` reads alone.
 
-**A decomposed collision.** A part declared `collision(part, "decomposed", max_hulls=16, threshold=None)`
-collides in a robot description as the convex hulls CoACD cuts its mesh into, the `coacd` integration's
-(`cad.coacd._decomposer`), while its visual stays the part whole: `describe` hands every decomposed
-prototype's mesh, with its options, to one call (`hulls.py`), which reads each mesh's hulls from the engine's cache
-(`places.cache_dir()/hulls/<digest>.npz`, the digest of the recipe -- CoACD's release line, the weld, seed
-0 --, the options and the mesh's bytes; never the model's folder), and decomposes the misses in one child
-interpreter of the calling environment, or of the coacd integration's environment (`python -m
-cad.coacd._decomposer`: CoACD's native library carries
-a TBB of its own beside OCCT's, logs from native code to file descriptor 1 and can die on a mesh it cannot
-repair, so the process that holds the kernel never loads it), keeping what it made. One decomposition is
-one geometry with one set of options: two parts of one shape declared with other options are cut apart, and
-a part decomposed by `collision_default` takes the declaration's default, at most 16 hulls. Each hull is a
-mesh of the description (`<key>#hull<i>`, `<key>#<options digest>#hull<i>` where options are given, named
-`<part>_hull<i>`) and a collision `<part>_hull<i>`, the part's
-contact friction on each: MJCF writes a `collision` geom and a mesh asset per hull, URDF a `<collision>`
-per hull, the contact rule (`export/contact.py`) tests each hull, and `cad.mujoco.spec` holds what the
-MJCF holds. A decomposition the cache does not hold needs coacd: where the environment that describes the
-robot does not hold it, the engine makes `cad[coacd]`'s environment on first need over its door
-(`{"op": "integration", "integration": "coacd"}`, `integration_env.made`) and the child runs there, so no
-model names it in its header and an `.xbf` or a STEP the documents worker exports decomposes too. It is
-refused by name, naming the part and the extra, only where CoACD has no wheel, no engine answers, or the
-making fails; a hit needs no coacd at all. `cad[coacd]` is one wheel, about 3 MB, for macOS arm64, Linux x86-64 and aarch64 and Windows x86-64.
+**A part's convex hulls.** `cad.mujoco.decompose(spec, part, max_hulls=16, threshold=None)` replaces a part's
+collision in a MuJoCo function's spec with the convex hulls CoACD cuts its mesh into, the `coacd` integration's
+(`cad.coacd._decomposer`), while its visual stays the part whole. It hands the mesh, with its options, to `hulls.py`,
+which reads each mesh's hulls from the engine's cache (`places.cache_dir()/hulls/<digest>.npz`, the digest of the
+recipe -- CoACD's release line, the weld, seed 0 --, the options and the mesh's bytes; never the model's folder),
+and decomposes the misses in one child interpreter of the calling environment, or of the coacd integration's
+environment (`python -m cad.coacd._decomposer`: CoACD's native library carries a TBB of its own beside OCCT's,
+logs from native code to file descriptor 1 and can die on a mesh it cannot repair, so the process that holds the
+kernel never loads it), keeping what it made. One decomposition is one mesh with one set of options. Each hull is a
+mesh asset `<mesh>_hull<i>` (a file in the engine's cache) and a collision geom `<part>_hull<i>`. A decomposition
+the cache does not hold needs coacd: where the calling environment does not hold it (a script `cad run` runs, whose
+imports name `cad[mujoco]`, or a Python of its own), the device's engine makes `cad[coacd]`'s environment on first
+need over its door (`{"op": "integration", "integration": "coacd"}`, `integration_env.made`) and the child runs
+there, so no script names it in its header. It is refused by name, naming the part and the extra, only where CoACD
+has no wheel, no engine answers, or the making fails; a hit needs no coacd at all. `cad[coacd]` is one wheel, about
+3 MB, for macOS arm64, Linux x86-64 and aarch64 and Windows x86-64.
 
 **A GLB in Blender's scene.** `cad.blender.load` is the `blender` integration's one helper, for a script that
 renders with bpy (Blender as a Python module, its extra `cad[blender]`), run by `cad run` in the environment
@@ -2900,50 +2894,36 @@ housing.color = "#606b78"  # assign after material: build123d's setter sets colo
 paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
 ```
 
-**What a model declares for a simulator.** Beside its material, a part may say what a robot
-description needs that geometry does not decide (`cad.build123d`'s `collision`, `frame`, `body`,
-`exclude`, `limits`, `mass`, `point_mass`, `friction`, `free`, `link`): `collision(part, "box")` (one of `mesh`, the default -- a simulator hulls it --,
-`box`, `sphere`, `cylinder`, `capsule`, fitted by the kernel to the part's oriented bounding box,
-`decomposed` -- the convex hulls CoACD cuts the part's mesh into, the `coacd` integration's, its visual
-whole, `max_hulls=` and `threshold=` bounding it (**A decomposed collision**, below) --, or `none`; on an
-assembly, for every part below it that declares none, its options with it); `frame(part, "tool",
-bd.Pos(160, 0, 25))` (in the part's own frame, before its placement); `body(part, name=None)`, a body
-of its own fixed to the link it would merge into; `exclude(a, b)`, a pair that never collides (`b` a
-part or an assembly, that occurrence alone, the document naming it by its path; or a label, every node
-of it; on an assembly, for every part below it); and `limits(assembly,
-"elbow", effort=27, velocity=6.28, armature=0.01, damping=0.4, friction=0.15)` (N*m or N, rad/s or
-m/s; the joint's dynamics in kg*m^2 or kg, N*m*s/rad or N*s/m, N*m or N), kept on the part that holds
-each revolute or linear joint of that label; `mass(shape, grams)`, what a part or an assembly weighs
-in all, its solids keeping their densities' ratios (one density where none has one) and scaled
-alike to make it up, an inner declaration fixing its own subtree and an outer one scaling only the
-solids no inner one holds (`describe.py`'s **Mass**, which refuses a total its point masses and inner
-masses reach, or one its solids have no volume to carry); `point_mass(part, grams, at, name=,
-inertia=)`, a lump at a point in the part's own frame that every `mass` above it counts; and
-`friction(shape, coefficient)`, a surface's contact friction (sliding, or sliding, torsional and
-rolling), inherited as a material is -- `bd_materials` carries no friction, so it is declared beside
-the material and never assumed; `free(shape)`, a base not bolted to the world (each link hung from
-the world that holds a part at or below it floats); and `link(shape, name)`, the name of the link its
-parts make. ISO 10303-105 bounds no drive and has no ground that floats, so none of them is the
-mechanism's (law 13). All travel with the prototype, in the structure (`collision`, `frames`, and
-`body`, `exclude`, `drives`, `mass` -- each declaration at or above the part, as levels above it and
-grams --, `pointMasses`, `friction`, `decomposition` -- a decomposed collision's `maxHulls` and
-`threshold`, those given --, `free` -- the levels above the part declared free -- and `link` -- each
-name at or above the part, as levels above it and the name -- where declared) and the xbf (a JSON string under `DECLARATIONS_GUID`
-on the part's label, written only where a part declares something), and two parts that differ only
-in them are two prototypes. The robot description reads them (`describe.py`: a body a link on a
-fixed joint, an exclusion a link pair, a drive a joint's `effort`, `velocity`, `armature`, `damping`
-and `friction`, the masses and point masses each link's inertial, a friction its collisions', a free
-node a `floating` joint from the ground, a link name the link's); an MJCF
-export writes collision geoms (with `friction` where declared), sites, child bodies, `<contact><exclude>`
-(the declared pairs, and every pair that touches at rest across a moving joint, `export/contact.py`),
-`actuatorfrcrange`, the joint's `armature`, `damping` and `frictionloss`, and a free base's
-`<freejoint>` (its seven values in every key); a URDF a fixed
-joint and a link, `<limit>`'s effort and velocity, and `<dynamics damping friction>` (URDF has
-no armature and no contact friction: a declared one is said in the export's log, not written), its root
-the free base, and an empty `base_link` before a root that has a mass (KDL takes no inertia on the
-root) or whose frame is not the world's (its first part's own frame, turned or moved), at the root's
-placement, so every link stands where the MJCF stands it. Each writer keeps links and
-joints in a namespace each, as MJCF and URDF do, and says a rename in its kind (`export.note`, the export's log).
+**What a model declares for a robot description.** Beside its material, a part may say what a robot
+description needs that geometry does not decide, each a fact of the machine (`cad.build123d`'s `body`, `frame`,
+`free`, `limits`, `link`, `mass`, `point_mass`): `frame(part, "tool", bd.Pos(160, 0, 25))` (in the part's own frame,
+before its placement); `body(part, name=None)`, a body of its own fixed to the link it would merge into;
+`limits(assembly, "elbow", effort=27, velocity=6.28)` (N*m or N, rad/s or m/s), kept on the part that holds each
+revolute or linear joint of that label; `mass(shape, grams)`, what a part or an assembly weighs in all, its solids
+keeping their densities' ratios (one density where none has one) and scaled alike to make it up, an inner
+declaration fixing its own subtree and an outer one scaling only the solids no inner one holds (`describe.py`'s
+**Mass**, which refuses a total its point masses and inner masses reach, or one its solids have no volume to
+carry); `point_mass(part, grams, at, name=, inertia=)`, a lump at a point in the part's own frame that every `mass`
+above it counts; `free(shape)`, a base not bolted to the world (each link hung from the world that holds a part at
+or below it floats); and `link(shape, name)`, the name of the link its parts make. ISO 10303-105 bounds no drive and
+has no ground that floats, so `limits` and `free` are facts of the machine that are not kinematics, kept here and
+not in the mechanism (law 13). How a simulator collides a part, which pairs never collide, contact friction and a
+joint's dynamics are a simulation's choices, made in a MuJoCo function (`cad.mujoco`), never declared on the
+model. All travel with the prototype, in the structure (`frames`, and `body`, `drives`, `mass` -- each declaration
+at or above the part, as levels above it and grams --, `pointMasses`, `free` -- the levels above the part declared
+free -- and `link` -- each name at or above the part, as levels above it and the name -- where declared) and the xbf
+(a JSON string under `DECLARATIONS_GUID` on the part's label, written only where a part declares something), and
+two parts that differ only in them are two prototypes. The robot description reads them (`describe.py`: a body a
+link on a fixed joint, a drive a joint's `effort` and `velocity`, the masses and point masses each link's inertial,
+a free node a `floating` joint from the ground, a link name the link's), and gives each part its own mesh as its
+collision. An MJCF export writes a collision geom of each part's mesh (MuJoCo collides it as its convex hull),
+sites, child bodies, `<contact><exclude>` for every pair that touches at rest across a moving joint
+(`export/contact.py`), `actuatorfrcrange`, and a free base's `<freejoint>` (its seven values in every key); a URDF a
+fixed joint and a link, `<limit>`'s effort and velocity, a `<collision>` of each part's mesh, its root the free
+base, and an empty `base_link` before a root that has a mass (KDL takes no inertia on the root) or whose frame is
+not the world's (its first part's own frame, turned or moved), at the root's placement, so every link stands where
+the MJCF stands it. Each writer keeps links and joints in a namespace each, as MJCF and URDF do, and says a rename
+in its kind (`export.note`, the export's log).
 
 **The zero, the scene and what an export says** (`describe.py`'s **The zero**, `export/mjcf.py`'s **The
 scene**, `Description.summary`). An export to an MJCF or a URDF may name a mechanism state (`--zero`,

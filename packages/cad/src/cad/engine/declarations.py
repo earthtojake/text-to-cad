@@ -1,28 +1,18 @@
-"""What a part declares for a simulator, beside its material: its collision, its named frames, whether it
-is a body of its own, what it does not collide with, how its joints are driven, what it weighs, how
-it grips, whether it floats and what its link is named.
+"""What a part declares for a robot description, beside its material: its named frames, whether it is
+a body of its own, how hard and how fast its joints are driven, what it weighs, whether it floats and
+what its link is named. Each is a fact of the machine. How a simulator collides it, which pairs it
+never collides, its contact friction and its joints' dynamics are choices made for a simulation, in a
+MuJoCo function (``cad.mujoco``), not declared here.
 
-``collision(part, kind)`` says what a simulator collides the part as (``description.COLLISIONS``):
-the mesh itself (the default a description is made with), a ``box``, a ``sphere``, a ``cylinder``
-or a ``capsule`` the kernel fits to the part, ``decomposed`` (convex hulls CoACD cuts the part's mesh
-into, the coacd integration's, its visual whole: ``max_hulls``, 16 by default, and ``threshold`` bound it), or
-``none``. On an assembly it is every part's below it that declares none, as a material is, its
-options with it. ``frame(part, name, location)`` names a frame on a part --
-a tool tip, a camera mount, a sensor -- for a writer's sites or fixed frames.
-
-``body(part, name=None)`` keeps a part a body of its own, fixed to the link it would have merged
-into (a camera mount, a fingertip a simulator addresses): its mass, visuals, collision and frames go
-with it. ``exclude(a, b)`` says two parts, or what they are part of, never collide (a hull pair that
-touches at rest); ``b`` is a part or an assembly, which names that occurrence and the parts below it
-alone, or a label, which names every part at or below a node of that label. ``limits(assembly, joint, effort=, velocity=)`` bounds the drive of every revolute or
-linear joint of that label on the assembly or below it: its effort in N*m (a revolute joint) or N
-(a linear one), its speed in rad/s or m/s, SI as the description is. ISO 10303-105 names which
-values a pair is driven in (``actuated_kinematic_pair``) and no bound on the drive, so the limits
-are a simulator's, as a collision is, and no fact of the mechanism (the package's law 13). Beside its
-bounds, ``limits`` gives the joint's own dynamics, each a fact of the hardware a simulator reads off
-the joint: ``armature`` (the rotor's inertia reflected through the gearbox, kg*m^2 for a turn, kg for
-a slide), ``damping`` (N*m*s/rad, N*s/m) and ``friction`` (the drive's dry friction, N*m or N:
-MuJoCo's ``frictionloss``). An actuator, its gains and the contact's tuning are the scene's.
+``frame(part, name, location)`` names a frame on a part -- a tool tip, a camera mount, a sensor -- for
+a writer's sites or fixed frames. ``body(part, name=None)`` keeps a part a body of its own, fixed to
+the link it would have merged into (a camera mount, a fingertip a simulator addresses): its mass,
+visuals, collision and frames go with it. ``limits(assembly, joint, effort=, velocity=)`` bounds the
+drive of every revolute or linear joint of that label on the assembly or below it: its effort in N*m
+(a revolute joint) or N (a linear one), its speed in rad/s or m/s, SI as the description is: the
+drive's data sheet. ISO 10303-105 names which values a pair is driven in (``actuated_kinematic_pair``)
+and no bound on the drive, so the limits are a fact of the machine that is not kinematics, which is
+why they are declared here and not in the AP242 mechanism (the package's law 13).
 
 **Mass.** ``mass(shape, grams)`` says what a part or an assembly weighs, all of it: its solids keep
 the density ratios their materials give them and are scaled alike until they, with every point mass
@@ -39,31 +29,26 @@ exactly, the parallel-axis theorem moving it to the link's centre. A point mass 
 ``mass`` total above it: the total is what the hardware weighs, the lumps are fixed, and the solids
 are scaled to make up the rest.
 
-**Friction.** ``friction(shape, coefficient)`` is the contact friction of a part's surface -- a
-rubber pad's, an aluminium finger's -- set where its material is and inherited as one is, the part's
-own over its assembly's: a sliding coefficient, or MuJoCo's three (sliding, torsional, rolling). It
-is the surface's, which the material's library does not carry, so it is declared beside it. No
-material's friction is assumed: where none is declared, a simulator uses its own default.
-
 **The base and the links' names.** ``free(shape)`` says that what ``shape`` holds is not bolted to
 the world: the link a robot description hangs from the world that holds a part at or below it -- on
 the top assembly, the robot's base (its ground link) -- floats (a humanoid, a quadruped, a mobile base,
-a part dropped on a table). Bolted is the default. It is a simulator's, as ``limits`` is: AP242's
-mechanism has a ground and no word for a ground that floats. ``link(shape, name)`` names the link the
-parts at or below ``shape`` make, instead of its first part's (or a jointed assembly's) label; a
-declaration on a part or an assembly below names its own links over it. Both are declared on a node of
-the tree and kept, as ``mass`` is, on every part below it with how many levels above the part it was
-declared, so the document carries them on the parts' prototypes and gives them back to the node.
+a part dropped on a table). Bolted is the default. It is a fact of the machine that is not kinematics,
+as ``limits`` is: AP242's mechanism has a ground and no word for a ground that floats. ``link(shape,
+name)`` names the link the parts at or below ``shape`` make, instead of its first part's (or a jointed
+assembly's) label; a declaration on a part or an assembly below names its own links over it. Both are
+declared on a node of the tree and kept, as ``mass`` is, on every part below it with how many levels
+above the part it was declared, so the document carries them on the parts' prototypes and gives them
+back to the node.
 
 Each is an attribute of the object, as a material is, and travels as build123d moves it: a copy,
 ``moved`` and ``located`` keep them. ``limits`` is kept on the node that holds the joint -- a part, or
 an assembly (a link of several parts), which the document keeps on every part below it with how many
-levels above the part it is, as ``mass`` -- so it is declared after the joint is made. A frame is given in the part's OWN frame, the one its geometry
-is in before its placement (``part.location`` not applied: ``bd.Box(240, 40, 50)`` is centred on
-it), so it moves with the part however a joint or a placement moves it::
+levels above the part it is, as ``mass`` -- so it is declared after the joint is made. A frame is given
+in the part's OWN frame, the one its geometry is in before its placement (``part.location`` not
+applied: ``bd.Box(240, 40, 50)`` is centred on it), so it moves with the part however a joint or a
+placement moves it::
 
     arm = bd.Box(240, 40, 50, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
-    collision(arm, "capsule")
     frame(arm, "tool", bd.Pos(240, 0, 25))
 
 The document carries them on the part's prototype (``document.collect``): a part that declares
@@ -76,29 +61,18 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from cad.engine.description import COLLISIONS
-from cad.engine.hulls import MAX_HULLS, THRESHOLD, options as hull_options
-
-__all__ = ["body", "collision", "exclude", "frame", "free", "friction", "limits", "link", "mass", "point_mass"]
+__all__ = ["body", "frame", "free", "limits", "link", "mass", "point_mass"]
 
 # The attributes the declarations are kept in on a shape (``document.collect`` reads them).
-COLLISION = "_collision"
-DECOMPOSITION = "_decomposition"  # a decomposed collision's options: {"maxHulls"?, "threshold"?}, those given
 FRAMES = "_frames"
 BODY = "_body"  # the body's name, "" for the part's own
-EXCLUDE = "_exclude"  # the labels it does not collide with, and the marks of the shapes, sorted
-EXCLUDED = "_excluded"  # the marks a shape given to ``exclude`` is named by, sorted
-#: How a mark begins (``exclude``): no label does, and the document never holds one (``document.collect`` names
-#: each by the occurrence it marks).
-MARK = "\x00shape:"
-DRIVES = "_drives"  # {joint label: {"effort": ..., "velocity": ..., ...}}, the keys it declares (``DRIVE``)
+DRIVES = "_drives"  # {joint label: {"effort": ..., "velocity": ...}}, the keys it declares (``DRIVE``)
 MASS = "_mass"  # grams, the part's or the assembly's whole
 POINTS = "_points"  # {name: (grams, Location in the part's own frame, (ixx, iyy, izz) kg*m^2 or None)}
-FRICTION = "_friction"  # (sliding,) or (sliding, torsional, rolling)
 FREE = "_free"  # True: what the node holds floats (``free``)
 LINK = "_link"  # the name of the link the node's parts make (``link``)
-#: What ``limits`` declares of a joint, by its keyword: the drive's bounds, then the joint's dynamics.
-DRIVE = ("effort", "velocity", "armature", "damping", "friction")
+#: What ``limits`` declares of a joint, by its keyword: the drive's bounds.
+DRIVE = ("effort", "velocity")
 # The joints a drive bounds, by build123d's class, and the ones it refuses: a bound of one value.
 DRIVEN = ("RevoluteJoint", "LinearJoint")
 UNDRIVEN = ("CylindricalJoint", "BallJoint")
@@ -109,40 +83,6 @@ def _shape(part: Any, said: str) -> Any:
 
     if not isinstance(part, bd.Shape):
         raise TypeError(f"{said}: a build123d shape, not {type(part).__name__}")
-    return part
-
-
-# ``MAX_HULLS`` and ``THRESHOLD`` are the decomposition's (``hulls``), kept here by name for the readers of these.
-
-
-def collision(part: Any, kind: str, *, max_hulls: int | None = MAX_HULLS, threshold: float | None = None) -> Any:
-    """Say what a simulator collides ``part`` as: one of ``mesh``, ``box``, ``sphere``,
-    ``cylinder``, ``capsule``, ``decomposed`` or ``none`` (the primitives fitted by the kernel to the
-    part's oriented bounding box, a capsule's axis its longest side, a cylinder's the axis the part is turned
-    about where its rim is a cylindrical face as wide as the part, or where its cylindrical and conical faces make
-    a quarter of its surface, a disc's or a pancake motor's short side however thin, else its longest side:
-    ``describe._turned_axis``). ``decomposed``
-    is a set of convex hulls cut from the part's mesh by CoACD (the coacd integration, ``cad[coacd]``,
-    where the robot is described), its visual left whole: ``max_hulls`` at most that many (CoACD's
-    ``max_convex_hull``; ``MAX_HULLS``, 16, by default, None for no limit), ``threshold`` its concavity
-    threshold, 0.01 to 1, a smaller one cutting finer (CoACD's 0.05 where None); no other kind takes
-    either (``max_hulls`` left at its default is none given). On an assembly, every part below it that
-    declares none. Returns ``part``."""
-    _shape(part, "collision")
-    if kind not in COLLISIONS:
-        raise ValueError(f"collision {kind!r} is none of {', '.join(COLLISIONS)}")
-    if max_hulls == MAX_HULLS and kind != "decomposed" and not isinstance(max_hulls, bool):
-        max_hulls = None  # the default bounds a decomposed collision alone: another kind is given none
-    options = hull_options(max_hulls, threshold)
-    if options and kind != "decomposed":
-        given = " or ".join(name for name, value in (("max_hulls", max_hulls), ("threshold", threshold))
-                            if value is not None)
-        raise ValueError(f"collision {kind!r} takes no {given}: they bound a decomposed one")
-    part.__dict__[COLLISION] = kind
-    if options:
-        part.__dict__[DECOMPOSITION] = options
-    else:
-        part.__dict__.pop(DECOMPOSITION, None)
     return part
 
 
@@ -186,46 +126,6 @@ def body(part: Any, name: str | None = None) -> Any:
     return part
 
 
-def exclude(a: Any, b: Any) -> Any:
-    """Say that ``a`` never collides with ``b``, one of the two a shape -- a part or an assembly (every
-    part below it), which keeps the declaration, as every declaration is -- in either order. The other
-    is a shape too, which names that shape alone (that occurrence and the parts below it, wherever the
-    model places it, however many other parts share its label), or a label, which names every part at
-    or below a node of that label (a part's label names its link too). A simulator that filters
-    contacts by pair is told so (MJCF's ``<contact><exclude>``). Returns the shape that keeps it.
-
-    A shape is named by a mark kept on both (``EXCLUDED`` on it, ``EXCLUDE`` on the keeper), as a
-    material is kept: a copy, ``moved`` and ``located`` carry it, and the document names the
-    occurrence that carries it by its path (``document.collect``); a shape the model's result does not
-    hold excludes nothing."""
-    import uuid
-
-    import build123d as bd
-
-    if not isinstance(a, bd.Shape) and isinstance(b, bd.Shape):
-        a, b = b, a  # the pair is either way round: the shape keeps it
-    if not isinstance(a, bd.Shape):
-        if isinstance(a, str) and isinstance(b, str):
-            raise TypeError(f"exclude({a!r}, {b!r}): one of the two is the part or the assembly itself, which keeps "
-                            f"the declaration, and the other may be its label: exclude(part, {b!r})")
-        _shape(a, "exclude")
-    if b is a:
-        raise ValueError(f"exclude: {a.label or 'a shape'!r} with itself; a body never collides with itself")
-    if isinstance(b, bd.Shape):
-        # A mark of its own, never a label: shapes of one label (a vendor's repeated parts) stay apart. Unique
-        # in every run, so a model body the engine replays keeps its marks and a later one never meets them.
-        other = f"{MARK}{uuid.uuid4().hex}"
-        b.__dict__[EXCLUDED] = tuple(sorted({*(b.__dict__.get(EXCLUDED) or ()), other}))
-    elif isinstance(b, str) and b:
-        other = b
-        if other == a.label:
-            raise ValueError(f"exclude: {other!r} with itself; a body never collides with itself")
-    else:
-        raise TypeError(f"exclude: a build123d shape or a part's label, not {b!r}")
-    a.__dict__[EXCLUDE] = tuple(sorted({*(a.__dict__.get(EXCLUDE) or ()), other}))
-    return a
-
-
 def _number(value: Any, said: str, *, zero: bool = False) -> float:
     """``value`` as a finite float above zero (or at it, where ``zero``), else refused as ``said``."""
     if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
@@ -234,26 +134,20 @@ def _number(value: Any, said: str, *, zero: bool = False) -> float:
     return float(value)
 
 
-def limits(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None,
-           armature: float | None = None, damping: float | None = None, friction: float | None = None) -> Any:
+def limits(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None) -> Any:
     """Bound the drive of every revolute or linear joint labelled ``joint`` on ``assembly`` or below
-    it, and give its dynamics: ``effort`` in N*m for a revolute joint and N for a linear one,
-    ``velocity`` in rad/s or m/s (URDF's ``<limit effort velocity>``, MJCF's
-    ``actuatorfrcrange``; MJCF bounds no speed), each positive; ``armature``, the rotor's inertia
-    reflected through its gearbox, in kg*m^2 or kg (MJCF's ``armature``; URDF has
-    none), ``damping`` in N*m*s/rad or N*s/m and ``friction``, the drive's dry friction, in N*m or N
-    (MJCF's ``damping`` and ``frictionloss``, URDF's ``<dynamics damping friction>``), each zero or more; each None where the model gives none. A cylindrical or
-    a ball joint, of two and three values, is refused. A second declaration for one joint replaces
-    the first. Declare it after the joint is made: it is kept on the part that holds it. Returns
-    ``assembly``."""
+    it: ``effort`` in N*m for a revolute joint and N for a linear one, ``velocity`` in rad/s or m/s
+    (URDF's ``<limit effort velocity>``, MJCF's ``actuatorfrcrange``; MJCF bounds no speed), each
+    positive, each None where the model gives none. A cylindrical or a ball joint, of two and three
+    values, is refused. A second declaration for one joint replaces the first. Declare it after the
+    joint is made: it is kept on the part that holds it. Returns ``assembly``."""
     _shape(assembly, "limits")
     if not isinstance(joint, str) or not joint:
         raise ValueError(f"limits: a joint's label, a non-empty string, not {joint!r}")
-    given = dict(zip(DRIVE, (effort, velocity, armature, damping, friction)))
-    bounds = {key: _number(value, f"limits {joint!r}: {key}", zero=key not in ("effort", "velocity"))
-              for key, value in given.items() if value is not None}
+    given = dict(zip(DRIVE, (effort, velocity)))
+    bounds = {key: _number(value, f"limits {joint!r}: {key}") for key, value in given.items() if value is not None}
     if not bounds:
-        raise ValueError(f"limits {joint!r}: give effort, velocity, armature, damping or friction")
+        raise ValueError(f"limits {joint!r}: give effort or velocity")
     found = []
     pending = [assembly]
     while pending:
@@ -342,20 +236,4 @@ def link(shape: Any, name: str) -> Any:
     if not isinstance(name, str) or not name:
         raise ValueError(f"a link's name is a non-empty string, not {name!r}")
     shape.__dict__[LINK] = name
-    return shape
-
-
-def friction(shape: Any, coefficient: float | tuple[float, float, float]) -> Any:
-    """Give ``shape``'s surface its contact friction: a sliding coefficient, or MuJoCo's three
-    (sliding, torsional, rolling), each zero or more. On an assembly, every part below it that
-    declares none, as a material is (the module's **Friction**). Returns ``shape``."""
-    _shape(shape, "friction")
-    said = f"friction of {shape.label or 'the shape'}"
-    if isinstance(coefficient, (tuple, list)):
-        if len(coefficient) != 3:
-            raise ValueError(f"{said}: one coefficient, or three (sliding, torsional, rolling), not {coefficient!r}")
-        values = tuple(_number(value, said, zero=True) for value in coefficient)
-    else:
-        values = (_number(coefficient, said, zero=True),)
-    shape.__dict__[FRICTION] = values
     return shape

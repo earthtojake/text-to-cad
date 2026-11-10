@@ -13,8 +13,8 @@ device's engine outside any sandbox and used again, as ``cad run`` makes a progr
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
-A process of the engine's own that needs an integration its environment lacks -- a worker's decomposition of a
-collision, the coacd integration's (``cad.engine.hulls``) -- asks the device's engine for it over the door
+A process that needs an integration its environment lacks -- a MuJoCo function's decomposition of a part's
+collision, the coacd integration's (``cad.engine.hulls``, for ``cad.mujoco.decompose``) -- asks the device's engine for it over the door
 (``{"op": "integration", "integration"}``, ``made``), which makes the same environment the same way, and runs
 the integration's code there in a process of its own.
 
@@ -118,8 +118,8 @@ def environment(integration: Integrations, told: Callable[[str], None], *, engin
 
 
 def made(integration: str, told: Callable[[str], None]) -> str:
-    """The Python of the environment that holds ``integration``, for a process of the engine's own that lacks it
-    (``{"op": "integration"}``, answered by the engine: a worker's decomposition, ``cad.engine.hulls``): this
+    """The Python of the environment that holds ``integration``, for a process that lacks it
+    (``{"op": "integration"}``, answered by the engine: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``): this
     process's own where it carries it, else ``environment``'s, its making the engine's one of that environment --
     the one under way followed, or one started (``extras.Making``, as the door's ``base`` with a spec makes a
     program's) -- each of its lines said to ``told``. ``Failed`` in one line: an integration the registry does

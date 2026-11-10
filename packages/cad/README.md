@@ -365,7 +365,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
     person's click.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
-    `cad[coacd]`'s, for an export's decomposed collision) is fetched once, the first time a command needs
+    `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
     reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
@@ -658,7 +658,7 @@ src/cad/
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
   coacd/                 # the coacd integration, CoACD's convex decomposition: the process of its own
-                         #   that cuts a part declared collision(part, "decomposed") into convex hulls
+                         #   that cuts a part's mesh into convex hulls for cad.mujoco.decompose
                          #   (_decomposer), which the engine starts and keeps the hulls of (engine/hulls.py)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
@@ -1001,16 +1001,35 @@ calling process, as a study reads one (a model exported by the engine to an `.xb
 first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
 (`engine.ranges`: surfaces sampled to a fixed resolution and measured gap by gap, the other joints as
 built): its stop is where its child link meets its parent link, and a clash with any other link before it is
-said beside; a larger clearance only narrows a range, and two parts declared `exclude(a, b)` never meet. It writes
-nothing and changes nothing: a model is code, and its ranges are written in it (law 23). Its options
-describe the sweep, never the model (law 22): `step` (degrees or millimetres), `clearance` (millimetres,
-0.3 by default and at the least: the surfaces' sampling), `geometry` (`parts`, each part's own surface;
-`collision`, what each declares a simulator collides it as, less the link pairs the MJCF never collides,
-so its stops are MuJoCo's) and `joint` (the joints to sweep, every one a person moves by default; a name
-the document has no such joint by is refused, naming its joints). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
+said beside; a larger clearance only narrows a range. Every part is tested against every other on its own
+surface: where a simulator stops a joint, with the collision shapes a MuJoCo function chose, is a question
+for the simulator on its file. It writes nothing and changes nothing: a model is code, and its ranges are
+written in it (law 23). Its options describe the sweep, never the model (law 22): `step` (degrees or
+millimetres), `clearance` (millimetres, 0.3 by default and at the least: the surfaces' sampling) and `joint`
+(the joints to sweep, every one a person moves by default; a name the document has no such joint by is
+refused, naming its joints). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
 process when its environment holds it, else the installation's base (law 29).
 
 ## Since 0.11.8
+
+What 0.11.8 adds:
+
+- **A model declares what is true of the machine for a robot description.** `cad.build123d`'s `body`,
+  `frame`, `free`, `limits` (a drive's `effort` and `velocity`), `link`, `mass` and `point_mass` are kept
+  in the xbf beside the materials. Each is a fact of the machine; how a simulator collides a part, which
+  pairs never collide, contact friction and a joint's dynamics are a simulation's choices, made in a MuJoCo
+  function.
+- **A document exports as a robot description.** `cad model export ID robot.xml` (MJCF) and `robot.urdf`
+  write its links, exact inertials, visual meshes and colours, each part's mesh as its collision (MuJoCo
+  collides a mesh as its convex hull), sites, drive force bounds, couplings, closed loops (MJCF) and states
+  as keys, with a `scene.xml` beside an MJCF; `--zero STATE` counts every joint from a state. Its summary
+  says how the parts collide, and that a MuJoCo function is where to choose otherwise.
+- **A MuJoCo function makes the simulation's choices** (`cad.mujoco`, `cad[mujoco]`): `spec` makes a
+  document a `mujoco.MjSpec`; `collisions`, `fit` (a box, sphere, cylinder or capsule fitted to the part's
+  exact solid) and `decompose` (CoACD's convex hulls of its mesh, `cad[coacd]`) find and replace a part's
+  collision by its label path; everything else is MuJoCo's own API; `save` writes the spec as a folder that
+  travels.
+- **`ranges` finds each joint's stops** from the parts' surfaces (**Joint stops**).
 
 What a model, a script or a check written for 0.11.7 meets now:
 

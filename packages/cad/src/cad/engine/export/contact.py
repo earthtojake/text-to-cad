@@ -14,17 +14,10 @@ description's zero state, its frames). A floating joint (a free base, ``cad.buil
 joint of a mechanism: a free body resting on a bolted one must collide with it, so no pair across it
 is excluded, and its base is welded to nothing, so MuJoCo's ``filterparent`` filters its children's
 contacts with it itself. A mesh is its convex hull, a primitive itself, as MuJoCo
-collides them, so a decomposed part (``collision(part, "decomposed")``) is tested hull by hull. The test is exact for convex shapes: the distance between two of them by GJK over their
+collides them. The test is exact for convex shapes: the distance between two of them by GJK over their
 support functions, after their axis-aligned boxes (grown by ``TOUCH``) are found to meet. A pair GJK
 does not settle in ``ITERATIONS`` steps is counted as touching, so the rule errs towards an exclusion.
 Pairs come in joint order, then the closures', each once. Text and numpy alone (law 3), the same description the same pairs.
-
-**What the MJCF never collides** (``never``): those pairs and the ones the model declares
-(``Description.excludes``), which the file excludes, and MuJoCo's own filter of the rest -- two bodies of one
-weld (bodies joined by fixed joints alone, which the file writes as bodies with no joint), and, with
-``filterparent`` (MuJoCo's default), two welds one of which hangs from the other by its joint, neither welded
-to the world. A joint stop sweep on the collision geometry (``ranges``) sets them aside, so its stops are the
-simulator's.
 """
 
 from __future__ import annotations
@@ -36,7 +29,7 @@ import numpy as np
 
 from cad.engine.description import Description, Geometry, Link
 
-__all__ = ["ITERATIONS", "TOUCH", "never", "touching"]
+__all__ = ["ITERATIONS", "TOUCH", "touching"]
 
 #: Two shapes this near (metres) touch: a tessellation's rounding of faces that meet.
 TOUCH = 1e-5
@@ -63,29 +56,6 @@ def touching(description: Description) -> list[tuple[str, str]]:
             if any(_near(a, b) for a in ours for b in theirs):
                 seen.add(key)
                 found.append((parent, child))
-    return found
-
-
-def never(description: Description) -> set[frozenset[str]]:
-    """The link pairs the MJCF never collides (the module's **What the MJCF never collides**), by link name."""
-    welded = _welds(description)
-    weld = {name: frozenset(links) for name, links in welded.items()}
-    world = weld[description.root.name]
-    above = {joint.child: joint for joint in description.joints}
-
-    def parent_weld(of: frozenset[str]) -> frozenset[str] | None:
-        """The weld the weld ``of`` hangs from by its joint: its top link's parent's (None at the root)."""
-        top = next((name for name in of if name not in above or above[name].kind != "fixed"), None)
-        joint = above.get(top) if top is not None else None
-        return None if joint is None else weld[joint.parent]
-
-    found = {frozenset(pair) for pair in [*touching(description), *description.excludes] if pair[0] != pair[1]}
-    names = [link.name for link in description.links]
-    for at, first in enumerate(names):
-        for second in names[at + 1:]:
-            a, b = weld[first], weld[second]
-            if a == b or (a != world and b != world and (parent_weld(a) == b or parent_weld(b) == a)):
-                found.add(frozenset((first, second)))
     return found
 
 

@@ -129,7 +129,7 @@ mujoco = [
   "mujoco-core>=4.0,<5",
   "mujoco-studio>=4.0,<5",
 ]
-# The coacd integration's extra: a part declared `collision(part, "decomposed")` collides in a robot description as
+# The coacd integration's extra: cad.mujoco.decompose makes a part of a MuJoCo function's spec collide as
 # the convex hulls CoACD cuts its mesh into (cad.coacd), imported only by the decomposer's own process
 # (cad.coacd._decomposer), since its native library carries a TBB of its own beside the kernel's. One wheel, its
 # library loaded with ctypes, numpy its one dependency, MIT; about 1.5-3.5 MB. Bounded to the 1.0 line: the hulls

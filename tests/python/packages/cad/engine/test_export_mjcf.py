@@ -1,9 +1,9 @@
 """MJCF as an export of every document (``export/mjcf.py``): a robot description written as Menagerie lays
 a robot out -- the exact text of a small hand-built one, its meshes binary STLs in metres beside it, the
 same bytes written twice, and MuJoCo compiling it to the bodies, masses and keys it describes; a body
-fixed to its link, a body and a joint of one name, a drive's effort, a joint's armature, damping and
-frictionloss and a part's contact friction, and the contact pairs excluded, a
-link resting on a ground welded to the world and a declared pair, which MuJoCo then leaves out; a loop of
+fixed to its link, a body and a joint of one name, a drive's effort, and the contact pairs excluded, a
+link resting on a ground welded to the world, which MuJoCo then leaves out, the summary counting them and saying
+each part collides as its mesh; a loop of
 slides alone refused by name, and a mesh file refused as a source; and models built by the engine and
 exported to ``.xml``: a four-bar whose loop two connects close as built and hold closed as it falls, two
 slides a pinion of no part couples as one control, a hinge whose bodies stand where the mechanism puts
@@ -248,8 +248,7 @@ class HandBuiltTest(_Folder):
 
 def jointed() -> Description:
     """A base fixed to the world, an arm sunk 1 cm into its top on a joint named as the arm is, with its drive's
-    limits, a camera kept a body of its own on the arm, and a hand clear of them on a wrist, excluded from
-    the base by declaration."""
+    limits, a camera kept a body of its own on the arm, and a hand clear of them on a wrist."""
     def box(name: str, z: float, size: tuple[float, ...]) -> list[Collision]:
         return [Collision(name, Geometry("box", _frame(0, 0, z), size=size))]
 
@@ -264,8 +263,7 @@ def jointed() -> Description:
                     effort=12.5, velocity=3.0),
               Joint("camera", "fixed", "arm", "camera", _frame(0, 0, 0.3)),
               Joint("wrist", "continuous", "arm", "hand", _frame(0, 0, 0.35), limits=((None, None),), as_built=(0.0,))]
-    return Description("rig", [Link("world", np.eye(4)), base, arm, camera, hand], joints,
-                       excludes=(("base", "hand"),))
+    return Description("rig", [Link("world", np.eye(4)), base, arm, camera, hand], joints)
 
 
 class ContactTest(_Folder):
@@ -275,60 +273,37 @@ class ContactTest(_Folder):
         text = path.read_text(encoding="utf-8")
         self.assertIn('<joint name="arm" type="hinge" axis="0 0 1" range="-1 1" actuatorfrcrange="-12.5 12.5"/>', text)
         # The arm sits in the base, which is welded to the world (MuJoCo's filterparent passes them); the hand is
-        # clear of the arm and the camera, and excluded from the base as declared.
-        self.assertIn('  <contact>\n    <exclude body1="base" body2="arm"/>\n    <exclude body1="base" body2="hand"/>\n'
-                      '  </contact>', text)
+        # clear of every body, and no pair of it is excluded.
+        self.assertIn('  <contact>\n    <exclude body1="base" body2="arm"/>\n  </contact>', text)
         model = mujoco.MjModel.from_xml_path(str(path))
         self.assertEqual((model.body("arm").name, model.joint("arm").name), ("arm", "arm"))  # a namespace each
         self.assertEqual(model.body("camera").jntnum[0], 0)  # fixed to the arm, a body of its own
         self.assertEqual(model.body("camera").parentid[0], model.body("arm").id)
         np.testing.assert_allclose(model.jnt_actfrcrange[model.joint("arm").id], [-12.5, 12.5])
-        self.assertEqual(model.nexclude, 2)
+        self.assertEqual(model.nexclude, 1)
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
         self.assertEqual(data.ncon, 0)
-        # Without the exclusions, the arm and the base are in contact at rest.
+        # Without the exclusion, the arm and the base are in contact at rest.
         bare = mujoco.MjModel.from_xml_string(text[:text.index("  <contact>")] + text[text.index("</contact>") + 11:])
         data = mujoco.MjData(bare)
         mujoco.mj_forward(bare, data)
         self.assertGreater(data.ncon, 0)
 
-    def test_the_summary_counts_the_contact_excludes_the_file_holds_declared_and_automatic(self) -> None:
+    def test_the_summary_counts_the_contact_excludes_the_file_holds_and_says_each_part_collides_as_its_mesh(self) -> None:
+        from cad.engine.description import COLLIDES
         from cad.engine.export.contact import touching
         from cad.engine.said import robot
 
-        # The file's two: base/arm touching at rest, base/hand declared; and a declared pair that touches too is one.
         rig = jointed()
-        said = robot(rig.summary("mjcf", touching=touching(rig)))
-        self.assertIn("2 contact excludes (1 declared, 1 automatic)", said[-1])
-        rig.excludes = (("base", "hand"), ("arm", "base"))
-        self.assertIn("2 contact excludes (2 declared, 0 automatic)", robot(rig.summary("mjcf", touching=touching(rig)))[-1])
-        # A URDF writes none, and says the declared ones are not written.
-        self.assertIn("2 declared contact excludes not written (a URDF has none; an MJCF has them)",
-                      robot(rig.summary("urdf"))[-1])
-
-    def test_a_joint_s_dynamics_and_a_part_s_contact_friction_are_written_as_mujoco_reads_them(self) -> None:
-        description = jointed()
-        arm = description.joints[1]
-        arm.armature, arm.damping, arm.friction = 0.012, 0.5, 0.2
-        base = description.link("base")
-        base.collisions[0] = Collision("base", base.collisions[0].geometry, (0.9,))
-        hand = description.link("hand")
-        hand.collisions[0] = Collision("hand", hand.collisions[0].geometry, (1.2, 0.01, 0.001))
-        path = self.folder / "rig.xml"
-        write_description(description, path)
-        text = path.read_text(encoding="utf-8")
-        self.assertIn('<joint name="arm" type="hinge" axis="0 0 1" range="-1 1" actuatorfrcrange="-12.5 12.5" '
-                      'armature="0.012" damping="0.5" frictionloss="0.2"/>', text)
-        self.assertIn('<joint name="wrist" type="hinge" axis="0 0 1"/>', text)  # none declared: none written
-        model = mujoco.MjModel.from_xml_path(str(path))
-        dof = model.jnt_dofadr[model.joint("arm").id]
-        self.assertEqual((model.dof_armature[dof], model.dof_damping[dof], model.dof_frictionloss[dof]), (0.012, 0.5, 0.2))
-        # The sliding coefficient alone keeps MuJoCo's torsional and rolling; three are written as given; a part
-        # that declares none has MuJoCo's default.
-        np.testing.assert_allclose(model.geom("base").friction, [0.9, 0.005, 0.0001])
-        np.testing.assert_allclose(model.geom("hand").friction, [1.2, 0.01, 0.001])
-        np.testing.assert_allclose(model.geom("arm").friction, [1, 0.005, 0.0001])
+        summary = rig.summary("mjcf", touching=touching(rig))
+        self.assertEqual((summary["touching"], summary["collides"]), ([["base", "arm"]], COLLIDES["mjcf"]))
+        self.assertNotIn("excludes", summary)
+        said = robot(summary)[-1]
+        self.assertIn("1 contact exclude (bodies touching at rest)", said)
+        self.assertIn("a MuJoCo function chooses another collision", said)
+        # A URDF writes no exclusion, and its parts collide as their meshes too.
+        self.assertEqual(robot(rig.summary("urdf"))[-1], "    each part collides as its mesh")
 
     def test_the_contact_rule_measures_convex_shapes_exactly(self) -> None:
         from cad.engine.export.contact import TOUCH, _distance, _shape

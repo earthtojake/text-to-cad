@@ -2,11 +2,11 @@
 the exact text of a small hand-built one, its meshes MJCF's bytes beside it, the same bytes written twice,
 the repository's own URDF check passing it and the stills reading its links where the description has them;
 a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
-and a joint keeping one name and a name repeated in its kind renamed and said, a joint's damping and
-friction as its dynamics and its armature and a part's contact friction not written and said in a line
-a kind, a ball refused by name, a joint that closes a loop left out and said; a root with an inertia, or standing off the
+and a joint keeping one name and a name repeated in its kind renamed and said, a joint bounding its effort
+alone written a velocity of 0 and said, a capsule and a ball refused by name, a joint that closes a loop left out and said; a root with an inertia, or standing off the
 world's frame, hung from an empty ``base_link`` there and a free base the root; a root part turned in its
-placement standing where the MJCF stands it; and a jointed model built by the engine and exported to ``.urdf``, its
+placement standing where the MJCF stands it; a model's plain MJCF and URDF holding each part's mesh as its
+collision and no joint dynamics, each summary saying so; and a jointed model built by the engine and exported to ``.urdf``, its
 links moving as the mechanism moves them, and a free arm taken at a state, its links at zero where the
 mechanism puts them there."""
 
@@ -58,8 +58,7 @@ def arm(closures: tuple[Closure, ...] = (), shoulder: str = "revolute") -> Descr
         Visual("base", Geometry("box", _frame(0, 0, 0.05), size=(0.4, 0.2, 0.1)), (0.5, 0.5, 0.5, 1.0), "steel")])
     upper = Link("arm", SHOULDER,
                  visuals=[Visual("arm", Geometry("mesh", np.eye(4), mesh="k1"), red, "paint")],
-                 collisions=[Collision("arm", Geometry("capsule", _frame(0.15, 0, 0, "y", math.pi / 2),
-                                                       size=(0.02, 0.3)))],
+                 collisions=[Collision("arm", Geometry("mesh", np.eye(4), mesh="k1"))],
                  inertial=Inertial(2.0, np.array([0.15, 0.0, 0.0]), np.diag([0.001, 0.016, 0.016])),
                  frames={"tip": TIP})
     finger = Link("finger", SHOULDER @ TIP,
@@ -117,21 +116,9 @@ GOLDEN = """\
       <material name="paint"/>
     </visual>
     <collision name="arm">
-      <origin xyz="0.15 0 0" rpy="0 1.57079633 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <cylinder radius="0.02" length="0.3"/>
-      </geometry>
-    </collision>
-    <collision name="arm_top">
-      <origin xyz="0.3 0 0" rpy="0 1.57079633 0"/>
-      <geometry>
-        <sphere radius="0.02"/>
-      </geometry>
-    </collision>
-    <collision name="arm_bottom">
-      <origin xyz="0 0 0" rpy="0 1.57079633 0"/>
-      <geometry>
-        <sphere radius="0.02"/>
+        <mesh filename="meshes/arm_link.stl" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
@@ -340,31 +327,26 @@ class HandBuiltTest(_Folder):
         self.assertEqual(sorted(read_urdf(path).links), ["base", "base_2", "base_link", "post", "slider",
                                                          "slider_turn"])
 
-    def test_a_joint_s_damping_and_friction_are_its_dynamics_and_what_urdf_cannot_say_is_said(self) -> None:
+    def test_a_joint_bounding_its_effort_alone_has_its_velocity_written_0_and_said(self) -> None:
         description = arm()
-        shoulder, knuckle = description.joints
-        shoulder.armature, shoulder.damping, shoulder.friction = 0.012, 0.5, 0.2
-        knuckle.armature = 0.003
+        knuckle = description.joints[1]
         # The knuckle bounds its effort and gives no speed: URDF requires one, so it is written 0, and said.
         knuckle.effort, knuckle.velocity = 7.0, None
-        upper = description.link("arm")
-        geometry = upper.collisions[0].geometry
-        # Two hulls of one part: the part is named once.
-        upper.collisions[:] = [Collision(f"arm_hull{at}", geometry, (0.9,), part="arm") for at in range(2)]
         path = self.folder / "arm.urdf"
         with self.assertWarns(ExportWarning) as said:
             write_description(description, path)
-        # A line a kind, naming every joint or part that declares it.
         self.assertEqual([str(warning.message) for warning in said.warnings],
-                         ["armature of 2 joints not written (a URDF has none; an MJCF carries it): shoulder, knuckle",
-                          "contact friction of 1 part not written (a URDF has none; an MJCF carries it): arm",
-                          "velocity of 1 joint written 0 (each declares an effort and no velocity, and a ROS controller "
+                         ["velocity of 1 joint written 0 (each declares an effort and no velocity, and a ROS controller "
                           "reads 0 as none allowed: give limits(..., velocity=) where the hardware's is known): "
                           "knuckle"])
-        text = path.read_text(encoding="utf-8")
-        self.assertIn('<dynamics damping="0.5" friction="0.2"/>', text)
-        self.assertEqual(text.count("<dynamics"), 1)  # the knuckle declares none
-        self.assertIn('effort="7" velocity="0"/>', text)
+        self.assertIn('effort="7" velocity="0"/>', path.read_text(encoding="utf-8"))
+
+    def test_a_capsule_is_refused_by_name_and_nothing_is_written(self) -> None:
+        description = arm()
+        description.link("arm").collisions[0] = Collision("arm", Geometry("capsule", np.eye(4), size=(0.02, 0.3)))
+        with self.assertRaisesRegex(ExportRefused, "arm: no URDF geometry is a 'capsule'"):
+            write_description(description, self.folder / "arm.urdf")
+        self.assertEqual(list(self.folder.iterdir()), [])
 
     def test_a_ball_is_refused_by_name_and_nothing_is_written(self) -> None:
         with self.assertRaisesRegex(ExportRefused, "joint 'shoulder' is spherical, and URDF has no ball joint"):
@@ -437,7 +419,61 @@ def turned():
 """
 
 
+# A hinge with its drive's limits, a frame and a mass: everything a model declares for a robot description.
+PLAIN = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import frame, limits, mass
+from cad.engine import xbf
+
+
+@xbf("XBF/plain.xbf")
+def plain():
+    base = bd.Box(100, 60, 20)
+    base.label = "base"
+    arm = bd.Pos(40, 0, 10) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    arm.label = "arm"
+    base.material = arm.material = metals.aluminum()
+    elbow = bd.RevoluteJoint("elbow", base, axis=bd.Axis((40, 0, 10), (0, -1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("elbow", arm, elbow.location)
+    elbow.connect_to(arm.joints["elbow"], angle=0)
+    frame(arm, "tool", bd.Pos(160, 0, 15))
+    mass(base, 400)
+    root = bd.Compound(children=[base, arm], label="plain")
+    return limits(root, "elbow", effort=2, velocity=1.5)
+"""
+
+
 class EngineTest(_Folder):
+    def test_a_plain_mjcf_and_urdf_hold_each_part_s_mesh_as_its_collision_and_no_joint_dynamics(self) -> None:
+        import xml.etree.ElementTree as ElementTree
+
+        from cad.engine.description import COLLIDES
+
+        (self.folder / "plain.py").write_text(textwrap.dedent(PLAIN), encoding="utf-8")
+        api.build_script(self.folder / "plain.py", daemon=False)
+        xbf = self.folder / "XBF/plain.xbf"
+        mjcf_file, urdf_file = self.folder / "mjcf" / "plain.xml", self.folder / "urdf" / "plain.urdf"
+        written = {row.kind: row for row in api.export(xbf, mjcf_file, urdf_file, daemon=False, progress=False)}
+        # The MJCF: each part's collision geom is its mesh, no geom names a friction, and the joint holds its drive's
+        # force bound alone (no armature, damping or frictionloss).
+        model = ElementTree.parse(mjcf_file).getroot()
+        collisions = [geom for geom in model.iter("geom") if geom.get("class") == "collision"]
+        self.assertEqual([(geom.get("name"), geom.get("type")) for geom in collisions],
+                         [("base_collision", "mesh"), ("arm_collision", "mesh")])
+        self.assertEqual([geom for geom in model.iter("geom") if "friction" in geom.attrib], [])
+        (joint,) = model.iter("joint")
+        self.assertEqual(sorted(joint.attrib), ["actuatorfrcrange", "axis", "name", "range", "type"])
+        # The URDF: each part's <collision> is its mesh, and no joint has <dynamics>.
+        robot = ElementTree.parse(urdf_file).getroot()
+        shapes = [[child.tag for child in collision.find("geometry")] for collision in robot.iter("collision")]
+        self.assertEqual(shapes, [["mesh"], ["mesh"]])
+        self.assertIsNone(robot.find(".//dynamics"))
+        # Each summary says how the parts collide, and counts no declared kind.
+        for kind in ("mjcf", "urdf"):
+            self.assertEqual(written[kind].robot["collides"], COLLIDES[kind])
+            self.assertNotIn("excludes", written[kind].robot)
+
     def test_a_turned_root_part_stands_where_the_mjcf_stands_it(self) -> None:
         (self.folder / "turned.py").write_text(textwrap.dedent(TURNED), encoding="utf-8")
         api.build_script(self.folder / "turned.py", daemon=False)

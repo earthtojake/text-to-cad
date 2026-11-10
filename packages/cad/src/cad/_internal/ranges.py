@@ -3,13 +3,13 @@
 ``model``, ``xbf`` and ``step`` each answer ``ranges`` with the same function, made for the type here (``ranges_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what it
 runs is the kernel's -- the document read and described as a robot (``engine.describe``) and its joints swept against
-its parts' collision geometry (``engine.ranges``) -- imported when it runs. A model, which the engine holds with no
+its parts' surfaces (``engine.ranges``) -- imported when it runs. A model, which the engine holds with no
 file, is exported by the engine to an ``.xbf`` in a temporary folder first, and the sweep reads that. It never writes
 the model: a model is code, and the person or the agent adopts the numbers into its joints' ranges.
 
 The answer is a check's (``cad.results.CheckResult``; ``StopsResult``, which says it as a table): a finding per joint (``joint_stops``, at the joint) saying its
 stops and which two parts meet past each, every number in ``measurements["joints"]``; a joint it cannot sweep (a
-cylindrical or spherical one, one whose parts have no collision geometry) a warning; a document with no joint to sweep
+cylindrical or spherical one, one whose parts have no surface to test) a warning; a document with no joint to sweep
 an error. The standard library alone at import: the server's command resolves the options here before it starts an
 environment that holds the kernel.
 """
@@ -22,7 +22,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding, CheckResult, _display
@@ -33,17 +33,12 @@ __all__ = ["INTEGRATION", "StopsResult", "options", "ranges_for"]
 INTEGRATION = "build123d"
 
 
-#: What a sweep tests (``engine.ranges.GEOMETRY``), and how its summary says it.
-Geometry = Literal["parts", "collision"]
-_TESTED = {"parts": "parts' surfaces", "collision": "parts' collision shapes"}
-
-
 #: The sweep's resolution, in mm (``engine.ranges.RESOLUTION``, said here where the kernel is not imported): every
 #: point of a tested surface is within it of a sample, so a clearance under it is refused.
 RESOLUTION = 0.3
 
 
-def options(*, step: float, clearance: float, geometry: str = "parts", joint: tuple[str, ...] = ()) -> None:
+def options(*, step: float, clearance: float, joint: tuple[str, ...] = ()) -> None:
     """Refuse a step or a clearance the sweep cannot use: each a positive finite number, the step at most 45 (degrees
     or millimetres: past it a part passes through a thin wall unseen), the clearance at least ``RESOLUTION`` (the
     samples resolve no finer) and at most 10 mm; and a joint named by anything but a name. Which joints the
@@ -56,8 +51,6 @@ def options(*, step: float, clearance: float, geometry: str = "parts", joint: tu
     if clearance < RESOLUTION:
         raise ArgumentRefused(f"--clearance {clearance:g} is under the sweep's resolution, {RESOLUTION:g} mm: every "
                               "surface is sampled to within it, so a gap is measured no finer")
-    if geometry not in _TESTED:
-        raise ArgumentRefused(f"--geometry is parts or collision, not {geometry!r}")
     for name in (joint,) if isinstance(joint, str) else joint:
         if not isinstance(name, str) or not name:
             raise ArgumentRefused(f"--joint names a joint, not {name!r}")
@@ -66,8 +59,8 @@ def options(*, step: float, clearance: float, geometry: str = "parts", joint: tu
 def ranges_for(document_type: str) -> Any:
     """``cad.<document_type>.ranges``: the joint stops, for a source of that type."""
 
-    def ranges(source: Path, *, step: float = 1.0, clearance: float = RESOLUTION, geometry: Geometry = "parts",
-               joint: tuple[str, ...] = (), verbose: bool = False) -> CheckResult:
+    def ranges(source: Path, *, step: float = 1.0, clearance: float = RESOLUTION, joint: tuple[str, ...] = (),
+               verbose: bool = False) -> CheckResult:
         """Each joint's stops, found from the geometry: where its parts first meet another part.
 
         Each joint a person moves is turned (or slid) alone from the as-built pose, the joints that follow it
@@ -89,26 +82,21 @@ def ranges_for(document_type: str) -> Any:
         joint's finding names them with the volume they share and how deep, and a stop they make lies past the
         true one by up to about that depth. A larger clearance only narrows a range. Each joint's finding says its stops in degrees
         or millimetres around the as-built pose (and in its own values where that is not zero) and which two
-        parts meet past each; a part declared collision none takes no part, and two parts declared exclude(a, b)
-        never meet each other. The model is not changed: adopt the numbers into its joints' ranges. --json
-        carries every number.
+        parts meet past each, every part tested against every other on its own surface. The model is not
+        changed: adopt the numbers into its joints' ranges. --json carries every number.
 
         source: the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or
           the handle its call returns.
         step: the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.
         clearance: how near two parts' surfaces come before they count as touching, in millimetres; default 0.3,
           the least (where they all but touch): a larger one stops each joint where its parts first come that near.
-        geometry: what meets: parts, each part's own surface (the default: the physical stops), or collision, what
-          each part declares a simulator collides it as (a fitted box where it declares one), less the link pairs
-          the MJCF never collides (a body and its parent, the pairs touching as built, those declared exclude):
-          MuJoCo's stops. A part declared collision none takes no part either way.
         joint: sweep this joint alone (repeat it for several); default every joint a person moves. A name the
           document has no such joint by is refused, naming its joints.
         verbose: say on stderr each step as it starts (reading the document, sampling its surfaces, each joint)
           and each joint's stops as it ends (a joint or a sampling that takes long is said either way).
         """
         joints = (joint,) if isinstance(joint, str) else tuple(joint)
-        options(step=step, clearance=clearance, geometry=geometry, joint=joints)
+        options(step=step, clearance=clearance, joint=joints)
         from cad._internal.document_type import refuse_other
 
         refuse_other(document_type, source)
@@ -126,16 +114,15 @@ def ranges_for(document_type: str) -> Any:
         if verbose:
             say(f"reading {source} and meshing its parts")
         with _readable(document_type, source) as (target, label):
-            # A part's hulls are tested on the collision geometry alone: on the parts, a decomposed one is whole.
-            description = describe(Source.read(target).view(), decompose=geometry == "collision")
+            description = describe(Source.read(target).view())
         try:
             unknown(description, joints)
         except ValueError as error:
             raise ArgumentRefused(f"--joint {error}") from None
         # A long joint is said as it starts and ends whatever ``verbose`` says: a fine sweep takes minutes.
-        stops = sweep(description, step=float(step), clearance=float(clearance), geometry=geometry, joints=joints,
+        stops = sweep(description, step=float(step), clearance=float(clearance), joints=joints,
                       told=say if verbose else None, progress=say)
-        return _result(label or Path(target), stops, step=float(step), clearance=float(clearance), geometry=geometry,
+        return _result(label or Path(target), stops, step=float(step), clearance=float(clearance),
                        seconds=time.perf_counter() - started)
 
     ranges.__module__ = f"cad.{document_type}"
@@ -143,8 +130,7 @@ def ranges_for(document_type: str) -> Any:
     return ranges
 
 
-def _result(path: Path, stops: list[Any], *, step: float, clearance: float, geometry: str,
-            seconds: float) -> CheckResult:
+def _result(path: Path, stops: list[Any], *, step: float, clearance: float, seconds: float) -> CheckResult:
     import dataclasses
 
     findings: list[CheckFinding] = []
@@ -160,11 +146,10 @@ def _result(path: Path, stops: list[Any], *, step: float, clearance: float, geom
                                      "a joint is a model's mechanism: build123d's RevoluteJoint or LinearJoint "
                                      "connected between two parts"))
     swept = sum(1 for found in stops if found.swept)
-    aside = ", the link pairs the MJCF never collides set aside" if geometry == "collision" else ""
-    summary = (f"{swept} joint{'s' if swept != 1 else ''} swept against the {_TESTED[geometry]} at {step:g} deg or mm "
-               f"a step, {clearance:g} mm clearance{aside}, in {seconds:.1f} s: nothing written")
+    summary = (f"{swept} joint{'s' if swept != 1 else ''} swept against the parts' surfaces at {step:g} deg or mm "
+               f"a step, {clearance:g} mm clearance, in {seconds:.1f} s: nothing written")
     return StopsResult(ok=bool(stops), path=Path(path), findings=tuple(findings), summary=summary,
-                       measurements={"joints": joints, "step": step, "clearance": clearance, "geometry": geometry})
+                       measurements={"joints": joints, "step": step, "clearance": clearance})
 
 
 @dataclass(frozen=True)

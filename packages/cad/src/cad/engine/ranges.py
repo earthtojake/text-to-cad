@@ -13,16 +13,9 @@ turn each way (one clear a full turn has no stop); a sliding one as far as the w
 A cylindrical or spherical joint, two or three values, is not swept, nor is a joint of a loop
 (``Description.closures``), which moves only with the rest of its loop.
 
-**The test is on surfaces**, the way the parts would meet: each part's own surface (``geometry="parts"``,
-the default: its mesh, as the viewer draws it), or what it declares a simulator collides it as
-(``"collision"``: the primitive fitted to it where it declares one, its hulls where it is decomposed, else
-its mesh), with a part declared ``collision(part, "none")`` taking no part either way (a fastener seated in
-the hole it holds, a servo's internals), and two parts declared ``exclude(a, b)`` never meeting each other
-(``Description.part_excludes``: those two alone, not the rest of their links). On the collision geometry the
-sweep is the simulator's: the link pairs the MJCF never collides (``export.contact.never``: MuJoCo's own
-filter of a body and its parent, the pairs touching as built, the pairs declared) never meet, so a joint whose
-child is filtered against its parent has no stop there, as MuJoCo has none, and its clashes are what it hits.
-Each surface is sampled so
+**The test is on surfaces**, the way the parts would meet: each part's own surface (its mesh, as the
+viewer draws it), every part against every other. Where a simulator stops a joint, with the collision
+shapes a MuJoCo function chose, is a question for the simulator on its file. Each surface is sampled so
 that every point of it is within ``RESOLUTION`` of a sample (``_samples``), the same samples whatever the
 clearance. A **gap** is the least distance between two sides' samples: never under the true distance
 between the two meshes, and at most ``2 * RESOLUTION`` over it (each side's nearest point is within
@@ -168,9 +161,6 @@ RIDES = 0.9
 #: A full turn, in degrees: a turning joint clear this far each way has no stop.
 TURN = 360.0
 SWEPT = ("revolute", "continuous", "prismatic")
-#: What a sweep tests: each colliding part's own surface (``parts``), or what each part declares a simulator
-#: collides it as (``collision``: a fitted box, cylinder, ... where it declares one).
-GEOMETRY = ("parts", "collision")
 
 
 @dataclass(frozen=True)
@@ -279,22 +269,18 @@ QUIET = 15.0
 RECALIBRATED = 10
 
 
-def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION, geometry: str = "parts",
-          joints: tuple[str, ...] = (), told: Callable[[str], None] | None = None,
+def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION, joints: tuple[str, ...] = (), told: Callable[[str], None] | None = None,
           progress: Callable[[str], None] | None = None) -> list[JointStops]:
     """Each controlled joint's stops (see the module docstring), or only those ``joints`` names, in the
     description's order: ``step`` degrees for a turning joint and millimetres for a sliding one,
-    ``clearance`` millimetres (at least ``RESOLUTION``, and that by default), ``geometry`` what is tested
-    (``GEOMETRY``); ``told`` hears a line per joint as it is done. ``progress`` hears each joint said as it
+    ``clearance`` millimetres (at least ``RESOLUTION``, and that by default); ``told`` hears a line per joint as it is done. ``progress`` hears each joint said as it
     starts or runs long, and as it ends (the module's **Progress**). A name in ``joints`` that is no control
     (``Description.controls``) is refused, naming the controls."""
-    if geometry not in GEOMETRY:
-        raise ValueError(f"geometry {geometry!r} is none of {', '.join(GEOMETRY)}")
     if not clearance >= RESOLUTION:
         raise ValueError(f"clearance {clearance:g} mm is under the sweep's resolution, {RESOLUTION:g} mm")
     unknown(description, joints)
-    return _Sweep(description, step, clearance, told or (lambda _line: None), geometry,
-                  progress or (lambda _line: None), tuple(joints)).run()
+    return _Sweep(description, step, clearance, told or (lambda _line: None), progress or (lambda _line: None),
+                  tuple(joints)).run()
 
 
 def unknown(description: Any, joints: tuple[str, ...]) -> None:
@@ -306,75 +292,24 @@ def unknown(description: Any, joints: tuple[str, ...]) -> None:
                          f"no joint the sweep moves; its joints: {', '.join(controls) or 'none'}")
 
 
-def _tested(link: Any, geometry: str) -> list[tuple[str, str, Any]]:
+def _tested(link: Any) -> list[tuple[str, str, Any]]:
     """A link's tested shapes, each with its part's name as a message names it (``description.shown``: an anonymous
     ``SOLID`` by its path from its nearest named ancestor) and its occurrence path (``Visual.path``; its name where it
-    has none): ``parts``, the part itself (its visual mesh) for each part that collides at all; ``collision``, what
-    each declares (``Link.collisions``), a decomposed part's hulls each under the part's name. A link's collisions
-    are its visuals' subsequence, in order, the parts declared ``none`` left out and a decomposed part's hulls one
-    after another."""
+    has none): the part itself (its visual mesh) for each part that collides. A link's collisions are its visuals'
+    subsequence, in order."""
     from cad.engine.description import shown
 
     found, at = [], 0
     for visual in link.visuals:
         path = getattr(visual, "path", "") or ""
         name = shown(path) if path else visual.name
-        if at < len(link.collisions) and link.collisions[at].of == visual.name:
-            if geometry != "collision":
-                found.append((name, path or visual.name, visual.geometry))
-            while at < len(link.collisions) and link.collisions[at].of == visual.name:
-                if geometry == "collision":
-                    found.append((name, path or visual.name, link.collisions[at].geometry))
-                at += 1
+        if at < len(link.collisions) and link.collisions[at].name == visual.name:
+            found.append((name, path or visual.name, visual.geometry))
+            at += 1
     return found
 
 
 # --- geometry ----------------------------------------------------------------------------------
-
-
-def _box(size: tuple[float, ...]) -> tuple[np.ndarray, np.ndarray]:
-    half = np.asarray(size[:3], dtype=float) / 2
-    corners = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)], dtype=float) * half
-    faces = np.array([[0, 1, 3], [0, 3, 2], [4, 6, 7], [4, 7, 5], [0, 4, 5], [0, 5, 1], [2, 3, 7], [2, 7, 6],
-                      [0, 2, 6], [0, 6, 4], [1, 5, 7], [1, 7, 3]])
-    return corners, faces
-
-
-def _revolved(profile: list[tuple[float, float]], segments: int = 32) -> tuple[np.ndarray, np.ndarray]:
-    """A surface of revolution about Z: ``profile`` (radius, z) points, first and last on the axis or not."""
-    angles = np.linspace(0.0, 2 * math.pi, segments, endpoint=False)
-    rings = [np.stack([radius * np.cos(angles), radius * np.sin(angles), np.full(segments, z)], axis=1)
-             for radius, z in profile]
-    vertices = np.vstack(rings)
-    faces = []
-    for ring in range(len(profile) - 1):
-        a, b = ring * segments, (ring + 1) * segments
-        for at in range(segments):
-            nxt = (at + 1) % segments
-            faces += [[a + at, a + nxt, b + nxt], [a + at, b + nxt, b + at]]
-    for ring, z in ((0, profile[0]), (len(profile) - 1, profile[-1])):
-        if z[0] > 0:  # a flat cap
-            centre = len(vertices)
-            vertices = np.vstack([vertices, [[0.0, 0.0, z[1]]]])
-            start = ring * segments
-            faces += [[centre, start + at, start + (at + 1) % segments] for at in range(segments)]
-    return vertices, np.asarray(faces)
-
-
-def _primitive(kind: str, size: tuple[float, ...]) -> tuple[np.ndarray, np.ndarray]:
-    """A fitted primitive (``description.Geometry``) as triangles in its own frame, metres."""
-    if kind == "box":
-        return _box(size)
-    if kind == "sphere":
-        radius = size[0]
-        return _revolved([(radius * math.sin(t), -radius * math.cos(t)) for t in np.linspace(0, math.pi, 17)])
-    radius, length = size[0], size[1]
-    if kind == "cylinder":
-        return _revolved([(radius, -length / 2), (radius, length / 2)])
-    # A capsule: the cylinder and a half sphere on each end.
-    bottom = [(radius * math.sin(t), -length / 2 - radius * math.cos(t)) for t in np.linspace(0, math.pi / 2, 9)]
-    top = [(radius * math.cos(t), length / 2 + radius * math.sin(t)) for t in np.linspace(0, math.pi / 2, 9)]
-    return _revolved(bottom + top)
 
 
 def _area(vertices: np.ndarray, faces: np.ndarray) -> float:
@@ -749,8 +684,7 @@ class _Reach:
 
 class _Sweep:
     def __init__(self, description: Any, step: float, clearance: float, told: Callable[[str], None],
-                 geometry_of: str = "parts", progress: Callable[[str], None] = lambda _line: None,
-                 only: tuple[str, ...] = ()) -> None:
+                 progress: Callable[[str], None] = lambda _line: None, only: tuple[str, ...] = ()) -> None:
         self.description = description
         self.only = only
         self.progress = progress
@@ -769,19 +703,15 @@ class _Sweep:
                        for label in closure.loop}
         # Every part's surface samples in its link's frame, and which part each point is.
         self.parts: list[tuple[str, str]] = []  # (part, link) by part index
-        paths: list[str] = []
         self.points: dict[str, np.ndarray] = {}
         self.normals: dict[str, np.ndarray] = {}  # each sample's surface normal, in its link's frame (``_sampled``)
         self.owners: dict[str, np.ndarray] = {}
         surfaces = []
         for link in description.links:
-            for name, path, geometry in _tested(link, geometry_of):
-                if geometry.kind == "mesh":
-                    mesh = description.meshes[geometry.mesh]
-                    vertices = np.asarray(mesh.positions, dtype=np.float64).reshape(-1, 3) * float(geometry.scale)
-                    faces = np.asarray(mesh.triangles, dtype=np.int64).reshape(-1, 3)
-                else:
-                    vertices, faces = _primitive(geometry.kind, tuple(geometry.size))
+            for name, path, geometry in _tested(link):
+                mesh = description.meshes[geometry.mesh]
+                vertices = np.asarray(mesh.positions, dtype=np.float64).reshape(-1, 3) * float(geometry.scale)
+                faces = np.asarray(mesh.triangles, dtype=np.int64).reshape(-1, 3)
                 placement = np.asarray(geometry.placement, dtype=float)
                 surfaces.append((link.name, name, path, vertices @ placement[:3, :3].T + placement[:3, 3], faces))
         # Said before it starts: on a vendor STEP the sampling alone takes seconds, before any joint is swept.
@@ -804,7 +734,6 @@ class _Sweep:
                 index = len(self.parts)
                 self.parts.append((name, link.name))
                 self.meshes.append((vertices, faces))
-                paths.append(path)
                 sampled, normals = _sampled(vertices, faces, self.resolution)
                 found.append(sampled)
                 facing.append(normals)
@@ -824,28 +753,6 @@ class _Sweep:
         self.insides: dict[int, tuple[np.ndarray, float, np.ndarray, np.ndarray]] = {}  # a still part's (``_deep``)
         self.rays: dict[int, tuple[_Rays, np.ndarray]] = {}  # each still part's, made once (``_filed``)
         self.pressed: dict[tuple[int, int], np.ndarray] = {}  # a moving part's depths in a still one as built
-        # The part pairs set aside (``exclude(a, b)``), by part index: a part's hulls are each that part.
-        self.excluded = np.zeros((len(self.parts), len(self.parts)), dtype=bool)
-        by_path: dict[str, list[int]] = {}
-        for index, path in enumerate(paths):
-            by_path.setdefault(path, []).append(index)
-        for first, second in getattr(description, "part_excludes", None) or ():
-            for a in by_path.get(first, ()):
-                for b in by_path.get(second, ()):
-                    self.excluded[a, b] = self.excluded[b, a] = True
-        if geometry_of == "collision":
-            # The simulator's own stops: the link pairs the MJCF never collides set aside whole (``never``).
-            from cad.engine.export.contact import never
-
-            by_link: dict[str, list[int]] = {}
-            for index, (_part, link_name) in enumerate(self.parts):
-                by_link.setdefault(link_name, []).append(index)
-            for pair in never(description):
-                first, second = sorted(pair)
-                rows, columns = by_link.get(first, []), by_link.get(second, [])
-                if rows and columns:
-                    self.excluded[np.ix_(rows, columns)] = True
-                    self.excluded[np.ix_(columns, rows)] = True
 
     def _hashed(self, part: int, size: float) -> _Cells:
         """A part's samples where it stands as built, hashed in cells of ``size`` metres: the same for every joint
@@ -1211,7 +1118,6 @@ class _Sweep:
             kept_index = kept_index[np.concatenate(kept)]
         movers = np.concatenate(movers)
         width = len(self.parts)
-        excluded = self.excluded
 
         def placed_at(value: float) -> np.ndarray:
             """Every moving sample (``whole``) at a pose."""
@@ -1230,8 +1136,7 @@ class _Sweep:
         asked, held_part, _apart = self._near_parts(resting_points, still_points, still_owners, 2 * self.resolution)
         standing = np.unique(asked * width + held_part)
         rest_gaps = {(int(code) // width, int(code) % width): float(gap) * 1000.0
-                     for code, gap in zip(pair_codes, pair_rest)
-                     if not excluded[int(code) // width, int(code) % width]}
+                     for code, gap in zip(pair_codes, pair_rest)}
         # Each pair's bound (the clearance where it was over ``looked`` apart as built): the module's **Where two
         # parts meet**.
         bound = np.full((width, width), clearance)
@@ -1361,7 +1266,7 @@ class _Sweep:
                 if own and self.parts[part][1] not in parent_side:
                     continue
                 asking = (bits & occupied.bit(part)) != 0
-                asking &= ~(excluded[moving_part, part] | overlapped[moving_part, part])
+                asking &= ~overlapped[moving_part, part]
                 if not asking.any():
                     continue
                 sample, where, of = candidates[asking], placed[asking], moving_part[asking]

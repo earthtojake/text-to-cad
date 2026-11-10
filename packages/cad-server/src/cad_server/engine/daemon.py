@@ -716,8 +716,8 @@ class Daemon:
 
     @staticmethod
     def integration(request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
-        """The environment of one of the library's integrations, asked by a process of the engine's that lacks it
-        (``{"op": "integration", "integration": "coacd"}``: a worker's decomposition, ``cad.engine.hulls``): made
+        """The environment of one of the library's integrations, asked by a process that lacks it
+        (``{"op": "integration", "integration": "coacd"}``: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``): made
         here on first need when it is not, as the ``cad`` command's integrations are
         (``integration_env.made``), each line of its making a ``log`` frame, then ``{"ok": true, "python"}``, or
         ``{"failed"}`` in one line."""

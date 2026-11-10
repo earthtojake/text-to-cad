@@ -12,7 +12,7 @@ of a weak dictionary (``SOURCES``) whose value is what the helpers need, and goe
 - From a document (a model call's handle, a build123d shape, a STEP or an ``.xbf``): each part by its
   occurrence path -- the body its geoms are in, its frame there (metres), its visual and collision geoms by
   name as the export wrote them (``mjcf.rendered``'s owners), its mesh (the description's, metres, the one
-  the export decomposes) and its solid (the B-rep bytes, read again when a primitive is fitted).
+  ``decompose`` cuts) and its solid (the B-rep bytes, read again when a primitive is fitted).
 - From an MJCF path: no solids. Each part is a mesh a colliding geom uses, named by the mesh's name (an
   export names a part's mesh for the part), its collision geoms those geoms; its triangles are read from
   the mesh's file by MuJoCo when a decomposition asks for them.
@@ -26,8 +26,7 @@ per body, as a Python warning (``UserWarning``) at the call, naming how to stop 
 ``mass()`` on the model).
 
 **``fit``.** The kernel's fit of the exact solid (``describe.fit``: the oriented bounding box of the
-B-rep; a cylinder about the axis the part is turned about), the same fit a collision declared on the model
-is made by. It replaces the part's collision geoms with one geom named as the export names a part's
+B-rep; a cylinder about the axis the part is turned about). It replaces the part's collision geoms with one geom named as the export names a part's
 collision (``<part>_collision`` where its visual holds ``<part>``), which keeps the first one's contact
 settings (class, friction, contact types). A spec read from an MJCF has no solid and is refused, as a
 part read from a mesh file is.
@@ -35,7 +34,7 @@ part read from a mesh file is.
 **``decompose``.** CoACD's convex hulls of the part's mesh (``cad.engine.hulls``: its cache, its child
 process, its refusals where coacd cannot run), each a mesh ``<mesh>_hull<i>`` (a file
 ``<model>_<mesh>_hull<i>.stl`` in the engine's cache, ``places.cache_dir()/mjcf/hulls/<digest>``) and a
-collision geom ``<part>_hull<i>`` where the part's collision was, as the export names them. It needs the
+collision geom ``<part>_hull<i>`` where the part's collision was. It needs the
 mesh, not the kernel, so it works on a spec read from an MJCF too.
 """
 
@@ -315,8 +314,8 @@ def _frame(mujoco: Any, spec: Any, geom: Any) -> np.ndarray:
 
 
 def _hull_meshes(mujoco: Any, spec: Any, source: Source, part: Part, made: list[tuple[np.ndarray, np.ndarray]]) -> list[str]:
-    """The hulls as mesh assets of ``spec``, each a binary STL in the engine's cache named as the export names it, and
-    their names: those ``decompose`` made of the part before are removed first."""
+    """The hulls as mesh assets of ``spec``, each a binary STL in the engine's cache named as the export names a
+    mesh, and their names: those ``decompose`` made of the part before are removed first."""
     import hashlib
 
     from cad.engine.export.mjcf import _stem, _stl

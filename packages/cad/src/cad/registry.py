@@ -382,8 +382,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         identity=("mujoco", "mujoco-core", "mujoco-studio"), commands=("mujoco-studio",),
         holds="MuJoCo's headless core and MuJoCo Studio", download_mb=20),
     "coacd": Integration(
-        "coacd", "CoACD, the approximate convex decomposition of a triangle mesh: a part declared collision(part, "
-                 "\"decomposed\") collides in a robot description as the convex hulls CoACD cuts its mesh into, its "
+        "coacd", "CoACD, the approximate convex decomposition of a triangle mesh: cad.mujoco.decompose makes a part "
+                 "of a MuJoCo function's spec collide as the convex hulls CoACD cuts its mesh into, its "
                  "visual whole, always in a process of its own (its TBB and the kernel's cannot share one), the "
                  "hulls kept in the engine's cache by the mesh's digest",
         extra="coacd", process="separate",

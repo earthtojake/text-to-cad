@@ -1,4 +1,4 @@
-"""A decomposed collision's convex hulls (``collision(part, "decomposed")``), kept in the engine's cache:
+"""A part's convex hulls for a MuJoCo function's collision (``cad.mujoco.decompose``), kept in the engine's cache:
 meshes in, each one's hulls out, made by the coacd integration's decomposer in a process of its own.
 
 **Why a process of its own.** CoACD's wheel is one native library loaded with ``ctypes`` that carries its own
@@ -9,17 +9,17 @@ interpreter (``python -m cad.coacd._decomposer JOB RESULT``, the integration's c
 numpy alone; this environment's Python or the coacd integration's, **Where coacd is**), handed every mesh the
 cache does not hold at once. A child that dies, or stops past ``TIMEOUT_S``, fails the decomposition in one line
 with the end of what it printed. As each mesh is done the child says so on its stderr (``DONE``), and the part is
-said on this process's stderr by its name, its hulls and its seconds: a first export decomposes for minutes.
+said on this process's stderr by its name, its hulls and its seconds: a first decomposition takes minutes.
 
 **What it is asked.** Each mesh is ``(positions, triangles, options)``: positions ``(n, 3)``, triangles ``(m,
-3)``, and ``options`` the declaration's (``maxHulls``: CoACD's ``max_convex_hull``, at most that many hulls,
-merged down to it, 16 unless the declaration says otherwise; ``threshold``: its concavity threshold, 0.01 to 1,
+3)``, and ``options`` the caller's (``maxHulls``: CoACD's ``max_convex_hull``, at most that many hulls,
+merged down to it, 16 unless the caller says otherwise; ``threshold``: its concavity threshold, 0.01 to 1,
 smaller cutting finer), each absent for CoACD's own default (no limit; 0.05). The child welds the corners a
 tessellation repeats on each face and runs CoACD with seed 0 (``cad.coacd._decomposer``), so the same mesh and
 options make the same hulls.
 
-**The cache.** A decomposition takes CoACD seconds to minutes, and a model is exported again on every
-change, so each mesh's hulls are kept in the engine's cache folder, never beside the model:
+**The cache.** A decomposition takes CoACD seconds to minutes, and a MuJoCo function runs again on every
+change of its model, so each mesh's hulls are kept in the engine's cache folder, never beside the model:
 ``places.cache_dir()/hulls/<digest>.npz``, the digest of the recipe (``RECIPE``: the CoACD release line the
 extra pins, the weld and the seed), the options and the mesh's own bytes (its positions as little-endian
 float32, its triangles as little-endian uint32). A hit reads the hulls back with no coacd here at all, and
@@ -33,8 +33,8 @@ makes once, outside any sandbox, on first need and keeps (``{"op": "integration"
 over its door, as the ``cad`` command's ``solve`` has netgen's and CalculiX's: ``cad_server._internal.
 integration_env``), each line of its making said on stderr as it comes -- a worker's, which its caller is
 shown -- offline first, from uv's cache, and the network for what that lacks; one that cannot reach it says
-so in a line. So no model names ``cad[coacd]`` in its header, and an ``.xbf`` or a STEP the documents worker
-exports decomposes too. ``Unavailable`` says, naming the extra, why no environment can hold it: CoACD
+so in a line. So no script names ``cad[coacd]`` in its header: a MuJoCo function run with ``cad run``, or in a
+Python of its own, decomposes wherever the device's engine answers. ``Unavailable`` says, naming the extra, why no environment can hold it: CoACD
 publishes no wheel for this platform (``PLATFORMS``: none for an Intel Mac, Windows on ARM or a musl Linux),
 no engine answers to make it (a model's own process with none running), or its making failed (uv's words).
 ``PROVIDE`` stands in for the engine (a test's provisioner).
@@ -73,7 +73,7 @@ PLATFORMS = "macOS arm64, Linux x86_64 and aarch64 (glibc) and Windows x86_64"
 #: it; ``Unavailable`` in its maker's words where it cannot be made. None: the device's engine's (``_engine``).
 PROVIDE: Callable[[Callable[[str], None]], str | None] | None = None
 #: The longest one child may take (s): past it the child is stopped and the decomposition says so, rather
-#: than a decomposition that never returns holding an export (and the engine or the worker it runs in).
+#: than a decomposition that never returns holding its caller (a MuJoCo function, and the process it runs in).
 TIMEOUT_S = 3600.0
 #: The line the child says on stderr as each mesh is done (``cad.coacd._decomposer.DONE``): ``<DONE> <index>
 #: <hulls> <seconds>``.
@@ -153,7 +153,7 @@ def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[li
         if named:
             shown = ": " + ", ".join(named[:4]) + (f" and {len(named) - 4} more" if len(named) > 4 else "")
         print(f"decomposing {len(missing)} part{'s' if len(missing) != 1 else ''} into convex hulls with CoACD{shown} "
-              "(seconds to minutes each, once: the hulls are kept for the exports after)", file=sys.stderr, flush=True)
+              "(seconds to minutes each, once: the hulls are kept for the runs after)", file=sys.stderr, flush=True)
 
         def done(index: int, made: int, seconds: float) -> None:
             if made < 0:
@@ -305,7 +305,7 @@ def _python() -> tuple[str, bool]:
     python = (PROVIDE or _engine)(_told)
     if python is None:
         raise Unavailable(f"coacd comes with cad's coacd integration, {EXTRA}, which this environment does not hold, "
-                          "and no engine answered to make its environment: export through the cad command, which "
+                          "and no engine answered to make its environment: run the script with cad run, whose engine "
                           f"makes it on first need, or install {EXTRA} here")
     return python, False
 
