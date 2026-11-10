@@ -1,9 +1,13 @@
 """sheet's measurements of exact geometry (``cad._internal.dfm.sheet`` says what they are for), and the unfold.
 
 **The sheet.** Every face is sampled (``_dfm_brep.samples``) and an exact ray cast from each sample into the
-material, square to the face, to the next face it crosses. A planar face whose rays mostly reach an
-opposite, antiparallel planar face is a *skin*; the area-weighted modal distance is the sheet's thickness
-``t``. A pair of coaxial cylinders, one concave and one convex, whose rays cross ``t`` is a *bend*. A face
+material, square to the face, to the next face it crosses. The sheet's thickness ``t`` is the area-weighted
+modal distance between a face and the face opposite it (an antiparallel plane, a coaxial cylinder), voted by
+the faces that can be a sheet's two sides alone: those ``SKIN_WIDTHS`` times as wide as the two are apart,
+each read in its own frame (``_Analysis._width``) -- nothing here reads the part's box in the world, so
+nothing turns with its placement. A planar face whose rays mostly reach an antiparallel planar face ``t``
+away is a *skin*. A pair of coaxial cylinders, one concave and one convex, whose rays cross ``t`` is a
+*bend* (with no flat skin beside them: a tube, or a rolled sheet -- ``rolled``). A face
 touching both faces of a pair (a skin and its opposite, a bend's inside and outside) is a cut *edge*; a cone
 between a skin and a hole's wall is a countersink. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
@@ -51,6 +55,11 @@ FAMILIES = ("parts", "not_sheet", "sharp_bends", "bends", "flanges", "channels",
             "hole_spacing", "hole_to_bend", "notches", "tabs", "webs", "gaps")
 ITEM_CAP = 300
 _PARALLEL = 0.9995
+#: A sheet's skin is at least this many times as wide as the sheet is thick (text-to-cad's own line, for which
+#: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
+#: 100 x 8 x 6 mm bar, a block and a tube's two ends are not). Read on each face in its own frame, so the same
+#: wherever the part stands.
+SKIN_WIDTHS = 2.5
 #: A bend this far round or more is a hem (to 185 degrees) or a curl: its mold lines meet at no finite point, so
 #: it has no setback, bend deduction or distance from a mold line.
 HEM_DEG = 175.0
@@ -490,6 +499,7 @@ class _Analysis:
         self.joggles: list[dict[str, Any]] = []
         self.overlap = 0.0
         self.sheet_fraction = 0.0
+        self.block = False                        # no face a skin's width against its opposite: a bar, a block
         self._boxes: tuple[np.ndarray, np.ndarray] | None = None
 
     def ref(self, ordinal: int) -> str:
@@ -528,12 +538,36 @@ class _Analysis:
                     found.append(_Hit(sample.area, hit[0], self.part.face_ordinal(hit[1]), sample.point))
             self.hits[ordinal] = found
 
+    def _width(self, a: int) -> float:
+        """How wide face ``a`` is, in its own frame: a plane's outline's smallest rectangle's short side, a
+        cylinder's length along its axis."""
+        surface = self.surfaces[a - 1]
+        points = np.array([(p.X, p.Y, p.Z) for edge in self.faces[a - 1].outer_wire().edges()
+                           for p in (edge.position_at(float(u)) for u in np.linspace(0.0, 1.0, 9))])
+        if surface.kind == "cylinder":
+            return float(np.ptp(points @ np.array(surface.axis)))
+        u = _perpendicular(np.array(surface.normal))
+        return plane.min_rectangle(np.column_stack([points @ u, points @ np.cross(surface.normal, u)]))[1]
+
     def classify(self) -> None:
-        planar = [(h.distance, h.area) for a, hs in self.hits.items() for h in hs
-                  if h.distance is not None and h.face and self._opposite(a, h.face) and self.surfaces[a - 1].kind == "plane"]
-        if not planar:
-            planar = [(h.distance, h.area) for a, hs in self.hits.items() for h in hs
-                      if h.distance is not None and h.face and self._opposite(a, h.face)]
+        # The votes for the thickness: every ray between a face and the face opposite it -- an antiparallel
+        # plane, a coaxial cylinder (a bend's, a rolled part's) -- that is a skin's, the face ``SKIN_WIDTHS``
+        # times as wide as the two are apart. A tube's ends, a bar's sides and a block's faces are opposite too,
+        # and are no sheet's skins.
+        opposite = {a: [h for h in hs if h.distance is not None and h.face and self._opposite(a, h.face)]
+                    for a, hs in self.hits.items()}
+        opposite = {a: hs for a, hs in opposite.items() if hs}
+        widths = {a: self._width(a) for a in opposite}
+        planar = [(h.distance, h.area) for a, hs in opposite.items() for h in hs
+                  if widths[a] >= SKIN_WIDTHS * h.distance * (1.0 - 1e-9)]
+        if not planar and opposite:
+            # no skin: the facts are read as before, off the opposite faces there are, and the part is not sheet
+            widest = max(opposite, key=lambda a: (widths[a], self.areas[a - 1]))
+            apart = float(np.median([h.distance for h in opposite[widest]]))
+            self.why = (f"no face is {SKIN_WIDTHS:g} times as wide as it is from the face opposite it (the widest "
+                        f"is {widths[widest]:.4g} mm wide and {apart:.4g} mm across): a bar or a block, not sheet")
+            self.block = True
+            planar = [(h.distance, h.area) for hs in opposite.values() for h in hs]
         if not planar:
             self.why = "no face lies opposite another a constant distance across"
             across = [(round(h.distance, 3), h.area) for a, hs in self.hits.items() for h in hs
@@ -661,11 +695,28 @@ class _Analysis:
                 if facing and sum(h.area for h in facing) >= 0.5 * sum(h.area for h in hs):
                     kind = "thicker" if worst.distance > thickness else "thinner"
             else:
-                box = self.faces[a - 1].bounding_box()
-                local, deviation = None, max(box.size.X, box.size.Y, box.size.Z)
+                # no ray of it crosses the part: by its own size (never its box in the world, which turns with it)
+                local, deviation = None, math.sqrt(float(self.areas[a - 1]))
                 centre = self.faces[a - 1].center()
                 point = np.array([centre.X, centre.Y, centre.Z])
             self._not_sheet(a, kind, local, max(deviation, tol), point, self.areas[a - 1])
+
+    def rolled(self) -> str:
+        """Why a part with no flat skin whose cylinders are a thickness apart is no brake part: a closed
+        section (a tube), or a sheet rolled round with no flat flange -- "" for any other part."""
+        if self.skins or not self.bend_faces:
+            return ""
+        t = float(self.thickness)
+        inside = min(float(self.surfaces[a - 1].radius) for a in self.bend_faces)
+        axis = np.array(self.surfaces[min(self.bend_faces) - 1].axis)
+        # open where a face along the axis joins the inside to the outside: a slit's wall, the sheet's two ends
+        slit = any(self.surfaces[a - 1].kind != "plane" or abs(float(np.dot(self.surfaces[a - 1].normal, axis))) < _PARALLEL
+                   for a in self.edge_set)
+        if slit:
+            return (f"a {t:.4g} mm sheet rolled to a {inside:.4g} mm inside radius with no flat flange: rolled "
+                    "(on plate rolls), not bent on a brake, and not unfolded here")
+        return (f"a closed section, a tube of {t:.4g} mm wall and {inside:.4g} mm inside radius: no flat blank "
+                "bends into it")
 
     def _step(self, a: int, thickness: float, tol: float) -> tuple[str, float, np.ndarray] | None:
         """For a face standing square on a skin beside it (a plane square to it, a cylinder about its normal):
@@ -1636,6 +1687,12 @@ def _reliefs(analysis: _Analysis, material: list[plane.Loop]) -> list[dict]:
     items = []
     t = float(analysis.thickness)
     eps = max(1e-4, 0.005 * t)
+    holes = [loop for loop in material if loop.label == "hole"]
+
+    def on_hole(point: np.ndarray) -> bool:
+        spot = _barrier(np.array([point, point]))  # in a hole (a bend's curved end reaches into it), or on its edge
+        return bool(plane.inside(point[None], holes)[0]) or any(plane.distance(hole, spot)[0] <= eps for hole in holes)
+
     for bend in analysis.bends:
         if bend.frame is None:
             continue
@@ -1657,6 +1714,10 @@ def _reliefs(analysis: _Analysis, material: list[plane.Loop]) -> list[dict]:
                     for point in np.vstack([probe_flange, probe_zone]))
                 item = {"bend": analysis.ref(bend.inner[0]), "end": end, "side": side,
                         "kind": "corner" if corner else "bend", "location": ref, "xyz": xyz}
+                if continues.any() and on_hole(_frame_points(bend, np.array([bend.allowance / 2]), np.array([w_end]))[0]):
+                    # the bend stops at a hole in the bend line and runs on past it: the hole's finding
+                    # (hole_to_bend, hole_in_bend), no relief missing
+                    continue
                 if continues.any():
                     item.update(needed=True, present=False, width_mm=0.0, depth_tangent_mm=0.0,
                                 depth_centerline_mm=0.0, depth_centerline_minus_radius_mm=0.0,
@@ -1704,21 +1765,33 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
         for bend in analysis.bends:
             if bend.frame is None:
                 continue
+            # the bend's two tangent lines and its centre line in the flat; a whole circle's distances are exact
+            lines = [_barrier(_frame_points(bend, np.array([x0, x0]), np.array([bend.w0, bend.w1])))
+                     for x0 in (0.0, bend.allowance, bend.allowance / 2)]
+            near, far, d_center = (plane.distance(loop, line)[0] for line in lines)
             origin, x, y = bend.frame
-            rel = loop.points - origin
-            xs = rel @ x
-            local = np.column_stack([xs, rel @ y])
-            segment = lambda x0: (np.array([[x0, bend.w0]]), np.array([[x0, bend.w1]]))  # noqa: E731
-            la, lb = local, np.roll(local, -1, axis=0)
-            if xs.max() <= 1e-9:
-                d_tangent = plane.segments_distance(la, lb, *segment(0.0))[0]
-            elif xs.min() >= bend.allowance - 1e-9:
-                d_tangent = plane.segments_distance(la, lb, *segment(bend.allowance))[0]
+            if loop.circle is not None:
+                at, radius = np.array(loop.circle[:2]) - origin, loop.circle[2]
+                reach = (float(at @ x) - radius, float(at @ x) + radius)
             else:
-                inside_ws = (local[:, 1] >= bend.w0) & (local[:, 1] <= bend.w1)
-                d_tangent = 0.0 if inside_ws.any() else min(plane.segments_distance(la, lb, *segment(0.0))[0],
-                                                             plane.segments_distance(la, lb, *segment(bend.allowance))[0])
-            d_center = plane.segments_distance(la, lb, *segment(bend.allowance / 2))[0]
+                reach = (float(((loop.points - origin) @ x).min()), float(((loop.points - origin) @ x).max()))
+            slack = 1e-6 * max(1.0, float(analysis.thickness))
+            if reach[1] <= slack:
+                d_tangent = near
+            elif reach[0] >= bend.allowance - slack:
+                d_tangent = far
+            else:
+                # it reaches between the tangent lines: in the bend where it does so along the bend's own length
+                rel = loop.points - origin
+                along = _span_within(np.column_stack([rel @ x, rel @ y]), 0.0, bend.allowance)
+                if along is not None and along[1] > bend.w0 + slack and along[0] < bend.w1 - slack:
+                    d_tangent = 0.0
+                elif reach[0] < -slack and reach[1] > bend.allowance + slack:
+                    # a cutout across both tangent lines past the bend's end: the bend ends at it -- a window through
+                    # the bend, a relief, which ``reliefs`` measures there -- and it is no hole beside this bend
+                    continue
+                else:
+                    d_tangent = min(near, far)
             if best is None or d_tangent < best[0]:
                 best = (d_tangent, d_center, bend)
         if best is not None:
@@ -1734,21 +1807,32 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
                 "inside_radius_mm": _r(bend.inside_radius), "bend_angle_deg": _r(bend.angle),
                 "location": item["location"], "xyz": item["xyz"]})
     pairs: dict[tuple[int, int], dict] = {}
-    for i, first in enumerate(analysis.holes):
-        checkpoint()
-        nearest = None
-        for j, second in enumerate(analysis.holes):
-            if i == j:
-                continue
-            d = plane.distance(first.loop, second.loop)[0]
-            if nearest is None or d < nearest[0]:
-                nearest = (d, j)
+    for i, nearest in enumerate(plane.nearest([hole.loop for hole in analysis.holes])):
         if nearest is not None:
             key = (min(i, nearest[1]), max(i, nearest[1]))
             pairs.setdefault(key, {"distance_mm": _r(nearest[0]), "location": holes[key[0]]["location"],
                                    "other": holes[key[1]]["location"], "xyz": holes[key[0]]["xyz"]})
     spacing = sorted(pairs.values(), key=lambda item: item["distance_mm"])
     return holes, spacing, to_bend
+
+
+def _span_within(points: np.ndarray, lo: float, hi: float) -> tuple[float, float] | None:
+    """The range of the second coordinate over the part of a closed polyline whose first lies in ``lo`` to
+    ``hi`` (each segment clipped to the band), or None where none of it does."""
+    a, b = points, np.roll(points, -1, axis=0)
+    dx = b[:, 0] - a[:, 0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t0, t1 = (lo - a[:, 0]) / dx, (hi - a[:, 0]) / dx
+    level = np.abs(dx) < 1e-300  # a segment along the band: all of it in, or none
+    enter = np.where(level, 0.0, np.clip(np.minimum(t0, t1), 0.0, 1.0))
+    leave = np.where(level, 1.0, np.clip(np.maximum(t0, t1), 0.0, 1.0))
+    within = np.where(level, (a[:, 0] >= lo) & (a[:, 0] <= hi), np.maximum(t0, t1) >= 0.0) & \
+        np.where(level, True, np.minimum(t0, t1) <= 1.0)
+    if not within.any():
+        return None
+    dy = b[:, 1] - a[:, 1]
+    ends = np.concatenate([(a[:, 1] + enter * dy)[within], (a[:, 1] + leave * dy)[within]])
+    return float(ends.min()), float(ends.max())
 
 
 def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thickness: float | None,
@@ -1778,6 +1862,11 @@ def _outline_features(analysis: _Analysis | None, loops: list[plane.Loop], thick
             webs.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "across": [_r(v) for v in (*width.start, *width.end)]})
         else:
+            # across a hole its least width is the hole's size (``holes.size_mm``) but where it necks in: a gap
+            # then, narrower than the hole (a keyhole's slot, a dumbbell's waist)
+            if a == b and loops[a].label != "outer" and \
+                    width.width >= plane.feret(loops[a].points)[0] - max(2.0 * plane.CHORD_MM, 1e-6 * width.width):
+                continue
             ref, xyz = locate(width.start)
             gaps.append({"width_mm": _r(width.width), "location": ref, "xyz": xyz,
                          "between": "one contour" if a == b else "two contours"})
@@ -1798,22 +1887,16 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     analysis.probe()
     analysis.classify()
     t = analysis.thickness
-    size = part.shape.bounding_box().size  # once: the optimal box of a large part costs seconds
-    box = sorted([size.X, size.Y, size.Z])
     largest = max(analysis.skins, key=lambda a: analysis.areas[a - 1]) if analysis.skins else 1
     item: dict[str, Any] = {
         "name": part.name, "thickness_mm": _r(t), "given_thickness_mm": options.get("thickness"),
         "sheet_area_fraction": _r(analysis.sheet_fraction), "skin_faces": len(analysis.skins),
-        "not_sheet_faces": len(analysis.not_sheet), "box_mm": [_r(v) for v in box[::-1]],
-        "box_short_mm": _r(box[1]), "location": part.ref("face", largest),
+        "not_sheet_faces": len(analysis.not_sheet), "bent": False, "location": part.ref("face", largest),
     }
-    is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5
-    if t is not None and is_sheet:
-        if t > 0.25 * box[1]:
-            is_sheet = False
-            analysis.why = f"its {t:.4g} mm thickness is no sheet's against its {box[1]:.4g} mm width"
-    elif t is not None:
-        analysis.why = analysis.why or f"only {100 * analysis.sheet_fraction:.0f}% of its area is a {t:.4g} mm sheet"
+    is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5 and not analysis.block
+    if t is not None and not is_sheet:
+        analysis.why = analysis.why or analysis.rolled() or \
+            f"only {100 * analysis.sheet_fraction:.0f}% of its area is a {t:.4g} mm sheet"
     item["is_sheet"] = is_sheet
     if analysis.why:
         item["why"] = analysis.why
@@ -1822,10 +1905,24 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
 
     def settle() -> None:
         # the facts stay; a part that is not sheet, or a round a sharp_bends item names, gets no thickness verdict
+        # one feature, one place: faces off the thickness that touch (a pocket's floor and walls, a boss's top
+        # and side) share the ref of the one furthest off it, each keeping its own (``face``)
+        off = {record["face"]: record for record in analysis.not_sheet
+               if record["kind"] in ("thicker", "thinner", "unpaired")}
+        features = _Sets()
+        for a in off:
+            features.add(a)
+            for b in analysis.neighbors[a]:
+                if b in off:
+                    features.join(a, b)
+        for group in features.groups():
+            worst = max(group, key=lambda a: (off[a]["deviation_mm"] or 0.0, -a))
+            for a in group:
+                off[a]["location"] = analysis.ref(worst)
         for record in analysis.not_sheet:
             if not is_sheet or record.get("face") in analysis.explained:
                 record["judged"] = None
-            record.pop("face", None)
+            record["face"] = analysis.ref(record["face"])
 
     screens, listed = [analysis.rays.screen], [analysis.rays.faces]
     # the faces the reading's own rays failed on (its skins, its thickness) are not measured in any family
@@ -1858,6 +1955,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
                      "angle_deg": b["angle_deg"], "location": b["location"], "xyz": b["xyz"]}
                     for b in out["bends"] if b["kind"] == "curl"]
     item["bend_count"] = len(analysis.bends)
+    item["bent"] = bool(analysis.bends)  # its own: bending's thickness limit is a bent part's
     item["flange_count"] = sum(1 for flange in analysis.flanges if flange.joint is None)
     try:
         analysis.unfold()
@@ -1874,6 +1972,8 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     if outer:
         points = np.vstack([loop.points for loop in outer])
         long, short, angle = plane.min_rectangle(points)
+        if len(outer) == 1 and outer[0].circle is not None:  # a disc: its diameter, not its chords' rectangle
+            long = short = 2.0 * outer[0].circle[2]
         item.update(flat_length_mm=_r(long), flat_width_mm=_r(short),
                     flat_area_mm2=_r(sum(abs(plane.area(loop)) for loop in analysis.flat_loops
                                          if loop.label == "outer") -
@@ -1991,6 +2091,14 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             results.append(_part(part, options))
         except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone
             results.append({family: error for family in FAMILIES})
+    for result in results:
+        # every item carries its own part's thickness: what its rules scale by (``sheet._scales``)
+        parts = result.get("parts")
+        thickness = parts[0].get("thickness_mm") if isinstance(parts, list) and parts else None
+        for family, found in result.items():
+            if thickness is not None and isinstance(found, list) and family in FAMILIES[2:]:
+                for item in found:
+                    item.setdefault("thickness_mm", thickness)
     report: dict[str, Any] = {}
     partial = []
     for family in FAMILIES:
@@ -2013,7 +2121,6 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                              for ordinal in (result.get("_lost") or {}).get(family, ())})
         if unmeasured:
             report[family]["unmeasured_faces"] = unmeasured
-    report["bent"] = bool((report.get("bends") or {}).get("items"))
     report["partial"] = bool(partial)
     report["partial_sections"] = partial
     found = [finding for result in results for finding in result.get("_findings", ())]

@@ -155,8 +155,9 @@ def corpus() -> list[Case]:
     cases.append(Case("hole_across_tangent_line", _labelled(across, "across"),
                       [("sheet.hole_to_bend", (40, 25, 0)), ("sheet.hole_in_bend", None)], near=3))
     slotted = _bracket("slotted") - bd.Pos(40, 25, 4) * bd.Box(12, 3, 12)
-    cases.append(Case("slot_across_bend", _labelled(slotted, "slotted"), [("sheet.hole_to_bend", (42.8, 25, 1.2))],
-                      near=3))
+    # a window through the bend, across both tangent lines: the bend ends at it either side (its width a relief's,
+    # 3 mm on 2 mm sheet), and it is no hole beside the bend
+    cases.append(Case("slot_across_bend", _labelled(slotted, "slotted"), []))
     return cases
 
 
@@ -232,6 +233,32 @@ class CorpusTest(unittest.TestCase):
         ids = sorted({rule.id for rule in RULES.rules})
         lines.append(f"\n{len(ids)} rules: {', '.join(i.removeprefix('sheet.') for i in ids)}")
         print("\nsheet corpus, " + f"{len(corpus())} parts in {elapsed:.1f} s\n" + "\n".join(lines), file=sys.stderr)
+        self.assertEqual(problems, [])
+
+
+    def test_every_part_reads_the_same_wherever_it_stands(self) -> None:
+        """No verdict turns with the part's placement: each corpus part, live, as built, turned 37 degrees about
+        a skew axis and moved, and tilted a third of a degree off its axes, fails the same rules as often."""
+        from cad import build123d as cb
+
+        def verdicts(shape: bd.Shape, options: dict) -> list[tuple[str, int]]:
+            result = cb.sheet_metal(shape, **options)
+            counts: dict[str, int] = {}
+            for code, _, _ in _events(result):
+                counts[code] = counts.get(code, 0) + 1
+            return sorted(counts.items())
+
+        problems = []
+        for case in corpus():
+            label = getattr(case.shape, "label", "")
+            as_built = verdicts(case.shape, case.options)
+            for name, axis, degrees, move in (("turned", (1, 2, 3), 37.0, (13.3, -7.1, 4.4)),
+                                              ("tilted", (1, 0.3, 0.2), 0.3, (0, 0, 0))):
+                moved = case.shape.rotate(bd.Axis((0, 0, 0), axis), degrees).translate(move)
+                moved.label = label
+                found = verdicts(moved, case.options)
+                if found != as_built:
+                    problems.append(f"{case.name} {name}: {found} != {as_built}")
         self.assertEqual(problems, [])
 
 

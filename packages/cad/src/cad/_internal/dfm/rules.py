@@ -10,7 +10,9 @@ one: the report carries both.
 A rule reads ``report[family]``: a family's ``items`` (one record per feature, each with its ``location`` --
 a ref in ``cad xbf inspect``'s grammar -- and ``xyz``), or the family itself where it has none (one figure
 for the whole part). The limit is a number, or one number per value of a ``context`` key (``by``: the
-material's class, a printing technology), times another (``scale_by``: a sheet's thickness), and the rule
+material's class, a printing technology), times another (``scale_by``: a sheet's thickness -- the item's own
+figure of that name where it carries one, as each feature of a part carries its part's thickness, else the
+context's), and the rule
 applies only where the context matches ``when`` (elsewhere it is recorded ``not_applicable``, never dropped)
 and to the items matching ``item_when`` (``not_applicable`` too where no item carries the fields it reads: a
 mesh's walls, against a rule for supported walls). A family measured with nothing to judge -- no hole, no
@@ -68,7 +70,7 @@ class Rule:
     source: str                 # a Source's id
     severity: str = "error"     # "error": the source's feasibility limit; "warning": its recommendation
     by: str | None = None       # the context key choosing the limit from a mapping
-    scale_by: str | None = None  # the context key the limit is multiplied by
+    scale_by: str | None = None  # what the limit is multiplied by: the item's field of this name, else the context's
     when: Mapping[str, Any] = field(default_factory=dict)       # context key: value or tuple of values
     item_when: Mapping[str, Any] = field(default_factory=dict)  # item field: value or tuple of values
     fix: str = ""               # what to change, formatted with value, limit, unit, the context's and the item's plain values
@@ -83,8 +85,9 @@ class Rule:
         if isinstance(self.limit, Mapping) and self.by is None:
             raise ValueError(f"rule {self.id}: a limit per value needs the context key it is chosen by (by=)")
 
-    def limit_for(self, context: Mapping[str, Any]) -> float | None:
-        """The limit in this context, or None where the rule gives none for it."""
+    def limit_for(self, context: Mapping[str, Any], item: Mapping[str, Any] | None = None) -> float | None:
+        """The limit in this context -- for ``item``, scaled by its own figure where it carries one -- or None
+        where the rule gives none for it."""
         limit = self.limit
         if isinstance(limit, Mapping):
             key = context.get(self.by) if self.by else None
@@ -93,7 +96,10 @@ class Rule:
                 return None
         value = float(limit)
         if self.scale_by is not None:
-            scale = _number(context.get(self.scale_by))  # a bool is no scale: True is not x1
+            # a bool is no scale: True is not x1
+            scale = _number(item.get(self.scale_by)) if item is not None else None
+            if scale is None:
+                scale = _number(context.get(self.scale_by))
             if scale is None:
                 return None
             value *= float(scale)
@@ -254,13 +260,16 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                                  f"{key} is {value}" for key, value in rule.when.items())})
             continue
         limit = rule.limit_for(context)
-        items, readable = _items(report, rule) if limit is not None else (None, True)
+        scaled = rule.scale_by is not None  # each item by its own scale where it carries one
+        items, readable = _items(report, rule) if limit is not None or scaled else (None, True)
+        # no limit here: none in the context, and no item with a scale of its own
+        limited = limit is not None or any(rule.limit_for(context, item) is not None for item in items or ())
         outcome: dict[str, Any] = {"rule": rule.id, "family": rule.family, "field": rule.field, "op": rule.op,
                                    "limit": limit, "unit": rule.unit, "severity": rule.severity,
                                    "source": rule.source}
-        if limit is None or items is None:
+        if not limited or items is None:
             outcome["status"] = "not_evaluated"
-            outcome["reason"] = ("the rules give no limit here" if limit is None
+            outcome["reason"] = ("the rules give no limit here" if not limited
                                  else f"{rule.family} was not measured")
             outcomes.append(outcome)
             continue
@@ -272,17 +281,22 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         failures: list[dict[str, Any]] = []
         failing: dict[int, Mapping[str, Any]] = {}  # the item behind each failure, for its message; not recorded
         evaluated = unmeasured = 0
+        limits: set[float] = set()
         judged[id(outcome)] = (read, unread) = (set(), set())  # the items, so variants of one rule count each once
         for item in items:
             value = _number(item.get(rule.field))
-            if value is None:
+            own = rule.limit_for(context, item) if scaled else limit
+            if value is None or own is None:
                 unmeasured += 1
                 unread.add(id(item))
                 continue
             evaluated += 1
             read.add(id(item))
-            if _fails(rule, value, limit):
-                failures.append({"value": value, "location": _where(item, rule), "xyz": item.get("xyz")})
+            limits.add(own)
+            if _fails(rule, value, own):
+                # its own limit where that is not the rule's here (an item scaled by its own figure)
+                failures.append({"value": value, "location": _where(item, rule), "xyz": item.get("xyz"),
+                                 **({} if own == limit else {"limit": own})})
                 failing[id(failures[-1])] = item
         failures.sort(key=lambda found: found["value"], reverse=rule.op == "max")
         # Faces the family's rays could not be intersected with (``unmeasured_faces``: the kernel failed there):
@@ -294,6 +308,8 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         # found. A figure the items do not carry is no pass.
         status = "failed" if failures else "passed" if evaluated or not unmeasured else "not_evaluated"
         outcome.update(status=status, evaluated=evaluated, unmeasured=unmeasured, failures=failures)
+        if len(limits) > 1 or (limits and limit not in limits):
+            outcome["limits"] = sorted(limits)  # the items' own, where they scale by their own figures
         said = []
         if unmeasured - len(lost):
             said.append(f"{unmeasured - len(lost)} item(s) not measured")
@@ -319,7 +335,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     for rule, limit, failures, failing in shown:
         for failure in failures:
             key = (rule.family, rule.field, rule.op, failure["location"], id(failing.get(id(failure))))
-            failing_rules.setdefault(key, []).append((rule, limit))
+            failing_rules.setdefault(key, []).append((rule, failure.get("limit", limit)))
 
     def implied(rule: Rule, limit: float, key: tuple[Any, ...]) -> bool:
         for other, other_limit in failing_rules.get(key, ()):
@@ -335,24 +351,26 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         places: dict[str, list[dict[str, Any]]] = {}
         for failure in failures:
             key = (rule.family, rule.field, rule.op, failure["location"], id(failing.get(id(failure))))
-            if implied(rule, limit, key):
+            if implied(rule, failure.get("limit", limit), key):
                 continue
             places.setdefault(failure["location"], []).append(failure)
         for location, here in list(places.items())[:SHOWN_PER_RULE]:
             worst = here[0]
             item = failing.get(id(worst), {})
-            detail = f" ({_format(rule.detail, rule, worst['value'], limit, context, item)})" if rule.detail else ""
+            own = worst.get("limit", limit)
+            detail = f" ({_format(rule.detail, rule, worst['value'], own, context, item)})" if rule.detail else ""
             more = f" (and {len(here) - 1} more at this ref)" if len(here) > 1 else ""
             findings.append(CheckFinding(rule.severity, rule.id,
-                                         _message(rule, rule_set, worst["value"], limit) + detail + more,
-                                         location, _hint(rule, worst["value"], limit, context, item)))
+                                         _message(rule, rule_set, worst["value"], own) + detail + more,
+                                         location, _hint(rule, worst["value"], own, context, item)))
         if len(places) > SHOWN_PER_RULE:
             # The rest, counted: where the record lists them, with the fix the first of them calls for.
             rest = list(places.values())[SHOWN_PER_RULE][0]
             findings.append(CheckFinding(rule.severity, rule.id,
                                          f"{len(places) - SHOWN_PER_RULE} more of the same "
                                          f"(measurements.rules lists every one)", "measurements.rules",
-                                         _hint(rule, rest["value"], limit, context, failing.get(id(rest), {}))))
+                                         _hint(rule, rest["value"], rest.get("limit", limit), context,
+                                               failing.get(id(rest), {}))))
     outcomes = _one_per_rule(rule_set, context, outcomes, judged)
     record = {
         "title": rule_set.title, "version": rule_set.version, "note": rule_set.note,
@@ -417,7 +435,8 @@ def _merged(done: list[dict[str, Any]], unjudged: list[dict[str, Any]],
     first = next((outcome for outcome in done if outcome["status"] == "failed"), done[0])
     merged = dict(first)
     differ = len({(outcome["op"], outcome["limit"], outcome["severity"]) for outcome in done}) > 1
-    failures = [{**failure, "op": outcome["op"], "limit": outcome["limit"], "severity": outcome["severity"]}
+    failures = [{**failure, "op": outcome["op"], "limit": failure.get("limit", outcome["limit"]),
+                 "severity": outcome["severity"]}
                 if differ else failure for outcome in done for failure in outcome["failures"]]
     read = set().union(*(judged[id(outcome)][0] for outcome in done))
     unread = set().union(*(judged[id(outcome)][1] for outcome in done)) - read

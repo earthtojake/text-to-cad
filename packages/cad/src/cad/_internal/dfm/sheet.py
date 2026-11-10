@@ -17,7 +17,9 @@ length is given the same three ways from the bend, the least along the bend (``l
 length at least half of the bend reaches (``length_*_half_mm``).
 
 **The rules** (``RULES``) are general practice, each from a published sheet metal design guide (cited as the
-evidence, not as a shop's limit). A shop's own figures -- its gauges, its tooled radius per gauge, its die
+evidence, not as a shop's limit) but the few that are text-to-cad's own (``OWN``: said as its own in every
+verdict). A rule that scales with the thickness scales by each item's own part's (``_scales``): a document's
+parts are each judged by their own. A shop's own figures -- its gauges, its tooled radius per gauge, its die
 widths, its brake's angles and lengths, its smallest and largest parts -- are no rule here: give the ones it
 publishes (``--thickness``, ``--bend-radius``, ``--k-factor``, ``--kerf``, ``--sheet-size``), or compare the
 measurements with them.
@@ -51,6 +53,20 @@ PROTOLABS = Source("protolabs-sheet", "Protolabs", "Sheet metal fabrication desi
                    "https://www.protolabs.com/services/sheet-metal-fabrication/design-guidelines/", ACCESSED)
 XOMETRY = Source("xometry-sheet", "Xometry", "Sheet metal fabrication service (design guidelines)",
                  "https://www.xometry.com/capabilities/sheet-metal-fabrication/", ACCESSED)
+
+#: The source of a rule that is text-to-cad's own (no guide states it), said as such in every verdict of it.
+OWN = Source("text-to-cad-own", "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
+             "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
+             ACCESSED)
+#: Past this a part is plate, no sheet shop's work (mm): text-to-cad's own floor -- sheet lasers and press brakes
+#: in general service stop near an inch of steel, and thicker plate is flame-, plasma- or waterjet-cut and
+#: machined. Hubs recommends 10 mm at most for laser cutting and 6 for bending (``thickness_max``, warnings).
+PLATE_MM = 25.0
+
+#: An inside radius past this many thicknesses is no one hit of a brake's punch: text-to-cad's own line (air
+#: bending forms a radius of a fraction of the die's opening, a few thicknesses; a larger one is bump-formed in
+#: steps or rolled). No fetched guide states one.
+BRAKE_RADIUS_T = 10.0
 
 # --- tables the rules read through ``context`` ------------------------------------------------------------
 
@@ -103,28 +119,19 @@ _SCALED = {"when": {"scale_known": True}}
 
 def _uniform(source: Source, note: str) -> tuple[Rule, ...]:
     """One thickness throughout, judged on the faces of sheet parts that depart from it (``not_sheet`` items
-    with ``judged``): a stretch thicker or thinner than the sheet against the sheet's own thickness where the
-    document's sheet parts share one (the message gives both), else by how far it departs; a face with no
-    opposite face a thickness across (a round, a boss's side) by how far it departs."""
-    thicker = {"kind": "thicker", "judged": True}
-    thinner = {"kind": "thinner", "judged": True}
-    fix_thicker = ("make it the sheet's {limit:.4g} mm: no boss, rib, second plate or doubled layer on the sheet "
-                   "(or give --thickness for thicker stock)")
-    fix_thinner = "make it the sheet's {limit:.4g} mm: no pocket, step or partial cut into the sheet"
+    with ``judged``): a stretch thicker or thinner than the sheet against its own part's thickness (the item's
+    ``sheet_thickness_mm``; the message gives both); a face with no opposite face a thickness across (a round,
+    a boss's side) by how far it departs."""
     return (
         _r("uniform_thickness", "not_sheet", "local_thickness_mm", "max", 1.0, "mm",
            "local thickness (the sheet's is the maximum)", source, scale_by="sheet_thickness_mm",
-           when={"one_thickness": True}, item_when=thicker, fix=fix_thicker, note=note),
+           item_when={"kind": "thicker", "judged": True}, note=note,
+           fix="make it the sheet's {limit:.4g} mm: no boss, rib, second plate or doubled layer on the sheet "
+               "(or give --thickness for thicker stock)"),
         _r("uniform_thickness", "not_sheet", "local_thickness_mm", "min", 1.0, "mm",
            "local thickness (the sheet's is the minimum)", source, scale_by="sheet_thickness_mm",
-           when={"one_thickness": True}, item_when=thinner, fix=fix_thinner, note=note),
-        _r("uniform_thickness", "not_sheet", "deviation_mm", "max", 0.0, "mm",
-           "thickness above the sheet's (parts of several thicknesses)", source, when={"one_thickness": False},
-           item_when=thicker, fix="make it its sheet's thickness: no boss, rib, second plate or doubled layer",
-           note=note),
-        _r("uniform_thickness", "not_sheet", "deviation_mm", "max", 0.0, "mm",
-           "thickness below the sheet's (parts of several thicknesses)", source, when={"one_thickness": False},
-           item_when=thinner, fix="make it its sheet's thickness: no pocket, step or partial cut", note=note),
+           item_when={"kind": "thinner", "judged": True}, note=note,
+           fix="make it the sheet's {limit:.4g} mm: no pocket, step or partial cut into the sheet"),
         _r("uniform_thickness", "not_sheet", "deviation_mm", "max", 0.0, "mm",
            "departure of a face with no opposite face a thickness across", source,
            item_when={"kind": "unpaired", "judged": True},
@@ -138,20 +145,20 @@ def _holes(source: Source, *, diameter: float | None, diameter_severity: str = "
     rules = []
     if diameter is not None:
         rules.append(_r("hole_diameter", "holes", "size_mm", "min", diameter, "mm", "hole or slot size", source,
-                        scale_by="thickness", severity=diameter_severity, note=note,
+                        scale_by="rule_thickness_mm", severity=diameter_severity, note=note,
                         fix="open it to at least {limit:.3g} mm (the thickness times the source's ratio), "
                             "or drill it after cutting", **_SCALED))
     if edge is not None:
         # a recommendation, a warning: "Holes should be at least the sheet's thickness from the edge"
         rules.append(_r("hole_to_edge", "holes", "edge_distance_mm", "min", edge, "mm", "hole-to-edge distance",
-                        source, scale_by="thickness", severity="warning", note=edge_note,
+                        source, scale_by="rule_thickness_mm", severity="warning", note=edge_note,
                         fix="move the hole in to at least {limit:.3g} mm from the edge", **_SCALED))
     if spacing is not None:
         # a recommendation, a warning: one of Hubs's "Design best practices for laser cutting", "Space holes at
         # least 2 times the sheet thickness apart", its risk in the forming -- "Holes that are too close to each
         # other can lead to deformation or breakage during forming or bending." -- no cutting limit
         rules.append(_r("hole_spacing", "hole_spacing", "distance_mm", "min", spacing, "mm",
-                        "hole-to-hole distance (edge to edge)", source, scale_by="thickness", severity="warning",
+                        "hole-to-hole distance (edge to edge)", source, scale_by="rule_thickness_mm", severity="warning",
                         note="holes closer than this can deform or break during forming or bending (a best "
                              "practice for laser cutting, a recommendation)",
                         fix="space the holes at least {limit:.3g} mm apart, edge to edge", **_SCALED))
@@ -184,65 +191,95 @@ def _notches_tabs(source: Source) -> tuple[Rule, ...]:
 def _hems(source: Source) -> tuple[Rule, ...]:
     return (
         _r("hem_diameter", "hems", "inside_diameter_mm", "min", 1.0, "mm", "hem inside diameter", source,
-           scale_by="thickness", fix="open the hem to an inside diameter of at least {limit:.3g} mm", **_SCALED),
+           scale_by="rule_thickness_mm", fix="open the hem to an inside diameter of at least {limit:.3g} mm", **_SCALED),
         _r("hem_return", "hems", "return_length_mm", "min", 6.0, "mm", "hem return length", source,
-           scale_by="thickness", severity="warning", fix="lengthen the hem's return to at least {limit:.3g} mm",
+           scale_by="rule_thickness_mm", severity="warning", fix="lengthen the hem's return to at least {limit:.3g} mm",
            **_SCALED),
     )
 
 
 def _flat_size(source: Source, note: str) -> tuple[Rule, ...]:
-    """The flat pattern on the sheet: an error against the sheet given (``--sheet-size``, the shop's), a
-    warning against the standard sheet assumed (``DEFAULT_SHEET``), which is no shop's limit."""
-    rules = []
-    for given, severity, said in ((True, "error", "the {limit:.4g} mm sheet given"),
-                                  (False, "warning", "the {limit:.4g} mm standard sheet assumed: give --sheet-size")):
-        rules += [
-            _r("flat_length", "parts", "flat_length_mm", "max", 1.0, "mm", "flat pattern's long side", source,
-               scale_by="sheet_long_mm", severity=severity, note=note,
-               when={"scale_known": True, "sheet_given": given},
-               fix="split the part or nest it on a larger sheet: the flat pattern is longer than " + said),
-            _r("flat_width", "parts", "flat_width_mm", "max", 1.0, "mm", "flat pattern's short side", source,
-               scale_by="sheet_short_mm", severity=severity, note=note,
-               when={"scale_known": True, "sheet_given": given},
-               fix="split the part: the flat pattern is wider than " + said)]
-    return tuple(rules)
+    """The flat pattern on the standard sheet assumed (``DEFAULT_SHEET``), a warning: no shop's limit. Against
+    the sheet given (``--sheet-size``, the shop's) it is a finding of fact (``_on_sheet``), which cites no
+    guide."""
+    more = {"severity": "warning", "note": note, "when": {"scale_known": True, "sheet_given": False}}
+    return (
+        _r("flat_length", "parts", "flat_length_mm", "max", 1.0, "mm", "flat pattern's long side", source,
+           scale_by="sheet_long_mm", **more,
+           fix="split the part or nest it on a larger sheet: the flat pattern is longer than the {limit:.4g} mm "
+               "standard sheet assumed: give --sheet-size"),
+        _r("flat_width", "parts", "flat_width_mm", "max", 1.0, "mm", "flat pattern's short side", source,
+           scale_by="sheet_short_mm", **more,
+           fix="split the part: the flat pattern is wider than the {limit:.4g} mm standard sheet assumed: give "
+               "--sheet-size"))
 
 
 def _hubs_rules(source: Source) -> tuple[Rule, ...]:
     return (
         # a recommendation, a warning: "We recommend a sheet metal thickness range between 0.5-10 mm"
         _r("thickness_max", "parts", "thickness_mm", "max", 6.0, "mm", "sheet thickness", source,
-           when={"bent": True}, item_when={"is_sheet": True}, severity="warning",
+           item_when={"is_sheet": True, "bent": True}, severity="warning",
            fix="bend sheet no thicker than {limit:g} mm", note="recommended for bending: 0.5 to 6 mm"),
         _r("thickness_max", "parts", "thickness_mm", "max", 10.0, "mm", "sheet thickness", source,
-           when={"bent": False}, item_when={"is_sheet": True}, severity="warning",
+           item_when={"is_sheet": True, "bent": False}, severity="warning",
            fix="laser cut sheet no thicker than {limit:g} mm", note="recommended for laser cutting: 0.5 to 10 mm"),
+        _r("thickness_limit", "parts", "thickness_mm", "max", PLATE_MM, "mm", "sheet thickness", OWN,
+           item_when={"is_sheet": True},
+           fix="plate over {limit:g} mm is not cut on a sheet laser or bent on a press brake: check it as a "
+               "machined part (--process cnc), or make it of thinner sheet",
+           note="text-to-cad's own floor: sheet lasers and press brakes in general service stop near 25 mm (an "
+                "inch) of steel; thicker plate is flame-, plasma- or waterjet-cut and machined"),
         _r("thickness_min", "parts", "thickness_mm", "min", 0.5, "mm", "sheet thickness", source,
            item_when={"is_sheet": True}, severity="warning", fix="use sheet at least {limit:g} mm thick",
            note="recommended: at least 0.5 mm"),
         _r("bend_radius", "bends", "inside_radius_mm", "min", 1.0, "mm", "inside bend radius", source,
-           scale_by="thickness", severity="warning", item_when={"kind": "bend"},  # a hem's is hem_diameter's
+           scale_by="rule_thickness_mm", severity="warning", item_when={"kind": "bend"},  # a hem's is hem_diameter's
            fix="open the inside radius to at least the thickness, {limit:.3g} mm", **_SCALED),
+        _r("bend_radius_max", "bends", "radius_to_thickness", "max", BRAKE_RADIUS_T, "ratio",
+           "inside bend radius over the thickness", OWN, severity="warning", item_when={"kind": "bend"},
+           fix="a radius this large is bump-formed in steps or rolled, not bent in one hit: confirm it with the "
+               "shop, or bend it at a few thicknesses",
+           note="text-to-cad's own line: air bending forms a radius of a few thicknesses in one hit; a larger "
+                "one is bump-formed or rolled, at more cost"),
         _r("flange_length", "flanges", "length_outside_minus_radius_mm", "min", 2.0, "mm",
-           "flange height less the inside radius (from the outside of the bend)", source, scale_by="thickness",
+           "flange height less the inside radius (from the outside of the bend)", source, scale_by="rule_thickness_mm",
            item_when={"joggle_web": (False, None)},  # a joggle's short web is sheet.joggle's (``_joggle_webs``)
            fix="lengthen the flange: its height from the outside of the bend at least twice the thickness plus "
                "the inside radius ({limit:.3g} mm plus the radius)",
            note="minimum bend height 2 t + r; the page does not say where the height is measured, read here "
-                "from the outside mold line", **_SCALED),
+                "from the outside mold line", when={"scale_known": True, "cut_file": False}),
+        # a cut file's bend line is the bend's centre line, with no radius or angle: the least the same rule
+        # asks of the flat, whatever they are. For a bend of up to 90 degrees the height 2 t + r puts the edge
+        # t + (pi / 4)(r + K t) or more from the centre line in the flat, so under 1 t fails it at any radius.
+        _r("flange_length", "flanges", "length_centerline_mm", "min", 1.0, "mm",
+           "flange length in the flat, from the bend line to the edge", source, scale_by="rule_thickness_mm",
+           fix="move the bend line at least {limit:.3g} mm from the edge (more for the bend's radius: check the "
+               "bent part)",
+           note="minimum bend height 2 t + r, read on the flat: for a bend of up to 90 degrees the edge lies at "
+                "least t (1 + pi K / 4) from the bend's centre line at any radius, so under 1 t fails it",
+           when={"scale_known": True, "cut_file": True}),
         _r("bend_relief_width", "reliefs", "width_mm", "min", 1.0, "mm", "bend relief width", source,
-           scale_by="thickness", item_when={"kind": "bend"}, fix="cut a relief at the bend's end at least {limit:.3g} mm wide, past the "
+           scale_by="rule_thickness_mm", item_when={"kind": "bend"}, fix="cut a relief at the bend's end at least {limit:.3g} mm wide, past the "
                                      "bend's tangent line", **_SCALED),
         _r("hole_to_bend", "hole_to_bend", "distance_tangent_mm", "min", 2.0, "mm",
-           "hole-to-bend distance from the bend's tangent line", source, scale_by="thickness",
+           "hole-to-bend distance from the bend's tangent line", source, scale_by="rule_thickness_mm",
            fix="move the hole at least {limit:.3g} mm from where the bend's radius starts",
-           note="measured from the start of the bend radius (the tangent line)", **_SCALED),
+           note="measured from the start of the bend radius (the tangent line)",
+           when={"scale_known": True, "cut_file": False}),
+        # in a cut file the tangent line lies half a bend allowance nearer the hole than the bend line drawn, so
+        # a hole within 2 t of the line is within 2 t of the start of the radius whatever the radius and angle
+        _r("hole_to_bend", "hole_to_bend", "distance_centerline_mm", "min", 2.0, "mm",
+           "hole-to-bend distance from the bend line", source, scale_by="rule_thickness_mm",
+           fix="move the hole at least {limit:.3g} mm from the bend line (and half the bend allowance more: "
+               "check the bent part)",
+           note="2 t from the start of the bend radius, which lies half a bend allowance nearer the hole than "
+                "the bend's centre line: under 2 t from the line fails it at any radius and angle",
+           when={"scale_known": True, "cut_file": True}),
         *_holes(source, diameter=1.0, diameter_severity="warning", edge=1.0, spacing=2.0,
                 note="smaller holes are possible, with more risk of distortion",
                 edge_note="holes should be at least the sheet's thickness from the edge (a recommendation)"),
         _r("web_width", "webs", "width_mm", "min", 1.0, "mm", "material between cuts", source,
-           scale_by="thickness", severity="warning",
+           scale_by="rule_thickness_mm", severity="warning",
            fix="leave at least {limit:.3g} mm of material between the cuts",
            note="Hubs's hole-to-edge minimum, applied to any web of material between two cut edges", **_SCALED),
     )
@@ -262,7 +299,7 @@ def _guarded(rule_set: RuleSet) -> RuleSet:
 
 
 RULES = _guarded(RuleSet(
-    "sheet", "text-to-cad general rules", "2026-11-08", _RULES, (HUBS, PROTOLABS, XOMETRY),
+    "sheet", "text-to-cad general rules", "2026-11-10", _RULES, (HUBS, PROTOLABS, XOMETRY, OWN),
     note="general practice from published sheet metal design guides, no shop's limits: Hubs's bending and laser "
          "rules, the uniform-thickness, notch, tab and hem rules of Protolabs' guide, a standard 5 x 10 ft sheet "
          "unless --sheet-size names the shop's; a shop's gauges, tooled radii, dies and part sizes are compared "
@@ -283,41 +320,59 @@ def validate(resolved: dict[str, Any], document_type: str) -> None:
     sheet_size(resolved.get("sheet_size"))
 
 
-def _thickness(report: dict[str, Any], resolved: dict[str, Any]) -> float | None:
-    if resolved.get("thickness") is not None:
-        return float(resolved["thickness"])
-    parts = (report.get("parts") or {}).get("items") or []
-    values = [part.get("thickness_mm") for part in parts if isinstance(part.get("thickness_mm"), (int, float))]
-    return float(values[0]) if values else None
+def _notch_min(thickness: float) -> float:
+    """A notch's least width: the greater of the thickness and 0.04 in (Protolabs)."""
+    return max(thickness, 1.016)
+
+
+def _tab_min(thickness: float) -> float:
+    """A tab's least width: the greater of twice the thickness and 0.126 in (Protolabs)."""
+    return max(2.0 * thickness, 3.2)
+
+
+#: The families whose rules scale with the sheet's thickness.
+_SCALED_FAMILIES = ("bends", "flanges", "reliefs", "hems", "holes", "hole_spacing", "hole_to_bend", "notches", "tabs",
+                    "webs")
+
+
+def _scales(report: dict[str, Any], resolved: dict[str, Any]) -> float | None:
+    """Each item's own scales, written on it: ``rule_thickness_mm``, the thickness its rules scale by -- the
+    stock's where ``--thickness`` names it, else its own part's (the item's ``thickness_mm``: a document of a
+    1 mm and a 3 mm part judges each by its own) -- and a notch's and a tab's least width from it. The
+    thickness for the context: the stock's, else the first part's, which only a family with no item reads."""
+    given = resolved.get("thickness")
+    for family in _SCALED_FAMILIES:
+        for item in _items(report, family):
+            own = given if given is not None else item.get("thickness_mm")
+            if not isinstance(own, (int, float)) or isinstance(own, bool):
+                continue  # a cut file's, with no --thickness: no scale, and its rules are not evaluated
+            item["rule_thickness_mm"] = float(own)
+            if family == "notches":
+                item["notch_min_mm"] = _notch_min(float(own))
+            elif family == "tabs":
+                item["tab_min_mm"] = _tab_min(float(own))
+    if given is not None:
+        return float(given)
+    return next((float(part["thickness_mm"]) for part in _items(report, "parts")
+                 if isinstance(part.get("thickness_mm"), (int, float))), None)
 
 
 def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     material = materials.resolve(resolved.get("material"))
-    thickness = _thickness(report, resolved)
-    bends = (report.get("bends") or {}).get("items") or []
-    bent = bool(bends) or bool(report.get("bent"))
+    thickness = _scales(report, resolved)
     scale = report.get("scale") or {}
     found: dict[str, Any] = {"material": material, "material_class": materials.material_class(material),
-                             "thickness": thickness, "bent": bent, "kerf": resolved.get("kerf"),
+                             "rule_thickness_mm": thickness, "kerf": resolved.get("kerf"),
+                             # the fallback again: a not_sheet item carries its own part's
+                             "sheet_thickness_mm": next((float(part["thickness_mm"]) for part in _items(report, "parts")
+                                                         if isinstance(part.get("thickness_mm"), (int, float))), None),
                              "scale_known": not scale.get("units_unknown", False),
                              "cut_file": "cut_file" in report}  # a DXF's: a cut file's own rules apply
-    # the sheet's own thickness, what a stretch off it is judged against: one where the document's sheet parts
-    # share it (a part that is not sheet is judged by none), else None and each part's departure judges
-    parts = (report.get("parts") or {}).get("items") or []
-    measured = [float(part["thickness_mm"]) for part in parts
-                if part.get("is_sheet", True) and isinstance(part.get("thickness_mm"), (int, float))] or \
-        [float(part["thickness_mm"]) for part in parts if isinstance(part.get("thickness_mm"), (int, float))]
-    one = bool(measured) and max(measured) - min(measured) <= max(0.005, 0.002 * max(measured))
-    found["one_thickness"] = one or not measured
-    found["sheet_thickness_mm"] = measured[0] if one else None
     given = sheet_size(resolved.get("sheet_size"))
     found["sheet_given"] = given is not None
     found["sheet_long_mm"], found["sheet_short_mm"] = given or DEFAULT_SHEET
     if thickness is not None:
-        found["notch_min_mm"] = max(thickness, 1.016)
-        found["tab_min_mm"] = max(2.0 * thickness, 3.2)
-    # a sharp bend already says why the flat pattern is short: sheet.flat_incomplete is left to it
-    found["sharp_bends_found"] = bool(_items(report, "sharp_bends"))
+        found["notch_min_mm"], found["tab_min_mm"] = _notch_min(thickness), _tab_min(thickness)
     return found
 
 
@@ -341,8 +396,8 @@ _FILE_DEFECTS = {
     "zero_area_loops": ("sheet.zero_area_loop", "error", "a closed loop encloses no area: a doubled-back line",
                         "delete the degenerate loop"),
     "annotations": ("sheet.annotation_on_cut_layer", "warning", "text, dimensions or other annotation on a cut "
-                                                                 "layer", "move it to a reference layer, or turn "
-                                                                          "engraved text into outlines on its own layer"),
+                                                                 "layer: it cuts nothing",
+                    "move it to a reference layer, or turn engraved text into outlines on its own layer"),
     "floating_interiors": ("sheet.floating_interior", "warning", "a closed contour inside a hole: that piece "
                                                                  "falls out when cut", "bridge it to the part, "
                                                                                        "or delete it"),
@@ -440,7 +495,8 @@ def _thickness_unknown(report: dict[str, Any], resolved: dict[str, Any]) -> list
         return []
     rule_set = RULES
     without = context(report, resolved)
-    given = context(report, {**resolved, "thickness": 1.0})
+    # the same context with a thickness in it: read here alone, never written on the items (``_scales``)
+    given = {**without, "rule_thickness_mm": 1.0, "notch_min_mm": _notch_min(1.0), "tab_min_mm": _tab_min(1.0)}
     waiting = sorted({rule.id for rule in rule_set.rules if isinstance(report.get(rule.family), dict)
                       and rule.applies(given) and rule.limit_for(given) is not None
                       and (not rule.applies(without) or rule.limit_for(without) is None)})
@@ -452,26 +508,70 @@ def _thickness_unknown(report: dict[str, Any], resolved: dict[str, Any]) -> list
                          f"evaluated ({names})", "rules", "give --thickness (the stock's, in mm)")]
 
 
+def _cut_file_notes(report: dict[str, Any]) -> list[CheckFinding]:
+    """A cut file's joints closed across a small gap (one warning for the file) and what its bend lines were
+    held to (an info: a flat drawing carries no bend radius or angle)."""
+    found = []
+    gaps = _items(report, "joined_gaps")
+    if gaps:
+        widest = max(gaps, key=lambda item: item.get("gap_mm") or 0.0)
+        count = (report.get("joined_gaps") or {}).get("count", len(gaps))
+        found.append(CheckFinding(
+            "warning", "sheet.joined_gap",
+            f"{count} joint(s) closed across a gap of up to {widest.get('gap_mm') or 0.0:.3g} mm: ends under 0.01 mm "
+            "apart are read as one point, and a cutter's software may read them as an open contour",
+            widest.get("location"), "snap the ends together: join the curves into one closed polyline"))
+    lines = (report.get("cut_file") or {}).get("bend_line_count")
+    if lines:
+        found.append(CheckFinding(
+            "info", "sheet.bend_lines_read",
+            f"{lines} bend line(s) read as bends' centre lines: a cut file carries no bend radius or angle, so each "
+            "hole and edge is held to the least any bend needs of it (2 t and 1 t from the line); the bend radius, "
+            "the reliefs at a bend's ends and the full hole-to-bend and flange distances are checked on the bent "
+            "part", "flanges", "check the bent part (its STEP) for the bending rules"))
+    return found
+
+
+def _not_judged(report: dict[str, Any]) -> list[CheckFinding]:
+    """What a bent part's check measured and no rule judges, said once (an info): no fetched guide gives a
+    limit for how far a relief reaches past its bend, for a corner relief, or for a channel's width against
+    its legs (the brake's tooling clearance, a shop's own)."""
+    reliefs = _items(report, "reliefs")
+    counts = (
+        (sum(1 for item in reliefs if item.get("kind") == "bend" and item.get("present")),
+         "bend relief(s)' depth past the bend (reliefs.depth_tangent_mm)"),
+        (sum(1 for item in reliefs if item.get("kind") == "corner"), "corner relief(s) (reliefs)"),
+        (len(_items(report, "channels")), "channel(s)' width against their legs (channels.base_to_flange_ratio)"),
+    )
+    said = [f"{count} {what}" for count, what in counts if count]
+    if not said:
+        return []
+    return [CheckFinding("info", "sheet.measured_not_judged",
+                         "measured and not judged, no fetched guide giving a limit: " + "; ".join(said),
+                         "reliefs" if counts[0][0] or counts[1][0] else "channels",
+                         "read them against the shop's own limits")]
+
+
 def _joggle_webs(report: dict[str, Any], resolved: dict[str, Any]) -> None:
     """A web between two bends that turn opposite ways (a flange item's ``web_of``) under the flange minimum
     (``flange_length``'s limit times the thickness, from the outside of the bend) is a joggle's: its flange
     items say so (``joggle_web``, which flange_length then leaves alone) and its part lists it in ``joggles``
     beside the tangent pairs, once. A web at or over the minimum is two ordinary bends."""
-    thickness = _thickness(report, resolved)
     rule = next((r for r in RULES.rules if r.id == "sheet.flange_length"), None)
     flanges = _items(report, "flanges")
-    if thickness is None or rule is None or not flanges:
+    if rule is None or not flanges:
         return
-    least = float(rule.limit) * float(thickness)
     webs: dict[str, list[dict[str, Any]]] = {}
     for item in flanges:
-        if item.get("web_of") and isinstance(item.get("length_outside_minus_radius_mm"), (int, float)):
+        if item.get("web_of") and isinstance(item.get("length_outside_minus_radius_mm"), (int, float)) \
+                and isinstance(item.get("rule_thickness_mm"), (int, float)):
             webs.setdefault(str(item.get("location")), []).append(item)
         elif item.get("joggle_web") is None:
             item["joggle_web"] = False
     parts = _items(report, "parts")
     for location, items in webs.items():
         web = min(float(item["length_outside_minus_radius_mm"]) for item in items)
+        least = float(rule.limit) * float(items[0]["rule_thickness_mm"])
         short = web < least - 1e-9 * max(1.0, least)
         for item in items:
             item["joggle_web"] = short
@@ -487,8 +587,26 @@ def _joggle_webs(report: dict[str, Any], resolved: dict[str, Any]) -> None:
                             "web_location": location, "location": location, "xyz": items[0].get("xyz")})
 
 
+def _on_sheet(part: dict[str, Any], resolved: dict[str, Any]) -> list[CheckFinding]:
+    """The part's flat pattern against the sheet given (``--sheet-size``, the shop's): the user's own figure,
+    so a finding of fact that cites no guide (against the standard sheet assumed, the rules warn)."""
+    given = sheet_size(resolved.get("sheet_size"))
+    found = []
+    for code, field, limit, what, fix in (
+            ("sheet.flat_length", "flat_length_mm", given and given[0], "long", "split the part or nest it on a larger sheet"),
+            ("sheet.flat_width", "flat_width_mm", given and given[1], "short", "split the part")):
+        value = part.get(field)
+        if given and isinstance(value, (int, float)) and value > limit + 1e-9 * max(1.0, limit):
+            found.append(CheckFinding(
+                "error", code, f"the flat pattern's {what} side {value:.4g} mm is over the {limit:.4g} mm of the "
+                               f"{given[0]:.4g} x {given[1]:.4g} mm sheet given (--sheet-size)",
+                part.get("location"), fix))
+    return found
+
+
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
+    _scales(report, resolved)
     _joggle_webs(report, resolved)
     given = resolved.get("thickness")
     for part in _items(report, "parts"):
@@ -508,11 +626,14 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                 found.append(CheckFinding("error", "sheet.thickness_mismatch",
                                           f"the part is {measured:.4g} mm thick, the stock {float(given):.4g} mm",
                                           where, "model the part at the stock's thickness, or order the part's"))
+        found.extend(_on_sheet(part, resolved))
         fraction = part.get("flat_material_fraction")
-        # where a sharp_bend or a judged not_sheet face already says why the flat is short, that error is the
-        # finding; this one fires where nothing else explains it
-        explained = bool(_items(report, "sharp_bends")) or any(
-            item.get("judged") and item.get("kind") != "edge_break" for item in _items(report, "not_sheet"))
+        # where a sharp_bend or a judged not_sheet face of this part already says why the flat is short, that
+        # error is the finding; this one fires where nothing else explains it
+        mine = _owner(where)
+        explained = any(_owner(item.get("location")) == mine for item in _items(report, "sharp_bends")) or any(
+            item.get("judged") and item.get("kind") != "edge_break" and _owner(item.get("location")) == mine
+            for item in _items(report, "not_sheet"))
         if isinstance(fraction, (int, float)) and abs(float(fraction) - 1.0) > FLAT_MATERIAL_SLACK and not explained:
             # nothing else says why: this finding names what is not in the flat itself
             missing = [str(ref) for ref in part.get("not_in_flat") or ()]
@@ -571,12 +692,17 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                     f"the bend's inside radius is {value:.4g} mm, the shop's {radius:.4g} mm: the part and its "
                     "flat pattern will come out differently", bend.get("location"),
                     f"model the bend at the shop's {radius:.4g} mm inside radius"))
-    radii = sorted({round(float(bend["inside_radius_mm"]), 3) for bend in bends  # hems and curls: their own tools
-                    if bend.get("kind", "bend") == "bend" and isinstance(bend.get("inside_radius_mm"), (int, float))})
-    if len(radii) > 1:
-        found.append(CheckFinding("info", "sheet.bend_radii_mixed",
-                                  f"the bends use {len(radii)} inside radii ({', '.join(f'{r:g}' for r in radii)} mm)",
-                                  "bends", "one radius for every bend saves tool changes"))
+    mixed: dict[str, set[float]] = {}  # a part's own bends: two parts of two radii mix none
+    for bend in bends:  # hems and curls: their own tools
+        if bend.get("kind", "bend") == "bend" and isinstance(bend.get("inside_radius_mm"), (int, float)):
+            mixed.setdefault(_owner(bend.get("location")), set()).add(round(float(bend["inside_radius_mm"]), 3))
+    for owner, radii in mixed.items():
+        if len(radii) > 1:
+            found.append(CheckFinding(
+                "info", "sheet.bend_radii_mixed",
+                f"{owner.rsplit('/', 1)[-1] or 'the part'}'s bends use {len(radii)} inside radii "
+                f"({', '.join(f'{r:g}' for r in sorted(radii))} mm)", "bends",
+                "one radius for every bend saves tool changes"))
     kerf = resolved.get("kerf")
     if kerf:
         for family, field, what in (("holes", "size_mm", "hole"), ("webs", "width_mm", "web"),
@@ -601,6 +727,8 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         if len(items) > 8:
             found.append(CheckFinding(severity, code, f"{len(items) - 8} more of the same", family))
     found.extend(_thickness_unknown(report, resolved))
+    found.extend(_cut_file_notes(report))
+    found.extend(_not_judged(report))
     if resolved.get("k_factor") is None and bends:
         sources = sorted({str(bend.get("k_factor_source")) for bend in bends if bend.get("k_factor_source")})
         if sources:
@@ -614,14 +742,29 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
     if "cut_file" in report:
         cut = report.get("cut_file") or {}
         parts = _items(report, "parts")
-        size = (f", {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
-                if len(parts) == 1 else "")
         unscaled = ("; no --thickness: the rules that scale with it not evaluated"
                     if resolved.get("thickness") is None else "")
-        return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}{unscaled}"
+        opened = (report.get("open_geometry") or {}).get("count") or 0
+        if opened:
+            # what closed is not the file's parts while a contour stands open: a hole's loop reads as an outline
+            return (f"cut file: {cut.get('contour_count', 0)} closed contour(s) and open geometry at {opened} "
+                    f"place(s){unscaled}")
+        size = (f", {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
+                if len(parts) == 1 else "")
+        bends = f", {cut['bend_line_count']} bend line(s)" if cut.get("bend_line_count") else ""
+        return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}{bends}{unscaled}"
     parts = _items(report, "parts")
     bends = _items(report, "bends")
+    if len(parts) > 1:
+        # each part's own thickness: a document of a 1 mm and a 3 mm part is not "sheet 1 mm"
+        sheets = [part for part in parts if part.get("is_sheet", True)]
+        thicknesses = sorted({part["thickness_mm"] for part in sheets if isinstance(part.get("thickness_mm"), (int, float))})
+        others = f", {len(parts) - len(sheets)} not sheet" if len(sheets) < len(parts) else ""
+        return (f"{len(parts)} parts, {' and '.join(mm(value) for value in thicknesses) or '-'} mm{others}, "
+                f"{len(bends)} bend(s)")
+    if parts and not parts[0].get("is_sheet", True):
+        return "not one sheet"
     thickness = parts[0].get("thickness_mm") if parts else None
     flat = (f", flat {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
-            if len(parts) == 1 and parts[0].get("flat_length_mm") is not None else "")
+            if parts and parts[0].get("flat_length_mm") is not None else "")
     return f"{mm(thickness)} mm, {len(bends)} bend(s){flat}"
