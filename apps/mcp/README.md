@@ -339,7 +339,9 @@ the launch's `_meta` first (`host/capability.ts`).
 - **A shell the host keeps; the app the engine runs.** The resource a host fetches,
   and may keep as long as it likes, is a small shell (`dist/shell.html`: `src/shell.ts`,
   `host/shell.ts`, built by `vite.shell.config.mjs`), named by the engine's release and
-  its build (`ui://cad/<release>/<build>/app.html`). It loads the app from the engine that
+  its build (`ui://cad/<release>/<build>/app.html`), a hash of the shell and of the `_meta`
+  served with it (the same in `resources/list` and `resources/read`), so a host that caches
+  it by URI sees a metadata change as a new resource. It loads the app from the engine that
   answers it (`GET /app`, `dist/app.js`): through `cad_http` where the host
   carries the card's calls, else straight from the engine with the launch's link,
   never a cookie; where neither reaches the engine it shows the app's own notice that this chat

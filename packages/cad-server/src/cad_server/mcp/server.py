@@ -444,20 +444,21 @@ class Server:
         if method == "tools/call":
             return self._call(params, context)
         if method == "resources/list":
-            return {"resources": [{"uri": self.page.uri, "name": "CAD", "title": TITLE, "mimeType": MIME, "_meta": self._resource_meta()}]}
+            return {"resources": [{"uri": self.page.uri, "name": "CAD", "title": TITLE, "mimeType": MIME, "_meta": self._page_meta()}]}
         if method == "resources/templates/list":
             return {"resourceTemplates": []}
         if method == "resources/read":
             uri = params.get("uri")
             if not self.page.owns(uri):
                 raise RpcError(_RESOURCE_NOT_FOUND, f"no resource {uri}")
-            return {"contents": [{"uri": uri, "mimeType": MIME, "text": self.page.html(), "_meta": self._read_meta()}]}
+            return {"contents": [{"uri": uri, "mimeType": MIME, "text": self.page.html(), "_meta": self._page_meta()}]}
         raise RpcError(METHOD_NOT_FOUND, f"{method} is not supported")
 
-    def _read_meta(self) -> dict[str, Any]:
-        """The page's ``_meta`` as ``resources/read`` serves it: ``_resource_meta``, and for a host that
-        mounts cards inline, ``preferredDisplayMode: fullscreen`` -- Claude's own extension of
-        ``_meta.ui``, which it reads on this content item alone: it moves a card that offers
+    def _page_meta(self) -> dict[str, Any]:
+        """The page's ``_meta``, the same in ``resources/list`` and ``resources/read``, and hashed into
+        the page's URI (``AppPage.presenting``) so a host that caches the resource by URI sees any change
+        to it: ``_resource_meta``, and for a host that mounts cards inline, ``preferredDisplayMode:
+        fullscreen`` -- Claude's own extension of ``_meta.ui``: it moves a card that offers
         ``fullscreen`` into its side panel once the card has started, and never opens it full screen
         from the preference; where there is no side panel the card stays in the chat. Other inline
         hosts ignore it. Tabs and text are served what they were (``test_codex_contract``)."""
@@ -494,7 +495,9 @@ class Server:
         self._declared = why.startswith("declared")
         self.tabs, self.text = presentation == "tabs", presentation == "text"
         if presentation == "inline":
-            self.page = self.page.presenting("inline")
+            # The engine's origin is in the hashed ``_meta``: its port is the device's (3245, or the one
+            # it remembers), so the URI moves only when the origin a cached sandbox allows would be wrong.
+            self.page = self.page.presenting("inline", self._page_meta())
         self._tools = None
         self.inert = host.claude_code(transport)
         self._capability_in_catalog = host.carries_capability(client, presentation)
