@@ -34,9 +34,9 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integrations_of",
-           "producer_for", "producers_for",
+           "platform_of", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
@@ -47,6 +47,17 @@ OPERATIONS = ("export", "snapshot", "inspect", "dfm", "solve", "drc", "erc", "va
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
 #: Where an integration's code runs: inside the Python process that calls it, as a separate program, or both.
 PROCESS_KINDS = ("in-process", "separate", "both")
+#: The platforms the server runs on, in the words an integration's ``platforms`` names them by (``platform_of``).
+PLATFORMS = ("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64", "Windows x86-64", "Windows arm64")
+
+
+def platform_of(system: str, machine: str) -> str:
+    """A platform in ``PLATFORMS``' words, from ``sys.platform`` and the machine as ``platform.machine()`` (or, on
+    Windows, ``PROCESSOR_ARCHITECTURE``) says it: ``("darwin", "x86_64")`` is ``macOS x86-64``. Another is said as
+    given."""
+    named = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}.get(system, system)
+    arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "x86-64", "amd64": "x86-64"}.get(machine.lower(), machine)
+    return f"{named} {arch}"
 
 
 @dataclass(frozen=True)
@@ -104,6 +115,15 @@ class Integration:
     #: The integrations its operations need in the same environment (netgen's: a stress study reads the B-rep with
     #: the kernel, build123d's, beside the mesher), so the environment the ``cad`` command makes for it holds them too.
     alongside: tuple[str, ...] = ()
+    #: What only its tool decides of the environment its extra is installed in, each empty for a tool that decides
+    #: none: the one Python line its tool is built for (``python``: ``3.13``; an environment ``cad run`` makes with
+    #: it is made on that line, a Python uv manages, where the engine's own is another), the platforms it is built
+    #: for (``platforms``, ``PLATFORMS``' words: its extra installs nothing anywhere else, and a run there is
+    #: refused by name), and the variables that name its tool's own settings folders (``homes``: a run's are
+    #: private folders of the engine's, so nothing of a person's own copy of the tool loads into it).
+    python: str | None = None
+    platforms: tuple[str, ...] = ()
+    homes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -200,8 +220,8 @@ class DocumentTypeEntry:
 _KERNEL = "build123d"
 
 _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
-                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance meshes an .stl or a "
-                                       ".3mf finer", _KERNEL, engine=True)
+                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance and --angle mesh a "
+                                       ".glb, an .stl or a .3mf finer", _KERNEL, engine=True)
 _EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
 _SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
@@ -348,6 +368,20 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),
+    "blender": Integration(
+        "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad "
+                   "exports into Blender's scene, every part where the file places it and each clip playable alone "
+                   "(cad.blender.load), then frames, lights and renders it with bpy itself",
+        extra="blender", process="in-process", modules=("bpy",), distributions=("bpy",), identity=("bpy",),
+        # bpy 5.2.3 is ``Requires-Python ==3.13.*``, cp313 wheels alone, and none for Intel Macs or Linux arm64: the
+        # extra's markers say the same (packages/cad/pyproject.toml), and a test holds the two together.
+        python="3.13", platforms=("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"),
+        # Blender's own folders for a person's preferences, add-ons, extensions and data, which bpy reads as the app
+        # does: a run's are private, so a person's Blender settings and add-ons never load into it.
+        homes=("BLENDER_USER_RESOURCES", "BLENDER_USER_CONFIG", "BLENDER_USER_SCRIPTS", "BLENDER_USER_DATAFILES",
+               "BLENDER_USER_EXTENSIONS"),
+        # PyPI's wheels with what they need: 262 MB on macOS arm64, 356 on Windows x86-64, 429 on Linux x86-64.
+        holds="Blender as a Python module", download_mb=430),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

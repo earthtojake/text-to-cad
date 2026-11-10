@@ -57,7 +57,8 @@ from typing import Any, Callable
 from cad.engine import places
 
 __all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "Environment", "Installation", "MARKER", "Making", "Recipe",
-           "Refused", "SCHEMA", "complete", "ensure", "failure", "find_uv", "halt", "interpreter", "kernel", "make", "where"]
+           "Refused", "SCHEMA", "complete", "ensure", "failure", "find_uv", "halt", "interpreter", "kernel", "make",
+           "marked", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -251,14 +252,22 @@ def where(installation: Installation | None = None) -> Path:
 
 
 def complete(env: Path) -> dict[str, Any] | None:
-    """The marker of the base at ``env`` when it is complete -- written last, of its key, and its Python
-    there -- else None."""
+    """The marker of the base at ``env`` when it is complete -- written last, of its key (``marked``), and its
+    Python there -- else None."""
+    marker = marked(env)
+    return marker if marker is not None and interpreter(env).exists() else None
+
+
+def marked(env: Path) -> dict[str, Any] | None:
+    """The marker of the environment at ``env`` when one was made there -- written last, of this schema and
+    its key -- whether or not its Python is there still, else None. One whose Python is gone (a Python uv
+    managed, uninstalled or its cache wiped) is dead: made again where it is needed, and collected as any
+    other where it is not (``extras._collect``, ``leftovers.package_environments``)."""
     try:
         marker = json.loads((env / MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if (isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("key") == env.name
-            and interpreter(env).exists()):
+    if isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("key") == env.name:
         return marker
     return None
 

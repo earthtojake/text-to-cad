@@ -578,6 +578,33 @@ test("GLB mesh data preserves source material opacity", async () => {
   assert.equal(meshData.parts[0].hasSourceColors, true);
 });
 
+test("a transmissive GLB material at alpha 1 previews where a look draws no transmission, and only there", async () => {
+  const glass = { materialBaseColor: [1, 1, 1, 1], materialExtensions: { KHR_materials_transmission: { transmissionFactor: 0.6 } } };
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} is not ${expected}`);
+  close((await buildMeshDataFromGlbBuffer(makeOccurrenceGlb(glass))).parts[0].opacity, 0.58);
+  const document = await buildGlbDocumentFromBuffer(makeOccurrenceGlb(glass));
+  const scene = createGlbScene(THREE, document);
+  let mesh; scene.object3D.traverse(object => { if (object.isMesh) mesh = object; });
+  const inspect = { authored: false, surface: { style: "shaded", opacity: 1 }, materialSettings: { roughness: 0.58, metalness: 0.02 } };
+  for (const [look, opacity, transmission] of [
+    [{ ...inspect, authored: true }, 1, 0.6], [inspect, 1, 0.6],
+    [{ ...inspect, surface: { style: "flat", opacity: 1 } }, 0.58, undefined],
+    [{ ...inspect, finishes: false }, 0.58, 0],
+    [{ ...inspect, materialSettings: { ...inspect.materialSettings, overrideSourceColors: true } }, 0.58, 0]]) {
+    scene.setSurfaceLook(look);
+    close(mesh.material.opacity, opacity);
+    assert.equal(mesh.material.transparent, opacity < 1);
+    assert.equal(mesh.material.transmission, transmission);
+  }
+  scene.dispose();
+  // An alpha below 1 is the material's own: an earlier release's GLB, or an authored opacity.
+  const faded = createGlbScene(THREE, await buildGlbDocumentFromBuffer(makeOccurrenceGlb({ ...glass, materialBaseColor: [1, 1, 1, 0.5] })));
+  let own; faded.object3D.traverse(object => { if (object.isMesh) own = object; });
+  faded.setSurfaceLook({ ...inspect, finishes: false });
+  close(own.material.opacity, 0.5);
+  faded.dispose();
+});
+
 test("GLB mesh data assigns stable primitive indexes per occurrence", async () => {
   const meshData = await buildMeshDataFromGlbBuffer(makeTwoPrimitiveOccurrenceGlb());
 

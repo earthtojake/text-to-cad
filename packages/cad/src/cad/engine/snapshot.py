@@ -972,6 +972,7 @@ def _written(document: Path, out: Path, data: bytes, report: dict[str, Any], sta
     document's file (``document`` by default), or None for a document no file holds."""
     named = str(document) if named == "" else named
     _warn(report.get("unmeshed") or {})
+    _warn_untextured(report.get("untextured") or {})
     for warning in report.get("warnings") or []:
         print(f"warning: {Path(named).name if named else 'the document'}: {warning}", file=sys.stderr)
     write_png(out, data)
@@ -1255,3 +1256,11 @@ def _warn(unmeshed: dict[str, list[int]]) -> dict[str, list[int]]:
               f"{', '.join(map(str, faces))} without triangles, so the picture does not draw "
               f"{'them' if len(faces) > 1 else 'it'}", file=sys.stderr)
     return unmeshed
+
+
+def _warn_untextured(untextured: dict[str, dict[str, list[str]]]) -> None:
+    """A warning for each part whose material's texture maps the picture leaves out (``untextured``)."""
+    from cad.engine.document import untextured_said
+
+    for name, materials in untextured.items():
+        print(f"warning: {untextured_said(name, materials)}", file=sys.stderr)

@@ -42,8 +42,9 @@ the board's outline, holes and art, and the board's scripts, build and checks li
 
 Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, the KiCad files no script writes, docs); never
 what a run, a build or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
-XBF, and no KiCad file a sample's scripts write), review media (`.gitignore` keeps images and video out of this
-tree) or runtime debris.
+XBF, no KiCad file a sample's scripts write, and no `.blend`, which a render's bpy script makes), review media
+(`.gitignore` keeps images and video out of this tree) or runtime debris. One project renders with Blender:
+`orbit_clock`'s `render.py`, a bpy script `cad run` runs, writes its stills into the project's gitignored `RENDERS/`.
 
 ## The files the corpus writes
 

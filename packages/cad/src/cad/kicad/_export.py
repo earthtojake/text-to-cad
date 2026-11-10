@@ -13,7 +13,7 @@ wrote. The board is read, never rewritten. What each writes into ``out_dir``:
               designator, comma-separated, no ranges), ``Value``, ``Footprint``, ``Quantity``, then
               ``MPN`` and ``LCSC`` where any part carries one (``BOM_FIELDS``' spellings)
 ``step``      ``<board>.step``: the board and its parts, STEP models substituted for VRML ones
-``glb``       ``<board>.glb``: the same, as binary glTF
+``glb``       ``<board>.glb``: the same and its copper, mask and silkscreen, as binary glTF
 ``odb``       ``<board>-odb.zip``: ODB++, zipped, millimetres
 ``ipc2581``   ``<board>-ipc2581.xml``: IPC-2581 revision C, millimetres
 ``pdf``       ``<board>-front.pdf`` and ``<board>-back.pdf`` (mirrored, as seen from below): one page a side,
@@ -56,6 +56,9 @@ FOLDERS = ("gerbers", "drill")
 #: Each PDF page's layers, by side: the copper, silkscreen and fabrication drawing over the outline.
 PDF_LAYERS = {"front": ("F.Cu", "F.Silkscreen", "F.Fab", "Edge.Cuts"),
               "back": ("B.Cu", "B.Silkscreen", "B.Fab", "Edge.Cuts")}
+#: What a board's GLB holds beside the board and its parts, each KiCad's own mesh: its copper, mask and silkscreen.
+BOARD_LAYERS = ("--include-tracks", "--include-pads", "--include-zones", "--include-inner-copper",
+                "--include-silkscreen", "--include-soldermask")
 #: The BOM's part-number columns and the symbol fields each is read from, the first a part carries.
 BOM_FIELDS = {"MPN": ("MPN", "Manufacturer_Part_Number", "Manufacturer Part Number", "MFR Part Number"),
               "LCSC": ("LCSC", "LCSC Part", "LCSC Part #", "LCSC_Part", "JLCPCB Part #")}
@@ -96,7 +99,8 @@ def commands(cli: Path, board: Path, to: str, out_dir: Path, scratch: Path | Non
                  "--group-by", "Value,Footprint", "--ref-range-delimiter", "", "--exclude-dnp",
                  "-o", str((scratch or out_dir) / f"{stem}-bom-kicad.csv"), str(schematic_of(board))]]
     if to in ("step", "glb"):
-        return [[*pcb, "--subst-models", "--force", "-o", str(out_dir / f"{stem}.{to}"), str(board)]]
+        return [[*pcb, "--subst-models", "--force", *(BOARD_LAYERS if to == "glb" else ()),
+                 "-o", str(out_dir / f"{stem}.{to}"), str(board)]]
     if to == "odb":
         return [[*pcb, "--units", "mm", "--compression", "zip", "-o", str(out_dir / f"{stem}-odb.zip"), str(board)]]
     if to == "ipc2581":

@@ -160,9 +160,13 @@ class PlotRules(unittest.TestCase):
 
 class Codings(unittest.TestCase):
     def test_the_coding_is_the_browsers_choice_zstd_first(self) -> None:
+        import importlib.util
+
         from cad_server.viewer.compressed import chosen, encode
 
-        self.assertEqual(chosen("gzip, deflate, br, zstd"), "zstd")
+        # zstd where the standard library has it: from Python 3.14 (``compression.zstd``); on 3.13, the floor, gzip.
+        zstd = importlib.util.find_spec("compression") is not None
+        self.assertEqual(chosen("gzip, deflate, br, zstd"), "zstd" if zstd else "gzip")
         self.assertEqual(chosen("gzip, deflate"), "gzip")
         self.assertEqual(chosen("*"), "gzip")
         for accept in ("", "identity", "gzip;q=0", "br"):
