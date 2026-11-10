@@ -407,6 +407,22 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.overlapping_curves"})  # no holes 0 mm apart
         self.assertEqual(result.measurements["holes"]["count"], 2)
 
+    def test_any_curve_drawn_twice_is_cut_twice(self) -> None:
+        fit = [(20, 20), (40, 40), (60, 20), (40, 10), (20, 20)]
+        for name, draw in (("ellipse", lambda msp: msp.add_ellipse((50, 30), (10, 0), 0.5)),
+                           ("spline", lambda msp: msp.add_spline(fit)),
+                           ("outline", lambda msp: _plate(msp, 100, 60))):   # a polyline of four lines
+            def build(msp, _, name=name, draw=draw):
+                if name != "outline":
+                    _plate(msp, 100, 60)
+                draw(msp)
+                draw(msp)
+            result = self.check(self.write(f"twice_{name}", build), thickness=2.0)
+            self.assertEqual(self.errors(result), ["sheet.overlapping_curves"], name)  # once for the pair of entities
+            (overlap,) = [item for item in result.measurements["overlaps"]["items"] if item["kind"] == "duplicate"]
+            self.assertEqual(len(overlap["handles"]), 2)
+            self.assertEqual(result.measurements["parts"]["count"], 1)
+
     # --- bend lines ----------------------------------------------------------------------------------------
 
     def bent_plate(self, name: str, holes=(), bend_x=50.0, split=None, turn=0.0):

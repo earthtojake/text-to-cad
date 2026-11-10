@@ -20,9 +20,10 @@ dimension makes no file a drawing here.
 
 The pieces are chained end to end into closed contours; ends within ``_JOIN`` are one point (a gap a
 cutter's path closes, counted in ``joined_gaps`` where it is wider than drawn exact). What does not close
-is open geometry, located by layer, entity handle and the dangling end. Pieces lying on one another
-(collinear lines overlapping, concentric arcs of one radius overlapping, a line along a polyline's
-segment) are cut twice; a contour crossing itself or another leaves a sliver, and two that touch (a hole
+is open geometry, located by layer, entity handle and the dangling end. Pieces lying on one another are cut
+twice: an exact copy of any curve, a spline or an ellipse as a line (``_unique``, one overlap per pair of
+entities), and lines and arcs that overlap in part (collinear lines, concentric arcs of one radius, a line
+along a polyline's segment: ``_overlaps``); a contour crossing itself or another leaves a sliver, and two that touch (a hole
 tangent to the edge, two parts corner to corner) leave no material or no gap between them (``contour_crossings``,
 within ``_SAME``; a whole circle crossed and held by its centre and radius); a loop enclosing no area is a
 doubled-back line; a run of many short lines turning a little at a time is a curve drawn as chords.
@@ -392,22 +393,29 @@ def _collinear(lines: list[_Piece], tolerance: float) -> list[list[int]]:
     return sorted(groups)
 
 
-def _unique(pieces: list[_Piece]) -> list[_Piece]:
+def _unique(pieces: list[_Piece]) -> tuple[list[_Piece], list[dict[str, Any]]]:
     """The pieces less exact copies of another entity's (the same kind through the same points, either way; a
-    whole circle from any start)."""
+    whole circle from any start), and each copy as an overlap, one per pair of entities: a line, an arc, a
+    spline or an ellipse drawn twice is cut twice."""
     kept: list[_Piece] = []
-    seen: dict[tuple[Any, ...], str] = {}
+    seen: dict[tuple[Any, ...], _Piece] = {}
+    copies: dict[tuple[str, str], dict[str, Any]] = {}
     for piece in pieces:
         if piece.closed and piece.kind == "arc":
             key: tuple[Any, ...] = ("circle", *np.round(np.array([*piece.centre, piece.radius]) / (10 * _SAME)).astype(np.int64).tolist())
         else:
             grid = [tuple(point) for point in np.round(piece.points / (10 * _SAME)).astype(np.int64).tolist()]
             key = (piece.kind, *min(grid, grid[::-1]))
-        if seen.get(key, piece.handle) != piece.handle:
-            continue  # another entity's copy (one entity doubling back on itself is a zero-area loop)
-        seen.setdefault(key, piece.handle)
-        kept.append(piece)
-    return kept
+        first = seen.setdefault(key, piece)
+        if first.handle == piece.handle:
+            kept.append(piece)  # one entity doubling back on itself is a zero-area loop, or its own overlap
+            continue
+        length = float(np.linalg.norm(np.diff(piece.points, axis=0), axis=1).sum())
+        item = copies.setdefault((first.handle, piece.handle), _overlap_item(first, piece, 0.0, piece.points[len(piece.points) // 2]))
+        item.update(kind="duplicate", length_mm=round(item["length_mm"] + length, 4))
+        item["detail"] = (f"{piece.entity} #{piece.handle} repeats {first.entity} #{first.handle} for "
+                          f"{item['length_mm']:.4g} mm")
+    return kept, list(copies.values())
 
 
 def _unexplained(problems: list[dict[str, Any]], overlaps: list[dict[str, Any]],
@@ -649,7 +657,7 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     if not pieces:
         raise _nothing_to_cut(path.name, read)
     # a bend line drawn twice is one bend
-    bend_lines: list[_Piece] = _unique(read["bend_lines"])
+    bend_lines: list[_Piece] = _unique(read["bend_lines"])[0]
     report: dict[str, Any] = {"source": {"type": "dxf", "measured_as": "cut file", "document": path.name}}
     families: dict[str, list[dict[str, Any]]] = {name: [] for name in (
         "parts", "holes", "hole_spacing", "hole_to_bend", "flanges", "notches", "tabs", "webs", "gaps",
@@ -681,10 +689,11 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     report["scale"] = {"units_unknown": unknown, "units_suspect": unknown,
                        "note": (f"$INSUNITS is {code}: the file's units are not set, so no size is compared with a "
                                 "rule; save it in mm or inches") if unknown else f"lengths in {unit}, read as mm"}
-    # an exact copy of a curve is cut twice (overlaps says so) but bounds nothing: the contours are chained
-    # without it, so the outline it doubles is still the part's
-    chains, problems, families["joined_gaps"] = _chain(_unique(pieces))
-    families["overlaps"] = _overlaps(pieces)
+    # an exact copy of a curve is cut twice (an overlap) but bounds nothing: the contours are chained without
+    # it, so the outline it doubles is still the part's
+    once, copies = _unique(pieces)
+    chains, problems, families["joined_gaps"] = _chain(once)
+    families["overlaps"] = copies + _overlaps(once)
     families["open_geometry"] = _unexplained(problems, families["overlaps"], pieces)
     loops: list[plane.Loop] = []
     for chain in chains:
