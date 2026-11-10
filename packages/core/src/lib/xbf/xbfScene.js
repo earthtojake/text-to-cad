@@ -47,6 +47,7 @@ import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
 import { createSceneExplode } from "../viewer/sceneExplode.js";
 import { createSceneHighlight } from "../viewer/sceneHighlight.js";
 import { createSurfaceLook, surfaceOffset } from "../viewer/surfaceLook.js";
+import { previewOpacity, transmittedOpacity } from "../render/previewOpacity.js";
 import { releaseGeometry, shareGeometry } from "../render/sharedGeometry.js";
 import { xbfLookRig, xbfLookSurface, xbfLookXray, xbfLookXrayRig, xbfLookXraySurface } from "./xbfLook.js";
 import { placeXbfPoint, placeXbfSurface, xbfEdgePolyline, xbfFaceNodes, xbfFaceSurface, xbfVertexPoint } from "./xbfEntities.js";
@@ -104,6 +105,12 @@ const finite = (value, fallback) => (Number.isFinite(Number(value)) && value !==
  * A look without a material is its colour alone, as every part was before materials. Its texture
  * maps and their transforms are left out (no UVs to draw them by): the engine's still and GLB draw
  * the same scalar look (`finish.py`, `export/glb.py`) and the structure names them (`untextured`).
+ *
+ * A transmissive look is one fade, as its GLB is: drawn with its transmission at the alpha the GLB
+ * writes (`transmittedOpacity`: its PBR fade, else 1), and in a look that draws no transmission
+ * (`surfaceLook.js`) at its preview, `userData.cadPreviewOpacity` (`previewOpacity`), the alpha the
+ * engine's still draws it at. Its colour's alpha, build123d's own inference of that preview or a value
+ * that cannot be told from one, is not applied again.
  */
 export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
   const alpha = rgba ? Math.min(Math.max(finite(rgba[3], 1), 0), 1) : 1;
@@ -130,6 +137,9 @@ export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
   if (material.iridescenceThicknessRange) parameters.iridescenceThicknessRange = material.iridescenceThicknessRange;
   const transmission = finite(material.transmission, 0);
   if (transmission > 0) {
+    const opacity = transmittedOpacity(material.opacity);
+    Object.assign(parameters, { transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
+      userData: { cadPreviewOpacity: previewOpacity(opacity, transmission) } });
     parameters.transmission = transmission;
     parameters.thickness = Math.max(finite(thickness, 0), 0);
     if (finite(material.attenuationDistance, 0) > 0) {

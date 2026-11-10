@@ -14,8 +14,11 @@ Each factory returns a fresh native ``bd_materials.FinishedMaterial``: the physi
 classes (its metals' and FR-4's tables where they have them, renamed for the look; ``custom_metal`` and
 ``custom_plastic`` or ``SolidMaterial`` where they do not), the look a ``threejs_materials.PbrProperties``.
 No class of its own, so any release that reads an xbf reads these. A ``color`` is a preset name, an sRGB
-hex string, a CSS name or an sRGB 0-1 tuple. ``substrate=`` takes the bd_materials metal a finish is on;
-its physics are kept, its look replaced.
+hex string, a CSS name or an sRGB (r, g, b) of 0-1 floats; ``zinc_plated`` takes its passivation instead,
+one of four. One finish is one material, named once whichever spelling asked for it: a preset by any of
+its names, or by its hex, is that preset (named by its first name in the table), and any other colour is
+named by its sRGB hex, so two parts of one look are one row of a BOM. ``substrate=`` takes the
+bd_materials metal a finish is on; its physics are kept, its look replaced.
 
 Nothing here loads before a factory is called: ``import cad.build123d.materials`` imports neither
 bd_materials nor threejs_materials.
@@ -45,14 +48,15 @@ Color = Any  # a preset name, "#rrggbb", a CSS name or an sRGB (r, g, b) of 0-1 
 SOLDERMASK = {"green": "#1d6b38", "black": "#18191b", "blue": "#1b3f8b", "red": "#a01c22",
               "white": "#ebeae4", "yellow": "#d8b21f", "purple": "#4a2a6c"}
 SILKSCREEN = {"white": "#f2f2ee", "black": "#141414", "yellow": "#e6c52c"}
+# Presets by name; a colour's first name is the one its look is named by (``_named``).
 ANODIZE = {"clear": "#c8cbce", "silver": "#c8cbce", "black": "#1e1f22", "grey": "#5d6166", "gray": "#5d6166",
            "red": "#9e1b25", "blue": "#1e4f9c", "gold": "#c79a3c", "green": "#2f6b3a", "purple": "#5a3478",
            "orange": "#c4581e"}
-# RAL classic shades, by number, and plain names.
-POWDER_COAT = {"black": "#1c1c1c", "white": "#f1f0ea", "grey": "#383e42", "gray": "#383e42",
-               "RAL9005": "#0e0e10", "RAL9010": "#f1ede1", "RAL9016": "#f1f0ea", "RAL7016": "#383e42",
+# RAL classic shades, by number, then plain names: grey is RAL7016 and white RAL9016, named so.
+POWDER_COAT = {"RAL9005": "#0e0e10", "RAL9010": "#f1ede1", "RAL9016": "#f1f0ea", "RAL7016": "#383e42",
                "RAL7035": "#c5c7c4", "RAL7024": "#45494e", "RAL3020": "#bb1e10", "RAL5010": "#13447c",
-               "RAL1023": "#f0ca00", "RAL6005": "#114232"}
+               "RAL1023": "#f0ca00", "RAL6005": "#114232",
+               "black": "#1c1c1c", "white": "#f1f0ea", "grey": "#383e42", "gray": "#383e42"}
 CERAMIC = {"white": "#f0eee8", "tan": "#c6aa7c", "beige": "#c6aa7c"}
 LED = {"clear": "#ffffff", "white": "#ffffff", "red": "#ff3b30", "green": "#34c759", "blue": "#2f6bff",
        "amber": "#ffb000", "yellow": "#ffe14d"}
@@ -66,21 +70,34 @@ Sheen = Literal["matte", "satin", "gloss"]
 
 
 def _named(table: dict[str, Any], color: Color, what: str) -> tuple[Any, str]:
-    """A colour (a preset of ``table``, or one as given) and its slug in the look's name."""
+    """A colour and its slug in the look's name, one per look: a preset by any of its names (any case,
+    spaces round it ignored), or any colour of its sRGB bytes, is that preset, named by its first name in
+    ``table`` (a RAL shade as written, any other lower case); any other colour is named by its sRGB hex."""
+    from threejs_materials import PbrProperties
+
+    said = (f"{what}: a colour is one of {', '.join(table)}, an sRGB hex string, a CSS name or an sRGB "
+            f"(r, g, b) of 0-1 floats")
     if isinstance(color, str):
-        presets = {name.lower(): (name, value) for name, value in table.items()}
-        if color.strip().lower() in presets:
-            name, found = presets[color.strip().lower()]
-            return found, name if name.startswith("RAL") else name.lower()
-        if not color.strip():
-            raise ValueError(f"{what}: an empty colour; one of {sorted(table)}, a hex string or an sRGB tuple")
-        return color, color.strip().lstrip("#").lower().replace(" ", "_")
+        given: Any = color.strip()
+        if not given:
+            raise ValueError(f"{said}, not an empty string")
+        given = {name.lower(): value for name, value in table.items()}.get(given.lower(), given)
+    else:
+        try:
+            given = tuple(float(value) for value in color)
+        except (TypeError, ValueError):
+            raise TypeError(f"{said}, not {color!r}") from None
+        if len(given) != 3 or not all(0.0 <= value <= 1.0 for value in given):
+            raise ValueError(f"{said}, not {color!r}")
     try:
-        rgb = [float(value) for value in color][:3]
-    except TypeError:
-        raise TypeError(f"{what}: a colour is a preset name, a hex string, a CSS name or an sRGB (r, g, b) "
-                        f"tuple of 0-1 floats, not {type(color).__name__}") from None
-    return tuple(rgb), "".join(f"{round(min(max(value, 0.0), 1.0) * 255):02x}" for value in rgb)
+        srgb = PbrProperties.create("colour", color=given).values.color
+    except ValueError:
+        raise ValueError(f"{said}, not {color!r}") from None
+    slug = "".join(f"{round(value * 255):02x}" for value in srgb)
+    for name, value in table.items():
+        if value.lstrip("#").lower() == slug:
+            return value, name if name.startswith("RAL") else name.lower()
+    return given, slug
 
 
 def _choice(value: str, allowed: tuple[str, ...], what: str) -> str:
@@ -110,8 +127,15 @@ def _metal(substrate: FinishedMaterial | None, default: str) -> Any:
 
 
 def _f0(metal: FinishedMaterial) -> Any:
-    """A metal's base colour (its reflectance at normal incidence) as bd_materials' own look has it."""
-    color = metal.pbr.values.color
+    """A metal's bare base colour (its reflectance at normal incidence), as bd_materials' own look of its
+    family has it (``metals.<family>()``), whatever look the substrate wears: an anodized or powder-coated
+    substrate's is its coating's, not the metal's. A family bd_materials has no factory for (a
+    ``custom_metal``'s) keeps the substrate's own."""
+    from bd_materials import metals
+
+    family = getattr(metal.material, "family", None)
+    catalogued = family in {grade.family for grade in metals.ALL_METALS}  # each family's factory is its name
+    color = (getattr(metals, family)() if catalogued else metal).pbr.values.color
     return tuple(color) if color else (0.8, 0.8, 0.8)
 
 
@@ -238,7 +262,10 @@ def ceramic(color: Color = "white") -> FinishedMaterial:
 
 def led_lens(color: Color = "clear", diffused: bool = False) -> FinishedMaterial:
     """An LED's lens, clear epoxy that light passes through (``transmission``), tinted by ``color``;
-    ``diffused`` a frosted one. Presets: clear, white, red, green, blue, amber, yellow."""
+    ``diffused`` a frosted one. Presets: clear, white, red, green, blue, amber, yellow. The tint is the
+    base colour alone, which tints the light a transmissive look passes (three.js, glTF) and is the
+    colour a look without transmission draws: an attenuation colour as well would tint it twice, the
+    lens far darker than its colour, and more so the thicker the part."""
     from bd_materials import plastics
     from bd_materials.core import Range
 
@@ -249,9 +276,8 @@ def led_lens(color: Color = "clear", diffused: bool = False) -> FinishedMaterial
         glass_transition_temperature=Range(110, 130), max_service_temp=Range(100, 120),
         thermal_conductivity=Range(0.17, 0.21), thermal_expansion=Range(55e-6, 70e-6),
     ).material
-    tint = {} if slug in ("clear", "white") else dict(attenuation_color=value, attenuation_distance=0.002)
     return _look(f"led_lens_{slug}" + ("_diffused" if diffused else ""), physics, color=value, metalness=0.0,
-                 roughness=0.55 if diffused else 0.05, ior=1.5, transmission=0.7 if diffused else 1.0, **tint)
+                 roughness=0.55 if diffused else 0.05, ior=1.5, transmission=0.7 if diffused else 1.0)
 
 
 def connector_housing(color: Color = "black") -> FinishedMaterial:
@@ -276,10 +302,13 @@ def connector_housing(color: Color = "black") -> FinishedMaterial:
 
 def anodized(color: Color = "clear", substrate: FinishedMaterial | None = None) -> FinishedMaterial:
     """Anodized aluminium (bd_materials' 6061-T6 unless ``substrate``): the dyed oxide over the metal,
-    satin, its colour carried by the coating rather than by a coloured mirror. Presets: clear, silver,
-    black, grey, red, blue, gold, green, purple, orange."""
+    satin. Light passes the dyed oxide to the metal and back, so a dyed part reflects its surroundings
+    in its dye's colour: drawn as a mostly metallic surface of that colour (metalness 0.7), clear (and
+    silver) as nearly the bare metal (0.9), black as a deep dye that reflects less (0.45), each under a
+    light clear coat, the oxide's sheen. Presets: clear, silver, black, grey, red, blue, gold, green,
+    purple, orange."""
     value, slug = _named(ANODIZE, color, "anodized")
-    metalness = {"clear": 0.9, "silver": 0.9, "black": 0.45}.get(slug, 0.7)
+    metalness = {"clear": 0.9, "black": 0.45}.get(slug, 0.7)  # silver is clear (``_named``)
     return _look(f"anodized_{slug}", _metal(substrate, "aluminum").material, color=value, metalness=metalness,
                  roughness=0.5 if slug == "black" else 0.42, clearcoat=0.2, clearcoat_roughness=0.35)
 
@@ -292,8 +321,8 @@ def anodized_black() -> FinishedMaterial:
 def powder_coat(color: Color = "black", finish: Sheen = "satin",
                 substrate: FinishedMaterial | None = None) -> FinishedMaterial:
     """Powder coat over a metal (bd_materials' mild steel unless ``substrate``): an opaque polymer skin,
-    ``matte``, ``satin`` or ``gloss``. Presets: black, white, grey, and RAL9005, RAL9010, RAL9016, RAL7016,
-    RAL7035, RAL7024, RAL3020, RAL5010, RAL1023, RAL6005."""
+    ``matte``, ``satin`` or ``gloss``. Presets: RAL9005, RAL9010, RAL9016, RAL7016, RAL7035, RAL7024,
+    RAL3020, RAL5010, RAL1023, RAL6005, and black, white (RAL9016) and grey (RAL7016)."""
     value, slug = _named(POWDER_COAT, color, "powder_coat")
     _choice(finish, ("matte", "satin", "gloss"), "powder_coat's finish")
     look = {"matte": dict(roughness=0.8), "satin": dict(roughness=0.5),
@@ -309,7 +338,7 @@ def powder_coat_black() -> FinishedMaterial:
 
 def bead_blasted(substrate: FinishedMaterial | None = None) -> FinishedMaterial:
     """Bead-blasted metal (bd_materials' 6061-T6 unless ``substrate``): an even, diffuse satin in the
-    metal's own colour."""
+    bare metal's own colour (bd_materials' look of its family), whatever finish the substrate wore."""
     metal = _metal(substrate, "aluminum")
     return _look(f"bead_blasted_{metal.material.family or 'metal'}", metal.material, color=_f0(metal),
                  metalness=1.0, roughness=0.55)
@@ -323,13 +352,15 @@ def brushed(substrate: FinishedMaterial | None = None) -> FinishedMaterial:
                  metalness=1.0, roughness=0.3, anisotropy=0.8, anisotropy_rotation=0.0)
 
 
-def zinc_plated(color: Color = "clear", substrate: FinishedMaterial | None = None) -> FinishedMaterial:
+def zinc_plated(passivation: str = "clear", substrate: FinishedMaterial | None = None) -> FinishedMaterial:
     """Zinc-plated steel (bd_materials' mild steel unless ``substrate``), passivated ``clear``, ``blue``,
-    ``yellow`` or ``black``."""
-    if not isinstance(color, str) or color.lower() not in ZINC:
-        raise ValueError(f"zinc_plated's colour is one of {', '.join(map(repr, ZINC))}, not {color!r}")
-    value, metalness, roughness = ZINC[color.lower()]
-    return _look(f"zinc_plated_{color.lower()}", _metal(substrate, "mild_steel").material, color=value,
+    ``yellow`` or ``black``. Each passivation is its own chemistry, its colour, metalness and roughness
+    together, so it takes one of those four, not a colour."""
+    chosen = passivation.strip().lower() if isinstance(passivation, str) else None
+    if chosen not in ZINC:
+        raise ValueError(f"zinc_plated's passivation is one of {', '.join(map(repr, ZINC))}, not {passivation!r}")
+    value, metalness, roughness = ZINC[chosen]
+    return _look(f"zinc_plated_{chosen}", _metal(substrate, "mild_steel").material, color=value,
                  metalness=metalness, roughness=roughness)
 
 

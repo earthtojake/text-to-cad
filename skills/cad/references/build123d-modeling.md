@@ -55,8 +55,10 @@ See [positioning](positioning.md) for datums and joints, and
 Use build123d's native `bd_materials` objects. Set materials after geometric operations,
 then set any explicit colour: build123d's material setter also sets colour. A transmissive
 material infers preview alpha (`transmission=1` gives `0.3`), even with PBR `opacity=1`.
-For an opaque base colour with physical transmission, assign an opaque `body.color`
-after its material.
+A transmissive part is one fade, never two, in every file of it: what draws transmission
+(the viewer's Render and Solid, a GLB's path tracer) draws it opaque with its transmission,
+and what draws none (Flat, X-ray, Parts, a snapshot, a 3MF) at that preview. The colour's
+alpha does not fade it further; to fade it everywhere, give the look a PBR `opacity` below 1.
 
 ```python
 from bd_materials import metals
@@ -80,7 +82,11 @@ There is no text-to-cad material class or adapter.
 For boards, electronic parts and process finishes, which `bd_materials` lacks or draws poorly
 untextured, `cad.build123d.materials` has named looks. Each returns a fresh native
 `FinishedMaterial` (physics from `bd_materials`, a scalar look every renderer draws). A `color`
-is a preset or any hex; `substrate=` is the `bd_materials` metal a finish is on.
+is a preset, a hex, a CSS name or an sRGB `(r, g, b)` of 0–1 floats; one colour is one material
+whatever its spelling (`"grey"`, `"gray"` and `"RAL7016"` are `powder_coat_RAL7016_satin`), so
+it is one BOM row. `zinc_plated` takes its passivation, not a colour. `substrate=` is the
+`bd_materials` metal a finish is on: its physics are kept, its look replaced (`bead_blasted` on
+an anodized part is bare aluminium).
 
 ```python
 from cad.build123d import materials, paint
@@ -97,7 +103,7 @@ bracket.material = materials.powder_coat("RAL7016", finish="satin")
 | IC packages, chip parts, LEDs | `mold_compound()`, `ceramic("white"\|"tan")`, `led_lens(color, diffused=False)` |
 | Connector and switch bodies | `connector_housing(color)` (PBT-GF30) |
 | Aluminium | `anodized(color)`, `anodized_black()`, `bead_blasted()` |
-| Steel and stainless | `powder_coat(color, finish="matte"\|"satin"\|"gloss")`, `powder_coat_black()`, `brushed()`, `zinc_plated("clear"\|"blue"\|"yellow"\|"black")`, `black_oxide(oiled=True)` |
+| Steel and stainless | `powder_coat(color, finish="matte"\|"satin"\|"gloss")`, `powder_coat_black()`, `brushed()`, `zinc_plated(passivation="clear"\|"blue"\|"yellow"\|"black")`, `black_oxide(oiled=True)` |
 
 Prefer these to `bd_materials`' textured finishes (`bead_blast`, `brushed`, `zinc_plate`,
 `tin_plate`), which draw flat at roughness 1 until textures are drawn.

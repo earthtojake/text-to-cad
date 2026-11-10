@@ -46,10 +46,10 @@ _NAMES = {
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
 }
 
-__all__ = sorted(_NAMES)
-
-# Its public submodules, each imported on first use (``cad.build123d.materials``).
+# Its public submodules, each imported on first use (``cad.build123d.materials``), offered with its names.
 _SUBMODULES = ("materials",)
+
+__all__ = sorted([*_NAMES, *_SUBMODULES])
 
 
 def __getattr__(name: str) -> Any:
