@@ -345,9 +345,9 @@ export default {
   "whatsNew.0.11.boards.title": "KiCad.",
   "whatsNew.0.11.boards.body": "Design circuit boards with KiCad: “Design a 9-key macropad PCB.”",
   "whatsNew.0.11.blender.title": "Blender.",
-  "whatsNew.0.11.blender.body": "Render images and videos of your models with Blender: “Render a turntable video of this part.”",
+  "whatsNew.0.11.blender.body": "Render images and videos of your models: “Render a turntable video of this part.”",
   "whatsNew.0.11.mujoco.title": "MuJoCo.",
-  "whatsNew.0.11.mujoco.body": "Simulate your CAD robots in MuJoCo: “Export this robot arm for MuJoCo.”",
+  "whatsNew.0.11.mujoco.body": "Simulate a robot built from your CAD: “Export this robot arm for MuJoCo.”",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
