@@ -62,11 +62,15 @@ FOLD_DEG = 2.0
 THIN_DEPTH_CAP_MM = 10.0
 
 
-def lying(across: np.ndarray) -> bool:
-    """Whether a wall whose thickness runs along ``across`` (a face's normal at its thinnest place) lies in
-    the layer plane: its faces within 45 deg of it -- a floor, a lid, a living hinge, laid layer on layer --
-    rather than stands (a wall laid bead beside bead). At 45 deg exactly it stands."""
-    across = np.asarray(across, dtype=float)
+def lying(near: np.ndarray, far: np.ndarray | None = None) -> bool:
+    """Whether a wall lies in the layer plane -- a floor, a lid, a living hinge, laid layer on layer -- rather
+    than stands (a wall laid bead beside bead): the way across it within 45 deg of the plate's axis. That way is
+    between its two faces' outward normals (``near``, and ``far`` the face across: a wall is read from either
+    side, and a land between a countersink's cone and the flat under it is one skin from both), or ``near``
+    alone where that is all there is. At 45 deg exactly it stands."""
+    across = np.asarray(near, dtype=float)
+    if far is not None:
+        across = across / (np.linalg.norm(across) or 1.0) - np.asarray(far, dtype=float) / (np.linalg.norm(far) or 1.0)
     return bool(abs(float(across[2])) > math.cos(math.radians(45.0)) * (float(np.linalg.norm(across)) or 1.0) + 1e-9)
 
 

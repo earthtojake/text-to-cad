@@ -886,7 +886,7 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
         seen.add(pair)
         item = {"xyz": _p(points[at]), "thickness_mm": _r(float(value), mo.JUDGED), "samples": int(count),
                 "supported": None, "sampled": True, "chord_mm": _r(float(chords[at]), 6)}
-        place, face = points[at], int(faces[order][at])
+        place, face, far = points[at], int(faces[order][at]), int(hits[order][at])
         if mesh is not None and judged_below is not None and value < 2.0 * judged_below and tried < REFINE_READ:
             tried += 1
             least = _least_wall(mesh, place + mesh.face_normals[face] * NUDGE, face, float(value),
@@ -903,7 +903,8 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
             item.update(supported=found["supported"], joined_sides=found["joined_sides"],
                         free_fraction=found["free_fraction"])
         if mesh is not None:
-            item["lying"] = mo.lying(mesh.face_normals[face])  # a skin in the layer plane, laid layer on layer
+            # a skin in the layer plane, laid layer on layer: by its two faces, whichever it was read from
+            item["lying"] = mo.lying(mesh.face_normals[face], mesh.face_normals[far])
         items.append(item)
     return items
 

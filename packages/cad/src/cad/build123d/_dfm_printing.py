@@ -402,7 +402,7 @@ def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, out
     """A listed wall's thickness (``outward`` False) or gap's width refined to the exact least distance between
     its face and the face across (``brep.least_segments``), where that segment leaves the face within 45 degrees
     of its normal (into the material, or the void), the face across looks back along it as a wall's or a gap's
-    far side does, and an exact ray along it meets the face across first, at that distance: sampled rays land
+    far side does, and an exact ray along it meets nothing before the face across: sampled rays land
     a few points a face and read a wall between two holes, or a slot's narrowest, wide (``refined`` true, ``xyz``
     the thinnest point). Faces sharing an edge or a corner are not refined: their least distance is 0."""
     key = "gap_mm" if outward else "thickness_mm"
@@ -430,8 +430,14 @@ def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, out
                 continue  # the face across looks back at the gap
         elif float(there @ way) < _FACING:
             continue  # the wall's far side looks on along the ray
+        # nothing between: an exact ray along it meets the face across first, at that distance -- or nothing
+        # at all, where the least lies on that face's own edge and the ray passes it by a hair; or a face both
+        # meet, which the least runs along (a groove's floor: the gap under a thread's first flank is least
+        # along the shank, and the ray grazing it met it as the part was drawn and not turned 37 deg)
         hit = _first_hits(rays, (pa + way * 1e-5)[None], way[None], 1e-6, length + 1e-3)[0]
-        if hit is None or (hit[1] + 1 != j and abs(hit[0] + 1e-5 - length) > 1e-4):
+        other = hit[1] + 1 if hit is not None else j
+        floor = other in ctx.adjacent(part, i) and other in ctx.adjacent(part, j)
+        if other != j and not floor and abs(hit[0] + 1e-5 - length) > 1e-4:
             continue
         item[key] = _r(length, JUDGED)
         item["xyz"] = _xyz(pa)
@@ -1020,7 +1026,13 @@ def _walls(ctx: Context) -> dict[str, Any]:
         if pair not in seen:
             seen.add(pair)
             unique.append(item)
-            item["lying"] = mo.lying(outward)  # a skin in the layer plane, laid layer on layer
+            # a skin in the layer plane, laid layer on layer: by its refined least's own way across, else (a
+            # wall a verdict can turn on) by its two faces, whichever it was read from
+            across = None
+            if not item.get("refined") and minimum is not None and item["thickness_mm"] < minimum:
+                _, there = _cast(ctx, part)((place - outward * 1e-5)[None], -np.asarray(outward)[None])
+                across = there[0] if np.linalg.norm(there[0]) > 0 else None
+            item["lying"] = mo.lying(outward, across)
             # a wall a verdict can turn on (under the unsupported minimum) has its support read off the wall
             # itself, as a mesh's is (``mo.wall_support``): its thin region's outline, and what it is joined to
             if minimum is not None and item["thickness_mm"] < minimum and len(unique) <= CAP:
