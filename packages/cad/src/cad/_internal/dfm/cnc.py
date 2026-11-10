@@ -3,7 +3,8 @@
 Measured on exact geometry alone (a STEP, an xbf, a document the engine holds; ``cad.build123d._dfm_cnc``
 says how): holes, pockets, internal corners, sharp concave edges no rotating tool makes, walls, gaps, tool
 access and setups per approach direction, closed voids, stock, small features, and with ``turning`` the
-axis, diameters, bores, grooves and live-tooling features.
+axis, diameters, bores, grooves and live-tooling features (its own rules: the grooves, the part's slenderness
+and size; the milling rules that do not apply there are said, ``cnc.turning_not_judged``).
 
 The rules (``RULES``) are general practice. A number a published guide states cites it (Protolabs Network's
 CNC design guide and its service's page: the evidence, not a shop's limit). A feasibility floor no guide states

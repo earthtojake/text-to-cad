@@ -1,7 +1,9 @@
 """cnc's measurements of exact geometry (``cad._internal.dfm.cnc`` says what they are for).
 
 Each part of the document is measured on its own B-rep (``_dfm_cnc_model.Model``), and every family's items
-say which part and face they are at (``plate/face 7``). Each part is machined in its own frame
+say which part and face they are at (``plate/face 7``). A part that holds several solids is measured solid by
+solid, each a part of its own (``_solids``: a tool machines one piece of stock into one solid); one of more
+faces than ``FACE_BUDGET`` is not measured, and said. Each part is machined in its own frame
 (``_dfm_cnc_model.machine_frame``: the axes its faces' normals and its holes' axes square, never the world's), so
 a part turned in its model reads as drawn: it is measured turned into that frame, every place and direction
 it reports turned back to its own coordinates (``machine.frames`` says each part's). "World axis" below is
@@ -65,7 +67,8 @@ the machine frame's. The families, and how each is measured:
   that is a reported corner's run through a small edge round at its end is folded into that corner
   (``folded_edges``, see ``_fold``), not listed again.
 - ``walls``: the thickness under each face (an exact ray into the material from points sampled on it, to the
-  first face across that faces the other way), the thinnest per face under 5 mm, with the wall's height. The
+  first face across that faces the other way), the thinnest per face under 5 mm, with the wall's height, and
+  whether it is a thin feature that stands (``_standing``: a fin, a rib, a pin, what it stands to). The
   listed items are then refined to the exact minimum distance between the face and the face across
   (``BRepExtrema_DistShapeShape``), kept where that segment runs through the material near square to the
   face. A face across that meets the face at a knife edge is no wall: ``knife_edges`` reports it.
@@ -83,9 +86,13 @@ the machine frame's. The families, and how each is measured:
   and the fixtures they need; the faces no direction
   reaches, and whether any direction at all (a five-axis machine's) would. Five axes try every direction a
   four-axis machine would (each 15 degrees about each world axis) before probing the sphere, so they reach
-  at least what four do. A hole or pocket along no direction the machine has adds its own orientation and
-  clamping (``inclined_directions``).
-- ``voids``: closed cavities inside the material (a solid's inner shells).
+  at least what four do. A face no straight line reaches is tried for a disc cutter on a straight shank
+  (``_disc_reach``): made only where one gets to it through an opening that holds the disc
+  (``disc_reach``, ``no_tool_fraction``); the faces of one recess are one item. A hole is a setup's along
+  its axis alone, whole (``_setup``); a hole or pocket along no direction the machine has adds its own
+  orientation and clamping (``inclined_directions``). The stock's own faces are no setup's
+  (``_stock_faces``): a bare block takes none.
+- ``voids``: closed cavities inside the material (a solid's inner shells); their edges are no other family's.
 - ``stock``: the part's box or ``--stock``, the material removed, the part's size sorted.
 - ``small_features``: the shortest edge, the smallest face, and the faces narrower than half a millimetre.
 - with ``turning`` (``_dfm_cnc_turning``): the axis, how much of the part turns about it, its diameters,
@@ -479,7 +486,9 @@ def _one_cause(model: Model, index: int, state: dict[str, Any], families: dict[s
             head["disc_reach"] = all(item["disc_reach"] for item in members)
         head["faces"] = [item["location"] for item in members][:20]
         head["face_count"] = len(members)
-        head["faces_said"] = ", ".join(head["faces"][:8]) + (f" and {len(members) - 8} more" if len(members) > 8 else "")
+        # said by ordinal, the part being the location's: a copy's item is said again at its own refs
+        head["faces_said"] = ", ".join(ref.rsplit("/", 1)[-1] for ref in head["faces"][:8]) + (
+            f" and {len(members) - 8} more" if len(members) > 8 else "")
         dropped |= {id(item) for item in members if item is not head}
     if dropped:
         families["access"][:] = [item for item in families["access"] if id(item) not in dropped]

@@ -691,9 +691,9 @@ class SummaryTest(unittest.TestCase):
     def test_a_failed_check_digests_what_failed_in_one_line(self) -> None:
         from cad.build123d import cnc
 
-        # four 0.8 mm holes, under the 1 mm drill a mill makes (an error: draft_min, a molding recommendation,
-        # no longer fails a check)
-        box = bd.Box(30, 20, 10) - bd.Pos(0, 0, 0) * bd.Compound([bd.Pos(x, y, 0) * bd.Cylinder(0.4, 10)
+        # four 0.04 mm holes, under the 0.05 mm the smallest tool makes (an error: draft_min, a molding
+        # recommendation, no longer fails a check; a hole under 1 mm is a warning)
+        box = bd.Box(30, 20, 10) - bd.Pos(0, 0, 0) * bd.Compound([bd.Pos(x, y, 0) * bd.Cylinder(0.02, 10)
                                                                      for x in (-8, 8) for y in (-5, 5)])
         box.label = "box"
         result = cnc(box, material="aluminum")
