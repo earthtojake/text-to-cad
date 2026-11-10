@@ -500,10 +500,10 @@ CASES = [
     Case("split_hole", split_hole, {"material": "aluminum"},
          allow=[("cnc.gap_width_small", None, box(-10, -0.5, -10, 30, 0.5, 10)),
                 ("cnc.pocket_depth_to_width", None, box(-10, -0.5, -10, 30, 0.5, 10))]),
-    # 0.8 mm strokes: sharp corners no tool cuts (errors), and gaps under 2.5 mm, micro-machining (warnings)
+    # 0.8 mm strokes half a millimetre deep: lettering, an engraving tool's -- its sharp corners no error --
+    # and gaps under 2.5 mm, micro-machining (warnings)
     Case("engraved", engraved, {"material": "aluminum"},
-         expect=[("cnc.internal_corner_sharp", None, box(-2.5, -3, 2.5, 11, 3, 3)),
-                 ("cnc.gap_width_small", None, box(-2.5, -3, 2.5, 11, 3, 3))]),
+         expect=[("cnc.gap_width_small", None, box(-2.5, -3, 2.5, 11, 3, 3))]),
     Case("cavity", deep_cavity, {"material": "aluminum"},
          allow=[("cnc.corner_radius_to_depth", None, box(-15, -3, -1, 15, 3, 20)),
                 ("cnc.corner_reach", None, box(-15, -3, -1, 15, 3, 20))]),
@@ -650,10 +650,13 @@ class CorpusTest(unittest.TestCase):
         self.assertEqual([(h["diameter_mm"], h["through"]) for h in split["holes"]["items"]], [(8.0, True)])
         self.assertEqual(split["internal_corners"]["items"], [])
 
-    def test_engraving_s_sharp_corners_are_errors_and_a_beside_axis_hole_is_perpendicular(self) -> None:
+    def test_engraving_is_an_engraving_tool_s_and_a_beside_axis_hole_is_perpendicular(self) -> None:
         _, result, _ = self.results["engraved"]
-        self.assertFalse(result.ok)
-        self.assertEqual({f.severity for f in result.findings if f.code == "cnc.internal_corner_sharp"}, {"error"})
+        self.assertTrue(result.ok)
+        (said,) = [f for f in result.findings if f.code == "cnc.engraving"]
+        self.assertEqual(said.severity, "info")
+        self.assertIn("2 shallow, narrow cavities", said.message)
+        self.assertEqual(result.measurements["internal_corners"]["count"], 0)
         hole = self.results["cross_shaft"][1].measurements["holes"]["items"][0]
         self.assertEqual(hole["relation"], "perpendicular")
 

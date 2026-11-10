@@ -198,6 +198,83 @@ def assembly():
     return bd.Compound(label="pair", children=[plain, drafted])
 
 
+# --- everyday parts: molded daily as drawn, nothing planted ------------------------------------------------
+
+BOTTOM = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
+#: Every everyday part is checked as built and turned so about the origin, its pull turned with it.
+TURN = (bd.Axis((0, 0, 0), (1, 2, 3)), 37.0)
+
+
+def bossed_tray():
+    """A drafted tray with two cored bosses 12 mm tall, drawn straight as bosses are."""
+    part = tray(draft=1.5, fillet=0.0)
+    for x in (-15.0, 15.0):
+        part += bd.Pos(x, 0, 1.99) * bd.Cylinder(3.0, 12.0, align=BOTTOM)
+        part -= bd.Pos(x, 0, 3.0) * bd.Cylinder(1.3, 12.0, align=BOTTOM)
+    return part
+
+
+def knob():
+    """A skirted knob, drafted, its hub's D bore 12 mm deep along the pull with no draft (a core pin's)."""
+    part = bd.Pos(0, 0, 9) * bd.Cone(14.0, 13.5, 18.0) - bd.Pos(0, 0, 8) * bd.Cone(12.3, 11.9, 16.0)
+    part += bd.Pos(0, 0, 9.5) * bd.Cone(4.6, 4.8, 13.0)
+    bore = bd.Pos(0, 0, 8.0) * (bd.Cylinder(3.0, 14.0) - bd.Pos(4.0, 0, 0) * bd.Box(3.0, 10, 14.0))
+    return part - (bore & (bd.Pos(0, 0, 8.5) * bd.Box(20, 20, 13.0)))
+
+
+def gear(teeth: int = 12, width: float = 12.0):
+    """A spur gear 12 mm wide: teeth cut straight along the pull (a molded gear has no draft on them), a
+    0.5 mm top land, a bore."""
+    root, tip = teeth / 2 - 1.25, teeth / 2 + 1.0
+    tooth = bd.extrude(bd.Polygon((-0.95, root - 0.2), (0.95, root - 0.2), (0.25, tip), (-0.25, tip), align=None),
+                       width / 2, both=True)
+    part = bd.Cylinder(root + 0.05, width)
+    for index in range(teeth):
+        part += bd.Rot(0, 0, index * 360 / teeth) * tooth
+    return part - bd.Cylinder(2.0, width)
+
+
+def hinged_plates():
+    """Two plates joined by a living hinge: a web 0.4 mm thick and 1.5 mm long (polypropylene's)."""
+    plates = bd.Pos(-20.75, 0, 0) * plate(40, 30, 2.0) + bd.Pos(20.75, 0, 0) * plate(40, 30, 2.0)
+    return plates + bd.Pos(0, 0, 1.6) * bd.Box(1.8, 26, 0.4, align=BOTTOM)
+
+
+def logo_lid():
+    """A lid with a logo cut 0.3 mm into its show face in 0.6 mm strokes, and a grip ridge with a 0.3 mm crest."""
+    part = plate(60, 40, 2.0)
+    for x in (-6.0, -4.6, -3.2, 0.0, 1.4):
+        part -= bd.Pos(x, 0, 1.7) * bd.Box(0.6, 12, 0.3, align=BOTTOM)
+    ridge = bd.extrude(bd.Trapezoid(1.1, 1.2, 71.6, align=(bd.Align.CENTER, bd.Align.MIN)), 9, both=True)
+    return part + bd.Pos(18, 0, 1.99) * bd.Rot(90, 0, 0) * ridge
+
+
+def snap_cover():
+    """A battery cover: a plate, a cantilever snap whose barb the cavity forms through a window in the plate."""
+    part = bd.extrude(bd.RectangleRounded(50, 30, 3), 2.0, taper=1.0)
+    part += bd.Pos(20, 0, 1.99) * bd.extrude(bd.Rectangle(1.4, 8.0), 9.0, taper=1.0)
+    part += bd.Pos(20.9, 0, 9.8) * bd.Box(2.2, 8.0, 2.0)
+    return part - bd.Pos(21.82, 0, 1.0) * bd.Box(2.4, 9.0, 3.0)
+
+
+def hose_barb():
+    """A straight hose connector along x, split along its axis (pull z), its bore a side core's."""
+    profile = [(0, 3.0), (8, 4.2), (8, 3.4), (16, 3.4), (16, 6.0), (20, 6.0), (20, 3.4), (28, 3.4), (28, 4.2),
+               (36, 3.0), (36, 0), (0, 0)]
+    part = bd.revolve(bd.Plane.XY * bd.Polygon(*profile, align=None), bd.Axis.X)
+    return part - bd.Pos(18, 0, 0) * bd.Rot(0, 90, 0) * bd.Cylinder(1.8, 50)
+
+
+def standoff():
+    """A 15 mm standoff, straight outside and in."""
+    return bd.Cylinder(4.0, 15.0, align=BOTTOM) - bd.Cylinder(1.6, 15.0, align=BOTTOM)
+
+
+def cutting_board():
+    """A 12 mm polyethylene cutting board, its edge drafted: thick, and molded every day."""
+    return bd.extrude(bd.RectangleRounded(250, 150, 10), 12.0, taper=2.0)
+
+
 @dataclass
 class Case:
     name: str
@@ -206,6 +283,8 @@ class Case:
     absent: tuple[str, ...] = ()                                   # rules that must fail nowhere
     unit: object = None
     releases: dict[str, str] = field(default_factory=dict)        # an undercut's release, by its region's key
+    material: str = "abs"
+    everyday: bool = False                                         # nothing planted: OK as built and turned
 
 
 def _box(lo, hi) -> Box3:
@@ -294,10 +373,18 @@ CASES = [
                  "molding.draft_zero")),
     Case("tiny_block", lambda: bd.Box(1.0, 1.0, 0.6, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)),
          expect={"molding.draft_min": [EVERYWHERE], "molding.wall_min": [EVERYWHERE]}, absent=("molding.undercut",)),
-    # 2 x 1 m: a press's and a mold's size are a shop's, compared with the measurements: no general rule fails it
+    # 2 x 1 m: a press few shops run (warned), not one beyond any built: a mold's size is a shop's, compared with
+    # the measurements
     Case("huge_panel", lambda: plate(2000.0, 1000.0, 4.0),
-         absent=("molding.draft_min", "molding.undercut", "molding.wall_min", "molding.thick_section")),
+         absent=("molding.draft_min", "molding.undercut", "molding.wall_min", "molding.thick_section",
+                 "molding.clamp_beyond_press")),
 ]
+#: The floors: what fails a part. An everyday part breaks none of them.
+FLOORS = ("molding.draft_zero", "molding.wall_too_thin", "molding.undercut_unreleasable", "molding.clamp_beyond_press")
+CASES += [Case(name, build, absent=FLOORS, material=material, everyday=True) for name, build, material in (
+    ("bossed_tray", bossed_tray, "abs"), ("knob", knob, "abs"), ("gear", gear, "pom"),
+    ("hinged_plates", hinged_plates, "pp"), ("logo_lid", logo_lid, "abs"), ("snap_cover", snap_cover, "abs"),
+    ("hose_barb", hose_barb, "nylon"), ("standoff", standoff, "abs"), ("cutting_board", cutting_board, "hdpe"))]
 
 
 # --- the run -----------------------------------------------------------------------------------------------
@@ -386,9 +473,15 @@ class MoldingCorpusTest(unittest.TestCase):
                 bd.export_step(shape.scale(1 / 25.4), str(step), unit=bd.Unit.IN)
             else:
                 bd.export_step(shape, str(step))
-            result = cad.step.dfm(str(step), process="molding", material="abs")
+            result = cad.step.dfm(str(step), process="molding", material=case.material)
             cls.results[case.name] = result
             _score(case.name, result, case.expect, case.absent, _Places(step), cls.tallies)
+            if case.everyday:
+                turned = root / f"{case.name}_turned.step"
+                bd.export_step(shape.rotate(*TURN), str(turned))
+                pull = bd.Vector(0, 0, 1).rotate(*TURN)
+                cls.results[case.name + " turned"] = cad.step.dfm(
+                    str(turned), process="molding", material=case.material, pull=f"{pull.X:.12g},{pull.Y:.12g},{pull.Z:.12g}")
         lines = [f"{'rule':34} {'tp':>4} {'fp':>4} {'fn':>4} {'precision':>9} {'recall':>7}"]
         for rule in sorted(cls.tallies):
             tally = cls.tallies[rule]
@@ -406,17 +499,32 @@ class MoldingCorpusTest(unittest.TestCase):
         self.assertEqual(false, [])
 
     def test_the_verdict_is_the_floors_alone(self) -> None:
-        """OK: nothing a general shop sends back (warnings: made, at a cost). FAILED: a floor broken -- a feature
-        nothing releases, a wall deeper than 10 mm with no draft at all (the brackets' 20 mm legs, the tray's
-        walls), a section over twice the resin's recommended maximum (a 10 mm block or pad in ABS). Every other
-        part of the corpus, whatever it is warned of, is OK."""
+        """OK: nothing a general molder sends back (warnings: made, at a cost). FAILED: a floor broken -- a feature
+        nothing releases (the void), a broad shell wall with no draft for its depth (the tray's core walls, 18 mm
+        in one half). Every other part of the corpus, whatever it is warned of, is OK: the brackets' 20 mm legs
+        part at their middle, 10 mm a half; a 10 mm block or pad in ABS sinks and is molded all the same; a 2 m
+        panel takes a press few shops run."""
         failed = {name: sorted({finding.code for finding in result.findings if finding.severity == "error"})
                   for name, result in self.results.items() if not result.ok}
-        self.assertEqual(failed, {
-            "sealed_void": ["molding.draft_zero", "molding.undercut_unreleasable", "molding.wall_too_thick"],
-            "undrafted_tray": ["molding.draft_zero"], "sharp_bracket": ["molding.draft_zero"],
-            "round_bracket": ["molding.draft_zero"], "thick_pad": ["molding.wall_too_thick"],
-            "assembly": ["molding.wall_too_thick"]})
+        self.assertEqual(failed, {"sealed_void": ["molding.undercut_unreleasable"],
+                                  "undrafted_tray": ["molding.draft_zero"]})
+        warned = {name: {finding.code for finding in self.results[name].findings if finding.severity == "warning"}
+                  for name in ("sharp_bracket", "thick_pad", "huge_panel")}
+        self.assertIn("molding.draft_min", warned["sharp_bracket"])
+        self.assertIn("molding.wall_too_thick", warned["thick_pad"])
+        self.assertIn("molding.clamp_large_press", warned["huge_panel"])
+
+    def test_an_everyday_part_is_not_failed_however_it_is_placed(self) -> None:
+        """Nothing planted: bosses, a core pin's bore, gear teeth and a standoff drawn straight, a living hinge, a
+        logo's strokes and a ridge's crest, a snap's barb, a barb split along its axis, a thick board. Each is
+        made as drawn -- warned of what costs, failed for nothing -- as built and turned 37 deg about (1, 2, 3)
+        with its pull."""
+        for case in CASES:
+            for name in (case.name, case.name + " turned") if case.everyday else ():
+                result = self.results[name]
+                with self.subTest(part=name):
+                    self.assertEqual((result.status, [f.code for f in result.findings if f.severity == "error"]),
+                                     ("ok", []), result.summary)
 
     def test_every_part_measured_whole(self) -> None:
         for name, result in self.results.items():

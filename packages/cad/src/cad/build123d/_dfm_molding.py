@@ -6,16 +6,18 @@ Every part of the document is measured along the pull on its B-rep, each finding
   along the pull (zero, the half-angle), the least over points sampled on the face and along its edges
   otherwise (a round tangent to a wall square to the pull is zero there) -- and which
   way it opens: ``+pull`` (released by the half withdrawing along the pull), ``-pull``, ``none`` (zero
-  draft, either half) or ``split`` (the face turns through the pull: the parting line crosses it);
+  draft, either half) or ``split`` (the face turns through the pull: the parting line crosses it); how deep it
+  runs in one mold half, read either side of the parting plane (``_half_depth``), and how wide across the pull;
 - **undercuts**: points sampled on every face shot along the way the face opens with exact rays; a point
   the part blocks is trapped (a zero-draft one only when both ways are blocked), but one in a crevice
   (``_CREVICE``: another face a hair off it), which is said as that. Trapped faces that touch are one group,
   split where its trapped points lie apart (two snaps under one lid are two features); what releases each is
   found by more rays (``molding_geometry.classify_undercut``, along the feature's own directions first:
-  ``_own_directions``), one nothing releases read again on denser points before it is said (``_denser``);
+  ``_own_directions``), one nothing releases read again on denser points before it is said (``_denser``); the
+  search is budgeted in rays and seconds, verdicts before figures (``_undercut_part``);
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
   it), the nominal wall (the area-weighted median), each face's thin and thick readings (``feature``: a rib's
-  or a boss's face, else wall), the thinnest faces refined to the exact least distance to a face across
+  or a boss's face, else wall) and whether it bounds a broad wall (``_broad``), the thinnest faces refined to the exact least distance to a face across
   (``_refine_thin``) and the thickest to their greatest ball over the face (``_refine_thick``); **transitions**: each step read on its stepped side (two parallel faces at two
   wall offsets, the chain of faces between them: its run over the change, ``ops.steps``), and on a free-form
   face no step takes in the rolling ball's steepest change;
@@ -31,14 +33,16 @@ Every part of the document is measured along the pull on its B-rep, each finding
   zero-draft walls on the outline, the curved faces turning through the pull there), whether one flat
   plane takes it and at what height, and the depth either side.
 
-With ``candidates`` the pulls are ranked instead: x, y, z and the part's principal axes. A check of one pull
-asks of each of those whether it does better (``_pull_check``), each read only as far as it still can. A family
-that raises leaves ``{"error": ...}`` and the report says so (``partial``).
+With ``candidates`` the pulls are ranked instead: x, y, z and the part's own directions (``_own_pulls``). A
+check of one pull asks of each of the part's own whether it does better (``_pull_check``), each read only as far
+as it still can; an assembly's parts are each measured along their own (``_own_pull``). A family that raises
+leaves ``{"error": ...}`` and the report says so (``partial``).
 """
 
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -46,7 +50,8 @@ import numpy as np
 
 from cad._internal import molding_geometry as ops
 from cad._internal.dfm._common import mm
-from cad._internal.dfm.molding import BUMP_OFF_MM, DEFAULT_PULL, better_pull, dominates
+from cad._internal.dfm.molding import (BROAD_WALLS, BUMP_OFF_MM, DEFAULT_PULL, DRAFT_FLOOR_DEG_PER_MM,
+                                       better_pull, dominates)
 from cad.build123d import _dfm_brep
 
 __all__ = ["measure"]
@@ -55,8 +60,10 @@ __all__ = ["measure"]
 _SAMPLES = 2400
 _LEAST_PER_FACE = 12
 _FACE_POINTS = 6000
-#: Rays the undercut release search spends on one part, at most (largest features first).
+#: What the search for what releases the trapped features may spend on one pull, over every part: rays, and
+#: seconds (largest features first). Rays bound it on any machine alike; seconds bound it whatever a ray costs.
 _RELEASE_RAYS = 200000
+_RELEASE_SECONDS = 45.0
 _MOST_PER_FACE = 400
 #: Points along each edge a curved face's draft is also read at (``_Geometry.boundary_normals``).
 _BOUNDARY_POINTS = 9
@@ -99,6 +106,63 @@ def _xyz(point: Any) -> list[float]:
 
 # How many (ray, face) pairs ``_mesh_crosses`` screens at once: the batch's arrays bound its memory.
 _CROSSES_AT_ONCE = 1 << 16
+#: A face of this many edges or more is crossed with the kernel's fast classifier alone (``_Fast``): the kernel sorts
+#: each crossing among every edge of the face, and with its boundary tolerance builds that sorting anew each ray
+#: -- a third of a millisecond a ray on a wall of sixteen holes and a millisecond on one of a hundred, so a
+#: perforated wall, whose every hole is a feature to release, cost minutes, then hours.
+_MANY_EDGES = 12
+
+
+class _Fast:
+    """The kernel's intersector of one face without its boundary tolerance (``_dfm_brep.Intersector``'s fast
+    half, alone): every crossing inside the face, as exact; a crossing within the kernel's tolerance of one of the
+    face's edges is left to the face across that edge, which the same ray meets. A ray the kernel fails on is
+    counted against the face (``Screen.failed``), as ``Intersector`` counts it."""
+
+    def __init__(self, face: Any, tolerance: float, screen: Any, index: int) -> None:
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector
+        from OCP.Standard import Standard_Failure
+
+        self._kernel = IntCurvesFace_Intersector(face, tolerance)
+        self._kernel.SetUseBoundToler(False)
+        self._screen, self._index, self._failure, self._done = screen, index, Standard_Failure, False
+
+    def Perform(self, line: Any, start: float, end: float) -> None:  # noqa: N802 - the kernel's name
+        try:
+            self._kernel.Perform(line, start, end)
+            self._done = bool(self._kernel.IsDone())
+        except self._failure:
+            self._done = False
+            self._screen.failed[self._index] = self._screen.failed.get(self._index, 0) + 1
+
+    def IsDone(self) -> bool:  # noqa: N802
+        return self._done
+
+    def NbPnt(self) -> int:  # noqa: N802
+        return int(self._kernel.NbPnt())
+
+    def WParameter(self, hit: int) -> float:  # noqa: N802
+        return float(self._kernel.WParameter(hit))
+
+
+class _Budget:
+    """What a release search may still spend (``_RELEASE_RAYS``, ``_RELEASE_SECONDS``): true while some is left.
+    Its seconds run only while a search does (``searching``): finding what is trapped, which no budget cuts
+    short, is none of them."""
+
+    def __init__(self) -> None:
+        self.rays = _RELEASE_RAYS
+        self.seconds = _RELEASE_SECONDS
+        self._since: float | None = None
+
+    def searching(self, running: bool) -> None:
+        if self._since is not None:
+            self.seconds -= time.monotonic() - self._since
+        self._since = time.monotonic() if running else None
+
+    def __bool__(self) -> bool:
+        spent = time.monotonic() - self._since if self._since is not None else 0.0
+        return self.rays > 0 and self.seconds - spent > 0.0
 
 
 def _safe(fn: Any, *args: Any) -> Any:
@@ -212,7 +276,8 @@ class _Geometry:
     _by_face: Any = None
     _vertices: dict[int, np.ndarray] = field(default_factory=dict)
     _contact: tuple[np.ndarray, list[dict[str, Any]]] | None = None
-    _boundary: dict[int, np.ndarray] | None = None
+    _boundary: dict[int, tuple[np.ndarray, np.ndarray]] | None = None
+    _undercut: dict[tuple, dict[str, Any]] = field(default_factory=dict)   # ``_undercut_part``'s, by pull
 
     def __post_init__(self) -> None:
         self.faces = self.part.faces()
@@ -287,10 +352,11 @@ class _Geometry:
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
 
-    def boundary_normals(self, ordinal: int) -> np.ndarray:
-        """The face's outward normals along its edges (``_BOUNDARY_POINTS`` an edge, on its curves in the face's
-        (u, v)): where a curved face's draft is least when it is least at its boundary -- a fillet tangent to a
-        wall square to the pull reaches zero draft on the tangent edge, which no sample inside it lands on."""
+    def boundary(self, ordinal: int) -> tuple[np.ndarray, np.ndarray]:
+        """Points along the face's edges and its outward normals there (``_BOUNDARY_POINTS`` an edge, on its
+        curves in the face's (u, v)): where a curved face's draft is least when it is least at its boundary -- a
+        fillet tangent to a wall square to the pull reaches zero draft on the tangent edge, which no sample
+        inside it lands on -- and how far along the pull the face runs there."""
         if self._boundary is None:
             self._boundary = {}
         found = self._boundary.get(ordinal)
@@ -303,7 +369,7 @@ class _Geometry:
 
             face = self.faces[ordinal - 1]
             props = BRepGProp_Face(face.wrapped)
-            normals = []
+            points, normals = [], []
             explorer = TopExp_Explorer(face.wrapped, TopAbs_EDGE)
             while explorer.More():
                 try:
@@ -311,13 +377,14 @@ class _Geometry:
                     first, last = curve.FirstParameter(), curve.LastParameter()
                     for k in range(_BOUNDARY_POINTS):
                         uv = curve.Value(first + (last - first) * k / (_BOUNDARY_POINTS - 1))
-                        _, normal = _dfm_brep.point_normal(face, uv.X(), uv.Y(), props)
+                        point, normal = _dfm_brep.point_normal(face, uv.X(), uv.Y(), props)
                         if float(np.linalg.norm(normal)) > 0.5:
+                            points.append(point)
                             normals.append(normal)
                 except Exception:  # noqa: BLE001 - an edge with no curve in the face adds no point
                     pass
                 explorer.Next()
-            found = np.array(normals).reshape(-1, 3)
+            found = (np.array(points).reshape(-1, 3), np.array(normals).reshape(-1, 3))
             self._boundary[ordinal] = found
         return found
 
@@ -491,7 +558,8 @@ class _Geometry:
                     candidate = int(face[k])
                     intersector = self._intersectors.get(candidate)
                     if intersector is None:
-                        intersector = self._intersectors[candidate] = _dfm_brep.Intersector(
+                        many = len(self.neighbours().get(candidate + 1, ())) >= _MANY_EDGES
+                        intersector = self._intersectors[candidate] = (_Fast if many else _dfm_brep.Intersector)(
                             rays.faces[candidate], 1e-7, rays.screen, candidate)
                     # a crossing the kernel cannot find (a degenerate patch) is counted against the face by the
                     # intersector (``Screen.failed``), and the ray goes on to the next face
@@ -545,6 +613,17 @@ class _Geometry:
 # --- draft -----------------------------------------------------------------------------------------------
 
 
+#: A wall is broad where it is clearly so: ``BROAD_WALLS`` of its thickness wide and this much over, the error of
+#: a thickness read by rolling balls off a triangulation (a tube 30 across with a 3 mm wall reads 2.995). A face
+#: at the limit is no broad wall: an error rests on it.
+_BROAD_CLEAR = 1.02
+#: A face that turns through the pull (``split``) is a wall along it all the same where this share of its area or
+#: more has less draft than ``_TURN_DRAFT_DEG``: a boss a degree off the pull, not a round the parting line
+#: crosses (whose draft is none along a line, and climbs away from it).
+_TURN_DRAFT_DEG = 0.5
+_TURN_SHARE = 0.25
+
+
 @dataclass
 class _FaceDraft:
     ordinal: int
@@ -554,6 +633,9 @@ class _FaceDraft:
     exact: bool
     zero_area: float      # area under zero_tol
     sample_drafts: np.ndarray
+    turns: bool = False   # split, and only turning through the pull: a silhouette's face, no wall along the pull
+    drafts: np.ndarray = field(default_factory=lambda: np.zeros(0))       # the draft at each of ``points``
+    points: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))  # its samples and its edges' points
 
 
 def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_FaceDraft]:
@@ -565,7 +647,8 @@ def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_Fac
         along = along_all[mine]
         weights = geo.weights[mine]
         sample = np.degrees(np.arcsin(np.clip(np.abs(along), 0.0, 1.0)))
-        exact = False
+        exact = turns = False
+        every, points = sample, geo.points[mine]
         if surface.kind == "plane" and surface.normal is not None:
             lean = float(np.asarray(surface.normal) @ pull)
             draft = math.degrees(math.asin(min(1.0, abs(lean))))
@@ -581,10 +664,12 @@ def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_Fac
             exact = True
         else:
             draft = float(sample.min()) if len(sample) else 90.0
-            edge = geo.boundary_normals(ordinal) @ pull
-            if len(edge):
+            edge_points, edge_normals = geo.boundary(ordinal)
+            if len(edge_points):
                 # its least over its edges too: a round's draft falls to the wall's it is tangent to there
-                draft = min(draft, float(np.degrees(np.arcsin(np.clip(np.abs(edge), 0.0, 1.0))).min()))
+                edge = np.degrees(np.arcsin(np.clip(np.abs(edge_normals @ pull), 0.0, 1.0)))
+                draft = min(draft, float(edge.min()))
+                every, points = np.concatenate([sample, edge]), np.vstack([points, edge_points])
             lean = float(np.average(along, weights=weights)) if len(along) else 0.0
         if exact:
             opens = "none" if draft < zero_tol else ("+pull" if lean > 0 else "-pull")
@@ -593,7 +678,9 @@ def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_Fac
             up, down = bool((along > tol).any()), bool((along < -tol).any())
             opens = "split" if up and down else "+pull" if up else "-pull" if down else "none"
             zero_area = float(weights[sample < zero_tol].sum() / max(weights.sum(), 1e-12) * area) if len(weights) else 0.0
-        drafts.append(_FaceDraft(ordinal, float(draft), lean, opens, exact, zero_area, sample))
+            turns = opens == "split" and (not len(weights) or float(weights[sample < _TURN_DRAFT_DEG].sum())
+                                          < _TURN_SHARE * float(weights.sum()))
+        drafts.append(_FaceDraft(ordinal, float(draft), lean, opens, exact, zero_area, sample, turns, every, points))
     return drafts
 
 
@@ -611,8 +698,49 @@ def _extent(geo: _Geometry, ordinal: int, direction: np.ndarray) -> tuple[float,
     return float(heights.min()), float(heights.max())
 
 
-def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarray, wall_limit: float,
-           zero_tol: float) -> dict[str, Any]:
+def _half_depth(face: _FaceDraft, low: float, high: float, pull: np.ndarray, parting: float | None) -> float:
+    """How deep along the pull the face runs in one mold half with its least draft (mm): the deeper of its
+    stretches either side of the parting plane (``parting``: its height along the pull; None: the face's whole
+    depth). A face of one draft (a plane, a cylinder or cone about the pull) runs its stretch; any other, the
+    stretch its least-drafted points span, each point with more draft than the least counting for less of it (a
+    millimetre for each ``DRAFT_FLOOR_DEG_PER_MM`` more, the rate the draft floor pays depth at): a dome's rim,
+    tangent to the pull along a line, runs no depth there; a boss a hair off the pull runs its height."""
+    sides = [(low, high)] if parting is None else [(low, min(high, parting)), (max(low, parting), high)]
+    if face.exact or not len(face.drafts):
+        return max(0.0, max(top - bottom for bottom, top in sides))
+    order = np.argsort(face.drafts, kind="stable")
+    drafts, heights = face.drafts[order], face.points[order] @ pull
+    slack = 1e-9 * max(1.0, abs(high), abs(low))
+    best = 0.0
+    for bottom, top in sides:
+        inside = (heights >= bottom - slack) & (heights <= top + slack)
+        if inside.any():
+            span = np.maximum.accumulate(heights[inside]) - np.minimum.accumulate(heights[inside])
+            best = max(best, float((span - (drafts[inside] - face.draft) / DRAFT_FLOOR_DEG_PER_MM).max()))
+    return best
+
+
+#: The directions round the pull a face's width is read along: its widest is within 0.12% of the true one, so a
+#: wall reads its own width however the part is turned.
+_WIDTH_WAYS = np.linspace(0.0, math.pi, 32, endpoint=False)
+
+
+def _width_across(geo: _Geometry, ordinal: int, pull: np.ndarray) -> float:
+    """The face's greatest extent square to the pull (mm): of its vertices, its edges' points and its samples,
+    the widest of ``_WIDTH_WAYS``."""
+    u, v = ops.basis(pull)
+    points = geo.vertices(ordinal)
+    spans = np.stack([points @ u, points @ v], axis=1) @ np.stack([np.cos(_WIDTH_WAYS), np.sin(_WIDTH_WAYS)])
+    return float((spans.max(axis=0) - spans.min(axis=0)).max())
+
+
+def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pulls: np.ndarray | list[np.ndarray],
+           wall_limit: float, zero_tol: float, partings: list[tuple[float, set[str]]] | None = None
+           ) -> dict[str, Any]:
+    """The draft family. ``pulls``: the pull, or each part's own (an assembly's parts lie as they lie);
+    ``partings``: where they are known, each part's parting plane's height along its pull and the walls on the
+    outline, which the parting line may run anywhere up (``_half_depth``)."""
+    pulls = pulls if isinstance(pulls, list) else [pulls] * len(geos)
     items: list[dict[str, Any]] = []
     total = wall = zero = drafted = drafted_moment = 0.0
     opening = {"+pull": 0.0, "-pull": 0.0, "none": 0.0, "split": 0.0}
@@ -620,12 +748,13 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
     edges = _HIST_DEG + [wall_limit]
     zero_faces: list[dict[str, Any]] = []
     walls = zeros = 0
-    for geo, faces in zip(geos, drafts):
+    for index, (geo, faces, pull) in enumerate(zip(geos, drafts, pulls)):
         # A total counts a part once for each time it occurs (the occurrences turned alike are measured once,
         # ``Part.occurrences``); its items are the faces measured, each once.
         times = geo.part.occurrences
         total += times * float(geo.areas.sum())
         contact = geo.contact
+        height, run_up = partings[index] if partings else (None, set())
         for face in faces:
             area = float(geo.areas[face.ordinal - 1])
             if face.draft >= wall_limit or area <= 0:
@@ -637,20 +766,19 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
             walls += times
             opening[face.opens] += times * area
             low, high = _extent(geo, face.ordinal, pull)
-            # How far along the pull the face runs with no draft: its whole depth where its draft is one figure
-            # (a plane, a cylinder along the pull); else the span of its points that read none -- a dome's rim,
-            # tangent to the pull along a line, has no draft there and no depth without it.
-            if face.exact:
-                undrafted = high - low if face.draft < zero_tol else 0.0
-            else:
-                heights = geo.points[mine][face.sample_drafts < zero_tol] @ pull
-                undrafted = float(heights.max() - heights.min()) if len(heights) else 0.0
+            # only a wall on the outline is split by the parting plane: a core's wall is one half's, whole
+            parting = height if geo.ref(face.ordinal) in run_up else None
             item = {"location": geo.ref(face.ordinal), "draft_deg": _r(face.draft, _JUDGED), "area_mm2": _r(area, 2),
                     "opens": face.opens, "surface": geo.surfaces[face.ordinal - 1].kind,
-                    "exact": face.exact, "depth_mm": _r(high - low, 3), "zero_draft_depth_mm": _r(undrafted, 3),
+                    "exact": face.exact, "depth_mm": _r(high - low, 3),
+                    "half_depth_mm": _r(_half_depth(face, low, high, pull, parting), 3),
+                    "width_mm": _r(_width_across(geo, face.ordinal, pull), 3),
+                    # a face that only turns through the pull is no wall along it: the wall's rules pass it by
+                    "feature": "turn" if face.turns else "wall",
                     "xyz": _centroid(geo, face.ordinal)}
+            if pull is not pulls[0] and not np.allclose(pull, pulls[0]):
+                item["pull_axis"] = [_r(v) for v in pull]   # an assembly's part judged along its own pull
             items.append(item)
-            mine = geo.owner == face.ordinal
             share = geo.weights[mine] / max(float(geo.weights[mine].sum()), 1e-12) * area
             for lo_deg, hi_deg in zip(edges[:-1], edges[1:]):
                 if hi_deg <= lo_deg:
@@ -671,7 +799,8 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
     items.sort(key=lambda item: (item["draft_deg"], -(item["area_mm2"] or 0)))
     zero_faces.sort(key=lambda face: -(face["area_mm2"] or 0))
     result: dict[str, Any] = {
-        "pull_axis": [_r(v) for v in pull], "wall_limit_deg": wall_limit, "zero_tol_deg": zero_tol,
+        "pull_axis": [_r(v) for v in pulls[0]] if pulls else None,
+        "wall_limit_deg": wall_limit, "zero_tol_deg": zero_tol,
         "wall_area_mm2": _r(wall, 2), "wall_area_pct_of_surface": _r(100 * wall / total, 1) if total else 0.0,
         "non_wall_area_mm2": _r(total - wall, 2), "wall_draft_histogram_mm2": histogram,
         "wall_area_by_opening_mm2": {key: _r(value, 2) for key, value in opening.items()},
@@ -685,9 +814,14 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
         "items": items[:_ITEMS],
         "method": ("per face on the B-rep: a plane's angle to the pull exactly, a cylinder's or cone's whose axis "
                    "runs along the pull exactly (zero, the half-angle), any other face the least over points "
-                   "sampled on it and along its edges; faces at or above wall_limit_deg are not walls"),
+                   "sampled on it and along its edges; faces at or above wall_limit_deg are not walls. feature: "
+                   "turn for a face the parting line crosses that only turns through the pull (a round, a "
+                   f"sphere: under {_TURN_SHARE:g} of its area has less than {_TURN_DRAFT_DEG:g} deg), which is "
+                   "no wall along it; half_depth_mm: how deep the face runs in one mold half (either side of the "
+                   "parting plane) with its least draft; width_mm: its greatest extent square to the pull; broad: "
+                   f"a wall of the part's shell, at least {BROAD_WALLS:g} nominal walls wide"),
     }
-    measured = [item for item in items if item["opens"] != "split"]
+    measured = [item for item in items if item["feature"] != "turn"]
     if measured:
         worst = measured[0]
         result["min_wall_draft"] = {"draft_deg": worst["draft_deg"], "area_mm2": worst["area_mm2"],
@@ -904,8 +1038,8 @@ def _own_directions(geo: _Geometry, faces: list[int]) -> list[np.ndarray]:
     """The directions a feature's own faces (``faces``, the ones that name it first) give a slide to try
     (``ops.slide_directions``): a bore's axis (a cylinder's, a cone's), a slot's run (square to two of its planes'
     normals, where they meet), a plane's normal (a pocket's floor) -- exact, where the eight directions round the
-    parting plane are a grid the feature need not lie on (a hole drilled 20 degrees off x, a slot in a part whose
-    own frame is a twelfth of a degree off its walls)."""
+    parting plane are a grid the feature need not lie on (a hole drilled 20 degrees off x, a slot in a part
+    turned a twelfth of a degree in its model)."""
     axes, normals = [], []
     for face in faces[:8]:
         surface = geo.surfaces[face - 1]
@@ -985,25 +1119,40 @@ def _stroke(geo: _Geometry, release: dict[str, Any], index: np.ndarray) -> float
     return stroke
 
 
+_UNSEARCHED = {"release": "unknown", "kind": None, "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
+
+
 def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: bool = True,
-                   depth: bool = True) -> dict[str, Any]:
+                   depth: bool = True, budget: _Budget | None = None) -> dict[str, Any]:
+    """One part's trapped features along ``pull`` and, with ``classify``, what releases each.
+
+    The search is budgeted (``budget``: rays and seconds), and spends the budget on verdicts before figures.
+    First every feature, the largest first, is asked what releases it -- cheap: a ray a point along each slide
+    -- and one nothing releases is read in full at once (confirmed on denser points, its depth against the pull
+    and its lip against a slide: it fails the part, so no budget cuts it short). Then, while the budget lasts,
+    the released features' figures: a slide's stroke, the depth against the pull that tells a bump-off. A
+    feature the budget ran out before is ``unknown`` (counted, never passed); one whose figures it ran out
+    before keeps its release and says no stroke or depth."""
+    key = (tuple(np.round(pull, 12)), zero_tol, classify, depth)
+    if key in geo._undercut:   # an assembly's part: read once to choose its pull, kept for its report
+        return geo._undercut[key]
+    budget = budget if budget is not None else _Budget()
     trapped = _trap(geo, pull, zero_tol)
-    items: list[dict[str, Any]] = []
     kept: list[np.ndarray] = []
     slides: list[np.ndarray] = []
     unconfirmed = 0
-    spent = [0]
 
     def counted(origins: np.ndarray, directions: np.ndarray) -> np.ndarray:
-        spent[0] += len(origins)
+        budget.rays -= len(origins)
         return geo.cast(origins, directions)
 
     # The largest features first: a part of hundreds of them (a connector's contacts) spends its release
-    # rays (_RELEASE_RAYS) on the largest, and says which it did not search ("unknown").
+    # budget on the largest, and says which it did not search ("unknown").
     features = _features(geo, trapped)
+    budget.searching(True)
+    found: list[tuple] = []   # per feature kept: its item, its mask, its release, the points it was read on
     for mine in sorted(features, key=lambda mask: -float(geo.weights[mask].sum())):
         group = sorted({int(face) for face in geo.owner[mine]})
-        index = np.nonzero(mine)[0]
         area = float(geo.weights[mine].sum())
         per_face = {face: float(geo.weights[mine & (geo.owner == face)].sum()) for face in group}
         # The face that best names the undercut: the largest of those mostly trapped (a snap's underside,
@@ -1016,38 +1165,50 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
                                 "trapped_area_mm2": _r(area, _JUDGED), "xyz": _xyz(geo.points[mine].mean(axis=0)),
                                 "blocked_by": [geo.ref(face) for face in
                                                sorted({int(f) for f in trapped.blocker[mine] if f and f not in group})]}
-        if classify:
-            if spent[0] < _RELEASE_RAYS:
-                own = _own_directions(geo, sorted(whole, key=lambda f: -whole[f])
-                                      + sorted(set(per_face) - set(whole), key=lambda f: -per_face[f]))
-                options = {"scale": geo.diagonal, "zero_tol_deg": zero_tol, "own": own, "box": (geo.lo, geo.hi),
-                           "lip_limit": 2.0 * BUMP_OFF_MM, "depth": depth}
-                release = ops.classify_undercut(geo.points[mine] + geo.normals[mine] * geo.eps, geo.normals[mine],
-                                                pull, counted, **options)
-                release["stroke_mm"] = _stroke(geo, release, index)
-                fields = _release_fields(release, geo.points[mine], pull)
-                if fields["release"] == "none" and len(index) < _CONFIRM_UNDER:
-                    # An error to be: read again on denser points before it is said (``_CONFIRM_UNDER``).
-                    points, normals = _denser(geo, mine, pull, zero_tol)
-                    if len(points) < _CONFIRM_POINTS:
-                        unconfirmed += 1
-                        continue
-                    release = ops.classify_undercut(points + normals * geo.eps, normals, pull, counted, **options)
-                    fields = _release_fields(release, points, pull)
-                    item["confirmed_points"] = len(points)
-            else:
-                release = {"release": "unknown", "kind": None, "directions": [], "vectors": [], "angled": [],
-                           "stroke_mm": None}
-                fields = _release_fields(release, geo.points[mine], pull)
+        release, points, normals, options = None, geo.points[mine], geo.normals[mine], {}
+        if classify and not budget:
+            release = dict(_UNSEARCHED)
+        elif classify:
+            own = _own_directions(geo, sorted(whole, key=lambda f: -whole[f])
+                                  + sorted(set(per_face) - set(whole), key=lambda f: -per_face[f]))
+            options = {"scale": geo.diagonal, "zero_tol_deg": zero_tol, "own": own, "box": (geo.lo, geo.hi),
+                       "lip_limit": 2.0 * BUMP_OFF_MM}
+            release = ops.classify_undercut(points + normals * geo.eps, normals, pull, counted, **options,
+                                            depth=False, stroke=False)
+            if release["release"] == "none" and len(points) < _CONFIRM_UNDER:
+                # An error to be: read again on denser points before it is said (``_CONFIRM_UNDER``).
+                points, normals = _denser(geo, mine, pull, zero_tol)
+                if len(points) < _CONFIRM_POINTS:
+                    unconfirmed += 1
+                    continue
+                release = ops.classify_undercut(points + normals * geo.eps, normals, pull, counted, **options,
+                                                depth=False, stroke=False)
+                item["confirmed_points"] = len(points)
+            if release["release"] == "none" and depth:
+                release.update(ops.pull_depth(points + normals * geo.eps, normals, pull, counted, scale=geo.diagonal,
+                                              zero_tol_deg=zero_tol))
+        found.append((item, mine, release, points, normals, options))
+        kept.append(mine)
+    items = []
+    for item, mine, release, points, normals, options in found:
+        if release is not None:
+            if release["release"] == "side_action" and budget:
+                release = ops.classify_undercut(points + normals * geo.eps, normals, pull, counted, **options,
+                                                depth=depth)
+                if "confirmed_points" not in item:   # the feature's own sampled points: its faces' ends are known
+                    release["stroke_mm"] = _stroke(geo, release, np.nonzero(mine)[0])
+            elif release["release"] in ("lifter", "collapsible_core") and depth and budget:
+                release.update(ops.pull_depth(points + normals * geo.eps, normals, pull, counted, scale=geo.diagonal,
+                                              zero_tol_deg=zero_tol))
+            fields = _release_fields(release, points, pull, measured=depth)
             item.update(fields)
             # what the rule of features nothing releases reads: the area, none where it is released, and no
             # figure where its release was not searched (not measured, never passed)
             item["unreleasable_area_mm2"] = {"none": item["trapped_area_mm2"], "unknown": None}.get(fields["release"], 0.0)
-            item["leaning"] = ", ".join(geo.ref(face).rsplit("/", 1)[-1] for face in sorted(whole or per_face))
             if fields["release"] == "side_action":
                 slides.extend(np.asarray(vector, dtype=float) for vector in release["vectors"])
         items.append(item)
-        kept.append(mine)
+    budget.searching(False)
     groups = [sorted({int(face) for face in geo.owner[mask]}) for mask in kept]
     in_group = np.isin(geo.owner, [face for group in groups for face in group])
     trapped_mask = np.logical_or.reduce(kept) if kept else np.zeros(len(geo.points), dtype=bool)
@@ -1065,12 +1226,14 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
     for vector in slides:
         if not any(float(vector @ other) > math.cos(math.radians(1.0)) for other in distinct):
             distinct.append(vector)
-    return {"items": items, "groups": groups, "area": float(geo.weights[trapped_mask].sum()),
-            "surface": float(geo.areas.sum()),
-            "faces": len({int(f) for f in geo.owner[trapped_mask]}), "leaning": float(geo.weights[leaning].sum()),
-            "zero": float(geo.weights[zero].sum()), "largest": largest_faces,
-            "slides": [ops.direction_name(vector) for vector in distinct], "unconfirmed": unconfirmed,
-            "crevices": _crevices(geo, trapped)}
+    geo._undercut[key] = {
+        "items": items, "groups": groups, "area": float(geo.weights[trapped_mask].sum()),
+        "surface": float(geo.areas.sum()),
+        "faces": len({int(f) for f in geo.owner[trapped_mask]}), "leaning": float(geo.weights[leaning].sum()),
+        "zero": float(geo.weights[zero].sum()), "largest": largest_faces,
+        "slides": [ops.direction_name(vector) for vector in distinct], "unconfirmed": unconfirmed,
+        "crevices": _crevices(geo, trapped)}
+    return geo._undercut[key]
 
 
 def _crevices(geo: _Geometry, trapped: _Trapped) -> list[dict[str, Any]]:
@@ -1086,7 +1249,10 @@ def _crevices(geo: _Geometry, trapped: _Trapped) -> list[dict[str, Any]]:
             for (a, b), pair in sorted(found.items(), key=lambda kv: -kv[1]["area"])]
 
 
-def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarray) -> dict[str, Any]:
+def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarray, measured: bool = True
+                    ) -> dict[str, Any]:
+    """An undercut item's fields of its release. ``measured``: its depth against the pull was asked for (a pull
+    only compared asks none), so one without it ran out of budget and says so."""
     vectors = release.get("vectors") or []
     if vectors:
         side = np.asarray(vectors[0], dtype=float)
@@ -1113,7 +1279,9 @@ def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarra
               "angled": any(release.get("angled") or []), "stroke_mm": stroke,
               "height_mm": _r(float(heights.max() - heights.min()), 3),
               "width_mm": _r(float(widths.max() - widths.min()), 3)}
-    fields["depth_said"] = "its depth unmeasured (the part's release budget spent)"
+    fields["depth_said"] = "its depth unmeasured (the release search's budget spent)"
+    if measured and found != "unknown":
+        fields["figures_measured"] = depth is not None and (found != "side_action" or stroke is not None)
     if depth is not None:
         fields["depth_mm"] = _r(depth, 4)
         fields["depth_said"] = (f"at least {mm(_r(depth, 3))} mm deep against the pull"
@@ -1129,10 +1297,8 @@ def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarra
     return fields
 
 
-def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
-               parts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    if parts is None:
-        parts = [_undercut_part(geo, pull, zero_tol) for geo in geos]
+def _undercuts(geos: list[_Geometry], pull: np.ndarray, parts: list[dict[str, Any]]) -> dict[str, Any]:
+    """The undercuts family of each part's own (``parts``: ``_undercut_part``); ``pull``: the pull said."""
     items = sorted((item for part in parts for item in part["items"]), key=lambda item: -(item["trapped_area_mm2"] or 0))
     # A total counts a part once for each time it occurs (``Part.occurrences``: each occurrence is its own molded
     # part, with its own slides); the items are the features measured, each once.
@@ -1221,8 +1387,9 @@ def _thickness_subset(geo: _Geometry) -> np.ndarray:
 def _thickness_part(geo: _Geometry) -> _Thickness:
     subset = _thickness_subset(geo)
     points, normals, owner = geo.points[subset], geo.normals[subset], geo.owner[subset]
-    # the exact ray straight through, cast from just inside the face
-    ray = geo.cast(points - normals * geo.eps, -normals) + geo.eps
+    # the exact ray straight through, cast from just inside the face, and the face it comes out of
+    ray, ray_face = geo.cast_faces(points - normals * geo.eps, -normals)
+    ray = ray + geo.eps
     vertices, triangles, owners = geo.mesh
     cap = np.full(len(geo.points), np.inf)
     for ordinal, surface in enumerate(geo.surfaces, start=1):
@@ -1237,6 +1404,10 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
     bound_all = np.full(len(geo.points), -1, dtype=int)
     bound_all[subset] = bound
     bound = bound_all
+    # the face each point's wall ends on: the one whose triangle holds its ball, else the one its ray comes out of
+    far = np.zeros(len(geo.points), dtype=int)
+    far[subset] = ray_face
+    far = np.where(bound >= 0, owners[np.maximum(bound, 0)], far)
     convex: dict[int, set[int]] = {}
     for edge in geo.edges:
         a, b = edge.faces
@@ -1264,13 +1435,20 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         # Narrow: a face the ball cannot sit on -- most of its points held by a face round a convex edge (a
         # rib's top, a plate's end). A face merely narrow is read as it is: its balls are its own wall.
         narrow = float(w[tidy].sum()) < 0.3 * float(w.sum())
+        own = across = None
         if narrow:
             median = low = float(v.max())
         else:
             # Most of the face is clear of its outside edges: the area median of those points.
             median, low = ops.weighted_median(v[tidy], w[tidy]), ops.weighted_quantile(v[tidy], w[tidy], 0.1)
+            own = median
+            met = far[mine][tidy]
+            seen, counts = np.unique(met[met > 0], return_counts=True)
+            across = int(seen[np.argmax(counts)]) if len(seen) else None
+        # ``own``: the face's own wall (its balls' area median, never a neighbour's, never one refined point);
+        # ``across``: the face that wall ends on
         per_face[ordinal] = {"median": median, "low": low, "max": float(v[top]), "at": geo.points[mine][top],
-                             "narrow": narrow}
+                             "narrow": narrow, "own": own, "across": across}
     links = geo.neighbours()
     nearest = ops.nearest_broad_all(list(range(1, len(geo.faces) + 1)),
                                     lambda face: [o for o, _e in links.get(face, [])],
@@ -1294,7 +1472,33 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         _refine_thin(geo, per_face, bound, owners, links)
         if nominal:
             _refine_thick(geo, per_face, float(nominal), cap, convex, values)
+        _broad(geo, per_face)
     return _Thickness(values, held, nominal, per_face)
+
+
+def _broad(geo: _Geometry, per_face: dict[int, dict[str, Any]]) -> None:
+    """Which faces bound a broad wall (``broad``), and each face's width (``width``: the lesser of its second
+    extent -- of its points' own axes, so a rectangle's short side and a tube's diameter -- and four times its
+    area over its outline, which a ring or a grille keeps to its strips). A broad wall is one whose own reading is
+    a wall's thickness and not a feature's width: the face is no narrow one, it and the face across are each at
+    least ``BROAD_WALLS`` of its wall wide. A text stroke's side, a ridge's crest, a gear tooth's land, a snap's
+    barb and a living hinge's web are none: the melt reaches across them from the wall beside."""
+    outline: dict[int, float] = {}
+    for edge in geo.edges:
+        for face in edge.faces:
+            outline[face] = outline.get(face, 0.0) + float(edge.length)
+    for ordinal, face in per_face.items():
+        points = geo.vertices(ordinal)
+        extents = np.sort(np.ptp((points - points.mean(axis=0)) @ np.linalg.svd(
+            points - points.mean(axis=0), full_matrices=False)[2].T, axis=0))[::-1]
+        across = float(extents[1]) if len(extents) > 1 else 0.0
+        face["width"] = min(across, 4.0 * float(geo.areas[ordinal - 1]) / outline[ordinal]) if outline.get(ordinal) \
+            else across
+    for face in per_face.values():
+        other = per_face.get(face["across"]) if face["across"] else None
+        least = _BROAD_CLEAR * BROAD_WALLS * face["own"] if face["own"] else math.inf
+        face["broad"] = bool(face["width"] >= least and other is not None and not other["narrow"]
+                             and other["width"] >= least)
 
 
 #: Faces whose thickest sampled ball reaches this share of the nominal wall, and is still under the thick-section
@@ -1502,7 +1706,11 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
                     "nominal_mm": _r(nominal, _LENGTH),
                     "ratio_to_nominal": _r(_length(face["max"]) / _length(nominal), _JUDGED),
                     "thin_ratio": _r((face["median"] or 0) / nominal, 3), "feature": "wall",
-                    "refined": bool(face.get("refined")), "xyz": _xyz(face["at"])}
+                    "refined": bool(face.get("refined")), "width_mm": _r(face.get("width"), 3),
+                    "broad": bool(face.get("broad")),
+                    "broad_wall_mm": _r(face["own"], _LENGTH) if face.get("broad") else None,
+                    **({"across": geo.ref(face["across"])} if face.get("across") else {}),
+                    "xyz": _xyz(face["at"])}
             items.append(item)
             medians.append(face["median"])
             lows.append(face["low"])
@@ -1537,7 +1745,11 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
                    "a face's thickness_mm is the area median of its points, min_mm the 10th percentile, max_mm "
                    "the most; the nominal wall is the area median over the part, leaving out the points held by "
                    "a face round a convex edge (they read low); feature: a rib's or a boss's face (their rules "
-                   "judge them, the wall's range does not), else wall"),
+                   "judge them, the wall's range does not), else wall; broad_wall_mm: the face's own wall (the "
+                   "area median of its own balls, no neighbour's and no refined point) where it bounds a broad "
+                   f"wall -- it and the face across (across) each at least {BROAD_WALLS:g} of that wall wide "
+                   "(width_mm: its second extent, or four times its area over its outline if less) -- which is what the floor of walls too "
+                   "thin to fill judges"),
     }
     if len(nominals) > 1:
         result["per_part"] = nominals
@@ -2037,21 +2249,69 @@ def _envelope(projected: list[dict[str, Any]], partings: list[dict[str, Any]] | 
 
 
 def _turns(geo: _Geometry, face: _FaceDraft, pull: np.ndarray) -> list[float]:
-    """The heights along the pull at which a split face turns through it."""
+    """The heights along the pull at which a split face turns through it: its silhouette's. Exact for a sphere
+    (its centre's), for a cylinder or a cone whose axis is square to the pull (the axis's: its two silhouette
+    lines lie level with it) and for a torus about the pull; on any other face, where the normal turns through
+    the pull along an edge of the face's own triangulation -- the place found on the surface itself, between the
+    edge's ends (``_silhouette``). A handle lofted through ellipses and split at its widest reads one height,
+    as a barb turned about its axis does, where its least-drafted sampled points read a band of them."""
     surface = geo.surfaces[face.ordinal - 1]
-    if surface.kind == "sphere" and surface.origin is not None:
+    axis = None if surface.axis is None else abs(float(np.asarray(surface.axis) @ pull))
+    if surface.origin is not None and (
+            surface.kind == "sphere" or (surface.kind in ("cylinder", "cone") and axis is not None and axis < 1e-9)
+            or (surface.kind == "torus" and axis is not None and abs(axis - 1.0) < 1e-9)):
         return [float(np.asarray(surface.origin) @ pull)]
-    if surface.kind == "cylinder" and surface.axis is not None and abs(float(np.asarray(surface.axis) @ pull)) < 1e-9:
-        return [float(np.asarray(surface.origin) @ pull)]
-    if surface.kind == "torus" and surface.axis is not None and \
-            abs(abs(float(np.asarray(surface.axis) @ pull)) - 1.0) < 1e-9:
-        return [float(np.asarray(surface.origin) @ pull)]
+    found = _silhouette(geo.faces[face.ordinal - 1], pull)
+    if found:
+        return found
     mine = geo.owner == face.ordinal
     points, along = geo.points[mine], geo.normals[mine] @ pull
     if not len(points):
         return []
     order = np.argsort(np.abs(along))[: max(2, len(points) // 10)]
     return [float(value) for value in points[order] @ pull]
+
+
+def _silhouette(face: Any, pull: np.ndarray) -> list[float]:
+    """The heights along ``pull`` of a face's silhouette: over the edges of its triangulation whose two ends'
+    normals lean opposite ways along the pull, the surface point between them where the normal is square to it
+    (found in the face's (u, v) along the edge, by false position). Empty where the face has no triangulation
+    with (u, v)."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepGProp import BRepGProp_Face
+    from OCP.TopLoc import TopLoc_Location
+
+    triangulation = BRep_Tool.Triangulation_s(face.wrapped, TopLoc_Location())
+    if triangulation is None or not triangulation.HasUVNodes():
+        return []
+    props = BRepGProp_Face(face.wrapped)
+    uv = np.array([(triangulation.UVNode(i).X(), triangulation.UVNode(i).Y())
+                   for i in range(1, triangulation.NbNodes() + 1)])
+
+    def lean(at: np.ndarray) -> tuple[float, float]:
+        point, normal = _dfm_brep.point_normal(face, float(at[0]), float(at[1]), props)
+        return float(normal @ pull), float(point @ pull)
+
+    leans = [lean(at)[0] for at in uv]
+    corners = np.array([triangulation.Triangle(i).Get() for i in range(1, triangulation.NbTriangles() + 1)]) - 1
+    edges = {(min(a, b), max(a, b)) for triangle in corners for a, b in zip(triangle, np.roll(triangle, 1))}
+    heights = []
+    for a, b in sorted(edges):
+        low, high = leans[a], leans[b]
+        if low * high >= 0.0:
+            continue
+        start, end = 0.0, 1.0
+        for _ in range(8):
+            middle = start + (end - start) * low / (low - high)
+            value, height = lean(uv[a] + middle * (uv[b] - uv[a]))
+            if abs(value) < 1e-9:
+                break
+            if value * low > 0.0:
+                start, low = middle, value
+            else:
+                end, high = middle, value
+        heights.append(height)
+    return heights
 
 
 def _parting_part(geo: _Geometry, drafts: list[_FaceDraft], projection: dict[str, Any], vertices: np.ndarray,
@@ -2172,10 +2432,67 @@ def _mark_partial(report: dict[str, Any]) -> None:
     report["partial_sections"] = sections
 
 
-def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_tol: float,
-              rotation: np.ndarray | None = None) -> dict[str, Any]:
-    """Every family of ``geos`` along ``pull``; ``rotation``: the turn that put ``geos`` into their own frame
-    (``measure``), by which ``pull_check`` turns the world's axes into it."""
+def _trapped_faces(part: dict[str, Any]) -> set[int]:
+    return {face for group in part["groups"] for face in group}
+
+
+def _pulled(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float, zero_tol: float,
+            budget: _Budget, tracked: Any = None) -> tuple[dict[str, Any], list[list[_FaceDraft]], list[set[int]]]:
+    """The families that turn with the pull -- ``undercuts``, ``projection``, ``parting``, ``envelope`` and
+    ``draft`` (last: a wall's depth is read either side of the parting plane) -- each part along its own of
+    ``pulls``; with them each part's faces' drafts and its trapped faces."""
+    tracked = tracked or (lambda _names, fn, *args: _safe(fn, *args))
+    drafts = [_face_drafts(geo, pull, zero_tol) for geo, pull in zip(geos, pulls)]
+    report: dict[str, Any] = {}
+    under_parts = tracked(("undercuts",), lambda: [_undercut_part(geo, pull, zero_tol, budget=budget)
+                                                   for geo, pull in zip(geos, pulls)])
+    if isinstance(under_parts, dict):
+        report["undercuts"] = under_parts
+        trapped: list[set[int]] = [set() for _ in geos]
+    else:
+        report["undercuts"] = tracked(("undercuts",), _undercuts, geos, pulls[0], under_parts)
+        trapped = [_trapped_faces(part) for part in under_parts]
+    # Each part's projection, and its parting read off it at once: a part's raster (millions of cells on a
+    # detailed part) is dropped as soon as its parting is read, never every part's held together (phalanx's 107
+    # parts: 1 GB). A parting that fails is the family's error, as a projection that fails is both's.
+    partings: list[dict[str, Any]] | dict[str, Any] = []
+
+    def projections() -> list[dict[str, Any]]:
+        nonlocal partings
+        items = []
+        for geo, d, t, pull in zip(geos, drafts, trapped, pulls):
+            item, projection, vertices = _projection_part(geo, pull)
+            items.append(item)
+            if isinstance(partings, list):
+                found = _safe(_parting_part, geo, d, projection, vertices, pull, wall_limit, t)
+                if isinstance(found, dict) and set(found) == {"error"}:
+                    partings = found
+                else:
+                    partings.append(found)
+            del projection, vertices
+        return items
+
+    projected = _safe(projections)
+    lines = None
+    if isinstance(projected, dict):
+        report["projection"] = projected
+        report["parting"] = dict(projected)
+    else:
+        report["projection"] = _safe(_projection, projected, pulls[0])
+        report["parting"] = partings if isinstance(partings, dict) else _safe(_parting, partings, pulls[0])
+        report["envelope"] = _safe(_envelope, projected, None if isinstance(partings, dict) else partings)
+        if isinstance(partings, list):
+            # where each part's parting plane stands, and the walls on the outline it may run anywhere up
+            lines = [(part["height"], {item["location"] for item in part["items"] if item["kind"] == "wall"})
+                     for part in partings]
+    report["draft"] = tracked(("draft",), _draft, geos, drafts, pulls, wall_limit, zero_tol, lines)
+    return report, drafts, trapped
+
+
+def _families(geos: list[_Geometry], pulls: list[np.ndarray], wall_limit: float, zero_tol: float,
+              checks: list[dict[str, Any] | None] | None = None) -> dict[str, Any]:
+    """Every family of ``geos``, each part along its own pull of ``pulls``; ``checks``: each part's
+    ``pull_check`` where it was already asked (an assembly's parts, ``measure``)."""
     lost: dict[str, set[str]] = {}
 
     def tracked(names: tuple[str, ...], fn: Any, *args: Any) -> Any:
@@ -2189,16 +2506,8 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
             for name in names if refs else ():
                 lost.setdefault(name, set()).update(refs)
 
-    drafts = [_face_drafts(geo, pull, zero_tol) for geo in geos]
-    report: dict[str, Any] = {"scale": _scale(geos)}
-    report["draft"] = tracked(("draft",), _draft, geos, drafts, pull, wall_limit, zero_tol)
-    under_parts = tracked(("undercuts",), lambda: [_undercut_part(geo, pull, zero_tol) for geo in geos])
-    if isinstance(under_parts, dict):
-        report["undercuts"] = under_parts
-        trapped: list[set[int]] = [set() for _ in geos]
-    else:
-        report["undercuts"] = tracked(("undercuts",), _undercuts, geos, pull, zero_tol, under_parts)
-        trapped = [{face for group in part["groups"] for face in group} for part in under_parts]
+    pulled, drafts, trapped = _pulled(geos, pulls, wall_limit, zero_tol, _Budget(), tracked)
+    report: dict[str, Any] = {"scale": _scale(geos), "draft": pulled["draft"], "undercuts": pulled["undercuts"]}
     touching = tracked(("touching", "draft", "undercuts"),
                        lambda: {"items": [pair for geo in geos for pair in geo.touching]})
     if "error" in touching or touching["items"]:
@@ -2228,8 +2537,8 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
         named = {geo.ref(face): kind for geo, part in zip(geos, kinds) for face, kind in part.items()}
         for item in (report["thickness"].get("items") or []) if isinstance(report["thickness"], dict) else []:
             item["feature"] = named.get(item.get("location"), "wall")
-        # A rib's sides and ends are judged by its draft rules (molding.rib_draft, molding.draft_zero), once for
-        # the rib, not as walls face by face (``feature``).
+        # A rib's sides and ends are judged by its draft rule (molding.rib_draft), once for the rib, not as
+        # walls face by face (``feature``).
         sides = {face: item.get("kind") or "rib" for item in (report["ribs"].get("items") or [])
                  if isinstance(report["ribs"], dict)
                  for face in [*(item.get("faces") or [])[:2], *(item.get("ends") or [])]}
@@ -2237,42 +2546,30 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
         # draft along the pull is no wall's either, and the undercut's rule is its one finding.
         formed = {face for item in (report["undercuts"].get("items") or []) if isinstance(report["undercuts"], dict)
                   for face in item.get("trapped_faces") or ()}
+        # A wall of the part's shell is broad: clearly ``BROAD_WALLS`` nominal walls wide across the pull
+        # (``_BROAD_CLEAR``). A boss, a bore, a pin, a gear's tooth, a snap arm and a window's side are not: the
+        # draft floor is no rule of theirs.
+        nominal = {geo.ref(face): t.nominal for geo, t in zip(geos, thick) for face in range(1, len(geo.faces) + 1)}
         for item in (report["draft"].get("items") or []) if isinstance(report["draft"], dict) else []:
-            item["feature"] = sides.get(item.get("location"), "undercut" if item.get("location") in formed else "wall")
-    # Each part's projection, and its parting read off it at once: a part's raster (millions of cells on a
-    # detailed part) is dropped as soon as its parting is read, never every part's held together (phalanx's 107
-    # parts: 1 GB). A parting that fails is the family's error, as a projection that fails is both's.
-    partings: list[dict[str, Any]] | dict[str, Any] = []
-
-    def projections() -> list[dict[str, Any]]:
-        nonlocal partings
-        items = []
-        for geo, d, t in zip(geos, drafts, trapped):
-            item, projection, vertices = _projection_part(geo, pull)
-            items.append(item)
-            if isinstance(partings, list):
-                found = _safe(_parting_part, geo, d, projection, vertices, pull, wall_limit, t)
-                if isinstance(found, dict) and set(found) == {"error"}:
-                    partings = found
-                else:
-                    partings.append(found)
-            del projection, vertices
-        return items
-
-    projected = _safe(projections)
-    if isinstance(projected, dict):
-        report["projection"] = projected
-        report["parting"] = dict(projected)
-    else:
-        report["projection"] = _safe(_projection, projected, pull)
-        report["parting"] = partings if isinstance(partings, dict) else _safe(_parting, partings, pull)
-        report["envelope"] = _safe(_envelope, projected, None if isinstance(partings, dict) else partings)
-    if len(geos) == 1 and len(geos[0].part.solids()) == 1 and "error" not in report["draft"] and \
-            "error" not in report["undercuts"]:
-        # One part of one solid: does another pull do better? (An assembly's parts, a part's solids, each open
-        # their own way: no one pull to compare.)
-        report["pull_check"] = tracked(("pull_check",), _pull_check, geos, pull,
-                                       rotation if rotation is not None else np.eye(3), report, wall_limit, zero_tol)
+            where = item.get("location")
+            item["feature"] = sides.get(where, "undercut" if where in formed else item["feature"])
+            wall = nominal.get(where)
+            item["broad"] = bool(wall and item["width_mm"] is not None
+                                 and item["width_mm"] >= _BROAD_CLEAR * BROAD_WALLS * wall)
+    for name in ("projection", "parting", "envelope"):
+        if name in pulled:
+            report[name] = pulled[name]
+    solid = [len(geo.part.solids()) == 1 for geo in geos]
+    if "error" not in report["draft"] and "error" not in report["undercuts"]:
+        if checks is not None:
+            asked = [check for check in checks if check]
+            if asked:
+                report["pull_checks"] = asked
+        elif len(geos) == 1 and solid[0]:
+            # One part of one solid: does another pull do better? (A part's solids each open their own way: no
+            # one pull to compare.)
+            report["pull_check"] = tracked(("pull_check",), _pull_check, geos[0], pulls[0], report, wall_limit,
+                                           zero_tol)
     for name, refs in lost.items():
         family = report.get(name)
         if isinstance(family, dict) and "error" not in family:
@@ -2302,19 +2599,26 @@ def _unintersected(geos: list[_Geometry]) -> list[dict[str, Any]]:
     return [finding for finding in found if finding]
 
 
-def _principal_axes(geos: list[_Geometry]) -> list[np.ndarray]:
+#: Two moments of inertia within this share of each other leave the axes between them unread (a cube's three, a
+#: round part's two): the kernel's pick of one is no axis of the part, and no pull to offer.
+_ISOTROPIC = 1e-3
+#: The part's own directions offered as pulls: its faces' (planes' normals, cylinders' and cones' axes, gathered
+#: where they agree within ``_OWN_PULL_DEG``), the ``_OWN_PULLS`` of most area.
+_OWN_PULLS = 3
+_OWN_PULL_DEG = 1.0
+
+
+def _principal_axes(geo: _Geometry) -> list[np.ndarray]:
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
 
     props = GProp_GProps()
-    BRepGProp.VolumeProperties_s(geos[0].part.shape.wrapped, props)
+    BRepGProp.VolumeProperties_s(geo.part.shape.wrapped, props)
     principal = props.PrincipalProperties()
     moments = [float(moment) for moment in principal.Moments()]
     axes = []
     for index, getter in enumerate((principal.FirstAxisOfInertia, principal.SecondAxisOfInertia,
                                     principal.ThirdAxisOfInertia)):
-        # An axis whose moment another shares is any direction of their plane (a cube's three, a round part's
-        # two): the kernel's pick of it is no axis of the part, and no pull to offer.
         if any(abs(moments[index] - other) <= _ISOTROPIC * max(abs(moments[index]), abs(other), 1e-12)
                for k, other in enumerate(moments) if k != index):
             continue
@@ -2323,102 +2627,156 @@ def _principal_axes(geos: list[_Geometry]) -> list[np.ndarray]:
     return axes
 
 
+def _face_directions(geo: _Geometry) -> list[np.ndarray]:
+    """The directions most of the part's surface is square to or turns about: its planes' normals and its
+    cylinders' and cones' axes, as lines, gathered where they agree within ``_OWN_PULL_DEG`` (the largest face
+    of each naming it), most area first."""
+    near = math.cos(math.radians(_OWN_PULL_DEG))
+    found: list[list[Any]] = []   # [direction, area]
+    order = np.argsort(-geo.areas, kind="stable")
+    for index in order:
+        surface = geo.surfaces[index]
+        way = surface.normal if surface.kind == "plane" else surface.axis if surface.kind in ("cylinder", "cone") else None
+        if way is None:
+            continue
+        unit = np.asarray(way, dtype=float)
+        unit = unit / (np.linalg.norm(unit) or 1.0)
+        for entry in found:
+            if abs(float(entry[0] @ unit)) > near:
+                entry[1] += float(geo.areas[index])
+                break
+        else:
+            found.append([unit, float(geo.areas[index])])
+    return [entry[0] for entry in sorted(found, key=lambda entry: -entry[1])]
+
+
+def _own_pulls(geo: _Geometry, but: tuple[np.ndarray, ...] = ()) -> list[tuple[str, np.ndarray]]:
+    """The pulls the part offers of itself, whichever way it lies in its model: the ``_OWN_PULLS`` directions
+    most of its surface is square to or turns about (``_face_directions``: a tray's floor, a boss's axis) and its
+    principal axes of inertia that are none of them, less any along one of ``but``. Each points the way the
+    part's surface lies from its mass (an open box: toward its mouth), so the same part names the same pull
+    however it is turned, and is named by the world's axis where it runs along one (``x``), else by what gives
+    it (``face0``: the direction of most area; ``principal0``)."""
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    named: list[tuple[str, np.ndarray]] = []
+    try:
+        props = GProp_GProps()
+        BRepGProp.VolumeProperties_s(geo.part.shape.wrapped, props)
+        centre = props.CentreOfMass()
+        lean = (geo.points * geo.weights[:, None]).sum(axis=0) / max(float(geo.weights.sum()), 1e-12) - \
+            np.array([centre.X(), centre.Y(), centre.Z()])
+    except Exception:  # noqa: BLE001 - no centre of mass: each direction its largest component up
+        lean = np.zeros(3)
+
+    def offer(name: str, unit: np.ndarray, apart: float = 1.5e-4) -> None:
+        # one within a degree of one offered is the same, and so is a principal axis within a degree of a pull of
+        # ``but`` (an off-centre boss leans a part's axes a fraction of a degree: no other pull); a face's
+        # direction a hundredth of a degree off one is not (a part tilted a twentieth of a degree off its own
+        # floor is offered its floor's normal)
+        unit = unit / (np.linalg.norm(unit) or 1.0)
+        if any(abs(abs(float(unit @ other)) - 1.0) < 1.5e-4 for _name, other in named) or \
+                any(abs(abs(float(unit @ other)) - 1.0) < apart for other in but):
+            return
+        side = float(lean @ unit)
+        if abs(side) <= 1e-6 * geo.diagonal:
+            side = float(unit[int(np.argmax(np.abs(unit)))])  # no lean (a symmetric part): its largest component up
+        unit = unit if side > 0 else -unit
+        world = [axis for axis, value in zip("xyz", unit) if abs(abs(float(value)) - 1.0) < 1e-9]
+        named.append((world[0] if world else name, unit))
+
+    for index, unit in enumerate(_face_directions(geo)[:_OWN_PULLS]):
+        offer(f"face{index}", unit, 1.5e-8)
+    try:
+        for index, axis in enumerate(_principal_axes(geo)):
+            offer(f"principal{index}", axis)
+    except Exception:  # noqa: BLE001 - no inertia frame: the faces' directions alone
+        pass
+    return named
+
+
 def _pull_row(draft: dict[str, Any], under: dict[str, Any]) -> dict[str, Any]:
     """What a pull is ranked by (``molding.ranked``), of its draft and undercuts families."""
     return {"undercut_candidate_area_mm2": under["candidate_area_mm2"],
             "undercut_count": under["undercut_count"], "side_action_count": under["side_action_count"],
             "lifter_count": under["lifter_count"] + under["collapsible_core_count"],
-            "unreleasable_count": under["unreleasable_count"],
+            "unreleasable_count": under["unreleasable_count"], "unsearched_count": under["unsearched_count"],
             "wall_area_mm2": draft["wall_area_mm2"], "zero_draft_wall_area_mm2": draft["zero_draft_wall_area_mm2"],
             "min_wall_draft_deg": (draft.get("min_wall_draft") or {}).get("draft_deg")}
 
 
-def _named_pulls(geos: list[_Geometry], turn: np.ndarray, but: tuple[np.ndarray, ...] = ()) -> list[tuple[str, np.ndarray]]:
-    """The pulls ranked: the world's x, y and z (turned by ``turn`` into the frame ``geos`` stand in) and the
-    part's principal axes of inertia that are none of them, less any along one of ``but``."""
-    named: list[tuple[str, np.ndarray]] = []
+def _pull_check(geo: _Geometry, pull: np.ndarray, report: dict[str, Any], wall_limit: float, zero_tol: float
+                ) -> dict[str, Any]:
+    """Whether another pull does better for the part ``geo`` than the one measured (``molding.better_pull``).
 
-    def taken(unit: np.ndarray) -> bool:
-        return any(abs(abs(float(unit @ other)) - 1.0) < 1.5e-4 for other in (*but, *(axis for _name, axis in named)))
-
-    for name, axis in (("x", (1.0, 0.0, 0.0)), ("y", (0.0, 1.0, 0.0)), ("z", (0.0, 0.0, 1.0))):
-        unit = turn @ np.array(axis, dtype=float)
-        if not taken(unit):
-            named.append((name, unit))
-    try:
-        for index, axis in enumerate(_principal_axes(geos)):
-            unit = axis / (np.linalg.norm(axis) or 1.0)
-            if not taken(unit):
-                named.append((f"principal{index}", unit))
-    except Exception:  # noqa: BLE001 - no inertia frame: the world axes alone
-        pass
-    return named
-
-
-def _pull_check(geos: list[_Geometry], pull: np.ndarray, rotation: np.ndarray, report: dict[str, Any],
-                wall_limit: float, zero_tol: float) -> dict[str, Any]:
-    """Whether another pull does better than the one measured (``molding.better_pull``).
-
-    The measured pull's row is the report's own figures (one reading of it, never a second); x, y, z and the
-    part's principal axes are each read on the same sampled points, only as far as it can still do better
-    (``molding.dominates``, a figure not yet read taken at its best): its draft first (no ray), then what it traps,
-    then what releases that, then its parting. So a pull nothing beats costs nothing here -- nothing trapped and no wall without
-    draft: no pull is read at all -- and one that leaves a wall without draft is not searched for undercuts.
-    ``geos`` stand in the part's own frame (``rotation``): each axis is turned into it, and said in the world."""
+    The measured pull's row is ``report``'s own figures (one reading of it, never a second); the part's own
+    directions (``_own_pulls``: where its surface faces, its principal axes -- the same whichever way it lies in
+    its model, where the world's x, y and z are whatever the model made them) are each read on the same sampled
+    points, only as far as it can still do better (``molding.dominates``, a figure not yet read taken at its
+    best): its draft first (no ray), then what it traps, then what releases that, then its parting. So a pull
+    nothing beats costs nothing here -- nothing trapped and no wall without draft: no pull is read at all. The
+    candidates share one release budget (``_Budget``): one it ran out on is not read whole, and never named."""
     parting = report.get("parting") if isinstance(report.get("parting"), dict) else {}
+    geos = [geo]
     chosen = {"pull": ops.direction_name(pull), "axis": [_r(v) for v in pull], "measured": "full",
               **_pull_row(report["draft"], report["undercuts"]), "flat_parting": parting.get("flat_parting_possible")}
     if not dominates({"wall_area_mm2": chosen["wall_area_mm2"]}, chosen):
         return {"chosen": chosen, "candidates": [], "better": None,
                 "note": "nothing is trapped and no wall is without draft along this pull: no pull does better"}
     rows = []
-    for name, axis in _named_pulls(geos, rotation, (pull,)):
-        draft = _draft(geos, [_face_drafts(geo, axis, zero_tol) for geo in geos], axis, wall_limit, zero_tol)
-        row: dict[str, Any] = {"pull": name, "axis": [_r(v) for v in rotation.T @ axis], "measured": "draft",
+    budget = _Budget()
+    for name, axis in _own_pulls(geo, (pull,)):
+        drafts = [_face_drafts(geo, axis, zero_tol)]
+        draft = _draft(geos, drafts, axis, wall_limit, zero_tol)
+        row: dict[str, Any] = {"pull": name, "axis": [_r(v, 6) for v in axis], "measured": "draft",
                                "wall_area_mm2": draft["wall_area_mm2"],
                                "zero_draft_wall_area_mm2": draft["zero_draft_wall_area_mm2"],
                                "min_wall_draft_deg": (draft.get("min_wall_draft") or {}).get("draft_deg")}
         if dominates(row, chosen):
-            parts = [_undercut_part(geo, axis, zero_tol, classify=False) for geo in geos]
-            times = [geo.part.occurrences for geo in geos]  # as ``_undercuts`` totals them
-            row.update(undercut_candidate_area_mm2=_r(sum(n * part["area"] for n, part in zip(times, parts)), 2),
-                       undercut_count=sum(n * len(part["items"]) for n, part in zip(times, parts)),
+            parts = [_undercut_part(geo, axis, zero_tol, classify=False)]
+            row.update(undercut_candidate_area_mm2=_r(parts[0]["area"], 2), undercut_count=len(parts[0]["items"]),
                        measured="trapped")
             if not row["undercut_count"]:
                 row.update(side_action_count=0, lifter_count=0, unreleasable_count=0, measured="released")
             elif dominates(row, chosen):
                 # what releases them: no depth against the pull (only whether a lip frees a feature)
-                parts = [_undercut_part(geo, axis, zero_tol, depth=False) for geo in geos]
-                row.update(_pull_row(draft, _undercuts(geos, axis, zero_tol, parts)), measured="released")
+                parts = [_undercut_part(geo, axis, zero_tol, depth=False, budget=budget)]
+                row.update(_pull_row(draft, _undercuts(geos, axis, parts)))
+                if not row["unsearched_count"]:
+                    row["measured"] = "released"
             if row["measured"] == "released" and dominates(row, chosen):
                 # last, its parting: a pull that steps the parting line where this one's is flat does no better
-                drafts = [_face_drafts(geo, axis, zero_tol) for geo in geos]
-                flat = _parting([_parting_part(geo, d, *_projection_part(geo, axis)[1:], axis, wall_limit,
-                                               {face for group in part["groups"] for face in group})
-                                 for geo, d, part in zip(geos, drafts, parts)], axis)["flat_parting_possible"]
+                flat = _parting([_parting_part(geo, drafts[0], *_projection_part(geo, axis)[1:], axis, wall_limit,
+                                               _trapped_faces(parts[0]))], axis)["flat_parting_possible"]
                 row.update(flat_parting=flat, measured="full")
         rows.append(row)
     better = better_pull(chosen, rows)
-    return {"chosen": chosen, "candidates": rows, "better": better["pull"] if better else None,
-            "method": ("the measured pull's own figures against x, y, z and the part's principal axes, each read "
-                       "only as far as it can still do better (measured: draft, then trapped, released, full): no "
-                       "worse in features nothing releases, trapped area, actions, wall without draft and a flat "
-                       "parting, and better in one")}
+    return {"part": geo.part.owner or geo.part.name, "chosen": chosen, "candidates": rows,
+            "better": better["pull"] if better else None,
+            "method": ("the measured pull's own figures against the part's own directions (those most of its "
+                       "surface is square to or turns about, and its principal axes), each read only as far as it "
+                       "can still do better (measured: draft, then trapped, released, full): fewer features "
+                       "nothing releases, then less trapped area, fewer actions, less wall without draft, a "
+                       "flat parting")}
 
 
 def _candidates(geos: list[_Geometry], wall_limit: float, zero_tol: float) -> dict[str, Any]:
-    named = _named_pulls(geos, np.eye(3))
+    named = [(name, np.array(axis, dtype=float)) for name, axis in
+             (("x", (1.0, 0.0, 0.0)), ("y", (0.0, 1.0, 0.0)), ("z", (0.0, 0.0, 1.0)))]
+    if len(geos) == 1:
+        named += _own_pulls(geos[0], tuple(axis for _name, axis in named))
     rows = []
     for name, axis in named:
         def row(axis: np.ndarray = axis) -> dict[str, Any]:
             drafts = [_face_drafts(geo, axis, zero_tol) for geo in geos]
             draft = _draft(geos, drafts, axis, wall_limit, zero_tol)
             # a candidate pull is ranked by its releases: no depth against it (only whether a lip frees it)
-            parts = [_undercut_part(geo, axis, zero_tol, depth=False) for geo in geos]
-            under = _undercuts(geos, axis, zero_tol, parts)
+            budget = _Budget()
+            parts = [_undercut_part(geo, axis, zero_tol, depth=False, budget=budget) for geo in geos]
+            under = _undercuts(geos, axis, parts)
             projected = [_projection_part(geo, axis) for geo in geos]
-            parting = _parting([_parting_part(geo, d, p, v, axis, wall_limit,
-                                              {face for group in part["groups"] for face in group})
+            parting = _parting([_parting_part(geo, d, p, v, axis, wall_limit, _trapped_faces(part))
                                 for geo, d, (_i, p, v), part in zip(geos, drafts, projected, parts)], axis)
             below_1 = sum(value for key, value in draft["wall_draft_histogram_mm2"].items()
                           if float(key.split("-")[1].rstrip("deg")) <= 1.0)
@@ -2429,170 +2787,55 @@ def _candidates(geos: list[_Geometry], wall_limit: float, zero_tol: float) -> di
                     "depth_from_parting_mm": parting["depth_from_parting_mm"]}
 
         measured = _safe(row)
-        rows.append({"pull": name, "axis": [_r(v) for v in axis], **measured})
+        rows.append({"pull": name, "axis": [_r(v, 6) for v in axis], **measured})
     return {"wall_limit_deg": wall_limit, "zero_tol_deg": zero_tol,
-            "note": ("draft magnitude is the same for +axis and -axis pulls; the lean direction differs. principal* "
-                     "are the part's own principal axes of inertia: a part modelled off-axis was drafted about one"),
+            "note": ("draft magnitude is the same for +axis and -axis pulls; the lean direction differs. face* and "
+                     "principal* are the part's own directions (those most of its surface is square to or turns "
+                     "about; its principal axes of inertia): a part modelled off-axis was drafted about one"),
             "candidates": rows}
 
 
-# --- the part's own frame about the pull -----------------------------------------------------------------------
-
-#: Two in-plane moments of inertia within this share of each other leave the part's long direction unread: its
-#: faces' normals, four-fold, take it.
-_ISOTROPIC = 1e-3
-
-
-def _turn_about(pull: np.ndarray, angle: float) -> np.ndarray:
-    """The rotation by ``angle`` (radians) about ``pull``, a 3x3 matrix acting on column vectors."""
-    p = pull / (np.linalg.norm(pull) or 1.0)
-    k = np.array([[0.0, -p[2], p[1]], [p[2], 0.0, -p[0]], [-p[1], p[0], 0.0]])
-    return np.eye(3) + math.sin(angle) * k + (1.0 - math.cos(angle)) * (k @ k)
-
-
-def _frame_about(part: _dfm_brep.Part, pull: np.ndarray) -> np.ndarray:
-    """The rotation about ``pull`` that turns ``part`` into its own frame: its long direction in the parting
-    plane (the in-plane principal axis of least inertia; for a part as broad one way as the other, the four-fold
-    mean of its planes' normals) along the plane's first axis (``ops.basis``), the way its mass leans along it
-    first. A part turned about the pull in its model is then measured as drawn the other way: the same samples,
-    the same rays, the same figures. The identity where the frame cannot be read (or is the world's)."""
-    from OCP.BRepGProp import BRepGProp
-    from OCP.GProp import GProp_GProps
-
-    u, v = ops.basis(pull)
-    props = GProp_GProps()
-    BRepGProp.VolumeProperties_s(part.shape.wrapped, props)
-    if props.Mass() <= 0:
-        return np.eye(3)
-    matrix = props.MatrixOfInertia()
-    inertia = np.array([[matrix.Value(i, j) for j in (1, 2, 3)] for i in (1, 2, 3)])
-    centre = props.CentreOfMass()
-    centre = np.array([centre.X(), centre.Y(), centre.Z()])
-    plane = np.stack([u, v])
-    moments, axes = np.linalg.eigh(plane @ inertia @ plane.T)
-    faces = part.faces()
-    areas = np.array([float(face.area) for face in faces])
-    if moments[1] - moments[0] > _ISOTROPIC * max(abs(float(moments[1])), 1e-12):
-        angle = math.atan2(float(axes[1, 0]), float(axes[0, 0]))
-        turns = 2
-    else:
-        # As broad one way as the other: the planes' normals in the parting plane, four-fold (a square's sides).
-        c4 = s4 = 0.0
-        for face, area in zip(faces, areas):
-            surface = _dfm_brep.surface(face)
-            if surface.kind != "plane" or surface.normal is None:
-                continue
-            n = np.asarray(surface.normal, dtype=float)
-            x, y = float(n @ u), float(n @ v)
-            if x * x + y * y < 1e-6:
-                continue
-            phi = math.atan2(y, x)
-            weight = float(area) * (x * x + y * y)
-            c4 += weight * math.cos(4 * phi)
-            s4 += weight * math.sin(4 * phi)
-        if c4 * c4 + s4 * s4 < 1e-12 * max(float(areas.sum()), 1.0) ** 2:
-            return np.eye(3)
-        angle = math.atan2(s4, c4) / 4.0
-        turns = 4
-    # Which of the ``turns`` equivalent directions: the one the mass leans along (third moment of the faces' areas
-    # about the centre), else the one nearest the world's (a part drawn square stays as drawn).
-    centres = np.array([[(c := face.center()).X, c.Y, c.Z] for face in faces]) - centre
-    size = float(np.linalg.norm(centres, axis=1).max()) or 1.0
-    best, best_key = angle, None
-    for k in range(turns):
-        candidate = angle + 2 * math.pi * k / turns
-        d = math.cos(candidate) * u + math.sin(candidate) * v
-        lean = float((areas * (centres @ d) ** 3).sum()) / (max(float(areas.sum()), 1e-12) * size ** 3)
-        nearest = abs(math.remainder(candidate, 2 * math.pi))
-        key = (-round(lean, 6), round(nearest, 9))
-        if best_key is None or key < best_key:
-            best, best_key = candidate, key
-    if abs(math.remainder(best, 2 * math.pi)) < 1e-12:
-        return np.eye(3)
-    return _turn_about(pull, -best)
-
-
-def _framed(part: _dfm_brep.Part, rotation: np.ndarray) -> _dfm_brep.Part:
-    """``part`` turned by ``rotation`` (about the origin): the same faces and edges in the same ordinals, so every
-    ref is the part's own."""
-    import dataclasses
-
-    import build123d as bd
-    from OCP.gp import gp_Trsf
-    from OCP.TopLoc import TopLoc_Location
-
-    r = rotation
-    trsf = gp_Trsf()
-    trsf.SetValues(r[0, 0], r[0, 1], r[0, 2], 0.0, r[1, 0], r[1, 1], r[1, 2], 0.0, r[2, 0], r[2, 1], r[2, 2], 0.0)
-    moved = bd.Shape.cast(part.shape.wrapped.Moved(TopLoc_Location(trsf)))
-    return dataclasses.replace(part, shape=moved, _faces=None, _edges=None, _face_map=None, _edge_map=None,
-                               _edge_context={})
-
-
-def _side_back(name: Any, back: np.ndarray) -> Any:
-    """A side action's direction (``+x``, ``x,y,z``) named in the world again."""
-    if not isinstance(name, str):
-        return name
-    if name[:1] in "+-" and name[1:] in ("x", "y", "z"):
-        vector = np.zeros(3)
-        vector["xyz".index(name[1])] = 1.0 if name[0] == "+" else -1.0
-    else:
-        try:
-            vector = np.array([float(value) for value in name.split(",")])
-        except ValueError:
-            return name
-        if len(vector) != 3:
-            return name
-    return ops.direction_name(back @ vector)
-
-
-def _unframed(value: Any, back: np.ndarray, key: str = "") -> Any:
-    """``value`` (a report, or part of one) with every place and direction turned back by ``back``: each ``xyz``
-    (and ``*_xyz``), a list of them, and each side action's name."""
-    if isinstance(value, dict):
-        return {k: _unframed(v, back, k) for k, v in value.items()}
-    if key in ("side_actions", "side_action_directions") and isinstance(value, list):
-        return [_side_back(name, back) for name in value]
-    if key == "xyz" or key.endswith("_xyz"):
-        if isinstance(value, list) and len(value) == 3 and all(isinstance(x, (int, float)) for x in value):
-            return _xyz(back @ np.asarray(value, dtype=float))
-        if isinstance(value, list) and value and all(isinstance(x, list) for x in value):
-            return [_unframed(x, back, "xyz") for x in value]
-        return value
-    if isinstance(value, list):
-        return [_unframed(item, back, key) for item in value]
-    return value
+def _own_pull(geo: _Geometry, pull: np.ndarray, wall_limit: float, zero_tol: float, budget: _Budget
+              ) -> tuple[np.ndarray, dict[str, Any] | None]:
+    """The pull one part of an assembly is judged along, and its ``pull_check``: the assembly's ``pull`` unless
+    one of the part's own does better for it (``_pull_check``) -- an assembly's parts lie as they are assembled,
+    not as each is molded, so one pull is rarely every part's. ``budget``: the parts' release searches along
+    the assembly's pull share one (what each finds is kept for its report: ``_Geometry._undercut``)."""
+    if len(geo.part.solids()) != 1:
+        return pull, None
+    pulled = _pulled([geo], [pull], wall_limit, zero_tol, budget)[0]
+    if "error" in pulled["draft"] or "error" in pulled["undercuts"]:
+        return pull, None
+    check = _safe(_pull_check, geo, pull, pulled, wall_limit, zero_tol)
+    if "error" in check or not check.get("better"):
+        return pull, None
+    better = next(row for row in check["candidates"] if row["pull"] == check["better"])
+    return np.array(better["axis"], dtype=float), check
 
 
 def measure(document: _dfm_brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The molding report of ``document``: facts alone, every family's ``items`` at a ref.
 
-    Each part is measured in its own frame about the pull (``_frame_about``), so a part turned about the pull in its
-    model reads the same figures, and every place and side action is said in the world again (``_unframed``). An
-    assembly's parts, or a part of several solids, are measured as they stand: their frames are one another's."""
+    One part is measured along the pull. An assembly's parts are each measured along their own: the pull given
+    (or the default), unless one of the part's own directions does better for it (``_own_pull``; said in
+    ``pulls`` and by a finding), so a part that lies differently in the assembly is judged as it would be
+    molded, not failed for how it is assembled."""
     wall_limit, zero_tol = float(options["wall_limit"]), float(options["zero_tol"])
+    geos = [_Geometry(part, budget=_CANDIDATE_SAMPLES if candidates else _SAMPLES) for part in document.parts]
     if candidates:
-        geos = [_Geometry(part, budget=_CANDIDATE_SAMPLES) for part in document.parts]
         report = {"scale": _scale(geos), "pulls": _safe(_candidates, geos, wall_limit, zero_tol)}
     else:
         pull = ops.pull_vector(options.get("pull") or DEFAULT_PULL)
-        rotation = np.eye(3)
-        if len(document.parts) == 1 and len(document.parts[0].solids()) == 1:
-            try:
-                rotation = _frame_about(document.parts[0], pull)
-            except Exception:  # noqa: BLE001 - a frame the kernel cannot read: the world's
-                rotation = np.eye(3)
-        if np.allclose(rotation, np.eye(3), atol=1e-12):
-            geos = [_Geometry(part) for part in document.parts]
-            report = _families(geos, pull, wall_limit, zero_tol)
+        if len(geos) > 1:
+            budget = _Budget()
+            own = [_own_pull(geo, pull, wall_limit, zero_tol, budget) for geo in geos]
+            pulls = [axis / (np.linalg.norm(axis) or 1.0) for axis, _check in own]
+            report = _families(geos, pulls, wall_limit, zero_tol, [check for _axis, check in own])
+            report["pulls"] = [{"part": geo.part.owner or geo.part.name, "axis": [_r(v) for v in axis],
+                                "own": check is not None, **({"pull": check["better"]} if check else {})}
+                               for geo, (axis, check) in zip(geos, own)]
         else:
-            geos = [_Geometry(_framed(part, rotation)) for part in document.parts]
-            report = _families(geos, pull, wall_limit, zero_tol, rotation)
-            report = _unframed(report, rotation.T)
-            report["frame"] = {"rotation_about_pull_deg": _r(math.degrees(math.atan2(
-                float(rotation[1, 0]), float(rotation[0, 0]))), 6),
-                "note": "measured in the part's own frame about the pull (its long direction along the "
-                        "parting plane's first axis); every place and side action is the world's"}
+            report = _families(geos, [pull] * len(geos), wall_limit, zero_tol)
         report["pull_given"] = options.get("pull") is not None
     _mark_partial(report)
     # the faces the kernel failed to intersect a ray with, said at each part's own faces (each family it cost names
