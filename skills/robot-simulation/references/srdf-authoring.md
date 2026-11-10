@@ -47,7 +47,7 @@ An SRDF pairs with its URDF by **colocation and robot name** — nothing else:
 
 ## Names Come From the URDF Table
 
-Every `link`, `joint`, `base_link`, `tip_link`, `parent_link`, and group-state joint name must be copied from the extracted URDF table ([below](#extract-the-urdf-table)). Never type a name from memory or from a similar robot; near-miss names (`wrist_roll` vs `wrist_roll_joint`) are the most common SRDF defect and validation will reject them.
+Every `link`, `joint`, `base_link`, `tip_link`, `parent_link`, and group-state joint name must be copied from the extracted URDF table ([above](#extract-the-urdf-table)). Never type a name from memory or from a similar robot; near-miss names (`wrist_roll` vs `wrist_roll_joint`) are the most common SRDF defect and validation will reject them.
 
 ## Element Contract
 

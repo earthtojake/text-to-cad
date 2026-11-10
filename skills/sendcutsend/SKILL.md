@@ -39,8 +39,10 @@ A bend is a pair of cylindrical faces, inside and outside, whose radii differ by
 the smaller is the inside radius. Measure a hole-to-bend distance in the convention the SKU's rule
 uses (to the bend's tangent line, its centerline, or the flange's edge) and say which. For a fact
 `inspect` does not give, write a small check script and run it with `cad run`: `step.read` (`from cad
-import step`) for a STEP, `ezdxf` (`import ezdxf`, which comes with build123d) for a DXF. Do not use
-raw text parsing or other geometry backends for geometry facts.
+import step`) for a STEP, `ezdxf` (`import ezdxf`) for a DXF. `ezdxf` comes with the build123d
+integration, which a script that imports `ezdxf` alone does not get: name it in the script's header
+(`# /// script`, `# dependencies = ["cad[build123d]"]`, `# ///`). Do not use raw text parsing or
+other geometry backends for geometry facts.
 
 The design rules for bends, reliefs, flanges and holes near bends that hold for any shop (beyond
 SendCutSend's own numbers) are the cad skill's sheet-metal review, its

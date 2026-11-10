@@ -101,8 +101,10 @@ def complete(index: dict[tuple[str, str], list[Path]], kind: str, ref: str,
         parents = index.get((kind, chain[-1]["inherits"]))
         if not parents or len(chain) > 20:
             sys.exit(f"Can't resolve parent {chain[-1]['inherits']!r} of {kind} preset {chain[0].get('name')!r}.")
-        # A parent of the same name can exist under several vendors: take the one nearest the child.
-        path = max(parents, key=lambda parent: shared_path_depth(parent, path))
+        # A parent of the same name can exist under several vendors: take the one nearest the child, and of
+        # those equally near (a person's own preset is as near every vendor), the one listing the printer.
+        path = max(parents, key=lambda parent: (shared_path_depth(parent, path), printer is not None and printer[0]
+                                                in (read_preset(parent).get("compatible_printers") or [])))
         chain.append(read_preset(path))
     merged: dict = {}
     for layer in reversed(chain):

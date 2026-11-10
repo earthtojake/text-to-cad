@@ -155,6 +155,22 @@ class OrcaPresetsTests(unittest.TestCase):
             filament = json.loads((root / "out/filament-1.json").read_text(encoding="utf-8"))
             self.assertEqual(filament["filament_vendor"], ["Acme"])
 
+    def test_a_saved_filament_takes_the_parent_listing_the_printer(self) -> None:
+        # A person's own preset is as near every vendor's folder; "Able" sorts first.
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            for vendor, printer in (("Able", "Able Two 0.4 nozzle"), ("Acme", "Acme One 0.4 nozzle")):
+                write(root, f"{vendor}/filament/petg.json",
+                      {"type": "filament", "name": "Generic PETG", "from": "system", "instantiation": "true",
+                       "compatible_printers": [printer], "filament_vendor": [vendor]})
+            write(root, "user/default/filament/mine.json", {"type": "filament", "name": "My PETG", "from": "User",
+                                                            "inherits": "Generic PETG"})
+            index, _ = orca_presets.index_presets([root])
+            printer = ("Acme One 0.4 nozzle", root / "Acme/machine/acme.json")
+            filament, system = orca_presets.complete(index, "filament", "My PETG", printer)
+            self.assertEqual((filament["filament_vendor"], system), (["Acme"], "Generic PETG"))
+
     def test_a_preset_several_vendors_ship_and_none_lists_the_printer_is_the_nearest(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
