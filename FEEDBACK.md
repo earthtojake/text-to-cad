@@ -398,6 +398,104 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     glob's matches the outermost is taken. A leading `/`, or taking the shortest path
     when one match holds the others, would say it plainly.
 
+40. **A motion says what the joints do, not what a floor would hold.** A mechanism has one
+    fixed link, and a sequence is waypoints eased joint by joint under it. For a robot
+    that is the pelvis, so every motion I wrote slid its feet about in the air, and the
+    pictures looked right because `stances.py` and the film set a foot back on the floor
+    frame by frame. A MuJoCo model built from the same numbers (`models/galatea/sim/`)
+    showed what a floor makes of them: the squat went over backward (its two poses
+    balanced by 77 and 32 mm; the path between, each joint eased on its own, passed
+    within 8 mm of the heels' edge), the bow and the reach scrubbed their feet and left
+    the hips pushing up to 105 N m against the floor's friction, and the one-leg stand
+    lifted its foot before its weight had left it. Nothing in the tooling could have
+    said so: the document does not know which links stand on something. What I did:
+    a leg solver for feet that stay (`kin.standing`), the motions as paths of the pelvis
+    over them, sampled, and a check that follows each motion in time
+    (`checks/balance.py`). What would have helped: a word in the skill where it tells a
+    robot's builder to fix the base link ("the fixed link is a choice of frame: a motion
+    written under it needs checking in the frame of whatever the robot stands on"); a
+    `plant=<link>` on `cad model snapshot` and on the viewer's playbar, so that a motion
+    can be watched standing on a foot; and, further off, a sequence that names a second
+    link to keep still and solves the chain between.
+
+41. **A motion's ease is in the code, not the docs, and a function of time is hardly
+    mentioned.** `configuration_sequence`'s docstring says `cubic` is "eased in and out
+    at every waypoint"; to check a motion as the document plays it, and to feed a
+    simulator the same path, the formula had to be read out of
+    `cad/engine/mechanism.py` (`3 s^2 - 2 s^3` over each step). Either the formula there
+    or a call that samples a sequence (`handle.sequence("crouch").at(t)` to joint
+    values) would make a second consumer exact by construction. The same docstring's
+    best feature, that a sequence may be a function of time or a dense list of samples
+    with `linear`, deserves an example: it is what makes a closed-chain motion possible
+    at all.
+
+42. **A check that follows a build closely builds the whole model again.** After a change
+    to the motions my own environment built (cold, 420 s; on later edits warm, 2 s).
+    Three times a check with another dependency header then built the model again in
+    full in its own environment: `built ... warm in 377.89s: bodies 2 run; 6352 misses,
+    0 hits` (its worker was alive, with a memo that was no use to it), `built ... cold
+    in 356.35s`, and, ten minutes after two other environments had each built that very
+    state, `built ... warm in 358.68s` again with no hit. Twice a check in one of the
+    same environments got `took ... cold in 3.44s: the engine's cache holds the model's
+    key ... nothing ran` instead, once after another environment's build and once after
+    an export of the document. So the document was sometimes to be had for four seconds,
+    and eighteen minutes of a core went on it instead, beside a film render. I could not
+    find what decides it. A sub-agent's script met the same thing
+    earlier in the day, and its build then got my own worker retired for memory, warm
+    memo and all. What would have helped: the cached document taken before any build,
+    whichever worker asks; memoized stages kept on disk by their closure, as documents
+    are; and a line in the docs that the scripts of one project which call a model
+    should share one dependency header, and why (each header is an environment, each
+    environment a worker holding the whole model: five header variants over an afternoon
+    made five, and the engine's memory limit holds two or three).
+
+43. **A script cannot learn a model's materials or masses without its solids.**
+    A link's mass needs each part's density, and a simulator's meshes each part's look.
+    The way that works is `handle.shape`: every solid of the robot transferred into the
+    script (8 s, 1.5 GB resident) to read `node.material` off 689 leaves.
+    `cad model inspect <id> --query structure --json` has density by label in 3 s, but
+    not the look, and there is no Python call for either. `inspect` also gives a part's
+    volume, mass and bounds and stops there: a robot description needs the centre of
+    mass and the inertia tensor too, and `references/inertials.md` itself says the
+    kernel's are better than a mesh's. `handle.materials()` and mass properties in
+    `inspect` (a part's and an assembly's) would do.
+
+44. **There is no export for a simulator.** Three things in one: (a) no mesh per link.
+    `references/meshes.md` assumes each link is a model of its own; Galatea is one
+    assembly of 73 links with its joints in the document, so the engine knows each
+    link's parts and the joint that carries it, and the sim's `build.py` regroups the
+    GLB's nodes by link and moves each into its joint's frame in a hundred lines.
+    `cad model export <id> --links DIR` (one mesh per link in the frame of the joint
+    that carries it, optionally one per material) is the export a robot description
+    needs, for URDF as much as MJCF. (b) A mesh export can only get finer:
+    `export(tolerance=, angle=)` "meshes again at the finer of each". A simulator wants
+    the opposite: the default mesh is 2.55 million triangles, 83 % of them in the five
+    vendor drive solids, and `build.py` decimates to 413,000 in its own process. A
+    ceiling the other way, or a triangle budget per part, would remove that step.
+    (c) No OBJ. MuJoCo reads STL, OBJ and its own MSH; an STL has no normals, so a
+    curved panel is drawn faceted or an edge smoothed away, and the script writes OBJ
+    itself with normals it computes by crease angle.
+
+45. **MJCF is outside the robot-simulation skill.** The skill covers URDF, SRDF and SDF,
+    with a validator and a snapshot for each, and says to author the XML by hand. A URDF
+    cannot hold a closed chain (the knees and ankles are four-bars), which is why the
+    sim is MJCF with joint equalities, and 73 links with mesh-derived inertials are not
+    hand-authored. A reference for MJCF's frames (a body's `pos` in its parent, a joint
+    in its child, `fullinertia`), for closing a linkage with `equality`, and a word on
+    when a generator is the right tool, would have saved an hour; `cad mjcf validate`
+    and `snapshot` in the long run. `references/inertials.md`'s recipe is also one mesh
+    at one density: a link of dozens of parts in several materials, some of them bought
+    drives weighed at their maker's mass, needs each part integrated at its own density
+    and the tensors carried to the link's centre of mass, and the reference could show
+    that sum.
+
+46. **Nothing says which build a derived file came from.** The model's id stayed the same
+    through two rebuilds by two sessions, so a file that records the id (the MJCF's
+    header, a GLB beside a film) says which model and not which state of it. The
+    closure's key on the handle, or printed on the `built ...` line, would let a derived
+    file name its source exactly, and would have told me at a glance whether the GLB a
+    render was reading had the old motions or the new.
+
 ## What worked well
 
 - `@memo` on the shared stage: nine models in 90 s, a pose edit in 0.6 s.
@@ -438,3 +536,15 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 - `cad model snapshot --job` with a list of jobs draws the viewer's own display modes
   (`solid` with the grid, `parts`, `xray`, `exploded`) at any pose from any camera:
   120 frames of plain CAD footage for the film from one short script, 3.7 s a frame.
+- A pose can be looked at before the model has it: `cad model snapshot --job` with
+  `jointValues` drew sixteen pictures of eight new poses on the document the engine
+  already held, in 66 s, while the sources were mid-edit and a render had the machine.
+- A motion as dense samples: five motions of 40 to 63 waypoints, 72 joints each, went
+  into the document without complaint; the warm rebuild that took them was 2.45 s
+  (`rebuilt: lib/rig.py: POSES changed`, which is the right thing to be told), and the
+  GLB with all ten clips exported in 57 s.
+- `cad run` with a PEP 723 header gave a script MuJoCo 4.0.0 beside cad in a few seconds,
+  once; a script that never touches cad runs the same way and loads no kernel. The
+  robot-simulation skill's discipline (the ledger at the top of the file, "never type an
+  inertia", the sanity gates of `references/inertials.md`, a mesh in its link's frame)
+  carried over to a format the skill does not cover.

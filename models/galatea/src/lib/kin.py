@@ -1,6 +1,7 @@
-"""Galatea's kinematics in plain numbers: the joint tree, the couplings, forward kinematics
-and the leg's planar inverse kinematics. Nothing here touches the CAD kernel, so the
-poses, the motions and the checks all compute with it.
+"""Galatea's kinematics in plain numbers: the joint tree, the couplings, forward kinematics,
+the leg's planar inverse kinematics, and the legs solved over feet that stay where they stand
+on a floor. Nothing here touches the CAD kernel, so the poses, the motions and the checks
+all compute with it.
 
 A pose is a mapping of controls to values: a joint's label to degrees, or a coupling's
 name to its value (a knee or an ankle in degrees, a finger's curl from 0 to 1).
@@ -9,8 +10,8 @@ name to its value (a knee or an ankle in degrees, a finger's curl from 0 to 1).
 import math
 
 from .dims import (
-    CENTRE_JOINTS, CENTRE_LINKS, FINGER_CURL, FINGERS, hand_joints, hip_can_reach, HIP_X, mirror_joint, SHIN_LEN,
-    SIDE_JOINTS, THIGH_LEN, THUMB_CURL,
+    ANKLE, CENTRE_JOINTS, CENTRE_LINKS, FINGER_CURL, FINGERS, hand_joints, HIP, hip_can_reach, HIP_X, mirror_joint,
+    mirror_point, SHIN_LEN, SIDE_JOINTS, THIGH_LEN, THUMB_CURL, X, Y, Z,
 )
 
 SIDES = ("l", "r")
@@ -225,3 +226,123 @@ def leg(side, forward=0.0, drop=0.0, foot_pitch=0.0, yaw=0.0, roll=0.0, toe=0.0)
     hip, knee, ankle = leg_ik(forward, drop, foot_pitch)
     return {f"{side}_hip_yaw": yaw, f"{side}_hip_roll": roll, f"{side}_hip_pitch": hip, f"{side}_knee": knee,
             f"{side}_ankle_pitch": ankle, f"{side}_ankle_roll": -roll, f"{side}_toe": toe}
+
+
+# ---------------------------------------------------------------------------------------------
+# The legs over feet that stay where they stand
+#
+# The pelvis is the mechanism's fixed link, so a pose written joint by joint moves the feet about
+# under it. A robot on a floor is the other way round: its feet stay and its pelvis moves. These
+# solve a leg's six joints for that: the foot's link is put where it must be as the pelvis sees it.
+# ---------------------------------------------------------------------------------------------
+LEG_CONTROLS = ("hip_yaw", "hip_roll", "hip_pitch", "knee", "ankle_pitch", "ankle_roll")
+_LEG_JOINTS = ("hip_yaw", "hip_roll", "hip_pitch", "knee_pivot", "ankle_pitch_pivot", "ankle_roll")
+HIP_MID = (0.0, 0.0, HIP[2])          # midway between the hips' centres: what a pelvis is turned about
+_CHAINS = {}
+
+
+def _chain(side):
+    """[(origin, direction)] of the six joints from the pelvis to one foot."""
+    if side not in _CHAINS:
+        joints = all_joints()
+        _CHAINS[side] = [joints[f"{side}_{label}"][2:4] for label in _LEG_JOINTS]
+    return _CHAINS[side]
+
+
+def foot_at(side, values):
+    """The foot link's transform, the pelvis fixed, for one leg's six LEG_CONTROLS (degrees)."""
+    t = IDENTITY
+    for (origin, direction), value in zip(_chain(side), values):
+        t = compose(t, about(origin, direction, value))
+    return t
+
+
+def placed(left=0.0, forward=0.0, drop=0.0, yaw=0.0, roll=0.0, pitch=0.0, centre=HIP_MID):
+    """The transform that turns a body about `centre` (`pitch` bows it forward, then `roll` leans it to the
+    left, then `yaw` turns it to the left: degrees) and then moves it `left`, `forward` and down by `drop` (mm).
+    The robot faces -Y and its left is +X."""
+    turn = compose(about(centre, Z, yaw), compose(about(centre, Y, roll), about(centre, X, pitch)))
+    return compose((IDENTITY[0], (left, -forward, -drop)), turn)
+
+
+def _solved(columns, right):
+    """x of A x = right, A given by its columns: elimination with pivoting, for the six by six of a leg."""
+    n = len(right)
+    rows = [[columns[k][i] for k in range(n)] + [right[i]] for i in range(n)]
+    for k in range(n):
+        pivot = max(range(k, n), key=lambda i: abs(rows[i][k]))
+        if abs(rows[pivot][k]) < 1e-12:
+            raise ZeroDivisionError("singular")
+        rows[k], rows[pivot] = rows[pivot], rows[k]
+        for i in range(k + 1, n):
+            factor = rows[i][k] / rows[k][k]
+            rows[i] = [a - factor * b for a, b in zip(rows[i], rows[k])]
+    x = [0.0] * n
+    for k in reversed(range(n)):
+        x[k] = (rows[k][n] - sum(rows[k][j] * x[j] for j in range(k + 1, n))) / rows[k][k]
+    return x
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def leg_to(side, target, start):
+    """One leg's six LEG_CONTROLS (degrees) that put its foot's link at `target`, a transform with the pelvis
+    fixed. The hip's three axes meet in a point and so do the ankle's two, so the knee's angle is the triangle's
+    (hip, knee, ankle) and is set first; Newton's iteration from `start` finds the rest. An error is six numbers:
+    how far the ankle's centre is from its place (mm) and the turn left to make (a rotation vector, as mm at
+    100 mm from its axis); a joint moves them as a turn about its axis where the leg now holds it."""
+    hip, ankle = (HIP, ANKLE) if side == "l" else (mirror_point(HIP), mirror_point(ANKLE))
+    goal, turned = apply(target, ankle), tuple(zip(*target[0]))
+    reach = math.dist(hip, goal)
+    if not abs(THIGH_LEN - SHIN_LEN) < reach < LEG_REACH - 1e-6:
+        raise ValueError(f"the {side} leg cannot put its foot there: {reach:.1f} mm from hip to ankle, of {LEG_REACH:.0f}")
+    values = list(start)
+    values[3] = 180.0 - math.degrees(math.acos((THIGH_LEN ** 2 + SHIN_LEN ** 2 - reach ** 2) / (2 * THIGH_LEN * SHIN_LEN)))
+    values[2] += (values[3] - start[3]) / 2.0                       # a knee that bends carries the thigh half as far
+    values[4] += (values[3] - start[3]) / 2.0
+    for _ in range(60):
+        t, axes = IDENTITY, []
+        for (origin, direction), value in zip(_chain(side), values):
+            axes.append((_matvec(t[0], direction), apply(t, origin)))
+            t = compose(t, about(origin, direction, value))
+        here, r = apply(t, ankle), _matmul(t[0], turned)
+        error = [here[0] - goal[0], here[1] - goal[1], here[2] - goal[2],
+                 50.0 * (r[2][1] - r[1][2]), 50.0 * (r[0][2] - r[2][0]), 50.0 * (r[1][0] - r[0][1])]
+        if max(abs(e) for e in error) < 1e-9:
+            return values
+        columns = []
+        for axis, origin in axes:
+            sweep = _cross(axis, tuple(here[i] - origin[i] for i in range(3)))
+            columns.append([math.radians(c) for c in (*sweep, 100.0 * axis[0], 100.0 * axis[1], 100.0 * axis[2])])
+        try:
+            change = _solved(columns, [-e for e in error])
+        except ZeroDivisionError:
+            break
+        scale = min(1.0, 20.0 / max(1e-12, max(abs(c) for c in change)))
+        values = [v + scale * c for v, c in zip(values, change)]
+    raise ValueError(f"the {side} leg's joints for its foot's place were not found")
+
+
+def standing(base, pelvis=IDENTITY, feet=None):
+    """The legs' controls that hold the pelvis where `pelvis` (a transform: see `placed`) moves it from its place
+    in the pose `base`, each foot left standing where `base` has it, or first moved by `feet[side]` (a transform
+    over the floor). The floor's frame is the pelvis's own at `base`."""
+    pose = {}
+    for side in SIDES:
+        start = [base[f"{side}_{name}"] for name in LEG_CONTROLS]
+        foot = foot_at(side, start)
+        if feet and side in feet:
+            foot = compose(feet[side], foot)
+        found = leg_to(side, compose(inverse(pelvis), foot), start)
+        pose.update({f"{side}_{name}": value for name, value in zip(LEG_CONTROLS, found)})
+    return pose
+
+
+def pelvis_over(base, pose, side):
+    """Where a pose's pelvis is, as a transform from its place in `base`, when the `side` foot has stayed where
+    `base` stands it: the inverse of `standing`, for a pose written joint by joint."""
+    here = foot_at(side, [pose[f"{side}_{name}"] for name in LEG_CONTROLS])
+    there = foot_at(side, [base[f"{side}_{name}"] for name in LEG_CONTROLS])
+    return compose(there, inverse(here))

@@ -146,8 +146,10 @@ def main(argv):
             ends = itertools.product(*[(limits[control][0], 0.0, limits[control][1]) for control in controls])
             poses = [dict(zip(controls, values)) for values in ends if sum(value != 0.0 for value in values) >= 2]
             count += report(f"{name}, {len(poses)} corners and edges", *sweep(links, poses, skip=far), limit=8)
-    elif argv == ["--motions"]:
+    elif argv[0] == "--motions":
         for name, waypoints, _ in MOTIONS:
+            if argv[1:] and name not in argv[1:]:
+                continue
             found = report(f"motion {name}", *sweep(links, list(frames(waypoints))), limit=8)
             count += found
     else:

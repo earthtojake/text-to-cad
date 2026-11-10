@@ -31,6 +31,13 @@ linkages close, and what holding each pose asks of each drive against its datash
 | `views.py` | none | the robot as the CAD viewer draws it, as frames for the film: solid on the grid, parts exploded, the walk in x-ray |
 | `checks/*.py` | none | drives, interference (and `planted`, the test of it), attachment, balance, linkages, loads |
 
+`../sim/` is the robot in MuJoCo ([its README](../sim/README.md)): the same links, joints,
+couplings, masses and drives, written from this model by a script, standing on a floor
+under gravity with a position servo for each drive. It is where the motions below were
+found wanting and put right. It stands, lands from a small drop, bows, waves, reaches,
+looks about, closes its hands and squats on its own feet; on one leg it stands only
+with its pelvis held.
+
 ```
 cad run src/vendor.py                        # once: RobStride's five STEP files, 53 MB, into vendor/ (Git keeps no CAD file)
 cad run src/galatea.py                       # about three minutes cold; a pose or a motion changed 1.5 s; unchanged 0.1 s
@@ -270,15 +277,53 @@ pelvis: heel strike, roll-over, heel-off on the toe hinge), `wave`, `bow`, `crou
 `reach`, `poise`, `look` and `grasp`, and the film's two: `wake` (from `rest` to `ready`)
 and `settle` (from `ready` into `contrapposto`).
 
+The pelvis is the mechanism's fixed link, and a robot on a floor is the other way round:
+its feet stay and its pelvis moves. So the standing poses are written that way. `ready`
+sets the stance (the feet 220 mm apart, turned out 7 degrees, the left 16 mm ahead), and
+`rest`, `reach`, `bow` and `crouch` say where the pelvis goes over feet that have not
+moved (`kin.standing` solves each leg's six joints for it: the knee from the triangle
+hip, knee, ankle, the other five by Newton's iteration, to a nanometre). A motion that
+moves the pelvis is a path of such poses, sampled ten times a second, because joints
+eased one by one between two poses that keep the feet do not keep them on the way. The
+squat was the lesson: `ready` balances by 77 mm and the old `crouch` did by 32, and the
+path between them, each joint eased on its own, carried the hips three quarters of the
+way back while the chest had leaned half of the way forward, and passed within 8 mm of
+going over backward. In the simulation (`../sim/`) it went over. Now the hips go back
+and down along a path the pelvis is given, the arms come out in front as a
+counterweight, and the least margin of the whole motion is 62 mm, at the bottom. The
+crouch is as deep as two limits allow with the weight over the middle of the feet: the
+rear ankle is half a degree from its 30 of dorsiflexion and the hips two from their
+100, the pelvis 325 mm down and tipped 26 degrees.
+
+Where a foot is re-placed, the weight goes first. `poise` carries the pelvis 126 mm over
+the left foot with both feet down, lifts the right foot straight up, sole level, and
+folds the leg as it clears the floor; `settle` carries the weight over the right foot,
+lifts the left 16 mm, sets it down 67 mm ahead and 48 mm nearer, and only then eases
+into contrapposto and shares the weight out. The shift takes three seconds, and cannot
+hurry: while the body is braked the floor's push stands ahead of the centre of mass, by
+the braking times the height over gravity, and the foot it arrives over is 60 mm wide.
+In a second and a half that is 30 mm, and the simulation went on over the outside of
+the foot.
+
+`checks/balance.py` holds every motion but the gait to all of this, followed in time on
+the foot it never moves: a foot that is down does not move (the most is 0.05 mm, the
+sampling's), no sole goes below the floor, the centre of mass stays at least 20 mm
+inside what is down, and the centre of pressure (the links' weights and accelerations,
+each link a point mass) at least 15. The squat's least are 62 and 60 mm, the bow's 76
+and 62, the reach's 70 and 66; on one foot `poise` has 27 and 19 and `settle` 27 and 24.
+What the checks do not say is that position drives alone will keep the robot on one
+foot: its ankle's roll drive steers the push 24 mm either side of its axis and no
+further, so standing on one leg is a matter of balance with feedback, which is not in
+this model (`../sim/README.md` has what the simulation makes of each motion).
+
 One thing moves that is not the mechanism's: `explode`, an animation of the GLB
 (`cad.build123d.animation`, in `lib/show.py`), in two stages with a hold after each.
 First the links go apart up the robot and each skin slides off what it covers; then
 every piece goes off on its own, each part well away from its link's middle, the whole
 wider than it is tall; and all come back. The document's joints and a STEP know nothing of it; the viewer's playbar and
-`film.py` play it from the GLB. A standing leg is
-posed by where its foot goes (`kin.leg` solves hip, knee and ankle and keeps the sole
-level), so both feet stand on one floor. The pelvis is the mechanism's fixed link, so a
-pose lifts or tilts the feet; `stances.py` sets each posed robot back on the ground.
+`film.py` play it from the GLB. In a picture or a posed model the pelvis stays and the
+feet move, as in the document; `stances.py` sets each posed robot back on the ground,
+and `film.py` each frame.
 
 ## Source
 
@@ -309,13 +354,13 @@ engine to move anything.
 | `interference.py --poses` | the same, link against link, at each configuration | none in the eleven configurations, 134 to 140 pairs measured in each |
 | `interference.py --limits` | each control swept alone through its travel in eight steps, against the links within three joints of it | none: the 26 controls of the centre and the left side, which stands for the right |
 | `interference.py --corners` | the joints that share a centre, moved together: waist, neck, hip, shoulder, wrist and ankle, each at every corner of its travel and the middle of every edge | none in the 104 poses |
-| `interference.py --motions` | each motion at its waypoints and between them | none in the ten motions |
+| `interference.py --motions` | each motion at its waypoints and between them (`--motions crouch bow`: those) | none in the ten motions |
 | `planted.py` | does that check find a plate planted through a 2.6 mm skin, clear one 0.3 mm from it, and pass a pin in its bore? | it does |
 | `fit.py` | does each skin hold its mechanism with 3 mm of air, through the travel under it? | it does. The least air: 3.0 mm round the upper arm, 3.2 the pelvis, 3.3 the shin, 3.5 the chest, 4.0 the thigh, 5.3 the forearm, 15 the head |
 | `attachment.py` | does every part touch another part of its own link, or else a part of a link it is jointed to (a pushrod on its pin)? | every part is held, six of them by a joint's pin alone |
-| `balance.py` | is the centre of mass over the support polygon in each standing pose, and by how much? | standing straight 51 mm inside, ready 77, contrapposto 55, reach 72, wave 72, present 94, crouch 32, bow 89, poise 30 (on one sole), fists 77, rest 73; the stride is a gait frame |
+| `balance.py` | is the centre of mass over the support polygon in each standing pose (heels and balls: the sprung toe carries nothing), and by how much? Can each motion be followed on a floor: do the feet that are down stay, and do the centre of mass and the centre of pressure stay over them? | standing straight 51 mm inside, ready 77, contrapposto 55, reach 70, wave 72, present 82, crouch 62, bow 77, poise 30 (on one sole), fists 77, rest 75; the stride is a gait frame. The nine motions that stand on a floor can be followed (above); the gait is trodden under a fixed pelvis |
 | `linkages.py` | do the pushrods' far eyes stay on their pins through the travel, and do the axes that should meet, meet? | gaps under 1e-12 mm; hip, ankle, waist and shoulder axes meet exactly |
-| `loads.py` | statics: the torque each drive holds in fourteen cases, against its rated and its peak torque; each pushrod's force against its Euler load | below |
+| `loads.py` | statics: the torque each drive holds in seventeen cases, four of them instants of a motion, against its rated and its peak torque; each pushrod's force against its Euler load | below |
 
 How interference is judged. The verdict is the kernel's: two parts interfere when their
 solids share more than 0.5 mm3 (`overlap_volume` on the model's own solids; parts that
@@ -336,9 +381,11 @@ and as held briefly while every drive is within 75 % of its peak.
 - Standing straight asks 6 N m of each ankle; `ready`, `contrapposto`, `wave` and `rest`
   are within every rated torque. Contrapposto is at the edge of it: 34 N m at the stance
   hip's roll drive, 98 % of what an RS04 holds on the heat sink its bracket can be.
-- Held briefly: the crouch (63 N m at each knee, 179 % of an RS04's rated torque and 52 %
-  of its peak; 45 N m at the waist's pitch pair), the bow, standing on one leg (51 N m at
-  the stance hip's roll drive, 145 % of rated), and the carried loads: 4 kg in each hand
+- Held briefly: the crouch (54 N m at the rear foot's knee and 49 at the other, 154 % of
+  an RS04's rated torque and 45 % of its peak; 49 N m at the waist's pitch pair, 68 % of
+  its peak, which the arms held out in front cost), the bow, standing on one leg (51 N m
+  at the stance hip's roll drive, 145 % of rated, and 55 as the other foot leaves the
+  floor), and the carried loads: 4 kg in each hand
   with the elbows square, 2.5 kg on each palm presented, 2 kg at the end of a reach, 1.5
   kg in each hand with the arms out level. The wrists (an RS05 gives 1.8 N m rated) and
   the waist's pitch pair are what limit them: a level palm carries about 1 kg for as long
@@ -350,7 +397,7 @@ and as held briefly while every drive is within 75 % of its peak.
   foot. Its ankle steers the centre of pressure 24 mm either side of the roll axis, and
   balance sideways is the hips' work.
 - The knee's pushrod (12 mm titanium, 280 long) buckles at 14.1 kN; the crouch pushes it
-  with 1.8 kN, and the drive at its peak with the lever at its shortest with 4.7 kN: a
+  with 1.2 kN, and the drive at its peak with the lever at its shortest with 4.7 kN: a
   factor of 3.0. The ankle's rod (9 mm steel, 255 long) buckles at 9.8 kN and keeps
   2.6 on the same measure.
 

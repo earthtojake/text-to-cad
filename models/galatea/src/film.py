@@ -146,11 +146,11 @@ CUT = [
     ("arm", range(0, 40), "seven joints an arm"),
     ("hand", range(0, 36), "six more in each hand"),
     ("neck", range(0, 32), "33 RobStride drives, each its maker's own CAD model"),
-    ("crouch", range(0, 40), "every pose checked for interference, balance and torque"),
+    ("crouch", range(0, 40), "every pose and motion checked for interference, balance and torque"),
     ("scan", quick(72, 4), None),
     ("walk", range(0, 60), None),
-    ("views", None, "the same document as the CAD viewer draws it: solid, parts, x-ray"),
-    ("sim", None, "and in simulation: MuJoCo, built from the same numbers"),
+    ("views", None, "the same file, as the CAD viewer draws it"),
+    ("sim", None, None),
     ("end", None, None),
 ]
 ORDER = tuple(dict.fromkeys(name for name, _, _ in CUT if name in SHOTS))
@@ -161,9 +161,12 @@ WITHIN = [
     ("explode", 2, 30, "1.76 m    57 kg    44 driven joints"),
     ("explode", 60, 104, "one CAD assembly, written as code: 73 links"),
     ("explode", 122, 174, "689 parts, each one modelled"),
+    # The robot stands in the middle of the simulation's picture: its captions are short, and end before its feet.
+    ("sim", 2, 54, "in MuJoCo, built from the same numbers"),
+    ("sim", 58, 118, "free-standing: gravity, contact, 44 servos"),
 ]
 # The title, over the last piece, and the line under it.
-TITLE = dict(text="G A L A T E A", height=0.045, at=0.76, under="designed, modelled and checked in code with text-to-cad")
+TITLE = dict(text="G A L A T E A", height=0.045, at=0.815, under="designed, modelled and checked in code with text-to-cad")
 
 # The lights: (azimuth from the robot's front toward its left, elevation, distance m, width m, height m, watts, colour).
 LIGHTS = {

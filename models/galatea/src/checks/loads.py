@@ -33,7 +33,7 @@ from scipy.spatial import ConvexHull
 
 from galatea import galatea
 from lib import dims, kin
-from lib.poses import POSES, READY, both, side, walk
+from lib.poses import POSES, READY, SHIFT, both, crouch, poise, settle, side, walk
 
 G = 9.81
 BRIEF = 0.75            # the share of a drive's peak a pose may ask of it and still count as held, briefly
@@ -53,7 +53,10 @@ CASES = [
     ("rest", POSES["rest"], "lr", {}),
     ("bow", POSES["bow"], "lr", {}),
     ("crouch", POSES["crouch"], "lr", {}),
+    ("crouch, half-way down", crouch(1.0), "lr", {}),
     ("poise, on the left leg", POSES["poise"], "l", {}),
+    ("poise, the right foot just lifted", poise(SHIFT + 0.5), "l", {}),
+    ("settle, the left foot in the air", settle(SHIFT + 0.55), "r", {}),
     ("reach, 2 kg in the hand", POSES["reach"], "lr", {"r": 2.0}),
     ("present, 2.5 kg on each palm", POSES["present"], "lr", {"l": 2.5, "r": 2.5}),
     ("arms out level, 1.5 kg in each hand", {**READY, **both(**{**ARMS_DOWN, "shoulder_roll": 90})}, "lr", {"l": 1.5, "r": 1.5}),
