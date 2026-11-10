@@ -626,3 +626,87 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   mode that calls nothing of the CAD model (`sim/mjcf.py --poses`) could move those
   imports into the branch that builds, keep the script's environment, and start in a
   second and a half.
+
+## Corrections, from a second check of each entry
+
+Every entry above was checked again on `main` after 0.11.7 (2026-11-10), each claim run before it
+was believed. The entries are left as written, as a record of what the build met; these are the ones
+that did not hold as written, and what a reader should take from them instead.
+
+- **2.** The memo is kept per body by design, not per worker by mistake: a kernel operation's entry
+  is keyed by the body that ran it, so two models never share one. The skill's text was what was
+  wrong ("the server already replays every kernel call of any model"). A builder several models
+  share is marked `@memo`.
+- **5.** Not reproduced. 120 intersections of the head's sections with the visor, shield and rim
+  prisms (with and without the apex and the extra end section, at five insets) and 78 random
+  spline-bounded bands were all consistent. The fault is presumably OCCT's on particular geometry;
+  it is not shown, and nothing was built to guard against it.
+- **6.** `bounding_box()`, which is `optimal=True`, was tight in every case tried: the 13 mm strip of
+  a 164 mm loft reads 13.000 mm. The loose box is `bounding_box(optimal=False)`, which read 39 to
+  72 mm for the same strip.
+- **8.** Not reproduced: 196 lens-in-bezel pairs (fresh solids, tree leaves under nested locations,
+  moved there and back, mirrored, a BREP round trip) gave 0 both ways. `overlap_volume` treats its
+  two arguments alike; the one asymmetry is which is OCCT's argument and which its tool.
+- **9.** `.volume` is 0.4 % high on a lofted solid (0.04 % on a 2.6 mm skin), as said. The remedy
+  named is itself wrong on some cuts: `VolumeProperties_s(shape, props, 1e-3, False, True)` was off
+  by 699 mm3 on one slab of the skin while reporting an error of 1e-3. What closes is Gauss-Kronrod,
+  `BRepGProp.VolumePropertiesGK_s(shape, props, 1e-6, False, False, False, False, False)`: under
+  0.5 mm3 on all eight cuts tried, at 0.04 to 2.4 s a solid.
+- **10.** No difference between plain Python and `cad run` was found. In both, `a & b` of two parts
+  that share no volume is an empty `Compound` (of two `Solid`s, `None`), and
+  `Compound(children=[...])` holding an empty one fails with the bare `AssertionError`. The
+  "Compound under `cad run`" was most likely that empty result.
+- **13.** A GLB export has taken `--tolerance` and `--angle` since 0.11.6 (this file's own "what
+  worked" says a GLB at 0.08 mm). Only `snapshot` has no tolerance.
+- **16.** `cad run` does read the imports of the local modules a script imports, in its folder, its
+  package or its project. What it does not read is a module reached through a path added at run
+  time: the checks reach the model through `sys.path.insert` in `checks/common.py`.
+- **17.** The variable is `CAD_ENGINE_WORKER_RSS_MB`, read when the engine starts.
+  `CAD_ENGINE_MEMORY_MB` is the documents' budget, not the workers' cap.
+- **18.** `--display shaded` draws no edges at all. The seam line is in `solid`, the default, and
+  in the x-ray, hidden-line and wireframe modes.
+- **21.** `cad status` already shows each worker's memory and the total against the cap. The `-9`
+  was the system's out-of-memory killer, which the engine's cap does not see coming: it counts its
+  own workers, not a `cad run` program or a check's processes.
+- **26.** More than a line beside `handle.shape`: the skill's own `world_parts` helper called
+  `located()` on every leaf, so it copied the tree once a leaf (6 s for 60 leaves, 28 ms with the
+  leaf taken out of its tree first).
+- **39.** There was a way to write "the one at the top": the path from the animation's own assembly,
+  its label first (`galatea/lumbar_yoke`). The refusal listed the paths without that label, the
+  first of which was the refused name itself, which is what hid it.
+- **43.** A part's density was to be had without its solids, from Python:
+  `cad.model.inspect(id, query="structure")["summary"]["materials"]`. A centre of mass and an
+  inertia tensor of several parts at their own densities is `cad.build123d.mass_properties`. The
+  look's name is still not there.
+
+**What changed after this review**, in the change that followed it:
+
+- `posed()` says a coupling's values again from the pose, so a posed copy keeps its states and
+  sequences (1). Before, a value that stayed in range was silently another pose.
+- A shape's own attributes are part of its memo key, so code edited to set one is not handed the
+  shapes made before it (25). The build's line counts the calls that ran uncached and says why a
+  body is not retained (32), and a cold run whose worker was retired says why (17). A worker
+  holding an older state takes the document another environment's worker built (42).
+- `cad model interference "$ID"`: every pair of parts whose boxes meet, measured exactly, as built
+  and at the poses, states and sequences asked, the named fits apart, a pair it could not measure
+  said and never passed (11).
+- `hidden` and `isolated` take globs (`*skin*`, `*/skin_screw`), and a name an assembly shares with
+  a part inside it is the assembly, in a ref and in an animation (7, 15, 39).
+- A snapshot's `--json` gives the camera it settled on, which a job draws exactly (14). A killed
+  snapshot job's folders are swept by the next (3). `inspect` names the first eight occurrences of
+  a material and counts the rest (4). The page of a checkout with no client built says so (38). uv
+  killed mid-install is said as that (34). The KiCad test's message and the corpus's README say a
+  `build.py` under `models/` is a KiCad sample's alone (49).
+- The skill's notes: the memo per body, `OCP` shapes and the import scan (2, 16, 32); the ease's
+  formula, dense linear paths and the fixed link as a choice of frame (40, 41); lofts, revolved
+  polylines, empty Booleans, the loose box and the volume integral (6, 9, 10, 23, 24, 27, 28); glass
+  over a liner and smoked glass (20, 35); EEVEE and the compositor with no graphics driver, and
+  sample counts on the CPU (33, 37); mass properties of a link of several parts (43, 45); and the
+  review order and the planted failure in *Check each change*.
+
+**Still open**, each a decision and not a defect: a motion drawn at a time and a planted link in a
+snapshot (12, 40, 36); a tolerance, sharp edges alone and a background colour in a snapshot, and a
+lit still (13, 18, 19, 22); the look's name on a GLB's material (29); a mesh per link and an MJCF
+reference for a simulator (44, 45, 48); live memory and a build's priority (21, 47); a fetched
+vendor STEP (31); and a guarded Boolean and both orders of `overlap_volume` (5, 8), which nothing
+reproduced.
