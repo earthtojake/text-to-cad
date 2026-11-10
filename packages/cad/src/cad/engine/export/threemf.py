@@ -3,12 +3,14 @@
 An object per prototype (its mesh at the prototype's frame) and a build item per
 placement (the object at the placement's transform). Looks go through the 3MF materials
 extension: one base material per look (named by the part's material, else its colour),
-its display colour the look's colour in sRGB, and a metallic display property per base
+its display colour the look's colour in sRGB -- its alpha, for a transmissive look, the one a 3MF's
+reader draws without transmission (``formats/gltf.py``'s ``drawn_alpha``: the preview of its PBR
+``opacity``, its colour's alpha ignored, as a GLB of it converted gives) -- and a metallic display property per base
 (``pbmetallicdisplayproperties``: the material's metallicness and roughness, a matte one
 for a look without a material). An object's default look is its part's; a painted face's
 triangles name their own (``pid``/``p1``). A placement whose own colour is not its part's
-places an object of its own drawn in that colour. An export's own tolerance is said in the
-model's ``Description`` metadata, one of the names the core specification defines.
+places an object of its own drawn in that colour. An export's own tolerance and angle are said in
+the model's ``Description`` metadata, one of the names the core specification defines.
 """
 
 from __future__ import annotations
@@ -20,8 +22,9 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
-from cad.engine.export import ZIP_DATE
+from cad.engine.export import ZIP_DATE, within
 from cad.engine.export.mesh import groups, meshes
+from cad.engine.formats.gltf import drawn_alpha
 
 __all__ = ["write"]
 
@@ -96,6 +99,7 @@ def write(view: Any, path: Path) -> None:
         name = given["material"]["name"] if given is not None else f"colour {at + 1}"
         if given is not None:
             given = given["pbr"]["values"]
+            rgba = (*rgba[:3], drawn_alpha(rgba[3], given))
             metallic.append(f'<m:pbmetallic name={quoteattr(name)} metallicness="{given.get("metalness", 0.0):.6g}" '
                             f'roughness="{given.get("roughness", 0.5):.6g}"/>')
         else:
@@ -107,9 +111,8 @@ def write(view: Any, path: Path) -> None:
     resources = (f'<m:pbmetallicdisplayproperties id="{PROPERTIES_ID}">{"".join(metallic)}'
                  f'</m:pbmetallicdisplayproperties>' if shown else "")
     group = f' m:displaypropertiesid="{PROPERTIES_ID}"' if shown else ""
-    tolerance = view.tolerance
-    described = (f'<metadata name="Description">Meshed to within {tolerance:g} mm</metadata>'
-                 if tolerance is not None else "")
+    meshed = within(view.tolerance, view.angle)
+    described = f'<metadata name="Description">Meshed to within {meshed}</metadata>' if meshed else ""
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              f'<model unit="millimeter" xml:lang="en-US" xmlns="{CORE}" xmlns:m="{MATERIALS}">'
              f'<metadata name="Title">{escape(view.name)}</metadata>{described}'

@@ -121,6 +121,13 @@ export const features = [
     file: "bracket.pdf",
   },
   {
+    id: "renders",
+    name: "Renders",
+    path: "skills/render/SKILL.md",
+    summary: "Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.",
+    file: "hero.png, turntable.mp4",
+  },
+  {
     id: "fabrication",
     name: "Fabrication services",
     path: "skills/sendcutsend/SKILL.md",

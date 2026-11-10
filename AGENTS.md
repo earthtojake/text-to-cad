@@ -225,6 +225,11 @@ which points both at the checkout.
   distributions is parsed against that floor, so syntax
   newer than it fails here rather than at `pip install` time on a user's
   interpreter; raising the declared minimum relaxes the check automatically.
+  The floor (3.13, the one Python Blender's module is built for) is older than the
+  Python the server's installations run on (3.14, `cad_server._internal.launch.PYTHON`):
+  a call the floor's standard library lacks parses and fails only when it runs, so CI
+  runs the library's, the server's and the shim's suites on the floor too
+  (`scripts/test/test-floor.sh`).
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
 - The server's packaged runtime (`_runtime/viewer`, `_runtime/mcp` and `_runtime/plugin`) is BUILT,

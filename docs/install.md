@@ -29,7 +29,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.5 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.6 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
@@ -174,7 +174,7 @@ The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cad-mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
-The runtime supports Python 3.14+; the launch commands use uv-managed Python 3.14.
+The runtime supports Python 3.13+; the launch commands use uv-managed Python 3.14.
 
 The commands below take the `latest` branch: it holds the plugin alone and gets
 each release once it is on PyPI. `main`, where development happens, installs too,
@@ -242,7 +242,7 @@ give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.5", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.6", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -527,7 +527,10 @@ kernel processes run in the `cad[build123d]` one: exports, snapshots and the mes
 shows. Nothing is installed in advance: each environment is made the first time something needs
 it, and a first model or view waits for it. A model run so imports what its environment holds.
 `cad[build123d]` is about 240 MB to download, and `cad[kicad]`, made the first time a board needs
-it, about 100 MB. On disk, measured on an Apple silicon Mac, they take about 620 MB and 340 MB.
+it, about 100 MB. On disk, measured on an Apple silicon Mac, they take about 620 MB and 340 MB. A
+script that imports Blender's `bpy` gets `cad[blender]`, whose environment is made on Python 3.13, the
+one bpy is built for, which uv fetches: bpy 5.2.3 is about 260 MB to download on a Mac and 430 MB on
+Linux, 730 MB on disk, and has no build for Intel Macs or Linux arm64.
 
 A model that needs another package names it at the top of its script, in Python's inline
 script metadata, and `cad run` installs it beside cad once, in an environment of its own that
@@ -553,8 +556,8 @@ model has used for a week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.11.5'` (`cad requirement build123d` prints the exact
-requirement; `pip install cad==0.11.5` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
+`pip install 'cad[build123d]==0.11.6'` (`cad requirement build123d` prints the exact
+requirement; `pip install cad==0.11.6` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
 A release whose worker contract the server does not speak is refused in one line that says

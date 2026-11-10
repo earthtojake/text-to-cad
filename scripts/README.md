@@ -90,6 +90,19 @@ where those files ship, so these scripts are what produces them.
   as the server does (in `tmp/kicad-suite`, naming its Python to the tests, `CAD_TEST_KICODE_PYTHON`):
   `tests/python/packages/kicad`, each file with private engine, state and cache folders. Called by
   `test.yml`'s KiCad job; no KiCad install, footprint library or browser is needed.
+- `test-blender.sh` — `cad.blender.load` in the environment `cad run` makes for a script that imports
+  bpy (cad's blender integration: bpy 5.2.3 on Python 3.13, from PyPI the first time): one script that
+  imports cad, build123d and bpy builds a part, loads the GLBs the checkout's `cad` exported and ones
+  made by hand, plays the clips in both orders, and renders a Cycles and an EEVEE still. On CI a test
+  that skips fails the run (`PYTHON_TEST_NO_SKIPS`). `tests/python/packages/blender`, each file with private
+  engine, state and cache folders. Called by `test.yml`'s Blender renders job; on Linux it needs X11's
+  client libraries and OpenGL from the system.
+- `test-floor.sh` — the library's, the server's and the shim's suites on the oldest Python the packages declare
+  (`requires-python`: 3.13, the one Blender's module is built for, so the one the library runs on in a
+  render script's environment). `PYTHON_BIN` names a Python of that line with `requirements-dev.txt`
+  installed; another is refused in one line. A call that Python's standard library lacks parses there
+  and fails only when it runs, so only running the suites holds the floor. Called by `test.yml`'s
+  Blender renders job, the one job on that Python, under Xvfb.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.

@@ -89,10 +89,13 @@ run_python_unittest() {
   # a daemon runs on one of that file's alone, stopped when the file ends, so a module that
   # starts workers or a daemon does not hold the rest of the suite.
   # PYTHON_TEST_PRINT_WEIGHTS is how --print-weights reaches the runner without every
-  # caller growing a flag.
+  # caller growing a flag; PYTHON_TEST_NO_SKIPS, --no-skips, for a suite that must run whole.
   local extra=()
   if [ -n "${PYTHON_TEST_PRINT_WEIGHTS:-}" ]; then
     extra+=(--print-weights)
+  fi
+  if [ -n "${PYTHON_TEST_NO_SKIPS:-}" ]; then
+    extra+=(--no-skips)
   fi
 
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
