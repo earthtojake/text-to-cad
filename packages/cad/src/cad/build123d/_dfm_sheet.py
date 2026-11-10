@@ -429,6 +429,31 @@ def _unslivered(face: Any) -> Any:
     return face if len(kept) == len(inner) else bd.Face(face.outer_wire(), kept)
 
 
+def _overlap(pieces: list[Any]) -> float:
+    """The area of the flat pattern's pieces that lies on another piece: the common area of each two whose
+    boxes overlap (two that meet along a line share none), measured by intersecting them -- never by the
+    pieces' areas less the fused pattern's, which counts whatever a fuse loses of faces that are not exact
+    (a STEP's planes and cylinders written as NURBS)."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    boxes = [piece.bounding_box() for piece in pieces]
+    lo = np.array([(box.min.X, box.min.Y) for box in boxes])
+    hi = np.array([(box.max.X, box.max.Y) for box in boxes])
+    total = 0.0
+    for i in range(len(pieces)):
+        within = (np.minimum(hi[i], hi[i + 1:]) - np.maximum(lo[i], lo[i + 1:]) > 1e-6).all(axis=1)
+        for j in np.nonzero(within)[0] + i + 1:
+            common = BRepAlgoAPI_Common(pieces[i].wrapped, pieces[int(j)].wrapped)
+            if not common.IsDone():
+                raise RuntimeError("two pieces of the flat pattern could not be intersected")
+            props = GProp_GProps()
+            BRepGProp.SurfaceProperties_s(common.Shape(), props)
+            total += max(0.0, float(props.Mass()))
+    return total
+
+
 def _simplify(points: np.ndarray) -> np.ndarray:
     """A closed polygon without repeated or collinear points."""
     kept = [p for i, p in enumerate(points) if i == 0 or np.linalg.norm(p - points[i - 1]) > 1e-9]
@@ -1199,10 +1224,9 @@ class _Analysis:
                 pieces.extend(self._strip(bend))
         if not pieces:
             return
-        total = sum(piece.area for piece in pieces)
+        overlap = _overlap(pieces)
+        self.overlap = overlap if overlap > 1e-6 * sum(piece.area for piece in pieces) + 1e-6 else 0.0
         fused = pieces[0].fuse(*pieces[1:], tol=1e-6).clean() if len(pieces) > 1 else pieces[0]
-        flat_area = sum(face.area for face in fused.faces())
-        self.overlap = max(0.0, total - flat_area) if total - flat_area > 1e-6 * total + 1e-6 else 0.0
         if broken:  # the breaks of both skins lie over each other: the overlap is the flanges' and strips' alone
             try:
                 fused = bd.Compound(children=[_unslivered(face) for face in

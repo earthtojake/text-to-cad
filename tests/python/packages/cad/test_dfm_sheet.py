@@ -265,6 +265,33 @@ class UnfoldTest(unittest.TestCase):
         round_holes = [i for i in items(report, "holes") if i["kind"] == "round"]
         self.assertEqual([i["diameter_mm"] for i in round_holes], [6.0])
 
+    def test_the_flat_overlaps_where_flanges_collide_in_it_and_not_where_a_fuse_loses_area(self) -> None:
+        t, r = 2.0, 2.0
+
+        def eared(side: float) -> bd.Part:
+            """A wall bent up at the plate's edge x = 0, an ear on its side reaching 20 mm past the plate's corner."""
+            return _wall(t, r, 60, 20) + bd.Pos(r + t / 2, side * 40, t + r + 10) * bd.Box(t, 20, 20)
+
+        # one wall bent up at x = 0 and one down at y = 30, each with an ear past their shared corner: clear of
+        # each other as bent, and on one another in the flat over the square the two ears share
+        down = bd.mirror(bd.Pos(-30, 30, 0) * bd.Rot(0, 0, 90) * eared(-1.0), bd.Plane.XY.offset(t / 2))
+        part = (bd.Pos(-30, 0, t / 2) * bd.Box(60, 60, t) + eared(1.0) + down).clean()
+        part.label = "eared"
+        allowance = math.pi / 2 * (r + 0.4 * t)
+        flat = items(measured(part), "parts")[0]
+        self.assertAlmostEqual(flat["flat_overlap_mm2"], (20 - allowance) ** 2, places=2)
+        self.assertIn("sheet.flat_overlap", [f.code for f in checked(part).findings if f.severity == "error"])
+        # a bracket with a hole in its wall, its planes and cylinders written as NURBS (as some CAD writes a STEP):
+        # the fused flat's area is a square millimetre short of its pieces', and nothing lies on anything
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        bracket = bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 50)
+        bracket = bracket - bd.Pos(43, 12, 20) * bd.Rot(0, 90, 0) * bd.Cylinder(2.75, 20)
+        nurbs = bd.Part(BRepBuilderAPI_NurbsConvert(bracket.wrapped, True).Shape())
+        nurbs.label = "bracket"
+        self.assertIsNone(items(measured(nurbs), "parts")[0]["flat_overlap_mm2"])
+        self.assertEqual(verdicts(checked(nurbs)), [])
+
     def test_not_sheet_refuses_to_unfold(self) -> None:
         with self.assertRaisesRegex(ValueError, "not sheet metal"):
             sheet.unfold(bd.Sphere(10))
