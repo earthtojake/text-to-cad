@@ -1,9 +1,11 @@
 """Versioned conversions of an already-loaded XCAF document, without rebuilding geometry.
 
-Only xbf/8 -> xbf/9 is supported. Original physical attributes and NamedData remain
-on their labels; each distinct resolved look gets a native payload on a copied
-physical label. Shape/face/component visual references, geometry and the original
-build closure are untouched. The caller owns any eventual file write.
+Supported: xbf/8 -> xbf/9 -> xbf/10. xbf/8 -> xbf/9 converts materials: original physical
+attributes and NamedData remain on their labels; each distinct resolved look gets a native
+payload on a copied physical label. xbf/9 -> xbf/10 converts nothing: xbf/10 adds a part's PMI
+beside what xbf/9 holds, as it holds it, so only the writer and the migration record change.
+Shape/face/component visual references, geometry and the original build closure are untouched.
+The caller owns any eventual file write.
 """
 
 from __future__ import annotations
@@ -234,7 +236,12 @@ def _xbf8(doc: Any) -> int:
     return len(plans) + sum(entry not in {key[0] for key in plans} for entry in originals)
 
 
-_UPGRADES = {"xbf/8": ("xbf/9", _xbf8)}
+def _xbf9(doc: Any) -> int:
+    """xbf/10 adds PMI (``pmi``) and changes nothing xbf/9 holds: no label to convert."""
+    return 0
+
+
+_UPGRADES = {"xbf/8": ("xbf/9", _xbf8), "xbf/9": ("xbf/10", _xbf9)}
 
 
 def upgrade(doc: Any) -> dict[str, Any] | None:

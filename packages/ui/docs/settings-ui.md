@@ -603,9 +603,12 @@ stands over its layers; its reach is written before the frame is painted, so ope
 panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
-then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
-**Position**), Position's Reset on its pose row and the Model's Show all on a line over its rows,
-and the trees searched by the panel's search box. A file's routines are no tab:
+then **Position**, where the file has joints to move, then **PMI**, where an engine document carries
+PMI or one is being made for it (its manufacturing annotations, read as a drawing is: its Views,
+Notes, Coverage and Annotations under static headings, each a list of the trees' rows,
+[PMI](pmi.md)); a robot's **Links**, an `.sdf`'s **SDF**, then
+**Position**), Position's Reset on its pose row, the Model's Show all and PMI's New and eye on a line
+over their rows, and the trees searched by the panel's search box. A file's routines are no tab:
 they play from the playbar under the model. A mesh, with no section, has no panel, and nor has a
 drawing with nothing for its Layers to say (fewer than four layers drawn on and no block
 reference: a flat pattern's CUT and BEND). The strip is for using tools, the panel for reading the
@@ -1044,7 +1047,10 @@ It shows all groups under static section headings and dividers, with no collapsi
 sections or cascading settings menus. A heading is 24px of regular `text-tiny` in the
 foreground colour, a rule above every one but the first. A feature that switches on and off
 (Orbit, Floor) is the checkbox at its heading's right end, the title naming it; there is no
-separate row for it. While the feature is off its section is that heading alone. Every
+separate row for it. While the feature is off its section is that heading alone. A checkbox that
+only shows something of what its section reads (PMI's Coverage: **Show faces with no
+requirement**) sits there too, named and hinted by its own words, and the section keeps its rows
+while it is off (`FileSheetSettingsSection`'s `switchLabel`). Every
 setting is one 24px row: its label in a 4rem muted column, its control filling the rest, so
 a form's controls start on one line. A label is short under its heading ("Colour",
 "Opacity" under Floor); the control's accessible name stays whole ("Floor opacity"). A
@@ -1279,14 +1285,16 @@ then an X. The file always goes and is not named. Under the header, the note
 buttons at its bottom-right.
 
 While the note is empty the box follows what it would carry: it opens when something
-is picked or annotated, and closes when that goes. Every chip leads with its
+is picked or annotated, or a change is asked for, and closes when that goes. Every chip leads with its
 icon — the Annotation chip's pen, a reference's pick glyph
 (a part's cube, a face, an edge, a vertex) — then its words, and they stand in the order
 they came, whatever their kind. A chip's copy pasted into the note is a pill there,
 drawn as the chip is, 20px like the note's lines so it sits in its rows without spacing
 them out. A click on a pill selects it whole, highlighted in the selection's colour, so
 Backspace, Delete or typing replaces it as it would selected text. Its chips are
-**Annotation** (its X clears the ink), then the selection. The Annotation chip does not copy
+**Annotation** (its X clears the ink), then each change asked for in the view (an engine document's
+PMI: "Add flatness", "Change thickness", "Move top-flat"; its card the call it asks the code
+to make, its click copies the request, its X drops it), then the selection. The Annotation chip does not copy
 references or write files. Copy Prompt, Queue and Send
 include their data in the snapshot packet; only selection chips copy individual references. A written note keeps it open whatever
 is picked, even with nothing picked or annotated, until the X. The X clears everything:
@@ -1305,7 +1313,8 @@ is the primary one, which Enter presses (Shift+Enter is a new line). They are th
 icon with a name and a hint — and every one is solid: the primary in the `default`
 variant, the others in `secondary`. Where Copy Prompt is the only one (a host that
 takes no message, as the web), it is a button in words, "Copy Prompt" with its icon
-first. While there is no note they are disabled, dimmed but still drawn:
+first. While there is no note, and no change asked for (which says what it wants on its own),
+they are disabled, dimmed but still drawn:
 
 - **Copy Prompt** (copy icon), always. It copies the note as text: its references
   spelled as copied references are, and its files by the paths they were saved at,
@@ -1314,6 +1323,8 @@ first. While there is no note they are disabled, dimmed but still drawn:
   into the context of the person's next message.
 - **Send** (up arrow), where the host can post a message: the note goes now, as the
   person's message.
+
+The changes asked for go after the note, under `Requested changes:`, a paragraph each.
 
 Every prompt captures the current view and the recorded views with remaining ink.
 If the current view matches a recorded view, its exact current framing replaces

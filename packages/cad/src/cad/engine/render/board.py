@@ -126,6 +126,8 @@ def refusals(still: Any, name: str) -> None:
     display_options(still.display)
     if still.preview or still.pose is not None or still.transparent:
         raise SnapshotRefused(f"{name} is a flat board: Preview, pose and transparent output are not supported")
+    if still.view is not None:
+        raise SnapshotRefused(f"{name} is a flat board: --view is a part's named view, and a board has none")
     if still.camera is not None:
         plan_view(still.camera, name)
         if display_options(still.display).get("window") is not None:

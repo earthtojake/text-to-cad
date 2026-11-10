@@ -79,7 +79,9 @@ SCHEMA = "cadgen.engine closure/2"
 # xbf/7: the build's animations are a record on the main label (``animations.record``); the closure counts none.
 # xbf/8: the closure names the toolchain that built it (closure/2): the system and architecture join the key.
 # xbf/9: native bd_materials physics and PbrProperties replace the cadgen material schema.
-FORMAT = "xbf/9"
+# xbf/10: a part's semantic PMI, notes and named views (``pmi``): an engine that reads xbf/9 alone
+# refuses the document rather than drop them from what it exports.
+FORMAT = "xbf/10"
 # The libraries a key covers: what decides the geometry and native material payload.
 KEYED_LIBRARIES = ("build123d", "OCP", "bd_materials", "threejs_materials")
 # The keyed platform fields; the closure also records Python as information only.

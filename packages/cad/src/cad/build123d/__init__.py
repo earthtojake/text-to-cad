@@ -17,7 +17,13 @@ and the helpers a model calls with build123d objects:
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
-  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``.
+  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* semantic PMI on a part's faces, as AP242 names its entities (the engine's **PMI**):
+  ``annotate(part, ...)`` gives it; ``datum``, ``dimensional_size``, ``dimensional_location``,
+  ``plus_minus_tolerance``, ``flatness_tolerance``, ``position_tolerance`` and
+  ``surface_profile_tolerance`` write theirs; ``limits``, ``general_profile``, ``general_tolerance`` and
+  ``place`` write none of their own, and ``note`` and ``view`` (with ``camera`` and ``section``) are
+  XCAF's, in the xbf and in no STEP.
 
 Every name loads on first use: ``import cad.build123d`` imports no CAD kernel.
 """
@@ -37,6 +43,10 @@ _NAMES = {
     "rack_and_pinion_pair": "cad.engine.mechanism",
     "screw_pair": "cad.engine.mechanism",
     "posed": "cad.engine.mechanism",
+    **{name: "cad.engine.pmi" for name in (
+        "annotate", "camera", "datum", "dimensional_location", "dimensional_size", "flatness_tolerance",
+        "general_profile", "general_tolerance", "limits", "note", "place", "plus_minus_tolerance",
+        "position_tolerance", "section", "surface_profile_tolerance", "view")},
     **{name: "cad.build123d._geometry" for name in (
         "GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties", "closest_points", "overlap_volume",
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
@@ -70,3 +80,6 @@ if TYPE_CHECKING:
                                          self_intersections, topology_errors)
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint
+    from cad.engine.pmi import (annotate, camera, datum, dimensional_location, dimensional_size, flatness_tolerance,
+                                general_profile, general_tolerance, limits, note, place, plus_minus_tolerance,
+                                position_tolerance, section, surface_profile_tolerance, view)

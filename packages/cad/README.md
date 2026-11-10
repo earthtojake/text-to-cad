@@ -84,7 +84,10 @@ launcher for the engine’s one page, every document at `/<id>`, every file read
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
 trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
-and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
+and solved by CalculiX's ccx, its results a folder of standard files); engineering drawings (`@eng_drawing`);
+and semantic PMI with the model-based definition around it (`cad.build123d`: datums, dimensions and
+tolerances on a part's faces, kept in its xbf and exported as AP242's; notes, named views and their
+presentation, kept in the xbf alone).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -190,8 +193,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    XCAF: a live model holds an XCAF document; `@xbf` or `--xbf` serializes it as native BinXCAF.
    It holds: units in millimetres,
    prototypes and instances with placements, a name on every part and instance, colours and
-   materials per part and per painted face, element names on face, edge and vertex labels, and
-   an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
+   materials per part and per painted face, element names on face, edge and vertex labels, an
+   assembly's mechanism, and each part's semantic PMI as XCAF's own GD&T objects, notes and views
+   (the engine's **PMI**). STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
    of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
    schematic, a robot description, a mesh -- is its file, read by its type (law 25).
 5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
@@ -301,7 +305,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     receipts, the plugin folder. A release reads what the previous shipped release wrote, writes the
     current form, and migrates on first touch, once: never the old form written, never a downgrade.
     Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
-    because text-to-cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
+    because text-to-cad was upgraded: the engine reads `xbf/8`, `xbf/9` and `xbf/10` and converts `xbf/8` in
     memory, without executing model code or changing source or cache bytes, under a migration record
     that leaves the original build closure and toolchain provenance unchanged; an explicit export to
     another XBF path saves the upgraded document atomically, and opening one does not rewrite it;
@@ -626,13 +630,15 @@ src/cad/
                          #   _printing), and the dfm every 3D type runs with them (_check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
-                         #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
-                         #   measurements of native geometry (_geometry), flat patterns (_flatten),
-                         #   and the producers it registers (_producers)
+                         #   rack_and_pinion_pair, screw_pair, posed), the semantic PMI model
+                         #   code writes on a part's faces (annotate, datum, ...: engine/pmi.py),
+                         #   a GLB's animation, measurements of native geometry (_geometry),
+                         #   flat patterns (_flatten), and the producers it registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
-                         #   on this computer (places)
+                         #   on this computer (places); a STEP's AP242 PMI read back and checked
+                         #   in the file written, with no OCCT (export/ap242.py)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run

@@ -113,6 +113,8 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
   }, [mode, change]);
   const tab = panel.tab;
   const changeTab = useCallback(id => change({ tab: id }), [change]);
+  // A tab brought up by what the person did elsewhere (a menu item of the viewport's): open, on it.
+  const showTab = useCallback(id => { changeTab(id); setOpen(true); }, [changeTab, setOpen]);
   const half = Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2);
   const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.min(half, reach > 0 ? reach - VIEWPORT_INSET_PX : half));
   const width = panel.width ?? FLAT_PANEL_DEFAULT_WIDTH;
@@ -126,7 +128,7 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
     toggle: () => setOpen(!openRef.current),
     search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; }
   } : null;
-  return { mode, open, setOpen, tab, changeTab, width, maxWidth, changeWidth, detailHeight, changeDetailHeight, focusSearch, control };
+  return { mode, open, setOpen, tab, changeTab, showTab, width, maxWidth, changeWidth, detailHeight, changeDetailHeight, focusSearch, control };
 }
 
 // The panel's two lines, the same on both sides (Figma's): every box in its head and lists — the search
@@ -190,8 +192,9 @@ export function FlatPanelPill({ onOpen, touch = false }) {
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
  *   focusSearch: number, detail?: import("react").ReactNode }} props
  *   `focusSearch`: a count; each new value puts the keyboard in the search box (/). `detail`: what is picked, under the lists.
+ *   `onShowTab`: what a section's `open` (`ToolStackContext`) brings its tab up by.
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false,
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, onShowTab = null, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false,
   detailHeight = null, onDetailHeightChange = null }) {
   const { t } = useI18n();
   const platform = useContext(ViewerHostContext)?.environment?.platform;
@@ -348,7 +351,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   activeRef.current = active;
   // One tab is no choice: no row of tabs, and no name over its hits; its list says what it is by its own label.
   const single = tabs.length <= 1;
-  const tabbed = useMemo(() => ({ tabbed: true, single, activeSection: active, searching, register }), [single, active, searching, register]);
+  const tabbed = useMemo(() => ({ tabbed: true, single, activeSection: active, searching, register, open: onShowTab }), [single, active, searching, register, onShowTab]);
   const ids = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
   const aside = <aside ref={asideRef} aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
     onKeyDown={onPanelKeyDown}

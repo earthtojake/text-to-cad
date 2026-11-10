@@ -77,6 +77,8 @@ const DOUBLE_PRESS_MS = 600;
  *   toolPanels?: import("react").ReactNode, sidebar?: import("react").ReactNode,
  *   references?: readonly import("@cad/core/prompt").PromptReference[],
  *   referenceChips?: readonly import("../tools/quick-edit/ReferenceChips.jsx").ReferenceChip[] | null,
+ *   requests?: ReadonlyArray<import("../tools/quick-edit/ReferenceChips.jsx").ReferenceChip & { request: string }> | null,
+ *   onClearRequests?: (() => void) | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../inspector/pickGlyph.jsx").CompactName) | null,
  *   copySelection?: (() => unknown) | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
@@ -110,6 +112,10 @@ const DOUBLE_PRESS_MS = 600;
  *   carry offers one. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
  *   here. `onClearReferences`: the renderer's clear of that selection, as a press on the
  *   background makes it; Quick Edit's X calls it, and clears Annotate's ink too.
+ *   `requests`: the changes the renderer was asked for in the view that its file's code should make
+ *   (a value or a placement the code holds, say), each a chip in Quick Edit
+ *   with what its prompt carries (`request`); `onClearRequests`: drops them all, as Quick Edit's
+ *   X does and a note that has gone does.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Annotate's copies the view with its ink); null when there is nothing to copy.
  *   `zoomToSelection`: `{ run(), available }`, the zoom menu's Zoom to selection (`ZoomControl.jsx`): what
@@ -151,7 +157,8 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
-export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null,
+  requests = null, onClearRequests = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
   doubleClickFits = true, zoomToSelection = null, inspect = null }) {
@@ -356,7 +363,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   };
   frame.copyActionRef.current = copyAction;
   // Quick Edit's X: nothing picked and nothing drawn, as the person would clear each.
-  const clearQuickEdit = () => { onClearReferences?.(); if (frame.annotation.hasAnnotation) frame.annotation.forget(); };
+  const clearQuickEdit = () => { onClearReferences?.(); onClearRequests?.(); if (frame.annotation.hasAnnotation) frame.annotation.forget(); };
   const forgetAnnotation = frame.annotation.forget;
   // Quick Edit's annotation: while Annotate is up or there is ink. The annotation goes with a note whenever
   // there is one (its views and annotation file, `frame.quickEditPrompt`); its Annotation chip's X wipes it.
@@ -386,7 +393,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const updateStatus = { preview: Boolean(frame.loading.preview), onRetry: frame.viewUpdate.retry,
     update: frame.loading.updating && !frame.viewUpdate.status.error ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status };
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
-    resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
+    resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} requests={requests} prompt={frame.quickEditPrompt}
     onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   // The view's own controls end the strip, after its rule: Projection (the state button), Display (its menu),
   // then Preview. A phone has no room for them on its strip: they are rows of its More, with the zoom.

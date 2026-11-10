@@ -4,7 +4,7 @@ ordinary Python scripts call decorated models explicitly.
     cad run SCRIPT.py                                the models the script explicitly calls
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
+        [--view NAME] [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
@@ -164,8 +164,9 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                              "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
                              "sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
-                                          "the display JSON object (mode, grid, camera, clip, exploded, "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), pmi=off "
+                                          "(a document's PMI not drawn; pmi or pmi=on asks for it), or "
+                                          "the display JSON object (mode, grid, camera, clip, exploded, pmi, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
                                           "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
@@ -178,6 +179,9 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                                          "the viewer's scene coordinates, as a Quick Edit packet carries them: a "
                                          "document's or a GLB's mm, a robot's m, a 3MF's unit), or authored: the "
                                          "view --annotation's ink was drawn in, from its Quick Edit packet, exactly")
+    parser.add_argument("--view", metavar="NAME", help="a part's named view (cad.build123d's view; PART/NAME where two "
+                                                       "parts have one): drawn down its camera, cut by its section, "
+                                                       "its PMI alone at its placements; not with --camera")
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--size-profile", choices=sorted(snapshot.SIZE_PROFILES))
@@ -213,7 +217,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
         report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
                               pose=args.pose, width=args.width, height=args.height,
                               size_profile=args.size_profile, annotation=args.annotation,
-                              measurements=args.measurements).report
+                              measurements=args.measurements, view=args.view).report
     except snapshot.SnapshotRefused as error:
         raise _refusal(error) from None
     except ConnectionError:
@@ -238,7 +242,7 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
         drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
                              pose=args.pose, width=args.width, height=args.height,
                              size_profile=args.size_profile, annotation=args.annotation,
-                             measurements=args.measurements)
+                             measurements=args.measurements, view=args.view)
     except (snapshot.SnapshotRefused, ValueError) as error:
         raise _refusal(error) from None
     except api.EngineError as error:
@@ -267,7 +271,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
         drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
                                  pose=args.pose, width=args.width, height=args.height,
                                  size_profile=args.size_profile, annotation=args.annotation,
-                                 measurements=args.measurements)
+                                 measurements=args.measurements, view=args.view)
     except snapshot.SnapshotRefused as error:
         raise _refusal(error) from None
     except ConnectionError:
@@ -592,6 +596,8 @@ def summary_text(summary: dict[str, Any]) -> str:
                       for row in summary["states"]])
     listed("sequences", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["sequences"]])
     listed("animations", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["animations"]])
+    listed("pmi", [f"{row['id']}  {row['kind']}  {row['status']}" + (f": {row['problem']}" if row.get("problem") else "")
+                   for row in summary.get("pmi") or []])
     # The files the model's decorators declare, not what an export wrote beside it.
     listed("declared files", summary["files"])
     return "\n".join(plain(line) for line in lines)

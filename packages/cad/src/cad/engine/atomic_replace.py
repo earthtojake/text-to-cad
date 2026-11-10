@@ -16,12 +16,14 @@ measurements) kept in the engine because the engine imports nothing of cadgen ou
 
 A declared or exported file is written through ``put``: moved into place only when the file there
 does not hold its bytes already, so writing the same translation twice writes it once and an
-unchanged file keeps its bytes and its time.
+unchanged file keeps its bytes and its time. Inside ``together`` every ``put`` lands with the others or
+not at all: a model's declared files, one of which its check refuses, leave every earlier file as it was.
 """
 
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import errno
 import os
 import shutil
@@ -73,6 +75,54 @@ def staging(target: Path | str) -> Iterator[Path]:
         shutil.rmtree(folder, ignore_errors=True)
 
 
+# The files each ``put`` inside ``together`` made, waiting to land: (staged file, target, its staging folder).
+_PENDING: contextvars.ContextVar[list[tuple[Path, Path, Path]] | None] = contextvars.ContextVar("pending", default=None)
+
+
+@contextlib.contextmanager
+def together() -> Iterator[None]:
+    """Every ``put`` in the block lands with the others or none does (law 17): each is written and
+    checked in its staging folder and held there; once the block ends whole they are moved into
+    place in order, the file each replaces linked aside in its staging folder until every one has
+    landed. A block that raises lands nothing; a move that fails puts each earlier file back byte
+    for byte and takes away each new one that had no file before it."""
+    pending: list[tuple[Path, Path, Path]] = []
+    token = _PENDING.set(pending)
+    try:
+        try:
+            yield
+        finally:
+            _PENDING.reset(token)
+        _land(pending)
+    finally:
+        for _temporary, _target, stage in pending:
+            shutil.rmtree(stage, ignore_errors=True)
+
+
+def _land(pending: list[tuple[Path, Path, Path]]) -> None:
+    """``together``'s moves, each undone when a later one fails."""
+    landed: list[tuple[Path, Path | None]] = []
+    try:
+        for temporary, target, stage in pending:
+            earlier: Path | None = stage / f".earlier.{target.name}"
+            try:
+                os.link(target, earlier)  # the earlier file itself, its bytes and its time, kept aside
+            except FileNotFoundError:
+                earlier = None
+            except OSError:  # a folder that takes no hard link: a copy of it
+                shutil.copy2(target, earlier)
+            landed.append((target, earlier))
+            replace_atomic(temporary, target)
+    except BaseException:
+        for target, earlier in reversed(landed):
+            with contextlib.suppress(OSError):
+                if earlier is not None:
+                    replace_atomic(earlier, target)
+                else:
+                    target.unlink(missing_ok=True)
+        raise
+
+
 # The refusals that say the target's folder takes no new file from this user.
 _REFUSED = (errno.EACCES, errno.EPERM, errno.EROFS)
 
@@ -103,6 +153,12 @@ def put(target: Path | str, write: Callable[[Path], None], *, compare: bool = Tr
                 return False, size
             if stage is None:
                 raise PermissionError(refused_folder(target))
+            pending = _PENDING.get()
+            if pending is not None:
+                # Landed with the rest of its set (``together``), which removes the folder.
+                pending.append((temporary, target, stage))
+                stage = None
+                return True, size
             replace_atomic(temporary, target)
             return True, size
     finally:

@@ -57,7 +57,8 @@ class ExportRefused(ValueError):
 class Kind:
     """One file kind: its name, the suffixes its files end in (the first is its own), the
     writer (``module:function``, loaded on first use: ``write(view, path)``), and whether
-    the kind is written atomically here (an xbf saves itself atomically)."""
+    the kind is written atomically here (an xbf saves itself atomically, and returns the size it
+    wrote, as a drawing does: inside ``atomic_replace.together`` the file lands later)."""
 
     name: str
     suffixes: tuple[str, ...]
@@ -68,9 +69,9 @@ class Kind:
     def suffix(self) -> str:
         return self.suffixes[0]
 
-    def write(self, view: "View", path: Path) -> None:
+    def write(self, view: "View", path: Path) -> Any:
         module, _sep, function = self.writer.partition(":")
-        getattr(importlib.import_module(module), function)(view, path)
+        return getattr(importlib.import_module(module), function)(view, path)
 
 
 KINDS: dict[str, Kind] = {
@@ -157,7 +158,7 @@ class Source:
     def __init__(self, structure: dict[str, Any], shapes: dict[str, Any], *, live: bool, xcaf: Any = None,
                  world: Callable[[tuple[int, ...]], Any] | None = None, mechanism: Any = None,
                  foreign: bool = False, path: Path | None = None, animations: Any = None,
-                 meshes: dict[str, Any] | None = None, mesh: str | None = None,
+                 meshes: dict[str, Any] | None = None, mesh: str | None = None, data: bytes | None = None,
                  local: Callable[[tuple[int, ...]], Any] | None = None,
                  local_placements: dict[tuple[int, ...], Any] | None = None,
                  migration: dict[str, Any] | None = None,
@@ -185,6 +186,9 @@ class Source:
         self.path = path
         self.meshes = meshes
         self.mesh = mesh
+        # The document's own xbf bytes, for one read from them (a retired worker's, the engine's
+        # cache's: ``build.held_source``): what an xbf of it is (``tree.write_xbf``).
+        self.data = data
         self._bytes: dict[str, bytes] = {}
         self._lock = threading.Lock()
 
@@ -425,13 +429,18 @@ def _instances(node: dict[str, Any]) -> list[int]:
 
 
 def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
-              told: Callable[[str], None] | None = None) -> int:
+              told: Callable[[str], None] | None = None, *, check: Callable[[Path], None] | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
     as ``kind`` (from the suffix when None), an STL or a 3MF meshed to within ``tolerance`` (mm) when
-    one is given (``told`` hears each part it left faces of without triangles); returns the file's size. The
-    translation lands only where the file does not hold its bytes already (``put``): a file written
-    again the same is left as it is. Every declared file is written this way too, after the build or
-    the take-up that made its document (``build``)."""
+    one is given; returns the file's size. The translation lands only where the file does not hold its
+    bytes already (``put``): a file written again the same is left as it is. Every declared file is
+    written this way too, after the build or the take-up that made its document (``build``). A file
+    that would not carry whole the PMI the code made is refused by name (``pmi.refuse_dropped``).
+    ``told`` hears what one of a document another system wrote leaves out, and each part it left faces
+    of without triangles. ``check`` reads the file staged before it lands (an atomic kind's, a STEP's):
+    one it refuses (raises) is not written, and the file there keeps its bytes."""
+    from cad.engine import pmi
+
     path = Path(path)
     kind = kind or kind_of(path)
     if kind not in KINDS:
@@ -455,13 +464,21 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     if tolerance is not None and source.mesh:
         raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance meshes it again")
     view = source.view()
+    pmi.refuse_dropped(view, kind)
+    for entry, why in pmi.dropped(view, kind) if told is not None else ():
+        told(f"warning: pmi: {path.name}: {entry['id']} is not carried whole: {why}")
     view.tolerance = tolerance
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
     if not spec.atomic:
-        spec.write(view, path)
-        return path.stat().st_size
-    _written, size = put(path, lambda temporary: spec.write(view, temporary))
+        return spec.write(view, path)
+
+    def write(temporary: Path) -> None:
+        spec.write(view, temporary)
+        if check is not None:
+            check(temporary)
+
+    _written, size = put(path, write)
     if told is not None:
         for name, faces in (view.unmeshed or {}).items():
             told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "

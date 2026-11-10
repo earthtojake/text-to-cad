@@ -162,6 +162,24 @@ it("a panel the person opened or closed stays so while the view is resized acros
   expect((await panel()).open, 'open after a remount').toBe(true);
 });
 
+// What the person did elsewhere (a menu item of the viewport's) brings a tab up: the panel opens, on it.
+it("opens on a tab brought up from elsewhere", () => {
+  function Shown() {
+    const frameRef = useRef<HTMLDivElement>(null);
+    const flat = useFlatPanelState({ frameRef, mobile: false, enabled: true, kind: 'board', toolStack: { panels: {}, collapsed: {} }, onToolStackChange: () => {} });
+    return <div ref={frameRef}>
+      <output data-testid="shown">{JSON.stringify({ open: flat.open, tab: flat.tab ?? null })}</output>
+      <button type="button" onClick={() => flat.setOpen(false)}>close</button>
+      <button type="button" onClick={() => flat.showTab('layers')}>show</button>
+    </div>;
+  }
+  render(<Shown />);
+  fireEvent.click(screen.getByRole('button', { name: 'close' }));
+  expect(JSON.parse(screen.getByTestId('shown').textContent!)).toEqual({ open: false, tab: null });
+  fireEvent.click(screen.getByRole('button', { name: 'show' }));
+  expect(JSON.parse(screen.getByTestId('shown').textContent!)).toEqual({ open: true, tab: 'layers' });
+});
+
 // The strip stands at the view's centre, over the panel where they meet: the panel is never so wide that
 // the strip covers its head (its search and its collapse button), whatever the person drags it to.
 it("is never wider than leaves its head clear of the strip, nor than half the view", async () => {

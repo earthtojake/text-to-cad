@@ -8,19 +8,16 @@ import { chromium } from 'playwright';
 
 // An engine document the harness can open: core's bracket (`lib/xbf/__fixtures__/bracket`, a
 // served document's structure and its two part buffers, as `cad serve` answers them: a
-// filleted plate and two instances of one peg), served as the engine's API serves it under each
+// filleted plate and two instances of one peg), or another of core's served documents (`fixture`:
+// `pmi_plate/v1`, a plate carrying PMI, whose next builds are `v2` and `v3`), served as the engine's API serves it under each
 // pane's origin (`cad_server/viewer/http_app.py`): `GET /api/v1/documents?path=` its envelope, `POST
 // /api/v1/documents` where the page reads the document, and its kind's reads under
-// `/api/v1/documents/xbf/bracket` -- the structure, a buffer per part -- with the version a page waits
-// on, and the look (`look.json`) with an environment image of one texel.
+// `/api/v1/documents/xbf/<its name>` -- the structure, a buffer per part -- with the version a page
+// waits on, the look (`look.json`) with an environment image of one texel, and Quick Edit's packet.
 const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
-const STRUCTURE = readFileSync(join(FIXTURES, 'bracket', 'structure.json'));
-const VERSION = JSON.parse(STRUCTURE).version;
 const LOOK = readFileSync(join(FIXTURES, 'look.json'));
 // 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128), as `xbf.test.js` serves it.
 const ENVIRONMENT = Buffer.concat([Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), Buffer.from([255, 255, 255, 128])]);
-const FILE = 'bracket.xbf';
-const DOC = '/api/v1/documents/xbf/bracket';
 
 /**
  * The page a spec opens, and so the viewer: it fills the page. Small, because a software renderer
@@ -33,8 +30,17 @@ export const VIEWPORT = Object.freeze({ width: 800, height: 600 });
  *
  * @param {{ after: (cleanup: () => unknown) => void }} lifetime — a test context, or any object
  *   with its `after`, so one server and one browser can span a whole file.
+ * @param {{ fixture?: string, edit?: (structure: object) => object, transmission?: boolean }} [options]
+ *   `fixture`: the served document's folder under core's fixtures (`bracket`, `pmi_plate/v1`),
+ *   opened as `<its first segment>.xbf`; `edit`: what the served structure is made of the
+ *   fixture's; `transmission`: its first prototype made glass, kept across `update`s of it.
  */
-export async function serveXbfHarness(t, { transmission = false } = {}) {
+export async function serveXbfHarness(t, { fixture = 'bracket', edit = structure => structure, transmission = false } = {}) {
+  const STRUCTURE = readFileSync(join(FIXTURES, fixture, 'structure.json'));
+  const VERSION = JSON.parse(STRUCTURE).version;
+  const name = fixture.split('/')[0];
+  const FILE = `${name}.xbf`;
+  const DOC = `/api/v1/documents/xbf/${name}`;
   let server, browser;
   t.after(async () => {
     await browser?.close();
@@ -42,10 +48,9 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
   });
   const { bundle, css: bundledCss } = await harnessBundle();
   // The document as it is served now: its version moves with each `update` of an open page.
-  const structure = JSON.parse(STRUCTURE);
+  const structure = edit(JSON.parse(STRUCTURE));
   if (transmission) structure.prototypes[0].material = { pbr: { values: { transmission: 0.9, roughness: 0.1, ior: 1.5 }, textures: {} } };
-  const initial = Buffer.from(JSON.stringify(structure));
-  let served = { version: VERSION, structure: initial };
+  let served = { version: VERSION, structure: Buffer.from(JSON.stringify(structure)), parts: fixture };
   let updates = 0;
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const json = (response, body) => { response.setHeader('Content-Type', 'application/json'); response.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
@@ -63,7 +68,7 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
     if (at >= 0) {
       const rest = path.slice(at);
       // The file's envelope, by its absolute path under the `/models` the harness opens a bare `?file=` in.
-      const envelope = { id: 'bracket', kind: 'xbf', api: DOC, held: true, revision: VERSION,
+      const envelope = { id: name, kind: 'xbf', api: DOC, held: true, revision: VERSION,
         entry: { file: `/models/${FILE}`, kind: 'xbf', hash: VERSION, bytes: STRUCTURE.length } };
       if (rest === '/api/v1/documents' && request.method === 'GET') {
         json(response, { documents: url.searchParams.get('path') === `/models/${FILE}` ? [envelope] : [] });
@@ -75,7 +80,17 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
         request.on('end', () => {
           if (JSON.parse(body || '{}').path !== `/models/${FILE}`) { notFound(response); return; }
           response.statusCode = 201;
-          json(response, { id: 'bracket', kind: 'xbf', api: DOC });
+          json(response, { id: name, kind: 'xbf', api: DOC });
+        });
+        return;
+      }
+      // Quick Edit's packet, as the viewer answers one small enough to travel inline.
+      if (rest === '/api/v1/local/prompt-files' && request.method === 'POST') {
+        const chunks = [];
+        request.on('data', chunk => chunks.push(chunk));
+        request.on('end', () => {
+          const { acceptInline, ...packet } = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+          json(response, { ok: true, inline: JSON.stringify(packet) });
         });
         return;
       }
@@ -84,10 +99,10 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
       if (rest === '/api/v1/look/environment') { binary(response, ENVIRONMENT); return; }
       if (rest === `${DOC}/structure`) { json(response, served.structure); return; }
       // The engine answers a version wait at once with the version it holds: the page paces its next ask.
-      if (rest === '/api/v1/documents/bracket/version') { json(response, { version: served.version, patch: null }); return; }
+      if (rest === `/api/v1/documents/${name}/version`) { json(response, { version: served.version, patch: null }); return; }
       const part = /^\/parts\/([0-9a-f]+)$/.exec(rest.slice(DOC.length));
       if (rest.startsWith(DOC) && part) {
-        try { binary(response, readFileSync(join(FIXTURES, 'bracket', `${part[1]}.xbm`))); } catch { notFound(response); }
+        try { binary(response, readFileSync(join(FIXTURES, served.parts, `${part[1]}.xbm`))); } catch { notFound(response); }
         return;
       }
       if (rest.startsWith(DOC) && /^\/parts\/[0-9a-f]+\/groups$/.test(rest.slice(DOC.length))) { json(response, { faces: {}, edges: {} }); return; }
@@ -110,7 +125,10 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
   /**
    * One page over the bracket. `deviceScaleFactor: 1` keeps a screenshot's pixels the viewport's.
    * Its `update()` serves a new version of the document, as a build that changed none of its parts
-   * writes one, and settles once the page shows it.
+   * writes one, and settles once the page shows it; `update(change)` serves the structure `change`
+   * makes of the one served before, or `update('pmi_plate/v2')` the next build a fixture holds,
+   * its structure and its parts, as the engine served them after an edit of the model (`edit`:
+   * what is served is made of that structure, its parts the fixture's).
    */
   const open = async ({ timeout = 30000 } = {}) => {
     const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
@@ -121,10 +139,11 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
     // No Worker: what a worker would build is built on the main thread, as for a host without one.
     await page.addInitScript(() => { window.Worker = undefined; });
     await page.goto(`http://127.0.0.1:${server.address().port}/?file=${FILE}`);
-    const update = async () => {
-      const next = JSON.parse(initial);
-      next.version = `${VERSION}-${(updates += 1)}`;
-      served = { version: next.version, structure: Buffer.from(JSON.stringify(next)) };
+    const update = async (change = structure => structure, edit = structure => structure) => {
+      const built = typeof change === 'string';
+      const next = built ? edit(JSON.parse(readFileSync(join(FIXTURES, change, 'structure.json')))) : change(JSON.parse(served.structure));
+      if (!built) next.version = `${VERSION}-${(updates += 1)}`;
+      served = { version: next.version, structure: Buffer.from(JSON.stringify(next)), parts: built ? change : served.parts };
       // The page hears it on its next wait (about a second), reads it and puts it on screen.
       await page.waitForFunction(version => window.__cadViewerLoad?.complete && window.__cadViewerLoad.modelKey.endsWith(`:${version}`), next.version);
     };

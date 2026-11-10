@@ -14,7 +14,7 @@ from pathlib import Path
 
 def fingerprint(structure: dict) -> str:
     """Content identity of a live document, independent of its served address/version."""
-    fields = ("name", "units", "prototypes", "instances", "tree", "kinematics")
+    fields = ("name", "units", "prototypes", "instances", "tree", "kinematics", "pmi")
     return hashlib.sha256(json.dumps({k: structure.get(k) for k in fields},
                                     sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 

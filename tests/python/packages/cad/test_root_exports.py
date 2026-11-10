@@ -23,13 +23,18 @@ ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint
 # The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
 TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
+# PMI's names, after the AP242 entities they write, and those that write none (limits, the general
+# profile and tolerance, notes, views and placements) plainly.
+PMI = ("annotate", "datum", "dimensional_size", "dimensional_location", "plus_minus_tolerance", "limits",
+       "flatness_tolerance", "position_tolerance", "surface_profile_tolerance", "general_profile", "general_tolerance",
+       "note", "view", "camera", "section", "place")
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
     "cad.build123d": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
                       "posed", "animation", "memo", "paint", "GeometryError", "GeometryIssue", "ClosestPoints",
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
-                      "flatten_face", "flatten_faces", "union_faces", "offset_profile"),
+                      "flatten_face", "flatten_faces", "union_faces", "offset_profile", *PMI),
 }
 
 
@@ -104,9 +109,10 @@ class RootExports(unittest.TestCase):
         from cad.engine import mechanism, model
         from cad.engine.formats.kicad import board_index, geometry, summary
 
+        pmi = importlib.import_module("cad.engine.pmi")  # the engine's own module, exported by cad.build123d
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model, "memo": model,
                    "paint": model, "gear_pair": mechanism, "rack_and_pinion_pair": mechanism,
-                   "screw_pair": mechanism, "posed": mechanism,
+                   "screw_pair": mechanism, "posed": mechanism, **{name: pmi for name in PMI},
                    **{name: _geometry for name in _geometry.__all__},
                    **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)}}
         for namespace, names in NAMESPACES.items():
@@ -160,7 +166,7 @@ class RootExports(unittest.TestCase):
         # ``build`` among them: a model builds by a decorated function's call, never cad.build (law 12).
         for name in ("Material", "materials", "build", "read_scene", "AssemblyHelper", "label_shape", "revolute", "compound_from_instances",
                      "mechanism_state", "animation", "select", "report", "track", "serve", "status", "stop",
-                     "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "validate", "check"):
+                     "daemon", "server", "srgb", "srgb_to_linear", "linear_to_srgb", "validate", "check", "pmi"):
             with self.subTest(name=name), self.assertRaises(AttributeError) as caught:
                 getattr(cad, name)
             self.assertEqual(str(caught.exception), f"module 'cad' has no attribute {name!r}")
