@@ -24,6 +24,9 @@ export CAD_ENGINE_STANDBY=0
 # prints its Python stack before it goes: workers inherit it from the run, so the model log the
 # client prints, and so the failing test's output, says where.
 export PYTHONFAULTHANDLER=1
+# A run started from a Claude Code session inherits its marker, which makes every CAD MCP session a
+# test opens list no tools (cad_server/mcp/host.py, claude_code): the tests that want it set it.
+unset CLAUDE_CODE_ENTRYPOINT CAD_MCP_CARDS
 
 # The three packages' source trees, the library's first: every suite runs on this checkout's own
 # packages, never on whatever the interpreter has installed (a worktree's venv may point at another).
@@ -86,10 +89,13 @@ run_python_unittest() {
   # a daemon runs on one of that file's alone, stopped when the file ends, so a module that
   # starts workers or a daemon does not hold the rest of the suite.
   # PYTHON_TEST_PRINT_WEIGHTS is how --print-weights reaches the runner without every
-  # caller growing a flag.
+  # caller growing a flag; PYTHON_TEST_NO_SKIPS, --no-skips, for a suite that must run whole.
   local extra=()
   if [ -n "${PYTHON_TEST_PRINT_WEIGHTS:-}" ]; then
     extra+=(--print-weights)
+  fi
+  if [ -n "${PYTHON_TEST_NO_SKIPS:-}" ]; then
+    extra+=(--no-skips)
   fi
 
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \

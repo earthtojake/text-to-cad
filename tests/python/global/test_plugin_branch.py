@@ -38,13 +38,27 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual({path for path in directory if path.startswith(".claude-plugin/")},
                          {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
         self.assertEqual({path for path in directory if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
-        # The latest copy adds what Claude Code's and Codex's marketplaces read, and the Agent Plugins standard's
-        # manifest and server config.
+        # The latest copy adds what Claude Code's and Codex's marketplaces read, Grok Build's manifest, and the
+        # Agent Plugins standard's manifest and server config.
         install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
         self.assertEqual(set(install) - set(directory), {".claude-plugin/marketplace.json", ".codex-plugin/plugin.json",
                                                          ".codex-plugin/logo.png", "codex.mcp.json", "plugin.json",
-                                                         "mcp.json"})
+                                                         "mcp.json", ".grok-plugin/plugin.json"})
+
+    def test_claude_code_gets_cad_s_server_from_the_directory_s_copy_alone(self) -> None:
+        # Claude Code gets the skills alone from main and latest; the directory's copy, which claude.ai reviewed,
+        # keeps the manifest naming claude.mcp.json, and that server lists no tools when Claude Code starts it.
+        # Grok Build reads its own manifest before Claude's: it keeps the server everywhere it is installed from.
+        named = {}
+        for copy in ("latest", "directory"):
+            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
+            self.assertEqual(errors, [])
+            manifests = {path: json.loads(tree[path][1]).get("mcpServers")
+                         for path in (".claude-plugin/plugin.json", ".grok-plugin/plugin.json") if path in tree}
+            named[copy] = manifests
+        self.assertEqual(named, {"latest": {".claude-plugin/plugin.json": None, ".grok-plugin/plugin.json": "./claude.mcp.json"},
+                                 "directory": {".claude-plugin/plugin.json": "./claude.mcp.json"}})
 
     def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
         # The catalog lists the plugin at the root of the branch it is read from, so a marketplace

@@ -6,6 +6,8 @@
 /DXF/
 /tmp/
 __pycache__/
+# What render.py writes (cad run render.py): its stills, and the scene as a .blend.
+/RENDERS/
 # The board's fabrication outputs (cad kicad_pcb export, cad kicad_sch export).
 /fab/
 # The 3D models src/part_models.py writes for the footprints that name them (${KIPRJMOD}/orbit.3dshapes).

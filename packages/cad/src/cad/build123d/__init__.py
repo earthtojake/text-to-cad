@@ -22,7 +22,9 @@ and the helpers a model calls with build123d objects:
   ``dfm(shape, process=...)`` -- what ``cad.step.dfm`` and ``cad.xbf.dfm`` run on a file's or a document's
   B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,
   ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;
-  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance.
+  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;
+* ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,
+  moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.
 
 Every name loads on first use: ``import cad.build123d`` imports no CAD kernel.
 """
@@ -51,15 +53,20 @@ _NAMES = {
     "unfold": "cad.build123d._dfm_sheet",
 }
 
-__all__ = sorted(_NAMES)
+# Its public submodules, each imported on first use (``cad.build123d.materials``), offered with its names.
+_SUBMODULES = ("materials",)
+
+__all__ = sorted([*_NAMES, *_SUBMODULES])
 
 
 def __getattr__(name: str) -> Any:
+    import importlib
+
+    if name in _SUBMODULES:
+        return importlib.import_module(f"{__name__}.{name}")
     module = _NAMES.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    import importlib
-
     return getattr(importlib.import_module(module), name)
 
 
@@ -70,6 +77,7 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
+    from cad.build123d import materials
     from cad.build123d._flatten import (flat_pattern, flatten_face, flatten_faces, offset_profile, planar_faces,
                                         union_faces)
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,

@@ -30,8 +30,10 @@ NAMESPACES = {
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
                       "flatten_face", "flatten_faces", "union_faces", "offset_profile", "dfm", "cnc",
-                      "sheet_metal", "molding", "printing", "unfold"),
+                      "sheet_metal", "molding", "printing", "unfold", "materials"),
 }
+# The namespaces' public submodules, offered with their names and imported on first use.
+SUBMODULES = {"cad.build123d": ("materials",)}
 
 
 class RootExports(unittest.TestCase):
@@ -117,8 +119,32 @@ class RootExports(unittest.TestCase):
             self.assertEqual(sorted(names), sorted(module.__all__))
             for name in names:
                 with self.subTest(name=f"{namespace}.{name}"):
-                    self.assertIs(getattr(module, name), getattr(defined[name], name))
+                    if name in SUBMODULES.get(namespace, ()):
+                        self.assertIs(getattr(module, name), importlib.import_module(f"{namespace}.{name}"))
+                    else:
+                        self.assertIs(getattr(module, name), getattr(defined[name], name))
                     self.assertNotIn(name, cad.__all__, f"{name} is {namespace}'s, not the root's")
+
+    def test_the_blender_namespace_loads_no_bpy_and_a_script_without_it_is_told_the_extra(self):
+        """``cad.blender`` is its declared names, loaded on first use: importing it imports no bpy. Where bpy is
+        absent -- any Python but the one Blender is built for, an environment made without the extra -- a name of
+        it says which extra brings it, in the one line every integration's missing module is said in."""
+        import importlib.util
+
+        code = ("import sys, cad.blender\n"
+                "print(cad.blender.__all__, 'bpy' in sys.modules, [n for n in dir(cad.blender) if n[0] != '_'])\n")
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(proc.stdout.strip(), "['Clip', 'Model', 'load'] False ['Clip', 'Model', 'load']", proc.stderr)
+        import cad.blender
+
+        with self.assertRaises(AttributeError):
+            cad.blender.cube
+        self.assertNotIn("blender", cad.__all__, "an integration's namespace, not a name of the root")
+        if importlib.util.find_spec("bpy") is None:
+            with self.assertRaises(ModuleNotFoundError) as caught:
+                from cad.blender import load  # noqa: F401
+            self.assertEqual((str(caught.exception), caught.exception.name),
+                             ("bpy comes with cad's blender integration: add `cad[blender]` to the script's header", "bpy"))
 
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
         """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
@@ -135,10 +161,11 @@ class RootExports(unittest.TestCase):
         for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
                 self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
-                                 ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
-                # The type's decorator passes an STL's or a 3MF's mesh tolerance to the engine's; any other
-                # type's engine decorator refuses it, as Python refuses an unknown keyword.
-                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name", "tolerance"])
+                                 ["out", "name", *(["tolerance", "angle"] if kind in ("glb", "stl", "threemf") else [])])
+                # The type's decorator passes a GLB's, an STL's or a 3MF's mesh tolerance and angle to the engine's;
+                # any other type's engine decorator refuses them, as Python refuses an unknown keyword.
+                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters),
+                                 ["out", "name", "tolerance", "angle"])
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either

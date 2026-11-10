@@ -5,7 +5,7 @@ A model has no file behind it: it is addressed by its document id (``cad run SCR
 the handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands
 a shape over), with no file of its own; the files it declares are the other types' decorators
 (``@xbf("XBF/arm.xbf")``, ``@step("arm.step")``). Its operations are the ``cad model <operation>`` commands':
-``model.export(handle_or_id, *destinations, tolerance=None)``, ``model.snapshot(...)``,
+``model.export(handle_or_id, *destinations, tolerance=None, angle=None)``, ``model.snapshot(...)``,
 ``model.inspect(...)`` and ``model.dfm(handle_or_id, process="cnc")`` (or ``"sheet"``, ``"molding"``,
 ``"printing"``), which checks it for manufacturing on its exact geometry, measured by the engine with the build123d
 integration (``cad._internal.manufacturing``), and

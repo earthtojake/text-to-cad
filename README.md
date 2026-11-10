@@ -34,7 +34,8 @@ irm https://www.texttocad.dev/install.ps1 | iex
 
 It installs uv if it is missing, then sets up text-to-cad in every agent app on
 your computer with each app's own commands (the plugin, which brings the skills
-and CAD's MCP server, or for an agent without a plugin the skills alone),
+and CAD's MCP server, or for an agent without a plugin the skills alone; Claude
+Code gets the skills, and Claude Desktop the server, for its Chat and Code tabs),
 registers the `cad` command, and moves CAD's server to the new release. Run
 it again to update everything, or click CAD's update button when it shows one; it
 lists the apps to restart.
@@ -53,6 +54,7 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 - [**Manufacturing checks**](skills/cad/SKILL.md#can-it-be-made): Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.
 - [**Stress checks**](skills/fea/SKILL.md): Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.
 - [**Engineering drawings**](skills/engineering-drawing/SKILL.md): Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.
+- [**Renders**](skills/render/SKILL.md): Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.
 - [**Fabrication services**](skills/sendcutsend/SKILL.md): [Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.
 - [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.
 

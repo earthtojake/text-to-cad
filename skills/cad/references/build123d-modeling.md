@@ -55,8 +55,10 @@ See [positioning](positioning.md) for datums and joints, and
 Use build123d's native `bd_materials` objects. Set materials after geometric operations,
 then set any explicit colour: build123d's material setter also sets colour. A transmissive
 material infers preview alpha (`transmission=1` gives `0.3`), even with PBR `opacity=1`.
-For an opaque base colour with physical transmission, assign an opaque `body.color`
-after its material.
+A transmissive part is one fade, never two, in every file of it: what draws transmission
+(the viewer's Render and Solid, a GLB's path tracer) draws it opaque with its transmission,
+and what draws none (Flat, X-ray, Parts, a snapshot, a 3MF) at that preview. The colour's
+alpha does not fade it further; to fade it everywhere, give the look a PBR `opacity` below 1.
 
 ```python
 from bd_materials import metals
@@ -75,7 +77,36 @@ A project's material is a native `FinishedMaterial`, with physics in `.material`
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
 with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
-There is no text-to-cad material class, catalogue or adapter.
+There is no text-to-cad material class or adapter.
+
+For boards, electronic parts and process finishes, which `bd_materials` lacks or draws poorly
+untextured, `cad.build123d.materials` has named looks. Each returns a fresh native
+`FinishedMaterial` (physics from `bd_materials`, a scalar look every renderer draws). A `color`
+is a preset, a hex, a CSS name or an sRGB `(r, g, b)` of 0–1 floats; one colour is one material
+whatever its spelling (`"grey"`, `"gray"` and `"RAL7016"` are `powder_coat_RAL7016_satin`), so
+it is one BOM row. `zinc_plated` takes its passivation, not a colour. `substrate=` is the
+`bd_materials` metal a finish is on: its physics are kept, its look replaced (`bead_blasted` on
+an anodized part is bare aluminium).
+
+```python
+from cad.build123d import materials, paint
+
+board.material = materials.soldermask("green")              # finish="matte" for a flat mask
+paint(board, pads, materials.enig())
+bracket.material = materials.powder_coat("RAL7016", finish="satin")
+```
+
+| Use for | Call |
+| --- | --- |
+| A board's body; its edge or a slot | `soldermask(color, finish="glossy"\|"matte")`, `soldermask_green()`, `soldermask_matte_black()`; `fr4()` |
+| Markings, pads, joints | `silkscreen(color)`, `bare_copper(oxidized=False)`, `enig()`, `hasl(lead_free=True)`, `solder()` |
+| IC packages, chip parts, LEDs | `mold_compound()`, `ceramic("white"\|"tan")`, `led_lens(color, diffused=False)` |
+| Connector and switch bodies | `connector_housing(color)` (PBT-GF30) |
+| Aluminium | `anodized(color)`, `anodized_black()`, `bead_blasted()` |
+| Steel and stainless | `powder_coat(color, finish="matte"\|"satin"\|"gloss")`, `powder_coat_black()`, `brushed()`, `zinc_plated(passivation="clear"\|"blue"\|"yellow"\|"black")`, `black_oxide(oiled=True)` |
+
+Prefer these to `bd_materials`' textured finishes (`bead_blast`, `brushed`, `zinc_plate`,
+`tin_plate`), which draw flat at roughness 1 until textures are drawn.
 
 `PbrProperties.override` returns an edited look. Its controls include `metalness`,
 `roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,
@@ -88,9 +119,13 @@ refuses 0–255 integers with OCCT's `Color out`. A paint (`paint(shape, faces, 
 0–255 integers, `(242, 240, 234)` or four with alpha.
 
 XBF keeps native physics and the resolved PBR data; GLB and the viewer retain the
-appearance. STEP keeps name, density and colour. Native texture maps are preserved in
-XBF; the viewer, GLB export and snapshots refuse them until UV mapping is supported.
-Use scalar PBR looks for those paths. OCCT snapshots keep their documented appearance approximations.
+appearance. STEP keeps name, density and colour. Native texture maps (every wood, cardboard
+and CFRP in the catalogue, a finish such as `processes.mjf()`) are kept in XBF but not drawn
+yet: the viewer, snapshots and GLB/3MF export draw the part in its material's scalar look (the
+colour build123d's setter infers, metalness, roughness, transmission, ...) and name what they left out — a snapshot or
+export warns `PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`, and `cad xbf
+inspect` lists the parts under `textures`. Set the scalar values with `pbr.override(...)` when
+the look matters. OCCT snapshots keep their documented appearance approximations.
 
 ## Placement and frame pitfalls
 

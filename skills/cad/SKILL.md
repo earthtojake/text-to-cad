@@ -40,7 +40,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 One server runs for the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad status` lists its workers
@@ -153,7 +154,8 @@ is the script's folder; two explicit names in it must differ.
 - **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"` (`"#4a6fa5cc"` with
   alpha). `part.color` is build123d's: it takes no 0-255 integers (OCCT's `Color out`), which
   `paint` does. Import `metals` from `bd_materials`; assign a native material with
-  `part.material = metals.aluminum()`
+  `part.material = metals.aluminum()`; boards, electronic parts and finishes (solder mask,
+  ENIG, anodized, powder coat) are `cad.build123d.materials`' named looks
   ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
 - **Inputs** are `step.read`, `xbf.read` and `stl.read` in the body, and any file its
   Python opens, each tracked by its bytes. The clock, environment variables and
@@ -191,7 +193,8 @@ and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model. A DXF is the export of a
 model that returns 2D geometry, a profile or a flat pattern, and a solid is refused
 ([2D profiles and DXF](references/2d-profiles-and-dxf.md)). An STL or 3MF for printing a part with fits takes
-`--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)).
+`--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)); a
+GLB for another renderer takes `--tolerance MM --angle DEG` ([a GLB for another renderer](references/exports.md#a-glb-for-another-renderer)).
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `xbf.read`. A restart needs none: the
@@ -438,8 +441,8 @@ and every assumption or departure from the request.
 
 Show the person each model you create or change, and any model or file they ask to see. If your
 tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once: a
-model's page is the `view:` line its run prints, and a file's is the `url` that
+absolute path; its description says the rest. Otherwise give the person the page's link once, to
+open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
 `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
 download: give its path. Never screenshot the viewer to check your own work; review with
 `cad <type> snapshot`. If it fails to launch, say so.

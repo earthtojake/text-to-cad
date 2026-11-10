@@ -1337,6 +1337,7 @@ class Daemon:
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
                      "expected": request.get("expected"), "original": request.get("original"),
                      **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
+                     **({"angle": request["angle"]} if request.get("angle") is not None else {}),
                      **({"display": shown} if shown else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:

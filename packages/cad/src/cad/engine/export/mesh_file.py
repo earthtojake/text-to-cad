@@ -23,6 +23,7 @@ from typing import Any
 
 import numpy as np
 
+from cad.engine.export.mesh import DEFAULT_COLOR
 from cad.engine.mesh_format import Mesh
 
 __all__ = ["read"]
@@ -102,10 +103,17 @@ def _glb(path: Path) -> tuple[list[tuple], list[tuple], dict[str, Any]]:
             parts.append((part.name, mesh_of(part.points, part.triangles, None, part.normals),
                           None if own is None else material_color(material_from_json(own)), {}, own, {}))
             continue
-        face_colors = {at: material_color(material_from_json(look)) for at, look in enumerate(looks, 1) if look is not None}
-        face_materials = {at: look for at, look in enumerate(looks, 1) if look is not None}
-        parts.append((part.name, mesh_of(part.points, part.triangles, part.faces, part.normals), None, face_colors,
-                      None, face_materials))
+        # Several looks: the one most of its triangles wear is the part's own (of two alike, the first), and
+        # each other primitive a painted face -- as the document the GLB was written from holds them, so what
+        # is written from this names the part's look its default and no look that nothing wears.
+        worn = np.bincount(np.asarray(part.faces, np.int64), minlength=len(looks) + 1)[1:]
+        own = looks[int(np.argmax(worn))]
+        face_colors = {at: DEFAULT_COLOR if look is None else material_color(material_from_json(look))
+                       for at, look in enumerate(looks, 1) if look != own}
+        face_materials = {at: look for at, look in enumerate(looks, 1) if look is not None and look != own}
+        parts.append((part.name, mesh_of(part.points, part.triangles, part.faces, part.normals),
+                      None if own is None else material_color(material_from_json(own)), face_colors, own,
+                      face_materials))
     placed = [(index, matrix, f"{path.stem}/{name}") for index, matrix, name in read.placed]
     leaves = [{"name": name, "prototype": index, "instance": at} for at, (index, _matrix, name) in enumerate(read.placed)]
     tree = leaves[0] if len(leaves) == 1 else {"name": path.stem, "children": leaves}

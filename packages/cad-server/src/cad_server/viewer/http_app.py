@@ -1131,7 +1131,7 @@ class CadApp:
         if not _is_file(path):
             raise ApiError(404, "That file is no longer there.", "build the model again, or open the file from where it is now")
         try:
-            apps.open_file(path, app)
+            apps.open_file(path, app, app_id=payload["app"])
         except OSError as error:
             raise ApiError(500, f"the app could not be started: {error}", "open the file from the file manager instead") from None
         response.send_empty(204)
