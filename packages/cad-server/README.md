@@ -168,6 +168,9 @@ doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
 
+**Since 0.11.8** `cad <type> inspect`'s text names at most four parts on a line of materials, then the first
+three and how many more; its `--json` still names every part, so a program reads that.
+
 The plugin every agent app gets is one folder, `plugin` in the state folder, which the server writes
 from its own copy of the plugin (`_runtime/plugin`: each host's manifest, its config for the CAD app's
 server, and the skills, byte for byte as they were released) with every version this distribution's

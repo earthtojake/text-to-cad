@@ -1009,3 +1009,25 @@ describe the sweep, never the model (law 22): `step` (degrees or millimetres), `
 so its stops are MuJoCo's) and `joint` (the joints to sweep, every one a person moves by default; a name
 the document has no such joint by is refused, naming its joints). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
 process when its environment holds it, else the installation's base (law 29).
+
+## Since 0.11.8
+
+What a model, a script or a check written for 0.11.7 meets now:
+
+- **A child turned about its joint's axis at its zero fails the run.** Where a child was built where it
+  stands -- its `RigidJoint` at the joint's origin, its Z on the joint's axis, its X another way (as a
+  `bd.Plane` of the axis on a turned part gives) -- and `connect_to` turned it about that axis at the joint's
+  zero, 0.11.7 built it turned. The run now fails, naming the joint, the turn and the frame to build the
+  `RigidJoint` at: a revolute's own frame, `hinge.location`, or a slide's position in its rail's
+  orientation. A `RigidJoint` whose Z is not the axis, or that stands elsewhere, places the child on the
+  joint as before.
+- **A read STEP's densities are the file's.** OCCT read a density declared in kg/m^3 (what most CAD tools
+  write) 1000 times too small; it is now read as declared, so masses from such a file are 1000 times
+  larger than 0.11.7 said. A STEP this library wrote (g/cm^3) reads as before.
+- **A read STEP's user-defined attributes are no materials.** A part parameter a CAD tool writes (`QTY`,
+  a sheet-metal default) was read as a material named for it, with no density; it is now none, and an
+  attribute that names a material (`PTC_MATERIAL_NAME`) names the part's material.
+- **`cad.urdf.validate` warns `zero_effort` and `zero_velocity`** for a joint limit of 0 that is not a
+  mimic's. With `strict`, a URDF that passed in 0.11.7 can fail: give the drive's limits.
+- **A snapshot's untriangulated faces are one warning**, naming the first parts and counting the faces,
+  where 0.11.7 said a line a part.
