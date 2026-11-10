@@ -57,11 +57,16 @@ ITEM_CAP = 300
 _PARALLEL = 0.9995
 #: A sheet's skin is at least this many times as wide as the sheet is thick (text-to-cad's own line, for which
 #: of a part's opposite faces can be a sheet's two sides: a strip 7 mm wide of 2 mm sheet is cut from sheet; a
-#: 100 x 8 x 6 mm bar, a block and a tube's two ends are not). Read on each face in its own frame, so the same
-#: wherever the part stands.
+#: grille's webs, a bar's sides, a block's faces and a tube's two ends are not). Read on each face in its own
+#: frame, so the same wherever the part stands.
 SKIN_WIDTHS = 2.5
-#: A bend this far round or more is a hem (to 185 degrees) or a curl: its mold lines meet at no finite point, so
-#: it has no setback, bend deduction or distance from a mold line.
+#: Where no face is that wide, one this many times as wide as the part is thick there still makes it a strip of
+#: sheet (a 4 mm strip of 2 mm sheet is laser cut; it has no wider face to outvote); under it the part is as much
+#: a bar on its side as a strip: a 100 x 8 x 6 mm bar, a 30 x 30 x 20 mm block. text-to-cad's own line too.
+STRIP_WIDTHS = 2.0
+#: A bend this far round or more is a hem (to 185 degrees, its inside diameter within ``sheet.HEM_DIAMETER_T``
+#: thicknesses), a U-bend (as far round, wider) or a curl: its mold lines meet at no finite point, so it has no
+#: setback, bend deduction or distance from a mold line.
 HEM_DEG = 175.0
 
 
@@ -582,13 +587,15 @@ class _Analysis:
                     for a, hs in self.hits.items()}
         opposite = {a: hs for a, hs in opposite.items() if hs}
         widths = {a: self._width(a) for a in opposite}
-        planar = [(h.distance, h.area) for a, hs in opposite.items() for h in hs
-                  if widths[a] >= SKIN_WIDTHS * h.distance * (1.0 - 1e-9)]
+        planar: list[tuple[float, float]] = []
+        for least in (SKIN_WIDTHS, STRIP_WIDTHS):  # a strip's faces vote only where no wider face does
+            planar = planar or [(h.distance, h.area) for a, hs in opposite.items() for h in hs
+                                if widths[a] >= least * h.distance * (1.0 - 1e-9)]
         if not planar and opposite:
             # no skin: the facts are read as before, off the opposite faces there are, and the part is not sheet
             widest = max(opposite, key=lambda a: (widths[a], self.areas[a - 1]))
             apart = float(np.median([h.distance for h in opposite[widest]]))
-            self.why = (f"no face is {SKIN_WIDTHS:g} times as wide as it is from the face opposite it (the widest "
+            self.why = (f"no face is {STRIP_WIDTHS:g} times as wide as it is from the face opposite it (the widest "
                         f"is {widths[widest]:.4g} mm wide and {apart:.4g} mm across): a bar or a block, not sheet")
             self.block = True
             planar = [(h.distance, h.area) for hs in opposite.values() for h in hs]
@@ -725,11 +732,13 @@ class _Analysis:
                 point = np.array([centre.X, centre.Y, centre.Z])
             self._not_sheet(a, kind, local, max(deviation, tol), point, self.areas[a - 1])
 
-    def rolled(self) -> str:
-        """Why a part with no flat skin whose cylinders are a thickness apart is no brake part: a closed
-        section (a tube), or a sheet rolled round with no flat flange -- "" for any other part."""
+    def rolled(self) -> tuple[str, str]:
+        """What a part with no flat skin whose cylinders are a thickness apart is, and what that means here:
+        ("tube", why it is no sheet part) for a closed section; ("rolled", what was not measured) for a sheet
+        rolled round with no flat flange, which is sheet, and which this check does not unroll; ("", "") for
+        any other part."""
         if self.skins or not self.bend_faces:
-            return ""
+            return "", ""
         t = float(self.thickness)
         inside = min(float(self.surfaces[a - 1].radius) for a in self.bend_faces)
         axis = np.array(self.surfaces[min(self.bend_faces) - 1].axis)
@@ -737,10 +746,11 @@ class _Analysis:
         slit = any(self.surfaces[a - 1].kind != "plane" or abs(float(np.dot(self.surfaces[a - 1].normal, axis))) < _PARALLEL
                    for a in self.edge_set)
         if slit:
-            return (f"a {t:.4g} mm sheet rolled to a {inside:.4g} mm inside radius with no flat flange: rolled "
-                    "(on plate rolls), not bent on a brake, and not unfolded here")
-        return (f"a closed section, a tube of {t:.4g} mm wall and {inside:.4g} mm inside radius: no flat blank "
-                "bends into it")
+            return "rolled", (f"a {t:.4g} mm sheet rolled to a {inside:.4g} mm inside radius with no flat flange is "
+                              "rolled on plate rolls, not bent on a brake: this check unfolds a part from a flat "
+                              "flange, so its roll, its holes and its flat pattern were not measured")
+        return "tube", (f"a closed section, a tube of {t:.4g} mm wall and {inside:.4g} mm inside radius: no flat "
+                        "blank bends into it")
 
     def _step(self, a: int, thickness: float, tol: float) -> tuple[str, float, np.ndarray] | None:
         """For a face standing square on a skin beside it (a plane square to it, a cylinder about its normal):
@@ -1536,7 +1546,9 @@ def _bend_item(analysis: _Analysis, bend: _Bend) -> dict[str, Any]:
     t = float(analysis.thickness)
     angle = bend.angle
     tangent = math.tan(math.radians(angle) / 2) if angle < HEM_DEG else None
-    kind = "hem" if HEM_DEG <= angle <= 185.0 else "curl" if angle > 185.0 else "bend"
+    # a fold flat on itself, or a few thicknesses off it, is a hem; one round a wide radius is a U-bend
+    hem = HEM_DEG <= angle <= 185.0 and 2.0 * bend.inside_radius <= rules_side.HEM_DIAMETER_T * t * (1.0 + 1e-9)
+    kind = "hem" if hem else "curl" if angle > 185.0 else "bend"
     lines = []
     for end in (0, 1):
         for radius in (bend.inside_radius, bend.outside_radius):
@@ -1916,8 +1928,18 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
         "not_sheet_faces": len(analysis.not_sheet), "bent": False, "location": part.ref("face", largest),
     }
     is_sheet = t is not None and bool(analysis.skins) and analysis.sheet_fraction >= 0.5 and not analysis.block
+    kind, said = analysis.rolled() if t is not None and not analysis.block else ("", "")
+    if kind == "rolled":
+        # sheet, rolled: no error of the part's, and no pass of what this check does not unroll -- its bends
+        # are not measured (the one family that says so: the rest hold nothing of it)
+        item.update(is_sheet=True, rolled=True)
+        out.update({family: [] for family in FAMILIES}, parts=[item], not_sheet=analysis.not_sheet,
+                   bends=Unmeasured("rolled", said), _lost={}, _failed={})
+        for record in analysis.not_sheet:
+            record["face"] = analysis.ref(record["face"])
+        return out
     if t is not None and not is_sheet:
-        analysis.why = analysis.why or analysis.rolled() or \
+        analysis.why = analysis.why or said or \
             f"only {100 * analysis.sheet_fraction:.0f}% of its area is a {t:.4g} mm sheet"
     item["is_sheet"] = is_sheet
     if analysis.why:
@@ -2127,7 +2149,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         for part, result in zip(document.parts, results):
             value = result.get(family, [])
             if isinstance(value, Exception):
-                failure = failure or f"{part.owner or part.name}: {type(value).__name__}: {value}"
+                # what this check does not measure says itself; anything else, with what raised it
+                said = str(value) if isinstance(value, Unmeasured) else f"{type(value).__name__}: {value}"
+                failure = failure or ": ".join(filter(None, (part.owner or part.name, said)))
                 continue
             items.extend(value)
         if failure is not None:
@@ -2182,7 +2206,8 @@ def _unfolded(shape: Any, thickness: float | None, k_factor: float | None,
         analysis.probe()
         analysis.classify()
         if analysis.thickness is None or not analysis.skins:
-            raise ValueError(f"{part.name or 'the shape'} is not sheet metal: {analysis.why or 'no thickness'}")
+            raise ValueError(f"{part.name or 'the shape'} is not sheet metal: "
+                             f"{analysis.why or analysis.rolled()[1] or 'no thickness'}")
         if thickness is not None and abs(analysis.thickness - float(thickness)) > max(0.01, 0.005 * float(thickness)):
             raise ValueError(f"{part.name or 'the shape'} is {analysis.thickness:.4g} mm thick, not {float(thickness):g}")
         analysis.find_bends()

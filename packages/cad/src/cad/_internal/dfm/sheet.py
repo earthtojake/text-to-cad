@@ -53,10 +53,17 @@ PROTOLABS = Source("protolabs-sheet", "Protolabs", "Sheet metal fabrication desi
 XOMETRY = Source("xometry-sheet", "Xometry", "Sheet metal fabrication service (design guidelines)",
                  "https://www.xometry.com/capabilities/sheet-metal-fabrication/", ACCESSED)
 
-#: Past this a part is plate, no sheet shop's work (mm): text-to-cad's own floor -- sheet lasers and press brakes
-#: in general service stop near an inch of steel, and thicker plate is flame-, plasma- or waterjet-cut and
-#: machined. Hubs recommends 10 mm at most for laser cutting and 6 for bending (``thickness_max``, warnings).
-PLATE_MM = 25.0
+#: Past this a part is plate, no sheet shop's work (mm): text-to-cad's own floor, an inch -- sheet lasers and
+#: press brakes in general service stop near an inch of steel (a 1 in plate is the last they take), and thicker
+#: plate is flame-, plasma- or waterjet-cut and machined. Hubs recommends 10 mm at most for laser cutting and 6
+#: for bending (``thickness_max``, warnings).
+PLATE_MM = 25.4
+
+#: A fold of 175 degrees or more is a hem where its inside diameter is at most this many thicknesses (the return
+#: lies on the panel, or a few thicknesses off it: a closed, an open or a teardrop hem); wider, it is a U-bend
+#: formed round a radius tool -- a strap, a saddle clamp -- and no hem's rule is its. text-to-cad's own line: the
+#: guides give a hem's least diameter (Protolabs: the thickness), not where a hem stops being one.
+HEM_DIAMETER_T = 4.0
 
 #: An inside radius past this many thicknesses is no one hit of a brake's punch: text-to-cad's own line (air
 #: bending forms a radius of a fraction of the die's opening, a few thicknesses; a larger one is bump-formed in
@@ -219,8 +226,8 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
            item_when={"is_sheet": True},
            fix="plate over {limit:g} mm is not cut on a sheet laser or bent on a press brake: check it as a "
                "machined part (--process cnc), or make it of thinner sheet",
-           note="text-to-cad's own floor: sheet lasers and press brakes in general service stop near 25 mm (an "
-                "inch) of steel; thicker plate is flame-, plasma- or waterjet-cut and machined"),
+           note="text-to-cad's own floor: sheet lasers and press brakes in general service stop near an inch "
+                "(25.4 mm) of steel; thicker plate is flame-, plasma- or waterjet-cut and machined"),
         _r("thickness_min", "parts", "thickness_mm", "min", 0.5, "mm", "sheet thickness", source,
            item_when={"is_sheet": True}, severity="warning", fix="use sheet at least {limit:g} mm thick",
            note="recommended: at least 0.5 mm"),
@@ -323,13 +330,17 @@ def _mark(report: dict[str, Any], given: Any) -> None:
     """The figures that do not apply to an item, named on it (``_common.not_applicable``), so a rule that reads
     one asks nothing of it -- where any other missing figure was not measured, and is said. A cut file carries
     no thickness: with none given there is none to judge (``sheet.thickness_unknown`` says which rules that
-    leaves unjudged). A hem's or a curl's flange has no outside mold line -- a fold through 180 degrees has
-    none -- so no height from it: its return is ``sheet.hem_return``'s."""
+    leaves unjudged). A flange of a fold through 180 degrees -- a hem, a curl, a U-bend -- has no outside mold
+    line (the bend has no setback: its ``bend_deduction_mm`` is None), so no height from it: a hem's return is
+    ``sheet.hem_return``'s."""
     if "cut_file" in report and given is None:
         for part in _items(report, "parts"):
             if part.get("thickness_mm") is None:
                 not_applicable(part, "thickness_mm")
-    folded = {bend.get("location") for bend in _items(report, "bends") if bend.get("kind") in ("hem", "curl")}
+    for part in _items(report, "parts"):
+        if part.get("rolled"):  # no flat pattern is made of a rolled part: not measured, said once (bends)
+            not_applicable(part, "flat_length_mm", "flat_width_mm")
+    folded = {bend.get("location") for bend in _items(report, "bends") if bend.get("bend_deduction_mm") is None}
     for flange in _items(report, "flanges"):
         if flange.get("bend") in folded and flange.get("length_outside_minus_radius_mm") is None:
             not_applicable(flange, "length_outside_minus_radius_mm")

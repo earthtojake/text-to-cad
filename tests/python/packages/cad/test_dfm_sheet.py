@@ -496,7 +496,9 @@ class RecognitionTest(unittest.TestCase):
     def test_a_small_bracket_and_a_narrow_strip_are_sheet_in_every_placement(self) -> None:
         bracket = bent([("line", 4), ("bend", 90, 3), ("line", 4)], 3.0, 30)  # 10 mm legs: Hubs's 2 t + r is 9
         for shape, summary in ((bracket, "sheet 3 mm, 1 bend(s), flat 30 x 14.5031 mm"),
-                               (bd.Box(100, 7, 2), "sheet 2 mm, 0 bend(s), flat 100 x 7 mm")):
+                               (bd.Box(100, 7, 2), "sheet 2 mm, 0 bend(s), flat 100 x 7 mm"),
+                               # twice as wide as it is thick, with no wider face: a laser-cut strip, no bar
+                               (bd.Box(100, 4, 2), "sheet 2 mm, 0 bend(s), flat 100 x 4 mm")):
             for placed in self.placements(shape):
                 result = checked(placed)
                 self.assertTrue(result.ok, result.summary)
@@ -513,22 +515,35 @@ class RecognitionTest(unittest.TestCase):
                 self.assertIn(said, finding.message)  # the same words wherever it stands
         for placed in self.placements(bd.Box(100, 100, 12)):
             self.assertEqual(verdicts(checked(placed)), [("warning", "sheet.thickness_max")])
-        # past an inch it is plate, no sheet shop's work: text-to-cad's own floor, said as its own
-        (plate,) = [f for f in checked(bd.Box(160, 120, 30)).findings if f.severity in ("error", "warning")]
+        # past an inch it is plate, no sheet shop's work: text-to-cad's own floor, said as its own -- and an
+        # inch plate is within the inch its note says
+        self.assertEqual(verdicts(checked(bd.Box(160, 120, 25.4))), [("warning", "sheet.thickness_max")])
+        (plate,) = [f for f in checked(bd.Box(160, 120, 26)).findings if f.severity in ("error", "warning")]
         self.assertEqual((plate.severity, plate.code), ("error", "sheet.thickness_limit"))
         self.assertTrue(plate.source.startswith("text-to-cad, its own figure"), plate.source)
 
-    def test_a_tube_is_a_closed_section_and_a_slit_one_a_rolled_sheet_at_its_wall(self) -> None:
+    def test_a_tube_is_a_closed_section_and_a_rolled_sheet_is_sheet_not_checked(self) -> None:
         tube = bd.Cylinder(20, 100) - bd.Cylinder(18, 100)
+        for placed in (tube, turned(tube)):
+            result = checked(placed)
+            (finding,) = [f for f in result.findings if f.severity == "error"]
+            self.assertEqual((result.status, finding.code), ("failed", "sheet.not_sheet"))
+            self.assertIn("a closed section, a tube of 2 mm wall and 18 mm inside radius", finding.message)
+        # a sheet rolled round with no flat flange is sheet -- no error says it is not -- and is not unrolled here:
+        # what was not measured is said once, and the check is no pass
         slit = tube - bd.Pos(20, 0, 0) * bd.Box(10, 1, 120)
-        for shape, said in ((tube, "a closed section, a tube of 2 mm wall and 18 mm inside radius"),
-                            (slit, "a 2 mm sheet rolled to a 18 mm inside radius with no flat flange")):
-            for placed in (shape, turned(shape)):
-                result = checked(placed)
-                (finding,) = [f for f in result.findings if f.severity == "error"]
-                self.assertEqual(finding.code, "sheet.not_sheet")
-                self.assertIn(said, finding.message)
-                self.assertAlmostEqual(result.measurements["parts"]["items"][0]["thickness_mm"], 2.0, places=6)
+        guard = bent([("bend", 120, 100)], 2.0, 200, "guard")
+        for shape, radius in ((slit, 18), (turned(slit), 18), (guard, 100), (turned(guard), 100)):
+            result = checked(shape)
+            self.assertEqual((result.status, result.reason), ("not_checked", "measurement_failed"))
+            (finding,) = [f for f in result.findings if f.severity in ("error", "warning")]
+            self.assertIn(f"a 2 mm sheet rolled to a {radius} mm inside radius with no flat flange is rolled on plate "
+                          "rolls", finding.message)
+            self.assertNotIn("not one sheet", finding.message)
+            (part,) = result.measurements["parts"]["items"]
+            self.assertEqual((part["is_sheet"], part["thickness_mm"]), (True, 2.0))
+        with self.assertRaisesRegex(ValueError, "rolled on plate rolls"):
+            sheet.unfold(guard)
 
     def test_a_grille_s_slot_walls_do_not_outvote_its_skins(self) -> None:
         t = 3.0  # webs half the sheet's thickness between long slots: the walls face each other 1.5 mm apart
@@ -712,6 +727,22 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertEqual(failed(result, "sheet.bend_radius"), [])
         lid = bent([("line", 8), ("bend", 180, 0.5), ("line", 25), ("bend", 90, 1.0), ("line", 60)], 1.0, 50, "lid")
         self.assertNotIn("sheet.bend_radii_mixed", {f.code for f in checked(lid, thickness=1).findings})
+
+    def test_a_u_bend_round_a_wide_radius_is_no_hem(self) -> None:
+        # a saddle clamp: a strap bent half round a 25 mm pipe, between two feet
+        clamp = bent([("line", 15), ("bend", 90, 2), ("line", 5), ("bend", -180, 12.5), ("line", 5), ("bend", 90, 2),
+                      ("line", 15)], 1.5, 20, "clamp")
+        for placed in (clamp, turned(clamp)):
+            result = checked(placed)
+            self.assertEqual(verdicts(result), [])
+            self.assertEqual(sorted(b["kind"] for b in result.measurements["bends"]["items"]), ["bend"] * 3)
+            self.assertEqual(result.measurements["hems"]["items"], [])
+        # a fold whose return lies four thicknesses off the panel is still a hem, and one wider is not
+        for radius, kind in ((2.0, "hem"), (2.1, "bend")):
+            fold = bent([("line", 80), ("bend", 180, radius), ("line", 4)], 1.0, 120, "fold")
+            (bend,) = items(measured(fold), "bends")
+            self.assertEqual(bend["kind"], kind)
+            self.assertEqual(verdicts(checked(fold)), [("warning", "sheet.hem_return")] if kind == "hem" else [])
 
     def test_the_shops_radius_is_given_and_said_once_a_bend(self) -> None:
         # no radius is assumed for a shop: given (--bend-radius), each bend modelled otherwise is one warning
