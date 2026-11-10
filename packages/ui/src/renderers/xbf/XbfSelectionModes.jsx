@@ -1,20 +1,17 @@
-import { PositionIcon } from '../kit/tools/ChangedDot.jsx';
-import { CONNECTED_SELECTION, SELECT_GEOMETRY, connectedSelectionApplies } from './xbfSelectionFilter.js';
-import { DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@cad/ui/primitives/dropdown-menu';
+import { SELECT_GEOMETRY } from './xbfSelectionFilter.js';
 import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
-import { useControlUsage } from "../../usage/controls.js";
+import { filterBadge } from "../kit/tools/select/selectFilter.js";
 import { useI18n } from "@cad/ui/i18n";
-import { ModeGlyph, ToolModeIcon, modeGlyphIcon } from "../kit/tools/select/modeGlyphs.jsx";
+import { ModeGlyph, ToolModeIcon } from "../kit/tools/select/modeGlyphs.jsx";
 
 // Select's button, Measure's and Select's menu, which read on an engine document as the STEP
 // renderer's did. The glyphs are the kit's (`kit/tools/select/modeGlyphs.jsx`).
 
-const lucideIcon = Icon => <Icon className="size-3.5" strokeWidth={2} aria-hidden="true" />;
-
 /**
- * Select's two tools, how a pick is made: Select, a click picks what is under it; Box select, a drag
- * draws a box and picks what is visible in it (`@cad/core/lib/viewer/boxSelect.js`), a click still
- * picking as Select's does. Select when a file opens.
+ * Select's two tools, how a pick is made: Select, a click picks what is under it and a drag turns the
+ * camera; Box select, a drag from empty space draws a box and picks what is visible in it
+ * (`@cad/core/lib/viewer/boxSelect.js`: what shows in it, touching it even in part), a drag from the model, its ink or a measurement still turning
+ * the camera and a click still picking as Select's do. Select when a file opens.
  */
 export const SELECT_TOOLS = Object.freeze([
   { id: 'select', key: 'tool.select', glyph: 'select' },
@@ -23,73 +20,64 @@ export const SELECT_TOOLS = Object.freeze([
 
 /**
  * The Select tool's button icon: the pointer, or Box select's pointer in a square (`tool`), badged
- * with what it picks alone (`mode`), none for All.
+ * with what its filter ticks (`mode`, `xbfSelectBadge`), none for All.
  */
 export function SelectIcon({ tool = "select", mode = "all", ...props }) {
   return <ToolModeIcon tool={tool === 'box' ? 'boxSelect' : 'select'} mode={mode} {...props} />;
 }
 
-// What each of Measure's modes is badged with: a vertex the point in a ring, an edge or a face the cube's.
-const MEASURE_BADGES = Object.freeze({ vertex: "points", edge: "edges", face: "faces" });
-
-/** The Measure tool's button icon: the ruler, badged with what it picks alone (`mode`), none for All. */
+/** The Measure tool's button icon: the ruler, badged with what its filter ticks (`mode`, `MeasureFilterMenu.jsx`'s `measureBadge`), none for All. */
 export function MeasureIcon({ mode = "all", ...props }) {
-  return <ToolModeIcon tool="measure" mode={MEASURE_BADGES[mode] || mode} {...props} />;
+  return <ToolModeIcon tool="measure" mode={mode} {...props} />;
 }
 
-const glyphIcon = modeGlyphIcon;
-// The overlays All picks too, beside the model's geometry: the annotations and measurements,
-// drawn over the model, so a click on one is never mistaken for the face under it.
-const SELECT_OVERLAYS = Object.freeze(['annotation', 'measurement']);
-// Each connected-selection option's glyph.
-const GROUP_GLYPHS = Object.freeze({ tangentFaces: 'groupFaces', edgeChain: 'groupEdges' });
-/** All, what an engine document's Select picks when a file opens, as a STEP's: Parts too, which a part file offers no mode of its own. */
-export const XBF_SELECT_DEFAULT = Object.freeze([...SELECT_GEOMETRY.map(kind => kind.id), 'position', ...SELECT_OVERLAYS]);
-
+// The overlays Select picks beside the model's geometry, each a kind of its own: the annotations and the
+// measurements, drawn over the model, so a click on one is never taken for the face under it.
+const SELECT_OVERLAYS = Object.freeze([
+  { id: 'annotation', label: 'Annotations', key: 'pick.annotations' },
+  { id: 'measurement', label: 'Measurements', key: 'pick.measurements' },
+]);
 /**
- * An engine document's Select modes, a STEP's: All (the default: a face or an edge, else the part,
- * Position's knobs, the annotations and the measurements), then each alone — Parts (in an
- * assembly), Faces, Edges, and Position (where the file has joints: its knobs, the model picks nothing).
+ * Every box ticked, what an engine document's Select picks when a file opens, as a STEP's: the
+ * geometry (Parts too, which a part file offers no box of its own), Position's knobs, the annotations
+ * and the measurements -- and the order the filter is kept in.
  */
-export function xbfSelectModes({ assembly, posable }) {
-  return [
-    { id: 'all', label: 'All', key: 'pick.all', kinds: XBF_SELECT_DEFAULT, icon: <ModeGlyph tool="select" mode="all" className="size-3.5" aria-hidden="true" /> },
-    ...SELECT_GEOMETRY.filter(item => assembly || !item.assemblyOnly).map(item => ({ id: item.id, label: item.label, key: item.key, kinds: [item.id], icon: glyphIcon(item.id) })),
-    ...(posable ? [{ id: 'position', label: 'Position', key: 'pick.position', kinds: ['position'], icon: lucideIcon(PositionIcon) }] : []),
-  ];
+export const XBF_SELECT_DEFAULT = Object.freeze(['parts', 'faces', 'edges', 'position', 'annotation', 'measurement']);
+// Each kind's glyph, and Position's, where one is drawn (the badge on Select's button).
+const GLYPHS = Object.freeze({ parts: 'parts', faces: 'faces', edges: 'edges', position: 'position' });
+
+/**
+ * An engine document's Select filter's kinds, a STEP's: Parts (in an assembly), Faces, Edges, Annotations
+ * and Measurements, each ticked on its own; and its extra, Position (where the file has joints: its knobs,
+ * shown while it is ticked, beside whatever the kinds pick).
+ */
+export function xbfSelectKinds({ assembly }) {
+  return [...SELECT_GEOMETRY.filter(item => assembly || !item.assemblyOnly), ...SELECT_OVERLAYS];
+}
+export const xbfSelectExtras = ({ posable }) => (posable ? [{ id: 'position', label: 'Position', key: 'pick.position' }] : []);
+
+/** The badge Select's button wears for `filter`: none for every kind, one kind's glyph, Position's alone, else the funnel. */
+export function xbfSelectBadge(filter, { assembly, posable }) {
+  return filterBadge(filter, xbfSelectKinds({ assembly }).map(kind => kind.id), { glyphs: GLYPHS, alone: posable ? 'position' : null });
 }
 
 /**
- * An engine document's Select menu, a STEP's (`kit/tools/select/SelectFilterMenu.jsx`): its two
- * tools (`SELECT_TOOLS`), one chosen, in their own section at the top, since how a pick is made is a
- * choice apart from what it takes; then its modes (`xbfSelectModes`), one chosen; then the connected-selection options that do something under it —
- * Group faces while it picks faces, Group edges while it picks edges. An option that does nothing
- * is not shown, and keeps its choice for when it does.
+ * An engine document's Select menu, a STEP's (`kit/tools/select/SelectFilterMenu.jsx`): its "Selection
+ * tool" section, its two tools (`SELECT_TOOLS`), one chosen, since how a pick is made is a choice apart
+ * from what it takes; then its one row, "Filter", its kinds ticked (`xbfSelectKinds`) and Position after
+ * them. A face's or an edge's tangent chain is the view's menu's to take (Select tangent faces, Select
+ * tangent edges), never a setting here.
  *
  * @param {{ value: readonly string[], onChange(filter: readonly string[]): void, assembly: boolean, posable: boolean,
- *   connected: { edgeChain: boolean, tangentFaces: boolean },
- *   onConnectedChange(id: "edgeChain" | "tangentFaces", checked: boolean): void,
  *   tool?: "select" | "box", onToolChange?(tool: "select" | "box"): void, disabled?: boolean }} props
  */
-export function SelectModeMenu({ value, onChange, assembly, posable, connected, onConnectedChange, tool = 'select', onToolChange = null, disabled = false }) {
-  const options = CONNECTED_SELECTION.filter(option => connectedSelectionApplies(option.id, value));
-  const controls = useControlUsage();
+export function SelectMenu({ value, onChange, assembly, posable, tool = 'select', onToolChange = null, disabled = false }) {
   const { t } = useI18n();
-  const tools = onToolChange ? <>
-    <DropdownMenuLabel className="text-tiny font-normal text-muted-foreground">{t('select.tool')}</DropdownMenuLabel>
-    <DropdownMenuRadioGroup value={tool} onValueChange={onToolChange}>
-      {SELECT_TOOLS.map(item => <DropdownMenuRadioItem key={item.id} value={item.id} data-select-tool={item.id}>
-        <ModeGlyph tool={item.glyph} mode="all" className="size-3.5" aria-hidden="true" />{t(item.key)}
-      </DropdownMenuRadioItem>)}
-    </DropdownMenuRadioGroup>
-  </> : null;
-  return <SelectFilterMenu value={value} onChange={onChange} modes={xbfSelectModes({ assembly, posable })} disabled={disabled} header={tools}>
-    {options.length ? options.map(option => <DropdownMenuCheckboxItem key={option.id} checked={connected[option.id] === true}
-      onSelect={event => event.preventDefault()} onCheckedChange={checked => {
-        controls.used(option.id === 'tangentFaces' ? 'select_group_faces' : 'select_group_edges');
-        onConnectedChange(option.id, checked === true);
-      }}>
-      {glyphIcon(GROUP_GLYPHS[option.id])}{t(option.key)}
-    </DropdownMenuCheckboxItem>) : null}
-  </SelectFilterMenu>;
+  const tools = onToolChange ? {
+    value: tool, onChange: onToolChange,
+    items: SELECT_TOOLS.map(item => ({ id: item.id, label: t(item.key), icon: <ModeGlyph tool={item.glyph} mode="all" className="size-3.5" aria-hidden="true" /> })),
+  } : null;
+  const named = items => items.map(item => ({ id: item.id, label: t(item.key) }));
+  return <SelectFilterMenu value={value} onChange={onChange} disabled={disabled} tools={tools} order={XBF_SELECT_DEFAULT}
+    kinds={named(xbfSelectKinds({ assembly }))} extras={named(xbfSelectExtras({ posable }))} />;
 }

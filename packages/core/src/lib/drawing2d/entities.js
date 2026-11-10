@@ -1,6 +1,6 @@
 /**
  * A prepared drawing's entities (`prepareDrawing`'s `entities`), as a pointer meets them: which one
- * lies under a point (`entityAt`), where a point snaps (`snapAt`: an end, a centre, a point on a
+ * lies under a point (`entityAt`), which ones a box under Select touches (`entitiesInBox`), where a point snaps (`snapAt`: an end, a centre, a point on a
  * line), and each one's outline for drawing it lit (`drawEntityHighlights`).
  *
  * All of it is in drawing coordinates, y up, against the primitives the payload sent: no DXF is
@@ -8,6 +8,7 @@
  * is its INSERT, and a dimension is one pick however many lines, arrows and words draw it.
  */
 import { REFERENCE_HOVER_COLOR, REFERENCE_SELECTED_COLOR } from "../viewer/referenceGeometry.js";
+import { boundsTouchBox, boxFromBounds, pointInBox, pointInPolygon, polylineTouchesBox } from "../viewer/boxSelect.js";
 
 /** Points along a curve segment, for a distance to it: plenty for a pick a few pixels wide. */
 const CURVE_STEPS = 12;
@@ -146,6 +147,32 @@ export function entityAt(drawable, point, tolerance, { hiddenLayers = null } = {
     if (distance <= tolerance && (!best || distance <= best.distance)) best = { handle: entity.handle, distance };
   }
   return best?.handle || "";
+}
+
+/**
+ * The handles of the entities a box under Select takes (`[minX, minY, maxX, maxY]`, drawing
+ * coordinates), by what they draw: those it touches, even in part -- a line or a curve anywhere along
+ * it, a point, a filled region or a word anywhere over it. In the payload's order; nothing on a hidden layer is there, and an entity is
+ * judged by what it draws on the layers shown.
+ *
+ * @param {import("./drawing.js").PreparedDrawing} drawable
+ * @param {readonly number[]} bounds
+ * @param {{ hiddenLayers?: ReadonlySet<string> | null }} [options]
+ * @returns {string[]}
+ */
+export function entitiesInBox(drawable, bounds, { hiddenLayers = null } = {}) {
+  if (!Array.isArray(bounds) || bounds.length < 4 || !bounds.every(Number.isFinite)) return [];
+  const box = boxFromBounds(bounds);
+  const touches = shape => shape.lines.some(line => polylineTouchesBox(box, line))
+    || (shape.points || []).some(([x, y]) => pointInBox(box, x, y))
+    || Boolean(shape.rings?.some(ring => ring.length > 2 && pointInPolygon(box.left, box.top, ring)));
+  const found = [];
+  for (const entity of drawable?.entities?.values?.() || []) {
+    if (!boundsTouchBox(box, entity.box)) continue;
+    const shown = shownShapes(entity, hiddenLayers).filter(shape => shape.lines.length || shape.points?.length);
+    if (shown.some(touches)) found.push(entity.handle);
+  }
+  return found;
 }
 
 /**

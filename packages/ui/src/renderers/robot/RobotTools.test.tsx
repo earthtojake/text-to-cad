@@ -146,12 +146,37 @@ async function openRobot({ phone = false } = {}) {
     toolNames: () => within(tools()).getAllByRole('button').filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]'))
       .map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`),
     filter: () => tools().querySelector('[data-select-filter-trigger]')!.getAttribute('aria-label'),
-    /** Choose `mode` from Select's menu ("all", "links" or "position"), which puts the menu away. */
+    /** Open Select's Filter submenu from its chevron: its boxes on screen, the row it opened from returned. */
+    async openFilter(user = userEvent.setup()) {
+      await user.click(tools().querySelector<HTMLElement>('[data-select-filter-trigger]')!);
+      const row = await waitFor(() => document.querySelector<HTMLElement>('[data-select-filter-row]')!);
+      await user.click(row);
+      await waitFor(() => expect(document.querySelector('[data-select-filter="position"]')).not.toBeNull());
+      return row;
+    },
+    /** In the open submenu, tick the boxes to `mode` ("all": Links and Position; "links" or "position" alone; "none"). */
+    async tick(mode: string, user = userEvent.setup()) {
+      for (const id of ['links', 'position']) {
+        const box = document.querySelector<HTMLElement>(`[data-select-filter="${id}"]`)!;
+        const want = String(mode === 'all' || mode === id);
+        if (box.getAttribute('aria-checked') === want) continue;
+        // jsdom has no geometry for a submenu's pointer grace area: the keyboard ticks, the same handler.
+        box.focus();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(document.querySelector(`[data-select-filter="${id}"]`)!.getAttribute('aria-checked')).toBe(want));
+      }
+    },
+    /** Escape puts the menu away. */
+    async closeFilter(user = userEvent.setup()) {
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(document.querySelector('[data-select-filter]')).toBeNull());
+    },
+    /** Tick Select's Filter to `mode` through its menu, then put the menu away. */
     async choose(mode: string) {
       const user = userEvent.setup();
-      await user.click(tools().querySelector<HTMLElement>('[data-select-filter-trigger]')!);
-      await user.click(document.querySelector<HTMLElement>(`[data-select-filter="${mode}"]`)!);
-      await waitFor(() => expect(document.querySelector('[data-select-filter]')).toBeNull());
+      await robot.openFilter(user);
+      await robot.tick(mode, user);
+      await robot.closeFilter(user);
     },
     menuItems: () => [...document.querySelectorAll('[data-select-filter]')].map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`),
     // The tool stack's panels on screen, top to bottom, and the view's panel's sections (each a tab of it).
@@ -195,22 +220,34 @@ const SELECT_IN_HAND = ['Select:true', 'Pencil:false', 'Shapes:false', 'Measure:
 
 it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it picks links and drags the knobs, and its filter picks either alone', async () => {
   const robot = await openRobot();
-  expect([robot.toolNames(), robot.filter()]).toEqual([SELECT_IN_HAND, 'Selection filter: everything']);
+  expect([robot.toolNames(), robot.filter()]).toEqual([SELECT_IN_HAND, 'Filter: everything']);
   expect([robot.sidebar(), robot.stack()]).toEqual([['Links', 'Position controls'], []]);
-  expect(robot.tool('Select').querySelectorAll('svg.lucide-mouse-pointer-2')).toHaveLength(1);
+  // Select's button is the pointer, badged with what its Filter ticks: none while Links is.
+  const badge = () => robot.tool('Select').querySelector('svg[data-tool-icon-base="select"] [data-tool-icon-badge]')?.getAttribute('data-tool-icon-badge') ?? '';
+  expect([robot.tool('Select').querySelectorAll('svg[data-tool-icon-base="select"]').length, badge()]).toEqual([1, '']);
   expect([robot.knobs(), picks.latest!.enabled]).toEqual([1, true]);
 
-  // The chevron's menu: one choice of what a click takes — All, the links alone, or the knobs alone.
+  // The chevron's menu: one row, Filter, summing up what is ticked; its submenu All, a rule, Links, a rule, and
+  // Position, no kind: its knobs, shown while it is ticked, beside the links a click picks. The submenu stays
+  // open while its boxes are ticked, and each tick takes at once: the chevron's label, the knobs, the pick.
   const user = userEvent.setup();
-  await user.click(robot.pane.querySelector<HTMLElement>('[data-select-filter-trigger]')!);
-  expect(robot.menuItems()).toEqual(['All:true', 'Links:false', 'Position:false']);
-  await user.keyboard('{Escape}');
-  await robot.choose('links');
-  expect([robot.filter(), robot.knobs(), picks.latest!.enabled]).toEqual(['Selection filter: Links', 0, true]);
-  await robot.choose('position');
-  expect([robot.filter(), robot.knobs(), picks.latest!.enabled]).toEqual(['Selection filter: Position', 1, false]);
-  expect(robot.toolNames()).toEqual(SELECT_IN_HAND);
+  expect((await robot.openFilter(user)).getAttribute('aria-label')).toBe('Filter: All');
+  expect(robot.menuItems()).toEqual(['All:true', 'Links:true', 'Position:true']);
+  const picksNow = () => [robot.filter(), robot.knobs(), picks.latest!.enabled, badge()];
+  for (const [mode, expected] of [['links', ['Filter: Links', 0, true, '']], ['position', ['Filter: Position', 1, false, 'position']],
+    ['none', ['Filter: nothing', 0, false, 'filter']], ['all', ['Filter: everything', 1, true, '']]] as const) {
+    await robot.tick(mode, user);
+    await waitFor(() => expect(picksNow()).toEqual(expected));
+  }
+  await robot.tick('position', user);
+  await robot.closeFilter(user);
+  expect([robot.toolNames(), robot.filter()]).toEqual([SELECT_IN_HAND, 'Filter: Position']);
+  robot.client.dispose();
+});
 
+it('a robot\'s Display menu leaves Select the tool, and a pose set by hand stays when Select\'s filter puts the knobs away', async () => {
+  const robot = await openRobot();
+  const user = userEvent.setup();
   // Display is not a tool: its menu (the modes and Grid), from its tile at the strip's end, opens over
   // Select and leaves it the tool, with its knobs; Escape puts it away.
   await user.click(within(robot.pane.querySelector<HTMLElement>('[data-cad-toolbar] [data-view-controls]')!).getByRole('button', { name: /^Display mode: / }));
@@ -224,12 +261,12 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   // says the joints were set by hand.
   robot.type('shoulder', '25');
   await robot.choose('links');
-  expect([robot.filter(), robot.knobs()]).toEqual(['Selection filter: Links', 0]);
+  expect([robot.filter(), robot.knobs()]).toEqual(['Filter: Links', 0]);
   expect(robot.jointField('shoulder').value).toBe('25°');
   expect(robot.position().getByRole('button', { name: /^Pose: / }).getAttribute('aria-label')).toBe('Pose: Custom');
   // Select is the only tool: pressing it again leaves it the tool, and its filter as it was.
   robot.open('Select');
-  expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Selection filter: Links', 0]);
+  expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Filter: Links', 0]);
   robot.client.dispose();
 });
 
@@ -262,7 +299,7 @@ it('robot Links and Position are the view\'s panel\'s whatever Select picks, a P
   expect([robot.sidebar(), robot.stack()]).toEqual([['Links', 'Position controls'], []]);
   // Reaching for a Position control changes neither the tool nor what it picks.
   fireEvent.pointerDown(robot.jointField('shoulder'));
-  expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Selection filter: Links', 0]);
+  expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Filter: Links', 0]);
   robot.client.dispose();
 });
 
@@ -273,7 +310,7 @@ it('robot Links and Position are the view\'s panel\'s tabs whatever Select picks
   const links = () => robot.pane.querySelector<HTMLElement>('[data-tool-panel][aria-label="Links"]')!;
   expect([names(), robot.toolNames()]).toEqual([[['Links', 'true'], ['Position', 'false']], SELECT_IN_HAND]);
   await robot.choose('position');
-  expect([robot.filter(), robot.sidebar()]).toEqual(['Selection filter: Position', ['Links', 'Position controls']]);
+  expect([robot.filter(), robot.sidebar()]).toEqual(['Filter: Position', ['Links', 'Position controls']]);
   expect([links().hidden, within(links()).queryByRole('button', { name: /^(?:Collapse|Expand) links$/ })]).toEqual([false, null]);
   // One section at a time: Position's tab takes Links' place.
   fireEvent.click(tabs()[1]);
@@ -308,7 +345,7 @@ it('a new revision of the robot keeps its pose while its controls and named pose
   await robot.publish(shifted);
   await waitFor(() => expect(scene()).not.toBe(before));
   expect(robot.jointField('shoulder').value).toBe('25°');
-  expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Selection filter: Position', 1]);
+  expect([robot.toolNames(), robot.filter(), robot.knobs()]).toEqual([SELECT_IN_HAND, 'Filter: Position', 1]);
 
   // The shoulder's range changed: the robot opens at its opening pose, though 25° would still fit.
   const kept = scene();

@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
-import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeMenu as XbfSelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
+import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectMenu as XbfSelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge, xbfSelectExtras,
+  xbfSelectKinds } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
+import { measureBadge } from '../../../dist/renderers/kit/tools/measure/MeasureFilterMenu.js';
+import { ControlUsageProvider } from '../../../dist/usage/controls.js';
+import { MEASURE_FILTER_DEFAULT } from '../../../dist/renderers/kit/tools/measure/measureFilter.js';
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
 import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper } from '../../../dist/renderers/xbf/xbfChips.js';
-import { nextSelectionIds, selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
+import { nextSelectionIds, selectGeometryMode, tangentChain, treeShape, withTangentChains, xbfGeometryPicks } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
 import { NO_EXPANSION, openRows, personsRows, shutOpenedBy, toggleRow } from '../../../dist/renderers/xbf/xbfExpansion.js';
-import { xbfModelMenu, xbfPartMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
-import { assemblyPartMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
+import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
+import { assemblyPartMenuEntries, viewportMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
 import { selectRenderer } from '../../../dist/file-viewer/registry.js';
 import { createXbfRenderer } from '../../../dist/renderers/xbf/index.js';
 import QuickEdit from '../../../dist/renderers/kit/tools/quick-edit/QuickEdit.js';
@@ -284,73 +288,144 @@ it("the rows walk by the keyboard, as the tree pattern has it: Up, Down, Home, E
     fireEvent.keyDown(nameOf('pin'), { key: 'ArrowRight' }), fireEvent.keyDown(nameOf('pin'), { key: 'x' })]).toEqual([false, false, false, true]);
 });
 
-it("Select's menu is a STEP's single choice: All when a file opens, or one kind alone", async () => {
-  const user = userEvent.setup({ pointerEventsCheck: 0 });
-  expect([...XBF_SELECT_DEFAULT]).toEqual(['parts', 'faces', 'edges', 'position', 'annotation', 'measurement']);
-  // The modes themselves, for every kind of file: Parts in an assembly, Position where it has joints.
-  const ids = (assembly: boolean, posable: boolean) => xbfSelectModes({ assembly, posable }).map(({ id }: { id: string }) => id);
-  expect([ids(false, false), ids(true, false), ids(false, true), ids(true, true)]).toEqual([['all', 'faces', 'edges'],
-    ['all', 'parts', 'faces', 'edges'], ['all', 'faces', 'edges', 'position'], ['all', 'parts', 'faces', 'edges', 'position']]);
-  // The menu as a person reads it: its trigger, its heading, each mode with its glyph and whether it
-  // is chosen, then the grouping options -- under All, and under each mode chosen in turn.
-  // A mode's own glyph: a mode glyph's name, else the icon's classes (not the chosen row's check).
-  const glyphOf = (item: Element) => item.querySelector('svg[data-mode-glyph]')?.getAttribute('data-mode-glyph')
-    ?? [...item.querySelectorAll('svg')].map(icon => icon.getAttribute('class') || '').find(name => !name.includes('lucide-check'));
+// Select's Filter as a person reads and ticks it (jsdom has no geometry for a submenu's pointer grace area:
+// the keyboard ticks, the same handler). Opens the chevron's menu and its Filter row, once.
+const filterMenu = (user: ReturnType<typeof userEvent.setup>, name = 'select') => {
   const read = () => {
-    const menu = document.querySelector<HTMLElement>('[role=menu]')!;
+    const sub = document.querySelector<HTMLElement>('[data-slot=dropdown-menu-sub-content][aria-label="Filter"]')!;
     return {
-      trigger: [...document.querySelectorAll('[data-select-filter-trigger]')].map(node => `${node.getAttribute('aria-label')}:${node.getAttribute('data-select-filter-trigger')}`),
-      label: menu.querySelector('[data-slot=dropdown-menu-label]')?.textContent,
-      modes: within(menu).getAllByRole('menuitemradio').map(item => `${item.getAttribute('data-select-filter')}:${item.textContent}:${item.getAttribute('aria-checked')}:${glyphOf(item)}`),
-      groups: within(menu).queryAllByRole('menuitemcheckbox').map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`),
+      trigger: [...document.querySelectorAll(`[data-${name}-filter-trigger]`)].map(node => `${node.getAttribute('aria-label')}:${node.getAttribute(`data-${name}-filter-trigger`)}`)[0],
+      row: document.querySelector(`[data-${name}-filter-row]`)?.getAttribute('aria-label'),
+      order: [...sub.querySelectorAll(`[data-${name}-filter], [role=separator]`)].map(item => item.getAttribute(`data-${name}-filter`) ?? 'rule'),
+      boxes: within(sub).getAllByRole('menuitemcheckbox').map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`),
+      // The glyph rule: a box is its name alone, in every file.
+      glyphs: sub.querySelectorAll(`[data-${name}-filter] svg:not(.lucide-check):not(.lucide-minus)`).length,
     };
   };
-  const seen: { xbf: ReturnType<typeof read>[] } = { xbf: [] };
-  const changes: { xbf: (readonly string[])[] } = { xbf: [] };
+  return {
+    read,
+    async open() {
+      await user.click(document.querySelector<HTMLElement>(`[data-${name}-filter-trigger]`)!);
+      await user.click(await waitFor(() => document.querySelector<HTMLElement>(`[data-${name}-filter-row]`)!));
+      await waitFor(() => expect(document.querySelector('[data-slot=dropdown-menu-sub-content][aria-label="Filter"]')).not.toBeNull());
+    },
+    async tick(id: string) {
+      document.querySelector<HTMLElement>(`[data-${name}-filter="${id}"]`)!.focus();
+      await user.keyboard('{Enter}');
+      // Ticking leaves the submenu up.
+      expect(document.querySelector('[data-slot=dropdown-menu-sub-content][aria-label="Filter"]')).not.toBeNull();
+    },
+  };
+};
+
+it("Select's menu is one row, Filter: All, a rule, the kinds a click takes, then Position, each ticked on its own", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  expect([...XBF_SELECT_DEFAULT]).toEqual(['parts', 'faces', 'edges', 'position', 'annotation', 'measurement']);
+  // The boxes themselves, for every kind of file: Parts in an assembly, Position (no kind) where it has joints.
+  const ids = (assembly: boolean, posable: boolean) => [xbfSelectKinds({ assembly }), xbfSelectExtras({ posable })].map(items => items.map(({ id }: { id: string }) => id));
+  expect([ids(false, false), ids(true, true)]).toEqual([[['faces', 'edges', 'annotation', 'measurement'], []],
+    [['parts', 'faces', 'edges', 'annotation', 'measurement'], ['position']]]);
+  const changes: (readonly string[])[] = [];
   function Harness() {
     const [value, setValue] = useState<readonly string[]>(XBF_SELECT_DEFAULT);
-    return <XbfSelectModeMenu value={value} onChange={(next: readonly string[]) => { changes.xbf.push(next); setValue(next); }} assembly posable
-      connected={{ edgeChain: true, tangentFaces: false }} onConnectedChange={() => {}} />;
+    return <XbfSelectMenu value={value} onChange={(next: readonly string[]) => { changes.push(next); setValue(next); }} assembly posable />;
   }
-  render(<Harness />);
-  for (const mode of ['parts', 'faces', 'edges', 'position', 'all']) {
-    await user.click(document.querySelector<HTMLElement>('[data-select-filter-trigger]')!);
-    seen.xbf.push(read());
-    await user.click(document.querySelector<HTMLElement>(`[data-select-filter="${mode}"]`)!);
-  }
+  const reported: { control: string, count: number }[] = [];
+  render(<ControlUsageProvider report={(counts: { control: string, count: number }[]) => reported.push(...counts)}><Harness /></ControlUsageProvider>);
+  const menu = filterMenu(user);
+  await menu.open();
+  // One row, every box ticked as a file opens; no Selection tool section without a tool to choose.
+  expect([document.querySelectorAll('[data-select-filter-row]').length, document.querySelectorAll('[data-slot=dropdown-menu-label]').length]).toEqual([1, 0]);
+  expect(menu.read()).toEqual({ trigger: 'Filter: everything:all', row: 'Filter: All',
+    order: ['all', 'rule', 'parts', 'faces', 'edges', 'annotation', 'measurement', 'rule', 'position'],
+    boxes: ['All:true', 'Parts:true', 'Faces:true', 'Edges:true', 'Annotations:true', 'Measurements:true', 'Position:true'], glyphs: 0 });
+  // All unticks every kind and leaves Position: the knobs alone, as the earlier Position mode.
+  await menu.tick('all');
+  expect(menu.read()).toMatchObject({ trigger: 'Filter: Position:position', row: 'Filter: None' });
+  await menu.tick('faces');
+  expect(menu.read()).toMatchObject({ trigger: 'Filter: Faces, Position:faces position', row: 'Filter: Faces',
+    boxes: ['All:mixed', 'Parts:false', 'Faces:true', 'Edges:false', 'Annotations:false', 'Measurements:false', 'Position:true'] });
+  await menu.tick('position');
+  await menu.tick('edges');
+  expect(menu.read()).toMatchObject({ trigger: 'Filter: Faces, Edges:faces edges', row: 'Filter: 2 of 5' });
+  // All with a dash ticks every kind, Position as it was; ticked, the filter is the opening one, exactly.
+  await menu.tick('all');
+  await menu.tick('position');
+  expect(menu.read()).toMatchObject({ trigger: 'Filter: everything:all', row: 'Filter: All' });
+  expect(changes).toEqual([['position'], ['faces', 'position'], ['faces'], ['faces', 'edges'],
+    ['parts', 'faces', 'edges', 'annotation', 'measurement'], [...XBF_SELECT_DEFAULT]]);
+  // Unticking every box: nothing at all.
+  for (const id of ['all', 'position']) await menu.tick(id);
+  expect(menu.read()).toMatchObject({ trigger: 'Filter: nothing:none', row: 'Filter: None' });
+  await user.keyboard('{Escape}');
   cleanup();
-  // All, opening: Parts, Faces, Edges and Position each alone, and both groupings, which All's faces and edges use.
-  expect(seen.xbf[0]).toEqual({ trigger: ['Selection filter: everything:all'], label: 'Pick',
-    modes: ['all:All:true:select', 'parts:Parts:false:parts', 'faces:Faces:false:faces', 'edges:Edges:false:edges', 'position:Position:false:lucide lucide-spline rotate-90 size-3.5'],
-    groups: ['Group edges:true', 'Group faces:false'] });
-  expect(seen.xbf.map(menu => menu.trigger[0])).toEqual(['Selection filter: everything:all', 'Selection filter: Parts:parts',
-    'Selection filter: Faces:faces', 'Selection filter: Edges:edges', 'Selection filter: Position:position']);
-  expect(changes.xbf).toEqual([['parts'], ['faces'], ['edges'], ['position'], [...XBF_SELECT_DEFAULT]]);
-  // The strip's buttons are a STEP's: the pointer and the ruler, badged with the mode chosen alone, none for All.
+  // Each press on a box is counted by its name, the earlier menu's where it had one.
+  expect(Object.fromEntries(reported.map(({ control, count }) => [control, count]))).toEqual({ select_filter_all: 3,
+    select_filter_faces: 1, select_filter_edges: 1, select_filter_position: 3 });
+});
+
+it("each of the earlier single choices is its kind ticked alone, picking as it did; every mix picks through the same booleans", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  // The earlier modes' filters (Automatic, Parts, Faces, Edges, Position), each reached by ticks from the opening filter.
+  const EARLIER = { all: [...XBF_SELECT_DEFAULT], parts: ['parts'], faces: ['faces'], edges: ['edges'], position: ['position'] };
+  for (const [mode, kinds] of Object.entries(EARLIER)) {
+    let value: readonly string[] = XBF_SELECT_DEFAULT;
+    function Harness() {
+      const [state, setState] = useState<readonly string[]>(XBF_SELECT_DEFAULT);
+      value = state;
+      return <XbfSelectMenu value={state} onChange={setState} assembly posable />;
+    }
+    render(<Harness />);
+    const menu = filterMenu(user);
+    await menu.open();
+    if (mode !== 'all') {
+      await menu.tick('all');
+      if (mode !== 'position') { await menu.tick(mode); await menu.tick('position'); }
+    }
+    expect([mode, value]).toEqual([mode, kinds]);
+    cleanup();
+  }
+  // What each picks, the earlier renderer's own reading of its filter, and its badge on Select's button.
+  const read = (filter: readonly string[], assembly = true) => ({ ...xbfGeometryPicks(filter, { assembly }),
+    badge: xbfSelectBadge(filter, { assembly, posable: true }) });
+  const geometry = (mode: string, shape: string, faces: boolean, edges: boolean, parts: boolean, badge: string) =>
+    ({ mode, shape, options: { faces, edges, parts }, badge });
+  expect(read(EARLIER.all)).toEqual(geometry('all', 'all', true, true, true, 'all'));
+  expect(read(EARLIER.parts)).toEqual(geometry('parts', 'parts', false, false, true, 'parts'));
+  expect(read(EARLIER.faces)).toEqual(geometry('faces', 'faces', true, false, false, 'faces'));
+  expect(read(EARLIER.edges)).toEqual(geometry('edges', 'edges', false, true, false, 'edges'));
+  expect(read(EARLIER.position)).toEqual(geometry('none', 'all', false, false, false, 'position'));
+  // A part file has no Parts box: its Automatic is its faces and edges, as it was.
+  expect(read(EARLIER.all, false)).toEqual(geometry('topology', 'faces', true, true, false, 'all'));
+  // The mixes no single choice could make: the knobs beside one kind, two kinds, nothing at all.
+  expect(read(['faces', 'position'])).toEqual(geometry('faces', 'faces', true, false, false, 'faces'));
+  expect(read(['faces', 'edges'])).toEqual(geometry('topology', 'faces', true, true, false, 'filter'));
+  expect(read(['parts', 'faces'])).toEqual(geometry('all', 'all', true, false, true, 'filter'));
+  expect(read(['parts', 'edges', 'measurement'])).toEqual(geometry('all', 'all', false, true, true, 'filter'));
+  expect(read([])).toEqual(geometry('none', 'all', false, false, false, 'filter'));
+  // The strip's buttons: the pointer and the ruler, badged with a kind's glyph alone, the funnel for a mix, none for All.
   const icons = (Select: any, Measure: any) => {
-    const { container } = render(<>{['all', 'parts', 'faces', 'edges', 'position'].map(mode => <Select key={mode} mode={mode} />)}
-      {['all', 'vertex', 'edge', 'face'].map(mode => <Measure key={mode} mode={mode} />)}</>);
+    const { container } = render(<>{['all', 'parts', 'faces', 'edges', 'position', 'filter'].map(mode => <Select key={mode} mode={mode} />)}
+      {[MEASURE_FILTER_DEFAULT, ['vertex'], ['edge'], ['face'], ['vertex', 'face'], []].map(filter => <Measure key={filter.join()} mode={measureBadge(filter)} />)}</>);
     const found = [...container.querySelectorAll('svg[data-tool-icon-base]')].map(icon =>
       `${icon.getAttribute('data-tool-icon-base')}:${icon.querySelector('[data-tool-icon-badge]')?.getAttribute('data-tool-icon-badge') ?? ''}`);
     cleanup();
     return found;
   };
-  expect(icons(XbfSelectIcon, XbfMeasureIcon)).toEqual(['select:', 'select:parts', 'select:faces', 'select:edges', 'select:position',
-    'measure:', 'measure:points', 'measure:edges', 'measure:faces']);
-  // The geometry ticked is picked as one mode, which shapes the tree.
+  expect(icons(XbfSelectIcon, XbfMeasureIcon)).toEqual(['select:', 'select:parts', 'select:faces', 'select:edges', 'select:position', 'select:filter',
+    'measure:', 'measure:points', 'measure:edges', 'measure:faces', 'measure:filter', 'measure:filter']);
   expect(['all', 'parts', 'topology', 'none'].map(mode => treeShape(mode))).toEqual(['all', 'parts', 'faces', 'all']);
   expect(selectGeometryMode(['faces', 'edges'])).toBe('topology');
 });
 
-it("Select and Box select are two tools in their own section at the top of Select's menu, apart from what they pick", async () => {
+it("Select and Box select are two tools in the Selection tool section at the top of Select's menu, apart from what they pick", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   const toolChange = vi.fn(), change = vi.fn();
   function Harness() {
     const [tool, setTool] = useState<'select' | 'box'>('select');
     const [value, setValue] = useState<readonly string[]>(['faces']);
     return <>
-      <XbfSelectModeMenu value={value} onChange={(next: readonly string[]) => { setValue(next); change(next); }} assembly={false} posable={false}
-        connected={{ edgeChain: false, tangentFaces: false }} onConnectedChange={() => {}}
+      <XbfSelectMenu value={value} onChange={(next: readonly string[]) => { setValue(next); change(next); }} assembly={false} posable={false}
         tool={tool} onToolChange={(next: 'select' | 'box') => { setTool(next); toolChange(next); }} />
       <XbfSelectIcon tool={tool} mode="faces" aria-hidden="true" />
     </>;
@@ -362,14 +437,15 @@ it("Select and Box select are two tools in their own section at the top of Selec
   render(<Harness />);
   expect(badge()).toEqual(['select:faces']);
   await open();
-  // The tools first, each with its glyph, then a rule, then what a pick takes.
+  // The tools first, each with its glyph, then a rule, then the Filter row, what a pick takes.
   const menu = document.querySelector<HTMLElement>('[role=menu]')!;
   expect(tools()).toEqual(['Select:true', 'Box select:false']);
   expect(menu.querySelector('[data-select-tool="box"] svg[data-mode-glyph]')?.getAttribute('data-mode-glyph')).toBe('boxSelect');
-  const order = [...menu.querySelectorAll('[data-select-tool], [role=separator], [data-select-filter]')]
-    .map(item => item.getAttribute('data-select-tool') ?? item.getAttribute('data-select-filter') ?? 'rule');
-  expect(order.slice(0, 4)).toEqual(['select', 'box', 'rule', 'all']);
-  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Tool', 'Pick']);
+  const order = [...menu.querySelectorAll('[data-select-tool], [role=separator], [data-select-filter-row]')]
+    .map(item => item.getAttribute('data-select-tool') ?? item.getAttribute('data-select-filter-row') ?? 'rule');
+  expect(order).toEqual(['select', 'box', 'rule', 'filter']);
+  expect(menu.querySelector('[data-select-filter-row]')?.getAttribute('aria-label')).toBe('Filter: Faces');
+  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Selection tool']);
   await user.click(document.querySelector<HTMLElement>('[data-select-tool="box"]')!);
   // Choosing a tool puts the menu away and leaves what is picked as it was; the strip's button is Box select's, badged the same.
   expect([toolChange.mock.calls, change.mock.calls, !!document.querySelector('[role=menu]')]).toEqual([[['box']], [], false]);
@@ -377,9 +453,8 @@ it("Select and Box select are two tools in their own section at the top of Selec
   await open();
   expect(tools()).toEqual(['Select:false', 'Box select:true']);
   cleanup();
-  // Without a tool to choose, the menu has no Tool section.
-  render(<XbfSelectModeMenu value={['faces']} onChange={() => {}} assembly={false} posable={false}
-    connected={{ edgeChain: false, tangentFaces: false }} onConnectedChange={() => {}} />);
+  // Without a tool to choose, the menu has no Selection tool section.
+  render(<XbfSelectMenu value={['faces']} onChange={() => {}} assembly={false} posable={false} />);
   await open();
   expect(document.querySelectorAll('[data-select-tool]').length).toBe(0);
 });
@@ -664,6 +739,42 @@ it("the menus are a STEP's: a part's offers Copy Reference, Select, Isolate, Hid
     'Copy Reference', '| Deselect', 'Isolate', '| Hide others', 'Hide', '| Expand', 'Collapse (off)', 'Expand all', 'Collapse all (off)', '| Zoom to fit', 'Zoom to selection']);
   const model = xbfModelMenu({ tree, assembly: true, expandedIds: [], hiddenCount: 1, zoomSelectionAvailable: false });
   expect([model.showShowAll, model.showExpandCollapse, model.copyText]).toEqual([true, true, '']);
+});
+
+it("the view's menu offers Select tangent faces over a face or while faces are selected, tangent edges likewise, each adding the chain to the selection", () => {
+  const tree = presentXbfTree(structure);
+  const words = (entries: any[]) => entries.map((entry: any) => `${entry.separatorBefore ? '| ' : ''}${typeof entry.label === 'string' ? entry.label : entry.label.props.children}`);
+  const actions = { onSelectTangentFaces: vi.fn(), onSelectTangentEdges: vi.fn() };
+  // The view's menu as `XbfRenderer` asks for it: the menu under the press, with what the actions take from.
+  const over = (menu: any, pressed: string, selectedElementIds: string[]) =>
+    viewportMenuEntries({ ...menu, ...xbfTangentSources({ pressed, selectedElementIds }) }, { actions });
+  const face = (selectedElementIds: string[]) => xbfTopologyMenu({ elementId: 'i0/face/2', label: 'Face 2', selectedElementIds, copyText: 'ref', zoomSelectionAvailable: false });
+  const edge = (selectedElementIds: string[]) => xbfTopologyMenu({ elementId: 'i0/edge/7', label: 'Edge 7', selectedElementIds, copyText: 'ref', zoomSelectionAvailable: true });
+  const space = xbfModelMenu({ tree, assembly: true, expandedIds: [], hiddenCount: 0, zoomSelectionAvailable: true });
+  // Over a face, nothing selected: its tangent faces, in the pick group, and no tangent edges.
+  const onFace = over(face([]), 'i0/face/2', []);
+  expect(words(onFace)).toEqual(['Copy Reference', '| Select', 'Select tangent faces', '| Zoom to fit', 'Zoom to selection']);
+  onFace.find((entry: any) => entry.id === 'select-tangent-faces').onSelect();
+  expect(actions.onSelectTangentFaces.mock.calls[0][0]).toMatchObject({ tangentFaceIds: ['i0/face/2'], tangentEdgeIds: [] });
+  // Over an edge while a face is selected: both, the edge's from the edge pressed, the faces' from the face selected.
+  const onEdge = over(edge(['i0/face/2']), 'i0/edge/7', ['i0/face/2']);
+  expect(words(onEdge)).toEqual(['Copy Reference', '| Select', 'Select tangent faces', 'Select tangent edges', '| Zoom to fit', 'Zoom to selection']);
+  onEdge.find((entry: any) => entry.id === 'select-tangent-edges').onSelect();
+  expect(actions.onSelectTangentEdges.mock.calls[0][0]).toMatchObject({ tangentFaceIds: ['i0/face/2'], tangentEdgeIds: ['i0/edge/7'] });
+  // Over empty space while edges are selected: tangent edges open the menu; with nothing of either selected, neither shows.
+  expect(words(over(space, '', ['i0/edge/7', 'i0/edge/9'])).slice(0, 2)).toEqual(['Select tangent edges', '| Expand all']);
+  expect(words(over(space, '', [])).some(word => word.includes('tangent'))).toBe(false);
+  expect(words(over(xbfPartMenu({ tree, nodeId: 'i3', assembly: true, hiddenIds: [], isolatedIds: [], selectedNodeIds: [], expandedIds: [],
+    copyText: 'ref', zoomSelectionAvailable: false }), '', [])).some(word => word.includes('tangent'))).toBe(false);
+  // Running one adds each chain, as its part's groups say, after what was selected; a face its groups say nothing of is itself alone.
+  const groups = { faces: { 1: 0, 2: 5, 3: 5, 4: 5 }, edges: { 7: 2, 8: 2, 9: 3 } };
+  const element = (id: string) => { const [instance, kind, ordinal] = id.slice(1).split('/'); return { id, kind, instance: Number(instance), ordinal: Number(ordinal) }; };
+  expect(tangentChain(element('i0/face/2'), groups)).toEqual(['i0/face/2', 'i0/face/3', 'i0/face/4']);
+  expect(tangentChain(element('i1/edge/8'), groups)).toEqual(['i1/edge/7', 'i1/edge/8']);
+  expect(tangentChain(element('i0/face/6'), groups)).toEqual(['i0/face/6']);
+  expect(tangentChain(element('i0/face/2'), null)).toEqual(['i0/face/2']);
+  expect(withTangentChains(['i3', 'i0/face/3'], [tangentChain(element('i0/face/2'), groups), tangentChain(element('i0/edge/9'), groups)]))
+    .toEqual(['i3', 'i0/face/3', 'i0/face/2', 'i0/face/4', 'i0/edge/9']);
 });
 
 it('an .xbf and a STEP have the engine document renderer, prepared from the catalog entry', async () => {

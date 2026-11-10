@@ -93,8 +93,11 @@ async function frame(pane, before = null) {
   let last = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await settle(pane.page());
-    // The drawing alone: the tools that float over it (the strip, Quick Edit, the corner's zoom) are not its picture.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill] { visibility: hidden !important; }' });
+    // The drawing alone: the tools that float over it (the strip, Quick Edit, the corner's zoom) are not its picture,
+    // and neither is the hover tip, which shows by the pointer once it has rested a moment over an entity
+    // (`HOVER_TIP_DELAY_MS`): a frame slow to come to rest after a wheel over the drawing caught it, its box
+    // read as ink below the pointer.
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-hover-tip] { visibility: hidden !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }
@@ -274,7 +277,7 @@ test('strokes stay hairlines when the drawing is zoomed in eight times', async (
   assert.deepEqual(errors, []);
 });
 
-test('the wheel zooms about the pointer, dragging pans, and a double-click fits again', async (t) => {
+test('the wheel zooms about the pointer, a middle drag pans (a plain one is Select\'s box), and a double-click fits again', async (t) => {
   const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
   const fittedShot = await frame(pane);
@@ -292,13 +295,13 @@ test('the wheel zooms about the pointer, dragging pans, and a double-click fits 
     `the corner under the pointer stayed put: (${zoomed.minX}, ${zoomed.maxY}) vs (${anchor.x}, ${anchor.y})`);
   assert.ok(Math.abs(zoomed.height / fitted.height - 0.5) < 0.03, `and it halved: ${zoomed.height / fitted.height}`);
 
-  // Dragging moves the picture by exactly the pointer's travel. Up and to the
-  // right, so the whole drawing stays on the canvas and the ink box measures it
-  // rather than the pane's edges.
+  // A middle drag moves the picture by exactly the pointer's travel (a plain one draws Select's box).
+  // Up and to the right, so the whole drawing stays on the canvas and the ink box measures it rather
+  // than the pane's edges.
   await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
-  await page.mouse.down();
+  await page.mouse.down({ button: 'middle' });
   await page.mouse.move(canvas.x + canvas.width / 2 + 140, canvas.y + canvas.height / 2 - 45, { steps: 8 });
-  await page.mouse.up();
+  await page.mouse.up({ button: 'middle' });
   const pannedShot = await frame(pane, zoomedShot);
   const panned = inkBox(pannedShot);
   assert.ok(Math.abs((panned.minX - zoomed.minX) - 140) <= 2, `panned right 140: ${panned.minX - zoomed.minX}`);

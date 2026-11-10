@@ -197,6 +197,14 @@ function HarnessSurface({ view, data }) {
   const [filter, setFilter] = useState("");
   // `panel-short.harness` turns the heights round: a tree of two rows and a Reference of many.
   const short = view.file.name.startsWith("panel-short");
+  // `panel-box.harness` adopts Select's Box select: the shell takes the ink in a box, and hands the
+  // box on for the renderer's own picks, which it notes (`data-harness-box`). Its "model" is the
+  // view's right half from x = 500: a drag from there is the camera's, as a drag on a model is.
+  const [boxed, setBoxed] = useState("");
+  const boxSelect = useMemo(() => (view.file.name.startsWith("panel-box")
+    ? { enabled: true, mayStart: event => event.clientX < 500,
+      onBox: box => setBoxed(`${box.additive ? "+" : ""}${box.client.left},${box.client.top},${box.client.right},${box.client.bottom}`) }
+    : null), [view.file.name]);
   const [treeRows, referenceRows] = short ? [2, 40] : [120, 8];
   const selectTool = shell.tools.own({ id: SELECT_TOOL, label: "Select", icon: <span aria-hidden="true">S</span> });
   const keepTool = { id: "keep", label: "Keep", icon: <span aria-hidden="true">K</span>, active: kept, disabled: shell.idle,
@@ -226,7 +234,7 @@ function HarnessSurface({ view, data }) {
     toolPanels={toolPanels} sidebar={sidebar} references={references} onClearReferences={() => setPicked("")}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
-    onCanvasPointerDown={() => setPutDown(`put down @${stage}`)}
+    onCanvasPointerDown={() => setPutDown(`put down @${stage}`)} boxSelect={boxSelect}
     viewportOverlay={viewport => <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 text-xs" data-harness-overlay>
       <span data-harness-camera-settles>{settleLabel}</span>
       <span data-harness-menu-note>{picked}</span>
@@ -234,6 +242,7 @@ function HarnessSurface({ view, data }) {
       <span data-harness-runtime>{runtimeEvents.join(" ")}</span>
       <span data-harness-shadows>{shadowReception}</span>
       <span data-harness-put-down>{putDown}</span>
+      <span data-harness-box>{boxed}</span>
       <FrameContextNote />
       <button type="button" className="pointer-events-auto" data-harness-arrive="partial"
         onClick={() => { scene.arrive(false); viewport.commitScene(); }}>partial</button>

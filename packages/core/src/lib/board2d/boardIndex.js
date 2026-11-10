@@ -18,6 +18,7 @@
 import { BOARD_ITEM_KINDS, formatBoardRefSelector, parseBoardRefSelector } from "../boardRefs.js";
 import { bounds, nearestOnPolyline, point, pointInPolygon, polygonArea, polygonReach } from "./geometry.js";
 import { boxOf, createSpatialGrid, nearBox } from "./spatialGrid.js";
+import { boundsTouchBox, boxFromBounds, circleTouchesBox, polygonTouchesBox, polylineTouchesBox } from "../viewer/boxSelect.js";
 
 
 /**
@@ -385,6 +386,92 @@ export function createBoardIndex(board, sheet = {}) {
     return null;
   }
 
+  /**
+   * What a box under Select takes (page box `[minX, minY, maxX, maxY]`), everything `kinds` takes by
+   * what a press takes it by (`pick`) -- a pad, a track at its width, a via, a text, a dimension, a
+   * graphic's ink, a pour or a rule area by its outline (anywhere in it where `pick` takes one anywhere
+   * inside), a part by its outline -- on a layer `layers` draws, the locked ones as `kinds.locked` says:
+   * what it touches, even in part (`../viewer/boxSelect.js`). Whichever side is looked at, both sides'
+   * are taken. The hits as `pick` names them, once each by selector, in kind order.
+   */
+  function pickBox(bounds, { mode = "all", kinds = BOARD_PICK_KINDS[mode] || BOARD_PICK_KINDS.all, layers = null } = {}) {
+    if (!Array.isArray(bounds) || bounds.length < 4 || !bounds.every(Number.isFinite)) return [];
+    const box = boxFromBounds(bounds);
+    const [x0, y0, x1, y1] = bounds;
+    const centre = [(x0 + x1) / 2, (y0 + y1) / 2];
+    const lineTest = (points, options = {}) => polylineTouchesBox(box, points, options);
+    const wholeNets = Boolean(kinds.nets);
+    const drawn = (layer) => !layers || layers.has(layer);
+    const free = kinds.locked === false ? (item) => !item.locked : () => true;
+    const found = new Map();
+    const take = (hit, at = centre) => {
+      const named = describeHit(hit, wholeNets, at);
+      if (named && !found.has(named.selector)) found.set(named.selector, named);
+    };
+    // Where copper with no uuid is named: its point nearest the box's middle.
+    const nearest = (points) => nearestOnPolyline(centre, points)?.point || centre;
+    if (kinds.pads) {
+      padGrid.visit(x0, y0, x1, y1, (order) => {
+        const shape = padShapes[order];
+        if (boundsTouchBox(box, shape.box) && polygonTouchesBox(box, shape.polygon)) take({ kind: "pad", pad: pads.get(`${shape.ref}.${shape.number}`) });
+      });
+    }
+    if ((kinds.vias || kinds.copper) && drawn("vias")) {
+      viaGrid.visit(x0, y0, x1, y1, (order) => {
+        const via = vias[order];
+        if (free(via) && circleTouchesBox(box, via.at[0], via.at[1], via.diameter / 2)) take({ kind: "via", via, at: via.at });
+      });
+    }
+    if (kinds.tracks || kinds.copper) {
+      trackGrid.visit(x0, y0, x1, y1, (order) => {
+        const track = tracks[order];
+        if (drawn(track.layer) && free(track) && lineTest(track.points, { radius: track.width / 2 })) take({ kind: "track", track, at: nearest(track.points) });
+      });
+    }
+    if (kinds.texts) {
+      textGrid.visit(x0, y0, x1, y1, (order) => {
+        const text = texts[order];
+        if (drawn(text.layer) && free(text) && polygonTouchesBox(box, text.polygon)) take({ kind: "text", text });
+      });
+    }
+    if (kinds.dimensions) {
+      dimensionGrid.visit(x0, y0, x1, y1, (order) => {
+        const dimension = dimensions[order];
+        if (!drawn(dimension.layer) || !free(dimension)) return;
+        const lines = dimension.lines, value = dimension.polygon.length > 2 ? [dimension.polygon] : [];
+        if (lines.some((line) => lineTest(line)) || value.some((polygon) => polygonTouchesBox(box, polygon))) {
+          take({ kind: "dimension", dimension });
+        }
+      });
+    }
+    if (kinds.shapes) {
+      const shapeTouches = (shape) => (shape.filled && shape.points.length > 2 ? polygonTouchesBox(box, shape.points)
+        : lineTest(shape.points, { closed: shape.closed, radius: shape.width / 2 }));
+      const visit = (list) => (order) => {
+        const shape = list[order];
+        if (drawn(shape.layer) && free(shape) && shapeTouches(shape)) take({ kind: "shape", shape });
+      };
+      shapeGrid.visit(x0, y0, x1, y1, visit(boardShapes));
+      if (kinds.footprintShapes) ownGrid().visit(x0, y0, x1, y1, visit(ownShapes()));
+    }
+    if (kinds.zones || kinds.ruleAreas) {
+      const inside = Boolean(kinds.zoneFill || wholeNets);
+      zoneGrid.visit(x0, y0, x1, y1, (order) => {
+        const zone = zones[order];
+        if (!(zone.rule ? kinds.ruleAreas && !wholeNets : kinds.zones) || !free(zone) || !drawn(zone.layer)) return;
+        const touches = inside ? polygonTouchesBox(box, zone.outline) : polylineTouchesBox(box, zone.outline, { closed: true });
+        if (touches) take({ kind: "zone", zone, at: pointInPolygon(centre, zone.outline) ? centre : nearest(closedLine(zone.outline)) });
+      });
+    }
+    if (kinds.parts) {
+      partGrid.visit(x0, y0, x1, y1, (order) => {
+        const part = parted[order];
+        if (free(part) && polygonTouchesBox(box, part.outline)) take({ kind: "part", part });
+      });
+    }
+    return [...found.values()];
+  }
+
   function describeHit(hit, wholeNets, at) {
     if (wholeNets) {
       const name = hit.pad?.net ?? hit.via?.net ?? hit.track?.net ?? hit.zone?.net ?? "";
@@ -575,6 +662,6 @@ export function createBoardIndex(board, sheet = {}) {
     document: "board", origin, parts, pads, padShapes, nets, tracks, vias, zones, holes, outline, texts, dimensions,
     /** Every graphic: the board's own, then the footprints' (read on first need). */
     get shapes() { return [...boardShapes, ...ownShapes()]; },
-    toScript, toPage, pick, snap, pointSelector, areaSelector, within, onLayer, resolve, extent, shapesOf
+    toScript, toPage, pick, pickBox, snap, pointSelector, areaSelector, within, onLayer, resolve, extent, shapesOf
   });
 }

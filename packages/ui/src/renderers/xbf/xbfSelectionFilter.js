@@ -1,10 +1,10 @@
 // What an engine document's Select picks, as the STEP renderer's did: the kinds of the
-// model's geometry its filter ticks, how they are picked as one mode, how a face or edge pick
-// grows, and the model tree's shape under each mode.
+// model's geometry its Filter ticks, how any mix of them is picked as one mode, and the model
+// tree's shape under each mode.
 
 /**
- * The kinds of the model's geometry Select picks, each a checkbox of its selection filter
- * (`kit/tools/select/selectFilter.js`), each on its own. `assemblyOnly`: a single part is one
+ * The kinds of the model's geometry Select picks, each a box of its Filter
+ * (`kit/tools/select/selectFilter.js`), each ticked on its own. `assemblyOnly`: a single part is one
  * thing, so a part file's filter offers no Parts.
  */
 export const SELECT_GEOMETRY = Object.freeze([
@@ -14,7 +14,7 @@ export const SELECT_GEOMETRY = Object.freeze([
 ]);
 
 /**
- * How the geometry a filter ticks is picked, as one mode: "all" — Parts with Faces or Edges — a
+ * How the geometry a filter ticks is picked, as one mode: "all" — Parts with Faces, Edges or both — a
  * press takes the face or edge it lands on where the part is open, the part elsewhere; "parts",
  * the part alone; "topology" — Faces and Edges — "faces" and "edges" that topology alone; "none",
  * no geometry.
@@ -30,24 +30,44 @@ export function selectGeometryMode(filter) {
 export const treeShape = mode => (mode === 'none' ? 'all' : mode === 'topology' ? 'faces' : mode);
 
 /**
- * How a face or edge pick grows, independent of the filter and of each other: Group faces takes
- * the smoothly joined faces with a picked face, Group edges the connected edges with a picked
- * edge. Each applies while its kind of topology is ticked.
+ * What Select's filter (any of its boxes ticked) picks of the model: its geometry mode
+ * (`selectGeometryMode`), the tree's shape under it (`treeShape`), and the booleans a click's pick and a
+ * box's take (`options`: the scene's `pickElement` and `pickBox`, `faces`, `edges`, `parts`). A part
+ * file has no Parts box: its whole part is what a press reaching no face or edge takes, whatever the
+ * filter says of Parts, so it is read without it. Position, the annotations and the measurements are
+ * no geometry: they are read off the filter where they are drawn.
+ *
+ * @param {readonly string[]} filter
+ * @param {{ assembly: boolean }} options
  */
-export const CONNECTED_SELECTION = [
-  { id: 'edgeChain', label: 'Group edges', key: 'select.groupEdges', kind: 'edges' },
-  { id: 'tangentFaces', label: 'Group faces', key: 'select.groupFaces', kind: 'faces' },
-];
-export const NO_CONNECTED_SELECTION = Object.freeze({ edgeChain: false, tangentFaces: false });
-
-/** Whether a connected-selection option does anything under `filter` (its kind ticked). */
-export function connectedSelectionApplies(id, filter) {
-  const kind = CONNECTED_SELECTION.find(option => option.id === id)?.kind;
-  return Boolean(kind) && filter.includes(kind);
+export function xbfGeometryPicks(filter, { assembly }) {
+  const geometry = assembly ? filter : filter.filter(id => id !== 'parts');
+  const mode = selectGeometryMode(geometry);
+  return { mode, shape: treeShape(mode),
+    options: { faces: geometry.includes('faces'), edges: geometry.includes('edges'), parts: assembly && geometry.includes('parts') } };
 }
 
 /**
- * The selection after a pick of `ids` (one element, a grown group, a folded row's parts): replaced, or
+ * A face's or an edge's tangent chain, what the view's menu's Select tangent faces and Select tangent
+ * edges take: the faces joined across tangent edges, the edges that continue one another at a shared
+ * vertex, as its part's groups say (`@cad/core`'s `fetchXbfPartGroups`: each face's and each edge's
+ * group by ordinal); itself alone where they say nothing of it.
+ *
+ * @param {{ id: string, kind: "face" | "edge", instance: number, ordinal: number }} element
+ * @param {{ faces?: Record<string, number>, edges?: Record<string, number> } | null} groups
+ */
+export function tangentChain(element, groups) {
+  const table = groups?.[element.kind === 'face' ? 'faces' : 'edges'];
+  const group = table?.[String(element.ordinal)];
+  if (group == null) return [element.id];
+  return Object.entries(table).filter(([, value]) => value === group).map(([ordinal]) => `i${element.instance}/${element.kind}/${ordinal}`);
+}
+
+/** The selection with tangent `chains` added to it: what was selected, in its order, then each chain's own. */
+export const withTangentChains = (selected, chains) => [...new Set([...selected, ...chains.flat()])];
+
+/**
+ * The selection after a pick of `ids` (one element, a tangent chain, a folded row's parts): replaced, or
  * with `additive` the group added -- or taken away where every one of it is selected already. A plain
  * pick of the one thing selected already, exactly, lets it go, as every selecting view does: one element,
  * or the group it is (pressed again, a folded row's parts are let go of, as a part's row's part is).
