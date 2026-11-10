@@ -143,6 +143,8 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        # An explicit shell runs with pipefail, so the script's refusal fails the step, not tee's status.
+        shell: bash
         run: scripts/release/check-pr-version.sh "$HEAD_REPO" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # The shipping contract's tree rules hold for every change, docs and models
@@ -532,7 +534,7 @@ jobs:
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --select skills --print-weights $TESTS
 
-  # The docs site: lint, the Next build and icon verification, and the animated brand marks.
+  # The docs site: lint, the Next build and icon verification.
   docs:
     name: docs
     needs: changes
@@ -580,6 +582,7 @@ jobs:
           npm: packages/core packages/ui apps/web apps/mcp
           # The launch smoke test drives Python Playwright's Chromium; the browser gates
           # drive npm Playwright's.
+          playwright: ${{ needs.changes.outputs.web_viewer }}
           ui-browser: ${{ needs.changes.outputs.web_viewer }}
 
       - name: Bundle production outputs from clean

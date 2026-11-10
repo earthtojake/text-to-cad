@@ -49,9 +49,8 @@ repo-scan*.md
 # Benchmark output is local evidence, not source. Use tmp/ for reports.
 /scripts/bench/**/results/
 /scripts/bench/**/*.json
-# ...but a benchmark's inputs are source: the corpus batch's models and the old engine's numbers.
+# ...but a benchmark's inputs are source: the corpus batch's models.
 !/scripts/bench/corpus.json
-!/scripts/bench/old-engine-numbers.json
 /scripts/bench/**/*.log
 /scripts/bench/**/*.gz
 /scripts/bench/**/*.cpuprofile

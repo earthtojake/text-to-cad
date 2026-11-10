@@ -5,9 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-HOST="127.0.0.1"
-# VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else
-# (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
+# VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else. CI uses the default.
 RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
 
 echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
@@ -63,7 +61,6 @@ if ! pick_interpreter; then
   echo "      needs the packages: pip install -r requirements-dev.txt, or set VIEWER_PYTHON." >&2
   exit 1
 fi
-export VIEWER_RUNTIME_DIR="$RUNTIME"
 "$PYTHON" - "$REPO_ROOT" <<'PYTHON'
 import json, os, subprocess, sys, tempfile
 from pathlib import Path

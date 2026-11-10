@@ -19,7 +19,7 @@
       "document": "planetary_gear_assembly.py::planetary_gear_assembly",
       "xbf": "XBF/planetary_gear_assembly/planetary_gear_assembly.xbf",
       "edit": {"file": "src/planetary_gear_assembly/planetary_gear_assembly.py", "from": "CARRIER_DIAMETER = 105.0", "to": "CARRIER_DIAMETER = 106.0"},
-      "note": "the docs hero, whose GLB apps/docs/scripts/sync-hero-glb.mjs exports"
+      "note": "the docs hero"
     },
     {
       "name": "qdd",

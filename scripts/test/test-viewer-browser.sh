@@ -10,7 +10,6 @@ source "$SCRIPT_DIR/common.sh"
 python_candidate="${VIEWER_PYTHON:-$PYTHON_BIN}"
 PYTHON="$(command -v "$python_candidate" 2>/dev/null || true)"
 RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
-HOST=127.0.0.1
 
 # The checkout's own packages (common.sh's PACKAGE_SOURCES), ahead of whatever is installed.
 for source in "${PACKAGE_SOURCES[@]}"; do
@@ -53,7 +52,6 @@ else
   project="$(mktemp -d)"
 fi
 log="$(mktemp)"
-viewer_pidfile="$project/viewer.pid"
 # The model library every Viewer writes: the test's own, never the user's. It registers this
 # interpreter as its current installation, as an installation registers itself: the engine a
 # command starts there is this checkout's (a client with no installation starts none).

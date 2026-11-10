@@ -36,8 +36,8 @@ It writes each picture, ``metrics.json`` (``hue`` beside the rows) and a contact
 
 ``--only chromium`` keeps the OCCT pictures already in ``--out`` (the reference does not move
 while the viewer is tuned); ``--modes`` and ``--cameras`` narrow the set. The daemon serves and
-meshes each document (``CAD_ENGINE_DIR`` chooses which daemon); macOS only, as the
-prototype's GL context is.
+meshes each document (``CAD_ENGINE_DIR`` chooses which daemon). Proven on macOS; on Linux it
+needs an X server (Xvfb).
 """
 
 from __future__ import annotations

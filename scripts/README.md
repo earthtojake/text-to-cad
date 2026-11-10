@@ -83,8 +83,11 @@ where those files ship, so these scripts are what produces them.
   and fails.
 - `test-global.sh [PATH...]` — `tests/python/global`, the repo-wide policy
   suite, narrowed to PATHs as `test-python.sh` is.
-- `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
-  marks' tests. Called by `test.yml`.
+- `test-docs.sh` — `npm --prefix apps/docs run check`. Called by `test.yml`.
+- `test-fea.sh` — the stress study's suite (`tests/python/packages/fea`), which needs
+  `cad[netgen,calculix]` installed. Called by `test.yml`'s `fea` job.
+- `test-routing.sh` — the router's unit files (`tests/python/packages/cad/test_kicad_routing*.py`),
+  the library alone. Called by `test.yml`'s `routing (macOS)` job.
 - `test-kicad.sh` — native board DRC, every export, a STEP/mesh round trip and the board's and
   schematic's edits (`kicad_pcb.edit`, `kicad_sch.edit`), through kicode's `kicad-cli` and KiPy in the environment of `cad[kicad]`, which it makes once
   as the server does (in `tmp/kicad-suite`, naming its Python to the tests, `CAD_TEST_KICODE_PYTHON`):
@@ -151,7 +154,7 @@ where those files ship, so these scripts are what produces them.
 - `check-wheel-contents.sh` — builds the four wheels and asserts each carries its own
   top-level packages alone (the alias none, and only the library at the release as
   its requirement); that the library's and the shim's carry their Python modules, the
-  library's the engine's page and environment image; that the server's carries its modules,
+  library's the environment image; that the server's carries its modules,
   the engine's README and `_runtime/{viewer,mcp,plugin}` with each page's third-party notice, and
   nothing else at the top of `_runtime`, the runtime with bytes identical to the bundled
   source, and its plugin the repository's own files and `skills/`, byte for byte
@@ -174,7 +177,7 @@ where those files ship, so these scripts are what produces them.
   as its channel. Called by `release-publish.yml`, whose `branches` job pushes
   the `latest` copy to `latest` and the `directory` copy to `claude-plugin`,
   together; tested by `tests/python/global/test_plugin_branch.py`.
-- `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and
+- `publish-github-release.sh [--target REF] [--asset PATH]... [--dry-run] [--publish]` — creates and
   pushes the `v<VERSION>` tag and the GitHub Release (a draft unless
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
   commit is the manual fallback.
@@ -216,7 +219,7 @@ where those files ship, so these scripts are what produces them.
   already bundled; then every path `cadgen-runtime.sh --print-outputs` names
   exists and holds no symlink. `--tree-only` stops after the tree rules, which
   need no runtime, so Version Check runs them for every change.
-  Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
+  Called by `test.yml`, `release-publish.yml`. The
   no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
   its public URLs. Called by `deploy-docs.yml` and `deploy-api.yml`.
@@ -277,7 +280,7 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, the release's pins, the tracked tree's rules; on a pull request, what merging it releases); the package suites on Linux and Windows (`cadgen (Linux)`, `cadgen (Windows)`, the names the jobs keep); the KiCad suite (`KiCad boards`); `core-js` (`@cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, the release's pins, the tracked tree's rules; on a pull request, what merging it releases); the package suites on Linux and Windows (`cadgen (Linux)`, `cadgen (Windows)`, the names the jobs keep); the KiCad suite (`KiCad boards`); `fea` and `routing (macOS)`; `core-js` (`@cad/core`), `web` (shared UI and the web app), `mcp`, `api`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |

@@ -23,6 +23,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
+    kicad                         KiCad boards
     routing                       routing (macOS): the router's unit files, on the third C library
     core_js                       core-js
     web  web_ui  web_client

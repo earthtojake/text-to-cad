@@ -6,8 +6,7 @@ set -euo pipefail
 # release.
 #
 # The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
-# non-Python data it reads (collation.json); the library ships the page `serve` shows a document
-# in and the environment image its look lights with.
+# non-Python data it reads (collation.json); the library ships the environment image its look lights with.
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
 # declaration that fails QUIETLY: a glob that does not match nested files produces a
 # wheel that imports fine, passes every Python test, and then cannot serve a Viewer or
@@ -39,8 +38,8 @@ fi
 
 # Paths each wheel must carry. The Python a wheel must actually contain is listed beside the asset
 # globs: a packages.find regression that dropped any of it would produce a wheel whose console script
-# dies at import. This is the ONLY packaging gate the publish job runs -- test-installed.sh covers the
-# same ground far better but runs in test.yml, not at publish.
+# dies at import. test-installed.sh then drives the built wheels end to end (test.yml's packaging job and
+# release-publish.yml).
 LIBRARY_REQUIRED=(
   "cad/__init__.py"
   # The library's earlier import name, an alias of it.

@@ -78,7 +78,7 @@ The batch writes `tmp/bench/corpus-<time>/` (`--out` selects another fresh folde
 and private runtime state. The first row records the commit, interpreter, platform and
 configuration. `--keep` retains source copies with the edit reverted. The normal exit
 stops each private daemon. These are manual measurements, not CI tests; the global
-suite tests the pure configuration, copy, selection, aggregation and comparison helpers.
+suite tests the pure configuration, copy, selection and aggregation helpers.
 
 ## Viewer against OCCT, mode by mode
 

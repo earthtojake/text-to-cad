@@ -2,8 +2,7 @@
 #
 # The editable packages below are what every pin of this release resolves to locally:
 # sync-version.mjs stamps their pyproject.toml files from VERSION, so the editable installs report
-# exactly the pinned version. Installing a skill's requirements.txt WITHOUT this file fetches the
-# last published release from PyPI instead of the checkout -- this file is the development door.
+# exactly the pinned version. This file is the development door.
 # The library with its build123d extra: this environment runs models itself, so it is its own base
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
 # its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
