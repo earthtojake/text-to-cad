@@ -594,8 +594,9 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
     ``CAD_ENGINE_CHECK_RSS_MB``, the same defaults), read each ``WATCH_SECONDS``, the time from the process's
     start and its memory as the system counts it. From outside, because nothing inside can stop it: a kernel
     call holds the interpreter until it returns, and one that never returns would hold a watchdog there too.
-    The process ends with its caller: it holds the read end of a pipe this one keeps open, and leaves when
-    that closes (a caller a shell's time limit killed leaves no check running on, measured for no one).
+    The process ends with its caller: it holds the read end of a pipe this one keeps open, on a descriptor of its
+    own rather than its standard input, and leaves when that closes (a caller a shell's time limit killed leaves
+    no check running on, measured for no one).
 
     Its answer, ``_measured_here``'s; or ``{"unmeasured": {"code", "message"}}`` for one stopped at a limit
     (``over_time``, ``over_memory``: its process killed), whose process exited with no answer
@@ -668,17 +669,23 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
 def _child() -> None:
     """The process ``_watched`` starts: the request in its first argument measured (``_measured_here``) and
     answered in the file its second names, written whole as it ends. Its standard output is its standard error's
-    (the kernel's and a library's prints never reach its caller's answer), and its standard input the pipe its
-    caller holds open: at its end of file the caller is gone, and so is this process, as soon as the interpreter
-    runs. What the integration raised is the check's answer, not checked for ``error``: its type, its words and
-    where it was raised, in one line; a module this environment lacks is answered as such (``missing``)."""
+    (the kernel's and a library's prints never reach its caller's answer). The pipe its caller holds open comes on
+    its standard input and is taken aside before anything reads it (``places.standard_input_aside``: on Windows a
+    thread reading standard input would hold the integration's first import of a DLL until the caller went),
+    standard input then the null device: at the pipe's end of file the caller is gone, and so is this process,
+    as soon as the interpreter runs. What the integration raised is the check's answer, not checked for
+    ``error``: its type, its words and where it was raised, in one line; a module this environment lacks is
+    answered as such (``missing``)."""
     import threading
 
+    from cad.engine.places import standard_input_aside
+
     os.dup2(2, 1)
+    caller = standard_input_aside()
 
     def orphaned() -> None:
         try:
-            while os.read(0, 4096):  # the descriptor itself: no lock of ``sys.stdin``'s is held as this process ends
+            while os.read(caller, 4096):  # a descriptor: no lock of a file object's is held as this process ends
                 pass
         except OSError:
             pass

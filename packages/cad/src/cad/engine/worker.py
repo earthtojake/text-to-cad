@@ -767,16 +767,12 @@ def main() -> int:
     os.dup2(2, 1)  # the model's prints go where the daemon reads logs from
     sys.stdout = sys.stderr
     # The daemon's requests come on a handle of the worker's own, and standard input is the null
-    # device. On Windows a thread blocked reading a pipe holds every other call on that pipe --
-    # GetFileType, which a DLL's C runtime asks of the standard handles as the DLL loads (numpy's
-    # OpenBLAS, say) -- so a model's first import would wait for the daemon's next request, which
-    # waits for the build: a worker that never builds. And a model reading its input reads none
-    # of the protocol.
-    asked = os.fdopen(os.dup(0), "rb")
-    null = os.open(os.devnull, os.O_RDONLY)
-    os.dup2(null, 0)
-    os.close(null)
-    sys.stdin = open(os.devnull, encoding="utf-8")  # noqa: SIM115 - standard input, for the worker's life
+    # device (``places.standard_input_aside``): on Windows a model's first import would otherwise wait
+    # for the daemon's next request, which waits for the build -- a worker that never builds. And a
+    # model reading its input reads none of the protocol.
+    from cad.engine.places import standard_input_aside
+
+    asked = os.fdopen(standard_input_aside(), "rb")
 
     lock = threading.Lock()
 
