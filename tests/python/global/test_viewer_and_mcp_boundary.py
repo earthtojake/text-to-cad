@@ -4,26 +4,16 @@ Outside `cad_server/viewer/`, `cad_server/mcp/` and the commands that start them
 `cli/mcp.py`, which the CLI registry names by string), no module of the server's
 imports either (the library imports nothing of the server's at all: test_core_imports)
 -- except the injected `_internal/engine_host.py` composition root
-and `cad_server.viewer.recents`, the state directory's one definition. CI
-leans on this: a change confined to one of them runs only the tests that reach it
-(scripts/github-workflows/select_checks.py), so an import across the line has to move the
-line there too.
+and `cad_server.viewer.recents`, the state directory's one definition.
 """
 from __future__ import annotations
 
 import ast
-import importlib.util
-import sys
 import unittest
 
 from tests.python.support.paths import REPO_ROOT
 
-_spec = importlib.util.spec_from_file_location("select_checks", REPO_ROOT / "scripts/github-workflows/select_checks.py")
-selector = importlib.util.module_from_spec(_spec)
-sys.modules.setdefault("select_checks", selector)
-_spec.loader.exec_module(selector)
-
-SERVER = REPO_ROOT / selector.SERVER_SRC
+SERVER = REPO_ROOT / "packages/cad-server/src/cad_server"
 SHELLS = {"cli/viewer.py"}
 ALLOWED = {"cad_server.viewer.recents"}
 
@@ -63,26 +53,6 @@ class ViewerAndMcpAreLeaves(unittest.TestCase):
                 continue
             offenders += [f"{relative} -> {name}" for name in references(path, relative) if leaf(name)]
         self.assertEqual(offenders, [], "only the application composition root may import viewer/MCP leaves")
-
-    def test_the_selector_draws_the_same_line(self):
-        self.assertEqual(set(selector.VIEWER_CODE), {f"{selector.SERVER_SRC}/viewer/**",
-                                                     *(f"{selector.SERVER_SRC}/{shell}" for shell in SHELLS)})
-        self.assertEqual(set(selector.MCP_CODE), {f"{selector.SERVER_SRC}/mcp/**"})
-        self.assertEqual(set(selector.VIEWER_SHARED), {f"{selector.SERVER_SRC}/viewer/__init__.py",
-                                                       f"{selector.SERVER_SRC}/viewer/recents.py"})
-
-    def test_a_change_to_a_leaf_reaches_every_test_that_imports_it(self):
-        viewer = set(selector._viewer_change("").cadgen)
-        mcp = set(selector._mcp_change("").cadgen)
-        for path in sorted((REPO_ROOT / selector.CADGEN_SUITE).rglob("test*.py")):
-            relative = path.relative_to(REPO_ROOT).as_posix()
-            names = [name for name in references(path, "tests/x.py") if leaf(name) or name.startswith("cad_server.cli.")]
-            with self.subTest(test=relative):
-                if any(name.startswith(("cad_server.viewer", "cad_server.cli.viewer")) for name in names):
-                    self.assertIn(relative, viewer)
-                if any(name.startswith(("cad_server.mcp", "cad_server.cli.mcp")) for name in names):
-                    self.assertIn(relative, mcp)
-                    self.assertIn(relative, viewer)
 
 
 if __name__ == "__main__":

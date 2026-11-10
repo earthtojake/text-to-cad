@@ -91,7 +91,7 @@ class PythonTestRunnerIsolation(unittest.TestCase):
         self.assertFalse(Path(file_env["CAD_ENGINE_DIR"]).exists())
 
     def test_even_one_file_at_one_job_runs_in_an_interpreter_of_its_own(self):
-        ran = ("only.py", 0, "Ran 0 tests in 0.000s\n\nOK\n", 0.0)
+        ran = ("only.py", 0, "Ran 0 tests in 0.000s\n\nOK\n", 0.0, None)
         with mock.patch.object(runner, "_run_one_file", return_value=ran) as one, \
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             self.assertEqual(runner.main(["--top", str(REPO_ROOT), "only.py"]), 0)
@@ -107,7 +107,7 @@ class DefaultEngineGuard(unittest.TestCase):
     def run_with(self, answering: list[bool]) -> tuple[int, str, list]:
         stopped: list = []
         door = "/default/cad-engine/engine.door"
-        ran = lambda path, top, verbose, env, places: (path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0)  # noqa: E731
+        ran = lambda path, top, verbose, env, **_: (path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0, None)  # noqa: E731
         said = io.StringIO()
         with mock.patch.object(runner, "default_engine_door", return_value=door), \
                 mock.patch.object(runner, "person_places", return_value=([], [], "")), \
@@ -166,10 +166,10 @@ class PersonStateGuard(unittest.TestCase):
             command.write_text("#!/bin/sh\n", encoding="utf-8")
             writes: list = []
 
-            def ran(path, top, verbose, env, places):  # what a process the file left writes as it ends
+            def ran(path, top, verbose, env, **_):  # what a process the file left writes as it ends
                 for write in writes:
                     write()
-                return path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0
+                return path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0, None
 
             def run() -> tuple[int, str]:
                 said = io.StringIO()
@@ -200,11 +200,11 @@ class PersonStateGuard(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             person = Path(scratch, "state")
 
-            def ran(path, top, verbose, env, places):
+            def ran(path, top, verbose, env, **_):
                 for inside, record in records.items():
                     Path(person, inside).parent.mkdir(parents=True, exist_ok=True)
                     Path(person, inside).write_text(json.dumps(record), encoding="utf-8")
-                return path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0
+                return path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0, None
 
             said = io.StringIO()
             with mock.patch.dict(os.environ, {"CI": ""}), \
@@ -372,9 +372,11 @@ class HangGuard(unittest.TestCase):
                     mock.patch.object(runner, "person_places", return_value=([], [], "")), \
                     mock.patch.object(runner.sys, "stderr", report):
                 code = runner.run_files([str(hung)], top, 1, False)
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 3)  # HUNG_EXIT: a hang, apart from a failure
         self.assertIn("in test_waits_forever", report.getvalue())
         self.assertIn(f"failing modules:\n  {hung}", report.getvalue())
+        self.assertIn(f"hung (each one's stacks are with its output above):\n  {hung}: its guard fired 1 s after",
+                      report.getvalue())
 
     def test_a_windows_childs_summary_still_parses(self):
         # Read from a file, a Windows child's \r\n reaches the parser untranslated:

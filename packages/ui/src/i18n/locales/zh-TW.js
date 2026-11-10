@@ -331,6 +331,8 @@ export default {
   "whatsNew.0.11.boards.body": "用 KiCad 設計 PCB：「Design a 9-key macropad with USB-C and a rotary encoder, route it, and show me the board in 3D.」",
   "whatsNew.0.11.updates.title": "更新自動安裝。",
   "whatsNew.0.11.updates.body": "修補版本會在背景安裝，並在沒有工作執行時切換。執行 `cad update auto off` 即可關閉。",
+  "whatsNew.0.11.checks.title": "可製造性檢查。",
+  "whatsNew.0.11.checks.body": "檢查零件能否進行 CNC 加工、鈑金製造、射出成型或 3D 列印：`cad step dfm part.step --process molding`。",
 
   "alert.undisplayable": "無法顯示這個模型",
   "alert.dismiss": "關閉",

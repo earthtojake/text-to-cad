@@ -44,9 +44,9 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
     # KiCad's electrical rules check of a saved schematic: the document type's, run by the kicad integration's kicad-cli.
     "kicad_sch erc": ("cad.kicad_sch", "erc"),
-    # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
+    # A 3D type's manufacturing check, and a DXF's as a sheet's cut file: one signature for every type.
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf")},
     # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
     **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
 }

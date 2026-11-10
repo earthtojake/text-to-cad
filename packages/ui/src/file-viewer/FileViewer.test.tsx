@@ -496,6 +496,23 @@ it('Open in draws a KiCad that refuses the board disabled, its hint saying why, 
   expect(openApp).toHaveBeenCalledWith({ path: '/boards/blinky.kicad_pcb', kind: 'file' }, 'source', 'kicad-nightly');
 });
 
+it('Open in draws each row\'s mark in the text\'s colour: an app\'s own, else the plain app glyph, and each place\'s glyph', async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const apps = vi.fn(async () => ({ fileManager: 'finder', targets: [{ target: 'source', kind: 'step', name: 'bracket.step', present: true,
+    apps: [{ id: 'freecad', name: 'FreeCAD' }, { id: 'solidworks', name: 'SolidWorks' }] }] }));
+  render(<FileViewer file="/models/bracket.step" renderers={[renderer]} state={{}} onStateChange={() => {}}
+    host={{ ...host, fileActions: { platform: 'darwin', perform: { browser: vi.fn(), reveal: vi.fn() }, apps, openApp: vi.fn() } } as any} />);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  await screen.findByRole('menuitem', { name: 'FreeCAD' });
+  const rows = within(screen.getByRole('menu', { name: 'Open in' })).getAllByRole('menuitem');
+  expect(rows.map(row => [row.textContent, row.querySelector('svg')?.getAttribute('data-open-in-mark')])).toEqual([
+    ['Browser', 'browser'], ['Finder', 'reveal'], ['FreeCAD', 'freecad'], ['SolidWorks', 'glyph'], ['Default app', 'default']]);
+  const freecad = rows[2].querySelector('svg')!;
+  expect([freecad.getAttribute('fill'), freecad.getAttribute('aria-hidden'), freecad.querySelectorAll('path').length]).toEqual(['currentColor', 'true', 1]);
+});
+
 it('says why a file will not open, and that it does not exist when it is missing', async () => {
   const missing = Object.assign(new Error('File does not exist: /models/gone.step'), { code: 'cad-file-missing' });
   expect(isMissingFileError(missing)).toBe(true);

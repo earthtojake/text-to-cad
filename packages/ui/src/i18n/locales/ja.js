@@ -330,6 +330,8 @@ export default {
   "whatsNew.0.11.boards.body": "KiCad でプリント基板を設計できます：「Design a 9-key macropad with USB-C and a rotary encoder, route it, and show me the board in 3D.」",
   "whatsNew.0.11.updates.title": "アップデートは自動で。",
   "whatsNew.0.11.updates.body": "パッチリリースはバックグラウンドでインストールされ、何も実行されていないときに切り替わります。`cad update auto off` でオフにできます。",
+  "whatsNew.0.11.checks.title": "製造性チェック。",
+  "whatsNew.0.11.checks.body": "部品を CNC 加工、板金、射出成形、3D プリントで作れるかを確認できます：`cad step dfm part.step --process molding`。",
 
   "alert.undisplayable": "モデルを表示できませんでした",
   "alert.dismiss": "閉じる",
