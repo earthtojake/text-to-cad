@@ -547,6 +547,15 @@ def _at_limit(report: dict[str, Any], resolved: dict[str, Any]) -> None:
             continue
         item["escape_at_limit"] = bool(under) and isinstance(slack, (int, float)) and \
             all(limit <= value + slack for limit in under)
+    # A clearance the measurement's budget cut short (``exact`` false) is the least it found, and may be less by
+    # its ``uncertainty_mm``: where a limit lies between the two, the rule cannot tell and the distance is not
+    # measured (None; kept as ``distance_at_most_mm``) -- never a pass.
+    limits = _limits("printing.clearance", resolved)
+    for item in _ok(report.get("clearances")).get("items") or ():
+        value, slack = item.get("distance_mm"), item.get("uncertainty_mm")
+        if item.get("exact") is False and isinstance(value, (int, float)) and isinstance(slack, (int, float)) and \
+                any(value - slack < limit <= value for limit in limits):
+            item.update(distance_mm=None, distance_at_most_mm=value)
 
 
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
@@ -627,6 +636,14 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     for item in crossing[:8]:
         names = item.get("parts") or [f"body {index + 1}" for index in item.get("bodies") or ()]
         shared = f" ({item['overlap_mm3']:g} mm3 shared)" if item.get("overlap_mm3") else ""
+        if item.get("inside") is not None:
+            # a body wholly in another's material: nothing of it shows, and the volume given counts it once
+            other = next(index for index in item["bodies"] if index != item["inside"])
+            found.append(CheckFinding(
+                "warning", "bodies_intersect", f"body {item['inside'] + 1} ({item.get('inside_volume_mm3'):g} mm3) "
+                f"lies wholly inside body {other + 1}'s material: a slicer prints them as one, and the volume given "
+                "counts it once", where(item.get("xyz")), "remove the inner body, or join them into one (a union)"))
+            continue
         found.append(CheckFinding(
             "warning", "bodies_intersect", f"{' and '.join(str(name) for name in names) or 'two bodies'} pass "
             f"through each other{shared}: a slicer may join them or fill the overlap twice, and the volume given is "
@@ -637,6 +654,24 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                   "each other (measurements.clearances lists every one)", "clearances"))
     if candidates:
         return found
+    # What a family's budget left unread is not measured, and the check is not checked: said as a family that
+    # failed is.
+    unread = _ok(report.get("bridges")).get("spans_not_measured")
+    if unread:
+        found.append(CheckFinding("error", "measurement_failed", f"bridges was not measured in full: {unread} flat "
+                                  "overhang(s) have no span read (the check's budget for spans was spent on the "
+                                  "larger ones), so printing.bridge_length and printing.cantilever_length give "
+                                  "them no verdict", "bridges", "check the part's exact geometry (its STEP or its "
+                                  "model), or a mesh with fewer separate flat undersides"))
+    for item in _ok(report.get("clearances")).get("items") or ():
+        if item.get("distance_at_most_mm") is not None:
+            names = item.get("parts") or [f"body {index + 1}" for index in item.get("bodies") or ()]
+            most = item["distance_at_most_mm"]
+            found.append(CheckFinding(
+                "info", "clearance_bounded", f"the clearance between {' and '.join(str(name) for name in names)} is "
+                f"between {max(0.0, most - item['uncertainty_mm']):g} and {most:g} mm: the check's budget was spent "
+                "before the least was found, and a limit lies between the two", item.get("location") or where(item.get("xyz")),
+                "check the parts' exact geometry (their STEP or model), or a mesh of fewer triangles"))
     overhangs = _ok(report.get("overhangs"))
     parts = (solid.get("part_count") or 0) if solid else (mesh.get("body_count") or 0)
     if (overhangs.get("down_facing_area_below_limit_mm2") or 0) > 0:

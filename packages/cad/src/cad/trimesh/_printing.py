@@ -146,7 +146,8 @@ def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], list[trimesh.
     A shell's normals point away from its material, so a sealed void's signed volume is negative and a
     solid's positive: a cavity a part encloses -- a groove that
     does not reach the surface -- is that part's, and its walls are measured with it, never as a body
-    of its own. A void goes with the solid that holds its centre, else with the largest. An open sliver of no
+    of its own. A void goes with the smallest solid that holds a corner of its shell, else with the largest. An
+    open sliver of no
     area worth a thousandth of the whole (an exporter's stray facets) is no body: a ray from one measured
     a wall the part has not."""
     faces = np.asarray(mesh.faces)
@@ -187,9 +188,12 @@ def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], list[trimesh.
         return parts, []
     held: list[list[trimesh.Trimesh]] = [[solid] for solid in solids]
     for void in voids:
-        centre = void.bounds.mean(axis=0)
-        holder = next((at for at, solid in enumerate(solids) if solid.is_watertight and _inside(solid, centre[None])[0]),
-                      max(range(len(solids)), key=lambda at: solids[at].area))
+        # the solid its shell lies in -- the smallest that holds a corner of it: a captive ball at the centre of a
+        # hollow shell holds the void's centre, never its shell
+        corner = np.asarray(void.vertices[:1], dtype=float)
+        within = [at for at, solid in enumerate(solids) if solid.is_watertight and _inside(solid, corner)[0]]
+        holder = min(within, key=lambda at: abs(float(solids[at].volume))) if within else \
+            max(range(len(solids)), key=lambda at: solids[at].area)
         held[holder].append(void)
     return [group[0] if len(group) == 1 else trimesh.util.concatenate(group) for group in held], voids
 
@@ -269,7 +273,18 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
             if area > 0:
                 hist[f"{bins[b]}-{bins[b+1]}deg"] = round(area, 2)
 
-    items = _overhang_regions(mesh, counted, surface_angle, z_min, max(1.0, 5 * layer), reach_floor) if regions else []
+    # one underside is one region: its triangles under the limit, joined through the down-facing triangles
+    # within ``OVERHANG_JOIN`` of them (a scan's noise breaks one underside into hundreds of islands)
+    band = counted.copy()
+    pairs = np.asarray(mesh.face_adjacency)
+    for _ring in range(OVERHANG_JOIN if regions and len(pairs) else 0):
+        beside = np.zeros(len(band), dtype=bool)
+        beside[pairs[band[pairs[:, 0]], 1]] = True
+        beside[pairs[band[pairs[:, 1]], 0]] = True
+        band |= beside & down & ~on_plate
+    items = _overhang_regions(mesh, counted, band, surface_angle, z_min, max(1.0, 5 * layer), reach_floor) \
+        if regions else []
+    unread = sum(1 for item in items if item.pop("_unread", False))
     # The headline is the exact path's: the regions that need support, a bridge, a round on the plate's edge and a
     # region under the floors aside (they are listed, counted false, and no rule judges them).
     headline = counted
@@ -308,10 +323,13 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
         "area_floor_mm2": mo.OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor,
         # under the limit by no more than the mesh's own angular deflection there: at the limit, not judged
         "at_limit_area_mm2": round(float(areas[near].sum()), 2),
+        # flat regions whose span the family's budget (``SPAN_PAIRS``) did not reach: not measured
+        **({"spans_not_measured": unread} if unread else {}),
         # how far those triangles' angles may be off the surface's (``Smooth.slopes``): at most ``CHORD_CAP_DEG``
         "at_limit_tolerance_deg": round(float(_smooth(mesh).slopes()[near].max()), 4) if regions and near.any() else 0.0,
         "method": "regions of down-facing triangles under the angle limit off the plate (but a region none of whose "
-                  "triangles is under it by more than the mesh's chords turn from the surface there: at the limit); "
+                  "triangles is under it by more than the mesh's chords turn from the surface there: at the limit), "
+                  f"those within {OVERHANG_JOIN} down-facing triangles of each other one region; "
                   "one under area_floor_mm2, "
                   "or a cantilever reaching under reach_floor_mm (the nozzle given, else one bead), is listed with "
                   "counted false and judged by no rule: text-to-cad's own floors, no guide states them; the "
@@ -320,41 +338,84 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
     }
 
 
-def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarray, z_min: float,
-                      plate_band: float, reach_floor: float = mo.OVERHANG_REACH_MM) -> list[dict]:
-    """Each connected region of ``counted`` triangles: its steepest angle, area, height, and what carries it
-    -- the walls below its boundary (a bridge held from opposite sides, a cantilever from one)."""
+#: Overhang regions with at most twice this many down-facing triangles between them are one region (one
+#: underside, one finding): a scanned sphere's underside read as 47 regions of 1 mm2 or more, at 3 as one.
+OVERHANG_JOIN = 3
+#: Point-to-support distances the overhang regions' spans get, at most, the largest regions first (3000 points a
+#: region against at most ``SPAN_SUPPORTS`` of its supporting edges): what bounds the family's time on a mesh of
+#: thousands of flat regions. A region past it has no span (``spans_not_measured``).
+SPAN_PAIRS = 100_000_000
+SPAN_SUPPORTS = 4000
+
+
+def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, band: np.ndarray, tilt: np.ndarray,
+                      z_min: float, plate_band: float, reach_floor: float = mo.OVERHANG_REACH_MM) -> list[dict]:
+    """Each region of ``counted`` triangles -- those joined by their edges, or through the triangles of
+    ``band`` (the down-facing triangles beside them) --: its steepest angle, area, height, and what carries it -- the
+    walls below its boundary (a bridge held from opposite sides, a cantilever from one). A flat region's or an
+    arch's span is read (``meshops_printing.span``), the largest regions first, within ``SPAN_PAIRS``; a
+    region too small to need support, or a slope, has none to read."""
     if not counted.any():
         return []
-    centers, areas, vertices = mesh.triangles_center, mesh.area_faces, mesh.vertices
-    pairs, shared = mesh.face_adjacency, mesh.face_adjacency_edges
+    centers, areas, vertices = np.asarray(mesh.triangles_center), np.asarray(mesh.area_faces), np.asarray(mesh.vertices)
+    faces, normals = np.asarray(mesh.faces), np.asarray(mesh.face_normals)
+    pairs, shared = np.asarray(mesh.face_adjacency), np.asarray(mesh.face_adjacency_edges)
     tol = 1e-3 * max(1.0, float(np.linalg.norm(mesh.extents)) * 1e-3)
-    items = []
-    for region in _components(mesh, counted):
-        inside = np.zeros(len(mesh.faces), dtype=bool)
-        inside[region] = True
-        edge = inside[pairs[:, 0]] != inside[pairs[:, 1]]
-        outer = np.where(inside[pairs[edge, 0]], pairs[edge, 1], pairs[edge, 0])
-        mids = vertices[shared[edge]].mean(axis=1)
-        carries = centers[outer, 2] < mids[:, 2] - tol
-        a, b = vertices[shared[edge][carries, 0]], vertices[shared[edge][carries, 1]]
-        tri = vertices[mesh.faces[region]]
-        points = mo.spread_points(tri, cap=3000)
+    # each counted triangle's region; the others' -1
+    label = np.full(len(faces), -1)
+    for k, component in enumerate(_components(mesh, counted | band)):
+        label[component] = k
+    label[~counted] = -1
+    # every edge between a region and what lies beside it, with the triangle beside: grouped by region
+    a, b = pairs[:, 0], pairs[:, 1]
+    edge = label[a] != label[b]
+    inner = np.concatenate([a[edge & (label[a] >= 0)], b[edge & (label[b] >= 0)]])
+    outer = np.concatenate([b[edge & (label[a] >= 0)], a[edge & (label[b] >= 0)]])
+    ends = np.concatenate([shared[edge & (label[a] >= 0)], shared[edge & (label[b] >= 0)]])
+    by_edge = np.argsort(label[inner], kind="stable")
+    inner, outer, ends = inner[by_edge], outer[by_edge], ends[by_edge]
+    edge_at = np.searchsorted(label[inner], np.arange(int(label.max()) + 2))
+    members = np.flatnonzero(label >= 0)
+    members = members[np.argsort(label[members], kind="stable")]
+    face_at = np.searchsorted(label[members], np.arange(int(label.max()) + 2))
+    regions = [members[face_at[k]:face_at[k + 1]] for k in range(int(label.max()) + 1) if face_at[k + 1] > face_at[k]]
+    regions.sort(key=lambda region: -float(areas[region].sum()))
+    items, spent = [], 0
+    for region in regions:
+        k = int(label[region[0]])
+        beside, rim = outer[edge_at[k]:edge_at[k + 1]], ends[edge_at[k]:edge_at[k + 1]]
+        mids = vertices[rim].mean(axis=1)
+        carries = centers[beside, 2] < mids[:, 2] - tol
+        tri = vertices[faces[region]]
+        area = float(areas[region].sum())
         flat = bool(tilt[region].max() < FLAT_DEG)
-        size = float(np.linalg.norm(tri.reshape(-1, 3).max(axis=0) - tri.reshape(-1, 3).min(axis=0)))
-        spread = mo.span(points, a, b, inside=mo.in_triangles_xy(tri) if len(region) <= 2000 else None,
-                         refine=size / 40.0)
         heights = centers[region, 2] - z_min
         # on the plate's edge: the region reaches the plate, or runs on into down-facing triangles that do (a
         # round's lowest row, on the plate, is no overhang and is not in the region) -- as the exact path reads a
         # round whose face touches the plate
-        lowest = vertices[mesh.faces[outer[mesh.face_normals[outer, 2] < -1e-6]]][:, :, 2]
-        touches = float(vertices[mesh.faces[region]][:, :, 2].min()) <= z_min + 0.1 or (
-            lowest.size > 0 and float(lowest.min()) <= z_min + 0.1)
-        # carried on both sides, a flat region or an arch (curved one way: a hole's crown, whose every layer
-        # but the last stands on the one below) is a bridge of its span; a dome (curved both ways: a hollow
-        # sphere's top) is a slope by its least angle, as the exact path reads a curved face
-        if spread["kind"] == "bridge" and (flat or _arch(mesh.face_normals[region], areas[region])):
+        lowest = vertices[faces[beside[normals[beside, 2] < -1e-6]]][:, :, 2]
+        touches = float(tri[:, :, 2].min()) <= z_min + 0.1 or (lowest.size > 0 and float(lowest.min()) <= z_min + 0.1)
+        # what carries it is read where a verdict can turn on it: a flat region, or an arch (curved one way: a
+        # hole's crown), large enough to need support
+        spread: dict = {"kind": None, "length_mm": None, "reach_mm": None}
+        unread = False
+        if area >= mo.OVERHANG_AREA_MM2 and (flat or _arch(normals[region], areas[region])):
+            starts, stops = vertices[rim[carries, 0]], vertices[rim[carries, 1]]
+            if len(starts) > SPAN_SUPPORTS:  # a boundary of more edges than are read: every n-th of them
+                some = np.linspace(0, len(starts) - 1, SPAN_SUPPORTS).round().astype(int)
+                starts, stops = starts[some], stops[some]
+            points = mo.spread_points(tri, cap=3000)
+            if spent + len(points) * max(1, len(starts)) > SPAN_PAIRS:
+                unread = True
+            else:
+                spent += len(points) * max(1, len(starts))
+                size = float(np.linalg.norm(tri.reshape(-1, 3).max(axis=0) - tri.reshape(-1, 3).min(axis=0)))
+                spread = mo.span(points, starts, stops, inside=mo.in_triangles_xy(tri) if len(region) <= 2000 else None,
+                                 refine=size / 40.0)
+        # carried on both sides, a flat region or an arch is a bridge of its span (every layer of a hole's crown
+        # but the last stands on the one below); a dome (curved both ways: a hollow sphere's top) is a slope by
+        # its least angle, as the exact path reads a curved face
+        if spread["kind"] == "bridge":
             kind = "bridge"
         elif touches and float(heights.max()) <= plate_band:
             kind = "plate_edge"
@@ -363,7 +424,6 @@ def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarr
         else:
             kind = "slope"
         worst = region[int(tilt[region].argmin())]
-        area = float(areas[region].sum())
         # too small to need support: under the area floor, or a cantilever shorter than a bead is wide
         big = kind != "plate_edge" and area >= mo.OVERHANG_AREA_MM2 and not (
             kind == "cantilever" and spread["reach_mm"] is not None and spread["reach_mm"] < reach_floor)
@@ -372,7 +432,7 @@ def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarr
                       "height_mm": _r(float(heights.min()), 3), "max_height_mm": _r(float(heights.max()), 3),
                       "kind": kind, "flat": flat, "length_mm": _r(spread["length_mm"], mo.JUDGED),
                       "reach_mm": _r(spread["reach_mm"]), "supporting_edges": int(carries.sum()), "counted": bool(big),
-                      "_faces": region})
+                      "_faces": region, "_unread": unread and kind != "plate_edge"})
     return items
 
 
@@ -394,8 +454,10 @@ def _bridge_facts(overhangs: dict) -> dict:
              for item in overhangs.get("items") or () if item["kind"] in ("bridge", "cantilever", "ceiling")]
     items.sort(key=lambda item: -(item["length_mm"] or 0.0))
     bridges = [item["length_mm"] for item in items if item["kind"] == "bridge" and item["length_mm"] is not None]
+    unread = overhangs.get("spans_not_measured")
     return {"items": items[:CAP], "count": len(items), "flat_within_deg": FLAT_DEG,
             "bridge_count": len(bridges), "longest_bridge_mm": max(bridges, default=None),
+            **({"spans_not_measured": unread} if unread else {}),
             "method": "regions of down-facing triangles under the angle limit; carried where the triangle across "
                       "their edge descends (a wall below); span from the region's points to those edges"}
 
@@ -471,6 +533,11 @@ class _Knife:
         return self.angle > mo.KNIFE_DEG + mo.ANGLE_EPS + self.slack
 
 
+#: Creases a chain has, at most, for each to be read against those around it (``_local_angles``: a pass over the
+#: chain a crease).
+LOCAL_CREASES = 4000
+
+
 def _local_angles(starts: np.ndarray, ends: np.ndarray, angles: np.ndarray, lengths: np.ndarray,
                   window: float) -> np.ndarray:
     """Each crease's angle as the creases around it read it: the length-weighted median of those whose middles lie
@@ -478,6 +545,11 @@ def _local_angles(starts: np.ndarray, ends: np.ndarray, angles: np.ndarray, leng
     58 deg), the run of them along the edge does not."""
     middles = (starts + ends) / 2.0
     found = np.empty(len(angles))
+    if len(angles) > LOCAL_CREASES:  # a chain of more creases than are read one by one: its own angle all along
+        order = np.argsort(angles)
+        weight = np.cumsum(lengths[order])
+        found[:] = angles[order][min(int(np.searchsorted(weight, weight[-1] / 2.0)), len(order) - 1)]
+        return found
     for k in range(len(angles)):
         near = np.flatnonzero(np.linalg.norm(middles - middles[k], axis=1) <= window)
         order = near[np.argsort(angles[near])]
@@ -520,8 +592,9 @@ def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
     owner = chain_of[pairs[:, 0]]
     lengths = np.linalg.norm(mesh.vertices[pairs[:, 0]] - mesh.vertices[pairs[:, 1]], axis=1)
     found = []
-    for k in np.unique(owner):
-        mine = owner == k
+    by_chain = np.argsort(owner, kind="stable")
+    cuts = np.flatnonzero(np.diff(owner[by_chain])) + 1
+    for mine in np.split(by_chain, cuts):
         length = float(lengths[mine].sum())
         # its least crease would make a curved knife far deeper than it is (and than it is long)
         order = np.argsort(angle[mine])
@@ -679,6 +752,9 @@ def _surface_offset(mesh: trimesh.Trimesh, triangles: np.ndarray, points: np.nda
 
 #: Walls of a body, the thinnest first, whose support is read (``_wall_items``): each costs a few hundred rays.
 SUPPORT_READ = 24
+#: Walls of a body, the thinnest first, refined to the least about their thinnest sample (``_least_wall``: a few
+#: hundred rays each): a lattice has thousands of faces under twice the minimum.
+REFINE_READ = 200
 
 
 def _cast(mesh: trimesh.Trimesh):
@@ -749,7 +825,7 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
     walls a verdict can turn on) has its support read off the wall itself, as the exact path reads it
     (``meshops_printing.wall_support``: ``supported``, ``joined_sides``), the ``SUPPORT_READ`` thinnest of a
     body; any other says ``supported`` None. One sampled under twice ``judged_below`` is first refined to the
-    least wall about its thinnest sample (``_least_wall``: ``refined`` true). Each has how far its thinnest ray's
+    least wall about its thinnest sample (``_least_wall``: ``refined`` true), the ``REFINE_READ`` thinnest of a body. Each has how far its thinnest ray's
     length may be off the wall the mesh stands for (``chord_mm``):
     the surfaces' offsets from the chords at its two ends (``_surface_offset``), each along its ray, summed with
     their signs -- a tube's two rows of chords, one convex and one concave, cancel where they lie alike.
@@ -773,6 +849,7 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
     rows = sorted(zip(values[starts], starts, counts), key=lambda row: row[0])
     seen: set[tuple[int, int]] = set()
     items = []
+    tried = read = 0  # the walls refined, and those whose support was read, so far
     for value, at, count in rows:
         pair = (int(min(own[at], across[at])), int(max(own[at], across[at])))
         if pair in seen:
@@ -781,7 +858,8 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
         item = {"xyz": _p(points[at]), "thickness_mm": _r(float(value), mo.JUDGED), "samples": int(count),
                 "supported": None, "sampled": True, "chord_mm": _r(float(chords[at]), 6)}
         place, face = points[at], int(faces[order][at])
-        if mesh is not None and judged_below is not None and value < 2.0 * judged_below:
+        if mesh is not None and judged_below is not None and value < 2.0 * judged_below and tried < REFINE_READ:
+            tried += 1
             least = _least_wall(mesh, place + mesh.face_normals[face] * NUDGE, face, float(value),
                                 math.sqrt(float(mesh.area) / len(thickness)), zones)
             if least is not None:
@@ -790,10 +868,11 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
                 chord = abs(float((_surface_offset(mesh, np.array([face]), place[None]) +
                                    _surface_offset(mesh, np.array([far]), (place + inward * value)[None]))[0]))
                 item.update(xyz=_p(place), thickness_mm=_r(float(value), mo.JUDGED), chord_mm=_r(chord, 6), refined=True)
-        read = sum(1 for other in items if "joined_sides" in other)
         if mesh is not None and judged_below is not None and value < judged_below and read < SUPPORT_READ:
+            read += 1
             found = mo.wall_support(_cast(mesh), place, mesh.face_normals[face], float(value))
-            item.update(supported=found["supported"], joined_sides=found["joined_sides"])
+            item.update(supported=found["supported"], joined_sides=found["joined_sides"],
+                        free_fraction=found["free_fraction"])
         items.append(item)
     return items
 
@@ -1106,42 +1185,149 @@ def _some(points: np.ndarray, most: int = 2000) -> np.ndarray:
     return points if len(points) <= most else points[np.linspace(0, len(points) - 1, most).round().astype(int)]
 
 
+#: The spacing of the points a body is read as for its clearances: its area over this many -- a triangle with
+#: a side over twice that gets a grid of them (those triangles ``CLEARANCE_POINTS`` between them), any other
+#: its centre alone. What bounds the family's memory: a point a triangle and these.
+CLEARANCE_POINTS = 30_000
+#: Point-triangle distances one body gets against another, at most: what bounds the family's time (a few
+#: seconds a pair of bodies). Past it the least distance found stands with how much less it may be.
+CLEARANCE_PAIRS = 3_000_000
+#: A pair of bodies whose points stay this far apart (less what their points leave uncovered) is above every
+#: published clearance (all under 1 mm): its distance is the points', with that margin (as the exact path's).
+CLEARANCE_EXACT_BELOW = 1.5
+
+
+class _Cloud:
+    """A body as points for its clearances: every triangle's centre, and across each triangle with a side
+    over twice the points' spacing (``CLEARANCE_POINTS``) a grid of them -- each point its triangle's own, in a
+    tree --, so no place on a triangle is farther than ``cover`` from one of that triangle's points; and its
+    ``probes``, the places its distance to another body is read at: those points and its corners."""
+
+    def __init__(self, body: trimesh.Trimesh) -> None:
+        from scipy.spatial import cKDTree
+
+        self.triangles = np.asarray(body.triangles, dtype=float)
+        longest = np.linalg.norm(self.triangles - np.roll(self.triangles, 1, axis=1), axis=2).max(axis=1)
+        big = longest > 2.0 * math.sqrt(float(body.area) / CLEARANCE_POINTS)
+        points, owner = [self.triangles.mean(axis=1)], [np.arange(len(self.triangles))]
+        # a triangle's farthest place from its centre is a corner: two thirds of a median, under its longest side
+        self.cover = 0.67 * float(longest[~big].max()) if (~big).any() else 0.0
+        if big.any():
+            grid, of = mo.spread_points(self.triangles[big], cap=CLEARANCE_POINTS, owners=True)
+            points.append(grid)
+            owner.append(np.flatnonzero(big)[of])
+            # the grid's rows and points lie a spacing apart (a sixtieth of a triangle's longest side where that
+            # is more): no place is farther than their diagonal's half from one
+            area = float(np.asarray(body.area_faces)[big].sum())
+            self.cover = max(self.cover, 0.75 * max(math.sqrt(area / CLEARANCE_POINTS), float(longest[big].max()) / 60.0))
+        self.points, self.owner = np.vstack(points), np.concatenate(owner)
+        self.probes = np.vstack([np.asarray(body.vertices, dtype=float), self.points])
+        self.tree = cKDTree(self.points)
+
+
+def _least_between(one: _Cloud, other: _Cloud, reach: float) -> tuple[float, np.ndarray, float] | None:
+    """The least distance from ``one``'s probes to ``other``'s surface within ``reach``: the distance, the
+    middle of its two ends, and how much less it may be (0 where it is the least). Each probe's nearest of
+    the other's points bounds its distance to the surface from above and (less the other's ``cover``) from
+    below; where that could be under ``CLEARANCE_EXACT_BELOW``, the probes that could hold the least are
+    measured against the triangles near them, exactly, the nearest first, until none left could be nearer or
+    ``CLEARANCE_PAIRS`` distances are spent -- then the least found stands, and the bound of the probes not
+    measured says how much less it may be. None where no probe comes within reach."""
+    from scipy.spatial import cKDTree
+
+    rough, nearest = other.tree.query(one.probes, distance_upper_bound=reach + other.cover)
+    order = np.argsort(rough)
+    order = order[np.isfinite(rough[order])]
+    if not len(order):
+        return None
+    first = order[0]
+    best, ends = float(rough[first]), (one.probes[first], other.points[nearest[first]])
+    if best - other.cover > CLEARANCE_EXACT_BELOW:
+        return best, (ends[0] + ends[1]) / 2.0, other.cover
+    spent, at, block = 0, 0, 256
+    while at < len(order) and rough[order[at]] - other.cover <= best:
+        probes = order[at:at + block]
+        # the other's points within the least so far (and its cover) of each: their triangles
+        near = cKDTree(one.probes[probes]).sparse_distance_matrix(other.tree, best + other.cover, output_type="ndarray")
+        pair = np.unique(near["i"].astype(np.int64) * len(other.triangles) + other.owner[near["j"]])
+        if spent + len(pair) > CLEARANCE_PAIRS:
+            if block <= 16:
+                break  # the budget is spent: the probes from here on are not measured
+            block //= 4
+            continue
+        at, block, spent = at + len(probes), min(2 * block, 8192), spent + len(pair)
+        which, triangle = pair // len(other.triangles), pair % len(other.triangles)
+        for begin in range(0, len(pair), 200_000):
+            rows = slice(begin, begin + 200_000)
+            start = one.probes[probes[which[rows]]]
+            closest = trimesh.triangles.closest_point(other.triangles[triangle[rows]], start)
+            distance = np.linalg.norm(closest - start, axis=1)
+            k = int(distance.argmin())
+            if distance[k] < best:
+                best, ends = float(distance[k]), (start[k], closest[k])
+    # what the probes not measured could still hold
+    left = float(rough[order[at]] - other.cover) if at < len(order) else math.inf
+    return best, (ends[0] + ends[1]) / 2.0, best - max(0.0, min(best, left))
+
+
 def _clearance_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], list] | None = None) -> dict:
-    """The least distance between each pair of bodies (vertices and triangle centres of each to the other's
-    surface, both ways), within ``CLEARANCE_REACH``."""
+    """The least distance between each pair of bodies within ``CLEARANCE_REACH`` (``_least_between``, both
+    ways), a pair that pass through each other (``overlap``) and a body that lies wholly in another's material
+    (``overlap`` with ``inside``: the body). Bounded: each body is read as points (``_Cloud``: a few a triangle)
+    and a pair gets at most ``CLEARANCE_PAIRS`` exact distances each way; a distance the budget cut short says
+    so (``exact`` false, ``uncertainty_mm``: how much less it may be)."""
     bodies, _voids = split if split is not None else _bodies(mesh)
     items = []
+    clouds: dict[int, _Cloud] = {}
+
+    def cloud(at: int) -> _Cloud:
+        if at not in clouds:
+            clouds[at] = _Cloud(bodies[at])
+        return clouds[at]
+
+    hair = 1e-4 * float(np.linalg.norm(mesh.extents))
     for i in range(len(bodies)):
         for j in range(i + 1, len(bodies)):
             a, b = bodies[i], bodies[j]
             lo, hi = np.maximum(a.bounds[0], b.bounds[0]), np.minimum(a.bounds[1], b.bounds[1])
             if float(np.max(lo - hi)) > CLEARANCE_REACH:
                 continue
-            best = (np.inf, None)
-            for one, other in ((a, b), (b, a)):
-                probes = np.vstack([one.vertices, one.triangles_center])
-                near = np.all((probes >= other.bounds[0] - CLEARANCE_REACH) & (probes <= other.bounds[1] + CLEARANCE_REACH), axis=1)
-                if not near.any():
-                    continue
-                closest, distance, _ = trimesh.proximity.closest_point(other, probes[near])
-                k = int(distance.argmin())
-                if distance[k] < best[0]:
-                    best = (float(distance[k]), (probes[near][k] + closest[k]) / 2.0)
-            if best[1] is None or best[0] > CLEARANCE_REACH:
+            # one body's corners inside the other's material: they pass through each other, or (every corner)
+            # one lies wholly in the other -- read before any distance: a body deep inside another is far from
+            # its surface. A void's shell is its solid's own, never a body here; each corner is read a hair
+            # inside its own body, so bodies that only touch -- along a face, an edge -- share no inside
+            a_in_b = _inside(b, _some(a.vertices - a.vertex_normals * hair)) if b.is_watertight else np.zeros(1, dtype=bool)
+            b_in_a = _inside(a, _some(b.vertices - b.vertex_normals * hair)) if a.is_watertight else np.zeros(1, dtype=bool)
+            if a_in_b.any() or b_in_a.any():
+                inside = i if a_in_b.all() else j if b_in_a.all() else None
+                held = bodies[inside] if inside is not None else None
+                items.append({"xyz": _p(held.bounds.mean(axis=0) if held is not None else (lo + hi) / 2.0),
+                              "distance_mm": 0.0, "kind": "overlap", "bodies": [i, j], "exact": True,
+                              **({"inside": inside, "inside_volume_mm3": _r(abs(float(held.volume)), 2)}
+                                 if held is not None else {})})
                 continue
-            # one body's corners inside the other's material: they pass through each other (a void's shell is
-            # its solid's own, never a body here). Each corner is read a hair inside its own body: bodies that
-            # only touch -- along a face, an edge -- share no inside
-            hair = 1e-4 * float(np.linalg.norm(mesh.extents))
-            overlap = bool(b.is_watertight and _inside(b, _some(a.vertices - a.vertex_normals * hair)).any()) or bool(
-                a.is_watertight and _inside(a, _some(b.vertices - b.vertex_normals * hair)).any())
-            kind = "overlap" if overlap else ("contact" if best[0] <= 1e-6 else "gap")
-            items.append({"xyz": _p(best[1]), "distance_mm": _r(0.0 if overlap else best[0], mo.JUDGED), "kind": kind,
-                          "bodies": [i, j]})
+            found = [got for got in (_least_between(cloud(i), cloud(j), CLEARANCE_REACH),
+                                     _least_between(cloud(j), cloud(i), CLEARANCE_REACH)) if got is not None]
+            if not found:
+                continue
+            distance, middle, _ = min(found, key=lambda got: got[0])
+            if distance > CLEARANCE_REACH:
+                continue
+            # how much less it may be: the most either way's unmeasured points allow
+            slack = max(distance - (got[0] - got[2]) for got in found)
+            items.append({"xyz": _p(middle), "distance_mm": _r(distance, mo.JUDGED),
+                          "kind": "contact" if distance <= 1e-6 else "gap", "bodies": [i, j],
+                          "exact": bool(slack <= 1e-9), "uncertainty_mm": _r(max(0.0, slack), 4)})
     items.sort(key=lambda item: item["distance_mm"])
     return {"items": items[:CAP], "count": len(items), "body_count": len(bodies), "reported_below_mm": CLEARANCE_REACH,
             "min_mm": items[0]["distance_mm"] if items else None,
-            "method": "closest points of each body's vertices and triangle centres on the other's surface"}
+            "budget": {"distances_per_pair": CLEARANCE_PAIRS, "exact_below_mm": CLEARANCE_EXACT_BELOW},
+            "method": "each body's corners and points across its triangles; a point's nearest of the other body's "
+                      "points bounds its distance to that body, and the points that could hold the least are "
+                      "measured against the triangles near them exactly (where the bodies may come within "
+                      "exact_below_mm; distances_per_pair at most each way: past it exact is false and "
+                      "uncertainty_mm says how much less the distance may be); bodies that pass through each "
+                      "other, or one inside another, are overlap"}
 
 
 class _Field:
@@ -1241,20 +1427,22 @@ def _bed_facts(mesh: trimesh.Trimesh) -> dict:
 def _stair_facts(mesh: trimesh.Trimesh, layer: float) -> dict:
     """The shallow slopes that stair-step: above flat (0.5 deg) and under ``SHALLOW_DEG`` from horizontal, by
     angle and as connected regions with their cusp height (layer cos angle) and step width (layer / tan)."""
-    tilt = mo.angles(mesh.face_normals)
-    areas = mesh.area_faces
+    normals, centers = np.asarray(mesh.face_normals), np.asarray(mesh.triangles_center)  # read once: a mesh's
+    tilt = mo.angles(normals)                                                             # arrays are hashed a read
+    areas = np.asarray(mesh.area_faces)
     edges = [0.5, 5.0, 10.0, 15.0, SHALLOW_DEG]
     shallow = (tilt > edges[0]) & (tilt < SHALLOW_DEG)
     items = []
-    for region in _components(mesh, shallow):
+    # the largest CAP regions are listed: a scan's shallow surface is thousands of them
+    regions = sorted(_components(mesh, shallow), key=lambda region: -float(areas[region].sum()))
+    for region in regions[:CAP]:
         mean = float(np.average(tilt[region], weights=np.maximum(areas[region], 1e-12)))
-        items.append({"xyz": _p(mesh.triangles_center[region].mean(axis=0)), "angle_deg": _r(mean, 3),
+        items.append({"xyz": _p(centers[region].mean(axis=0)), "angle_deg": _r(mean, 3),
                       "area_mm2": _r(float(areas[region].sum()), 3),
                       "cusp_mm": _r(layer * np.cos(np.radians(mean)), 4),
                       "step_width_mm": _r(layer / np.tan(np.radians(mean)), 4),
-                      "facing": "up" if float(mesh.face_normals[region, 2].mean()) > 0 else "down"})
-    items.sort(key=lambda item: -item["area_mm2"])
-    return {"items": items[:CAP], "count": len(items), "layer_height_mm": layer, "shallow_below_deg": SHALLOW_DEG,
+                      "facing": "up" if float(normals[region, 2].mean()) > 0 else "down"})
+    return {"items": items, "count": len(regions), "layer_height_mm": layer, "shallow_below_deg": SHALLOW_DEG,
             "area_by_angle_mm2": {f"{edges[k]:g}-{edges[k + 1]:g}deg":
                                   _r(float(areas[shallow & (tilt >= edges[k]) & (tilt < edges[k + 1])].sum()), 2)
                                   for k in range(4)},
@@ -1375,6 +1563,12 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
     }
     report["bridges"] = _bridge_facts(report["overhangs"])
+    # a body wholly inside another's material adds nothing to the part: its volume is counted once
+    nested = {item["inside"]: item for item in report["clearances"].get("items") or () if item.get("inside") is not None}
+    if nested and isinstance(report["mesh"].get("volume_mm3"), (int, float)):
+        report["mesh"]["volume_mm3"] = round(report["mesh"]["volume_mm3"] - sum(
+            item["inside_volume_mm3"] or 0.0 for item in nested.values()), 1)
+        report["mesh"]["bodies_inside_another"] = len(nested)
     try:
         field = _Field(mesh)
     except Exception as exc:  # noqa: BLE001 - both families say so

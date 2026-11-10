@@ -598,6 +598,41 @@ class GateTest(unittest.TestCase):
                         self.assertEqual(found["bodies_intersect"].severity, "warning")
                         self.assertIn("the bodies' sum", found["bodies_intersect"].message)
 
+    def test_a_body_inside_another_is_found_and_counted_once_and_a_captive_ball_is_no_overlap(self) -> None:
+        import numpy as np
+
+        def sphere(radius: float, inside_out: bool = False) -> trimesh.Trimesh:
+            ball = trimesh.creation.icosphere(subdivisions=3, radius=radius)
+            if inside_out:
+                ball.invert()
+            return ball
+
+        with tempfile.TemporaryDirectory() as td:
+            # a 5 mm cube deep in a 20 mm cube's material: far from its surface, so read before any distance
+            nested = trimesh.util.concatenate([trimesh.creation.box((20, 20, 20)), trimesh.creation.box((5, 5, 5))])
+            result = cad.stl.dfm(_written(nested, Path(td), "nested"), process="printing")
+            found = [f for f in result.findings if f.code == "bodies_intersect"]
+            self.assertEqual(len(found), 1)
+            self.assertIn("lies wholly inside", found[0].message)
+            self.assertAlmostEqual(result.measurements["mesh"]["volume_mm3"], 8000.0, delta=1.0)
+            self.assertEqual(result.measurements["mesh"]["bodies_inside_another"], 1)
+            # a ball loose in a hollow shell (print-in-place): the void is the shell's, though the ball holds its
+            # centre -- so the shell's own 0.3 mm wall is measured, the 0.5 mm clearance judged, and nothing
+            # passes through anything
+            captive = trimesh.util.concatenate([sphere(10.0), sphere(10.5, inside_out=True), sphere(10.8)])
+            result = cad.stl.dfm(_written(captive, Path(td), "captive"), process="printing", technology="sla")
+            codes = [f.code for f in result.findings]
+            self.assertNotIn("bodies_intersect", codes)
+            self.assertEqual(result.measurements["mesh"]["body_count"], 2)
+            self.assertAlmostEqual(result.measurements["wall_thickness"]["min_mm"], 0.3, delta=0.02)
+            self.assertIn("printing.wall_supported", codes)
+            [gap] = result.measurements["clearances"]["items"]
+            self.assertAlmostEqual(gap["distance_mm"], 0.5, delta=0.02)
+            self.assertTrue(gap["exact"])
+            self.assertAlmostEqual(result.measurements["mesh"]["volume_mm3"],
+                                   float(captive.volume), delta=1.0)
+            self.assertTrue(np.isfinite(gap["distance_mm"]))
+
     def test_a_mesh_over_the_ceiling_is_refused_before_it_is_read(self) -> None:
         from unittest import mock
 
@@ -651,6 +686,65 @@ class BoundedTest(unittest.TestCase):
         every = np.where((u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0), t, np.inf).min(axis=1)
         np.testing.assert_allclose(found, every, rtol=1e-9)
         self.assertEqual(int((which >= 0).sum()), int(np.isfinite(every).sum()))
+
+
+    def test_the_clearances_are_bounded_and_a_distance_the_budget_cut_short_is_no_pass(self) -> None:
+        """A ball 0.3 mm inside a shell, 61 000 triangles: every point of each is as near the other as any, the
+        case trimesh's closest-point query held 767 MB on (and ran out of 4 GB at 246 000 triangles). Each body
+        is read as a few points a triangle, in a tree; with the budget of exact distances cut to nothing the
+        distance stands with how much less it may be, and a limit between the two is not judged: not checked."""
+        import tracemalloc
+        from unittest import mock
+
+        def sphere(radius: float, inside_out: bool = False, subdivisions: int = 5) -> trimesh.Trimesh:
+            ball = trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
+            if inside_out:
+                ball.invert()
+            return ball
+
+        nested = dfam_tool._mesh.prepared(trimesh.util.concatenate([sphere(30.0), sphere(30.3, True), sphere(32.0)]))
+        self.assertEqual(len(nested.faces), 61440)
+        tracemalloc.start()
+        found = dfam_tool._clearance_facts(nested)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        [gap] = found["items"]
+        self.assertLess(peak, 300e6)
+        self.assertAlmostEqual(gap["distance_mm"], 0.3, delta=0.01)
+        self.assertEqual((gap["kind"], gap["exact"]), ("gap", True))
+        # 1 mm apart, the budget cut: the points alone say 1 mm or up to their spacing less, and FDM's 0.762 mm
+        # limit lies between
+        loose = trimesh.util.concatenate([sphere(30.0, False, 4), sphere(31.0, True, 4), sphere(33.0, False, 4)])
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(dfam_tool, "CLEARANCE_PAIRS", 1):
+            result = cad.stl.dfm(_written(loose, Path(td), "loose"), process="printing", technology="fdm")
+        [gap] = result.measurements["clearances"]["items"]
+        self.assertFalse(gap["exact"])
+        self.assertIsNone(gap["distance_mm"], "the limit lies between the least found and its bound")
+        self.assertGreater(gap["distance_at_most_mm"], 0.99)
+        self.assertGreater(gap["uncertainty_mm"], 0.24)
+        self.assertEqual(result.status, "not_checked")
+        self.assertIn("clearance_bounded", [f.code for f in result.findings])
+
+    def test_a_scan_s_underside_is_one_overhang_and_its_spans_are_bounded(self) -> None:
+        """A sphere with every corner moved a little (a scan's noise): its underside's triangles under the limit
+        are hundreds of islands, one overhang -- and no span is read of a slope. With the spans' budget cut to
+        nothing a part of flat undersides says they were not measured: not checked, never passed."""
+        import numpy as np
+        from unittest import mock
+
+        ball = trimesh.creation.icosphere(subdivisions=5, radius=30.0)
+        ball.vertices = ball.vertices + ball.vertex_normals * np.random.default_rng(7).normal(0, 0.05, (len(ball.vertices), 1))
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.dfm(_written(ball, Path(td), "scan"), process="printing")
+            self.assertEqual(len([f for f in result.findings if f.code == "printing.overhang_angle"]), 1)
+            self.assertNotIn("measurement_failed", [f.code for f in result.findings])
+            table = _stl(Box(30, 10, 10) - Pos(0, 0, -2) * Box(20, 10, 6), Path(td), "table")
+            with mock.patch.object(dfam_tool, "SPAN_PAIRS", 0):
+                unread = cad.stl.dfm(table, process="printing")
+            self.assertEqual(unread.measurements["bridges"]["spans_not_measured"], 1)
+            self.assertEqual(unread.status, "not_checked")
+            self.assertIn("bridges", [f.location for f in unread.findings if f.code == "measurement_failed"])
+            self.assertIn("printing.bridge_length", [f.code for f in cad.stl.dfm(table, process="printing").findings])
 
 
 class MeshAccuracyTest(unittest.TestCase):
