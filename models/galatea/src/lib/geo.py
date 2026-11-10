@@ -72,6 +72,19 @@ def _span(shape):
     return (b.min.X, b.min.Y, b.min.Z), (b.max.X, b.max.Y, b.max.Z)
 
 
+def measured(shape):
+    """A solid's volume by adaptive integration. `shape.volume` is a fixed-order quadrature: on
+    a thin shell between two lofted surfaces it is good to about a per cent, and the pieces
+    of a correct cut then fail to add up by thousands of cubic millimetres. This costs a
+    second or two on such a shell, so the guards below call it only when the quick sum fails."""
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    properties = GProp_GProps()
+    BRepGProp.VolumeProperties_s(shape.wrapped, properties, 1e-3, False, True)
+    return properties.Mass()
+
+
 def common(a, b, what="common"):
     """a & b, refused when it cannot be right. A lofted solid met by a long prism has come
     back as the whole prism, valid and silent: the kernel missed the surfaces' crossing and
@@ -88,14 +101,12 @@ def common(a, b, what="common"):
 
 
 def cut(a, b, what="cut"):
-    """a - b, refused when it and what it removed do not add up to a. The allowance is the
-    kernel's own: a lofted solid's volume is good to about one part in ten thousand of the
-    box it fills, which for a thin shell is a visible share of the shell."""
+    """a - b, refused when it and what it removed do not add up to a."""
     result, removed = a - b, common(a, b, what)
-    (lo, hi) = _span(a)
-    allowance = 2e-3 * a.volume + 1e-4 * (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]) + 1.0
-    if abs(result.volume + removed.volume - a.volume) > allowance:
-        raise WrongBoolean(f"{what}: {result.volume:.0f} left and {removed.volume:.0f} removed are not the {a.volume:.0f} there was")
+    if abs(result.volume + removed.volume - a.volume) > 1e-4 * a.volume + 1.0:
+        left, taken, whole = measured(result), measured(removed), measured(a)        # the quick sum failed: measure properly
+        if abs(left + taken - whole) > 2e-3 * whole + 1.0:       # the integrator's own reach on a thin lofted shell
+            raise WrongBoolean(f"{what}: {left:.0f} left and {taken:.0f} removed are not the {whole:.0f} there was")
     return result
 
 
@@ -106,7 +117,10 @@ def carve(a, b, what="carve"):
     result = a - b
     slack = 1e-4 * a.volume + 0.5
     if not a.volume - b.volume + slack < result.volume < a.volume - slack:
-        raise WrongBoolean(f"{what}: {result.volume:.0f} left of {a.volume:.0f} after a tool of {b.volume:.0f} that crosses its surface")
+        left, whole, tool = measured(result), measured(a), measured(b)
+        slack = 1e-4 * whole + 0.05
+        if not whole - tool + slack < left < whole - slack:
+            raise WrongBoolean(f"{what}: {left:.0f} left of {whole:.0f} after a tool of {tool:.0f} that crosses its surface")
     return result
 
 
@@ -116,7 +130,10 @@ def fuse(a, b, what="fuse"):
     result = a + b
     slack = 1e-3 * (a.volume + b.volume) + 1.0
     if not max(a.volume, b.volume) - slack <= result.volume <= a.volume + b.volume + slack:
-        raise WrongBoolean(f"{what}: {result.volume:.0f} from {a.volume:.0f} and {b.volume:.0f}")
+        both, one, other = measured(result), measured(a), measured(b)
+        slack = 2e-3 * (one + other) + 1.0
+        if not max(one, other) - slack <= both <= one + other + slack:
+            raise WrongBoolean(f"{what}: {both:.0f} from {one:.0f} and {other:.0f}")
     return result
 
 

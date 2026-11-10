@@ -10,10 +10,11 @@ carried load hangs 30 mm off a palm, and the ground pushes up at the soles' cont
 the set of forces that carries the weight with its resultant under the centre of mass and
 asks least of the ankles. The torque a joint's drive holds is then
 the moment, about the joint's axis, of everything that acts on the links beyond it. It is
-set against the drive's peak torque (`dims.DRIVES`): a pose is held without strain while no
-drive works above HOLD of its peak, a drive holding continuously about half of what it
-delivers briefly. The loads in the cases are the ratings that rule gives: what each hand
-carries in that posture with every drive below HOLD.
+set against the drive's two figures from its maker's datasheet (`dims.ACTUATORS`): its rated
+torque, which it holds continuously, and its peak, which it gives briefly. A pose is held
+for as long as one likes while every drive is within its rated torque, and held briefly
+while every drive is within BRIEF of its peak. The standing poses must be of the first
+kind; every other case here must be at least of the second, and is listed with which it is.
 
 The knee's and the ankle's torque reach their joints through pushrods. A rod's force is the
 torque over the lever its crank gives it at that angle; where it pushes, it is set against
@@ -35,7 +36,8 @@ from lib import dims, kin
 from lib.poses import POSES, READY, both, side, walk
 
 G = 9.81
-HOLD = 0.5
+BRIEF = 0.75            # the share of a drive's peak a pose may ask of it and still count as held, briefly
+STANDING = ("standing straight", "ready", "contrapposto", "wave")     # held as long as one likes: within every rated torque
 ROD_MARGIN = 1.5
 GRIP = (dims.SHOULDER_X - 30.0, 0.0, 800.0)          # where a carried load hangs from the left hand
 SOLE_EDGE = 44.0                                     # from the ankle's roll axis to the sole's outer edge, mm
@@ -156,26 +158,31 @@ def holding(pose, links, carried, feet):
 
 def peak(control):
     size, count = dims.DRIVES[control]
-    return count * (dims.CALF_DRIVE_NM if size == "calf" else dims.ACTUATORS[size]["nm"])
+    return count * dims.ACTUATORS[size]["peak"]
+
+
+def rated(control):
+    size, count = dims.DRIVES[control]
+    return count * dims.ACTUATORS[size]["rated"]
 
 
 def drives():
-    """[(drive, its loaded joint, peak N m)] for every drive of the robot."""
+    """[(drive, its loaded joint, rated N m, peak N m)] for every drive of the robot."""
     out = []
     for control in dims.DRIVES:
         names = [control] if control in dims.CENTRE_JOINTS else [f"{s}_{control}" for s in kin.SIDES]
-        out += [(name, name.replace(control, PIVOT.get(control, control)), peak(control)) for name in names]
+        out += [(name, name.replace(control, PIVOT.get(control, control)), rated(control), peak(control)) for name in names]
     return out
 
 
 def rod_forces(pose, torques):
-    """{rod: N along it, + a pull} at a pose: the knee pushrods, and each of an ankle's two rods."""
+    """{rod: N along it, + a pull} at a pose: each knee's pushrod and each ankle's rod."""
     values, out = kin.expand(pose), {}
     for s in kin.SIDES:
         knee = math.radians(dims.KNEE_CRANK_PSI + values.get(f"{s}_knee_pivot", 0.0))
         out[f"{s}_knee_pushrod"] = torques[f"{s}_knee_pivot"] / (dims.KNEE_CRANK_R / 1000.0 * math.cos(knee))
         ankle = math.radians(values.get(f"{s}_ankle_pitch_pivot", 0.0))
-        out[f"{s}_achilles_rods"] = -torques[f"{s}_ankle_pitch_pivot"] / (dims.ANKLE_CRANK_R / 1000.0 * math.cos(ankle)) / 2.0
+        out[f"{s}_achilles_rod"] = -torques[f"{s}_ankle_pitch_pivot"] / (dims.ANKLE_CRANK_R / 1000.0 * math.cos(ankle))
     return out
 
 
@@ -188,29 +195,35 @@ def buckling(material, radius, length):
 def main():
     handle = galatea()
     links, grades = weigh(handle), materials(handle.shape)
-    table, worst, strained = drives(), {}, 0
-    rods = {"knee_pushrod": 0.0, "achilles_rods": 0.0}
+    table, worst, failed = drives(), {}, 0
+    rods = {"knee_pushrod": 0.0, "achilles_rod": 0.0}
     total = sum(mass for mass, _ in links.values())
-    print(f"holding torques, statics ({total:.1f} kg); the three hardest-worked drives of each case")
+    print(f"holding torques, statics ({total:.1f} kg); the three hardest-worked drives of each case, as shares of their rated torque")
     for name, pose, feet, carried in CASES:
         torques, outside = holding(pose, links, carried, feet)
-        used = sorted(((abs(torques[joint]) / most, drive, torques[joint]) for drive, joint, most in table), reverse=True)
+        used = sorted(((abs(torques[joint]) / most, abs(torques[joint]) / top, drive, torques[joint])
+                       for drive, joint, most, top in table), reverse=True)
+        of_peak = max(share for _, share, _, _ in used)
         if outside < 0.5:                                   # a held pose: it counts
-            for share, drive, torque in used:
+            for of_rated, share, drive, torque in used:
                 key = drive.split("_", 1)[1] if drive[:2] in ("l_", "r_") else drive
-                if share > worst.get(key, (0.0,))[0]:
-                    worst[key] = (share, torque, name)
+                if of_rated > worst.get(key, (0.0,))[0]:
+                    worst[key] = (of_rated, share, torque, name)
             for rod, force in rod_forces(pose, torques).items():
                 rods[rod[2:]] = min(rods[rod[2:]], force)
-            strained += used[0][0] > HOLD
-        note = "" if outside < 0.5 else f"  (not held: the weight stands {outside:.0f} mm outside the sole, as in a step)"
-        print(f"  {name:36s}" + ",  ".join(f"{drive} {torque:6.1f} N m ({share:4.0%})" for share, drive, torque in used[:3]) + note)
+            kind = "held" if used[0][0] <= 1.0 else "held briefly" if of_peak <= BRIEF else "NOT HELD"
+            failed += kind == "NOT HELD" or (name in STANDING and kind != "held")
+        else:
+            kind = f"not held: the weight stands {outside:.0f} mm outside the sole, as in a step"
+        print(f"  {name:36s}" + ",  ".join(f"{drive} {torque:6.1f} N m ({of_rated:4.0%})" for of_rated, _, drive, torque in used[:3])
+              + f"   [{kind}]")
 
     print("each drive's hardest held case")
     for control, (size, count) in dims.DRIVES.items():
-        share, torque, name = worst[control]
+        of_rated, share, torque, name = worst[control]
         drive = f"{count} x {size}" if count > 1 else size
-        print(f"  {control:15s} {drive:8s} peak {peak(control):5.0f} N m   holds {abs(torque):5.1f} N m ({share:4.0%})  {name}")
+        print(f"  {control:15s} {drive:8s} rated {rated(control):5.1f}, peak {peak(control):5.1f} N m   holds {abs(torque):5.1f} N m "
+              f"({of_rated:4.0%} of rated, {share:4.0%} of peak)  {name}")
 
     # What walking adds to the statics: a foot can lever no more than the weight at its own edge.
     on_toe = total * G * abs(dims.TOE[1] - dims.ANKLE[1]) / 1000.0
@@ -222,8 +235,8 @@ def main():
     weak = 0
     specs = [("knee_pushrod", "knee_pushrod", dims.KNEE_ROD_R, dims.KNEE_ROD, peak("knee"),
               dims.KNEE_CRANK_R * math.cos(math.radians(dims.KNEE_CRANK_PSI)), 1),
-             ("achilles_rods", "achilles_rod_outer", dims.ANKLE_ROD_R, dims.ANKLE_ROD, peak("ankle_pitch"),
-              dims.ANKLE_CRANK_R * math.cos(math.radians(max(abs(a) for a in dims.SIDE_JOINTS["ankle_pitch_pivot"][4]))), 2)]
+             ("achilles_rod", "achilles_rod", dims.ANKLE_ROD_R, dims.ANKLE_ROD, peak("ankle_pitch"),
+              dims.ANKLE_CRANK_R * math.cos(math.radians(max(abs(a) for a in dims.SIDE_JOINTS["ankle_pitch_pivot"][4]))), 1)]
     for rod, label, radius, length, most, lever, count in specs:
         euler = buckling(grades[label], radius, length)
         at_peak = most / (lever / 1000.0) / count
@@ -232,9 +245,10 @@ def main():
         print(f"  {rod:14s} {grades[label].name}, {2 * radius:g} mm x {length:g} mm: Euler load {euler / 1000:.1f} kN; "
               f"hardest held push {-rods[rod]:.0f} N; at the drive's peak and the shortest lever {at_peak / 1000:.1f} kN "
               f"(factor {factor:.1f})")
-    ok = not strained and not weak
-    print(f"OK: every held case stays below {HOLD:.0%} of a drive's peak, and the rods keep {ROD_MARGIN} on buckling" if ok
-          else f"{strained} case(s) strain a drive, {weak} rod(s) are short of their margin")
+    ok = not failed and not weak
+    print(f"OK: the standing poses are within every drive's rated torque, every other case within {BRIEF:.0%} of every peak, "
+          f"and the rods keep {ROD_MARGIN} on buckling" if ok
+          else f"{failed} case(s) ask more of a drive than it has, {weak} rod(s) are short of their margin")
     return 0 if ok else 1
 
 

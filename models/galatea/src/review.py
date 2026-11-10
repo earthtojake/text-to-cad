@@ -22,9 +22,7 @@ from galatea import galatea
 from lib.hand import HAND_LINKS
 
 OUT = Path(__file__).resolve().parents[1] / "tmp" / "review"
-SKINS = {"pelvis_belt", "apron", "breastplate", "backplate", "collar", "neck_deck", "midriff", "sternum_inlay", "thigh_fairing",
-         "shin_guard", "foot_shell", "toe_cap", "shoulder_ball", "upper_arm_fairing", "forearm_cuff", "forearm_fairing",
-         "hand_back", "skull", "visor", "spine_inlay", "skin_screw"}
+SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back")
 GROUPS = {
     "pelvis": ["pelvis"], "waist": ["lumbar_yoke", "waist_cross"], "chest": ["chest"], "neck": ["neck", "neck_stem"],
     "head": ["head"], "hip": ["l_hip_yoke", "l_hip_cradle"], "thigh": ["l_thigh", "l_knee_crank", "l_knee_rod"],
@@ -46,7 +44,7 @@ def skins_of(tree, links):
             seen = {}
             for name in names:
                 seen[name] = seen.get(name, 0) + 1
-                if name in SKINS:
+                if name.startswith(SKINS):
                     refs.append(f"{tree.label}/{link.label}/{name}" + (f".{seen[name]}" if names.count(name) > 1 else ""))
     return refs
 

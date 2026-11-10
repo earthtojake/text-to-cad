@@ -18,16 +18,18 @@ Skins are thin lofted shells. Each is trimmed by a cylinder about every axis it 
 round opening, and each is carried on pads that grow from the frame to its inner surface.
 """
 
-from . import geo
+import math
+
+from . import geo, skin
 from .dims import (
-    ANKLE, ANKLE_ACT, ANKLE_ARM_PIN, ANKLE_CRANK_PIN, ANKLE_ROD_R, ANKLE_ROD_X, CRADLE_CHEEK_X, FEMUR_PLATE_X, HIP,
+    actuator_length, ANKLE, ANKLE_ACT, ANKLE_ARM_PIN, ANKLE_CRANK_PIN, ANKLE_ROD_R, ANKLE_ROD_X, CRADLE_CHEEK_X, FEMUR_PLATE_X, HIP,
     KNEE, KNEE_ACT, KNEE_CRANK_PIN, KNEE_HORN_PIN, KNEE_ROD_R, PELVIS_Z, PLATE_T, SHIN_RAIL_X, TOE,
 )
-from .hardware import pin, pushrod, rotor_counterbores
+from .hardware import ROTOR_PROUD, mount_bores, pin, pushrod, rotor_counterbores
 from .kit import frame, part
 
 HX, HZ = HIP[0], HIP[2]
-KZ, AZ, KAZ, CAZ = KNEE[2], ANKLE[2], KNEE_ACT[2], ANKLE_ACT[2]
+KZ, AZ, KAZ, CAZ, CAY = KNEE[2], ANKLE[2], KNEE_ACT[2], ANKLE_ACT[2], ANKLE_ACT[1]
 C0, C1 = CRADLE_CHEEK_X
 P0, P1 = FEMUR_PLATE_X
 R0, R1 = SHIN_RAIL_X
@@ -35,6 +37,34 @@ SKIN_T = 2.6
 DECK_Z = 33.5         # top of the foot shell's deck, half a millimetre under its rim
 LEG_LINKS = ("hip_yoke", "hip_cradle", "thigh", "knee_crank", "knee_rod", "shin", "ankle_crank", "ankle_rods",
              "ankle_gimbal", "foot", "toe")
+
+
+# The thigh's form. Its outer side swells over the knee drive (an RS04: 120 across, standing 78 out from the
+# leg's centre plane, at z 780); its back holds the pushrod, which stands 61 behind the axis at mid bend.
+THIGH_TOP = 852.0                              # under the hip drive's can and its cap
+YOKE_Y = 70.0                                  # the hip yoke's rear plate: its front face, behind the hip's centre
+HIP_CAP_R = 65.6                               # the hip cap's outer radius: an RS04 is 60, with 3 of air
+THIGH_RIM = (586.0, 0.70)                      # the knee rim in the side view: z = 586 + 0.70 y
+THIGH_ROWS = skin.register("thigh", [
+    geo.S(520, HX + 3, 0, rx=44, rxn=50, ry=70, ryn=54, n=3.3),
+    geo.S(640, HX + 3, 0, rx=64, rxn=55, ry=74, ryn=64, n=3.3),
+    geo.S(716, HX + 3, 0, rx=88, rxn=57, ry=78, ryn=78, n=3.3),
+    geo.S(860, HX + 3, 0, rx=93, rxn=56, ry=79, ryn=79, n=3.3),
+], covers=["l_thigh", "l_knee_crank", "l_knee_rod"], link="l_thigh", above=[((-100.0, 516.0), (100.0, 656.0))],
+    below=[((-100.0, THIGH_TOP), (100.0, THIGH_TOP))], poses=[{"l_knee": 40}, {"l_knee": 62.5}, {"l_knee": 90}, {"l_knee": 125}])
+# The shin's form: the rails stand 48 either side of the centre plane all the way down; the calf drive, an
+# RS04 120 across on a bracket, stands 12 behind the leg's axis, so the shin is straight in front and has a calf.
+CALF_FACE = 14.0                               # the calf drive's mounting face, outboard of the leg's centre plane
+SHIN_RIM = ((-52.0, 530.0), (50.0, 440.0))     # the top rim in the side view (y, z): high before the knee, low behind it
+SHIN_ROWS = skin.register("shin", [
+    geo.S(150, HX, 4, rx=60, ry=62, ryn=41, n=4.0),
+    geo.S(240, HX, 6, rx=63, ry=64, ryn=45, n=4.0),
+    geo.S(340, HX, 8, rx=63, ry=75, ryn=67, n=3.6),
+    geo.S(425, HX, 6, rx=64, ry=62, ryn=52, n=3.4),
+    geo.S(470, HX, 0, rx=54, ry=50, ryn=46, n=3.2),
+    geo.S(535, HX, -2, rx=44, ry=46, ryn=50, n=3.0),
+], covers=["l_shin", "l_ankle_crank", "l_ankle_rods"], link="l_shin", below=[SHIN_RIM],
+    poses=[{"l_ankle_pitch": -45}, {"l_ankle_pitch": 30}])
 
 
 def xr(offset):
@@ -71,78 +101,87 @@ def _hip(hw, links):
     zt = PELVIS_Z[0] - 1.0            # the yoke's flange meets the yaw output just under the pelvis
     zb = zt - 10.0
     yaw_at = (HX, 0.0, PELVIS_Z[0] + PLATE_T)
-    stator, rotor = hw.actuator("A86", yaw_at, (0, 0, -1), x_dir=(-1, 0, 0), name="hip_yaw")
+    stator, rotor = hw.actuator("RS06", yaw_at, (0, 0, -1), x_dir=(-1, 0, 0), name="hip_yaw")
     links["pelvis"] += stator
 
-    top = geo.plate_xy(geo.bones([(HX, 0, 40), (HX, 50, 30)], holes=[(HX, 0, 8)]), zb, zt)
-    rear = geo.plate_xz(geo.bones([(HX, HZ, 47), (HX, zt - 30, 30)], holes=[(HX, HZ, 27)]), 64, 72)
-    rib = geo.polygon((64, zb), (30, zb), (64, zb - 26))
+    top = geo.plate_xy(geo.bones([(HX, 0, 40), (HX, 56, 30)], holes=[(HX, 0, 8)]), zb, zt)
+    roll_at = (HX, YOKE_Y + 8.0, HZ)
+    rear = geo.plate_xz(geo.bones([(HX, HZ, 60), (HX, zt - 30, 30)]), YOKE_Y, YOKE_Y + 8) - mount_bores("RS04", roll_at, (0, -1, 0), x_dir=(1, 0, 0))
+    rib = geo.polygon((YOKE_Y, zb), (YOKE_Y - 34, zb), (YOKE_Y, zb - 26))
     yoke = top + rear + geo.plate_yz(rib, xr(21), xr(27)) + geo.plate_yz(rib, xr(-27), xr(-21))
-    roll_at = (HX, 72.0, HZ)
-    roll_stator, roll_rotor = hw.actuator("A86", roll_at, (0, -1, 0), x_dir=(1, 0, 0), name="hip_roll")
+    roll_stator, roll_rotor = hw.actuator("RS04", roll_at, (0, -1, 0), x_dir=(1, 0, 0), name="hip_roll")
     links["hip_yoke"] += [part(yoke, "hip_yoke", "gunmetal"), *rotor,
-                          *hw.rotor_screws("A86", yaw_at, (0, 0, -1), 10.0, x_dir=(-1, 0, 0)), *roll_stator]
+                          *hw.rotor_screws("RS06", yaw_at, (0, 0, -1), 10.0, x_dir=(-1, 0, 0)), *roll_stator]
 
     back = geo.plate_xz(geo.bones([(xr(-25), 894, 10), (xr(25), 894, 10), (xr(25), 940, 10), (xr(-25), 940, 10)],
-                                  links=[(0, 1, 2, 3)], holes=[(HX, HZ, 8)]), 53, 63)
-    outer = geo.plate_yz(geo.bones([(0, HZ, 58), (40, HZ - 3, 23)], holes=[(0, HZ, 35)]), xr(C0), xr(C1))
-    inner = geo.plate_yz(geo.bones([(0, HZ, 40), (40, HZ - 3, 23)], holes=[(0, HZ, 14)]), xr(-C1), xr(-C0))
+                                  links=[(0, 1, 2, 3)], holes=[(HX, HZ, 8)]), YOKE_Y - 11, YOKE_Y - 1)
     pitch_at = (xr(C1), 0.0, HZ)
-    pitch_stator, pitch_rotor = hw.actuator("A110", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0), cover=True, name="hip_pitch")
-    links["hip_cradle"] += [part(back + outer + inner, "hip_cradle", "gunmetal"), *roll_rotor,
-                            *hw.rotor_screws("A86", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)), *pitch_stator,
+    outer = geo.plate_yz(geo.bones([(0, HZ, 60), (YOKE_Y - 24, HZ - 3, 23)]), xr(C0), xr(C1))
+    inner = geo.plate_yz(geo.bones([(0, HZ, 40), (YOKE_Y - 24, HZ - 3, 23)], holes=[(0, HZ, 14)]), xr(-C1), xr(-C0))
+    cradle = back + outer + inner - mount_bores("RS04", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0))
+    pitch_stator, pitch_rotor = hw.actuator("RS04", pitch_at, (-1, 0, 0), x_dir=(0, -1, 0), name="hip_pitch")
+    links["hip_cradle"] += [part(cradle, "hip_cradle", "gunmetal"), *roll_rotor,
+                            *hw.rotor_screws("RS04", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)), *pitch_stator,
                             hw.pivot_cap(19, (xr(-C1), 0, HZ), (-1, 0, 0), label="hip_bearing_cap")]
-    links["thigh"] += [*pitch_rotor, *hw.rotor_screws("A110", pitch_at, (-1, 0, 0), PLATE_T, x_dir=(0, -1, 0))]
+    links["thigh"] += [*pitch_rotor, *hw.rotor_screws("RS04", pitch_at, (-1, 0, 0), PLATE_T, x_dir=(0, -1, 0), sunk=5.0)]
 
 
 # ---------------------------------------------------------------------------------------------
 # Thigh: the femur, two plates with the knee drive between them, and its fairing
 # ---------------------------------------------------------------------------------------------
 def _thigh(hw, links):
-    # The fairing holds the femur's plates (outer faces P1 from the centre plane) inside it
-    # from the knee's arch up to the knee drive's window, 3 mm clear, and its rear edge runs
-    # behind them: the plates show through the windows and at the joints, never across an edge.
-    rows = [
-        geo.S(538, HX + 0, -3, rx=46, ry=46, n=2.6, rxn=44, ryn=50),
-        geo.S(600, HX + 1, -5, rx=49, ry=50, n=2.6, rxn=46, ryn=58),
-        geo.S(680, HX + 2, -6, rx=52.5, ry=52, n=2.5, rxn=48.5, ryn=65),
-        geo.S(760, HX + 2, -6, rx=57, ry=52, n=2.5, rxn=53, ryn=71),
-        geo.S(830, HX + 2, -6, rx=59, ry=50, n=2.5, rxn=55, ryn=71),
-        geo.S(890, HX + 2, -5, rx=58, ry=48, n=2.5, rxn=55, ryn=68),
-    ]
-    skin, cavity, shell_outer = geo.shell(rows, SKIN_T)
-    back_edge = geo.behind_curve([(22, 520), (36, 556), (35, 610), (34, 670), (36, 725), (30, 765), (0, 800), (-22, 850), (-34, 910)],
-                                 [(160, 910), (160, 520)])
-    skin -= geo.plate_yz(back_edge, xr(-90), xr(90))                     # open to the back: the pushrod's channel
-    skin -= geo.half_space((HX, 0, 856), (0.3, 0.0, 1.0))                # top edge, falling toward the outside
-    skin -= geo.cyl(62, 240, HIP, (1, 0, 0), centered=True)              # round openings about the hip drive
-    skin -= geo.cyl(62, 240, KNEE_ACT, (1, 0, 0), centered=True)         # and the knee drive
-    skin -= geo.cyl(50, 240, KNEE, (1, 0, 0), centered=True)             # arch over the knee
-    reveal = geo.band([(xr(-70), 706), (xr(-20), 692), (xr(30), 670), (xr(70), 640)], 2.2)
-    skin -= geo.plate_xz(reveal, -200, -12)                              # a reveal line across the front
-    pads, screws = _skin_mounts(hw, cavity, shell_outer, [((xr(s * 20), -14, z), (s, 0, 0))
-                                                         for s in (1, -1) for z in (600, 715)])
+    # The thigh's skin holds the femur, the knee drive on its outer plate and the pushrod's
+    # whole sweep. It ends under the hip drive's drum, and at the knee on a slant: the line the
+    # calf's back comes up to when the knee is fully bent.
+    form = skin.Form(THIGH_ROWS)
+    cuts = [skin.from_side([(-200, THIGH_RIM[0] - 200 * THIGH_RIM[1]), (200, THIGH_RIM[0] + 200 * THIGH_RIM[1])], [(200, 300), (-200, 300)]),
+            geo.box(600, 600, 100, (HX, 0, THIGH_TOP + 50)),
+            # Behind the hip stands its roll drive. When the leg swings 30 degrees back the thigh's upper back comes up under
+            # it, so the skin is cut away there on the line the drive's can sweeps (seen from the thigh), with 4 mm to spare.
+            geo.plate_yz(geo.polygon((33, 880), (33, 852), (29, 846), (24, 838), (20, 830), (86, 792), (140, 792), (140, 880)), -400, 400)]
+    liner = skin.trim(form.liner, cuts, "thigh liner")
+    # Two pearl plates, one over the front and one over the back, with the thigh's sides (and its inside) left black between them.
+    inside = geo.box(60, 600, 600, (xr(-58), 0, 700))
+    stripe = skin.from_side([(8, 900), (-8, 500)], [(22, 500), (38, 900)])
+    panel = skin.trim(form.panel, [*cuts, inside, stripe], "thigh panels")
+    # The hip drive's cap: a cup over the can's end and round it, turning with the thigh about the can's own axis.
+    end = xr(C1) + actuator_length("RS04") + 3.0
+    cup = geo.tube(HIP_CAP_R, HIP_CAP_R - skin.PANEL_T, end - xr(C1) - 5.0, (xr(C1) + 5.0, 0, HZ), (1, 0, 0)) \
+        + geo.cyl(HIP_CAP_R, skin.PANEL_T, (end, 0, HZ), (1, 0, 0))
+    cup += geo.box(skin.PANEL_T + 1.8, 24, HZ - HIP_CAP_R + 2.0 - THIGH_TOP, (end + skin.PANEL_T / 2 - 0.9, 0, (HZ - HIP_CAP_R + 2.0 + THIGH_TOP) / 2))   # its foot on the thigh's skin
+    # ... and a guard before the joint, between the thigh's front plate and the pelvis: the same cylinder, from 40 degrees
+    # under the horizontal to 20 over it, so that at full flexion its edge stops short of the roll drive behind the hip.
+    sector = [(0.0, HZ)] + [(-90.0 * math.cos(math.radians(a)), HZ + 90.0 * math.sin(math.radians(a))) for a in range(-40, 21, 5)]
+    cup += geo.tube(HIP_CAP_R, HIP_CAP_R - skin.PANEL_T, xr(C1) + 5.0 - xr(-42), (xr(-42), 0, HZ), (1, 0, 0)) \
+        & geo.plate_yz(geo.polygon(*sector), xr(-60), xr(C1) + 6.0)
+    pads = None
+    for origin, direction in [((xr(s * 20), -14, z), (s, 0, 0)) for s in (1, -1) for z in (640, 716)]:
+        pad = geo.mount_pad(form.cavity, origin, direction)
+        pads = pad if pads is None else pads + pad
 
-    circles = [(0, HZ, 44), (0, KAZ, 58), (-4, HZ, 26), (-4, KAZ, 26), (0, KAZ, 40), (-2, 650, 27), (0, KZ, 34)]
+    knee_at = (xr(P1), 0.0, KAZ)
+    circles = [(0, HZ, 44), (0, KAZ, 60), (-4, HZ, 26), (-4, KAZ, 26), (0, KAZ, 40), (-2, 650, 27), (0, KZ, 34)]
     chain = [(0,), (1,), (2, 3), (4, 5), (5, 6)]
-    window = geo.slot(-2, 705, -2, 585, 9)
-    outer = geo.plate_yz(geo.bones(circles, chain, holes=[(0, HZ, 10), (0, KAZ, 35), (0, KZ, 10)], cuts=[window]),
-                         xr(P0), xr(P1))
+    window = geo.slot(-2, 695, -2, 585, 9)
+    outer = geo.plate_yz(geo.bones(circles, chain, holes=[(0, HZ, 10), (0, KZ, 10)], cuts=[window]), xr(P0), xr(P1))
+    outer -= mount_bores("RS04", knee_at, (-1, 0, 0), x_dir=(0, -1, 0))
     slim = [(0, KAZ, 40) if k == 1 else c for k, c in enumerate(circles)]       # no drive to carry on the inside
     inner = geo.plate_yz(geo.bones(slim, chain, holes=[(0, KAZ, 12), (0, KZ, 10)], cuts=[window]), xr(-P1), xr(-P0))
     web_low = geo.box(2 * P0 + 2, 6, 190, (HX, -26, 640))
     web_high = geo.box(2 * P0 + 2, 6, 42, (HX, -26, 864))
     spacer = geo.tube(22, 10, 2 * P0 + 2, (xr(-P0 - 1), 0, HZ), (1, 0, 0))
     stub = geo.cyl(14, C1 - P1, (xr(-P1), 0, HZ), (-1, 0, 0))
-    femur = outer + inner + web_low + web_high + spacer + stub + pads
+    femur = outer + inner + web_low + web_high + spacer + stub
+    femur -= rotor_counterbores("RS04", (xr(C1), 0.0, HZ), (-1, 0, 0), PLATE_T, x_dir=(0, -1, 0))    # the hip pitch output's screws
 
-    knee_at = (xr(P1), 0.0, KAZ)
-    stator, rotor = hw.actuator("A110", knee_at, (-1, 0, 0), x_dir=(0, -1, 0), cover=True, name="knee")
+    stator, rotor = hw.actuator("RS04", knee_at, (-1, 0, 0), x_dir=(0, -1, 0), name="knee")
     links["thigh"] += [part(femur, "femur", "gunmetal"), *stator,
                        pin((xr(-P1), 0, KZ), (1, 0, 0), 10.0, 2 * P1, label="knee_axle"),
                        hw.pivot_cap(17, (xr(P1), 0, KZ), (1, 0, 0), label="knee_cap"),
                        hw.pivot_cap(17, (xr(-P1), 0, KZ), (-1, 0, 0), label="knee_cap"),
-                       part(skin, "thigh_fairing", "ivory"), *screws]
+                       part(skin.solids(pads - femur), "pad_thigh", "gunmetal"),
+                       part(skin.solids(liner), "liner_thigh", "under"), part(skin.solids(panel), "panel_thigh", "shell"),
+                       part(cup, "panel_hip", "shell")]
     links["knee_crank"] += rotor
 
 
@@ -153,51 +192,31 @@ def _knee_drive(hw, links):
                          xr(8), xr(17))
     inner = geo.plate_yz(geo.bones([(0, KAZ, 20), (B[1], B[2], 13)], holes=[(B[1], B[2], 5)]), xr(-17), xr(-8))
     stub = geo.cyl(12, P1 - 17, (xr(-17), 0, KAZ), (-1, 0, 0))
-    crank = outer + inner + stub - rotor_counterbores("A110", knee_at, (-1, 0, 0), 9.0, x_dir=(0, -1, 0))
+    crank = outer + inner + stub - rotor_counterbores("RS04", knee_at, (-1, 0, 0), 9.0, x_dir=(0, -1, 0))
     links["knee_crank"] += [part(crank, "knee_crank", "slate"),
                             pin((xr(-17), B[1], B[2]), (1, 0, 0), 5.0, 34.0, label="crank_pin"),
-                            *hw.rotor_screws("A110", knee_at, (-1, 0, 0), 9.0, x_dir=(0, -1, 0), sunk=5.0)]
+                            *hw.rotor_screws("RS04", knee_at, (-1, 0, 0), 9.0, x_dir=(0, -1, 0), sunk=5.0)]
     links["knee_rod"] += [pushrod(B, C, KNEE_ROD_R, 10.0, 13.0, 5.0, label="knee_pushrod")]
 
 
 # ---------------------------------------------------------------------------------------------
 # Shin: the tibia (spool hub, wishbone, two rails), the calf drive and the shin guard
 # ---------------------------------------------------------------------------------------------
-def _calf_housing():
-    half, r_tip, r_root, pitch = 24.0, 36.0, 32.0, 5.25
-    pts = [(9.6, -half), (33.0, -half), (33.0, -21.0)]
-    z = -21.0
-    while z < 21.0 - 1e-6:
-        pts += [(r_root, z), (r_root, z + pitch / 2), (r_tip, z + pitch / 2), (r_tip, z + pitch)]
-        z += pitch
-    pts += [(33.0, 21.0), (33.0, half), (9.6, half)]
-    body = geo.revolve(pts, origin=ANKLE_ACT, axis=(1, 0, 0))
-    saddle = geo.box(44, 26, 9, (HX, -2, CAZ + 34.5))         # hangs from the tibia's cross-beam at z = CAZ + 39
-    return body + saddle
-
-
 def _shin(hw, links):
-    # The guard holds the tibia's rails (their outer faces R1 from the centre plane) inside
-    # it all the way down, 3 mm clear: so its lower sections are wide and square-shouldered,
-    # and its rear edge runs behind the rails, which never show through its flank.
-    rows = [
-        geo.S(118, HX, 0, rx=54.5, ry=44, n=3.6, ryn=44),
-        geo.S(170, HX, -1, rx=55, ry=46, n=3.6, ryn=46),
-        geo.S(255, HX, -2, rx=56.5, ry=50, n=3.2, ryn=53),
-        geo.S(345, HX, -2, rx=58.5, ry=56, n=3.0, ryn=60),
-        geo.S(430, HX, -2, rx=57.5, ry=50, n=2.9, ryn=59),
-        geo.S(492, HX, -2, rx=50, ry=38, n=2.6, ryn=57),
-        geo.S(536, HX, -2, rx=42, ry=27, n=2.6, ryn=50),
-    ]
-    skin, cavity, shell_outer = geo.shell(rows, SKIN_T)
-    back_edge = geo.behind_curve([(27, 100), (26, 170), (25, 230), (31, 300), (34, 345), (31, 395), (20, 450), (9, 505), (3, 550)],
-                                 [(160, 550), (160, 100)])
-    skin -= geo.plate_yz(back_edge, xr(-90), xr(90))                     # open to the back: calf drive and rods
-    skin -= geo.cyl(80, 240, ANKLE, (1, 0, 0), centered=True)            # arch over the ankle
-    reveal = geo.band([(xr(-70), 478), (xr(-34), 452), (xr(0), 442), (xr(34), 452), (xr(70), 478)], 2.2)
-    skin -= geo.plate_xz(reveal, -200, -6)                               # the kneecap's reveal line
-    pads, screws = _skin_mounts(hw, cavity, shell_outer, [((xr(s * 42), y, z), (s, 0, 0))
-                                                         for s in (1, -1) for y, z in ((-6, 255), (-8, 415))])
+    # The shin's skin holds the rails, the calf drive between them and the two rods behind,
+    # through the ankle's travel. Its liner is the whole boot; the pearl panel is a greave over
+    # the front of it that rises to a guard before the knee and leaves the calf black.
+    form = skin.Form(SHIN_ROWS)
+    (y0, z0), (y1, z1) = SHIN_RIM
+    slope = (z1 - z0) / (y1 - y0)
+    over = skin.from_side([(-200, z0 + slope * (-200 - y0)), (200, z0 + slope * (200 - y0))], [(200, 700), (-200, 700)])
+    panel, liner = geo.cut(form.panel, over, "shin panel's rim"), geo.cut(form.liner, over, "shin liner's rim")
+    stripe = skin.from_side([(26, 560), (20, 440), (10, 300), (-2, 120)], [(22, 120), (34, 300), (44, 440), (50, 560)])
+    panel = skin.trim(panel, [stripe], "greave and calf plate")           # a greave before and a plate behind, black between
+    pads = None
+    for origin, direction in [((xr(s * 42), y, z), (s, 0, 0)) for s in (1, -1) for y, z in ((-6, 255), (-8, 415))]:
+        pad = geo.mount_pad(form.cavity, origin, direction)
+        pads = pad if pads is None else pads + pad
 
     C = KNEE_HORN_PIN
     core = geo.tube(17, 10, 34, (xr(-17), 0, KZ), (1, 0, 0))
@@ -208,27 +227,29 @@ def _shin(hw, links):
     wishbone -= geo.cyl(10, 40, KNEE, (1, 0, 0), centered=True)          # the knee axle passes through
     rail = geo.bones([(-6, 404, 16), (0, CAZ, 24), (-2, 215, 15), (0, AZ, 22)], holes=[(0, CAZ, 9), (0, AZ, 12)])
     rails = geo.plate_yz(rail, xr(R0), xr(R1)) + geo.plate_yz(rail, xr(-R1), xr(-R0))
-    beam = geo.box(2 * R0 + 2, 28, 12, (HX, -2, CAZ + 45))               # the calf drive hangs from this
+    beam = geo.box(2 * R0 + 2, 28, 12, (HX, -2, CAZ + 68))               # over the calf drive
     tie = geo.cyl(7, 2 * R0 + 2, (xr(-R0 - 1), -8, 195), (1, 0, 0))
-    tibia = core + flanges + wishbone + rails + beam + tie + pads
-    links["shin"] += [part(tibia, "tibia", "gunmetal"),
+    # The calf drive: an RS04 across the leg between the rails, on a bracket hung from the beam,
+    # its output outboard. Its crank carries one rod down the back of the shin.
+    calf_at = (xr(CALF_FACE), CAY, CAZ)
+    bracket = geo.plate_yz(geo.bones([(CAY, CAZ, 61), (-2, CAZ + 68, 14)]), xr(CALF_FACE), xr(CALF_FACE + PLATE_T))
+    bracket -= mount_bores("RS04", calf_at, (1, 0, 0), x_dir=(0, 1, 0))
+    stator, rotor = hw.actuator("RS04", calf_at, (1, 0, 0), x_dir=(0, 1, 0), name="ankle_pitch")
+    tibia = core + flanges + wishbone + rails + beam + tie + bracket
+    links["shin"] += [part(tibia, "tibia", "gunmetal"), *stator,
                       pin((xr(-17), C[1], C[2]), (1, 0, 0), 5.0, 34.0, label="horn_pin"),
-                      part(_calf_housing(), "calf_drive", "bronze"),
-                      part(skin, "shin_guard", "ivory"), *screws]
-    links["shin"] += [hw.screw("M4", (xr(sx * 14), -2 + sy * 8, CAZ + 51), (0, 0, 1)) for sx in (1, -1) for sy in (1, -1)]
-
+                      part(skin.solids(pads - tibia), "pad_shin", "gunmetal"),
+                      part(skin.solids(liner), "liner_shin", "under"), part(skin.solids(panel), "panel_shin", "shell")]
     P, Q = ANKLE_CRANK_PIN, ANKLE_ARM_PIN
-    crank = geo.cyl(9, 2 * R1, (xr(-R1), 0, CAZ), (1, 0, 0))
-    arm = geo.bones([(0, CAZ, 15), (P[1], P[2], 9)])
-    for s in (1, -1):
-        crank += geo.plate_yz(arm, xr(s * 25), xr(s * 30))
-        crank += geo.cyl(4, 13, (xr(s * 25), P[1], P[2]), (s, 0, 0))
-        crank += geo.cyl(6, 1.5, (xr(s * 38), P[1], P[2]), (s, 0, 0))
-    links["ankle_crank"] += [part(crank, "calf_crankshaft", "steel")]
-    for s, name in ((1, "outer"), (-1, "inner")):
-        x = xr(s * ANKLE_ROD_X)
-        links["ankle_rods"].append(pushrod((x, P[1], P[2]), (x, Q[1], Q[2]), ANKLE_ROD_R, 8.0, 7.0, 4.0,
-                                           label=f"achilles_rod_{name}", finish="steel", nut_af=6.3))
+    x0 = CALF_FACE + ROTOR_PROUD                                          # the hub's end
+    arm = geo.plate_yz(geo.bones([(CAY, CAZ, 27), (P[1], P[2], 9)]), xr(x0), xr(x0 + 8))
+    arm -= rotor_counterbores("RS04", calf_at, (1, 0, 0), 8.0, x_dir=(0, 1, 0))
+    rod_x = xr(ANKLE_ROD_X)
+    links["ankle_crank"] += [*rotor, part(arm, "calf_crank", "steel"),
+                             *hw.rotor_screws("RS04", calf_at, (1, 0, 0), 8.0, x_dir=(0, 1, 0), sunk=5.0),
+                             pin((xr(x0 + 8), P[1], P[2]), (1, 0, 0), 4.0, rod_x + 5.0 - xr(x0 + 8), label="crank_pin")]
+    links["ankle_rods"].append(pushrod((rod_x, P[1], P[2]), (rod_x, Q[1], Q[2]), ANKLE_ROD_R, 8.0, 7.0, 4.0,
+                                       label="achilles_rod", finish="steel", nut_af=7.0))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -236,18 +257,17 @@ def _shin(hw, links):
 # ---------------------------------------------------------------------------------------------
 def _ankle(hw, links):
     Q = ANKLE_ARM_PIN
-    gimbal = geo.plate_xz(geo.bones([(HX, AZ, 30)], links=[(0,)], holes=[(HX, AZ, 16)]), -4, 4)
-    pins = []
-    for s in (1, -1):
-        gimbal += geo.plate_yz(geo.hull([(0, AZ, 12), (10, AZ, 12)]), xr(s * 27), xr(s * 39))
-        gimbal += geo.plate_yz(geo.bones([(14, AZ, 9), (Q[1], Q[2], 9)], holes=[(Q[1], Q[2], 4)]), xr(s * 24), xr(s * 30))
-        gimbal += geo.cyl(12, R1 - 39, (xr(s * 39), 0, AZ), (s, 0, 0))
-        pins.append(pin((xr(s * 24), Q[1], Q[2]), (s, 0, 0), 4.0, 14.0, label="achilles_pin"))
-        pins.append(part(geo.cyl(6, 1.5, (xr(s * 38), Q[1], Q[2]), (s, 0, 0)), "achilles_pin_head", "steel"))
     roll_at = (HX, -4.0, AZ)
-    stator, rotor = hw.actuator("A52L", roll_at, (0, 1, 0), x_dir=(-1, 0, 0), name="ankle_roll")
+    gimbal = geo.plate_xz(geo.bones([(HX, AZ, 30)], links=[(0,)]), -4, 4) - mount_bores("RS00", roll_at, (0, 1, 0), x_dir=(-1, 0, 0))
+    for s in (1, -1):
+        gimbal += geo.plate_yz(geo.hull([(0, AZ, 12), (10, AZ, 12)]), xr(s * 30), xr(s * 39))
+        gimbal += geo.cyl(12, R1 - 39, (xr(s * 39), 0, AZ), (s, 0, 0))
+    gimbal += geo.plate_yz(geo.bones([(14, AZ, 9), (Q[1], Q[2], 9)], holes=[(Q[1], Q[2], 4)]), xr(24), xr(30))   # the rod's arm
+    pins = [pin((xr(24), Q[1], Q[2]), (1, 0, 0), 4.0, 16.0, label="achilles_pin"),
+            part(geo.cyl(6, 1.5, (xr(40), Q[1], Q[2]), (1, 0, 0)), "achilles_pin_head", "steel")]
+    stator, rotor = hw.actuator("RS00", roll_at, (0, 1, 0), x_dir=(-1, 0, 0), name="ankle_roll")
     links["ankle_gimbal"] += [part(gimbal, "ankle_gimbal", "gunmetal"), *pins, *stator]
-    links["foot"] += [*rotor, *hw.rotor_screws("A52L", roll_at, (0, 1, 0), 10.0, x_dir=(-1, 0, 0))]
+    links["foot"] += [*rotor, *hw.rotor_screws("RS00", roll_at, (0, 1, 0), 10.0, x_dir=(-1, 0, 0))]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -282,7 +302,7 @@ def _foot(hw, links):
     sole = geo.plate_xy(outline, 10, 20) - geo.box(240, 120, 40, (HX, edge - 60, 15))
     rear = geo.plate_xz(geo.bones([(HX, AZ, 19), (HX, 26, 15)], holes=[(HX, AZ, 4)]), 5, 15)
     front = geo.plate_xz(geo.bones([(HX, AZ, 12), (HX, 26, 12)]), -76, -66)
-    tail = geo.cyl(3.4, 30, (HX, -66, AZ), (0, 1, 0))
+    tail = geo.cyl(3.4, 11, (HX, -66, AZ), (0, 1, 0))                    # to the back of the roll drive's cover
     keel = geo.box(12, 71, 12, (HX, -30.5, 26))
     foot = sole + rear + front + tail + keel + pads
     for a, b in ((-40, -24), (-8, 8), (24, 40)):

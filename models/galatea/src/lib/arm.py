@@ -14,8 +14,9 @@ import math
 
 import build123d as bd
 
-from . import geo
+from . import geo, skin
 from .dims import CHEST_SIDE_X, ELBOW, PLATE_T, SHOULDER, WRIST, WRIST_ROLL, WRIST_YAW
+from .hardware import mount_bores
 from .kit import part
 
 SX, SZ = SHOULDER[0], SHOULDER[2]
@@ -37,6 +38,18 @@ def build_arm(hw, shoulder_pitch_output):
     return links
 
 
+POD_R, POD_FRONT, POD_BACK = 52.0, 50.0, 108.0      # the shoulder pod: its radius about the roll axis, and how far it reaches
+
+
+def _sector(a0, a1, radius, steps=24):
+    """A pie slice in the plane of the roll's travel: angles from inboard (-X) toward up (+Z), degrees."""
+    points = [(0.0, 0.0)]
+    for k in range(steps + 1):
+        a = math.radians(a0 + (a1 - a0) * k / steps)
+        points.append((-radius * math.cos(a), radius * math.sin(a)))
+    return points
+
+
 def _skin_mounts(hw, cavity, outer, seats, size="M3", radius=5.0, reach=80.0):
     pads, screws = None, []
     for origin, direction in seats:
@@ -55,112 +68,127 @@ def _shoulder(hw, links):
     lug = geo.plate_yz(geo.bones([(0, SZ, 40)], links=[(0,)], holes=[(0, SZ, 8)]), x0, x0 + 10)
     # The arm to the roll drive leaves the chest through the round shoulder opening: inboard of
     # the skin it stays inside the opening's radius about the pitch axis.
-    ring = geo.plate_xz(geo.bones([(SX, SZ, 39), (SX - 46, SZ, 24)], holes=[(SX, SZ, 22)]), 34, 42)
-    ring -= geo.half_space((x0, 0, 0), (-1, 0, 0))
-    corner = geo.box(16, 18, 40, (160, 51, SZ))
     roll_at = (SX, 42.0, SZ)
-    stator, rotor = hw.actuator("A70", roll_at, (0, -1, 0), x_dir=(1, 0, 0), cover=True, name="shoulder_roll")
+    ring = geo.plate_xz(geo.bones([(SX, SZ, 45), (SX - 46, SZ, 24)]), 34, 42) - mount_bores("RS06", roll_at, (0, -1, 0), x_dir=(1, 0, 0))
+    ring -= geo.half_space((x0, 0, 0), (-1, 0, 0))
+    corner = geo.box(8, 10, 30, (x0 + 4, 47, SZ))                         # a gusset inboard of the roll drive's can
+    stator, rotor = hw.actuator("RS06", roll_at, (0, -1, 0), x_dir=(1, 0, 0), name="shoulder_roll")
     links["shoulder_yoke"] += [part(lug + ring + corner, "shoulder_yoke", "gunmetal"),
-                               *hw.rotor_screws("A86", pitch_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0)), *stator]
+                               *hw.rotor_screws("RS03", pitch_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0)), *stator]
 
     lug = geo.plate_xz(geo.bones([(SX, SZ, 30)], links=[(0,)], holes=[(SX, SZ, 6)]), 23, 33)
-    cup = geo.tube(22, 15, 17, (SX, 0, SZ - 36), (0, 0, 1)) + geo.tube(22, 5, 10, (SX, 0, SZ - 36), (0, 0, 1))
+    cup = geo.tube(22, 17, 17, (SX, 0, SZ - 36), (0, 0, 1)) + geo.tube(22, 5, 10, (SX, 0, SZ - 36), (0, 0, 1))
     neck = geo.box(24, 12, 9, (SX, 18, SZ - 25.5))
-    ball = bd.Pos(*SHOULDER) * (bd.Sphere(BALL_R) - bd.Sphere(BALL_R - SKIN_T))
-    ball -= geo.half_space((0, 22, 0), (0, 1, 0))                         # open behind, where the yoke carries it
-    ball -= geo.cyl(29, 70, (SX, 0, SZ - 70), (0, 0, 1))                  # round opening for the arm
-    inside = bd.Pos(*SHOULDER) * bd.Sphere(BALL_R - SKIN_T)
-    pads, screws = None, []
+    # The shoulder's pod: a body of revolution about the roll axis, so that it turns with the arm
+    # round the yoke's ring and the roll drive behind it without meeting either. A slot round it
+    # lets the yoke's arm through over the whole of the roll's travel; the arm leaves it below.
+    t = skin.PANEL_T
+    profile = [(0, -POD_FRONT), (24, -POD_FRONT + 5), (40, -POD_FRONT + 16), (POD_R, -POD_FRONT + 36), (POD_R, POD_BACK - 28),
+               (45, POD_BACK - 10), (28, POD_BACK - 2), (0, POD_BACK)]
+    inner = [(0, -POD_FRONT + t), (22.5, -POD_FRONT + 5 + t), (38, -POD_FRONT + 17.5), (POD_R - t, -POD_FRONT + 37), (POD_R - t, POD_BACK - 29),
+             (43, POD_BACK - 11.5), (26.5, POD_BACK - 2 - t), (0, POD_BACK - t)]
+    turned = lambda points: geo.revolve(points, SHOULDER, (0, 1, 0), x_dir=(1, 0, 0))
+    pod = turned(profile) - turned(inner)
+    slot = geo.plate_xz(geo.polygon(*[(SX + x, SZ + z) for x, z in _sector(-43.0, 151.0, 80.0)]), 30, 46)
+    pod = geo.carve(pod, slot, "shoulder pod's slot")                     # the yoke's arm, through the roll's travel
+    pod -= geo.cyl(36, 80, (SX, 0, SZ - 90), (0, 0, 1))                   # round opening for the arm
+    pads = None
     for s in (1, -1):
-        pad = geo.cyl(5, 40, (SX + s * 18, 0, SZ - 27), (s, 0, 0)) & inside
+        pad = geo.cyl(5, 60, (SX + s * 18, 0, SZ - 27), (s, 0, 0)) & turned(inner)
         pads = pad if pads is None else pads + pad
-        reach = math.sqrt(BALL_R ** 2 - 27 ** 2)
-        screws.append(hw.screw("M3", (SX + s * reach, 0, SZ - 27), (s * reach, 0, -27), label="skin_screw"))
     yaw_at = (SX, 0.0, SZ - 45)
-    yaw_stator, yaw_rotor = hw.actuator("A52", yaw_at, (0, 0, 1), x_dir=(1, 0, 0), name="shoulder_yaw")
-    links["shoulder_block"] += [part(lug + cup + neck + pads, "shoulder_block", "gunmetal"), *rotor,
-                                *hw.rotor_screws("A70", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)),
-                                part(ball, "shoulder_ball", "ivory"), *screws, *yaw_rotor,
-                                *hw.rotor_screws("A52", yaw_at, (0, 0, 1), 10.0, x_dir=(1, 0, 0))]
+    yaw_stator, yaw_rotor = hw.actuator("RS00", yaw_at, (0, 0, 1), x_dir=(1, 0, 0), name="shoulder_yaw")
+    links["shoulder_block"] += [part(lug + cup + neck, "shoulder_block", "gunmetal"), part(skin.solids(pads - (lug + cup + neck)), "pad_shoulder", "gunmetal"),
+                                *rotor, *hw.rotor_screws("RS06", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)),
+                                part(skin.solids(pod), "panel_shoulder", "shell"), *yaw_rotor,
+                                *hw.rotor_screws("RS00", yaw_at, (0, 0, 1), 10.0, x_dir=(1, 0, 0))]
     links["upper_arm"] += yaw_stator
 
 
 # ---------------------------------------------------------------------------------------------
 # Upper arm
 # ---------------------------------------------------------------------------------------------
-def _upper_arm(hw, links):
-    rows = [
-        geo.S(1150, SX + 2, 0, rx=37, ry=37, n=2.5, rxn=35),
-        geo.S(1215, SX + 2, 0, rx=41, ry=41, n=2.5, rxn=37),
-        geo.S(1290, SX + 1, 0, rx=42, ry=43, n=2.4, rxn=39),
-        geo.S(1345, SX, 0, rx=39, ry=39, n=2.3),
-        geo.S(1378, SX, 0, rx=36, ry=36, n=2.1),
-    ]
-    skin, cavity, outer = geo.shell(rows, SKIN_T, seam=180.0)
-    skin -= geo.cyl(46, 200, ELBOW, (1, 0, 0), centered=True)             # round opening about the elbow
-    relief = geo.behind_curve([(-80, 1262), (-30, 1232), (0, 1196), (12, 1150)], [(-80, 1150)])
-    skin -= geo.plate_yz(relief, SX - 80, SX + 80)                        # cut back in front, where the forearm folds in
-    pads, screws = _skin_mounts(hw, cavity, outer, [((SX + 20, 0, z), (1, 0, 0)) for z in (1215, 1295)])
+ARM_RIM = (1215.5, -0.76)                       # the elbow rim in the side view: z = 1215.5 - 0.76 y
+UPPER_ARM_ROWS = skin.register("upper_arm", [
+    geo.S(1140, SX + 3, 2, rx=38, rxn=38, ry=40, ryn=38, n=3.0),
+    geo.S(1230, SX + 3, 2, rx=38, rxn=40, ry=42, ryn=40, n=3.0),
+    geo.S(1320, SX + 2, 0, rx=41, rxn=43, ry=43, ryn=43, n=3.0),
+    geo.S(1352, SX + 2, 0, rx=41, rxn=43, ry=43, ryn=43, n=3.0),
+], covers=["l_upper_arm"], link="l_upper_arm", skip=("elbow",), above=[((-100.0, 1291.5), (100.0, 1139.5))])
 
-    top = geo.tube(32, 16, PLATE_T, (SX, 0, SZ - 45), (0, 0, 1))
-    housing = geo.tube(32, 27.5, 48, (SX, 0, SZ - 93), (0, 0, 1)) + geo.tube(32, 6, 8, (SX, 0, SZ - 101), (0, 0, 1))
-    windows = None
-    for k in range(6):                                                    # windows on the yaw drive's fins
-        a = math.radians(30 + 60 * k)
-        slot = geo.rod((SX + 20 * math.cos(a), 20 * math.sin(a), SZ - 72), (SX + 40 * math.cos(a), 40 * math.sin(a), SZ - 72), 6.0)
-        windows = slot if windows is None else windows + slot
-    housing -= windows
-    plate = geo.plate_yz(geo.bones([(0, SZ - 124, 26), (6, 1240, 16), (10, 1180, 13), (0, EZ, 39)], holes=[(0, EZ, 22)]), SX + 17, SX + 25)
-    ribs = geo.box(26, 6, 140, (SX + 12, 20, 1245))                       # one rib, behind: the forearm folds in front
-    elbow_at = (SX + 17, 0.0, EZ)
-    stator, rotor = hw.actuator("A70", elbow_at, (1, 0, 0), x_dir=(0, 1, 0), cover=True, name="elbow")
-    links["upper_arm"] += [part(top + housing + plate + ribs + pads, "humerus", "gunmetal"), *stator,
-                           part(skin, "upper_arm_fairing", "ivory"), *screws]
-    links["forearm"] += [*rotor, *hw.rotor_screws("A70", elbow_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0))]
+
+def _upper_arm(hw, links):
+    # The upper arm's skin, from under the shoulder's pod to the elbow, where its rim is slanted:
+    # the line the forearm's front comes up to at a full bend.
+    form = skin.Form(UPPER_ARM_ROWS)
+    rim = skin.from_side([(-200, ARM_RIM[0] - 200 * ARM_RIM[1]), (200, ARM_RIM[0] + 200 * ARM_RIM[1])], [(200, 1000), (-200, 1000)])
+    liner, panel = skin.trim(form.liner, [rim], "upper arm liner"), skin.trim(form.panel, [rim], "upper arm panel")
+    pads = None
+    for origin, direction in [((SX + 20, 0, z), (1, 0, 0)) for z in (1240, 1300)]:
+        pad = geo.mount_pad(form.cavity, origin, direction, 5.0, 80.0)
+        pads = pad if pads is None else pads + pad
+
+    yaw_at, elbow_at = (SX, 0.0, SZ - 45), (SX + 17, 0.0, EZ)
+    top = geo.tube(33.5, 8, PLATE_T, (SX, 0, SZ - 45), (0, 0, 1)) - mount_bores("RS00", yaw_at, (0, 0, 1), x_dir=(1, 0, 0))
+    housing = geo.tube(33.5, 29.3, 51, (SX, 0, SZ - 96), (0, 0, 1)) + geo.tube(33.5, 6, 8, (SX, 0, SZ - 104), (0, 0, 1))   # the yaw drive's sleeve
+    plate = geo.plate_yz(geo.bones([(0, SZ - 124, 26), (6, 1240, 16), (10, 1182, 13), (0, EZ, 45)]), SX + 17, SX + 25)
+    plate -= mount_bores("RS06", elbow_at, (1, 0, 0), x_dir=(0, 1, 0))
+    ribs = geo.box(26, 6, 126, (SX + 12, 20, 1252))                       # one rib, behind: the forearm folds in front
+    stator, rotor = hw.actuator("RS06", elbow_at, (1, 0, 0), x_dir=(0, 1, 0), name="elbow")
+    links["upper_arm"] += [part(top + housing + plate + ribs, "humerus", "gunmetal"), *stator,
+                           part(skin.solids(pads - (top + housing + plate + ribs)), "pad_upper_arm", "gunmetal"),
+                           part(skin.solids(liner), "liner_upper_arm", "under"), part(skin.solids(panel), "panel_upper_arm", "shell")]
+    links["forearm"] += [*rotor, *hw.rotor_screws("RS06", elbow_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0))]
 
 
 # ---------------------------------------------------------------------------------------------
 # Forearm: the elbow lug and roll drive, then the turning half
 # ---------------------------------------------------------------------------------------------
+FOREARM_ROWS = skin.register("forearm", [
+    geo.S(950, SX, 0, rx=28, ry=30, n=2.6),
+    geo.S(980, SX, 0, rx=31, ry=32.5, n=2.8),
+    geo.S(RZ - 3, SX, 0, rx=32.6, ry=33.6, n=2.8),
+], covers=["l_forearm_distal"], link="l_forearm_distal", skip=("wrist_pitch",), within=((-1e4, -1e4, 970.0), (1e4, 1e4, 2e3)))
+
+
 def _forearm(hw, links):
     lug = geo.plate_yz(geo.bones([(0, EZ, 30), (0, RZ + 24, 22)], holes=[(0, EZ, 6)]), SX + 26, SX + 36)
-    mount = geo.tube(31, 16, PLATE_T, (SX, 0, RZ + 1), (0, 0, 1))
-    housing = geo.tube(31, 27.5, 38, (SX, 0, RZ + 9), (0, 0, 1))
-    cuff = geo.tube(34.6, 32.0, 46, (SX, 0, RZ + 3), (0, 0, 1)) - geo.cyl(46, 200, ELBOW, (1, 0, 0), centered=True) \
-        - geo.box(30, 50, 80, (SX + 34, 0, RZ + 30))
-    cuff_pad = geo.tube(32.0, 31.0, 10, (SX, 0, RZ + 12), (0, 0, 1)) - geo.box(30, 50, 80, (SX + 34, 0, RZ + 30))
     roll_at = (SX, 0.0, RZ + 9)
-    stator, rotor = hw.actuator("A52", roll_at, (0, 0, -1), x_dir=(1, 0, 0), name="wrist_roll")
+    mount = geo.tube(28, 8, PLATE_T, (SX, 0, RZ + 1), (0, 0, 1)) - mount_bores("RS05", roll_at, (0, 0, -1), x_dir=(1, 0, 0))
+    housing = geo.tube(28, 23.8, 44, (SX, 0, RZ + 9), (0, 0, 1))          # the roll drive's sleeve
+    cuff = geo.tube(32.6, 30.0, 52, (SX, 0, RZ + 3), (0, 0, 1)) - geo.cyl(48, 200, ELBOW, (1, 0, 0), centered=True) \
+        - geo.box(30, 50, 90, (SX + 34, 0, RZ + 36))
+    cuff_pad = geo.tube(30.0, 28.0, 10, (SX, 0, RZ + 12), (0, 0, 1)) - geo.box(30, 50, 90, (SX + 34, 0, RZ + 36))
+    stator, rotor = hw.actuator("RS05", roll_at, (0, 0, -1), x_dir=(1, 0, 0), name="wrist_roll")
     links["forearm"] += [part(lug + mount + housing + cuff_pad, "elbow_bracket", "gunmetal"), *stator,
-                         part(cuff, "forearm_cuff", "ivory")]
+                         part(cuff, "panel_forearm_cuff", "shell")]
 
-    rows = [
-        geo.S(940, SX, 0, rx=25, ry=27, n=2.3),
-        geo.S(965, SX, 0, rx=28, ry=30, n=2.3),
-        geo.S(1002, SX, 0, rx=33, ry=34, n=2.3),
-        geo.S(RZ - 3, SX, 0, rx=33.5, ry=33.5, n=2.1),
-    ]
-    skin, cavity, outer = geo.shell(rows, SKIN_T, seam=180.0)
-    skin -= geo.cyl(45, 200, WRIST, (0, 1, 0), centered=True)             # round opening about the wrist
-    pads, screws = _skin_mounts(hw, cavity, outer, [((SX, s * 8, 1006), (0, s, 0)) for s in (1, -1)])
+    form = skin.Form(FOREARM_ROWS)
+    opening = geo.cyl(45, 200, WRIST, (0, 1, 0), centered=True)            # round opening about the wrist
+    liner, panel = skin.trim(form.liner, [opening], "forearm liner"), skin.trim(form.panel, [opening], "forearm panel")
+    pads = None
+    for origin, direction in [((SX, s * 8, 1003), (0, s, 0)) for s in (1, -1)]:
+        pad = geo.mount_pad(form.cavity, origin, direction, 5.0, 80.0)
+        pads = pad if pads is None else pads + pad
     lug = geo.tube(22, 5, 10, (SX, 0, RZ - 10), (0, 0, 1)) + geo.cyl(7, 8, (SX, 0, RZ - 18), (0, 0, 1))
-    stem = geo.cyl(13, RZ - 18 - 955, (SX, 0, 955), (0, 0, 1))        # necked under the lug for its screw heads
-    block = geo.cyl(21, 22, (SX, 0, 938), (0, 0, 1))
-    fork = geo.plate_xz(geo.bones([(SX, WZ, 22), (SX, 944, 14)], holes=[(SX, WZ, 12.5)]), -22, -14)
-    sleeve = geo.tube(16, 13, 30, (SX, 0, 962), (0, 0, 1))
     pitch_at = (SX, -14.0, WZ)
-    wp_stator, wp_rotor = hw.actuator("A40", pitch_at, (0, -1, 0), x_dir=(1, 0, 0), name="wrist_pitch")
-    links["forearm_distal"] += [*rotor, *hw.rotor_screws("A52", roll_at, (0, 0, -1), 10.0, x_dir=(1, 0, 0)),
-                                part(lug + stem + block + fork + pads, "radius", "gunmetal"),
-                                part(sleeve, "forearm_tube", "carbon"), part(skin, "forearm_fairing", "ivory"), *screws,
+    stem = geo.cyl(13, RZ - 18 - 966, (SX, 0, 966), (0, 0, 1))        # necked under the lug for its screw heads
+    block = geo.cyl(21, 18, (SX, 0, 950), (0, 0, 1))                   # over the pitch drive's can
+    fork = geo.plate_xz(geo.bones([(SX, WZ, 24), (SX, 956, 14)]), -22, -14) - mount_bores("RS05", pitch_at, (0, -1, 0), x_dir=(1, 0, 0))
+    sleeve = geo.tube(16, 13, 26, (SX, 0, 970), (0, 0, 1))
+    wp_stator, wp_rotor = hw.actuator("RS05", pitch_at, (0, -1, 0), x_dir=(1, 0, 0), name="wrist_pitch")
+    links["forearm_distal"] += [*rotor, *hw.rotor_screws("RS05", roll_at, (0, 0, -1), 10.0, x_dir=(1, 0, 0)),
+                                part(lug + stem + block + fork, "radius", "gunmetal"), part(skin.solids(pads - (lug + stem + block + fork)), "pad_forearm", "gunmetal"),
+                                part(sleeve, "forearm_tube", "carbon"),
+                                part(skin.solids(liner), "liner_forearm", "under"), part(skin.solids(panel), "panel_forearm", "shell"),
                                 *wp_stator]
-    links["wrist_link"] += [*wp_rotor, *hw.rotor_screws("A40", pitch_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0))]
+    links["wrist_link"] += [*wp_rotor, *hw.rotor_screws("RS05", pitch_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0))]
 
 
 def _wrist(hw, links):
-    lug = geo.plate_xz(geo.bones([(SX, WZ, 16), (SX + 14, WZ - 30, 10)], holes=[(SX, WZ, 3)]), -33, -23)
-    yaw_plate = geo.plate_yz(geo.bones([(0, YZ, 22), (-22, YZ + 16, 10)], holes=[(0, YZ, 12.5)]), SX + 14, SX + 22)
     yaw_at = (SX + 14, 0.0, YZ)
-    stator, rotor = hw.actuator("A40", yaw_at, (1, 0, 0), x_dir=(0, 1, 0), name="wrist_yaw")
+    lug = geo.plate_xz(geo.bones([(SX, WZ, 18), (SX + 14, WZ - 34, 10)], holes=[(SX, WZ, 3)]), -33, -23)
+    yaw_plate = geo.plate_yz(geo.bones([(0, YZ, 24), (-24, YZ + 20, 10)]), SX + 14, SX + 22) - mount_bores("RS05", yaw_at, (1, 0, 0), x_dir=(0, 1, 0))
+    stator, rotor = hw.actuator("RS05", yaw_at, (1, 0, 0), x_dir=(0, 1, 0), name="wrist_yaw")
     links["wrist_link"] += [part(lug + yaw_plate, "wrist_bracket", "gunmetal"), *stator]
-    links["palm"] += [*rotor, *hw.rotor_screws("A40", yaw_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0))]
+    links["palm"] += [*rotor, *hw.rotor_screws("RS05", yaw_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0))]

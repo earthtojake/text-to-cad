@@ -22,6 +22,14 @@ def material(name):
     return _FINISHES[name]()
 
 
+def actuator(model, density):
+    """The finish of an actuator of `model`: black anodised, at the density that gives the unit its maker's mass."""
+    name = f"actuator_{model}"
+    _FINISHES[name] = lambda: _look(metals.custom_metal(f"RobStride {model}, homogenised", density, family="aluminum"),
+                                    "actuator_black", color="#1b1d21", metalness=0.6, roughness=0.42)
+    return name
+
+
 def apply(shape, name):
     """Give `shape` the finish `name` and return it. Set after the last geometric operation."""
     shape.material = material(name)
@@ -29,24 +37,43 @@ def apply(shape, name):
 
 
 _FINISHES = {
+    # The restyled exterior: two tones. Shells are a satin pearl white over a matte black
+    # under-body; joints are black anodised; the face is one smoked shield.
+    "shell": lambda: _look(plastics.cfrp(), "shell_pearl", color="#e6e8ea", metalness=0.0, roughness=0.42,
+                           clearcoat=0.6, clearcoat_roughness=0.25),
+    "under": lambda: _look(plastics.nylon(), "under_black", color="#17181b", metalness=0.0, roughness=0.78),
+    "joint": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "joint_black", color="#202226", metalness=0.55,
+                           roughness=0.48),
+    "trim": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "trim_grey", color="#8f959c", metalness=0.8,
+                          roughness=0.38),
+    "face": lambda: _look(plastics.pc(), "face_gloss", color="#050607", metalness=0.0, roughness=0.04,
+                          clearcoat=1.0, clearcoat_roughness=0.02),
+    "smoke35": lambda: _look(plastics.pc(), "smoke35", color="#050607", metalness=0.0, roughness=0.04,
+                             clearcoat=1.0, clearcoat_roughness=0.02, transmission=0.35),
+    "smoke60": lambda: _look(plastics.pc(), "smoke60", color="#050607", metalness=0.0, roughness=0.04,
+                             clearcoat=1.0, clearcoat_roughness=0.02, transmission=0.6),
+    "smoke85": lambda: _look(plastics.pc(), "smoke85", color="#050607", metalness=0.0, roughness=0.04,
+                             clearcoat=1.0, clearcoat_roughness=0.02, transmission=0.85),
+    "light": lambda: _look(plastics.pc(), "light_white", color="#eef4ff", metalness=0.0, roughness=0.4,
+                           emissive="#dfeaff", emissive_intensity=0.9),
     # Shells: carbon-fibre skins under an ivory ceramic lacquer, clear-coated.
-    "ivory": lambda: _look(plastics.cfrp(), "ivory_lacquer", color="#f3efe4", metalness=0.0, roughness=0.34,
-                           clearcoat=1.0, clearcoat_roughness=0.08),
+    "ivory": lambda: _look(plastics.cfrp(), "shell_pearl", color="#e6e8ea", metalness=0.0, roughness=0.42,
+                           clearcoat=0.6, clearcoat_roughness=0.25),
     # Inner liners, bellows and moulded covers: glass-filled nylon, satin graphite.
     "graphite": lambda: _look(plastics.nylon(), "graphite_nylon", color="#33373d", metalness=0.0, roughness=0.55),
     # Structure: 7075 aluminium, hard anodised gunmetal.
-    "gunmetal": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "gunmetal_anodise", color="#8a929d",
-                              metalness=0.6, roughness=0.45),
+    "gunmetal": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "gunmetal_anodise", color="#4b4f56",
+                              metalness=0.6, roughness=0.48),
     # A darker structural tone for links that sit behind the gunmetal ones.
-    "slate": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "slate_anodise", color="#5b636e",
-                           metalness=0.55, roughness=0.45),
+    "slate": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "slate_anodise", color="#3a3d43",
+                           metalness=0.55, roughness=0.5),
     # Actuator housings: finned aluminium, bronze anodised. Density is the assembly's
     # (stator, rotor, gear set and bearings homogenised), not aluminium's.
     "bronze": lambda: _look(metals.custom_metal("Actuator assembly, bronze anodised housing", 3400.0,
                                                 family="aluminum"),
-                            "bronze_anodise", color="#b9773f", metalness=1.0, roughness=0.36),
+                            "actuator_black", color="#1b1d21", metalness=0.6, roughness=0.42),
     # Bronze-anodised machined trim that is plain aluminium all the way through.
-    "bronze_trim": lambda: _look(metals.aluminum(), "bronze_trim", color="#b9773f", metalness=1.0, roughness=0.36),
+    "bronze_trim": lambda: _look(metals.aluminum(), "trim_dark", color="#2a2d32", metalness=0.7, roughness=0.4),
     # Output flanges, axles, pins, the Achilles rods: 4340 steel, quenched and tempered, ground satin.
     "steel": lambda: _look(metals.alloy_steel(metals.AlloySteel.G4340_QUENCHED_TEMPERED), "steel_satin", color="#c4c5c4",
                            metalness=1.0, roughness=0.28),
@@ -65,8 +92,8 @@ _FINISHES = {
     "visor": lambda: _look(plastics.pc(), "visor_smoke", color="#1b222b", metalness=0.0, roughness=0.05,
                            clearcoat=1.0, clearcoat_roughness=0.03, transmission=1.0),
     # Light guides: status bar, eye rings.
-    "glow": lambda: _look(plastics.pc(), "glow_amber", color="#ff9d3c", metalness=0.0, roughness=0.4,
-                          emissive="#ff7a10", emissive_intensity=0.6),
+    "glow": lambda: _look(plastics.pc(), "light_white", color="#eef4ff", metalness=0.0, roughness=0.4,
+                          emissive="#dfeaff", emissive_intensity=0.9),
     # Camera and depth-sensor windows.
     "lens": lambda: _look(glass.borosilicate(), "lens_glass", color="#0a0c10", metalness=0.2, roughness=0.02,
                           clearcoat=1.0, clearcoat_roughness=0.0),

@@ -104,7 +104,7 @@ def _palm(hw, links):
         slab += geo.plate_xz(ear, y0, y1)
     slab -= geo.cyl(2.5, 90, (SX, -45, KNUCKLE_Z), (0, 1, 0))             # the knuckle pin's bore
     slab -= geo.cyl(4.0, 40, (THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 20), (0, 0, 1))   # the thumb pivot's
-    lug = geo.plate_yz(geo.bones([(0, YZ, 14), (0, YZ - 24, 12)], holes=[(0, YZ, 3)]), SX + 23, SX + 33)
+    lug = geo.plate_yz(geo.bones([(0, YZ, 18), (0, YZ - 26, 12)], holes=[(0, YZ, 3)]), SX + 23, SX + 33)
     bridge = geo.box(33, 24, 12, (SX + 16.5, 0, 841))
     back = geo.plate_yz(geo.hull([(-30, 824, 8), (28, 824, 8), (-32, 784, 6), (30, 784, 6)]), SX + 9, SX + 12.5)
     back = bd.fillet(back.edges().group_by(bd.Axis.X)[-1], 2.0)

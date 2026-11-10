@@ -306,7 +306,23 @@ def _shared(a, b, relative):
 
     m = np.array(relative).reshape(4, 4)
     there = bd.Plane(origin=tuple(m[:3, 3]), x_dir=tuple(m[:3, 0]), z_dir=tuple(m[:3, 2])).location
-    return float(overlap_volume(a.solid, b.solid.moved(there)))
+    other = b.solid.moved(there)
+    one = float(overlap_volume(a.solid, other))
+    if one <= SHARED:
+        return one
+    # The kernel's intersection is not always the same both ways round: a lens that fills its
+    # bezel's bore came back as the whole lens one way and as nothing the other. A volume is
+    # believed when the pair says it both ways; when they differ, what a cut takes from the
+    # first part decides, and the pair is named so that it can be looked at.
+    two = float(overlap_volume(other, a.solid))
+    if abs(one - two) <= max(SHARED, 0.02 * max(one, two)):
+        return max(one, two)
+    whole = sum(solid.volume for solid in a.solid.solids())
+    three = whole - sum(solid.volume for solid in (a.solid - other).solids())
+    verdict = sorted((one, two, max(three, 0.0)))[1]
+    print(f"  the kernel disagrees with itself on {a.path} x {b.path}: {one:.1f} one way, {two:.1f} the other, "
+          f"{three:.1f} by a cut; taken as {verdict:.1f} mm3", file=sys.stderr, flush=True)
+    return verdict
 
 
 def _crew_member(tasks, results):

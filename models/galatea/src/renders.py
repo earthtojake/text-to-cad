@@ -5,7 +5,7 @@
 
 Each still is one `cad model snapshot` of a document the server holds (the robot, or one
 of the standing models of `stances.py`), drawn shaded through a long lens on a clear
-background at twice its size, then set on a dark studio backdrop with a contact shadow.
+background at twice its size, then set on a pale studio backdrop with a contact shadow.
 A clip is a motion drawn frame by frame, the robot posed by its joint values under a
 camera that stays put, and joined by ffmpeg (an MP4, and a GIF of it). The pictures are
 review media: the project's .gitignore keeps them out of Git.
@@ -34,10 +34,8 @@ LENS = {"projection": "perspective", "focalLength": 85}
 # model) or a camera object in millimetres; extras are a pose, or parts to isolate.
 LEFT_HAND = [f"l_{link}" for link in ("forearm", "forearm_distal", "wrist_link", *HAND_LINKS)]
 HAND_OUT = {"l_shoulder_roll": 24, "l_elbow": 30}          # the left hand held clear of the hip
-# The body's skins and liners by label: what the undressed stills leave out, with the screws that hold them.
-SKINS = {"pelvis_belt", "apron", "breastplate", "backplate", "collar", "neck_deck", "midriff", "sternum_inlay",
-         "thigh_fairing", "shin_guard", "foot_shell", "toe_cap", "shoulder_ball", "upper_arm_fairing", "forearm_cuff",
-         "forearm_fairing", "skin_screw"}
+# The skins by label (or its beginning): what the undressed stills leave out.
+SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back")
 STILLS = {
     "hero": (stances.galatea_contrapposto, "24:5", (1600, 2400), {}),
     "front": (galatea, "0:2", (1400, 2400), {}),
@@ -53,17 +51,17 @@ STILLS = {
     "poise": (stances.galatea_poise, "28:6", (1700, 2400), {}),
     "crouch": (stances.galatea_crouch, "48:8", (2000, 2000), {}),
     "bow": (stances.galatea_bow, "64:6", (2000, 2200), {}),
-    "head": (galatea, {"position": [400, -800, 1705], "target": [0, -5, 1642], "up": [0, 0, 1]}, (1800, 1700), {}),
-    "face": (galatea, {"position": [0, -900, 1672], "target": [0, 0, 1648], "up": [0, 0, 1]}, (1700, 1700), {}),
-    "head_back": (galatea, {"position": [-470, 700, 1745], "target": [0, 20, 1650], "up": [0, 0, 1]}, (1800, 1700), {}),
+    "head": (galatea, {"position": [430, -800, 1700], "target": [0, -5, 1632], "up": [0, 0, 1]}, (1800, 1700), {}),
+    "face": (galatea, {"position": [0, -900, 1668], "target": [0, 0, 1640], "up": [0, 0, 1]}, (1700, 1700), {}),
+    "head_back": (galatea, {"position": [-470, 700, 1745], "target": [0, 20, 1640], "up": [0, 0, 1]}, (1800, 1700), {}),
     "torso": (galatea, {"position": [520, -1150, 1420], "target": [0, 10, 1300], "up": [0, 0, 1]}, (2000, 1800), {}),
     "waist": (galatea, {"position": [420, -620, 1210], "target": [0, 20, 1110], "up": [0, 0, 1]}, (2000, 1500), {}),
     "hip": (galatea, {"position": [640, -560, 1010], "target": [100, 0, 880], "up": [0, 0, 1]}, (2000, 1600),
             {"pose": {"l_shoulder_roll": 40, "l_elbow": 20}}),
-    "knee_drive": (galatea, {"position": [520, 760, 820], "target": [82, 20, 640], "up": [0, 0, 1]}, (1800, 2000), {}),
-    "calf_drive": (galatea, {"position": [430, 640, 380], "target": [82, 10, 230], "up": [0, 0, 1]}, (1800, 2000), {}),
+    "knee_drive": (galatea, {"position": [520, 760, 820], "target": [82, 20, 640], "up": [0, 0, 1]}, (1800, 2000), {"without": SKINS}),
+    "calf_drive": (galatea, {"position": [430, 640, 380], "target": [82, 10, 230], "up": [0, 0, 1]}, (1800, 2000), {"without": SKINS}),
     "foot": (galatea, {"position": [520, -520, 250], "target": [82, -40, 70], "up": [0, 0, 1]}, (2000, 1400), {}),
-    "shoulder": (galatea, {"position": [640, 420, 1560], "target": [205, 10, 1390], "up": [0, 0, 1]}, (2000, 1600), {}),
+    "shoulder": (galatea, {"position": [650, 420, 1560], "target": [212, 10, 1390], "up": [0, 0, 1]}, (2000, 1600), {}),
     "hand": (galatea, {"position": [-100, -600, 975], "target": [440, -170, 885], "up": [0, 0, 1]}, (1800, 1800),
              {"isolated": LEFT_HAND, "pose": {**HAND_OUT, "l_index_curl": 0.25, "l_middle_curl": 0.4, "l_ring_curl": 0.55,
                                               "l_little_curl": 0.7, "l_thumb_opp": 40, "l_thumb_curl": 0.3}}),
@@ -93,28 +91,28 @@ def snapshot(document, camera, size, extras, path):
         raise SystemExit(f"snapshot failed for {path.name}: {done.stdout.strip() or done.stderr.strip()}")
 
 
-def without(shape, labels, keep=("head",)):
-    """Refs of the parts so labelled, link by link (but in the links to `keep`): an occurrence's
-    path, numbered among the siblings that share its label."""
+def without(shape, labels, keep=()):
+    """Refs of the parts whose labels begin so, link by link (but in the links to `keep`): an
+    occurrence's path, numbered among the siblings that share its label."""
     refs = []
     for link in shape.children:
         names = [part.label for part in link.children]
         seen = {}
         for name in names:
             seen[name] = seen.get(name, 0) + 1
-            if name in labels and link.label not in keep:
-                refs.append(f"{link.label}/{name}" + (f".{seen[name]}" if names.count(name) > 1 else ""))
+            if name.startswith(tuple(labels)) and link.label not in keep:
+                refs.append(f"{shape.label}/{link.label}/{name}" + (f".{seen[name]}" if names.count(name) > 1 else ""))
     return refs
 
 
-def backdrop(size, top=(36, 39, 46), bottom=(11, 12, 15), pool=(78, 84, 97)):
-    """A charcoal sweep, lighter behind the subject."""
+def backdrop(size, top=(246, 247, 249), bottom=(196, 199, 204), pool=(252, 252, 253)):
+    """A pale studio sweep, lighter behind the subject: the pearl panels and the black under-body both read on it."""
     w, h = size
     strip = Image.new("RGB", (1, h))
     strip.putdata([tuple(int(top[i] + (bottom[i] - top[i]) * y / (h - 1)) for i in range(3)) for y in range(h)])
     image = strip.resize((w, h))
     glow = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(glow).ellipse((w * 0.1, h * 0.02, w * 0.9, h * 0.84), fill=72)
+    ImageDraw.Draw(glow).ellipse((w * 0.1, h * 0.02, w * 0.9, h * 0.84), fill=96)
     return Image.composite(Image.new("RGB", (w, h), pool), image, glow.filter(ImageFilter.GaussianBlur(w * 0.2)))
 
 
@@ -128,8 +126,8 @@ def stage(path, grounded):
         x0, _, x1, y1 = box
         shadow = Image.new("L", (w, h), 0)
         spread = (x1 - x0) * 0.12
-        ImageDraw.Draw(shadow).ellipse((x0 - spread, y1 - h * 0.02, x1 + spread, y1 + h * 0.028), fill=200)
-        image = Image.composite(Image.new("RGB", (w, h), (0, 0, 0)), image, shadow.filter(ImageFilter.GaussianBlur(w * 0.02)))
+        ImageDraw.Draw(shadow).ellipse((x0 - spread, y1 - h * 0.02, x1 + spread, y1 + h * 0.028), fill=90)
+        image = Image.composite(Image.new("RGB", (w, h), (60, 62, 66)), image, shadow.filter(ImageFilter.GaussianBlur(w * 0.02)))
     image.paste(subject, (0, 0), subject)
     image.save(path)
 
@@ -154,8 +152,8 @@ def film(name, document):
             boxes = [shots[v, k].split()[3].getbbox() for k in range(count)]
             x0, x1, y1 = min(b[0] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)
             shadow = Image.new("L", stage_image.size, 0)
-            ImageDraw.Draw(shadow).ellipse((v * w + x0 - 30, y1 - h * 0.022, v * w + x1 + 30, y1 + h * 0.03), fill=200)
-            stage_image = Image.composite(Image.new("RGB", stage_image.size, (0, 0, 0)), stage_image,
+            ImageDraw.Draw(shadow).ellipse((v * w + x0 - 30, y1 - h * 0.022, v * w + x1 + 30, y1 + h * 0.03), fill=90)
+            stage_image = Image.composite(Image.new("RGB", stage_image.size, (60, 62, 66)), stage_image,
                                           shadow.filter(ImageFilter.GaussianBlur(w * 0.03)))
         for k in range(count):
             frame = stage_image.copy()

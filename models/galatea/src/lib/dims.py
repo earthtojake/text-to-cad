@@ -20,8 +20,9 @@ SHIN_LEN = KNEE[2] - ANKLE[2]    # 410
 
 # Knee drive: a rotary actuator high in the thigh turns the shin through a parallelogram
 # four-bar (crank = horn, pushrod = pivot spacing), so crank angle == knee angle exactly.
-KNEE_ACT = (HIP_X, 0.0, 800.0)   # crank pivot, on the thigh axis
-KNEE_ROD = KNEE_ACT[2] - KNEE[2]                  # 300, pushrod length
+KNEE_ACT = (HIP_X, 0.0, 780.0)   # crank pivot, on the thigh axis: 140 under the hip's, so that the knee drive's can passes
+                                 # under the hip's roll drive when the leg swings back
+KNEE_ROD = KNEE_ACT[2] - KNEE[2]                  # 280, pushrod length
 KNEE_CRANK_R = 55.0
 KNEE_CRANK_PSI = -62.5                            # deg from +Y (back) at knee = 0; flexion adds
 KNEE_RANGE = (0.0, 125.0)                         # transmission angle 27.5 deg at both ends
@@ -29,11 +30,11 @@ KNEE_ROD_R = 6.0                                  # a solid titanium rod: it pus
 
 # Ankle pitch drive: a double-ended actuator between the shin rails turns the ankle gimbal
 # through twin parallel pushrods (again a parallelogram: crank angle == ankle pitch).
-ANKLE_ACT = (HIP_X, 0.0, 345.0)
-ANKLE_ROD = ANKLE_ACT[2] - ANKLE[2]               # 255
+ANKLE_ACT = (HIP_X, 12.0, 345.0)
+ANKLE_ROD = math.hypot(ANKLE_ACT[1] - ANKLE[1], ANKLE_ACT[2] - ANKLE[2])   # 255.3: the drive stands 12 behind the ankle, as a calf does
 ANKLE_CRANK_R = 45.0                              # crank and gimbal arm point straight back (+Y)
-ANKLE_ROD_X = 34.0                                # pushrods sit this far either side of the leg's centre plane
-ANKLE_ROD_R = 3.5                                 # steel, behind the ankle like a tendon: push-off pulls them
+ANKLE_ROD_X = 35.5                                # the pushrod sits this far outboard of the leg's centre plane
+ANKLE_ROD_R = 4.5                                 # steel, behind the ankle like a tendon: push-off pulls it
 
 SHIN_RAIL_X = (40.0, 48.0)                        # shin rails: inner and outer face, from the centre plane
 FEMUR_PLATE_X = (18.0, 26.0)                      # femur plates: inner and outer face
@@ -47,12 +48,12 @@ WAIST = (0.0, WAIST_AXIS_Y, 1150.0)               # waist roll (Y) and pitch (X)
 # --------------------------------------------------------------------------------------------
 # Arm
 # --------------------------------------------------------------------------------------------
-SHOULDER_X = 205.0
+SHOULDER_X = 212.0
 SHOULDER = (SHOULDER_X, 0.0, 1420.0)              # shoulder pitch (X), roll (Y) and yaw (Z) meet here
 ELBOW = (SHOULDER_X, 0.0, 1130.0)                 # elbow axis (X)
-WRIST_ROLL = (SHOULDER_X, 0.0, 1039.0)            # forearm rotation (Z), just under the elbow
-WRIST = (SHOULDER_X, 0.0, 915.0)                  # wrist pitch (Y)
-WRIST_YAW = (SHOULDER_X, 0.0, 871.0)              # wrist yaw / deviation (X), 44 below the pitch axis
+WRIST_ROLL = (SHOULDER_X, 0.0, 1022.0)            # forearm rotation (Z), under the elbow drive's can
+WRIST = (SHOULDER_X, 0.0, 924.0)                  # wrist pitch (Y)
+WRIST_YAW = (SHOULDER_X, 0.0, 873.0)              # wrist yaw / deviation (X), 51 below the pitch axis: two 46 mm cans, crossed
 CHEST_SIDE_X = (132.0, 140.0)                     # chest side plates the shoulder actuators bolt to
 UPPER_ARM_LEN = SHOULDER[2] - ELBOW[2]            # 290
 FOREARM_LEN = ELBOW[2] - WRIST[2]                 # 215
@@ -82,35 +83,57 @@ THUMB_IP = tuple(b + THUMB_BONES[1] * k for b, k in zip(THUMB_MCP, THUMB_DIR))
 # --------------------------------------------------------------------------------------------
 NECK_BASE = (0.0, 14.0, 1497.0)                   # neck yaw (Z): the drive's output face, in the collar
 NECK_ROLL = (0.0, 32.0, 1531.0)                   # neck roll (Y): the neck leans from its root
-NECK = (0.0, 14.0, 1580.0)                        # neck pitch (X): the head nods at the skull's base
+NECK = (0.0, 14.0, 1586.0)                        # neck pitch (X): the head nods at the skull's base, 55 over the roll's can
 HEAD_TOP_Z = 1752.0
 
 # --------------------------------------------------------------------------------------------
-# Actuator family: one design in five frame sizes. R = mounting flange radius, L = body
-# length behind the mounting face, r_out = output flange radius, bore = hollow shaft (cables),
-# ring = flange ring width, screw = stator screw size, n = screws per bolt circle.
+# Actuators: RobStride quasi-direct drives (a frameless motor, a 7.75 to 10:1 planetary stage,
+# encoder and driver in one housing; 48 V, CAN). Dimensions, bolt circles, torques and masses are
+# the maker's (robstride.com product pages and its Product Specification Document, 2025-06-26):
+#
+#   front  (radius, length)  the main body, whose front face is the mounting face
+#   rear   (radius, length)  the cover behind it, over the driver board
+#   ears   radius over the mounting ears, or None for a plain can
+#   pilot  (radius, height)  the register standing proud of the mounting face
+#   mount  (screw, count, pitch radius)  tapped holes in the mounting face
+#   out    (screw, count, pitch radius)  tapped holes in the output flange
+#   peak, rated  N m at the output;  kg  the unit's mass
+#   hub    radius of the adapter this robot bolts to the output flange: it stands through the
+#          parent's mounting plate and the child's lug bolts to it (not a RobStride part)
+#
+# Not from a drawing, and marked so in the README: the RS00's and RS05's rear cover step (the
+# maker gives their diameter and length only).
 # --------------------------------------------------------------------------------------------
 ACTUATORS = {
-    "A110": dict(R=55.0, L=44.0, r_out=34.0, bore=10.0, ring=10.0, screw="M5", n=12, nm=160),
-    "A86": dict(R=43.0, L=50.0, r_out=26.0, bore=8.0, ring=8.0, screw="M4", n=10, nm=85),
-    "A70": dict(R=35.0, L=44.0, r_out=21.0, bore=6.0, ring=7.5, screw="M4", n=8, nm=42),
-    "A52": dict(R=26.0, L=36.0, r_out=15.0, bore=4.0, ring=6.5, screw="M3", n=8, nm=16),
-    "A52L": dict(R=26.0, L=54.0, r_out=15.0, bore=4.0, ring=6.5, screw="M3", n=8, nm=27),   # long stack: ankle roll
-    "A40": dict(R=20.0, L=28.0, r_out=11.5, bore=3.0, ring=6.0, screw="M3", n=6, nm=7),
+    "RS04": dict(front=(60.0, 39.0), rear=(47.0, 13.2), ears=None, pilot=(25.0, 3.3), mount=("M4", 10, 53.0), out=("M5", 9, 18.0),
+                 peak=120.0, rated=40.0, kg=1.42, hub=26.0),
+    "RS03": dict(front=(49.0, 39.5), rear=(39.75, 12.1), ears=53.0, pilot=(35.0, 2.5), mount=("M4", 8, 49.0), out=("M4", 6, 15.18),
+                 peak=60.0, rated=20.0, kg=0.88, hub=22.0),
+    "RS06": dict(front=(40.0, 33.0), rear=(35.0, 14.5), ears=44.0, pilot=(26.0, 1.5), mount=("M3", 8, 41.0), out=("M4", 6, 12.0),
+                 peak=36.0, rated=11.0, kg=0.621, hub=19.0),
+    "RS00": dict(front=(28.5, 41.0), rear=(25.0, 10.0), ears=None, pilot=(17.5, 1.5), mount=("M3", 6, 25.0), out=("M3", 6, 13.5),
+                 peak=14.0, rated=5.0, kg=0.31, hub=20.0),
+    "RS05": dict(front=(23.0, 35.0), rear=(20.0, 9.0), ears=None, pilot=(15.0, 1.5), mount=("M3", 4, 20.75), out=("M4", 6, 12.0),
+                 peak=5.5, rated=1.6, kg=0.191, hub=17.0),
 }
-CALF_DRIVE_NM = 60.0   # the ankle's pitch drive, a double-ended unit of its own between the shin rails:
-                       # 72 mm across and 48 long, between an A70 and an A86, and rated between them
 
-# Which drive turns which joint: control -> (frame size, how many share the joint). The builders
-# place them by these names (`Hardware.actuator` checks the size), and `checks/loads.py` reads
-# the peak torques (`nm`) from here.
+
+def actuator_length(size):
+    """How far an actuator stands behind its mounting face."""
+    spec = ACTUATORS[size]
+    return spec["front"][1] + spec["rear"][1]
+
+
+# Which drive turns which joint: control -> (model, how many share the joint). The builders place
+# them by these names (`Hardware.actuator` checks the model), and `checks/loads.py` reads the
+# torques from here.
 DRIVES = {
-    "hip_yaw": ("A86", 1), "hip_roll": ("A86", 1), "hip_pitch": ("A110", 1), "knee": ("A110", 1),
-    "ankle_pitch": ("calf", 1), "ankle_roll": ("A52L", 1),
-    "waist_yaw": ("A86", 1), "waist_roll": ("A86", 1), "waist_pitch": ("A70", 2),
-    "shoulder_pitch": ("A86", 1), "shoulder_roll": ("A70", 1), "shoulder_yaw": ("A52", 1), "elbow": ("A70", 1),
-    "wrist_roll": ("A52", 1), "wrist_pitch": ("A40", 1), "wrist_yaw": ("A40", 1),
-    "neck_yaw": ("A70", 1), "neck_roll": ("A40", 1), "neck_pitch": ("A52", 1),
+    "hip_yaw": ("RS06", 1), "hip_roll": ("RS04", 1), "hip_pitch": ("RS04", 1), "knee": ("RS04", 1),
+    "ankle_pitch": ("RS04", 1), "ankle_roll": ("RS00", 1),
+    "waist_yaw": ("RS06", 1), "waist_roll": ("RS06", 1), "waist_pitch": ("RS06", 2),
+    "shoulder_pitch": ("RS03", 1), "shoulder_roll": ("RS06", 1), "shoulder_yaw": ("RS00", 1), "elbow": ("RS06", 1),
+    "wrist_roll": ("RS05", 1), "wrist_pitch": ("RS05", 1), "wrist_yaw": ("RS05", 1),
+    "neck_yaw": ("RS00", 1), "neck_roll": ("RS05", 1), "neck_pitch": ("RS00", 1),
 }
 PLATE_T = 8.0          # the parent's mounting plate an actuator's output passes through
 ROTOR_PROUD = 9.0      # the output flange stands this far past the mounting face (plate + 1)
