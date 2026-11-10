@@ -51,11 +51,12 @@ qualifier's path, for a label two pairs share). A declaration no pair's joint ta
 node that holds it, and left out. A declared exclusion (``declarations.exclude``) is
 each link holding the part that declares it, with each link holding a part at or below a node of
 the label it names (a part's own label names it), or at or below the one occurrence a shape it was
-given names (``excludePaths``: never the others of that shape's label); a label or a path that
+given names (``excludePaths``: that occurrence's place in the tree, its child indices from the root,
+so never the others of that shape's label, its siblings among them); a label or a place that
 names no node is refused by name,
-and two links' pair is kept once. The part pairs themselves are kept too (``part_excludes``, by
-occurrence path): a joint stop sweep sets aside those two parts alone, where a simulator filters
-their links.
+and two links' pair is kept once. The part pairs themselves are kept too (``part_excludes``, each
+part by its instance, which no other part shares as it may its label and its path): a joint stop
+sweep sets aside those two parts alone, where a simulator filters their links.
 
 **Frames** (``description.py``'s **Units and frames**). For a pair from link 1 (the part holding the
 moving joint) to link 2 (the rigid joint's), with ``W1``/``W2`` the links as built, ``item_1``/``item_2``
@@ -176,7 +177,8 @@ def _values(value: Any) -> tuple[float, ...]:
 
 
 def _unique(name: str, taken: set[str]) -> str:
-    found, at = name or "part", 2
+    name = name or "part"  # a node with no name is a part: its suffix goes on that word too
+    found, at = name, 2
     while found in taken:
         found, at = f"{name}_{at}", at + 1
     taken.add(found)
@@ -435,21 +437,37 @@ class _Describer:
                 links.insert(at, child)
                 joints.append(self._fixed(child.name, link, child))
 
-    def _excludes(self, links: list[Link]) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
+    def _excludes(self, links: list[Link]) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[int, int], ...]]:
         """The link pairs the parts' declarations say never collide (the module's **Drives and exclusions**), and
-        the part pairs they name, each by its two occurrence paths, sorted: what a joint stop sweep sets aside
-        (``ranges``), where a simulator filters the links."""
+        the part pairs they name, each by its two instances, the lower first, sorted: what a joint stop sweep
+        sets aside (``ranges``), where a simulator filters the links."""
         owner = {index: at for at, link in enumerate(links) for index in link.parts}
+        # Each node's place in the tree (its child indices from the root) with its path of labels, and each
+        # instance's place: a place names one occurrence, where its labels name every sibling labelled as it is.
+        labels: dict[tuple[int, ...], str] = {}
+        places: dict[int, tuple[int, ...]] = {}
+
+        def walk(node: dict[str, Any], at: tuple[int, ...], above: str) -> None:
+            labels[at] = f"{above}/{node.get('name') or ''}" if at else str(node.get("name") or "")
+            for position, child in enumerate(node.get("children") or ()):
+                walk(child, at + (position,), labels[at])
+            if "children" not in node:
+                places[int(node["instance"])] = at
+
+        walk(self.structure["tree"], (), "")
         found: set[tuple[int, int]] = set()
-        parts: set[tuple[str, str]] = set()
+        parts: set[tuple[int, int]] = set()
         for index, at in sorted(owner.items()):
             declared = self._declared(index)
-            # A label names every part at or below a node of it; a shape, the path of its occurrence, that alone.
+            # A label names every part at or below a node of it; a shape, the place of its occurrence, that alone.
             named_by = [(label, [other for other in owner if label in self.instances[other]["path"].split("/")])
                         for label in declared.get("exclude") or ()]
-            named_by += [(path, [other for other in owner if self.instances[other]["path"] == path
-                                 or self.instances[other]["path"].startswith(path + "/")])
-                         for path in declared.get("excludePaths") or ()]
+            for given in declared.get("excludePaths") or ():
+                place = tuple(given)
+                if place not in labels:
+                    raise DescriptionError(f"part {self._name(index)!r} excludes the occurrence {given!r}, which "
+                                           "names no part or assembly of the document")
+                named_by.append((labels[place], [other for other in owner if places[other][:len(place)] == place]))
             for label, named in named_by:
                 if not named:
                     raise DescriptionError(f"part {self._name(index)!r} excludes {label!r}, which names no part or "
@@ -460,11 +478,9 @@ class _Describer:
                                   "holds too: a body never collides with itself")
                         continue
                     found.add((min(at, other), max(at, other)))
-                mine = str(self.instances[index]["path"])
                 for other in named:
                     if owner[other] != at:
-                        first, second = sorted((mine, str(self.instances[other]["path"])))
-                        parts.add((first, second))
+                        parts.add((min(index, other), max(index, other)))
         return tuple((links[a].name, links[b].name) for a, b in sorted(found)), tuple(sorted(parts))
 
     def _drives(self, kinematics: dict[str, Any]) -> None:
@@ -787,7 +803,10 @@ class _Describer:
         return prototype["key"], json.dumps(self._options(prototype), sort_keys=True, separators=(",", ":"))
 
     def _geometry(self, link: Link) -> None:
-        """A link's visuals, collisions, named frames and inertial, each in its frame."""
+        """A link's visuals, collisions, named frames and inertial, each in its frame. A visual and its collisions
+        carry the instance they are of (``Visual.instance``): parts of one label are named alike. A frame whose
+        name the link holds already is kept under its part's name, ``<part>/<frame>``, numbered on (``_2``,
+        ``_3``) where parts of one name each hold it, and each such name is warned."""
         inverse = np.linalg.inv(link.frame)
         masses: list[tuple[float, np.ndarray, np.ndarray]] = []
         massless: list[str] = []
@@ -798,27 +817,31 @@ class _Describer:
             placement = inverse @ self.worlds[index]
             material = (prototype.get("material") or {}).get("material") or {}
             key = prototype["key"]
+            # A part's name is its label, which the parts of one link may share: its instance tells it apart.
             link.visuals.append(Visual(name, Geometry("mesh", placement, mesh=key),
                                        srgb(instance.get("color") or prototype.get("color")),
                                        material.get("name") or None, path=instance["path"],
-                                       looks=self._looks(instance, prototype)))
+                                       looks=self._looks(instance, prototype), instance=index))
             kind = prototype.get("collision") or self.collision_default
             surface = tuple(float(value) for value in prototype.get("friction") or ())
             if kind == "mesh" or (kind == "decomposed" and not self.decompose):
-                link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key), surface))
+                link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key), surface,
+                                                 instance=index))
             elif kind == "decomposed":
                 for at, hull in enumerate(self.hulls.get(self._cut(prototype), ())):
                     link.collisions.append(Collision(f"{name}_hull{at}", Geometry("mesh", placement, mesh=hull),
-                                                     surface, part=name))
+                                                     surface, part=name, instance=index))
             elif kind != "none":
                 frame, size = self._fit(key, prototype["name"], kind)
-                link.collisions.append(Collision(name, Geometry(kind, placement @ frame, size=size), surface))
+                link.collisions.append(Collision(name, Geometry(kind, placement @ frame, size=size), surface,
+                                                 instance=index))
             for frame_name, values in sorted((prototype.get("frames") or {}).items()):
                 named = frame_name
                 if named in link.frames:
-                    named = f"{name}/{frame_name}"
-                    self.warn(f"link {link.name!r} holds frame {frame_name!r} twice: the one on {name} is "
-                              f"{named!r}")
+                    # Under its part's name, and, where parts of one name each hold it, numbered on (``_unique``).
+                    named = _unique(f"{name}/{frame_name}", set(link.frames))
+                    self.warn(f"link {link.name!r} holds frame {frame_name!r} more than once: the one on {name} "
+                              f"is {named!r}")
                 link.frames[named] = placement @ column_major(values)
             rotation = placement[:3, :3]
             points = self._points(prototype)

@@ -5,7 +5,9 @@ forward kinematics does, a pair followed backwards and a chain with a slide too;
 on the joints that follow; a part's collision and named frames, declared on the part and round-tripped
 through the xbf and through a warm build; a part kept a body of its own, an exclusion and a joint's drive
 limits and dynamics, declared, described and round-tripped through the xbf, and refused where they are
-wrong; limits on a joint an assembly holds (a link of several parts) described and round-tripped, and one no
+wrong; a shape excluded among siblings of its label, a part or an assembly, naming that occurrence alone by its
+place in the tree, in the description, the document and a tree rebuilt from it, and a frame that parts of one
+name each hold kept once a part; limits on a joint an assembly holds (a link of several parts) described and round-tripped, and one no
 pair takes warned; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
 a part with no density among parts that have one carrying none of their mass, said by the mass, and a mass that
 cannot be made refused; a turned link's inertia in its own frame, as the description, the
@@ -567,8 +569,9 @@ class BodiesTest(_Folder):
         self.assertEqual((elbow.effort, elbow.velocity, elbow.armature, elbow.damping, elbow.friction),
                          (27.0, 6.28, 0.012, 0.5, 0.0))
         self.assertEqual(description.excludes, (("base", "camera"),))
-        # And the two parts it names, by occurrence path: what a joint stop sweep sets aside, those two alone.
-        self.assertEqual(description.part_excludes, (("bodies/base", "bodies/cam"),))
+        # And the two parts it names, each by its instance: what a joint stop sweep sets aside, those two alone.
+        paths = [instance["path"] for instance in structure["instances"]]
+        self.assertEqual(description.part_excludes, ((paths.index("bodies/base"), paths.index("bodies/cam")),))
         self.assertEqual(description.warnings, ())
         # The structure carries them, the same from the file as from the build's tree, and a shape rebuilt from
         # the document carries them as the model gave them.
@@ -618,9 +621,10 @@ class BodiesTest(_Folder):
         with self.assertRaisesRegex(DescriptionError, "part 'cam' excludes 'nothing', which names no part"):
             self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude(cam, "nothing")'))
         # A label first and the shape second is the same declaration.
-        swapped, _structure = self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude("base", cam)'))
-        self.assertEqual((swapped.excludes, swapped.part_excludes), ((("base", "camera"),),
-                                                                     (("bodies/base", "bodies/cam"),)))
+        swapped, structure = self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude("base", cam)'))
+        paths = [instance["path"] for instance in structure["instances"]]
+        self.assertEqual((swapped.excludes, swapped.part_excludes),
+                         ((("base", "camera"),), ((paths.index("bodies/base"), paths.index("bodies/cam")),)))
 
 
 # Two arms on a base, each link holding a part labelled "bracket", as a vendor's STEP repeats a part's label: the
@@ -654,10 +658,11 @@ class RepeatedLabelsTest(_Folder):
         shape, structure = self.described("repeated", REPEATED.format(other="links[0].children[0]"))
         # The left bracket alone: the right one, of the same label, still collides with the base.
         self.assertEqual(shape.excludes, (("base", "left"),))
-        self.assertEqual(shape.part_excludes, (("repeated/base", "repeated/left/bracket"),))
+        paths = [instance["path"] for instance in structure["instances"]]
+        self.assertEqual(shape.part_excludes, ((paths.index("repeated/base"), paths.index("repeated/left/bracket")),))
+        # The document names the occurrence by its place in the tree: the left link's first component.
         by_name = {prototype["name"]: prototype for prototype in structure["prototypes"]}
-        self.assertEqual((by_name["base"].get("exclude"), by_name["base"]["excludePaths"]),
-                         (None, ["repeated/left/bracket"]))
+        self.assertEqual((by_name["base"].get("exclude"), by_name["base"]["excludePaths"]), (None, [[1, 0]]))
         # Rebuilt from the document, the base and the left bracket carry one mark, the right bracket none: placed in
         # another model, the tree names that occurrence still.
         rebuilt = Source.read(self.folder / "XBF/repeated.xbf").shape()
@@ -668,6 +673,105 @@ class RepeatedLabelsTest(_Folder):
         # The label names every part at or below a node of it: both brackets.
         label, _structure = self.described("repeated", REPEATED.format(other='"bracket"'))
         self.assertEqual(label.excludes, (("base", "left"), ("base", "right")))
+
+
+# A holder of three screws labelled alike, each with a frame of one name, and two clamps labelled alike, each
+# a jaw and a pad, all one link; an arm on a hinge excludes the middle screw and the second clamp, those shapes.
+SIBLINGS = """
+import build123d as bd
+from cad.build123d import exclude, frame
+from cad.engine import xbf
+
+
+@xbf("XBF/siblings.xbf")
+def siblings():
+    base = bd.Box(40, 40, 10)
+    base.label = "base"
+    screws = []
+    for x in (-10, 0, 10):
+        screw = bd.Pos(x, 0, 8) * bd.Cylinder(2, 6)
+        screw.label = "screw"
+        frame(screw, "tip", bd.Pos(0, 0, 3))
+        screws.append(screw)
+    clamps = []
+    for y in (-15, 15):
+        jaw = bd.Pos(0, y, 8) * bd.Box(4, 4, 6)
+        jaw.label = "jaw"
+        pad = bd.Pos(6, y, 8) * bd.Box(4, 3, 6)
+        pad.label = "pad"
+        clamps.append(bd.Compound(children=[jaw, pad], label="clamp"))
+    holder = bd.Compound(children=[base, *screws, *clamps], label="holder")
+    arm = bd.Pos(0, 0, 40) * bd.Box(10, 10, 60)
+    arm.label = "arm"
+    hinge = bd.RevoluteJoint("shoulder", base, axis=bd.Axis((0, 0, 10), (1, 0, 0)), angular_range=(-90, 90))
+    bd.RigidJoint("shoulder", arm, hinge.location)
+    hinge.connect_to(arm.joints["shoulder"], angle=0)
+    exclude(arm, screws[1])
+    exclude(arm, clamps[1])
+    return bd.Compound(children=[holder, arm], label="siblings")
+"""
+
+
+class SiblingsOfOneLabelTest(_Folder):
+    def test_a_shape_excluded_among_siblings_of_its_label_names_that_occurrence_alone(self) -> None:
+        import build123d as bd
+
+        description, structure = self.described("siblings", SIBLINGS)
+        paths = [instance["path"] for instance in structure["instances"]]
+        self.assertEqual(paths, ["siblings/holder/base", *["siblings/holder/screw"] * 3,
+                                 *["siblings/holder/clamp/jaw", "siblings/holder/clamp/pad"] * 2, "siblings/arm"],
+                         "the siblings share their paths: a path names all three screws, and both clamps")
+        # The middle screw alone, of three of one path; and the second clamp, an assembly: each part below that one
+        # occurrence, and none of the first clamp's. Each pair by its two instances.
+        self.assertEqual(description.part_excludes, ((2, 8), (6, 8), (7, 8)))
+        self.assertEqual(description.excludes, (("base", "arm"),))
+        # The document names each by its place in the tree, the holder's third and sixth components.
+        arm = next(prototype for prototype in structure["prototypes"] if prototype["name"] == "arm")
+        self.assertEqual((arm.get("exclude"), arm["excludePaths"]), (None, [[0, 2], [0, 5]]))
+        path = self.folder / "XBF/siblings.xbf"
+        self.assertEqual(document.Loaded(path).structure()["prototypes"],
+                         document.tree_structure(document.saved(path), path)["prototypes"])
+        # Rebuilt from the document, the middle screw and the second clamp carry a mark each, the arm's two, and no
+        # sibling of theirs carries one.
+        rebuilt = Source.read(path).shape()
+        holder, arm = rebuilt.children
+        marked = [at for at, child in enumerate(holder.children) if "_excluded" in child.__dict__]
+        self.assertEqual(marked, [2, 5])
+        self.assertEqual(sorted(arm.__dict__["_exclude"]),
+                         sorted(holder.children[2].__dict__["_excluded"] + holder.children[5].__dict__["_excluded"]))
+        self.assertFalse([child.label for clamp in holder.children[4:] for child in clamp.children
+                          if "_excluded" in child.__dict__], "a clamp is marked, not the parts below it")
+        # Placed in another model, the tree names those two occurrences still, where they then stand.
+        extra = bd.Box(5, 5, 5)
+        extra.label = "extra"
+        again = document.collect(bd.Compound(children=[extra, rebuilt], label="cell"), "cell")
+        declared = {part.name: part.declared for part in again.parts}
+        self.assertEqual(declared["arm"], {"excludePaths": [[1, 0, 2], [1, 0, 5]]})
+        # An occurrence the document does not hold (a file written otherwise) is refused, by the part that names it.
+        stale = Source.read(path)
+        next(prototype for prototype in stale.structure["prototypes"]
+             if prototype["name"] == "arm")["excludePaths"] = [[0, 9]]
+        with self.assertRaisesRegex(DescriptionError, r"part 'arm' excludes the occurrence \[0, 9\], which names no "
+                                                      "part or assembly"):
+            describe(stale.view())
+
+    def test_a_frame_parts_of_one_name_each_hold_is_kept_once_a_part_and_each_rename_said(self) -> None:
+        from cad.engine.describe import _unique
+
+        description, _structure = self.described("siblings", SIBLINGS)
+        # Three screws in one link, each with a frame "tip": the first keeps the name, the second is its part's,
+        # and the third, whose part is named as the second's, is numbered on -- none replaces another.
+        base = description.link("base")
+        self.assertEqual(sorted(base.frames), ["screw/tip", "screw/tip_2", "tip"])
+        at = {name: tuple(np.round(frame[:3, 3] * 1000, 6)) for name, frame in base.frames.items()}
+        self.assertEqual((at["tip"][0], at["screw/tip"][0], at["screw/tip_2"][0]), (-10.0, 0.0, 10.0))
+        self.assertEqual([text for text in description.warnings if "frame" in text],
+                         ["link 'base' holds frame 'tip' more than once: the one on screw is 'screw/tip'",
+                          "link 'base' holds frame 'tip' more than once: the one on screw is 'screw/tip_2'"])
+        # A name made unique is numbered on the name it has: one with no name is a part, and the next ``part_2``.
+        taken = {"part"}
+        self.assertEqual((_unique("", taken), _unique("", taken), _unique("arm", taken), _unique("arm", taken)),
+                         ("part_2", "part_3", "arm", "arm_2"))
 
 
 # The hinge's links each a compound of parts, the moving joint on the base's compound: limits declared on the

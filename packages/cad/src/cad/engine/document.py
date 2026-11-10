@@ -388,7 +388,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         holder = Assembly(root_name, [Component(root, location, root.name, color)])
         order.append(holder)
         root = holder
-    _named_excludes(root, parts, marked, (0,) if held else ())
+    _named_excludes(parts, marked, (0,) if held else ())
     tree = Tree(root, order, parts, (signature, _location_key(location), root_name))
     found = harvested(tree.signature) if harvested is not None else None
     if found is None:
@@ -407,20 +407,13 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
     return tree
 
 
-def _named_excludes(root: Any, parts: list[Part], marked: dict[str, list[tuple[int, ...]]],
-                    prefix: tuple[int, ...]) -> None:
-    """Each part's ``exclude`` marks (``declarations.exclude`` given a shape) made the paths of the occurrences
-    they mark, as the document names its instances (``excludePaths``): a shape names that occurrence alone, never
-    the others of its label. A mark no occurrence carries (a shape the result does not hold) names nothing."""
+def _named_excludes(parts: list[Part], marked: dict[str, list[tuple[int, ...]]], prefix: tuple[int, ...]) -> None:
+    """Each part's ``exclude`` marks (``declarations.exclude`` given a shape) made the places of the occurrences
+    they mark (``excludePaths``): each its component indices from the document's root, as the structure's tree
+    nests its children, which names that occurrence alone -- never the others of its label, which its path of
+    labels names with it where siblings share one (a vendor's three ``screw``). A mark no occurrence carries (a
+    shape the result does not hold) names nothing."""
     from cad.engine.declarations import MARK
-
-    def named(occurrence: tuple[int, ...]) -> str:
-        node, names = root, [root.name]
-        for at in occurrence:
-            component = node.components[at]
-            names.append(component.name or component.prototype.name or f"{names[-1]}.{at + 1}")
-            node = component.prototype
-        return "/".join(names)
 
     for part in parts:
         given = part.declared.get("exclude") or []
@@ -432,9 +425,9 @@ def _named_excludes(root: Any, parts: list[Part], marked: dict[str, list[tuple[i
             part.declared["exclude"] = labels
         else:
             del part.declared["exclude"]
-        paths = sorted({named(prefix + occurrence) for mark in marks for occurrence in marked.get(mark, ())})
-        if paths:
-            part.declared["excludePaths"] = paths
+        places = sorted({prefix + occurrence for mark in marks for occurrence in marked.get(mark, ())})
+        if places:
+            part.declared["excludePaths"] = [list(place) for place in places]
 
 
 def merge(tree: Tree) -> None:
@@ -2155,8 +2148,10 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 
 
 #: What a part declares beside its collision and its frames, by the key the structure and the label hold it
-#: under: its body's name ("" for the part's own), the labels it does not collide with and the paths of the
-#: occurrences it does not collide with (``excludePaths``: a shape given to ``exclude``), its joints' drive
+#: under: its body's name ("" for the part's own), the labels it does not collide with and the occurrences it
+#: does not collide with (``excludePaths``: a shape given to ``exclude``, by its place in the tree,
+#: ``[[component index, ...], ...]`` from the document's root: one occurrence, whatever labels its siblings
+#: share with it, and every part below it where it is an assembly), its joints' drive
 #: limits and dynamics (``{label: {"effort": ..., "damping": ..., "up"?}}``, the keys declared, and ``up``, how
 #: many levels above the part the node holding the joint is, where an assembly holds it), the masses
 #: declared on it or above it (``[[levels above the part, grams], ...]``, the outermost first: 0 is the

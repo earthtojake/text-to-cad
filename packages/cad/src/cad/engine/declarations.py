@@ -208,7 +208,8 @@ def exclude(a: Any, b: Any) -> Any:
 
     A shape is named by a mark kept on both (``EXCLUDED`` on it, ``EXCLUDE`` on the keeper), as a
     material is kept: a copy, ``moved`` and ``located`` carry it, and the document names the
-    occurrence that carries it by its path (``document.collect``); a shape the model's result does not
+    occurrence that carries it by its place in the tree (``document.collect``: its component indices
+    from the root, which no sibling shares as it may its label); a shape the model's result does not
     hold excludes nothing."""
     import uuid
 

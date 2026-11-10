@@ -10,7 +10,8 @@ is cut into hulls for the collision geometry alone. The stops are said as a tabl
 it starts and ends; a verbose one says each step as it starts. A pair near as built, its gap narrowing a hair as the
 joint turns, stops nothing until it truly closes, and is reported with its gaps. A pair drawn one inside the other
 stops nothing where its overlap shrinks or slides, only where it deepens, and is reported with its volume and
-depth."""
+depth. Parts labelled alike in one link are each tested, each with its own collisions, and one of them excluded by
+its shape is set aside alone."""
 
 from __future__ import annotations
 
@@ -186,6 +187,39 @@ def motor():
 """
 
 
+# An arm on a hinge about Z, 1 mm over a plate, between three pegs standing on the plate 30 mm from the hinge, all
+# labelled "peg" as a vendor labels its repeated parts: one behind the hinge (the first of the three), one 60 degrees
+# round each way. The arm turning either way meets the peg 60 degrees round, about 49 degrees on.
+PEGS = """
+import math
+
+import build123d as bd
+from cad.build123d import exclude
+from cad.engine import xbf
+
+
+@xbf("XBF/pegs.xbf")
+def pegs():
+    plate = bd.Pos(0, 0, -6) * bd.Box(120, 120, 10)
+    plate.label = "plate"
+    stops = []
+    for degrees in (180, 60, -60):
+        at = math.radians(degrees)
+        peg = bd.Pos(30 * math.cos(at), 30 * math.sin(at), 4) * bd.Box(6, 6, 10)
+        peg.label = "peg"
+        stops.append(peg)
+    base = bd.Compound(children=[plate, *stops], label="base")
+    arm = bd.Pos(5, 0, 0) * bd.Box(45, 4, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    arm.label = "arm"
+    upper = bd.Compound(children=[arm], label="upper")
+    hinge = bd.RevoluteJoint("hinge", base, axis=bd.Axis((0, 0, 0), (0, 0, 1)), angular_range=(-360, 360))
+    bd.RigidJoint("hinge", upper, hinge.location)
+    hinge.connect_to(upper.joints["hinge"], angle=0)
+    {declare}
+    return bd.Compound(children=[base, upper], label="pegs")
+"""
+
+
 class Ranges(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="cad-ranges-")).resolve()
@@ -274,6 +308,74 @@ class Ranges(unittest.TestCase):
         self.assertLess(elbow["lower"], -60.0)
         self.assertEqual(101.0 - 1.0, elbow["upper"])
         self.assertEqual("wall", slide["lower_contact"]["still"])
+
+    def pegs(self, declare: str = "pass") -> dict[str, Any]:
+        """The pegs' hinge swept, the arm declared as ``declare`` says."""
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "pegs.py"
+        script.write_text(textwrap.dedent(PEGS.format(declare=declare)), encoding="utf-8")
+        report = engine_build.build(script, ["pegs"], cwd=self.folder)[0]
+        self.assertTrue(report["ok"], report)
+        [hinge] = xbf.ranges(self.folder / "XBF/pegs.xbf").measurements["joints"]
+        return hinge
+
+    def test_parts_labelled_alike_in_one_link_are_each_tested(self) -> None:
+        hinge = self.pegs()
+        # Three pegs of one label, and so of one name and one path, in the base's link: the arm stops at the one 60
+        # degrees round each way, the second and the third, not at the first alone, behind the hinge (170 degrees).
+        self.assertEqual(("peg", "peg"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
+        self.assertTrue(-56.0 <= hinge["lower"] <= -40.0 and 40.0 <= hinge["upper"] <= 56.0, hinge)
+        self.assertEqual(hinge["lower"], -hinge["upper"], "the two pegs stand alike, either side")
+
+    def test_a_shape_excluded_among_parts_of_its_label_is_set_aside_alone(self) -> None:
+        hinge = self.pegs("exclude(arm, stops[1])")
+        # The peg 60 degrees round is set aside, that shape: the arm passes it and turns on to the peg behind the
+        # hinge; the other way it still stops at the third peg, which shares the excluded one's label and path.
+        self.assertEqual(("peg", "peg"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
+        self.assertTrue(-56.0 <= hinge["lower"] <= -40.0, hinge)
+        self.assertTrue(160.0 <= hinge["upper"] <= 176.0, hinge)
+
+    def test_each_part_takes_its_own_collisions_by_its_instance_and_by_hand_in_order(self) -> None:
+        import numpy as np
+
+        from cad.engine.description import Collision, Geometry, Link, Visual
+        from cad.engine.ranges import _tested
+
+        def box(size: float) -> Geometry:
+            return Geometry("box", np.eye(4), size=(size, size, size))
+
+        def tested(link: Link, geometry: str) -> list[tuple[str, float]]:
+            return [(name, shape.size[0]) for name, _instance, shape in _tested(link, geometry)]
+
+        grey = (0.5, 0.5, 0.5, 1.0)
+        # Four parts named alike: one whole, one cut into two hulls, one that collides as nothing, one whole.
+        for instances in ((4, 5, 6, 7), (None,) * 4):
+            first, cut, none, last = instances
+            link = Link("base", np.eye(4),
+                        visuals=[Visual("screw", box(size), grey, instance=instance)
+                                 for size, instance in zip((1.0, 2.0, 3.0, 4.0), instances)],
+                        collisions=[Collision("screw", box(1.5), instance=first),
+                                    Collision("screw_hull0", box(2.5), part="screw", instance=cut),
+                                    Collision("screw_hull1", box(2.6), part="screw", instance=cut),
+                                    Collision("screw", box(4.5), instance=last)])
+            with self.subTest(instances=instances):
+                if none is not None:
+                    self.assertEqual([("screw", 1.0), ("screw", 2.0), ("screw", 4.0)], tested(link, "parts"))
+                    self.assertEqual([4, 5, 5, 7], [instance for _name, instance, _shape in _tested(link, "collision")])
+                else:
+                    # By hand no instance says which part collides as nothing: the collisions are taken in order,
+                    # one part's each, so the three that collide are the first three of the name.
+                    self.assertEqual([("screw", 1.0), ("screw", 2.0), ("screw", 3.0)], tested(link, "parts"))
+                self.assertEqual([("screw", 1.5), ("screw", 2.5), ("screw", 2.6), ("screw", 4.5)],
+                                 tested(link, "collision"))
+        # Two parts of one name, each cut into hulls, by hand: a hull named again is the next part's first.
+        link = Link("base", np.eye(4), visuals=[Visual("screw", box(1.0), grey), Visual("screw", box(2.0), grey)],
+                    collisions=[Collision("screw_hull0", box(1.5), part="screw"),
+                                Collision("screw_hull1", box(1.6), part="screw"),
+                                Collision("screw_hull0", box(2.5), part="screw")])
+        self.assertEqual([("screw", 1.0), ("screw", 2.0)], tested(link, "parts"))
 
     def test_a_pair_near_as_built_stops_only_where_its_gap_closes(self) -> None:
         from cad import xbf

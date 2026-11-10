@@ -82,7 +82,8 @@ at zero; a writer that can close it does (MJCF), one that cannot leaves it open 
 
 **Contacts.** ``excludes`` are the link pairs a model says never collide (``cad.build123d.exclude``),
 each pair once, in link order; what a writer finds touching at rest is its own (``export/contact.py``).
-``part_excludes`` are the part pairs the same declarations name, by occurrence path: a joint stop sweep
+``part_excludes`` are the part pairs the same declarations name, each part by the document's instance it is
+(``Visual.instance``, never its name or its path, which the parts of one label share): a joint stop sweep
 (``ranges``) sets aside those two parts, not the rest of their links.
 
 **Poses.** The mechanism's named states, each as ``{joint: value}`` around zero, in radians or
@@ -183,6 +184,9 @@ class Visual:
     material: str | None = None  # the material's name, where the part has one
     path: str = ""  # the part's occurrence path in the document, for messages (``shown``); "" where it has none
     looks: tuple[Look, ...] = ()
+    #: The document's instance the part is (its index, as ``Link.parts`` holds it): what tells it from the others
+    #: of its name and path, which parts labelled alike share; None in a description not made of a document.
+    instance: int | None = None
 
     def drawn(self) -> list[tuple[str, Geometry, tuple[float, float, float, float], str | None]]:
         """What a writer draws of the part: (name, geometry, colour, material) for each piece -- the part whole, or
@@ -200,6 +204,7 @@ class Collision:
     geometry: Geometry
     friction: tuple[float, ...] = ()  # (sliding,) or (sliding, torsional, rolling); () where none is declared
     part: str = ""  # the part it is one hull of (a decomposition: ``name`` is ``<part>_hull<i>``); "" where ``name`` is
+    instance: int | None = None  # the document's instance it collides for (its part's ``Visual.instance``), or None
 
     @property
     def of(self) -> str:
@@ -303,9 +308,10 @@ class Description:
     closures: list[Closure] = field(default_factory=list)
     warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
     excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)
-    #: The part pairs those declarations name, each by its two occurrence paths (``Visual.path``): what a joint stop
-    #: sweep sets aside (``ranges``), two parts alone where a simulator filters their links.
-    part_excludes: tuple[tuple[str, str], ...] = ()
+    #: The part pairs those declarations name, each by its two parts' instances in the document
+    #: (``Visual.instance``), the lower first: what a joint stop sweep sets aside (``ranges``), two parts alone
+    #: where a simulator filters their links, however many other parts share their labels.
+    part_excludes: tuple[tuple[int, int], ...] = ()
     zero: str | None = None  # the mechanism state every joint's zero is at; None for the as-built state
 
     @property

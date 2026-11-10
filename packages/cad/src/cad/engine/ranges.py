@@ -18,7 +18,10 @@ the default: its mesh, as the viewer draws it), or what it declares a simulator 
 (``"collision"``: the primitive fitted to it where it declares one, its hulls where it is decomposed, else
 its mesh), with a part declared ``collision(part, "none")`` taking no part either way (a fastener seated in
 the hole it holds, a servo's internals), and two parts declared ``exclude(a, b)`` never meeting each other
-(``Description.part_excludes``: those two alone, not the rest of their links). On the collision geometry the
+(``Description.part_excludes``: those two alone, not the rest of their links). A part is the document's
+instance it is (``Visual.instance``), never its name: the parts of one label in a link (a vendor's three
+``screw``) are each tested, each with its own collisions, and an exclusion of one sets no other aside
+(``_tested``). On the collision geometry the
 sweep is the simulator's: the link pairs the MJCF never collides (``export.contact.never``: MuJoCo's own
 filter of a body and its parent, the pairs touching as built, the pairs declared) never meet, so a joint whose
 child is filtered against its parent has no stop there, as MuJoCo has none, and its clashes are what it hits.
@@ -291,26 +294,45 @@ def unknown(description: Any, joints: tuple[str, ...]) -> None:
                          f"no joint the sweep moves; its joints: {', '.join(controls) or 'none'}")
 
 
-def _tested(link: Any, geometry: str) -> list[tuple[str, str, Any]]:
+def _tested(link: Any, geometry: str) -> list[tuple[str, int | None, Any]]:
     """A link's tested shapes, each with its part's name as a message names it (``description.shown``: an anonymous
-    ``SOLID`` by its path from its nearest named ancestor) and its occurrence path (``Visual.path``; its name where it
-    has none): ``parts``, the part itself (its visual mesh) for each part that collides at all; ``collision``, what
-    each declares (``Link.collisions``), a decomposed part's hulls each under the part's name. A link's collisions
-    are its visuals' subsequence, in order, the parts declared ``none`` left out and a decomposed part's hulls one
-    after another."""
+    ``SOLID`` by its path from its nearest named ancestor) and the document's instance it is (``Visual.instance``;
+    None where it has none): ``parts``, the part itself (its visual mesh) for each part that collides at all;
+    ``collision``, what each declares (``Link.collisions``), a decomposed part's hulls each under the part's name.
+
+    A part's collisions are the ones of its instance (``Collision.instance``), never the ones of its name: the parts
+    of one label (a vendor's three ``screw`` in one link) are named alike, and each is tested with its own. The
+    collisions of no instance (a description made by hand, of no document) are their link's visuals' subsequence,
+    in order, the parts declared ``none`` left out and a decomposed part's hulls one after another: a visual with
+    no collision of its instance takes the next of them of its name, that one alone, or the next hulls of its
+    name, up to a hull named again (the next part's first)."""
     from cad.engine.description import shown
 
+    held: dict[int, list[Any]] = {}  # each instance's collisions
+    loose: list[Any] = []  # and the collisions of no instance, in order
+    for collision in link.collisions:
+        instance = getattr(collision, "instance", None)
+        (loose if instance is None else held.setdefault(instance, [])).append(collision)
     found, at = [], 0
     for visual in link.visuals:
         path = getattr(visual, "path", "") or ""
         name = shown(path) if path else visual.name
-        if at < len(link.collisions) and link.collisions[at].of == visual.name:
-            if geometry != "collision":
-                found.append((name, path or visual.name, visual.geometry))
-            while at < len(link.collisions) and link.collisions[at].of == visual.name:
-                if geometry == "collision":
-                    found.append((name, path or visual.name, link.collisions[at].geometry))
-                at += 1
+        instance = getattr(visual, "instance", None)
+        own = list(held.get(instance, ())) if instance is not None else []
+        if not own and at < len(loose) and loose[at].of == visual.name:
+            if not loose[at].part:
+                own, at = [loose[at]], at + 1  # its one collision: the next of its name is the next part's
+            else:
+                while (at < len(loose) and loose[at].part == visual.name
+                       and loose[at].name not in {hull.name for hull in own}):
+                    own.append(loose[at])
+                    at += 1
+        if not own:
+            continue
+        if geometry == "collision":
+            found.extend((name, instance, collision.geometry) for collision in own)
+        else:
+            found.append((name, instance, visual.geometry))
     return found
 
 
@@ -739,13 +761,13 @@ class _Sweep:
                        for label in closure.loop}
         # Every part's surface samples in its link's frame, and which part each point is.
         self.parts: list[tuple[str, str]] = []  # (part, link) by part index
-        paths: list[str] = []
+        instances: list[int | None] = []  # the document's instance each part is, by part index (``_tested``)
         self.points: dict[str, np.ndarray] = {}
         self.normals: dict[str, np.ndarray] = {}  # each sample's surface normal, in its link's frame (``_sampled``)
         self.owners: dict[str, np.ndarray] = {}
         surfaces = []
         for link in description.links:
-            for name, path, geometry in _tested(link, geometry_of):
+            for name, instance, geometry in _tested(link, geometry_of):
                 if geometry.kind == "mesh":
                     mesh = description.meshes[geometry.mesh]
                     vertices = np.asarray(mesh.positions, dtype=np.float64).reshape(-1, 3) * float(geometry.scale)
@@ -753,7 +775,8 @@ class _Sweep:
                 else:
                     vertices, faces = _primitive(geometry.kind, tuple(geometry.size))
                 placement = np.asarray(geometry.placement, dtype=float)
-                surfaces.append((link.name, name, path, vertices @ placement[:3, :3].T + placement[:3, 3], faces))
+                surfaces.append((link.name, name, instance, vertices @ placement[:3, :3].T + placement[:3, 3],
+                                 faces))
         # Said before it starts: on a vendor STEP the sampling alone takes seconds, before any joint is swept.
         estimate = int(sum(_area(vertices, faces) for *_named, vertices, faces in surfaces)
                        / self.resolution ** 2)
@@ -763,18 +786,18 @@ class _Sweep:
             self.progress(said)
         else:
             self.told(said)
-        by_link: dict[str, list[tuple[str, str, np.ndarray, np.ndarray]]] = {}
-        for link_name, name, path, vertices, faces in surfaces:
-            by_link.setdefault(link_name, []).append((name, path, vertices, faces))
+        by_link: dict[str, list[tuple[str, int | None, np.ndarray, np.ndarray]]] = {}
+        for link_name, name, instance, vertices, faces in surfaces:
+            by_link.setdefault(link_name, []).append((name, instance, vertices, faces))
         # Each part's triangles in its link's frame, by part index: what a point inside it is told by (``_inside``).
         self.meshes: list[tuple[np.ndarray, np.ndarray]] = []
         for link in description.links:
             found, facing, owners = [], [], []
-            for name, path, vertices, faces in by_link.get(link.name, ()):
+            for name, instance, vertices, faces in by_link.get(link.name, ()):
                 index = len(self.parts)
                 self.parts.append((name, link.name))
                 self.meshes.append((vertices, faces))
-                paths.append(path)
+                instances.append(instance)
                 sampled, normals = _sampled(vertices, faces, self.resolution)
                 found.append(sampled)
                 facing.append(normals)
@@ -792,14 +815,17 @@ class _Sweep:
         self.shared: dict[tuple[int, int], float] = {}
         self.depths: dict[tuple[int, int], float] = {}  # how deep a moving part lies in a still one, mm (``_depth``)
         self.insides: dict[int, tuple[np.ndarray, float, np.ndarray, np.ndarray]] = {}  # a still part's (``_deep``)
-        # The part pairs set aside (``exclude(a, b)``), by part index: a part's hulls are each that part.
+        # The part pairs set aside (``exclude(a, b)``), by part index: a part's hulls are each that part. A pair
+        # names its two parts by their instances (``Description.part_excludes``), so the parts labelled as one of
+        # them is, in the same assembly or another, are not set aside with it.
         self.excluded = np.zeros((len(self.parts), len(self.parts)), dtype=bool)
-        by_path: dict[str, list[int]] = {}
-        for index, path in enumerate(paths):
-            by_path.setdefault(path, []).append(index)
+        by_instance: dict[int, list[int]] = {}
+        for index, instance in enumerate(instances):
+            if instance is not None:
+                by_instance.setdefault(instance, []).append(index)
         for first, second in getattr(description, "part_excludes", None) or ():
-            for a in by_path.get(first, ()):
-                for b in by_path.get(second, ()):
+            for a in by_instance.get(first, ()):
+                for b in by_instance.get(second, ()):
                     self.excluded[a, b] = self.excluded[b, a] = True
         if geometry_of == "collision":
             # The simulator's own stops: the link pairs the MJCF never collides set aside whole (``never``).
