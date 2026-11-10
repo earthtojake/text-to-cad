@@ -3,7 +3,8 @@
 A check's measurements are facts (``cad.build123d``'s and ``cad.trimesh``'s reports). A process's **rules**
 turn them into verdicts: one table per process (``RuleSet``), versioned, each rule a limit on one measured
 field, the general practice a published design guide states -- the guide cited as the rule's evidence, never
-as a shop's limit: text-to-cad's checks are no shop's, and a shop's own limits are read against the
+as a shop's limit -- or, where no guide states a limit, text-to-cad's own floor, its source text-to-cad and
+never a publisher (``_origin``): text-to-cad's checks are no shop's, and a shop's own limits are read against the
 measurements, which every result carries. A rule never changes a measurement and a verdict never replaces
 one: the report carries both.
 
@@ -247,7 +248,8 @@ def _message(rule: Rule, value: float, limit: float, severity: str | None = None
 
 def _origin(rule: Rule, rule_set: RuleSet) -> str:
     """Where the rule's limit comes from, for a finding's ``source``: the guide's publisher and its title (a
-    limit of text-to-cad's own names text-to-cad): the evidence of general practice, never a shop's limit."""
+    limit of text-to-cad's own names text-to-cad, never a publisher): the evidence of general practice, or
+    whose floor it is, never a shop's limit."""
     source = rule_set.source(rule.source)
     return f"{source.publisher}, {source.title}"
 

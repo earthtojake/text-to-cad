@@ -67,7 +67,9 @@ before it starts an environment) holds each process's options, its rules, the fi
 and its summary line (`cnc.py`, `sheet.py`, `molding.py`, `printing.py`). Each process has **one table of
 rules** (`RULES`, a `rules.RuleSet`: versioned, each rule a limit on one measured field with its source,
 `rules.py`), and the checks are **general**: a rule states general practice, and the published design guide
-it cites is the evidence for it, never a target -- no rule is a shop's capability (its gauges, its tooled
+it cites is the evidence for it, never a target; where no guide states a limit and one physically exists, the
+rule is text-to-cad's own floor, labelled as its own (its source `text-to-cad`, its reason in the rule's
+note), never put in a publisher's name -- no rule is a shop's capability (its gauges, its tooled
 radii, its machines' sizes, its press). Every verdict names where its limit comes from (its `source`: the
 guide's publisher and title, or text-to-cad's own where no guide states one), and every
 result says the verdicts are no shop's limits (`rules_general`, info). A shop's own limits are compared with
@@ -383,7 +385,8 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
 **A part is one solid.** A part that holds several separate solids (a compound exported as one product) is
 judged solid by solid (`_dfm_cnc._solids`): each its own stock, frame, setups and tool access -- another solid
 of the part is no obstacle to its tools and no wall of its gaps --, its refs the whole part's, its `part` name
-`<part> (solid 2 of 3)`; `cnc.solids_judged_apart` (info) says so, and the summary counts the parts judged. A
+`<part> (solid 2 of 3)`; the part's `several_solids` (the warning every process gives) says so, and the
+summary counts the parts judged. A
 part of more than 20000 faces (`FACE_BUDGET`, text-to-cad's own bound) is not measured: `model` is
 `{"error": ...}`, the report `partial`, never a pass.
 
@@ -645,7 +648,7 @@ Severity e = error (no general shop makes the part as drawn), w = warning (a rec
 risk: it is made). "tools" = the limit follows the smallest `--tools` tool when given. A number a published
 guide states cites it: Protolabs Network (Hubs)'s "How to design parts for CNC machining" (`hubs-cnc`) and its
 CNC machining service page's maximum part sizes (`hubs-cnc-service`). A floor no guide states is text-to-cad's
-own (**own** below; the rule's source is `text-to-cad`, so its message reads `source: text-to-cad`, never the
+own (**own** below; the rule's source is `text-to-cad`, so its finding's `source` reads `text-to-cad, ...`, never the
 publisher's name, and its note gives the reason). One tool floor holds for holes, slots and corners: the
 0.05 mm the guide's small-features table calls a feasible hole (`TOOL_FLOOR_MM`); a tool under 1 mm is a micro
 tool (`MICRO_TOOL_MM`), which reaches ten of its diameters (`MICRO_REACH`, own).
@@ -701,8 +704,8 @@ edge, height and depth below the top; a round corner's rules its own face (`corn
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`
 (e, `--turning` on a part with no surface of revolution), `cnc.mostly_not_turned` (w, under half the area
 turns), `cnc.live_tooling` (i), `cnc.turned_corner_sharp` (i: the sharp internal corners of the turned
-profile, each left with an insert's nose radius), `cnc.turning_not_judged` (i), `cnc.solids_judged_apart`
-(i), `cnc.rotary_axis` (i), `cnc.fine_detail` (i, >= 20 faces under 1 mm),
+profile, each left with an insert's nose radius), `cnc.turning_not_judged` (i),
+`cnc.rotary_axis` (i), `cnc.fine_detail` (i, >= 20 faces under 1 mm),
 `cnc.material_assumed` (i: no `--material`, walls judged by metal's limits), `cnc.ball_creases` (i: the
 creases a ball end mill rounds, the worst one's departure from the drawn edge).
 The summary says a part's setups (an assembly: the most any part takes), never a sum.
@@ -1063,12 +1066,11 @@ figures, the hint its `--pull`; it says where the measured pull was the default)
 say where one is, not every one there is; no undercut),
 `undercuts_unsearched` (warning: features whose release the part's ray budget did not reach; the unreleasable
 rule counts them not measured),
-`occurrences_measured_once` (warning: a part that occurs several times in the document is measured where its
-first occurrence stands; one turned another way against the pull is not judged -- check the part alone),
 `solids_touching` (warning: names the part's solids that touch and says to fuse them; their contact is
-left out of draft and undercuts, and the part's `several_bodies` is then not said),
-`rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (also for a multi-part document, and a
-warning for a part of several solids: they shadow each other),
+left out of draft and undercuts),
+`rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (warning: a
+multi-part document is an assembly, each part measured on its own; a part of several solids is every
+process's `several_solids`, which says here that they shadow each other),
 `stepped_parting` (warning), `resin_unknown` (info), `clamp_estimate` (info), `thickness_unmeasured`.
 
 ### Rules (each rule's id is the finding's code)
@@ -1130,8 +1132,9 @@ measured to, a micron -- a 1 mm fillet on a wall that reads 2.00001 is a ratio o
 - The pull is the one given: a part tilted against it is measured tilted (a square box a degree off the pull
   reads its walls drafted a degree, half of them the wrong way). `pull_better` names a pull that does better
   where one of those compared does; the part's own axis is not looked for beyond them.
-- A part that occurs several times in a document is measured once, where its first occurrence stands
-  (`occurrences_measured_once`); an occurrence turned another way against the pull is not judged.
+- A part that occurs several times in a document is measured each way it stands against the pull: the
+  occurrences turned alike once (`projection.items[i].occurrences`), and the totals -- the projected area, the
+  volume, the clamp force -- count every one of them.
 - The undercut test samples points (2400 per part, at least 12 a face): a feature smaller than the point
   spacing can be missed; the lifter stroke is capped at a quarter of the part; a slide is tried along the
   feature's own directions (its cylinders' axes, its planes' normals and the lines they meet along), eight
@@ -1141,7 +1144,7 @@ measured to, a micron -- a 1 mm fillet on a wall that reads 2.00001 is a ratio o
   slide's own clearance.
 - A component model whose contacts are fused into one solid with its housing (a KiCad connector) reads its
   pins as walls and ribs and its contact slots as undercuts: check the housing alone. Contacts kept as their
-  own solids are said (`several_bodies`).
+  own solids are said (`several_solids`).
 - Clamp force is the part's projected area alone (no runner), a molder's factor table, not a resin's cavity
   pressure.
 

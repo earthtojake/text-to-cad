@@ -430,7 +430,8 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
         found.append(CheckFinding(
             "info", "rules_general",
             f"the verdicts are {rule_set.title} (version {rule_set.version}): general practice drawn from "
-            f"published design guides, no shop's limits", "rules",
+            f"published design guides, and text-to-cad's own floors where no guide states a limit (each "
+            f"labelled by its source), no shop's limits", "rules",
             "for a named shop, compare the measurements with its own published limits, or use its skill"))
     try:
         # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
@@ -635,8 +636,9 @@ _HELP = {
     "units": "the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.",
     "axes": "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
     "turning": "cnc: the part is turned on a lathe (its axis found), not milled.",
-    "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a sharp "
-             "corner is held to the smallest standard end mill, 2.5 mm.",
+    "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner "
+             "is held to the smallest tool that can exist (0.05 mm across, text-to-cad's own floor) and to how "
+             "deep a tool of its size reaches; a radius of 1.25 mm or more (a 2.5 mm end mill's) is recommended.",
     "stock": "cnc: the stock's size in mm (100x60x25); default the part's box.",
     "thickness": "sheet: the stock's thickness in mm; default measured.",
     "k_factor": "sheet: the neutral axis's place in the thickness, for the flat pattern (the shop's bend "

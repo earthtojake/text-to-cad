@@ -43,8 +43,8 @@ When the person gave no material or thickness, the check's own assumption is a f
 
 ## A shop's own limits
 
-Each process has one table of rules, general practice from published design guides, and no flag picks
-a shop's. What the person knows of their shop goes in as options: `--tools`, `--axes`, `--stock`,
+Each process has one table of rules -- general practice from published design guides, and text-to-cad's
+own floors where no guide states a limit, each labelled as its own (`source`) -- and no flag picks a shop's. What the person knows of their shop goes in as options: `--tools`, `--axes`, `--stock`,
 `--thickness`, `--bend-radius`, `--k-factor`, `--kerf`, `--sheet-size`, `--cavities`,
 `--build-volume`, `--layer-height`, `--nozzle`.
 

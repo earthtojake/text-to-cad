@@ -820,13 +820,14 @@ a file of another type or not there, a document the engine does not hold.
 holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), in the calling process, each at `x, y, z` in
 millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
-one table of rules, general practice from published design guides, each rule citing its guide as the
-evidence -- no rule is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
+one table of rules: general practice from published design guides, each rule citing its guide as the
+evidence, and text-to-cad's own floors where no guide states a limit, each labelled as its own -- no rule
+is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
 compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
 `--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is one finding for
 each feature that fails it, coded by its id, at the feature's most specific ref (a corner's edge, not one of
 its two faces), with the verdict as data -- `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`),
-`source` (the guide's publisher and title) and `refs` (every ref the feature names, `location` first) --
+`source` (the guide's publisher and title, or `text-to-cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
 and a hint saying what to change; an error is a limit the part breaks, a warning a recommendation. The
 command says a rule once -- its hint, its source and how many places -- then a short line a place, and its
 last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2

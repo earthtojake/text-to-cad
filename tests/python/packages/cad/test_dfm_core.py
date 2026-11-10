@@ -748,9 +748,10 @@ class SummaryTest(unittest.TestCase):
         from cad.build123d import cnc
 
         # four 0.04 mm holes, under the 0.05 mm the smallest tool makes (an error: draft_min, a molding
-        # recommendation, no longer fails a check; a hole under 1 mm is a warning)
-        box = bd.Box(30, 20, 10) - bd.Pos(0, 0, 0) * bd.Compound([bd.Pos(x, y, 0) * bd.Cylinder(0.02, 10)
-                                                                     for x in (-8, 8) for y in (-5, 5)])
+        # recommendation, no longer fails a check; a hole under 1 mm is a warning), each 0.2 mm deep: five
+        # diameters, no drill's limit
+        box = bd.Box(30, 20, 10) - bd.Compound([bd.Pos(x, y, 4.9) * bd.Cylinder(0.02, 0.2)
+                                                for x in (-8, 8) for y in (-5, 5)])
         box.label = "box"
         result = cnc(box, material="aluminum")
         self.assertEqual((result.ok, result.status, result.reason), (False, "failed", None))
@@ -764,7 +765,7 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(len(said), 1)
         self.assertRegex(said[0], r"^error: cnc.hole_diameter, 4 place\(s\)\. Hint: .* Source: .*\.$")
         places = lines[lines.index(said[0]) + 1:lines.index(said[0]) + 5]
-        self.assertTrue(all(line.startswith("  box/face ") and "0.8 mm is under the 1 mm minimum" in line
+        self.assertTrue(all(line.startswith("  box/face ") and "0.04 mm is under the 0.05 mm minimum" in line
                             for line in places), places)
         self.assertLess(max(len(line) for line in places), 120)
         # errors come first, then warnings, then the facts
