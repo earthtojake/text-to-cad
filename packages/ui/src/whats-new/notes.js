@@ -9,7 +9,7 @@
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
 export const WHATS_NEW = Object.freeze({
-  "0.11": Object.freeze(["boards", "updates", "checks"]),
+  "0.11": Object.freeze(["boards", "blender", "mujoco"]),
 });
 
 /** At most this many items an entry. */
