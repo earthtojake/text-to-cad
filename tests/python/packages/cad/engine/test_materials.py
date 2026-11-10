@@ -282,6 +282,49 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual([colour[-2:] for colour in colours[0]], ["94", "4C", "80", "66"],
                          "PMMA at 0.58, a clear lens at 0.3, an author's opacity 0.5, brass at its colour's 0.4")
 
+    def test_a_3mf_of_a_glb_names_a_painted_part_s_own_look_its_default_and_no_look_nothing_wears(self):
+        """A part with a painted face is several primitives in a GLB. Read back for a 3MF, the look most of
+        its triangles wear is the part's own again, the painted face alone names another: the same bases and
+        the same triangles' looks as the xbf's 3MF, and no base that no triangle wears."""
+        script = self.folder / "painted.py"
+        script.write_text(textwrap.dedent('''
+            import build123d as bd
+            from bd_materials import metals, plastics
+            from cad import glb, xbf
+            from cad.build123d import paint
+
+            @xbf("painted.xbf")
+            @glb("painted.glb")
+            def painted():
+                glass = bd.Box(10, 10, 2)
+                glass.label, glass.material = "glass", plastics.pmma(opacity=0.4)
+                part = bd.Box(10, 10, 2).moved(bd.Location((20, 0, 0)))
+                part.label, part.material = "painted", metals.brass()
+                paint(part, part.faces().sort_by(bd.Axis.Z)[-1], plastics.pmma(opacity=0.4))
+                paint(part, part.faces().sort_by(bd.Axis.Z)[0], bd.Color(1, 0, 0))
+                return bd.Compound(label="painted", children=[glass, part])
+        '''), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["painted"], cwd=self.folder)[0]["ok"])
+        worn = []
+        for source in ("painted.xbf", "painted.glb"):
+            path = self.folder / f"{source}.3mf"
+            export.translate(self.folder / source, None, path)
+            model = zipfile.ZipFile(path).read("3D/3dmodel.model").decode()
+            colours = re.findall(r'displaycolor="([^"]+)"', model)
+            objects = {}
+            for name, default, body in re.findall(r'<object id="\d+" type="model" name="([^"]+)" pid="1" '
+                                                  r'pindex="(\d+)">(.*?)</object>', model, re.S):
+                looks = [found[1] if (found := re.search(r'p1="(\d+)"', triangle)) else default
+                         for triangle in re.findall(r"<triangle [^>]*/>", body)]
+                objects[name] = (colours[int(default)], sorted(colours[int(look)] for look in looks))
+            self.assertEqual(sorted(set(colours)), sorted({look for _own, looks in objects.values() for look in looks}),
+                             f"{source}: every base is worn")
+            worn.append(objects)
+        self.assertEqual(worn[0], worn[1])
+        brass, glass, red = "#F5E4AEFF", "#FFFFFF94", "#FF0000FF"
+        self.assertEqual(worn[1], {"glass": (glass, [glass] * 12),
+                                   "painted": (brass, sorted([brass] * 8 + [glass] * 2 + [red] * 2))})
+
     def test_a_still_draws_a_clear_lens_at_its_preview_and_a_faded_one_at_its_own_fade(self):
         from cad.build123d import materials
         from cad.engine.render.finish import finish
