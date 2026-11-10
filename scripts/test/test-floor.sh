@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The packages' floor: the library's suite, and the shim's, on the oldest Python the packages declare
+# The packages' floor: the library's suite, the server's and the shim's, on the oldest Python the packages declare
 # (requires-python in packages/cad/pyproject.toml). The server's installations run on a newer one
 # (cad_server._internal.launch.PYTHON), and so does every other job; the library runs on the floor wherever a
 # render script does (bpy has builds for that Python alone: cad[blender]), in the script's process and in the
-# worker that builds its models. A call the floor's standard library lacks parses there and fails only when
-# it runs, so nothing but running the suite on it holds the floor.
+# worker that builds its models, and the server and the shim declare the same floor, so a pip install puts them
+# on it too. A call the floor's standard library lacks parses there and fails only when it runs (one already
+# slipped into the server: argparse's suggest_on_error), so nothing but running the suites on it holds the floor.
 #
 #   PYTHON_BIN=<a Python of the floor, requirements-dev.txt installed> scripts/test/test-floor.sh
 #
@@ -27,4 +28,5 @@ if [ -z "$floor" ] || [ "$have" != "$floor" ]; then
 fi
 
 run_python_unittest "cad (the library) Python tests, on Python $floor" "tests/python/packages/cad" "${PACKAGE_SOURCES[@]}"
+run_python_unittest "cad-server Python tests, on Python $floor" "tests/python/packages/cad_server" "${PACKAGE_SOURCES[@]}"
 run_python_unittest "cad-mcp (the shim) Python tests, on Python $floor" "tests/python/packages/cad_mcp" "${PACKAGE_SOURCES[@]}"

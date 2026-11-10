@@ -24,8 +24,8 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     fea                           fea (the stress study's suite, with netgen and CalculiX installed)
     blender  bpy  floor           blender, the job on Python 3.13: bpy (cad.blender.load and Open in's Blender script
-                                  in the environment cad run makes for bpy) and floor (the library's and the shim's
-                                  suites on the packages' oldest Python)
+                                  in the environment cad run makes for bpy) and floor (the library's, the server's
+                                  and the shim's suites on the packages' oldest Python)
     routing                       routing (macOS): the router's unit files, on the third C library
     core_js                       core-js
     web  web_ui  web_client
@@ -250,19 +250,22 @@ BLENDER_CODE = (f"{LIBRARY_SRC}/blender/**", f"{LIBRARY_SRC}/registry.py", f"{LI
                 f"{SERVER_SRC}/_internal/extras.py", f"{SERVER_SRC}/_internal/base.py",
                 f"{SERVER_SRC}/_internal/scan.py", f"{SERVER_SRC}/cli/run.py",
                 f"{SERVER_SRC}/_internal/open_in_blender.py")
-# The engine's modules among them, which the engine's final rule would end at.
+# The engine's modules among them, which the engine's final rule would end at. And the daemon's and the supervisor's:
+# the bpy suite is the one test of a daemon on the server's Python starting a worker on bpy's (the daemon's
+# ``caller``, the supervisor's ``start`` with ``python=``).
 BLENDER_GLB = (f"{LIBRARY_SRC}/engine/formats/gltf.py",
                f"{LIBRARY_SRC}/engine/export/__init__.py", f"{LIBRARY_SRC}/engine/export/mesh.py",
                f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/export/motion.py",
                f"{LIBRARY_SRC}/engine/export/animation.py", f"{LIBRARY_SRC}/engine/export/keys.py",
-               f"{SERVER_SRC}/engine/cli.py")
+               f"{SERVER_SRC}/engine/cli.py", f"{SERVER_SRC}/engine/daemon.py", f"{SERVER_SRC}/engine/supervisor.py")
 BLENDER_SUITE = "tests/python/packages/blender"
 # The packages' floor, the oldest Python they declare (requires-python): the library runs on it wherever a render
-# script does (bpy's one line), in that script's process and in the worker that builds its models, so the library's
-# suite runs on it too, with the shim's (seconds), in the blender job, the one job on that Python (test-floor.sh).
-# Whatever a 3.14-only call in them could break: their sources and their suites. The server's suite is the cadgen
-# jobs' alone, on the Python its installations run on.
-FLOOR_CODE = ("packages/cad/**", "packages/cad-mcp/**", f"{CADGEN_SUITE}/cad/**", f"{CADGEN_SUITE}/cad_mcp/**")
+# script does (bpy's one line), in that script's process and in the worker that builds its models, and the server
+# and the shim declare it too, so the three suites run on it, in the blender job, the one job on that Python
+# (test-floor.sh), beside the cadgen jobs on the Python the server's installations run on. Whatever a 3.14-only call
+# in them could break (one reached the server once: argparse's suggest_on_error): their sources and their suites.
+FLOOR_CODE = ("packages/cad/**", "packages/cad-server/**", "packages/cad-mcp/**", f"{CADGEN_SUITE}/cad/**",
+              f"{CADGEN_SUITE}/cad_server/**", f"{CADGEN_SUITE}/cad_mcp/**")
 
 # The router (cad.kicad.route) and what it reads a board's numbers through: the board readers, their geometry
 # and the parser, and the numpy the library pins. Its copper must be the same
@@ -334,7 +337,8 @@ RULES: tuple[Rule, ...] = (
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
     Rule(ROUTING_CODE, select(flags=["routing"])),
-    # The library and the shim on the packages' oldest Python: before the leaves' and the engine's final rules.
+    # The library, the server and the shim on the packages' oldest Python: before the leaves' and the engine's final
+    # rules.
     Rule(FLOOR_CODE, select(flags=["floor"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),

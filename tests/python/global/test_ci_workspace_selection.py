@@ -69,8 +69,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
             r"^apps/api/src/[^/]*\.test\.mjs$",                   # test-api.sh (node --test)
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
-            r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen (and, the
-                                                                                 # library's and the shim's,
+            r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen (and
                                                                                  # test-floor.sh on Python 3.13)
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
             r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
@@ -238,7 +237,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_a_test_file_runs_itself(self):
         self.assertEqual(tests_for(f"{SERVER}/test_settings.py")["cadgen_tests"], [f"{SERVER}/test_settings.py"])
-        self.assertEqual(jobs_for(f"{SERVER}/test_settings.py"), {"cadgen-linux", "cadgen-windows", "skills"})
+        self.assertEqual(jobs_for(f"{SERVER}/test_settings.py"),
+                         {"cadgen-linux", "cadgen-windows", "skills", "blender"})  # blender: the floor's
         self.assertEqual(tests_for(f"{SHIM}/test_protocol.py")["cadgen_tests"], [f"{SHIM}/test_protocol.py"])
         self.assertEqual(tests_for(f"{POLICY}/test_cli_stream_contract.py")["skills_policy"],
                          [f"{POLICY}/test_cli_stream_contract.py"])
@@ -255,9 +255,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(path=path):
                 # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
                 solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
-                # The library runs on Python 3.13 too, the packages' floor: the blender job, the one job on it, runs
-                # its suite there for any change to it. The server's runs on its own Python alone.
-                floor = {"blender"} if path.startswith("packages/cad/") else set()
+                # The library and the server run on Python 3.13 too, the packages' floor: the blender job, the one
+                # job on it, runs their suites there for any change to them. The alias has no suite of its own.
+                floor = {"blender"} if path.startswith(("packages/cad/", "packages/cad-server/")) else set()
                 self.assertEqual(jobs_for(path),
                                  GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "blender", "routing-macos"} | solves | floor)
                 self.assertEqual(route(path)["floor"], "true" if floor else "false")
@@ -317,7 +317,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn("needs.changes.outputs.bpy == 'true'", steps["Run the blender suite"])
         self.assertIn("run: scripts/test/test-blender.sh", steps["Run the blender suite"])
         made = steps["Make an environment on Python 3.13, the packages' floor"]
-        floor = steps["Run the library's and the shim's suites on the floor"]
+        floor = steps["Run the library's, the server's and the shim's suites on the floor"]
         for step in (made, floor):
             self.assertIn("needs.changes.outputs.floor == 'true'", step)
         import tomllib
@@ -328,6 +328,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn("-r requirements-dev.txt", made)
         self.assertIn("PYTHON_BIN: ${{ runner.temp }}/floor/bin/python", floor)
         self.assertRegex(floor, r"run: xvfb-run [^\n]+ scripts/test/test-floor\.sh")
+        # The three distributions declare the one floor, so the three suites run on it.
+        runner = (REPO_ROOT / "scripts/test/test-floor.sh").read_text(encoding="utf-8")
+        for suite in ("cad", "cad_server", "cad_mcp"):
+            self.assertRegex(runner, rf'\nrun_python_unittest "[^"]+" "tests/python/packages/{suite}" ', suite)
         self.assertEqual(route("VERSION")["blender"], "true")
         self.assertEqual({flag: route()[flag] for flag in ("blender", "bpy", "floor")},
                          {"blender": "false", "bpy": "false", "floor": "false"})
@@ -358,6 +362,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/_internal/scan.py",
                      "packages/cad-server/src/cad_server/cli/run.py",
                      "packages/cad-server/src/cad_server/engine/cli.py",
+                     # A daemon on the server's Python starting a worker on bpy's: the bpy suite is its one test.
+                     "packages/cad-server/src/cad_server/engine/daemon.py",
+                     "packages/cad-server/src/cad_server/engine/supervisor.py",
                      "packages/cad-server/src/cad_server/_internal/open_in_blender.py",
                      "packages/cad/src/cad/engine/export/__init__.py", "packages/cad/src/cad/engine/export/mesh.py",
                      "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/engine/export/motion.py",
@@ -365,19 +372,21 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertLessEqual({"blender", "cadgen-linux"}, jobs_for(path))
                 self.assertEqual(route(path)["bpy"], "true")
-        # ...and the rest does not: the rest of the library reaches the job for the floor's suite alone, and what no
-        # script in bpy reads reaches none of it -- the opener that finds a person's Blender, the server's other
-        # commands, the render skill's pages, which hold no code.
+        # ...and the rest does not: the rest of the packages and their suites reach the job for the floor's suites
+        # alone -- the opener that finds a person's Blender, the server's other commands among them -- and what holds
+        # no code reaches none of it: a package's README, the render skill's pages.
         for path in ("packages/cad/src/cad/engine/api.py", "packages/cad/src/cad/engine/export/stl.py",
                      "packages/cad-mcp/src/cad_mcp/shim.py", "tests/python/packages/cad/test_registry.py",
-                     "tests/python/packages/cad_mcp/test_protocol.py"):
+                     "tests/python/packages/cad_mcp/test_protocol.py",
+                     "packages/cad-server/src/cad_server/_internal/apps.py",
+                     "packages/cad-server/src/cad_server/_internal/integration_env.py",
+                     "packages/cad-server/src/cad_server/cli/doctor.py", "packages/cad-server/pyproject.toml",
+                     "tests/python/packages/cad_server/test_extras.py"):
             with self.subTest(path=path):
                 self.assertEqual(halves(path), ("false", "true"))
                 self.assertIn("blender", jobs_for(path))
-        for path in ("packages/cad-server/src/cad_server/_internal/apps.py",
-                     "packages/cad-server/src/cad_server/_internal/integration_env.py",
-                     "packages/cad-server/src/cad_server/cli/doctor.py", "packages/cad-server/pyproject.toml",
-                     "tests/python/packages/cad_server/test_extras.py", "packages/cad/README.md",
+        for path in ("packages/cad/README.md", "packages/cad-server/README.md",
+                     "packages/cad-server/src/cad_server/engine/README.md",
                      "skills/render/SKILL.md", "skills/render/references/shots.md",
                      "skills/render/references/scene-script.md", "skills/cad/SKILL.md"):
             with self.subTest(path=path):
@@ -395,14 +404,14 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn(f"{LIBRARY}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
         self.assertEqual(viewer["skills_tests"], [])
         self.assertEqual(jobs_for("packages/cad-server/src/cad_server/viewer/scanner.py"),
-                         {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
+                         {"cadgen-linux", "cadgen-windows", "skills", "packaging", "blender"})  # blender: the floor's
         # ...and drives the bundled viewer, which packaging builds.
         self.assertEqual(route("packages/cad-server/src/cad_server/viewer/scanner.py")["web_viewer"], "true")
         mcp = tests_for("packages/cad-server/src/cad_server/mcp/server.py")
         self.assertIn(f"{SERVER}/mcp/test_server.py", mcp["cadgen_tests"])
         self.assertNotIn(f"{SERVER}/viewer/test_launcher.py", mcp["cadgen_tests"])
         self.assertEqual(jobs_for("packages/cad-server/src/cad_server/mcp/server.py"),
-                         {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
+                         {"cadgen-linux", "cadgen-windows", "skills", "packaging", "blender"})  # blender: the floor's
         # The state directory's one definition is shared with the rest of the server.
         self.assertEqual(tests_for("packages/cad-server/src/cad_server/viewer/recents.py")["cadgen_tests"], [CADGEN])
         # The shim is a leaf too: its own suite and the tests that name it, and the wheels.

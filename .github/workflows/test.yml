@@ -335,15 +335,16 @@ jobs:
   # clips in both orders and renders a 64x64 still with Cycles on the CPU, then one with EEVEE through Mesa's
   # software OpenGL. Nothing in it may skip here: its runner fails a run in which a test did. The suite
   # (tests/python/packages/blender, test-blender.sh) is this job's alone. cad.blender, bpy's environment and how
-  # cad run chooses it, the GLB's export, the suite and its runner select it. Linux only: bpy's wheel is one
-  # build per platform and no runner has a GPU. About 2 minutes: the X and OpenGL libraries, the environment, a
+  # cad run chooses it, the GLB's export, the daemon and supervisor that start its worker, the suite and its runner
+  # select it. Linux only: bpy's wheel is one build per platform and no runner has a GPU. About 2 minutes: the X and OpenGL libraries, the environment, a
   # model's build and export, two bpy runs (16 tests in 47 s locally, warm).
   #
-  # floor: the library's suite, and the shim's, on Python 3.13 (test-floor.sh), in an environment made here with
-  # requirements-dev.txt: a call Python 3.13 lacks parses there and fails only when it runs, so only the suite holds
-  # the floor. The library's and the shim's sources and suites select it; the server's suite stays the cadgen
-  # jobs', on the Python its installations run on. About 5 minutes: the environment (the kernel's wheels for 3.13,
-  # no cache of them), then 1050 tests (2.3 minutes locally, on four cores).
+  # floor: the library's, the server's and the shim's suites on Python 3.13 (test-floor.sh), in an environment made
+  # here with requirements-dev.txt: a call Python 3.13 lacks parses there and fails only when it runs (one reached
+  # the server once: argparse's suggest_on_error), so only the suites hold the floor. The three packages' sources
+  # and suites select it, beside the cadgen jobs on the Python the server's installations run on. About 10 minutes:
+  # the environment (the kernel's wheels for 3.13, no cache of them), then about 2450 tests (7.7 minutes locally, on
+  # four cores: the library's 3.3, the server's 4.3, the shim's seconds).
   blender:
     name: Blender renders
     needs: changes
@@ -382,7 +383,7 @@ jobs:
           uv venv --python 3.13 "$RUNNER_TEMP/floor"
           uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
 
-      - name: Run the library's and the shim's suites on the floor
+      - name: Run the library's, the server's and the shim's suites on the floor
         if: ${{ !cancelled() && needs.changes.outputs.floor == 'true' }}
         env:
           PYTHON_BIN: ${{ runner.temp }}/floor/bin/python

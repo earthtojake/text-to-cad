@@ -97,11 +97,11 @@ where those files ship, so these scripts are what produces them.
   that skips fails the run (`PYTHON_TEST_NO_SKIPS`). `tests/python/packages/blender`, each file with private
   engine, state and cache folders. Called by `test.yml`'s Blender renders job; on Linux it needs X11's
   client libraries and OpenGL from the system.
-- `test-floor.sh` — the library's suite, and the shim's, on the oldest Python the packages declare
+- `test-floor.sh` — the library's, the server's and the shim's suites on the oldest Python the packages declare
   (`requires-python`: 3.13, the one Blender's module is built for, so the one the library runs on in a
   render script's environment). `PYTHON_BIN` names a Python of that line with `requirements-dev.txt`
   installed; another is refused in one line. A call that Python's standard library lacks parses there
-  and fails only when it runs, so only running the suite holds the floor. Called by `test.yml`'s
+  and fails only when it runs, so only running the suites holds the floor. Called by `test.yml`'s
   Blender renders job, the one job on that Python, under Xvfb.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
