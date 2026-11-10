@@ -397,6 +397,41 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(self.errors(self.check(self.write("gap", gapped(0.05)), thickness=2.0)),
                          ["measurement_failed", "sheet.open_contour", "sheet.open_contour"])
 
+    def test_a_side_shorter_than_the_join_is_a_side_and_no_open_contour(self) -> None:
+        def lines(msp, points):
+            for start, end in zip(points, points[1:] + points[:1]):
+                msp.add_line(start, end)
+
+        def fillet(msp):   # a corner rounded at 5 microns, as a CAD's fillet of a "sharp" corner is written
+            for start, end in (((0, 0), (100, 0)), ((100, 0), (100, 59.995)), ((99.995, 60), (0, 60)), ((0, 60), (0, 0))):
+                msp.add_line(start, end)
+            msp.add_arc((99.995, 59.995), 0.005, 0, 90)
+
+        run = [(50 + 0.003 * i, 60 + 0.0005 * i * (10 - i)) for i in range(10, -1, -1)]
+        cases = {
+            "polyline_stub": lambda msp: msp.add_lwpolyline(
+                [(0, 0), (100, 0), (100, 60), (50.005, 60), (50, 60), (0, 60)], close=True),
+            "polyline_chamfer": lambda msp: msp.add_lwpolyline(
+                [(0, 0), (100, 0), (100, 59.995), (99.995, 60), (0, 60)], close=True),
+            "polyline_run": lambda msp: msp.add_lwpolyline([(0, 0), (100, 0), (100, 60), *run, (0, 60)], close=True),
+            "line_stub": lambda msp: lines(msp, [(0, 0), (100, 0), (100, 60), (99.996, 60), (0, 60)]),
+            "line_run": lambda msp: lines(msp, [(0, 0), (100, 0), (100, 60), *run, (0, 60)]),
+            "fillet": fillet,
+        }
+        for name, draw in cases.items():
+            result = self.check(self.write(name, lambda msp, _, draw=draw: draw(msp)), thickness=2.0)
+            self.assertEqual(self.codes(result) - CLEAN_CODES, set(), name)   # closed as drawn: nothing joined
+            (part,) = result.measurements["parts"]["items"]
+            self.assertAlmostEqual(part["flat_length_mm"], 100.0, places=2, msg=name)
+
+        # two squares that share a side are two parts, that side cut twice: no open contour where three ends meet
+        def shared(msp, _):
+            msp.add_lwpolyline([(0, 0), (50, 0), (50, 50), (0, 50)], close=True)
+            msp.add_lwpolyline([(50, 0), (100, 0), (100, 50), (50, 50)], close=True)
+        result = self.check(self.write("shared", shared), thickness=2.0)
+        self.assertEqual(self.errors(result), ["sheet.crossing_contours", "sheet.overlapping_curves"])
+        self.assertEqual(result.measurements["parts"]["count"], 2)
+
     def test_a_circle_drawn_twice_is_cut_twice_and_is_one_hole(self) -> None:
         def build(msp, _):
             _plate(msp)
