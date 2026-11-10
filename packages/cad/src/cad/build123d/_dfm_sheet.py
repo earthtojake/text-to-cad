@@ -480,6 +480,33 @@ def _simplify(points: np.ndarray) -> np.ndarray:
     return np.array(kept)
 
 
+def _chorded(path: list[tuple[float, float, float]]) -> list[tuple[float, float, float]]:
+    """A sampled curve's path in the plane as the fewest of its points whose chords stay within ``CHORD_MM``
+    of the rest (as an arc's chords do): a curve in a plane square to the plate (the mitre where two rounds
+    meet) is its one chord, and no curve is left as chords shorter than the tolerance its face is fused with."""
+    points = np.array(path)[:, :2]
+    keep = np.zeros(len(points), bool)
+    keep[[0, -1]] = True
+    spans = [(0, len(points) - 1)]
+    while spans:
+        first, last = spans.pop()
+        if last - first < 2:
+            continue
+        start, chord = points[first], points[last] - points[first]
+        length = float(np.linalg.norm(chord))
+        between = points[first + 1:last] - start
+        if length > 1e-12:
+            along = np.clip(between @ chord / length ** 2, 0.0, 1.0)
+            away = np.linalg.norm(between - along[:, None] * chord, axis=1)
+        else:  # a closed curve: from its start
+            away = np.linalg.norm(between, axis=1)
+        furthest = int(np.argmax(away))
+        if away[furthest] > plane.CHORD_MM:
+            keep[first + 1 + furthest] = True
+            spans += [(first, first + 1 + furthest), (first + 1 + furthest, last)]
+    return [point for point, kept in zip(path, keep) if kept]
+
+
 # --- the analysis ------------------------------------------------------------------------------------------
 
 
@@ -1413,7 +1440,8 @@ class _Analysis:
 
         def exact(pieces: list[tuple[np.ndarray, Any]]) -> Any | None:
             """The projected outline as exact edges: an arc about the plate's normal stays an arc, a line or an
-            arc square to the plate (a round's end) is the chord it projects to, any other curve sampled."""
+            arc square to the plate (a round's end) is the chord it projects to, any other curve its chords
+            (``_chorded``)."""
             made = []
             for points, circle in pieces:
                 ends = flat(points[0]), flat(points[-1])
@@ -1423,7 +1451,7 @@ class _Analysis:
                     else:
                         made.append(bd.ThreePointArc(ends[0], flat(points[len(points) // 2]), ends[1]))
                 elif circle is None and len(points) > 2:
-                    path = [flat(p) for p in points]
+                    path = _chorded([flat(p) for p in points])
                     made.extend(bd.Line(a, b) for a, b in zip(path, path[1:]) if math.dist(a, b) > 1e-9)
                 elif math.dist(*ends) > 1e-9:
                     made.append(bd.Line(*ends))

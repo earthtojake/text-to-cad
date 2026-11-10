@@ -844,6 +844,29 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertEqual(broken.severity, "warning")
         self.assertEqual(failed(result, "sheet.uniform_thickness"), [])
 
+    def test_broken_edges_that_meet_at_a_corner_of_the_outline_are_laid_into_the_flat(self) -> None:
+        # where two broken edges meet at a corner of the outline a break ends in a curve, no line: an ellipse's
+        # arc between two rounds, a conic between a chamfer along a line and one along an arc. Sampled, its
+        # chords were shorter than the tolerance the breaks are fused onto the skin with, and the fuse dropped
+        # the breaks with no error: the flat was the skin's, 79 x 39 for an 80 x 40 plate rounded 0.5 mm
+        def broken(part: bd.Part, how, size: float) -> bd.Part:
+            levels = part.edges().group_by(bd.Axis.Z)
+            return how(levels[0] + levels[-1], size)
+
+        outline = bd.Wire([bd.CenterArc((0, 0), 30, 90, 180), bd.Line((0, -30), (0, 30))])
+        for name, part in (("plate", bd.Box(80, 40, 2)), ("half disc", bd.extrude(bd.Face(outline), 2))):
+            square = checked(part).measurements["parts"]["items"][0]
+            for how in (bd.fillet, bd.chamfer):
+                for size in (0.2, 0.5):
+                    with self.subTest(part=name, how=how.__name__, size=size):
+                        result = checked(broken(part, how, size))
+                        self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+                        found = result.measurements["parts"]["items"][0]
+                        for key in ("flat_length_mm", "flat_width_mm"):
+                            self.assertAlmostEqual(found[key], square[key], places=3)
+                        self.assertAlmostEqual(found["flat_area_mm2"], square["flat_area_mm2"], delta=0.05)
+                        self.assertIn("sheet.edge_break", {f.code for f in result.findings})
+
     def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
         # two bends meeting with no flat between them: a joggle, unrolled one strip after the other
         jog = bent([("line", 40), ("bend", 90, 1.5), ("bend", -90, 1.5), ("line", 40)], 1.5, 40, "jog")
