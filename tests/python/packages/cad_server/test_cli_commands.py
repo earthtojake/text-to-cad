@@ -102,7 +102,10 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual((code, out, err), (2, "", f"cad {document_type} {operation}: no such file: {missing}\n"))
                 code, out, err = _run([document_type, operation, missing, *extra, "--json"])
                 self.assertEqual((code, err), (2, ""))
-                self.assertEqual(json.loads(out), {"ok": False, "error": f"no such file: {missing}", "reason": "not_found"})
+                # a manufacturing check's answers all carry the state, a command-line mistake's too
+                state = {"status": "usage"} if operation == "dfm" else {}
+                self.assertEqual(json.loads(out),
+                                 {"ok": False, "error": f"no such file: {missing}", "reason": "not_found", **state})
         code, _, err = _run(["urdf", "validate", "robot.xml"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf\n"))
 
