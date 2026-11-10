@@ -22,7 +22,9 @@ The pieces are chained end to end into closed contours; ends within ``_JOIN`` ar
 cutter's path closes, counted in ``joined_gaps`` where it is wider than drawn exact). What does not close
 is open geometry, located by layer, entity handle and the dangling end. Pieces lying on one another
 (collinear lines overlapping, concentric arcs of one radius overlapping, a line along a polyline's
-segment) are cut twice; a contour crossing itself or another leaves a sliver; a loop enclosing no area is a
+segment) are cut twice; a contour crossing itself or another leaves a sliver, and two that touch (a hole
+tangent to the edge, two parts corner to corner) leave no material or no gap between them (``contour_crossings``,
+within ``_SAME``; a whole circle crossed and held by its centre and radius); a loop enclosing no area is a
 doubled-back line; a run of many short lines turning a little at a time is a curve drawn as chords.
 
 The closed contours are nested (an outline, its holes, an island in a hole: a piece that falls out) and
@@ -722,14 +724,20 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     for i in range(len(loops)):
         touching = np.nonzero((lows[i + 1:] <= highs[i] + 1e-9).all(axis=1) & (highs[i + 1:] >= lows[i] - 1e-9).all(axis=1))[0]
         for j in touching + i + 1:
-            for point in plane.crossings(loops[i], loops[j])[:2]:
+            met = [("crosses", point) for point in plane.crossings(loops[i], loops[j], _SAME)[:2]]
+            if not met:
+                # two that meet without crossing (a hole tangent to the edge, two parts corner to corner) leave
+                # no material, or no gap, between them
+                gap, point, _ = plane.distance(loops[i], loops[j])
+                met = [("touches", point)] if gap <= _SAME else []
+            for verb, point in met:
                 source = loops[i].source[0]
                 families["contour_crossings"].append({
-                    "detail": f"#{','.join(handles[i])} crosses #{','.join(handles[j])} at "
-                              f"{point[0]:.4g}, {point[1]:.4g}", "handles": handles[i] + handles[j],
+                    "kind": verb, "detail": f"#{','.join(handles[i])} {verb} #{','.join(handles[j])} at "
+                                            f"{point[0]:.4g}, {point[1]:.4g}", "handles": handles[i] + handles[j],
                     "layer": getattr(source, "layer", None), "location": _where(source),
-                    "xyz": [round(point[0], 4), round(point[1], 4), 0.0]})
-    depth, parent = plane.nest(loops)
+                    "xyz": [round(float(point[0]), 4), round(float(point[1]), 4), 0.0]})
+    depth, parent = plane.nest(loops, _SAME)
     thickness = options.get("thickness")
     outlines = [i for i, level in enumerate(depth) if level % 2 == 0]
     held: dict[int, list[int]] = {}   # each outline's holes: the loops it holds directly

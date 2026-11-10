@@ -335,6 +335,51 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(self.errors(self.check(self.write("mirrored_circle", crossing), thickness=2.0)),
                          ["sheet.crossing_contours"] * 2)
 
+    def test_contours_that_cross_through_a_sampled_point_or_touch_are_found(self) -> None:
+        def plate_and(*cuts):
+            def build(msp, _):
+                _plate(msp, 100, 60, layer="0")
+                for cut in cuts:
+                    cut(msp)
+            return build
+
+        def crossed(result) -> list[str]:
+            return [item["kind"] for item in result.measurements["contour_crossings"]["items"]]
+
+        # a circle centred on the edge crosses it a quarter turn from its first point, whatever its radius
+        for radius in (1.0, 2.0, 2.5, 3.0, 5.0, 10.0):
+            result = self.check(self.write(f"on_edge{radius}", plate_and(
+                lambda msp, radius=radius: msp.add_circle((100, 30), radius))), thickness=2.0)
+            self.assertEqual(self.errors(result), ["sheet.crossing_contours"] * 2, radius)
+            self.assertEqual(sorted(item["xyz"][:2] for item in result.measurements["contour_crossings"]["items"]),
+                             [[100.0, 30.0 - radius], [100.0, 30.0 + radius]])
+        # the circle a hole near the edge is, reaching 5 mm past it: where its equation says, not its chords
+        through = self.check(self.write("through", plate_and(lambda msp: msp.add_circle((95, 30), 10))), thickness=2.0)
+        self.assertEqual(sorted(item["xyz"][:2] for item in through.measurements["contour_crossings"]["items"]),
+                         [[100.0, 21.3397], [100.0, 38.6603]])
+        # two holes 5 mm across each other's centres cross 60 degrees round each: both holes of the one part
+        holes = self.check(self.write("holes", plate_and(lambda msp: msp.add_circle((50, 30), 5),
+                                                         lambda msp: msp.add_circle((55, 30), 5))), thickness=2.0)
+        self.assertEqual(crossed(holes), ["crosses", "crosses"])
+        self.assertEqual(holes.measurements["parts"]["items"][0]["hole_count"], 2)
+        self.assertEqual(holes.measurements["floating_interiors"]["items"], [])
+        # a diamond with two corners on the edge's line passes through it there
+        diamond = self.check(self.write("diamond", plate_and(lambda msp: msp.add_lwpolyline(
+            [(90, 30), (100, 20), (110, 30), (100, 40)], close=True))), thickness=2.0)
+        self.assertEqual(crossed(diamond), ["crosses", "crosses"])
+        # a hole tangent to the edge from inside is a hole of the part, with no material between it and the edge
+        tangent = self.check(self.write("tangent", plate_and(lambda msp: msp.add_circle((95, 30), 5))), thickness=2.0)
+        self.assertEqual(self.errors(tangent), ["sheet.crossing_contours"])
+        self.assertEqual(crossed(tangent), ["touches"])
+        (hole,) = tangent.measurements["holes"]["items"]
+        self.assertEqual(hole["edge_distance_mm"], 0.0)
+        # two parts corner to corner touch; a hole a hair inside the edge is a hole, and only close to it
+        corner = self.check(self.write("corner", plate_and(lambda msp: msp.add_lwpolyline(
+            [(100, 30), (120, 10), (140, 30), (120, 50)], close=True))), thickness=2.0)
+        self.assertEqual(crossed(corner), ["touches"])
+        clear = self.check(self.write("clear", plate_and(lambda msp: msp.add_circle((94.9, 30), 5))), thickness=2.0)
+        self.assertEqual((self.errors(clear), clear.measurements["holes"]["count"]), ([], 1))
+
     def test_ends_a_hair_apart_are_joined_and_said_and_a_real_gap_is_open(self) -> None:
         def gapped(gap):
             def build(msp, _):

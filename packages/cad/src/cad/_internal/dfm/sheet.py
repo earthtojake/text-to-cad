@@ -406,8 +406,9 @@ _FILE_DEFECTS = {
                                                       "twice", "delete the overlapping copy, or join the curves"),
     "self_intersections": ("sheet.self_intersecting", "error", "a contour crosses itself",
                            "redraw the contour so it does not cross itself"),
-    "contour_crossings": ("sheet.crossing_contours", "error", "two contours cross: the cut leaves slivers",
-                          "join or separate the contours"),
+    "contour_crossings": ("sheet.crossing_contours", "error", "two contours cross or touch: a sliver, or "
+                                                              "nothing, is left between them",
+                          "join the contours into one, or move them apart"),
     "zero_area_loops": ("sheet.zero_area_loop", "error", "a closed loop encloses no area: a doubled-back line",
                         "delete the degenerate loop"),
     "annotations": ("sheet.annotation_on_cut_layer", "warning", "text, dimensions or other annotation on a cut "
