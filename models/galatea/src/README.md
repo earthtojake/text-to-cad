@@ -25,6 +25,10 @@ cad run src/checks/interference.py --poses   # and the other checks, below
 cad run src/renders.py hero stride walk      # stills and clips by name; all of them without names
 ```
 
+A run writes nothing. Files are written on request, into folders Git ignores:
+`cad model export <id> GLB/galatea.glb` is 9.7 MB and carries the eight motions as
+animation clips, `STEP/galatea.step` is 67.5 MB.
+
 `links()` in `galatea.py` is the one `@memo` stage: all 73 links at the zero pose, 64 s of
 kernel work that the robot and the nine standing models share. A run builds it once, so
 `stances.py` costs 90 s where it cost nine minutes without the marker, and an edit to a
