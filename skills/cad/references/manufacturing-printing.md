@@ -19,7 +19,8 @@ technology is named; a machine datasheet moves them):
   5 mm as a bridge (FDM), and a horizontal round hole up to 10 mm prints unsupported (wider: a teardrop,
   or turn the part so the hole is vertical). Powder processes (SLS, MJF) need no support: there, trapped powder is the
   question.
-- **Walls, pins and holes.** Walls 0.8 mm or more (two nozzle widths; SLA 0.5 supported / 1.0 free,
+- **Walls, pins and holes.** Walls 0.8 mm or more (two beads of a 0.4 mm nozzle: with `--nozzle` given,
+  two of its; SLA 0.5 supported / 1.0 free,
   SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); holes 1 mm or wider (SLS 1.5), vertical where they
   can be; pins 1 mm (FDM, Xometry's recommendation) or 0.8 mm (SLS, a recommendation; SLA 0.5); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule) -- raised or
   sunk detail alone: a step running across a face is the part's shape, not text.
@@ -30,11 +31,13 @@ technology is named; a machine datasheet moves them):
   the edge, not at its middle): blend them, or cut the feather back. A tip at 45 degrees or more is
   neither a knife nor a thin wall.
 - **Hollow parts.** SLS, MJF and PBF need an escape hole of 3.5 mm or more per cavity for the powder;
-  SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill.
+  SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill. A cavity is any air wider
+  than its way out, whatever its shape: a flat pocket behind a small vent traps powder as a hollow ball does.
 - **Fits.** Mating parts 0.3 mm apart for FDM in practice (the general rule warns under 0.76), SLS 0.3,
   SLA 0.5; walls are judged per part, clearances per pair.
 - Within the printer: `--build-volume 256x256x256` for the person's machine (without it the fit is
-  judged against a typical machine of the technology's, assumed: a warning naming it, never an error). The material and the
+  judged against a typical machine of the technology's, assumed: a warning naming it -- and an error only
+  where no orientation fits the largest machine the guide lists, 900 x 600 x 900 mm for FDM). The material and the
   process on the part, `part.material = plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`,
   `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad model dfm "$ID"` then needs no
   `--process`, `--technology` or `--layer-height`.
@@ -56,7 +59,8 @@ the verdicts:
 - `--material`: FDM's warping risk for the materials that warp (`warping_risk`). A metal with a plastic
   technology, or a plastic with `pbf`, is refused.
 - `--build-volume XxYxZ`: the person's printer, else a typical machine of the technology's, assumed.
-- `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail.
+- `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail; the nozzle sets FDM's minimum
+  wall, two of its beads (0.8 mm for the common 0.4 mm nozzle, assumed and said where none is given).
 - `--angle-limit`: the person's printer's self-supporting angle, from its datasheet: the overhangs are
   counted and `printing.overhang_angle` judges each against it in place of the technology's figure.
 - `--units` (an STL's: millimetres by default) and `--samples` (rays on a mesh).
@@ -72,17 +76,25 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
 `pins`, `details`, `clearances`, `trapped_volumes`, `build_volume`, `bed`, `stair_stepping`,
 `support_volume`, `sections`; `orientations` with `--candidates`.
 
-- Report `not_watertight` or `not_sound` first: it blocks slicing for every technology.
-- Walls are `supported` (joined to the part on two sides or more) or not, each with its own minimum.
-  A mesh cannot say which, so it is judged against the supported minimum (`printing.wall`). On a mesh
+- Report `not_watertight` or `not_sound` first: it blocks slicing for every technology. A mesh with no
+  inside is refused in one finding and measured not at all: `mesh_empty`, `mesh_unreadable`,
+  `mesh_too_large` (over 2 million triangles: decimate it), `inconsistent_normals`, `mesh_no_volume`.
+  `mesh_repaired` (a warning) says what was put right before measuring -- doubled triangles, triangles
+  wound against their neighbours, a shell inside out: export the file again, a slicer reads it as it is.
+  `bodies_intersect`: bodies that pass through each other; the volume given is their sum.
+- Walls are `supported` (joined to the part on two sides or more) or not, each with its own minimum
+  (`printing.wall_supported`, `printing.wall_unsupported`), read off the wall itself on a STEP and on a
+  mesh alike: a fin on its base is joined on one side, a skin over a cavity all round. A wall whose
+  support could not be read is `printing.wall`: judged as supported, and warned of under the unsupported
+  minimum. On a mesh
   the field is `--samples` rays (2000) from random points over the surface (plus one from every
   triangle on a mesh of 5000 triangles or fewer), each straight in to the face it leaves through, a
   knife edge's own sliver left to the knife family: a thin `min_mm` beside a thick `p05_mm` is a small
   thin place (a web between two cuts, a feather where two surfaces meet at a glancing angle); name it
   from its item's `xyz` and judge it there. A mesh's walls are an item per face and the face across (one
-  fin, one item). Every reading is sampled (`sampled`); on the B-rep the thinnest walls and gaps are then
-  refined to the exact least distance (`refined`). On a mesh a place smaller than the rays' spacing can be
-  missed, and more rays find false thin places as well as true ones, so a mesh's thin reading is confirmed
+  fin, one item). Every reading is sampled (`sampled`); the thinnest walls are then refined (`refined`):
+  on the B-rep to the exact least distance, on a mesh to the least wall about the thinnest sample. On a
+  mesh a place smaller than the rays' spacing can still be missed, so a mesh's thin reading is confirmed
   on the STEP or the model before the design changes. A mesh's wall under its limit by no more than its
   chords may stray from the curved surface (`chord_mm`) is a warning, at the limit within the mesh's
   accuracy (a 0.5 mm tube's STL reads 0.498): only the exact model can say which side it falls.
@@ -91,9 +103,15 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   stays under the minimum wall. A warning (text-to-cad's own rule;
   no guide defines a knife edge, and the tip prints rounded): blunt it, chamfer it at 45 degrees or
   more, or move the cut that made it.
+- `mesh_at_limit` (info, a mesh alone): surface or edges that read within the mesh's own angular
+  accuracy of a limit -- a 45 degree cone's triangles read 44.3 to 45.4 -- and were not judged. The STEP or
+  the model has the angle; a finer mesh narrows the band.
 - The powder processes (SLS, MJF) need no support: their overhangs are facts, not verdicts, and
   trapped powder and its escape holes (`trapped_volumes`) are the check instead. A sealed cavity in
-  SLA traps resin; in FDM it prints as infill (`internal_void`).
+  SLA traps resin; in FDM it prints as infill (`internal_void`). Each opening's `min_escape_hole_mm` is the
+  hole's own diameter on a STEP and the throat measured on the triangles on a mesh or for an opening that is
+  no round hole (within `escape_hole_uncertainty_mm`); MJF's and metal's escape-hole verdicts say they
+  apply the SLS guide's figure.
 - `support_volume` is a column fill to the plate or the part: a coarse upper bound, a cost and finish
   signal, not a failure unless the person set a budget.
 - `clearances` measures each pair of parts in an assembly, and walls are per part: attribute a thin
@@ -110,12 +128,13 @@ model's document. Then check by hand what the check does not measure:
 
 - Tree supports, support density and the designer's cosmetic faces (the check calls a face cosmetic
   by its size).
-- Escape-hole sizes on a mesh, and openings other than round holes, are estimates; cavities smaller
-  than the probing ball are found only when sealed.
+- A cavity under about five voxels across (`trapped_volumes.pitch_mm`) is found only where it is sealed,
+  and an opening under a voxel wide is known only to be that narrow.
 - Lattices, minimum feature by local curvature, text legibility, tolerance stack-ups and residual
   stress beyond the largest cross-section.
 - A horizontal round hole is judged by its diameter (`printing.horizontal_hole`: over 10 mm on FDM its
   crown sags; a teardrop or a turn of the part fixes it), not as a bridge; smaller ones print unsupported.
+  A mesh has no axes: there its crown reads as a bridge of its span (`printing.bridge_length`).
 
 For every fail, give a concrete, plain-language instruction with target numbers from the hint (for
 example "thicken the wall at housing/face 8 from 0.3 mm to at least 1 mm"). When the model's source can

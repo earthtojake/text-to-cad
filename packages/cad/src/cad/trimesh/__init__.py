@@ -1,6 +1,7 @@
 """``cad.trimesh``: the trimesh integration -- our measurements of a triangle mesh for 3D printing,
-taking trimesh's ``Trimesh`` (its extra, ``cad[trimesh]``: trimesh, with rtree for its ray casts,
-scipy for its connected bodies and networkx for filling the face a body shares with another).
+taking trimesh's ``Trimesh`` (its extra, ``cad[trimesh]``: trimesh, with rtree for its closest points,
+scipy for its connected bodies and networkx for filling the face a body shares with another; the rays are
+the library's own, in bounded memory).
 
 Each returns the report as plain data, every figure in millimetres, degrees and square millimetres --
 facts, never verdicts: nothing here compares a figure against a process's limit:
@@ -13,7 +14,10 @@ A family that cannot be measured leaves ``{"error": ...}`` where its facts would
 says so (``partial``, ``partial_sections``). The mesh is never changed: each measures a copy, scaled
 by ``units`` to millimetres and cleaned as a file's mesh is (``_mesh``: welded, its collapsed triangles and
 doubled slivers and zero-area debris dropped, its tessellation's cracks closed; watertightness judged per
-body).
+body) and put through the same gate: a mesh with no inside to measure -- no triangles, a corner that is no
+number, more than two million triangles, a one-sided surface, a closed one of no volume -- raises
+``cad._internal.dfm.Unmeasured`` (its ``code`` and ``message`` the check's one finding), and what the gate
+repaired is in the report's ``mesh``.
 
 Injection molding is judged on exact geometry alone (a mesh's chords misread its draft, undercuts and walls):
 check the part's STEP or model. A file is measured by its document type's check -- ``cad.stl.dfm("part.stl")``,

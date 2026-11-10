@@ -71,8 +71,9 @@ FOLD_PLANE = 1e-5
 
 
 #: Triangles a mesh may have for the check to measure it. Every family's tables are bounded per block, so the
-#: check's memory grows with the mesh alone. Past this the check refuses (``mesh_too_large``) rather than take
-#: a machine's memory: a slicer needs far fewer triangles.
+#: check's memory grows with the mesh alone: a sphere of 330 000 triangles peaked at 0.5 GB (10 s) and one of
+#: 1.3 million at 1.7 GB (35 s). Past this the check refuses (``mesh_too_large``) rather than take a machine's
+#: memory: a slicer needs far fewer triangles.
 MAX_TRIANGLES = 2_000_000
 
 
