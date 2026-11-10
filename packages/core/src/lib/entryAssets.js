@@ -54,8 +54,7 @@ export function entryAsset(entry, key) {
   if (
     assetKey === kind ||
     assetKey === sourceFormat ||
-    (sourceFormat === RENDER_FORMAT.STEP && assetKey === "glb") ||
-    (kind === "srdf" && assetKey === "srdf")
+    (sourceFormat === RENDER_FORMAT.STEP && assetKey === "glb")
   ) {
     return primaryAsset(entry);
   }

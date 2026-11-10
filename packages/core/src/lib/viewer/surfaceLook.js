@@ -218,7 +218,7 @@ export function createSurfaceLook(THREE, root) {
         if (authored.glows && finishes) {
           target.emissive.copy(lit.emissive);
           target.emissiveIntensity = lit.emissiveIntensity;
-        } else if (!authored.glows || !finishes) {
+        } else {
           target.emissive.copy(color);
           target.emissiveIntensity = clamp01(settings.emissiveIntensity);
         }

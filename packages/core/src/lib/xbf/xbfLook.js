@@ -185,8 +185,8 @@ export async function fetchXbfLook(base, { fetch: fetchImpl = globalThis.fetch, 
 /**
  * The rig a stage lights an engine document's scene with in the regular modes
  * (`../viewer/sceneRig.js`): the look's key lights, each shining from where its direction comes, its
- * environment image at its intensity turned into the document's frame, exposure 1 and the look's
- * curve. A look read without its image lights with none.
+ * environment image at its intensity turned into the document's frame, the look's exposure
+ * (`2 ** exposure` stops) and the look's curve. A look read without its image lights with none.
  */
 export function xbfLookRig(look) {
   const image = look.environment.image || null;
@@ -208,8 +208,8 @@ export function xbfLookRig(look) {
 /**
  * The rig a stage lights an engine document's scene with in X-ray (`xbfLookXray`): the look's
  * colour-only model, its ambient and its lights at `π` times their radiance, each shining from
- * where its direction comes, no environment, exposure 1 and the look's curve, its see-through
- * surfaces blended in linear light as OCCT's are.
+ * where its direction comes, no environment, the look's exposure (`2 ** exposure` stops) and the
+ * look's curve, its see-through surfaces blended in linear light as OCCT's are.
  */
 export function xbfLookXrayRig(look) {
   return Object.freeze({

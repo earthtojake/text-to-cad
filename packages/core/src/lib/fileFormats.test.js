@@ -12,8 +12,8 @@ import {
 } from "./fileFormats.js";
 
 test("entrySourceFormat maps manifest kinds to stable render formats", () => {
-  assert.equal(entrySourceFormat({ kind: "part" }), RENDER_FORMAT.STEP);
-  assert.equal(entrySourceFormat({ kind: "assembly" }), RENDER_FORMAT.STEP);
+  assert.equal(entrySourceFormat({ kind: "step" }), RENDER_FORMAT.STEP);
+  assert.equal(entrySourceFormat({ kind: "xbf" }), RENDER_FORMAT.STEP);
   assert.equal(entrySourceFormat({ kind: "dxf" }), RENDER_FORMAT.DXF);
   assert.equal(entrySourceFormat({ kind: "stl" }), RENDER_FORMAT.STL);
   assert.equal(entrySourceFormat({ kind: "3mf" }), RENDER_FORMAT.THREE_MF);
@@ -53,16 +53,16 @@ test("meshAssetKeyForEntry chooses a mesh file's own key, and glb for any other 
   assert.equal(meshAssetKeyForEntry({ kind: "stl" }), "stl");
   assert.equal(meshAssetKeyForEntry({ kind: "3mf" }), "3mf");
   assert.equal(meshAssetKeyForEntry({ kind: "glb" }), "glb");
-  assert.equal(meshAssetKeyForEntry({ kind: "part" }), "glb");
-  assert.equal(meshAssetKeyForEntry({ kind: "assembly" }), "glb");
+  assert.equal(meshAssetKeyForEntry({ kind: "step" }), "glb");
+  assert.equal(meshAssetKeyForEntry({ kind: "xbf" }), "glb");
   assert.equal(meshAssetKeyForEntry({ kind: "dxf" }), "dxf");
 });
 
 test("every entry renders its own source format; nothing is package-baked", () => {
-  // A DXF's render asset is the .dxf itself — parsed and prism-meshed in the client — and no kind
+  // A DXF's render asset is the .dxf itself (the server flattens it to the drawing payload) and no kind
   // is baked into a package any more, so the source format IS the asset format everywhere.
   assert.equal(entrySourceFormat({ kind: "dxf" }), RENDER_FORMAT.DXF);
-  assert.equal(entrySourceFormat({ kind: "part" }), RENDER_FORMAT.STEP);
+  assert.equal(entrySourceFormat({ kind: "model" }), RENDER_FORMAT.STEP);
   assert.equal(entrySourceFormat({ kind: "stl" }), RENDER_FORMAT.STL);
   assert.equal(entrySourceFormat({ kind: "urdf" }), RENDER_FORMAT.URDF);
 });

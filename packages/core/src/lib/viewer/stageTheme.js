@@ -8,51 +8,15 @@ import {
 export const BASE_VIEWER_THEME = {
   sceneBackground: "#09090b",
   surface: "#f4f4f5",
-  surfaceRoughness: 0.92,
-  surfaceMetalness: 0.03,
-  surfaceClearcoat: 0,
-  surfaceClearcoatRoughness: 0.6,
   edge: "#18181b",
   edgeThickness: 1,
-  edgeOpacity: 0.84,
   selected: "#2563eb",
   hover: "#0ea5e9",
   gridCenter: "#3f3f46",
-  gridCell: "#27272a",
   gridOpacity: 0.16,
   stageFloorColor: "#141416",
   stageFloorOpacity: 0.78,
-  stageFloorRoughness: 0.92,
-  stageFloorMetalness: 0,
-  stageFloorTransmission: 0,
-  stageFloorIor: 1.35,
-  stageFloorThickness: 0.035,
-  stageFloorAttenuationDistance: 4,
-  viewPlanePalette: {
-    axis: {
-      x: {
-        front: [250, 88, 79],
-        back: [122, 32, 28]
-      },
-      y: {
-        front: [92, 233, 123],
-        back: [30, 99, 46]
-      },
-      z: {
-        front: [84, 131, 255],
-        back: [30, 53, 126]
-      }
-    },
-    center: {
-      fill: [252, 215, 74],
-      stroke: [255, 235, 153]
-    },
-    shell: {
-      inner: [24, 31, 48],
-      outer: [8, 12, 20],
-      stroke: [148, 163, 184]
-    }
-  }
+  stageFloorRoughness: 0.92
 };
 
 export const THEME_BACKGROUND_TYPES = {

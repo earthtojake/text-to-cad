@@ -44,7 +44,6 @@ export const BOARD_PICK_KINDS = Object.freeze({
   dimensions: Object.freeze({ dimensions: true }),
   shapes: Object.freeze({ shapes: true, footprintShapes: true }),
 });
-export const BOARD_PICK_MODES = Object.freeze(Object.keys(BOARD_PICK_KINDS));
 
 const EMPTY = Object.freeze([]);
 function centre(polygon) {

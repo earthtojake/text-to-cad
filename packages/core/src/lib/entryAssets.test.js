@@ -12,7 +12,7 @@ import {
 function stepEntry(overrides = {}) {
   return {
     file: "parts/bracket.step",
-    kind: "part",
+    kind: "step",
     url: "/assets/bracket.glb",
     hash: "glb-hash",
     ...overrides

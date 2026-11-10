@@ -3,7 +3,7 @@
  *
  * A plot is a KiCad board drawn from its file (`docs/plot-payload.md`, schema 4): one sheet in
  * millimetres, y DOWN, on KiCad's board background, its LAYERS bottom to top as KiCad's PCB editor
- * draws them with the front copper active — the drawing sheet, the board's area, the back side,
+ * draws them with the front copper active — the board's area, the back side,
  * the inner coppers, the user layers and the outline, the front side, then what goes through the
  * board: the pads' holes, the vias' holes, the ratsnest and the through-hole names — each a list of
  * ITEMS: filled polygons (pads, pours, filled graphics, the board's area with its cutouts), stroked
@@ -66,7 +66,7 @@ export const PLOT_LAYER_SIDES = Object.freeze(["front", "back", "both"]);
 export const PLOT_ITEM_TYPES = Object.freeze(["poly", "path", "circle", "text", "label"]);
 /** Layer kinds drawn only when a view names them: none, as KiCad shows every layer of a board it opens. */
 export const OPTIONAL_LAYER_KINDS = Object.freeze([]);
-/** Layer kinds drawn under the stack from either side: the drawing sheet and the board's area. */
+/** Layer kinds drawn under the stack from either side: the board's area. */
 const UNDERLAY_KINDS = new Set(["area"]);
 /** Layer kinds drawn over the stack from either side: what goes through the board. */
 const OVERLAY_KINDS = new Set(["drill", "via", "ratsnest", "names"]);
