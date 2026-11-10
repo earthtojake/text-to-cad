@@ -400,14 +400,12 @@ def _overlaps(pieces: list[_Piece], tolerance: float = _SAME) -> list[dict[str, 
             off_a = np.abs(rel_a[:, 0] * u[i, 1] - rel_a[:, 1] * u[i, 0])
             rel_b = b[i + 1:] - a[i]
             off_b = np.abs(rel_b[:, 0] * u[i, 1] - rel_b[:, 1] * u[i, 0])
-            candidates = np.nonzero((cross_dir < 1e-7) & (off_a < tolerance) & (off_b < tolerance))[0]
-            for k in candidates:
-                j = i + 1 + int(k)
-                s0, s1 = sorted((float(rel_a[k] @ u[i]), float(rel_b[k] @ u[i])))
-                overlap = min(s1, length[i]) - max(s0, 0.0)
-                if overlap > tolerance:
-                    found.append(_overlap_item(lines[group[i]], lines[group[j]], overlap,
-                                               a[i] + u[i] * (max(s0, 0.0) + overlap / 2)))
+            along = np.sort(np.column_stack([rel_a @ u[i], rel_b @ u[i]]), axis=1)
+            start = np.maximum(along[:, 0], 0.0)
+            overlap = np.minimum(along[:, 1], length[i]) - start
+            for k in np.nonzero((cross_dir < 1e-7) & (off_a < tolerance) & (off_b < tolerance) & (overlap > tolerance))[0]:
+                found.append(_overlap_item(lines[group[i]], lines[group[i + 1 + int(k)]], float(overlap[k]),
+                                           a[i] + u[i] * float(start[k] + overlap[k] / 2)))
     if arcs:
         centres = np.array([p.centre for p in arcs])
         radii = np.array([p.radius for p in arcs])
@@ -532,7 +530,8 @@ def _overlap_item(first: _Piece, second: _Piece, length: float, at: np.ndarray) 
 
 
 def _short_runs(loop: plane.Loop, most_turn_deg: float = 20.0, least_count: int = 8) -> list[dict[str, Any]]:
-    """Runs of short straight segments turning a little, the same way, at each joint: a curve as chords."""
+    """Runs of short straight segments turning a little, the same way, at each joint: a curve as chords. One
+    item for the contour, at its first run, counting them all: a traced outline is one curve drawn so."""
     pts = loop.points
     n = len(pts)
     if n < least_count + 2 or not loop.straight.any():
@@ -567,7 +566,11 @@ def _short_runs(loop: plane.Loop, most_turn_deg: float = 20.0, least_count: int 
                           "location": _where(source) if source is not None else None,
                           "xyz": [round(float(pts[i][0]), 4), round(float(pts[i][1]), 4), 0.0]})
         i = j + 1
-    return found
+    if len(found) > 1:
+        lines, total = sum(item["segments"] for item in found), sum(item["length_mm"] for item in found)
+        found[0].update(segments=int(lines), length_mm=round(float(total), 4), runs=len(found),
+                        detail=f"{len(found)} runs, {lines} lines under {short:.3g} mm each")
+    return found[:1]
 
 
 # --- bend lines ---------------------------------------------------------------------------------------------
@@ -778,8 +781,9 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         size = loop.length()
         crossing = plane.self_crossings(loop)
         if crossing is None:
-            failed["self_intersections"] = (f"a contour of {len(loop.points)} segments ({_where(loop.source[0])}) is "
-                                            f"past the {plane.SELF_CROSSING_SEGMENTS} this check seeks crossings in")
+            failed["self_intersections"] = (f"a contour of {len(loop.points)} segments ({_where(loop.source[0])}) has "
+                                            f"over {plane.SELF_CROSSING_PAIRS} pairs of segments that may cross: "
+                                            "past what this check seeks crossings in")
         elif crossing:
             source = loop.source[0]
             for point in crossing[:4]:

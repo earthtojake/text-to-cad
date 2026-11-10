@@ -542,6 +542,27 @@ class CutFileTest(unittest.TestCase):
         nearest = result.measurements["hole_spacing"]["items"][0]
         self.assertAlmostEqual(nearest["distance_mm"], 11.0, places=6)  # 21 mm apart, 10 mm across
 
+    def test_a_traced_outline_of_twenty_five_thousand_lines_is_measured(self) -> None:
+        count = 25000   # one contour: every measure of it is pruned, none the square of its sides
+
+        def build(msp, _):
+            turns = [2 * math.pi * i / count for i in range(count)]
+            msp.add_lwpolyline([(200 + 150 * math.cos(t) * (1 + 0.05 * math.sin(40 * t)),
+                                 200 + 150 * math.sin(t) * (1 + 0.05 * math.sin(40 * t))) for t in turns], close=True)
+        result = self.check(self.write("traced", build), thickness=2.0)
+        self.assertEqual(result.status, "ok")   # its crossings of itself sought too: nothing left unmeasured
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.short_line_run"})
+        (runs,) = result.measurements["short_line_runs"]["items"]   # one finding for the contour, not one a run
+        self.assertEqual(runs["runs"], 80)
+        self.assertEqual(result.measurements["cut_file"]["contour_count"], 1)
+
+        # a long straight side drawn as five thousand lines, crossed twice: found among the pairs that may cross
+        def crossed(msp, _):
+            msp.add_lwpolyline([(0.01 * i + 0.003, 0.0) for i in range(5000)] + [(50, 30), (20, -30), (0, 30)],
+                               close=True)
+        result = self.check(self.write("crossed", crossed), thickness=2.0)
+        self.assertEqual([item["xyz"][:2] for item in result.measurements["self_intersections"]["items"]], [[10.0, 0.0], [35.0, 0.0]])
+
 
 if __name__ == "__main__":
     unittest.main()
