@@ -45,6 +45,13 @@ terminal UI show none and are served as text clients.
   newer card retires the older ones. The Claude app's Code tab draws the card of Claude Desktop's own
   server and carries its calls; a server Claude Code starts there gets cards whose calls it refuses, so
   that server lists no tools ([Claude: where the card comes from](#claude-where-the-card-comes-from)).
+  In Claude (Desktop's Chat and Code tabs, claude.ai) a card opens in the side panel beside the
+  chat: the page's `resources/read` content item carries `_meta.ui.preferredDisplayMode:
+  "fullscreen"`, Claude's own extension, which no other host reads (the listing, tabs and text are
+  served without it). Claude moves the card once it has started, and never opens it full screen
+  from that; where there is no side panel (a narrow window, an account without it, a chat in its own
+  window) the card stays in the chat. A newer card replaces the older one in the panel, which
+  returns to the chat as a card and, retired, keeps its last frame.
 
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
@@ -475,7 +482,9 @@ frames, so there is nothing to keep its record under. `App.tsx` frames it (full 
 an inline card whose height the host is told) under the navbar (`chrome: "page"`) in every
 presentation but the file handler's (`chrome: "bare"`, above). Inline, where the host offers
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
-icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's
+icon button) asks it for `ui/request-display-mode` fullscreen (in Claude, the side panel, where a card
+starts: there, as full screen, the card has no Full size, and the host's own controls return it to the
+chat); it is the first of the host's
 actions at the navbar's right, over a file and on the home (the corner's first in the file
 handler); with the update button after it, outermost, it is all the navbar's right end holds. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s

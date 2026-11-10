@@ -451,8 +451,20 @@ class Server:
             uri = params.get("uri")
             if not self.page.owns(uri):
                 raise RpcError(_RESOURCE_NOT_FOUND, f"no resource {uri}")
-            return {"contents": [{"uri": uri, "mimeType": MIME, "text": self.page.html(), "_meta": self._resource_meta()}]}
+            return {"contents": [{"uri": uri, "mimeType": MIME, "text": self.page.html(), "_meta": self._read_meta()}]}
         raise RpcError(METHOD_NOT_FOUND, f"{method} is not supported")
+
+    def _read_meta(self) -> dict[str, Any]:
+        """The page's ``_meta`` as ``resources/read`` serves it: ``_resource_meta``, and for a host that
+        mounts cards inline, ``preferredDisplayMode: fullscreen`` -- Claude's own extension of
+        ``_meta.ui``, which it reads on this content item alone: it moves a card that offers
+        ``fullscreen`` into its side panel once the card has started, and never opens it full screen
+        from the preference; where there is no side panel the card stays in the chat. Other inline
+        hosts ignore it. Tabs and text are served what they were (``test_codex_contract``)."""
+        meta = self._resource_meta()
+        if self.tabs or self.text:
+            return meta
+        return {**meta, "ui": {**meta["ui"], "preferredDisplayMode": "fullscreen"}}
 
     def _resource_meta(self) -> dict[str, Any]:
         """The page's sandbox: ``RESOURCE_META``, and for a host that mounts cards inline, the engine's

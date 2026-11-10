@@ -73,13 +73,17 @@ function Frame({ bridge, context, insets, inline = false, floatingComposer = fal
     ...(floatingComposer ? { '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px`,
       '--cad-viewport-corner-left': '2px', '--cad-viewport-corner-right': 'auto' } : {}),
   } as CSSProperties;
-  const [width, setWidth] = useState(() => window.innerWidth);
+  // The width is read as the card draws, not kept from when it mounted: a card that started full
+  // size (Claude's side panel, where it moves an inline card it can) comes back to the chat at the
+  // width its frame has then, which may have changed before a resize listener was up.
+  const [, resized] = useState(0);
   useEffect(() => {
     if (!inline) return;
-    const measure = () => setWidth(window.innerWidth);
+    const measure = () => resized(count => count + 1);
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [inline]);
+  const width = window.innerWidth;
   const height = inlineHeight(width, context.containerDimensions?.maxHeight);
   useEffect(() => { if (inline) bridge.notify('ui/notifications/size-changed', { height }); }, [bridge, inline, height]);
   if (!inline) {

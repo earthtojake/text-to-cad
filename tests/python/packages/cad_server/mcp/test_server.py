@@ -765,6 +765,19 @@ class InlineServerTest(_Session):
         self.assertEqual(tabs.handle("resources/list", {}, None)["resources"][0]["_meta"]["ui"]["csp"]["connectDomains"],
                          ["data:", "blob:"])
 
+    def test_an_inline_card_prefers_claude_s_side_panel_and_tabs_and_text_are_served_as_they_were(self) -> None:
+        # Claude reads the preference on the content item resources/read serves, not on the listing.
+        uri = self.server.handle("resources/list", {}, None)["resources"][0]["uri"]
+        served = {}
+        for presentation, (client, offered) in CATALOGS.items():
+            server = Server(page=self.server.page, recents=self.server.recents)
+            server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": offered,
+                                                           "clientInfo": client}), None)
+            listed = server.handle("resources/list", {}, None)["resources"][0]["_meta"]["ui"]
+            self.assertNotIn("preferredDisplayMode", listed)
+            served[presentation] = server.handle("resources/read", {"uri": uri}, None)["contents"][0]["_meta"]["ui"].get("preferredDisplayMode")
+        self.assertEqual(served, {"tabs": None, "inline": "fullscreen", "text": None})
+
     def test_a_mounted_view_warms_the_engine_s_meshing_pool(self) -> None:
         # The engine starts its pool with the first view, never with a build (law 19).
         warmed = []
