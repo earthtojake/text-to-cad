@@ -1195,6 +1195,22 @@ class CopiesTest(unittest.TestCase):
             np.testing.assert_allclose(found[index].point(corner),
                                        [c * 20.0 - s_ * 12.0 + x, s_ * 20.0 + c * 12.0 + y, 4.0 + z], atol=1e-9)
 
+    def test_a_mirror_image_is_no_copy_and_the_same_part_turned_is_one(self) -> None:
+        """A left and a right bracket are two parts: no turn takes a handed feature onto its mirror image, so
+        the mirrored one is measured on its own, while the same part turned is the first's copy."""
+        import copy
+
+        handed = _bracket() - bd.Pos(-15, 8, 0) * bd.Cylinder(1.5, 8)  # a hole off both of its planes of symmetry
+        left = copy.deepcopy(handed)
+        right = bd.Pos(70, 0, 0) * bd.mirror(copy.deepcopy(handed), bd.Plane.YZ)
+        turned = bd.Pos(0, 60, 0) * bd.Rot(0, 0, 90) * copy.deepcopy(handed)
+        left.label, right.label, turned.label = "left", "right", "turned"
+        document = brep.parts_of(bd.Compound(children=[left, right, turned]), "kit")
+        self.assertEqual([part.name for part in document.parts], ["left", "right", "turned"])
+        found = brep.copies(document.parts)
+        self.assertEqual({index: found[index].of for index in found}, {2: 0})
+        self.assertAlmostEqual(float(np.linalg.det(found[2].rotation)), 1.0, places=9)
+
     def test_a_different_part_that_shares_its_ends_and_middles_is_no_copy(self) -> None:
         # two plates whose curved edge is a Bezier with the same ends and middle, its other poles apart
         def plate(poles: list[tuple[float, float]]) -> bd.Shape:

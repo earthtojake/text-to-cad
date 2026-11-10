@@ -291,13 +291,14 @@ count a summary says.
   geometry moved -- an exporter's copies, a pattern written out part by part -- is found by its geometry
   (`_dfm_brep.copies`: its counts and faces' kinds alike, its volume and area the first's to 1e-6, and every
   vertex, each edge at its middle and quarters and each face at the middles and quarters of its parameters where
-  the first's lie moved, ordinal for ordinal, 1e-7 of its size -- probes in one plane, which a mirror fits as well
-  as a turn, are no copy; never by bytes, which a copy does not keep) and, in CNC and sheet metal (each part read in
+  the first's lie moved, ordinal for ordinal, 1e-7 of its size, by a turn and a shift -- a mirror image is no
+  copy (a left and a right bracket are two parts, each measured on its own), nor are probes in one plane, which a
+  mirror fits as well as a turn; never by bytes, which a copy does not keep) and, in CNC and sheet metal (each part read in
   its own frame, so where it stands changes nothing), measured once: the first's items said again at the copy's
   refs, its places and directions moved onto it, its counts counted again (`_dfm_brep.moved`), the faces the
   kernel failed on said at the copy's own too. CNC reuses a measurement only where the copy's own machine frame
   (`machine.frames`, its own) is the measured part's turned with it: a copy turned by a right angle reads square
-  to the world again, a frame of its own, and is measured anew (a mirrored copy too). A row of 46 copies among 107
+  to the world again, a frame of its own, and is measured anew. A row of 46 copies among 107
   parts costs 61 parts' measurement, its report the same. Molding reads a part against the world's pull, so it
   measures every part that stands another way; printing every occurrence.
 - **Exact rays** (`_dfm_brep.Rays`, each process's casts) cost what a crossing costs. On a heavy face -- free-form
