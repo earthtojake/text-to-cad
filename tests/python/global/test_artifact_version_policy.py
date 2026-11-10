@@ -35,21 +35,16 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
         # the one GLB the server writes outside the engine (a robot primitive's mesh) is framed in
         # cad_server._internal.primitive_mesh. cad.engine is the one exception: it is standalone
         # by law (it imports nothing of the packages outside itself) and writes its own GLB, so it
-        # declares the container once more, in its GLB writer. The render skill's helper is the
-        # other: it runs inside Blender's bpy, in an environment with nothing of ours in it, and
-        # reads the GLB's own JSON chunk, so it frames the container itself. The server's packaged
-        # runtime (`_runtime`) is a built copy of the skills, not a source, so it is not scanned.
+        # declares the container once more, in its GLB writer.
         sources = [ROOT / "packages" / project / "src" for project in ("cad", "cad-server", "cad-mcp")]
-        sources.append(ROOT / "skills")
         magic = re.compile(r"0x46546c67|b[\"']glTF[\"']", re.IGNORECASE)
         declarations = sorted(
             path.relative_to(source).as_posix()
             for source in sources
             for path in source.rglob("*.py")
-            if "_runtime" not in path.relative_to(source).parts and magic.search(path.read_text(encoding="utf-8"))
+            if magic.search(path.read_text(encoding="utf-8"))
         )
-        self.assertEqual(["cad/engine/export/glb.py", "cad_server/_internal/primitive_mesh.py",
-                          "render/scripts/cad_glb.py"], declarations)
+        self.assertEqual(["cad/engine/export/glb.py", "cad_server/_internal/primitive_mesh.py"], declarations)
 
 
 if __name__ == "__main__":

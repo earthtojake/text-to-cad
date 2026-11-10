@@ -137,7 +137,8 @@ and vias. After a board change, export the STEP and the xbf again before
 end of its explode, out of the stand, with the LEDs lit to show 2:14:23. It reads `GLB/orbit_assembly.glb` (every
 part and the explode, `cad run src/exports.py`) and `GLB/orbit.glb` (the board's copper, mask and silkscreen,
 `cad kicad_pcb export orbit.kicad_pcb --to glb -o GLB`), laying the board's layers on the assembly's PCB, so make
-both first. `cad run` runs it in its own Python with Blender's module, without cad.
+both first. `cad run` gives it cad's blender integration: Blender's module on Python 3.13, with cad, whose
+`cad.blender.load` it loads both GLBs with.
 
 ```bash
 cad run render.py                                # an EEVEE draft at 1080p, RENDERS/hero-draft.png (15-35 s)

@@ -1,6 +1,6 @@
 ---
 name: render
-description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, lights and frames it in a bpy script that `cad run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
+description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, loads it with cad.blender, lights and frames it in a bpy script that `cad run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -9,19 +9,19 @@ metadata:
 # Renders for people
 
 A render is a picture for a person: a hero image, a README picture, a post, a turntable, a film of
-a mechanism. The model goes to Blender as a GLB; the scene (camera, lights, world, engine,
-output) is an ordinary Python script that imports `bpy`, Blender as a Python module, and `cad run`
-runs it. The same script runs in a person's own Blender. Judge geometry with `cad model snapshot`,
-never with a render: a render's lens, light and depth of field make it a poor measure, so never
-read a dimension off one.
+a mechanism. The model goes to Blender as a GLB, loaded by `cad.blender.load`; the scene (camera,
+lights, world, engine, output) is an ordinary Python script that imports `bpy`, Blender as a
+Python module, and `cad run` runs it. Judge geometry with `cad model snapshot`, never with a
+render: a render's lens, light and depth of field make it a poor measure, so never read a
+dimension off one.
 
 ## Start with the task
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **A still of a model** | Export a GLB, copy `scripts/cad_glb.py` beside a new `render.py`, `cad run render.py`. | [The script](#the-script), [scene script](references/scene-script.md) |
+| **A still of a model** | Export a GLB, write a `render.py` that loads it, `cad run render.py`. | [The script](#the-script), [scene script](references/scene-script.md) |
 | **Draft, then a final** | An EEVEE draft at 1080p, looked at, before Cycles. | [Draft then final](references/shots.md#draft-then-final) |
-| **A pose of a motion or a frame of an animation** | `model.play(name)` and the frame. | [Clips](#import-through-the-helper) |
+| **A pose of a motion or a frame of an animation** | `model.play(name)` and the frame. | [Clips](#load-the-glb) |
 | **A turntable** | The camera on an empty that turns once. | [Turntables](references/shots.md#turntables) |
 | **A film of a motion or an animation** | `model.play(name)`, then an mp4. | [Films](references/shots.md#films) |
 | **Motion blur, depth of field, a glow** | The scene's and the camera's settings; a keyed emission. | [Shots](references/shots.md) |
@@ -42,12 +42,14 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
-`cad run render.py` sees `import bpy` and runs the script in an environment of its own: Python 3.13
-and bpy 5.2.3 (Blender 5.2 LTS), without `cad`, made the first time and kept. Blender's own
-preferences and add-ons folders are private to that run, so a person's Blender settings never load
-into it. A script that imports both `bpy` and `cad` is refused: export what it reads first. bpy has no
-build for Intel Macs or Linux on ARM, where `cad run` refuses such a script by name. Nothing here
-starts the Blender app.
+`cad run render.py` sees `import bpy` and gives the script cad's blender integration: an
+environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)
+beside cad, made the first time and kept. The script imports what it likes of cad and build123d
+beside bpy, so one script can build a model, export it and render it. Blender's own preferences
+and add-ons folders are private to that run, so a person's Blender settings never load into it. bpy
+has no build for Intel Macs or Linux on ARM, where `cad run` refuses such a script by name. A
+`--python` or a header's `requires-python` that leaves 3.13 out is refused the same way. Nothing
+here starts the Blender app.
 
 ## Export the model
 
@@ -68,24 +70,21 @@ the GLB is a copy.
 
 ## The script
 
-Copy `scripts/cad_glb.py` from this skill's folder beside the script (the helper below), then:
-
 ```python
-# render.py: cad run render.py, or blender -b -P render.py in a person's Blender
+# render.py: cad run render.py
 import math
-import sys
 from pathlib import Path
 
 import bpy
 from mathutils import Vector
 
+from cad.blender import load
+
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))  # cad run puts the script's folder first; blender -P does not
-import cad_glb
 
 bpy.ops.wm.read_factory_settings(use_empty=True)  # no person's startup file, no default cube
 scene = bpy.context.scene
-model = cad_glb.load(HERE / "scene.glb")  # every part where cad placed it
+model = load(HERE / "scene.glb")  # every part where cad placed it
 
 scene.render.resolution_x, scene.render.resolution_y = 1920, 1080
 aim = bpy.data.objects.new("aim", None)
@@ -115,23 +114,24 @@ cad run render.py
 
 The script is the scene: a camera, lights and a world are added in Python, every run starts from
 an empty scene, and the outputs are wherever the script writes them. Arguments after the script's
-name reach it as `sys.argv[1:]` (`cad run render.py --final`); under `blender -b -P render.py --
---final`, after the `--`. Lights, the world, colour management and a GPU are in
-[the scene script](references/scene-script.md).
+name reach it as `sys.argv[1:]` (`cad run render.py --final`). Lights, the world, colour
+management and a GPU are in [the scene script](references/scene-script.md).
 
-## Import through the helper
+## Load the GLB
 
-Always import a GLB from cad with `cad_glb.load`, never `bpy.ops.import_scene.gltf` alone. Blender's
+Always load a GLB with `cad.blender.load`, never `bpy.ops.import_scene.gltf` alone. Blender's
 importer poses every part a clip moves at that clip's first frame (a hinge written at 30 degrees
 reads at the clip's start, with no error), leaves only the first clip live, and keys from frame 0.
-The helper puts every node back where the GLB places it, clears what the import set playing, and
-plays the clip asked for.
+`load` runs that importer, puts every node a clip moves back where the GLB places it, clears what
+the import set playing, and plays the clip asked for. It opens any GLB, not only cad's: a node is
+found by its place in the file, whatever Blender names its object.
 
 | Call | What it gives |
 | --- | --- |
-| `cad_glb.load(path, clip=None, fps=24)` | Imports into the current scene and returns the model; `clip` plays one, `fps` keys its seconds (set before the import, so a clip is in frames at that rate). |
-| `model.root` | The document's root empty, at the origin, scale 0.001 (the parts are in mm below it). |
-| `model.objects["arm/head"]` | Each node's object by its path below the root, as the GLB names it. |
+| `load(path, clip=None, fps=24)` | Imports into the current scene and returns the model; `clip` plays one, `fps` keys its seconds (set before the import, so a clip is in frames at that rate). |
+| `model.root` | The document's root empty, at the origin, scale 0.001 (the parts are in mm below it). `model.roots` is every root's, for another tool's file with several. |
+| `model.objects["arm/head"]` | Each node's object by its path below the root, as the GLB names it. A node with no name is under the name Blender gave its object; of two nodes with one name (KiCad names every lens `lens`), the last. |
+| `model.nodes[7]` | Each node's object by its index in the file, which tells two of one name apart. |
 | `model.clips` | Each clip by name: `kind` (`motion` or `animation`) and `duration` in seconds. |
 | `model.box`, `model.center`, `model.size` | The world box of the pose cad wrote, in metres, for framing (the root sits at the document's origin, not the model's middle). |
 | `model.play("sweep")` | That clip from frame 0, the scene's range 0 to its duration; `model.play(None)` stands every part where cad placed it. |
@@ -175,7 +175,7 @@ matters: draft those in Cycles at a few samples. Device setup is in
 
 - An empty or black image is the camera inside, behind or too near the model, or no light: print
   `model.box` and the camera's location.
-- A part in the wrong pose is a GLB imported without the helper, or a clip's frame taken before
+- A part in the wrong pose is a GLB imported without `load`, or a clip's frame taken before
   `model.play`.
 - A render proves a picture, not a dimension: geometry is checked with `cad model snapshot`.
 
@@ -183,7 +183,7 @@ matters: draft those in Cycles at a few samples. Device setup is in
 
 - The first `cad run` of a script that imports bpy downloads Blender's module once: about 262 MB
   on a Mac, 356 MB on Windows, 430 MB on Linux, and a Python 3.13 (65 MB). Later runs and other
-  projects reuse it.
+  projects reuse it, and after an update of text-to-cad it is made again from what was downloaded.
 - The first `import bpy` after that takes 11 to 18 s; then about 1.3 s.
 - The first EEVEE render compiles its shaders (about 13 s); the first Cycles render on a Mac's GPU
   compiles its kernels once, about 3.5 minutes. Run it in the background with a long timeout.

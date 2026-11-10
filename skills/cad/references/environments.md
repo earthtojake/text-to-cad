@@ -24,5 +24,5 @@ next run installs it again after an edit). A script with no header inside a Pyth
 import says which integration brings it in one line: add what it names to the header. What cannot
 be installed beside cad is refused in one line with uv's reason: change the requirement it names,
 or, where the network is needed once, run it outside a sandbox or with its permission. A script that
-imports `bpy` (Blender) runs on Python 3.13 with bpy 5.2.3 and no cad, so it imports nothing of cad's:
-export what it reads first (`cad model export ID scene.glb`).
+imports `bpy` (Blender) gets cad's blender integration, whose environment is made on Python 3.13, the one
+bpy 5.2.3 is built for, with cad and any other integration the script uses beside it.
