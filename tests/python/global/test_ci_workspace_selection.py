@@ -321,6 +321,9 @@ class TheOneRequiredCheck(unittest.TestCase):
         self.assertEqual(granted, {"contents": "read", "actions": "read"})
         for name in ("test.yml", "install-linux.yml", "install-windows.yml"):
             text = (WORKFLOWS / name).read_text(encoding="utf-8")
+            # Only the block form: a one-line `permissions: write-all` (or read-all, or {}) asks for
+            # what the block's names would not show.
+            self.assertNotRegex(text, r"(?m)^ *permissions:[ \t]*[^\s#]", name)
             for block in re.findall(r"^( *)permissions:\n((?:\1  .*\n)+)", text, re.M):
                 for permission, level in re.findall(r"^\s+([\w-]+): (\w+)$", block[1], re.M):
                     with self.subTest(workflow=name, permission=permission):
@@ -550,7 +553,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn('"./packages/cad[build123d,trimesh,netgen,calculix]"', JOBS["fea"])
         self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
         self.assertIn("scripts/test/test-fea.sh", JOBS["fea"])
-        self.assertRegex(JOBS["fea"], r"(?m)^    timeout-minutes: 15$")
+        self.assertRegex(JOBS["fea"], r"(?m)^    timeout-minutes: 20$")
         # The suite and its runner are that job's alone: no package job collects them.
         suite = REPO_ROOT / "tests/python/packages/fea"
         self.assertLessEqual({"test_fea.py", "test_fea_assembly.py", "test_fea_checks.py"},
@@ -587,7 +590,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_blenders_job_runs_bpy_in_the_environment_cad_run_makes(self):
         job = JOBS["blender"]
         self.assertEqual(condition("blender"), "bpy")
-        self.assertRegex(job, r"(?m)^    timeout-minutes: 15$")
+        self.assertRegex(job, r"(?m)^    timeout-minutes: 20$")
         self.assertIn("run: scripts/test/test-blender.sh", steps("blender")["Run the blender suite"])
         self.assertNotIn("test-floor.sh", job)  # the floor's suites are a job of their own
         self.assertEqual(route("VERSION")["bpy"], "true")

@@ -66,6 +66,11 @@ const allBrowserTests = tests.filter((test) => /\.browser\.test\.[cm]?js$/u.test
 const browserTests = shard
   ? allBrowserTests.filter((_, k) => k % shard.count === shard.index - 1)
   : allBrowserTests;
+// A collector that finds nothing fails: a browser pass or a shard that was asked for, with no spec
+// named, on a tree whose specs it no longer finds would pass having run none.
+if (!requestedTests.length && !allBrowserTests.length && (shard || testPass === "browser")) {
+  fail("no *.browser.test.* spec found under src/ or scripts/, and the browser pass was asked for");
+}
 if (shard) {
   console.log(`Browser shard ${shard.index}/${shard.count}: ${browserTests.length} of ${allBrowserTests.length} browser specs.`);
   if (!browserTests.length) console.log("This shard has no browser specs; nothing to run in the browser pass.");

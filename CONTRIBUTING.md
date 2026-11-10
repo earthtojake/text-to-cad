@@ -454,18 +454,25 @@ run fails when the selection itself did not run (every job it gates was then
 skipped having tested nothing), when a job failed, and when one was cancelled or
 ran out its timeout. A pull request's run that a newer push superseded is the one
 cancelled run that passes: its commit is no longer the head, so its check gates
-nothing. Because nothing else is required, adding, renaming, splitting or
+nothing, and failing it would report a failure for every push made while a run
+was in flight. That pass stays on the superseded commit: a branch force-pushed
+back to exactly that commit shows it until the new run's `CI` reports, so wait
+for the new run there (a merge that slipped through is still tested by the push
+run, and by `Publish Release` before a release ships). Because nothing else is required, adding, renaming, splitting or
 sharding a job needs no branch-protection change, and no job can fail without
 stopping the merge.
 
 **Nothing waits long.** Every job has a timeout of about twice its slowest
-observed run, and every step that downloads has one of its own (`setup-deps` as
-a whole, the pip and uv installs): a stalled mirror fails in minutes rather than
-running out its job. `setup-deps` installs system packages only when the image
+observed run (a job that runs Python test files, at least its slowest run and
+11 minutes, so the hang guard below fires before it), and every install step has
+one of its own (`setup-deps` as a whole, the pip and uv installs): a stalled
+mirror fails in minutes rather than running out its job. The blender and KiCad
+suites fetch their environments as they run and the rehearsals are installs;
+their jobs' timeouts bound those. `setup-deps` installs system packages only when the image
 lacks one, and apt gives up on a connection that says nothing for 30 seconds.
 Within a Python suite, a test file still running after 10 minutes prints every
-thread's stack and fails by name, the run starts no further file, and a line a
-minute says which files are running.
+thread's stack and fails by name, the run starts no further file or suite
+(`--keep-going` included), and a line a minute says which files are running.
 
 The CAD Viewer's backend and the CAD app's server are leaves of the server:
 outside them and the commands that start them, nothing in the server imports either
@@ -1279,7 +1286,12 @@ job that ran passed) — strict (up to date with `main`), squash merges only, a
 linear history, no force pushes and no deletions. No other check is required, so
 a job is added, renamed, split or sharded in `test.yml` without a
 branch-protection change; a job its selection skips passes the gate, so a prose
-pull request merges on `static` and `CI`. Strict up-to-date is what makes a
+pull request merges on `static` and `CI`. The other side of one required check:
+a pull request that removes a job from `test.yml`, or from `CI`'s `needs`, still
+merges green, where a removed required job used to block. Review a change to
+`test.yml`, `ci_gate.py` or the selector as a change to what protects `main`
+(`test_ci_workspace_selection.py` holds that `CI` needs every job), and require
+`CI` from GitHub Actions as its source. Strict up-to-date is what makes a
 merged tree the tree its pull request's run tested, so the push run and
 `Publish Release` find that run's record and test nothing again; a merge that is
 not up to date is still tested, by both.

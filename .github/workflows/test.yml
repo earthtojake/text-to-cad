@@ -51,16 +51,19 @@ on:
     - cron: "23 8 * * *"
 
 # github.workflow is the CALLER's name when Publish Release calls this, so its run never
-# queues behind -- or cancels -- this workflow's own runs on the same branch.
+# queues behind -- or cancels -- this workflow's own runs on the same branch. The nightly run
+# has a group of its own: in main's, a merge's push run would replace it while it waited.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'schedule' && '-nightly' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Timeouts. A job's is about twice its slowest observed run, and a job that runs Python test
-  # files leaves room for unittest_files.py's per-file hang guard (10 minutes) to fire first,
-  # name the file and stop the run. Every step that downloads has a timeout of its own: a
-  # stalled mirror fails in minutes, not at the job's.
+  # files has at least its slowest run and 11 minutes more: unittest_files.py's per-file hang
+  # guard (10 minutes, and a minute's backstop) fires first, names the file and stops the run.
+  # Every install step has a timeout of its own: a stalled mirror fails in minutes, not at the
+  # job's. (The blender and KiCad suites fetch their environments as they run, and the
+  # rehearsals are installs: those are bounded by their job.)
   #
   # What the change can break, as flags and test paths. Every gated job reads these.
   changes:
@@ -417,7 +420,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.fea == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -462,7 +465,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.bpy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -496,7 +499,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.kicad == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -522,7 +525,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.skills == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       CAD_TEST_JOBS: "4"
 

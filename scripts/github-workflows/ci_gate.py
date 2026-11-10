@@ -17,7 +17,8 @@ A job passes by succeeding, or by being skipped: its flag did not select it
 One cancelled run passes: a pull request's run that a newer push superseded, which the
 workflow's concurrency group cancels. Its commit is no longer the pull request's head, so its
 check gates nothing, and failing it would only mail a failure for every push made while a run
-was in flight. Whether the head has moved is read from the repository itself
+was in flight. (The pass stays on that commit: a branch force-pushed back to exactly it shows the
+pass until the new run's `CI` reports. The push run and Publish Release test a merge made then.) Whether the head has moved is read from the repository itself
 (`git ls-remote refs/pull/<n>/head`, which needs no more than the read of contents every
 caller of this workflow has); failing to read it is "not superseded", and the run fails.
 """
