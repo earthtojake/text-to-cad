@@ -117,7 +117,8 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
 - `clearances` measures each pair of parts in an assembly, and walls are per part: attribute a thin
   wall to its part, never to a fit gap between two.
 - On a mesh, holes, pins and embossed or engraved detail are not measured (no axes or faces): their
-  rules are not evaluated, so check the STEP or the model. When `scale.units_suspect` is true, report
+  rules are not evaluated and the result says so (`families_not_measured`), so check the STEP or the
+  model. When `scale.units_suspect` is true, report
   a units finding and ask before comparing anything.
 
 ## Review the part

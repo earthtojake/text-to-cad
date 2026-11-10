@@ -399,20 +399,22 @@ they supply overrides every rule.
 
 - **The last line leads with the state**, which is the exit status (`"status"` in `--json`):
   - `OK`, **exit 0**: everything was measured and no finding is an error. Not an approval: warnings
-    remain (the line counts them first), and a rule `not_evaluated` or `partial` is never a pass.
+    remain (the line counts them first), and a rule `not_evaluated` is never a pass (no limit for this
+    material or technology; a mesh's holes and a cut file's bends, which `families_not_measured` names).
   - `FAILED`, **exit 1**: a finding is an error -- the part cannot be made by this process as drawn.
     `--strict` fails on a warning too.
   - `NOT CHECKED`, **exit 3**: the check did not judge what it was asked to -- no closed solid
     (`not_solid`), a file that does not read, a family not measured (`measurement_failed`), faces the
-    kernel failed on (`rays_unintersected`), the engine stopped or cancelled it. Never read it as a pass
-    or as "no findings"; `"reason"` is the code that says why.
+    kernel failed on (`rays_unintersected`), features a rule could not judge (`rule_partly_judged`), the
+    engine stopped it. Never read it as a pass or as "no findings"; `"reason"` is the code that says why.
   - **exit 2**: the command itself was refused; fix the command, not the part.
 - **One count**: `FAILED part: 4 error(s), 2 warning(s); ...; failed: cnc.internal_corner_sharp x4` counts
   features, one finding each: a rule is said once, with its hint and source, then a short line a place.
-  In `--json` a rule's finding carries `value`, `limit`, `unit`, `op` and `refs` (a corner's edge first,
-  then its faces): read those, never the message.
+  In `--json` a rule's finding carries `rule`, `value`, `limit`, `unit`, `op`, `source` and `refs` (a
+  corner's edge first, then its faces): read those, never the message, and take the next edit from them
+  (the feature at `refs[0]`, moved from `value` past `limit`).
 - An assembly's every part is judged, and a part used several times each way it stands: a finding names the
-  occurrence it is at.
+  occurrence it is at, and the totals count every occurrence.
 - Resolve a finding's ref with `cad model inspect "$ID" '<ref>'` or `cad step inspect part.step '<ref>'`.
 - `--candidates` ranks pulls or orientations and judges nothing: check again with the one chosen.
 - **A redesign** gets the same check with the same flags on the new revision: compare

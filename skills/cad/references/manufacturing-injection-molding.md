@@ -116,8 +116,11 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
 - `parting.flat_parting_possible`, and `stepped_parting` where it is not.
 - `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a molder's
   factor for the resin.
-- Several bodies (`several_bodies`) are an assembly: each body is checked on its own. Say so rather
-  than reviewing an assembly as a part. A part of several solids is warned too (`several_solids`): a component
+- Several parts (`several_bodies`, every occurrence counted) are an assembly: each is checked on its
+  own, and the areas, the clamp force and the `--candidates` rows count a part once for each time it
+  occurs. Say so rather than reviewing an assembly as a part. A part of several solids is warned too
+  (`several_solids`; where its solids touch without being fused their contacts are left out of draft
+  and undercuts, `measurements.touching`): a component
   model whose contacts sit inside its housing reads its pins as walls and ribs and its slots as
   undercuts, so check the housing alone (one fused solid gives no such signal: say so).
 

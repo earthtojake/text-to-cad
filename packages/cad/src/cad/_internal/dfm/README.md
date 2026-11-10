@@ -94,6 +94,20 @@ source's number is a feasibility limit (the part cannot be made as drawn under t
 where it is a recommendation ("should", "recommend"), a cost or a risk, and its note quotes the source's
 sentence.
 
+**The tables are the code's, not this page's.** A rule's id, the family and field it reads, its comparison,
+its limit, its severity, its source and the source's sentence are `cad._internal.dfm.<process>.RULES` and
+nowhere else: a copy here would drift from it. Every result carries the table as it judged
+(`measurements.rules`: each rule's outcome, its limit in this part's context, and the sources with their
+URLs), and it prints as written:
+
+```
+python -c "from cad._internal.dfm import cnc
+for r in cnc.RULES.rules: print(r.id, r.severity, f'{r.family}.{r.field}', r.op, r.limit, r.source, dict(r.when), dict(r.item_when))"
+```
+
+What follows for each process is what its table does not say of itself: how its figures are measured, what
+its limits follow, what no rule judges, and its findings of fact.
+
 ## The process and the options
 
 `--process` names the check, one of the type's: `cnc`, `sheet`, `molding` or `printing` for a model, an xbf
@@ -159,16 +173,33 @@ report.
   exact geometry it has not (`needs_exact_geometry`), or its report holds a figure that is no finite number
   (`not_finite`);
 - **a part of it** (`manufacturing.NOT_CHECKED`, whatever the finding's severity): a family that could not
-  be measured (`measurement_failed`: the family is `{"error": "..."}` and named in `partial_sections`), faces
-  the kernel failed to intersect rays with (`rays_unintersected`: a family's `unmeasured_faces`, so its rules
-  are `partial` or `not_evaluated` there), or rules that judged nothing at all (`rules_none_evaluated`).
+  be measured (`measurement_failed`: the family is `{"error": "..."}` and named in `partial_sections`, or the
+  report lacks it where a rule that applies reads it), faces the kernel failed to intersect rays with
+  (`rays_unintersected`: a family's `unmeasured_faces`, so its rules are `partial` or `not_evaluated` there),
+  a rule whose items carry no figure that should have been measured (`rule_partly_judged`, naming them), or
+  rules that judged nothing at all (`rules_none_evaluated`).
 
 So a process's module marks what it did not measure through the report alone: raise `Unmeasured(code,
-message)` for the whole source, answer `{"error": ...}` for a family and name it in `partial_sections`, or
-list a family's `unmeasured_faces`. An error found wins over what was not checked -- `failed`, exit 1, its
+message)` for the whole source, answer `{"error": ...}` for a family and name it in `partial_sections`,
+list a family's `unmeasured_faces`, or leave an item's figure `None`.
+
+**Does not apply is not "not measured".** A `None` is never both. A figure that cannot exist of an item is
+named in the item's `not_applicable`, a list of its fields (`_common.not_applicable`, set where the type side
+annotates its items before the rules read them: `cnc._mark`, `sheet._mark`, `molding._hint_fields`,
+`printing._at_limit`), and a rule that reads it asks nothing of the item: an open step or shoulder has no
+opposite wall, so no width to be deep against; a sharp corner, or one no tool given fits, has no tool whose
+reach to judge; a part with no axis of revolution has no turned diameter; a lone rib has no gap to a
+neighbour; a hem's flange has no outside mold line; a sealed cavity has no escape hole to size; a cut file
+given no `--thickness` has none. Where an item's own field tells them apart the rule leaves them out by
+`item_when` (a part that is no sheet has no flat pattern). A family a source does not hold by its nature is
+the report's `not_measured`, `{family: why}` -- a mesh's `holes`, `pins` and `details`, a cut file's `bends`,
+`reliefs`, `hems` and `not_sheet` -- its rules `not_evaluated` with that reason, and the result says so once,
+as a fact (`families_not_measured`, info, listing the rules that judge nothing): the check stays what the
+rest makes it. An error found wins over what was not checked -- `failed`, exit 1, its
 line saying `; not checked: <code> xN` too: the part fails whatever else was not judged. The command also
-exits 3 for a check that did not run to its end -- the engine cancelled it for a build of its script, lost
-its worker or stopped, the integration's environment gave no answer, the check crashed -- never 1, which
+exits 3 for a check that did not run to its end -- the engine stopped it (its document changed under it, it
+went past its time or its memory), lost its process or stopped itself, the integration's environment gave no
+answer, the check crashed -- never 1, which
 says the part fails: under `--json` the failure's document, `{"ok": false, "error": ..., "status":
 "not_checked", "reason": ...}`, the reason the engine's own where its error carries one (`error.reason`),
 else `engine_stopped`, `engine_failed`, `engine_unavailable` or `failed`; without, its words on stderr and
@@ -236,8 +267,13 @@ count a summary says.
   twentieth of a degree is another -- is a part of its own, at its own refs, measured as it stands. So what
   depends on how a part stands (a print's overhangs against the plate, a molding's draft against the pull) is
   judged for every occurrence, and nothing is judged for the first alone. `document` totals every occurrence
-  (`occurrence_count`, `solid_count`, `volume_mm3`); a family's own totals are of the parts measured, each
-  with its `occurrences` to count by. A part that is another's
+  (`occurrence_count`, `solid_count`, `volume_mm3`), and so does every process: a total counts a part once for
+  each time it occurs (`_common.occurrences`: molding's draft, undercut and projected areas, its clamp force
+  and its candidates' rows; the parts and the volume of CNC's and sheet's last lines), where a family's items
+  are the features measured, each once. A print is the exception that needs none: its parts stand together on
+  one plate, so the occurrences turned alike share neither their height above it nor what stands beside them,
+  and it measures every occurrence where it stands (`_dfm_brep.every_occurrence`: each a part at its own path,
+  its clearances to its copies among them). A part that is another's
   geometry moved -- an exporter's copies, a pattern written out part by part -- is found by its geometry
   (`_dfm_brep.copies`: its counts and faces' kinds alike, its volume and area the first's to 1e-6, and every
   vertex, each edge at its middle and quarters and each face at the middles and quarters of its parameters where
@@ -248,8 +284,8 @@ count a summary says.
   kernel failed on said at the copy's own too. CNC reuses a measurement only where the copy's own machine frame
   (`machine.frames`, its own) is the measured part's turned with it: a copy turned by a right angle reads square
   to the world again, a frame of its own, and is measured anew (a mirrored copy too). A row of 46 copies among 107
-  parts costs 61 parts' measurement, its report the same. Molding and printing read a part against the world's
-  pull and plate, so they measure every part.
+  parts costs 61 parts' measurement, its report the same. Molding reads a part against the world's pull, so it
+  measures every part that stands another way; printing every occurrence.
 - **Exact rays** (`_dfm_brep.Rays`, each process's casts) cost what a crossing costs. On a heavy face -- free-form
   and of 48 edges or more, or a B-spline of 4000 control points or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
   crossing of the surface beyond the face's trim against every edge again, with a classifier made anew each call:
@@ -283,14 +319,16 @@ count a summary says.
   (`measurement_failed`): the check is `not_checked`; the other families are still reported.
 - **Every rule id has one outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
   wall under the family's threshold -- `passed` with `evaluated` 0, reason `none found`, listed in
-  `rules.none_found`), `partial` (it judged some of its items and not the rest, which is no pass: items that
-  carry no figure for it, reason `N item(s) not measured` and one `rule_partly_judged` warning naming them;
-  or faces the family's rays could not be intersected with -- its `unmeasured_faces` -- each counted in
-  `unmeasured`, named in the outcome's `unmeasured_faces` and its reason, which makes the check
-  `not_checked`; listed in `rules.partial`), `failed` (each
-  failing item's value, place, refs and item), `not_evaluated` (the rules
-  give no limit for this material or technology, or the family or the figure was not measured -- every item
-  lacks it, or nothing but lost faces: unverified)
+  `rules.none_found`; an item whose `not_applicable` names the figure is no item of the rule's), `partial` (it
+  judged some of its items and not the rest, which is no pass: items that carry no figure for it, reason `N
+  item(s) not measured` and one `rule_partly_judged` finding naming them; or faces the family's rays could
+  not be intersected with -- its `unmeasured_faces` -- each counted in `unmeasured`, named in the outcome's
+  `unmeasured_faces` and its reason; either makes the check `not_checked`; listed in `rules.partial`),
+  `failed` (each failing item's value, place, refs and item; items it could not judge are said all the
+  same), `not_evaluated` (the rules give no limit for this material or technology; or the figure was not
+  measured of any item, which `rule_partly_judged` says too; or the family was not measured: by the
+  source's nature, its reason the report's `not_measured`; because it failed; or because the report lacks
+  it, `absent`, which is `measurement_failed`: unverified)
   or `not_applicable` (the rule is for another context -- turning, a sheet given, a cut file -- or reads a
   figure this source's items do not carry, which another rule judges). Rules that come in variants by one
   key (`RuleSet.selector`, printing's `technology`) with no variant of a rule id for the part's value leave
@@ -357,9 +395,12 @@ count a summary says.
   that fails the kernel's topology check (BRepCheck) `not_sound`: errors in every process, said first
   (printing's `solid` family judges its own solids' shells and soundness, with the boolean check). A mesh's
   open body is `not_watertight` too, an error.
-- **Several solids in one part** are said alike in every process (`_dfm_check._several`): `several_solids`,
-  a warning -- a process makes a part of one solid -- and, where two of them share volume (their common over
-  1e-6 of the smaller's), `not_sound`, an error naming the pairs and the volume: interpenetrating solids are
+- **Several solids in one part** are said alike in every process, once (`_dfm_check._several`):
+  `several_solids`, a warning -- a process makes a part of one solid, and the finding says how this process
+  read them (molding: together, their contacts left out of draft and undercuts and listed in `touching`) --
+  where `several_bodies` is several parts, every occurrence counted (molding's warning: an assembly; printing's
+  info; a mesh's bodies). Where two of a part's solids share volume (their common over
+  1e-6 of the smaller's) it is `not_sound`, an error naming the pairs and the volume: interpenetrating solids are
   no part, their material counted twice. Pairs are compared where their boxes meet, 256 at most
   (`solids_not_compared`, a warning, where more remain or the kernel cannot finish one); printing's own
   boolean check finds shared volume, so it is not looked for twice there.
@@ -654,53 +695,22 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   the two bores beside it, its tool's best way in -- and `depth_to_entry`), **live_tooling** (off-axis face groups: `cross_hole`, `flat`,
   `slot`, `feature`, with the hole's `relation`).
 
-### Rule ids (finding code = rule id)
+### Rules
 
-Severity e = error (no general shop makes the part as drawn), w = warning (a recommendation, a cost or a
-risk: it is made). "tools" = the limit follows the smallest `--tools` tool when given. A number a published
-guide states cites it: Protolabs Network (Hubs)'s "How to design parts for CNC machining" (`hubs-cnc`) and its
-CNC machining service page's maximum part sizes (`hubs-cnc-service`). A floor no guide states is text-to-cad's
-own (**own** below; the rule's source is `text-to-cad`, so its finding's `source` reads `text-to-cad, ...`, never the
-publisher's name, and its note gives the reason). One tool floor holds for holes, slots and corners: the
-0.05 mm the guide's small-features table calls a feasible hole (`TOOL_FLOOR_MM`); a tool under 1 mm is a micro
-tool (`MICRO_TOOL_MM`), which reaches ten of its diameters (`MICRO_REACH`, own).
+`cad._internal.dfm.cnc.RULES` (above: the table is not copied here). An error is a part no general shop
+makes as drawn; a warning a recommendation, a cost or a risk: it is made.
 
-| id | family.field | limit |
-|---|---|---|
-| cnc.internal_corner_sharp | internal_corners.radius_mm min, sharp corners | sharp: no round tool makes it (e: Hubs "the internal corners of a CNC part always have a radius"); the limit 0.025 mm (own: the smallest feasible tool's radius, Hubs' "Feasible: 0.05 mm" hole); tools: 0.5 x min tool (e); the hint gives 1.25 mm or more recommended (a 2.5 mm end mill's) and a third of the depth in mm |
-| cnc.internal_corner_radius | internal_corners.radius_mm | 0.025 mm (e, own: half the tool floor); tools: 0.5 x min tool (e) |
-| cnc.internal_corner_small | internal_corners.radius_mm min 1.25 (w) | features under 2.5 mm are micro-machining |
-| cnc.corner_radius_to_depth | internal_corners.radius_to_depth min 1/3 (w) | Hubs "Recommended: ⅓ times cavity depth (or larger)"; the hint gives the radius in mm |
-| cnc.corner_reach / _limit | internal_corners.reach_ratio max 4 (w) / 30 (e); 10 (e, own) where `micro_tool` | 3-4 D cutting length / 30:1 specialised; a tool under 1 mm is catalogued to about ten diameters (a 0.1 mm corner 6 mm deep is no tool's) |
-| cnc.sharp_internal_edge | sharp_edges.radius_mm min, message and fix by `reason` (e; `other_axes` w: an angled setup or more axes) | 0.025 (own, as internal_corner_sharp; the fix gives 1.25 mm or more recommended); tools: 0.5 x min tool |
-| cnc.knife_edge | knife_edges.thickness_mm min (w) | metal 0.5 / plastic 1.0 (the feasible wall) |
-| cnc.pocket_depth_to_width | pockets.depth_to_width max | 4 (w) |
-| cnc.pocket_depth_limit | pockets.depth_to_width max 30 (e); 10 (e, own) where `micro_tool` | Hubs "A tool diameter-to-cavity depth ratio of up to 30:1 is possible using specialized tooling", read for a width: a cavity takes no tool wider than itself |
-| cnc.tall_feature | walls.height_to_thickness max 4, `standing` (w, own) | a rule of thumb: a thin wall, rib or pin over four times its thickness chatters; no hard limit, never an error |
-| cnc.wall_thickness | walls.thickness_mm min | metal 0.5 / plastic 1.0 (e, feasible) |
-| cnc.wall_thickness_recommended | walls.thickness_mm min | metal 0.8 / plastic 1.5 (w) |
-| cnc.inclined_feature | pockets / holes.inclination_deg max 0 where `reachable` is false (w); 3 and 4 axes (5: n/a); a profile cut along a machine direction is reachable | align features to the six principal directions of the part's own frame (`machine.frames`), else 5 axes |
-| cnc.hole_diameter | holes.diameter_mm min | 0.05 (e: minimum hole diameter "Feasible: 0.05 mm (0.005 inches)") |
-| cnc.hole_diameter_small | holes.diameter_mm min 1.0 (w) | holes, diameter: "Feasible: any diameter larger than 1 mm"; under it, micro-drilling |
-| cnc.hole_depth / _limit | holes.depth_to_diameter, counterbores.depth_to_diameter max | 4 (w) / 40 (e) |
-| cnc.drill_size | holes.drill_deviation_mm max 0.005 (w), drilled holes | standard drill sizes |
-| cnc.thread_size | threads.major_diameter_mm min 6 (w) | M6 or larger recommended |
-| cnc.thread_length / _minimum | threads.length_to_diameter max 3 / min 1.5 (w) | 3 D adds no strength / 1.5 D minimum |
-| cnc.gap_width | gaps.width_mm min | 0.05 (e, own: the tool floor, a gap takes no tool wider than itself); tools: min tool (e) for `made_by` end_mill, 0.05 for a slot cutter's recess height |
-| cnc.gap_width_small | gaps.width_mm min 2.5 (w) | features under 2.5 mm are micro-machining |
-| cnc.undercut | access.unreached_fraction max 0.02, kind undercut, not `part_of` another cause (w; a hole's face: its fix names the axis); access.unreached_any_direction_fraction, kind no_line_of_sight where `disc_reach` (w: only a keyseat or lollipop cutter through its opening makes it) | special cutters |
-| cnc.special_cutter | access.edge_count max 0, kind special_cutter (w; its message names the recess's unreached faces) | "The width of an undercut can vary between 3mm and 40mm." |
-| cnc.no_line_of_sight | access.no_tool_fraction max 0.02, kind no_line_of_sight, not `part_of` another cause (e, own; milling and turning) | by geometry: a tool is straight, and a disc on a shank reaches no further past an opening than the disc the opening lets in |
-| cnc.enclosed_void | voids.volume_mm3 max 0 (e) | a tool reaches only what it can enter |
-| cnc.setups | setups.setup_count max 5 (w) | rotated "up to three or four times" (five clampings) |
-| cnc.part_size | stock.length_mm max 2000 (w, milling); turning.max_diameter_mm max 431, turning.length_mm max 990 (w, turning) | the service's maximum part sizes: "3-axis CNC milling (soft metals) 2000 x 1500 x 200 mm", "CNC turning (lathe) Ø431 x 990 mm" |
-| cnc.part_size_limit | stock.length_mm max 4000 (e, own, milling); turning.max_diameter_mm max 1000, turning.length_mm max 4000 (e, own, turning) | twice (a lathe's length: four times) what the cited network's machines take: past any general machine |
-| cnc.turned_slenderness | turning.length_to_diameter max 10 (w, own, turning) | past about ten diameters a steady rest or a sliding-head lathe: made, never an error |
-| cnc.groove_depth_limit | grooves.depth_to_entry max 0.5, internal (e, own, turning) | by geometry: a tool that passes the bore reaches past its wall by less than its own width |
-| cnc.groove_depth | grooves.depth_to_width max 5 (w, own, turning) | a grooving insert's reach, a rule of thumb |
+A number a published guide states cites it: Protolabs Network (Hubs)'s "How to design parts for CNC
+machining" (`hubs-cnc`) and its CNC machining service page's maximum part sizes (`hubs-cnc-service`). A floor
+no guide states is text-to-cad's own (`rules.OWN`: its finding's `source` reads `text-to-cad, ...`, never the
+publisher's name, and the rule's note gives the reason). A limit that follows the tools is the smallest
+`--tools` tool's where one is given. With none, one tool floor holds for holes, slots and corners: the 0.05 mm
+the guide's small-features table calls a feasible hole (`TOOL_FLOOR_MM`; a corner's radius half of it, a
+gap's width all of it); a tool under 1 mm is a micro tool (`MICRO_TOOL_MM`), which reaches ten of its
+diameters (`MICRO_REACH`, own), where the guide's 30 diameters are specialised tooling's at full size.
 
-The pocket and corner rows apply under `--turning` too, to the live tooling's pockets. Under `--turning` the
-milling rows -- `sharp_internal_edge`, `gap_width*`, `inclined_feature`, `special_cutter`, `undercut`,
+The pocket and corner rules apply under `--turning` too, to the live tooling's pockets. Under `--turning` the
+milling rules -- `sharp_internal_edge`, `gap_width*`, `inclined_feature`, `special_cutter`, `undercut`,
 `setups` -- are `not_applicable`, and `cnc.turning_not_judged` (info) says what turning does not judge.
 
 No rule judges a shop's own feature limits (its narrowest engraved line, its smallest part, its turned
@@ -725,9 +735,7 @@ The summary says a part's setups (an assembly: the most any part takes), never a
 Context the rules read: `material_class`, `wall_class` (the class, else `metal`), `tools_given`,
 `min_tool_mm`, `axes`, `turning`.
 
-Sources (the rules' version 2026-11-09): Protolabs Network (Hubs), "How to design parts for CNC machining"
-(accessed 2026-11-06) and its "CNC machining service" page's maximum part sizes (accessed 2026-11-09);
-`text-to-cad` for its own floors.
+Sources and when each was read: `cnc.RULES.sources` (and every result's `measurements.rules.sources`).
 
 ### What it cannot measure
 
@@ -931,53 +939,36 @@ that scale with it and were not evaluated; the OK line says so too), `sheet.open
 `sheet.overlapping_curves`, `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop`
 (errors), `sheet.annotation_on_cut_layer`, `sheet.floating_interior`, `sheet.short_line_run` (warnings),
 `sheet.joined_gap` (warning, one a file: its joints closed across a gap, the widest),
-`sheet.bend_lines_read` (info: what the bend lines were held to). A cut file's summary names its closed
+`sheet.bend_lines_read` (info: what the bend lines were held to). A flat drawing holds no bend, relief, hem or
+thickness to read (the report's `not_measured`): every cut file's result says their rules judge nothing
+(`families_not_measured`, info: the bent part's check judges them). A cut file's summary names its closed
 contours and its open places while any contour stands open (a hole's loop then reads as an outline, so no
 part or size is named).
 A cut file's layers holding cut geometry are counted (`cut_file.cut_layer_count`), never judged: a shop's
 file rules are its own.
 
-### Rules (id: family.field op limit, severity; source)
+### Rules
+
+`cad._internal.dfm.sheet.RULES` (above: the table is not copied here): Hubs's bending and laser-cutting
+numbers, Protolabs' uniform-thickness, notch, tab and hem guidance, and a standard 5 x 10 ft blank (Xometry's
+page for the largest), each citing its page as the evidence for general practice; two are text-to-cad's own
+(`rules.OWN`): plate over `PLATE_MM` is no sheet shop's work (an error), and a bend radius over
+`BRAKE_RADIUS_T` thicknesses is bump-formed or rolled, not bent in one hit (a warning).
 
 Every length rule is withheld where the units are unknown. `t` is the thickness a rule scales by
 (`scale_by` `rule_thickness_mm`): each item's own, which `sheet._scales` writes on it -- the stock's where
 `--thickness` names it, else its own part's measured `thickness_mm` -- so a document of a 1 mm and a 3 mm
 part judges each by its own, whichever comes first (the context's, the first part's, is read only by a
-family with no item). A failure whose limit is its item's own carries it (`failures[].limit`; the outcome's
-`limits` lists them).
+family with no item). A failure whose limit is its item's own carries it (`failures[].limit`).
 
-Hubs's numbers unless noted, each citing its page as the evidence for general practice:
-`sheet.uniform_thickness` (Protolabs guidelines: uniform throughout) on `not_sheet` items with `judged`: a
-thicker stretch's `local_thickness_mm` max its own part's thickness (the item's `sheet_thickness_mm`), a
-thinner's min it (the message gives both: "local thickness (the sheet's is the maximum) 3 mm is over the
-2 mm maximum"); an unpaired face's `deviation_mm` max 0; one finding a feature;
-`sheet.thickness_max` parts.thickness_mm max 6 for a part with a bend (`bent`) / 10 for a flat one,
-`sheet.thickness_min` min 0.5 (warnings, "We recommend a sheet metal thickness range"; parts with `is_sheet`
-alone); `sheet.thickness_limit` max 25 (error; **text-to-cad's own floor**, said as its own in the verdict:
-sheet lasers and press brakes in general service stop near an inch of steel, and thicker plate is flame-,
-plasma- or waterjet-cut and machined); `sheet.bend_radius` bends.inside_radius_mm min 1 t (warning; bends,
-not hems, which `sheet.hem_diameter` judges); `sheet.bend_radius_max` bends.radius_to_thickness max 10
-(warning; **text-to-cad's own line**: a radius of many thicknesses is bump-formed in steps or rolled, not
-bent in one hit);
-`sheet.flange_length` flanges.length_outside_minus_radius_mm min 2 t (Hubs min bend height 2t + r; read from
-the outside mold line, the page does not say) -- in a cut file, flanges.length_centerline_mm min 1 t: the
-same rule read on the flat with no radius or angle known, where a bend of up to 90 degrees puts the edge
-t (1 + pi K / 4) or more from its centre line at any radius, so under 1 t fails it;
-`sheet.bend_relief_width` reliefs.width_mm min 1 t (bend
-reliefs, not corner); `sheet.hole_to_bend` hole_to_bend.distance_tangent_mm min 2 t ("from the start of the
-bend radius") -- in a cut file, hole_to_bend.distance_centerline_mm min 2 t: the tangent line lies half a
-bend allowance nearer the hole than the line drawn, so under 2 t from the line fails it at any radius and
-angle (`sheet.bend_lines_read` says the bend lines were held to these floors, not the full rules);
-`sheet.hole_diameter` holes.size_mm min 1 t (warning); `sheet.hole_to_edge` min 1 t (warning:
-"Holes should be at least the sheet's thickness from the edge");
-`sheet.hole_spacing` min 2 t (warning: a laser-cutting best practice, its risk the forming's -- "Holes that are
-too close to each other can lead to deformation or breakage during forming or bending."); `sheet.web_width` webs.width_mm min 1 t (warning; Hubs's hole-to-edge applied
-to any web); `sheet.notch_width` min max(t, 1.016), `sheet.notch_length` length_to_width max 5,
-`sheet.tab_width` min max(2t, 3.2), `sheet.tab_length` max 5 (warnings: notches and tabs "should" be),
-`sheet.hem_diameter` min 1 t,
-`sheet.hem_return` min 6 t (warning) (Protolabs guidelines); `sheet.flat_length`/`sheet.flat_width` max the
-standard 5 x 10 ft blank assumed where no `--sheet-size` is given (warnings; 3048 x 1524; Xometry's page for
-the largest standard blank) -- against the sheet given they are findings of fact, above.
+Where a source's convention is not the obvious one the rule's note says which it reads: a flange's height
+from the outside mold line less the inside radius (Hubs's "minimum bend height 2 t + r"; the page does not
+say where it is measured), a hole's distance to a bend from the bend's tangent line ("from the start of the
+bend radius"). A cut file has its own two (`when` `cut_file`): its bend line is the bend's centre line, with
+no radius or angle, so a flange and a hole are held to the least the same rules ask of the flat at any radius
+(1 t and 2 t from the line), and `sheet.bend_lines_read` says the bend lines were held to those floors, not
+the full rules. The flat pattern is judged against the standard blank assumed (warnings) where no
+`--sheet-size` is given; against the sheet given it is a finding of fact, above.
 
 No rule judges a shop's tooling or capabilities: its gauges and tooled radius per gauge, its die widths and
 the distances they set, its largest tooled radius, its brake's angles and bend lengths, its smallest and
@@ -988,10 +979,8 @@ carry each of them (`parts.thickness_mm`, `bends.inside_radius_mm` and `angle_de
 `hole_to_bend.distance_*`, `reliefs.depth_*`, `holes.countersink_diameter_mm`, `channels`,
 `cut_file.cut_layer_count`) for a shop's own limits to be read against.
 
-Sources, accessed 2026-11-03 (the rules' version 2026-11-10): hubs.com/guides/sheet-metal-fabrication;
-protolabs.com sheet metal design guidelines; xometry.com/capabilities/sheet-metal-fabrication; and
-text-to-cad's own figures, each said as its own (`text-to-cad-own`: `SKIN_WIDTHS`, `PLATE_MM`,
-`BRAKE_RADIUS_T`).
+Sources and when each was read: `sheet.RULES.sources`. text-to-cad's own figures, each said as its own:
+`SKIN_WIDTHS`, `PLATE_MM`, `BRAKE_RADIUS_T`.
 
 ### What it does not measure
 
@@ -1065,11 +1054,9 @@ their fillets, ribs and bosses unrecognised.
 | `pulls` (`--candidates`) | x, y, z and the principal axes that are the part's own (one whose moment another shares is any direction of their plane -- a cube's three, a round part's two -- and is left out) ranked (`molding.ranked`: fewest unreleasable, least undercut area, fewest side actions, least zero-draft area -- areas within a hundredth of the largest wall tie -- then the most draft at its least, a flat parting first) | the families above per axis (fewer samples) | `undercut_candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `unreleasable_count`, `zero_draft_wall_area_mm2`, `min_wall_draft_deg`, `flat_parting`, `projected_area_mm2`, `depth_from_parting_mm` |
 | `pull_check` | does another pull do better than the one measured? (one part of one solid; an assembly's parts each open their own way) | `chosen` is the report's own figures for the measured pull -- one reading of it, never a second. x, y, z and the principal axes are read on the same sampled points, each only as far as it can still do better (`molding.dominates`: no worse in features nothing releases, trapped area, actions, zero-draft wall and a flat parting -- areas within a hundredth of the wall tie -- and better in one): its draft first (no ray), then what it traps, then what releases that, then its parting (`measured`: draft, trapped, released, full). A pull nothing can beat -- nothing trapped, no wall without draft, a flat parting -- reads no other pull at all | `chosen`, `candidates` (each `pull`, `axis` in the world, `measured`, the figures read so far), `better` (the name of the first that does better as `ranked` ranks them, or null), `note` |
 
-Kept from today's report: `draft` scalars (`wall_area_mm2`, `zero_draft_wall_area_mm2`, `largest_zero_draft_faces`,
-`min_wall_draft`, `wall_draft_histogram_mm2`, `wall_area_by_opening_mm2`, ...), `undercuts` scalars
-(`candidate_area_mm2`, `largest_candidate_faces`; `unintersected_rays` and
-its note where the kernel failed to intersect a ray with a face -- that crossing is not found, the family is
-measured all the same), `projection`, `scale`, `pull_given`. Fact findings: `zero_draft_walls` and
+Beside the families: `projection`, `scale`, and `pull_given` (false where no `--pull` was given and the
+default, z, was measured). A ray the kernel cannot intersect with a face loses that crossing alone, and the
+faces it cost are the family's `unmeasured_faces`. Fact findings: `zero_draft_walls` and
 `undercut_candidates` (both **info**: sums of what the rules judge per face and per feature, each naming the
 rule that judges it; the second counts the part's side actions by direction),
 `pull_better` (warning: another pull does better than the one measured, named with its axis and both pulls'
@@ -1077,47 +1064,31 @@ figures, the hint its `--pull`; it says where the measured pull was the default)
 `crevices` (info: where two faces stand closer than steel can stand between them -- the samples that met one
 say where one is, not every one there is; no undercut),
 `undercuts_unsearched` (warning: features whose release the part's ray budget did not reach; the unreleasable
-rule counts them not measured),
-`solids_touching` (warning: names the part's solids that touch and says to fuse them; their contact is
-left out of draft and undercuts),
-`rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (warning: a
-multi-part document is an assembly, each part measured on its own; a part of several solids is every
-process's `several_solids`, which says here that they shadow each other),
+rule did not judge them, so the check is not checked),
+`rays_unintersected` (the undercut figures are a lower bound there), `several_bodies` (warning: several
+parts, every occurrence counted, are an assembly, each part measured on its own; a part of several solids is
+every process's `several_solids`, which says here that they shadow each other and that their contacts --
+`touching`, each pair with its area and faces -- are left out of draft and undercuts),
 `stepped_parting` (warning), `resin_unknown` (info), `clamp_estimate` (info), `thickness_unmeasured`.
 
-### Rules (each rule's id is the finding's code)
+### Rules
 
-Sources, each cited as the evidence for general practice: Hubs `https://www.hubs.com/guides/injection-molding/`;
-Protolabs design guidelines
-`https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/` (its wall
-and draft tables read again on 2026-11-10: every row as below);
-Protolabs uniform-wall tip `https://www.protolabs.com/resources/design-tips/improving-part-design-with-uniform-wall-thickness/`;
-Xometry ribs `https://www.xometry.com/resources/injection-molding/plastic-ribs-for-injection-molding-design/`;
-Moldminds clamp calculator `https://moldminds.com/clamp-force-calculator/` (the others accessed 2026-11-03; the
-rules' version 2026-11-10). A floor no guide states cites `text-to-cad` (its own feasibility floor, no
-published guide's): its message never names a publisher as the source of text-to-cad's number.
+`cad._internal.dfm.molding.RULES` (above: the table is not copied here). The guides give recommendations:
+Hubs's injection molding guide, Protolabs' design guidelines (its wall table by resin and its draft table),
+its uniform-wall and bump-off tips, Xometry's rib guide -- warnings. Beside them stand the floors, errors: a
+feature nothing releases (the guide's own), and text-to-cad's own (`rules.OWN`: its message never names a
+publisher as the source of text-to-cad's number) -- a wall or a rib deeper than `DRAFT_FLOOR_DEPTH_MM` with no
+draft at all (under `--zero-tol`), and a wall under `WALL_FLOOR_SHARE` of the resin's recommended minimum or
+over `WALL_CEILING_MULTIPLE` times its maximum (with no resin of the table named, outside every resin's
+range).
 
-| rule id | field | limit (severity; source) |
-|---|---|---|
-| `molding.draft_zero` | draft_deg min `--zero-tol` (0.05), a wall's face that runs over 10 mm along the pull with no draft (`zero_draft_depth_mm`), and a rib over 10 mm tall, judged once as a rib | **error**; text-to-cad's own floor: the guides recommend draft and say what none does (Hubs: "Parts with vertical walls (and no draft angle) are most prone to drag marks"), none gives a depth under which none is accepted |
-| `molding.draft_min` | draft_deg min, a wall's face (a rib's sides and ends are `rib_draft`'s, a face an undercut traps its release's) | 0.5 warning (Protolabs' table: "VERTICAL FACES 0.5°", "MOST SITUATIONS 2°"; only its shut-off and texture rows are labelled MINIMUM, so it is a recommendation) |
-| `molding.draft` | draft_deg min, a wall's face, as draft_min | 2 warning (Hubs "A minimum draft angle of 2° is recommended."; Protolabs "Most situations: 2°"; Hubs' 1-2 deg is a textured face's extra) |
-| `molding.undercut` | trapped area, release side_action/lifter/core (or not searched); says its leaning faces, what releases it and the stroke | warning (Hubs) |
-| `molding.undercut_bump_off` | trapped area, release bump_off; says the lip's depth | warning (Protolabs' bumpoff tip: a flexible resin, TPE, unfilled PE or PP, over a ramped or rounded leading edge; the 0.1 mm depth is text-to-cad's own figure) |
-| `molding.undercut_unreleasable` | unreleasable_area_mm2, release none (or not searched: not measured); says its depth against the pull and its best slide, over 0.1 mm | **error** |
-| `molding.wall_min` / `wall_max` | thickness_mm (the face's wall, `feature` wall: a junction's thickest point is thick_section's) by `--material` | the wall table by resin (Protolabs), warning |
-| `molding.wall_too_thin` / `wall_too_thick` | the same figure | **error**; text-to-cad's own floors: under 0.5 of the resin's recommended minimum, over 2 times its recommended maximum; with no resin of the table named, under the least minimum of any resin (0.508 mm) or over the greatest maximum (25.4 mm) |
-| `molding.thick_section` | ratio_to_nominal max 1/0.6 | warning (Protolabs 40-60%) |
-| `molding.wall_transition` | `transitions`.transition_ratio min 3 | warning (Hubs) |
-| `molding.rib_thickness` | thickness_ratio max 0.6 | warning (Xometry) |
-| `molding.rib_height` | `kind` rib: height_ratio max 3 | warning (Hubs "max. height equal to 3x the wall thickness"; it also says "Define a height smaller than 3 × rib thickness") |
-| `molding.rib_base_fillet` | base_fillet_ratio min 0.25 | warning (Hubs) |
-| `molding.rib_gap` | `kind` rib: gap_to_wall min 2.5 | warning (Xometry) |
-| `molding.rib_draft` | draft_deg min 0.5 | warning (Xometry) |
-| `molding.snap_thickness` | `kind` snap: thickness_ratio min 0.5 | warning (Hubs "Design snap-fits with thickness greater than 0.5x the wall thickness") |
-| `molding.boss_root_fillet` | base_fillet_mm min 0.01, any rounding | warning (Hubs "the base of vertical features (like ribs, bosses, snap-fits) must also always be rounded"; no source gives a radius) |
-| `molding.boss_wall` | wall_ratio max 0.6 | warning (Protolabs) |
-| `molding.inside_corner_radius` | ratio_to_wall min 0.5 | warning (Hubs); the hint gives the radius in mm (half the wall) |
+One face, one rule: a wall's draft rules judge a wall's faces, a rib's sides are `molding.rib_draft`'s, and a
+face an undercut traps is its release's. An undercut is judged by what releases it: a side action, a lifter
+or a core is a warning (tooling cost), a lip of at most `BUMP_OFF_MM` stripped as the part ejects a warning
+of its own, and a feature nothing releases an error; one whose release was not searched (the part's ray
+budget spent) carries no figure, which is not measured, never a pass. A lone rib has no gap to judge, and
+says so (`not_applicable`). The clamp force is an estimate, no rule: Moldminds' tonnage factors by resin
+(`CLAMP_FACTORS`), else the usual range.
 
 No rule judges a press or a mold: its projected area, its largest part, its depth from the parting line,
 its shot volume and its side actions' travel are a shop's, read against the measurements (`projection`,
@@ -1243,7 +1214,9 @@ angular tolerance of a limit -- not judged: the exact model has the angle, a fin
 mesh the gate refuses is one error and no report: `mesh_empty`, `mesh_unreadable`, `mesh_too_large`,
 `inconsistent_normals`, `mesh_no_volume`.
 
-### Rules (every limit keyed by `technology`)
+### Rules
+
+`cad._internal.dfm.printing.RULES` (above: the table is not copied here), every limit keyed by `technology`.
 
 The rules take, per figure and technology, one published design guide's row: Hubs's where Hubs gives one, else
 Protolabs's, else Xometry's (and apply Hubs's SLS escape-hole figure to the other powder beds: every verdict of it
@@ -1251,50 +1224,24 @@ says "Hubs's SLS figure, applied"), each cited as the evidence for general pract
 shop's limit; the table holds no row that cannot apply (`_general.add` refuses a second source for a figure).
 The build volume is the printer's given (`--build-volume`), else a typical machine of the technology's (Hubs's: a
 desktop printer for FDM and SLA, `BUILD_VOLUMES`), assumed and said -- and, with none given, the largest machine
-the same page lists (`LARGEST_VOLUMES`: "up to 900 x 600 x 900 mm" for FDM): a part no orientation of which
-fits that is made by no machine of the technology, an error. The `selector` is `technology`: a rule id with no figure for the
+the same page lists (`LARGEST_VOLUMES`): a part no orientation of which fits that is made by no machine of the
+technology, an error. The `selector` is `technology`: a rule id with no figure for the
 technology is one `not_evaluated` outcome ("the rules give no limit for technology fdm"), never a pass, and a
 check that judged nothing says so (`rules_none_evaluated`).
-The rules' version is 2026-11-10. A rule no fetched guide states cites `text-to-cad-own` ("text-to-cad's own
-figure; no fetched guide states one") and its findings say so: `printing.knife_edge`, `printing.horizontal_hole`.
+A rule no guide states is text-to-cad's own (`rules.OWN`, its finding's `source`): a knife edge's thin depth
+(`printing.knife_edge`), FDM's horizontal round holes over `HORIZONTAL_HOLE_MM` (`printing.horizontal_hole`),
+and an FDM wall by the `--nozzle` given (two beads of it, where Hubs's 0.8 mm is two beads of the common 0.4 mm
+nozzle).
 Severity follows the source: a feasibility limit is an error, a recommendation or an unsourced figure a warning.
+A wall's minimum follows whether it is supported (joined on two or more sides: `printing.wall_supported`,
+`printing.wall_unsupported`; `printing.wall` where its support could not be read: judged as supported, and
+warned where it would fail unsupported), and a mesh's wall under its limit by no more than its chords may depart
+from the surface is at the limit: the rule's warning, not its error.
 Every figure a rule judges is kept to 1e-9 (`meshops_printing.JUDGED`), never rounded before the comparison: a
 0.79996 mm wall is under 0.8 mm.
-Sources, each row read on its page on 2026-11-10: hubs-thin-walls, hubs-geometry, hubs-fdm, hubs-sla, hubs-sls,
-hubs-mjf, hubs-metal, protolabs-toolkit, protolabs-metal, protolabs-7mistakes, xometry-fdm, xometry-fdm-tips,
-xometry-sla (Xometry Pro SLA quick reference), xometry-3dp -- URLs in `cad._internal.dfm.printing.SOURCES`. Two
-Hubs pages differ: its SLA guide gives walls 0.4 mm supported and 0.6 unsupported, its thin-walls table 0.5 and
-1.0, which the rules cite; its MJF guide asks for walls of 2.5 mm, its table 0.7 and 1.0.
-
-| rule id | family.field | op | limit (fdm / sla / sls / mjf / pbf; source) | severity |
-| --- | --- | --- | --- | --- |
-| printing.wall_supported | wall_thickness.thickness_mm (supported) | min | 0.8 / 0.5 / 0.8 / 0.7 / 0.4 (hubs-thin-walls: "Min wall (supported / free)"; DMLS's row is 0.4-0.8 / 0.8-1.5, its least). FDM's 0.8 is two beads of the common 0.4 mm nozzle, and its verdicts say so; with `--nozzle` given, two beads of that nozzle (text-to-cad-own: its scaling of the cited figure) | error; a warning where a mesh's wall is under the limit by no more than its chords may depart from the surface there (`chord_mm`, `at_limit`: at the limit within the mesh's accuracy) |
-| printing.wall_unsupported | wall_thickness.thickness_mm (not) | min | 0.8 / 1.0 / 1.0 / 1.0 / 0.8 (hubs-thin-walls); FDM's by the nozzle as above | error; at the limit as above |
-| printing.wall | wall_thickness (support not read: a walk that reached no end, or past the 24 thinnest of a mesh's body) | min | as supported: error (at the limit as above); and under the unsupported minimum a warning -- it fails if it is free: check the exact model | error / warning |
-| printing.hole_diameter | holes.diameter_mm | min | 1.0 (xometry-fdm, warning: "to retain a circular shape") / 0.8 warning ("may close off") and 0.5 error (its table's minimum) (hubs-sla) / 1.5 (hubs-sls) / - / 1.5 (hubs-metal) | error* |
-| printing.pin_diameter | pins.diameter_mm | min | 1.0 (xometry-fdm-tips, warning: "Pins should be at least 1 mm in diameter and kept as short as possible."; Hubs FDM gives none) / 0.5 (xometry-sla) / 0.8 (hubs-sls, warning: "recommended") / 0.5 (hubs-mjf, warning) / 0.6 (hubs-metal) | error* |
-| printing.pin_aspect | pins.aspect_ratio | max | pbf 8 (hubs-metal) | warning |
-| printing.overhang_angle | overhangs.angle_deg (slope, ceiling, cantilever; metal also bridge; `counted` only) | min | `--angle-limit` where given (the printer's own self-supporting angle, as `--tools` is a shop's cutters); else fdm 45 (hubs-fdm), sla 19 (hubs-sla), pbf 45 (protolabs-metal: Hubs metal lists 50 deg, its reference axis unstated, so the rules keep Protolabs's 45) | warning |
-| printing.bridge_length | bridges.length_mm (bridge) | max | fdm 5 (hubs-fdm), sla 21 (hubs-sla) | warning |
-| printing.cantilever_length | bridges.length_mm (cantilever) | max | sla 1.0 (hubs-sla), pbf 0.5 (hubs-metal) | warning |
-| printing.horizontal_hole_diameter | holes.diameter_mm (horizontal, no teardrop) | max | pbf 8 (protolabs-metal) | warning |
-| printing.horizontal_hole | holes.diameter_mm (horizontal, no teardrop) | max | fdm 10 (`HORIZONTAL_HOLE_MM`, text-to-cad-own: Hubs FDM gives no diameter) | warning |
-| printing.clearance | clearances.distance_mm (a gap or a contact; an overlap is `bodies_intersect`) | min | fdm 0.762 (xometry-3dp), sla 0.5, sls 0.3, mjf 0.9 (hubs), pbf 0.635 (protolabs) | warning |
-| printing.gap | gaps.gap_mm | min | fdm 0.762 (xometry-3dp, warning: its general "clearance between features" line, no FDM limit), sla 0.635, sls 0.762, mjf 0.508, pbf 0.635 (protolabs-toolkit) | error* |
-| printing.escape_holes | trapped_volumes.escape_holes | min | 1: sla (hubs-sla); sls, mjf, pbf (hubs-sls, applied) | error |
-| printing.escape_hole_diameter | trapped_volumes.min_escape_hole_mm (not `escape_at_limit`; one the voxels could only bound, `escape_hole_at_most`, that is not under the limit is not measured) | min | 3.5: sla (hubs-sla), sls (hubs-sls), mjf, pbf (hubs-sls, applied) | warning |
-| printing.hollow_wall | trapped_volumes.min_wall_mm | min | sla 2.0 (hubs-sla) | warning |
-| printing.build_volume | build_volume.fill_ratio; largest_fill_ratio | max | 1.0 against the machine given (`--build-volume`: error); else against a typical machine assumed (a warning naming it: "against an assumed typical fdm machine, 200 x 200 x 200 mm: give --build-volume"; fdm 200 x 200 x 200, sla 145 x 145 x 175, sls 300 x 300 x 300, mjf 380 x 285 x 380, pbf 250 x 150 x 150, hubs-geometry), and against the largest the page lists (an error, in place of the warning: fdm 900 x 600 x 900, sla 1500 x 750 x 500, sls 750 x 550 x 550, mjf 380 x 285 x 380, pbf 500 x 280 x 360) | error / warning |
-| printing.emboss_height | details.height_mm (emboss) | min | fdm 1.0 (xometry-fdm), sla 0.1, sls 1.0, mjf 0.3048 (protolabs), pbf 0.4 (hubs-metal detail) | warning |
-| printing.engrave_depth | details.height_mm (engrave) | min | sla 0.4, sls 1.0 (hubs) | warning |
-| printing.engrave_width | details.width_mm (engrave) | min | sla 0.4 (hubs-sla), pbf 0.4 (hubs-metal) | warning |
-| printing.warp_length | build_volume.max_dimension_mm | max | sls, mjf 177.8 (protolabs-7mistakes) | warning |
-| printing.knife_edge | knife_edges.thickness_mm (0 at the edge) | min | the unsupported-wall rows' figures: 0.8 / 1.0 / 1.0 / 1.0 / 0.8 (text-to-cad-own: no guide defines a knife edge; the tip prints rounded, Hubs SLS: "A radius of less than 0.4mm on a design is printed as 0.4mm") | warning |
-| printing.section_thickness | sections.thickness_mm | max | pbf 10 (hubs-metal) | warning |
-
-\* severity per row: SLS and MJF pins, Xometry's FDM holes, Hubs's SLA 0.8 mm hole and FDM gaps are
-warnings (a recommendation, a risk or a general line), the rest errors. FDM's pin row is Xometry's FDM design
-tips', a "should": a warning.
+Sources and when each row was read: `printing.RULES.sources` (their URLs in `printing.SOURCES`). Two Hubs pages
+differ: its SLA guide gives walls 0.4 mm supported and 0.6 unsupported, its thin-walls table 0.5 and 1.0, which
+the rules cite; its MJF guide asks for walls of 2.5 mm, its table 0.7 and 1.0.
 
 What a warning and an error mean here: a warning is a part that will be made, at a cost or a risk (support, a
 sagging bridge, a drain hole too small to empty fast); an error one the process does not make as drawn. So FDM's
@@ -1303,8 +1250,9 @@ wall under two beads and a part no machine holds.
 
 ### What it cannot measure
 
-- On a mesh: holes, pins, embossed and engraved details (no axes or faces): their rules read "holes was not
-  measured", never a pass; a mesh's hole reads as a gap, and a horizontal one's crown as a bridge of its span
+- On a mesh: holes, pins, embossed and engraved details (no axes or faces: the report's `not_measured`). Their
+  rules are not evaluated, never a pass, and every mesh's result says which (`families_not_measured`, info: check
+  the STEP or the model for them); a mesh's hole reads as a gap, and a horizontal one's crown as a bridge of its span
   (`printing.bridge_length`, where exact geometry judges its diameter). An angle within the mesh's own tolerance
   of a limit (`mesh_at_limit`): a cone meshed at 0.4 rad cannot tell 43 deg from 45.
 - A cavity under about five voxels across (`trapped_volumes.pitch_mm`) is found only where sealed (its shell);
@@ -1341,7 +1289,7 @@ wall under two beads and a part no machine holds.
   both, on such a part, are not. A part read sound by either bounded check is said (`soundness_bounded`, a warning
   naming the parts and the stage not run), never a plain pass.
 - Voxel fields: each part's field dropped once its trapped volumes and sections are read (an assembly's fields
-  held together were most of a 1.8 GB check), and every flood of it reaches a checkpoint each sweep.
+  held together were most of a 1.8 GB check).
 - A flat ceiling the kernel lays no sample on is said not measured (`bridges.items[].unmeasured`), its rules'
   figure missing, never a crash of the family.
 - Flat ceilings: the 40 largest refined to the exact farthest point; the rest read on their samples (`refined`).

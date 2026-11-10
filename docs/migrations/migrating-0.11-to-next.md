@@ -28,9 +28,9 @@ its `--json` or its findings changes for these:
 
 | 0.11 | Now |
 | --- | --- |
-| a part whose every family measured passed, exit 0 and `"ok": true`, whatever its figures: zero-draft walls, thin walls and overhangs were warnings | a part that breaks a rule's feasibility limit fails, exit 1 and `"ok": false`: the finding is an `error` coded by the rule's id, with the figure, the limit, its source and what to change. A recommendation broken is a `warning` and does not fail the check (zero draft, `molding.draft_min`; a wall under the resin's recommended minimum, `molding.wall_min`; an overhang, `printing.overhang_angle`): the last line counts them, `OK part.step: 22 warning(s); ...`, and `--strict` fails on them. Which a rule is: its `severity` in `measurements.rules.outcomes`. The measurements are in the result either way |
-| exit 1 and `"ok": false` for a family that could not be measured (`measurement_failed`), a source that could not be read (`mesh_unreadable`, `document_unreadable`) or a missing file (`invalid_target`) | exit 3, `"status": "not_checked"`, `"reason"` the code: no rule failed, nothing says the part cannot be made. The same for a part with no closed solid (`not_solid`), a document with no part (`document_empty`), faces the kernel failed to intersect rays with (`rays_unintersected`), rules that judged nothing (`rules_none_evaluated`) and a report that is not finite (`not_finite`) |
-| exit 1 and `{"ok": false, "error": ..., "reason": "failed"}` for a check that did not run to its end (its environment gave no answer, it crashed) | exit 3, and the document gains `"status": "not_checked"`. The engine measures a STEP's, an xbf's and a model's check now, so the same holds for a check it did not finish: its `"reason"` is the engine's own where its error carries one (a check cancelled by a build of its script, a worker lost), else `engine_stopped`, `engine_failed`, `engine_unavailable` or `failed` |
+| a part whose every family measured passed, exit 0 and `"ok": true`, whatever its figures: zero-draft walls, thin walls and overhangs were warnings | a part that breaks a rule's feasibility limit fails, exit 1 and `"ok": false`: the finding is an `error` coded by the rule's id, with the figure, the limit, its source and what to change. A recommendation broken is a `warning` and does not fail the check (a wall with less than 0.5 deg of draft, `molding.draft_min`; a wall under the resin's recommended minimum, `molding.wall_min`; an overhang, `printing.overhang_angle`), where its floor is an `error` (no draft at all on a wall deeper than 10 mm, `molding.draft_zero`; a wall under half the resin's minimum, `molding.wall_too_thin`): the last line counts the warnings, `OK part.step: 22 warning(s); ...`, and `--strict` fails on them. Which a rule is: its `severity` in `measurements.rules.outcomes`. The measurements are in the result either way |
+| exit 1 and `"ok": false` for a family that could not be measured (`measurement_failed`), a source that could not be read (`mesh_unreadable`, `document_unreadable`) or a missing file (`invalid_target`) | exit 3, `"status": "not_checked"`, `"reason"` the code: no rule failed, nothing says the part cannot be made. The same for a part with no closed solid (`not_solid`), a document with no part (`document_empty`), a mesh with no triangle (`mesh_empty`), faces the kernel failed to intersect rays with (`rays_unintersected`), a rule whose features carry no figure that should have been measured (`rule_partly_judged`), rules that judged nothing (`rules_none_evaluated`) and a report that is not finite (`not_finite`): every code is under "What to change" below |
+| exit 1 and `{"ok": false, "error": ..., "reason": "failed"}` for a check that did not run to its end (its environment gave no answer, it crashed) | exit 3, and the document gains `"status": "not_checked"`. The engine measures a STEP's, an xbf's and a model's check now, so the same holds for a check it did not finish: its `"reason"` is the engine's own where its error carries one (its document changed while it was measured, `superseded`; its process lost, `process_lost`; past its time or memory, `over_time`, `over_memory`), else `engine_stopped`, `engine_failed`, `engine_unavailable` or `failed` |
 | a mesh that is not watertight: `not_watertight`, a warning, exit 0 | an `error`, exit 1: an open mesh has no inside, so its walls, voids and volume are a surface's. A STEP's, an xbf's or a model's part with an open shell or loose faces is `not_watertight` too, and one whose solids share volume or that fails the kernel's validity check `not_sound`: errors in every process |
 | `--json`: `ok`, `path`, `findings`, `summary`, `measurements` | also `status` (`ok`, `failed`, `not_checked`) and `reason` (the code, when not checked; else null). Every check's result carries them (`drc`, `erc`, `validate`, `solve`: `ok` or `failed`) |
 | a finding: `severity`, `code`, `message`, `location`, `hint`, `items` | also `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`), `source` and `refs`: a rule's verdict as data (null and empty for any other finding). Read those, never the message, which no longer carries the source |
@@ -44,6 +44,8 @@ its `--json` or its findings changes for these:
 | a STEP, an xbf or a model: `draft.min_facet_draft`, `undercuts.note`, `undercuts.probe_resolution_note`, and the `probe_resolution` finding | gone: an exact face's draft is read exactly, with no facets and no probe to bound it |
 | a finding's `location` on a STEP, an xbf or a model: `x, y, z` | a ref, which `cad xbf inspect DOC REF` resolves: the feature's most specific one, a face's (`plate/face 7`) or, for a corner, its edge's (`plate/edge 17`, its faces after it in the finding's `refs`); a mesh's stays `x, y, z` |
 | `sealed_voids`, one info finding with the count | `internal_void`, an info finding for each sealed void, with its volume |
+| `several_bodies` for a mesh of several bodies, which a STEP's, an xbf's or a model's tessellation was too: an info for printing, a warning for molding | a STEP, an xbf or a model: `several_bodies` for several parts, every occurrence counted (molding a warning, "an assembly, not one molded part"; printing an info), and `several_solids`, a warning in every process, for one part that holds several solids. A mesh keeps `several_bodies` (info) for its bodies |
+| molding given no `--pull` measured along z and said nothing of it | still z, and said: `measurements.pull_given` is false and the last line says `(the default pull)`. Any pull is compared with x, y, z and the part's principal axes, and `pull_better` (a warning) names one that traps no more, needs no more side actions, leaves no more wall without draft and is better on one of them |
 | `cad stl\|threemf\|glb dfm --process molding` measured a mesh for molding (`cad.trimesh.molding`, `pulls`; `coarse_curved_face`, `mesh_folds`, `probe_resolution`) | refused, exit 2 (`invalid_argument`): molding is judged on exact geometry, a mesh's chords misread its draft, undercuts and walls -- check the STEP or the model (`cad step dfm part.step --process molding`); a mesh's `dfm` checks printing, its default |
 
 What to change:
@@ -53,36 +55,68 @@ What to change:
   for a part that fails: fix what its `reason` names, or run the check again. A script that tested `exit
   != 0` still stops on all of them; one that tested `exit == 1` for "could not be measured" tests `exit ==
   3` (or `status == "not_checked"`) now.
-- **What fails a check** is every finding of severity `error`, whatever its code:
-  - a rule whose limit is a feasibility limit, coded by the rule's id (`<process>.<rule>`). The rules that
-    failed are `measurements.rules.failed`, each rule's outcome and `severity` are in
-    `measurements.rules.outcomes`, and `measurements.rules.failing` counts the failing features by
-    severity. As this is written the `error` rules are: cnc's `cnc.internal_corner_sharp`,
-    `cnc.internal_corner_radius`, `cnc.sharp_internal_edge`, `cnc.corner_reach_limit`,
-    `cnc.hole_diameter`, `cnc.hole_depth_limit`, `cnc.wall_thickness`, `cnc.gap_width` and
-    `cnc.enclosed_void`; sheet's `sheet.uniform_thickness`, `sheet.flange_length`, `sheet.hole_to_bend`,
-    `sheet.bend_relief_width`, `sheet.hem_diameter`, `sheet.flat_length` and `sheet.flat_width`; molding's
-    `molding.undercut_unreleasable`; printing's `printing.wall`, `printing.wall_supported`,
-    `printing.wall_unsupported`, `printing.gap`, `printing.hole_diameter`, `printing.pin_diameter`,
-    `printing.escape_holes` and, with `--build-volume` given, `printing.build_volume`. Every other rule is
-    a `warning`;
-  - a process's own error, which no rule's limit states: `cnc.no_turning_axis`, `cnc.stock_too_small`,
-    `sheet.not_sheet`, `sheet.sharp_bend`, `sheet.thickness_mismatch`, `sheet.under_kerf`,
-    `sheet.flat_incomplete`, `sheet.flat_overlap`;
-  - the part's own soundness: `not_watertight`, `not_sound`.
+- **What fails a check** is every finding of severity `error`, whatever its code. Do not key on a list of
+  codes: key on the exit status or `status`, then read `findings` by severity. As this is written they are:
+  - **a rule's feasibility limit**, coded by the rule's id (`<process>.<rule>`). The rules that failed are
+    `measurements.rules.failed`, each rule's outcome and `severity` are in `measurements.rules.outcomes`,
+    and `measurements.rules.failing` counts the failing features by severity. Every other rule is a
+    `warning`.
 
-  Do not key on a list of codes: key on the exit status or `status`, then read `findings` by severity.
-- **What makes a check `NOT CHECKED`**, by its `reason`: the whole source -- `invalid_target` (a file
-  that is not there, from the library; the command refuses one first, exit 2), `document_unreadable`,
-  `mesh_unreadable`, `document_empty`, `not_solid`, `needs_exact_geometry`, `not_finite` -- where
-  `measurements` is empty and `summary` is `NOT CHECKED <source>: <code>`; or a part of it --
-  `measurement_failed` (a family, named in `measurements.partial_sections`), `rays_unintersected` (faces,
-  named in the finding and in each rule's `unmeasured_faces`), `rules_none_evaluated` -- where the rest of
-  `measurements` is reported. A script that took exit 0 to mean "measured" reads `measurements` whenever
-  `status` is not `not_checked` for the whole source, that is whenever `measurements.rules` is there.
-- **A rule that judged some of its features and not the rest** is `partial` in
-  `measurements.rules.outcomes`, never `passed`, listed in `measurements.rules.partial` and said in a
-  `rule_partly_judged` warning: a script that counted `passed` rules as verified leaves those out.
+    | Process | The `error` rules |
+    | --- | --- |
+    | cnc | `cnc.internal_corner_sharp`, `cnc.sharp_internal_edge` (a warning where more axes, a special cutter or a second setup makes the edge), `cnc.internal_corner_radius`, `cnc.corner_reach_limit`, `cnc.pocket_depth_limit`, `cnc.wall_thickness`, `cnc.hole_diameter`, `cnc.hole_depth_limit`, `cnc.gap_width`, `cnc.no_line_of_sight`, `cnc.enclosed_void`, `cnc.part_size_limit`, and with `--turning` `cnc.groove_depth_limit` |
+    | sheet | `sheet.uniform_thickness`, `sheet.thickness_limit`, `sheet.flange_length`, `sheet.bend_relief_width`, `sheet.hole_to_bend`, `sheet.hem_diameter` |
+    | molding | `molding.draft_zero`, `molding.undercut_unreleasable`, `molding.wall_too_thin`, `molding.wall_too_thick` |
+    | printing | `printing.wall_supported`, `printing.wall_unsupported`, `printing.wall` (each a warning for a mesh's wall at the limit within the mesh's accuracy), `printing.hole_diameter` (SLA under 0.5 mm, SLS, metal; a warning for FDM and for SLA under 0.8 mm), `printing.pin_diameter` (SLA, metal; a warning for FDM, SLS, MJF), `printing.gap` (a warning for FDM), `printing.escape_holes`, and `printing.build_volume` against the machine given (`--build-volume`) or, with none given, where no orientation fits the largest machine listed |
+
+    A limit no published guide states is **text-to-cad's own floor**, and its finding's `source` reads
+    `text-to-cad, its own figure: no published guide states one`, never a publisher's name: with no
+    `--tools`, a corner or edge radius under 0.025 mm and a gap under 0.05 mm (the smallest tool the cited
+    guide calls feasible); a corner or a cavity a tool under 1 mm across must reach more than 10 diameters
+    into (`cnc.corner_reach_limit`, `cnc.pocket_depth_limit`); a face no tool reaches at all
+    (`cnc.no_line_of_sight`); a part over 4000 mm long, or a turned one over 1000 mm across
+    (`cnc.part_size_limit`); an internal groove deeper than half the bore its tool enters by
+    (`cnc.groove_depth_limit`); sheet over 25 mm thick (`sheet.thickness_limit`); a wall or a rib deeper
+    than 10 mm with no draft at all (`molding.draft_zero`); a wall under half the resin's recommended
+    minimum or over twice its maximum (`molding.wall_too_thin`, `molding.wall_too_thick`); and an FDM wall
+    under two beads of the `--nozzle` given. A hole under 1 mm is a warning (`cnc.hole_diameter_small`:
+    micro-drilled), an error only under 0.05 mm (`cnc.hole_diameter`);
+  - **a process's own error**, which no rule's limit states: `cnc.no_turning_axis`,
+    `cnc.stock_too_small`; `sheet.not_sheet`, `sheet.sharp_bend`, `sheet.thickness_mismatch`,
+    `sheet.under_kerf`, `sheet.flat_incomplete`, `sheet.flat_overlap`, and `sheet.flat_length` and
+    `sheet.flat_width` against the sheet given (`--sheet-size`; against the standard sheet assumed they are
+    the rules' warnings); a cut file's `sheet.open_contour`, `sheet.overlapping_curves`,
+    `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop`, `zero_length_entity` and
+    `units_not_set`;
+  - **the part's own soundness**: `not_watertight` (an open mesh; a part with an open shell or faces
+    outside its solids) and `not_sound` (the kernel's validity check fails, or a part's solids share
+    volume).
+- **What makes a check `NOT CHECKED`**, by its `reason`:
+  - the whole source, where `measurements` is empty and `summary` is `NOT CHECKED <source>: <code>`:
+    `invalid_target` (a file that is not there, from the library; the command refuses one first, exit 2),
+    `document_unreadable`, `document_empty`, `not_solid`; a mesh's `mesh_unreadable`, `mesh_empty` (no
+    triangle, or none with an area), `mesh_too_large` (over 2 000 000 triangles), `inconsistent_normals`
+    and `mesh_no_volume`; a cut file's `no_cut_geometry`; `not_finite`;
+  - a part of it, where the rest of `measurements` is reported: `measurement_failed` (a family, named in
+    `measurements.partial_sections`, or one the report lacks), `rays_unintersected` (faces, named in the
+    finding and in each rule's `unmeasured_faces`), `rule_partly_judged` (a rule's features that carry no
+    figure, named in the finding) and `rules_none_evaluated`;
+  - a check the engine did not finish (above): `stopped`, `cancelled`, `over_time`, `over_memory`,
+    `process_lost`, `no_kernel`, `superseded`, `error`, else `engine_stopped`, `engine_failed`,
+    `engine_unavailable` or `failed`.
+
+  A script that took exit 0 to mean "measured" reads `measurements` whenever `status` is not
+  `not_checked` for the whole source, that is whenever `measurements.rules` is there.
+- **A rule is a pass only where it is `passed`.** In `measurements.rules.outcomes` a rule that judged some
+  of its features and not the rest is `partial` (listed in `measurements.rules.partial`), and one that
+  judged none of them `not_evaluated`: where the figure was not measured, `rule_partly_judged` says which
+  features and the check is `NOT CHECKED`. A figure that does not apply to a feature is no gap: the feature
+  names it in its `not_applicable` (a lone rib has no gap to a neighbour, an open step no width) and the
+  rule asks nothing of it. What a source does not hold by its nature is said once as a fact,
+  `families_not_measured` (info), and its rules are `not_evaluated`, never `passed`: a mesh's holes, pins
+  and embossed or engraved details (check the STEP or the model for them) and a cut file's bends, reliefs,
+  hems and thickness (check the bent part). A script that counted `passed` rules as verified leaves the
+  others out.
 - **A shop's limits are not the rules.** The verdicts are general practice, no shop's: compare the
   measurements with a shop's own published limits (the sendcutsend skill does, for its sheet).
 - **A printing check that ranked orientations runs twice** when it wants both: `--candidates` for the
@@ -122,8 +156,12 @@ and read back there. The `cad` command, which holds no kernel, runs that in the 
 An assembly's every part is judged, and a part used several times is judged each way it stands: the
 occurrences turned alike are measured once and counted (`measurements.bodies[i].occurrences`, `paths`,
 `placements_mm`), one turned another way is measured as it stands, at its own ref, and
-`measurements.document` totals every occurrence (`occurrence_count`, `solid_count`, `volume_mm3`). A part of
-several solids says so in every process (`several_solids`, a warning).
+`measurements.document` totals every occurrence (`occurrence_count`, `solid_count`, `volume_mm3`), and so does
+each process: a print's parts stand together on one plate, so every occurrence is measured where it stands
+(its bodies, volume, support and clearances count each), and molding's areas, its clamp force and its
+`--candidates` rows, like CNC's and sheet's last lines, count a part once for each time it occurs. A part of
+several solids says so in every process (`several_solids`, a warning; for molding its solids' contacts, left
+out of draft and undercuts, are `measurements.touching`).
 
 A model's, a STEP's and an xbf's check is measured by the engine, in one of a small pool of processes of its
 own (a file read once, a model from the bytes the engine holds, so checks of different documents run at once and
@@ -142,7 +180,13 @@ update, which does not wait for it), its process was lost, or it went past a che
 memory cap): run the check again.
 
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
-metal; `cad dxf dfm` checks a sheet's cut file. A model or an xbf given no `--process` is checked for
+metal; `cad dxf dfm` checks a sheet's cut file. It is not the drawing checks an export runs (`cad model
+export` of a DXF, unchanged), and reads the file its own way: of those checks' codes it keeps
+`units_not_set` and `zero_length_entity`; an entity drawn twice, the export's `duplicate_entity`, is
+`sheet.overlapping_curves` here (an error: the cutter goes over the line twice), with the outline it doubles
+still read as the part's; a file with nothing to cut, the export's `empty_drawing`, is `no_cut_geometry`
+(`NOT CHECKED`); and a drawing with dimensions, the export's `drawing_document`, is measured as any cut file,
+its annotation on a cut layer a warning (`sheet.annotation_on_cut_layer`). A model or an xbf given no `--process` is checked for
 the process its parts declare (`part.material = metals.aluminum(process=machined())`), where 0.11
 refused it; a STEP still needs one, and a mesh takes printing, the one process it is checked for. Each process takes options of its own beside 0.11's
 (`--material`, `--cavities`, `--technology`, `--build-volume`, `--layer-height`, `--nozzle`), and

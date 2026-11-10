@@ -790,12 +790,12 @@ if found.status != "ok":                                       # "ok", "failed" 
 | --- | --- | --- |
 | `ok` | 0 | every part was measured and no finding is an error: the part can be made. Warnings are recommendations: it is made, at a cost or a risk |
 | `failed` | 1 | a finding is an error: the part cannot be made by this process as drawn. With `--strict` (`strict=True`), a warning fails it too |
-| `not_checked` | 3 | the check did not judge what it was asked to, so it is no verdict and never a pass: a source that does not read or holds no solid (`document_unreadable`, `mesh_unreadable`, `not_solid`, `document_empty`, a file that is not there: `invalid_target`), a family that could not be measured (`measurement_failed`), faces the kernel failed to intersect rays with (`rays_unintersected`), rules that judged nothing (`rules_none_evaluated`), a report with a figure that is no finite number (`not_finite`). `reason` is the code of the finding that says so |
+| `not_checked` | 3 | the check did not judge what it was asked to, so it is no verdict and never a pass: a source that does not read or holds nothing to measure (`document_unreadable`, `document_empty`, `not_solid`, a mesh's `mesh_unreadable` or `mesh_empty`, a cut file's `no_cut_geometry`, a file that is not there: `invalid_target`), a family that could not be measured (`measurement_failed`), faces the kernel failed to intersect rays with (`rays_unintersected`), a rule whose features carry no figure that should have been measured (`rule_partly_judged`), rules that judged nothing (`rules_none_evaluated`), a report with a figure that is no finite number (`not_finite`). `reason` is the code of the finding that says so |
 
 `ok` is true for `ok` alone. An error found wins over what was not checked: the part fails whatever else
 was not judged, and the line says both. The command exits 3 too for a check that did not run to its end --
-the engine cancelled it for a build of its script, lost its worker or stopped, its environment gave no
-answer, it crashed -- where `--json` is the failure's document with `"status": "not_checked"` and a
+the engine stopped it (its document changed under it, it went past its time or its memory), lost its process
+or stopped itself, its environment gave no answer, it crashed -- where `--json` is the failure's document with `"status": "not_checked"` and a
 `reason`; a library call raises those. Exit 2 stays the command line's mistake: an option refused by name,
 a file of another type or not there, a document the engine does not hold.
 
@@ -834,16 +834,21 @@ command says a rule once -- its hint, its source and how many places -- then a s
 last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2
 warning(s); cnc ...; failed: cnc.internal_corner_sharp x4`. Every rule's outcome, its source and every
 failure (with the index of its item in its family) are `measurements["rules"]`, and a figure not measured is
-never a pass: a rule that judged some of its features and not the rest is `partial` and says which
-(`rule_partly_judged`).
+never a pass: a rule that could not judge some of its features says which (`rule_partly_judged`) and the
+check is not checked. What does not apply is no gap: a figure that cannot exist of a feature (a lone rib's
+gap to a neighbour) is named in the feature's `not_applicable`, and what a source does not hold (a mesh's
+holes, pins and details; a cut file's bends, reliefs, hems and thickness) is said once as a fact
+(`families_not_measured`), its rules not evaluated.
 
 **Every part, as it stands.** An assembly's every part is judged, and a part used several times is judged
 each way it stands: the occurrences turned alike are measured once and counted
 (`measurements["bodies"][i]`: `occurrences`, `paths`, `placements_mm`), and one turned another way is
 measured as it stands, at its own refs -- a bracket that prints clean on its back and needs support on its
 side is said at the occurrence on its side. `measurements["document"]` totals every occurrence
-(`occurrence_count`, `solid_count`, `volume_mm3`). A part of several solids says so (`several_solids`), and
-solids that share volume fail every process (`not_sound`).
+(`occurrence_count`, `solid_count`, `volume_mm3`), and so does each process: a print measures every
+occurrence where it stands on the plate, and the others' totals count a part once for each time it occurs.
+Several parts are said (`several_bodies`); one part of several solids says so in every process
+(`several_solids`), and solids that share volume fail every process (`not_sound`).
 `--material` picks a material's limits, and without it the material the parts declare is read
 (`part.material = metals.aluminum()`, when every part agrees: `material_declared`); without `--process`, an
 xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,

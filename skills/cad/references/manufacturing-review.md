@@ -66,11 +66,14 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
   | `NOT CHECKED <id>: <code> ...` | 3 | the check did not judge what it was asked to: no verdict, never a pass, never "no findings". `"reason"` is the code |
 
   `NOT CHECKED` is a part with no closed solid (`not_solid`: an open shell, a face -- close it or check
-  the solid meant), a source that does not read (`document_unreadable`, `mesh_unreadable`,
-  `document_empty`), a family that could not be measured (`measurement_failed`: the rest is still
-  reported), faces the kernel failed to intersect rays with (`rays_unintersected`: rebuild the face it
-  names), rules that judged nothing (`rules_none_evaluated`), or a check the engine did not finish
-  (cancelled by a run of the model's script, stopped: run it again). A part that both fails and was not
+  the solid meant), a source that does not read or holds nothing (`document_unreadable`,
+  `document_empty`, a mesh's `mesh_unreadable` or `mesh_empty`, a cut file's `no_cut_geometry`), a family
+  that could not be measured (`measurement_failed`: the rest is still reported), faces the kernel failed
+  to intersect rays with (`rays_unintersected`: rebuild the face it names), a rule whose features carry
+  no figure that should have been measured (`rule_partly_judged`: it names them -- judge them by hand
+  from `measurements.<family>`, or simplify the feature and check again), rules that judged nothing
+  (`rules_none_evaluated`), or a check the engine did not finish (its model was built again while it was
+  measured, the server stopped, it went past its time or memory: run it again). A part that both fails and was not
   wholly checked is `FAILED`, its line ending `; not checked: <code> xN`. Exit 2 means the command itself
   was refused -- an option of another process or kind, a value no machine has (`--tools 1000`), no process
   where none is declared or the parts declare several, a file that is not there, a mesh asked for cnc or
@@ -88,10 +91,12 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
   specific first (a corner's edge, then its faces: `location` is the first). Several failures at one
   feature are one finding (`and 2 more at this ref`), and a warning on
   a figure that already fails an error, or a stricter recommendation, at the same place is left to
-  `measurements.rules`. Other codes are facts the figures call for
-  (`zero_draft_walls`, `cnc.live_tooling`, `sheet.bend_radius_differs`, `material_declared`: the
-  material was read from the part; `several_solids`: a part of several solids, which a process makes
-  as several parts -- fuse them or label each).
+  `measurements.rules`. A limit no published guide states is text-to-cad's own floor, and its `source`
+  says so (`text-to-cad, its own figure: ...`): report it as that, never as a guide's. Other codes are
+  facts the figures call for (`zero_draft_walls`, `cnc.live_tooling`, `sheet.bend_radius_differs`,
+  `material_declared`: the material was read from the part; `several_solids`: one part of several
+  solids, which a process makes as several parts -- fuse them or label each; `several_bodies`: several
+  parts, every occurrence counted).
 - **See the place.** Resolve a finding's ref with `cad model inspect "$ID" 'plate/edge 17'` or
   `cad step inspect part.step 'COMPOUND/face 7'`: the face's surface, radius, area and box. The
   figures behind it are `measurements.<family>`, items worst first; the process's reference names the families.
@@ -102,9 +107,11 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
   (each with its `refs` and the index of its `item` in its family) and
   `reason`. A rule `passed` with reason "none found" had nothing of its kind to judge (no holes, no
   wall thin enough to list: `rules.none_found`): say none was found. A rule `not_evaluated` is never a
-  pass: "the rules give no limit here" or "... was not measured" leave it unverified. A rule `partial`
-  judged some of its features and not the rest (`rule_partly_judged` names them): its pass is of the
-  judged ones alone -- judge the others by hand from `measurements.<family>`.
+  pass: "the rules give no limit here" or "... was not measured" leave it unverified. What a source
+  does not hold is said once, `families_not_measured` (info): a mesh's holes, pins and details, a cut
+  file's bends, reliefs, hems and thickness -- check the STEP, the model or the bent part for those
+  rules. A rule `partial` judged some of its features and not the rest (`rule_partly_judged` names them,
+  and the check is `NOT CHECKED`): its pass is of the judged ones alone.
 
 ## The review
 
