@@ -100,7 +100,8 @@ The STEP is the full assembly: printed parts, six ST3215 servos with their inter
 nuts. The one human input is which printed parts form which link; every other part goes to the link it
 touches, a servo as a unit by its case and its horns to the link they drive, which reproduces the
 maker's grouping. Each axis is the drive horn's rim, checked against the parts' own bores (0.00 mm).
-The joint stops come from a self-collision sweep of the CAD (`src/so101_ranges.py`), within 5-10 deg of
+The joint stops come from a self-collision sweep of the CAD (`src/so101_ranges.py`, written before
+`cad model ranges` shipped; its numbers are the ones `so101.py` writes), within 5-10 deg of
 the references, with no number taken from them. Mass: printed parts as PLA with a 0.8 mm solid skin
 and the maker's 15% infill (277 g where solid would be 709 g), each servo at its published 55 g (the
 STEP's servo model overlaps itself), fasteners at the STEP's own steels. The two axes that differ, the
@@ -119,7 +120,8 @@ are not Trossen's pinned STLs.
 ## What the benchmark found in text-to-cad
 
 Fixed: a vendor STEP's densities read 1000 times too light (OCCT drops the "kilo" of kg/m^3; our own
-STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to-simulation user:
+STEPs say grams, so no test saw it). Every gap below is fixed on this branch too; they stay listed,
+ranked by how much they cost a CAD-to-simulation user:
 
 1. **Fixed: mass from a STEP that does not carry it.** There was no way to give a link a measured mass
    (scale its parts' densities to a target) or a mass budget for parts the CAD omits (motors in a dummy
@@ -151,12 +153,16 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
    renamed when it shared a link's name (`gripper` became `gripper_2`). `limits(assembly, joint,
    effort=, velocity=)` gives the drive's limits (`cad urdf validate` warns of a 0), and links and
    joints are named in their own kinds.
-8. **No joint limits from geometry.** The STEP has no stops; a self-collision sweep found them for SO-101
-   in 41 s. That belongs in text-to-cad, not in each model script.
-9. **Reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf deep-copies
-   the whole tree (7 s and 400 MB a call); and `cad mjcf snapshot` fails when the daemon started without
-   a display.
-10. **Fixed in part: the joint's and the surface's dynamics.** A servo's reflected inertia, damping and
+8. **Fixed: no joint limits from geometry.** The STEP has no stops; a model script's own self-collision
+   sweep found them for SO-101 in 41 s. `cad model ranges` (also `cad xbf|step ranges`) now sweeps each
+   joint alone until its parts meet and prints a table of each joint's stops (0.3 mm by default;
+   `--joint` names the joints to sweep).
+9. **Fixed: reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf
+   deep-copies the whole tree (7 s and 400 MB a call); `leaves(tree)` (`cad.build123d`) now places a read
+   tree's leaves on its own B-rep without the copy. And `cad mjcf snapshot` failed when the daemon
+   started without a display; a snapshot the daemon cannot draw is now drawn by the calling process
+   where it has a display (`xvfb-run cad mjcf snapshot ...`).
+10. **Fixed: the joint's and the surface's dynamics.** A servo's reflected inertia, damping and
    dry friction are the hardware's, so `limits(assembly, joint, armature=, damping=, friction=)` declares
    them in the model (MJCF `armature`, `damping`, `frictionloss`; URDF `<dynamics>`), and
    `friction(part, coefficient)` a surface's contact friction (MJCF geom `friction`). Actuators, gains,

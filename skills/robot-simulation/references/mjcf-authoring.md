@@ -37,8 +37,8 @@ Lengths are metres and masses kilograms, as everywhere in this skill.
 
 Split the robot from its world:
 
-- `robot.xml` (named for the robot, `panda.xml`): the compiler, defaults, assets, the robot's body tree, its actuators, equalities and keyframes. No floor, no light, no skybox.
-- `scene.xml`: `<include file="panda.xml"/>`, then the floor plane, the light and anything else of the world.
+- `robot.xml` (named for the robot, `panda.xml`): the compiler, defaults, assets, the robot's body tree, its equalities and keyframes. No actuators, no floor, no light, no skybox.
+- `scene.xml`: `<include file="panda.xml"/>`, then the actuators, the floor plane, the light and anything else of the world.
 
 ```xml
 <mujoco model="panda scene">

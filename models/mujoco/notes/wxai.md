@@ -229,7 +229,7 @@ pinion pair relates its first joint, 'left', to joints of the other kind". `gear
 drives the prismatic joint 'left': a gear pair turns revolute joints". The two slides are therefore
 independent joints (2 controls where Menagerie has 1 plus an equality).
 
-**Workaround tried and working** (`tmp/wxai/couple_test.py::pinion_racks`, not shipped): the real
+**Workaround tried and working** (a scratch test, not shipped or committed): the real
 mechanism is one pinion driving both racks. The v1.5 page gives its pitch radius as 0.00875 m in the
 gripping-force formula.
 
@@ -252,7 +252,7 @@ gripping-force formula.
 
 - `out/wxai/wxai.png`: the qpos0 (sleep) pose.
 - `out/wxai/wxai_pose.png`: joint_0 30, joint_1 60, joint_2 60, joint_4 45, gripper open.
-- `tmp/wxai/menagerie_pose.png`: Menagerie at the same pose. The two match link for link. Menagerie's
+- Menagerie drawn at the same pose (a scratch picture, not committed): the two match link for link. Menagerie's
   meshes show the pocketing and the D405 that the dummies lack.
 
 The shared daemon was started without a display, so its `cad mjcf snapshot` fails with "no X
@@ -306,7 +306,7 @@ import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
 5. **A part fixed to a link cannot stay a body of its own.** Fixed: `body(part, name)`. Menagerie and the URDF keep
    camera_mount_d405 and gripper_left/right as fixed child bodies. Here they merge into link_6 and the
    carriages. A jointless part in a sub-assembly beside a jointed part goes to the ground link, not to
-   its sibling (`tmp/wxai/fixed_test.py`: `cam` landed in `base`), so fastening by RigidJoint pairs is
+   its sibling (a scratch test, not committed: `cam` landed in `base`), so fastening by RigidJoint pairs is
    the only way, and it merges. A comparison has to merge Menagerie's fixed bodies.
 6. **URDF joint limits are written with `effort="0" velocity="0"`.** Fixed: `limits(assembly, joint, effort=,
    velocity=)`, and `cad urdf validate` warns of a 0. The spec gives both (27/7 N*m;
