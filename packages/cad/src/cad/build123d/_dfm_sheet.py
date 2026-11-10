@@ -1,9 +1,13 @@
 """sheet's measurements of exact geometry (``cad._internal.dfm.sheet`` says what they are for), and the unfold.
 
 **The sheet.** Every face is sampled (``_dfm_brep.samples``) and an exact ray cast from each sample into the
-material, square to the face, to the next face it crosses. A planar face whose rays mostly reach an
-opposite, antiparallel planar face is a *skin*; the area-weighted modal distance is the sheet's thickness
-``t``. A pair of coaxial cylinders, one concave and one convex, whose rays cross ``t`` is a *bend*. A face
+material, square to the face, to the next face it crosses. The sheet's thickness ``t`` is the area-weighted
+modal distance between a face and the face opposite it (an antiparallel plane, a coaxial cylinder), voted by
+the faces that can be a sheet's two sides alone: those ``SKIN_WIDTHS`` times as wide as the two are apart,
+each read in its own frame (``_Analysis._width``) -- nothing here reads the part's box in the world, so
+nothing turns with its placement. A planar face whose rays mostly reach an antiparallel planar face ``t``
+away is a *skin*. A pair of coaxial cylinders, one concave and one convex, whose rays cross ``t`` is a
+*bend* (with no flat skin beside them: a tube, or a rolled sheet -- ``rolled``). A face
 touching both faces of a pair (a skin and its opposite, a bend's inside and outside) is a cut *edge*; a cone
 between a skin and a hole's wall is a countersink. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
@@ -691,8 +695,8 @@ class _Analysis:
                 if facing and sum(h.area for h in facing) >= 0.5 * sum(h.area for h in hs):
                     kind = "thicker" if worst.distance > thickness else "thinner"
             else:
-                box = self.faces[a - 1].bounding_box()
-                local, deviation = None, max(box.size.X, box.size.Y, box.size.Z)
+                # no ray of it crosses the part: by its own size (never its box in the world, which turns with it)
+                local, deviation = None, math.sqrt(float(self.areas[a - 1]))
                 centre = self.faces[a - 1].center()
                 point = np.array([centre.X, centre.Y, centre.Z])
             self._not_sheet(a, kind, local, max(deviation, tol), point, self.areas[a - 1])
@@ -1968,6 +1972,8 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     if outer:
         points = np.vstack([loop.points for loop in outer])
         long, short, angle = plane.min_rectangle(points)
+        if len(outer) == 1 and outer[0].circle is not None:  # a disc: its diameter, not its chords' rectangle
+            long = short = 2.0 * outer[0].circle[2]
         item.update(flat_length_mm=_r(long), flat_width_mm=_r(short),
                     flat_area_mm2=_r(sum(abs(plane.area(loop)) for loop in analysis.flat_loops
                                          if loop.label == "outer") -

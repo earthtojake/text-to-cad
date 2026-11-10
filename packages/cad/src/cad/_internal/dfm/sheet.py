@@ -17,7 +17,9 @@ length is given the same three ways from the bend, the least along the bend (``l
 length at least half of the bend reaches (``length_*_half_mm``).
 
 **The rules** (``RULES``) are general practice, each from a published sheet metal design guide (cited as the
-evidence, not as a shop's limit). A shop's own figures -- its gauges, its tooled radius per gauge, its die
+evidence, not as a shop's limit) but the few that are text-to-cad's own (``OWN``: said as its own in every
+verdict). A rule that scales with the thickness scales by each item's own part's (``_scales``): a document's
+parts are each judged by their own. A shop's own figures -- its gauges, its tooled radius per gauge, its die
 widths, its brake's angles and lengths, its smallest and largest parts -- are no rule here: give the ones it
 publishes (``--thickness``, ``--bend-radius``, ``--k-factor``, ``--kerf``, ``--sheet-size``), or compare the
 measurements with them.
@@ -60,6 +62,11 @@ OWN = Source("text-to-cad-own", "text-to-cad", "text-to-cad's own figure; no fet
 #: in general service stop near an inch of steel, and thicker plate is flame-, plasma- or waterjet-cut and
 #: machined. Hubs recommends 10 mm at most for laser cutting and 6 for bending (``thickness_max``, warnings).
 PLATE_MM = 25.0
+
+#: An inside radius past this many thicknesses is no one hit of a brake's punch: text-to-cad's own line (air
+#: bending forms a radius of a fraction of the die's opening, a few thicknesses; a larger one is bump-formed in
+#: steps or rolled). No fetched guide states one.
+BRAKE_RADIUS_T = 10.0
 
 # --- tables the rules read through ``context`` ------------------------------------------------------------
 
@@ -228,6 +235,12 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
         _r("bend_radius", "bends", "inside_radius_mm", "min", 1.0, "mm", "inside bend radius", source,
            scale_by="rule_thickness_mm", severity="warning", item_when={"kind": "bend"},  # a hem's is hem_diameter's
            fix="open the inside radius to at least the thickness, {limit:.3g} mm", **_SCALED),
+        _r("bend_radius_max", "bends", "radius_to_thickness", "max", BRAKE_RADIUS_T, "ratio",
+           "inside bend radius over the thickness", OWN, severity="warning", item_when={"kind": "bend"},
+           fix="a radius this large is bump-formed in steps or rolled, not bent in one hit: confirm it with the "
+               "shop, or bend it at a few thicknesses",
+           note="text-to-cad's own line: air bending forms a radius of a few thicknesses in one hit; a larger "
+                "one is bump-formed or rolled, at more cost"),
         _r("flange_length", "flanges", "length_outside_minus_radius_mm", "min", 2.0, "mm",
            "flange height less the inside radius (from the outside of the bend)", source, scale_by="rule_thickness_mm",
            item_when={"joggle_web": (False, None)},  # a joggle's short web is sheet.joggle's (``_joggle_webs``)
@@ -509,6 +522,26 @@ def _cut_file_notes(report: dict[str, Any]) -> list[CheckFinding]:
     return found
 
 
+def _not_judged(report: dict[str, Any]) -> list[CheckFinding]:
+    """What a bent part's check measured and no rule judges, said once (an info): no fetched guide gives a
+    limit for how far a relief reaches past its bend, for a corner relief, or for a channel's width against
+    its legs (the brake's tooling clearance, a shop's own)."""
+    reliefs = _items(report, "reliefs")
+    counts = (
+        (sum(1 for item in reliefs if item.get("kind") == "bend" and item.get("present")),
+         "bend relief(s)' depth past the bend (reliefs.depth_tangent_mm)"),
+        (sum(1 for item in reliefs if item.get("kind") == "corner"), "corner relief(s) (reliefs)"),
+        (len(_items(report, "channels")), "channel(s)' width against their legs (channels.base_to_flange_ratio)"),
+    )
+    said = [f"{count} {what}" for count, what in counts if count]
+    if not said:
+        return []
+    return [CheckFinding("info", "sheet.measured_not_judged",
+                         "measured and not judged, no fetched guide giving a limit: " + "; ".join(said),
+                         "reliefs" if counts[0][0] or counts[1][0] else "channels",
+                         "read them against the shop's own limits")]
+
+
 def _joggle_webs(report: dict[str, Any], resolved: dict[str, Any]) -> None:
     """A web between two bends that turn opposite ways (a flange item's ``web_of``) under the flange minimum
     (``flange_length``'s limit times the thickness, from the outside of the bend) is a joggle's: its flange
@@ -680,6 +713,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             found.append(CheckFinding(severity, code, f"{len(items) - 8} more of the same", family))
     found.extend(_thickness_unknown(report, resolved))
     found.extend(_cut_file_notes(report))
+    found.extend(_not_judged(report))
     if resolved.get("k_factor") is None and bends:
         sources = sorted({str(bend.get("k_factor_source")) for bend in bends if bend.get("k_factor_source")})
         if sources:

@@ -513,6 +513,29 @@ class RecognitionTest(unittest.TestCase):
         self.assertTrue(part["is_sheet"])
 
 
+class NotJudgedTest(unittest.TestCase):
+    """What is measured with no guide's limit is said so, and text-to-cad's own lines are said as its own."""
+
+    def test_a_radius_of_many_thicknesses_is_no_single_hit_of_a_brake(self) -> None:
+        rolled = checked(bent([("line", 20), ("bend", 120, 50), ("line", 20)], 2.0, 60))  # r = 25 t
+        (warned,) = [f for f in rolled.findings if f.severity in ("error", "warning")]
+        self.assertEqual((warned.severity, warned.code), ("warning", "sheet.bend_radius_max"))
+        self.assertIn("25 ratio is over the 10 ratio recommended maximum", warned.message)
+        self.assertIn("text-to-cad's own figure", warned.message)
+
+    def test_relief_depth_and_channel_proportions_are_said_measured_not_judged(self) -> None:
+        shallow = checked(tabbed(relief=(3.0, 0.5)))  # wide enough, 0.5 mm past the tangent line
+        self.assertEqual(verdicts(shallow), [])
+        (note,) = [f for f in shallow.findings if f.code == "sheet.measured_not_judged"]
+        self.assertEqual(note.severity, "info")
+        self.assertIn("2 bend relief(s)' depth past the bend", note.message)
+        self.assertEqual({item["depth_tangent_mm"] for item in shallow.measurements["reliefs"]["items"]}, {0.5})
+        channel = checked(bent([("line", 30), ("bend", 90, 2), ("line", 6), ("bend", 90, 2), ("line", 30)], 2.0, 120))
+        (note,) = [f for f in channel.findings if f.code == "sheet.measured_not_judged"]
+        self.assertIn("1 channel(s)' width against their legs", note.message)
+        self.assertNotIn("sheet.measured_not_judged", {f.code for f in checked(bd.Box(80, 50, 2)).findings})
+
+
 class PerPartTest(unittest.TestCase):
     """Each part of a document is judged by its own thickness, whichever comes first."""
 
