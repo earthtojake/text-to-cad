@@ -17,8 +17,8 @@ length is given the same three ways from the bend, the least along the bend (``l
 length at least half of the bend reaches (``length_*_half_mm``).
 
 **The rules** (``RULES``) are general practice, each from a published sheet metal design guide (cited as the
-evidence, not as a shop's limit) but the few that are text-to-cad's own (``OWN``: said as its own in every
-verdict). A rule that scales with the thickness scales by each item's own part's (``_scales``): a document's
+evidence, not as a shop's limit) but the few that are text-to-cad's own (``rules.OWN``: said as its own in
+every verdict). A rule that scales with the thickness scales by each item's own part's (``_scales``): a document's
 parts are each judged by their own. A shop's own figures -- its gauges, its tooled radius per gauge, its die
 widths, its brake's angles and lengths, its smallest and largest parts -- are no rule here: give the ones it
 publishes (``--thickness``, ``--bend-radius``, ``--k-factor``, ``--kerf``, ``--sheet-size``), or compare the
@@ -33,8 +33,8 @@ from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
-from cad._internal.dfm._common import mm
-from cad._internal.dfm.rules import Rule, RuleSet, Source
+from cad._internal.dfm._common import mm, not_applicable, occurrences
+from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
 __all__ = ["DEFAULT_SHEET", "MEASURED_FROM", "OPTIONS", "RULES", "context", "findings", "k_factor", "sheet_size",
@@ -54,10 +54,6 @@ PROTOLABS = Source("protolabs-sheet", "Protolabs", "Sheet metal fabrication desi
 XOMETRY = Source("xometry-sheet", "Xometry", "Sheet metal fabrication service (design guidelines)",
                  "https://www.xometry.com/capabilities/sheet-metal-fabrication/", ACCESSED)
 
-#: The source of a rule that is text-to-cad's own (no guide states it), said as such in every verdict of it.
-OWN = Source("text-to-cad-own", "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
-             "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
-             ACCESSED)
 #: Past this a part is plate, no sheet shop's work (mm): text-to-cad's own floor -- sheet lasers and press brakes
 #: in general service stop near an inch of steel, and thicker plate is flame-, plasma- or waterjet-cut and
 #: machined. Hubs recommends 10 mm at most for laser cutting and 6 for bending (``thickness_max``, warnings).
@@ -202,7 +198,9 @@ def _flat_size(source: Source, note: str) -> tuple[Rule, ...]:
     """The flat pattern on the standard sheet assumed (``DEFAULT_SHEET``), a warning: no shop's limit. Against
     the sheet given (``--sheet-size``, the shop's) it is a finding of fact (``_on_sheet``), which cites no
     guide."""
-    more = {"severity": "warning", "note": note, "when": {"scale_known": True, "sheet_given": False}}
+    # a part that is not sheet has no flat pattern (``sheet.not_sheet`` says so): the rule is a sheet part's
+    more = {"severity": "warning", "note": note, "when": {"scale_known": True, "sheet_given": False},
+            "item_when": {"is_sheet": True}}
     return (
         _r("flat_length", "parts", "flat_length_mm", "max", 1.0, "mm", "flat pattern's long side", source,
            scale_by="sheet_long_mm", **more,
@@ -335,12 +333,29 @@ _SCALED_FAMILIES = ("bends", "flanges", "reliefs", "hems", "holes", "hole_spacin
                     "webs")
 
 
+def _mark(report: dict[str, Any], given: Any) -> None:
+    """The figures that do not apply to an item, named on it (``_common.not_applicable``), so a rule that reads
+    one asks nothing of it -- where any other missing figure was not measured, and is said. A cut file carries
+    no thickness: with none given there is none to judge (``sheet.thickness_unknown`` says which rules that
+    leaves unjudged). A hem's or a curl's flange has no outside mold line -- a fold through 180 degrees has
+    none -- so no height from it: its return is ``sheet.hem_return``'s."""
+    if "cut_file" in report and given is None:
+        for part in _items(report, "parts"):
+            if part.get("thickness_mm") is None:
+                not_applicable(part, "thickness_mm")
+    folded = {bend.get("location") for bend in _items(report, "bends") if bend.get("kind") in ("hem", "curl")}
+    for flange in _items(report, "flanges"):
+        if flange.get("bend") in folded and flange.get("length_outside_minus_radius_mm") is None:
+            not_applicable(flange, "length_outside_minus_radius_mm")
+
+
 def _scales(report: dict[str, Any], resolved: dict[str, Any]) -> float | None:
     """Each item's own scales, written on it: ``rule_thickness_mm``, the thickness its rules scale by -- the
     stock's where ``--thickness`` names it, else its own part's (the item's ``thickness_mm``: a document of a
     1 mm and a 3 mm part judges each by its own) -- and a notch's and a tab's least width from it. The
     thickness for the context: the stock's, else the first part's, which only a family with no item reads."""
     given = resolved.get("thickness")
+    _mark(report, given)
     for family in _SCALED_FAMILIES:
         for item in _items(report, family):
             own = given if given is not None else item.get("thickness_mm")
@@ -755,13 +770,19 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
         return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}{bends}{unscaled}"
     parts = _items(report, "parts")
     bends = _items(report, "bends")
-    if len(parts) > 1:
+    # the parts as made: a part measured once counts for each time it occurs (``_common.occurrences``)
+    times = occurrences(report)
+
+    def count(items: list[dict[str, Any]]) -> int:
+        return sum(times.get(_owner(item.get("location")), 1) for item in items)
+
+    if count(parts) > 1:
         # each part's own thickness: a document of a 1 mm and a 3 mm part is not "sheet 1 mm"
         sheets = [part for part in parts if part.get("is_sheet", True)]
         thicknesses = sorted({part["thickness_mm"] for part in sheets if isinstance(part.get("thickness_mm"), (int, float))})
-        others = f", {len(parts) - len(sheets)} not sheet" if len(sheets) < len(parts) else ""
-        return (f"{len(parts)} parts, {' and '.join(mm(value) for value in thicknesses) or '-'} mm{others}, "
-                f"{len(bends)} bend(s)")
+        others = f", {count(parts) - count(sheets)} not sheet" if len(sheets) < len(parts) else ""
+        return (f"{count(parts)} parts, {' and '.join(mm(value) for value in thicknesses) or '-'} mm{others}, "
+                f"{count(bends)} bend(s)")
     if parts and not parts[0].get("is_sheet", True):
         return "not one sheet"
     thickness = parts[0].get("thickness_mm") if parts else None

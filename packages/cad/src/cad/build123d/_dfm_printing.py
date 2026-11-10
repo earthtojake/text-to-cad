@@ -38,7 +38,6 @@ from typing import Any, Callable
 import numpy as np
 
 from cad._internal import meshops_printing as mo
-from cad._internal.dfm import checkpoint
 from cad._internal.dfm import printing as rules
 from cad.build123d import _dfm_brep as brep
 
@@ -95,7 +94,6 @@ def _xyz(point: Any) -> list[float]:
 
 
 def _safe(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-    checkpoint()  # between families
     try:
         return fn()
     except Exception as error:  # noqa: BLE001 - one family failing never loses the rest
@@ -147,6 +145,9 @@ class Context:
     """What every family reads: the parts, their faces sampled, their edges, rays, the plate."""
 
     def __init__(self, document: brep.Document, options: dict[str, Any]) -> None:
+        # The parts as they are printed together: every occurrence where it stands, on one plate. The occurrences
+        # turned alike share neither their height above the plate, nor what stands under and beside them.
+        document = brep.every_occurrence(document)
         self.document = document
         self.options = options
         self.technology = options["technology"]
@@ -237,7 +238,6 @@ class Context:
 
     def _group_rounds(self, part: int) -> None:
         for info in self.faces[part]:
-            checkpoint()
             s = info.surface
             if s.kind != "cylinder" or s.concave is None or s.radius is None:
                 continue
@@ -387,7 +387,6 @@ def _refine(ctx: "Context", part: int, item: dict[str, Any], i: int, j: int, out
         return  # parallel planes: every ray between them is as long, the sampled one exact
     if len(ctx.adjacent(part, i)) > REFINE_EDGES:
         return
-    checkpoint()
     segments = brep.least_segments(a.face, b.face, len(ctx.adjacent(part, j)) > REFINE_EDGES)
     if not segments or segments[0][0] >= float(item[key]) - 1e-6:
         return
@@ -479,7 +478,6 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
         enter, leave = lo.max(axis=2), hi.min(axis=2)
         mask = across & (enter <= leave) & (leave >= start) & (enter <= end)
         for r in range(mask.shape[0]):
-            checkpoint()
             index = np.flatnonzero(mask[r])
             if not len(index):
                 found.append(None)
@@ -631,7 +629,6 @@ def _solid(ctx: Context) -> dict[str, Any]:
     items = []
     checked = 0
     for index, part in enumerate(ctx.parts):
-        checkpoint()
         solids = part.solids()
         inner = closed = 0
         shells = 0
@@ -693,9 +690,7 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
     plate_band = max(1.0, 5 * ctx.layer)
     items, histogram, below_total = [], np.zeros(9), 0.0
     for infos in ctx.faces:
-        checkpoint()
         for info in infos:
-            checkpoint()
             down = [s for s in info.samples if s.normal[2] < -1e-9 and not ctx.on_plate(float(s.point[2]))]
             if not down:
                 continue
@@ -770,10 +765,8 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
              and info.surface.normal[2] < -cos_flat and not ctx.on_plate(info.zmin)]
     refined = {id(info) for info in sorted(flats, key=lambda info: -info.area)[:REFINED_CEILINGS]}
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         edges = ctx.parts[part].edges()
         for info in infos:
-            checkpoint()
             n = info.surface.normal
             if info.surface.kind != "plane" or n is None or not n[2] < -cos_flat or ctx.on_plate(info.zmin):
                 continue
@@ -879,7 +872,6 @@ def _knife_runs(ctx: Context, part: int, upto: float) -> list[dict[str, Any]]:
                 continue  # two planes over the limit: no ray from one lands on the other looking back at it
             angles = np.full(len(coarse), float(edge.angle_deg))  # two planes meet at one angle all along
         else:
-            checkpoint()
             _, angles = brep.edge_angles(ctx.parts[part], edge, coarse)
             if np.isfinite(angles).any():
                 # the least angle found exactly between the samples about it, whatever the sampling (a rod cut
@@ -941,10 +933,8 @@ def _walls(ctx: Context) -> dict[str, Any]:
     minimum = rules.wall_minimum(ctx.options)
     items, every, where = [], [], []
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         zones = _knife_zones(ctx, part)
         for info in infos:
-            checkpoint()
             pin = info.group is not None and not ctx.rounds[info.group].concave and \
                 ctx.rounds[info.group].coverage_deg >= ROUND_DEG
             if not info.thickness or pin:  # a pin's thickness is its diameter: the pins' rules judge it
@@ -1019,9 +1009,7 @@ def _gaps(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items = []
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         for info in infos:
-            checkpoint()
             if not info.gap:
                 continue
             width, k, other = min(info.gap)
@@ -1064,7 +1052,6 @@ def _inside(ctx: Context, part: int, points: list[np.ndarray]) -> list[bool]:
                        for solid in (ctx.parts[part].solids() or [ctx.parts[part].shape])]
     found = []
     for point in points:
-        checkpoint()
         state = False
         for classifier in cache[part]:
             classifier.Perform(gp_Pnt(*map(float, point)), 1e-6)
@@ -1085,7 +1072,6 @@ def _round_items(ctx: Context, concave: bool) -> list[dict[str, Any]]:
 def _measure_rounds(ctx: Context, concave: bool) -> list[dict[str, Any]]:
     items = []
     for index, group in ctx.rounds_of(concave):
-        checkpoint()
         part = group.part
         largest = max(group.faces, key=lambda ordinal: ctx.info(part, ordinal).area)
         center = group.origin + group.axis * (0.5 * (group.lo + group.hi))
@@ -1138,7 +1124,6 @@ def _details(ctx: Context) -> dict[str, Any]:
     # floor ("engrave")
     sides: dict[tuple[int, int, str], set[int]] = {}
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         for side in infos:
             # a side is any face standing between a top and a bottom, of any surface: a plane square to them, a
             # round corner's cylinder, a dot's, a letter's spline
@@ -1284,7 +1269,6 @@ def _clearances(ctx: Context) -> dict[str, Any]:
     part_of = O >> 20
     clouds = []
     for part in range(len(ctx.parts)):
-        checkpoint()
         mine = part_of == part
         tri = V[F[mine]]
         points = np.vstack([tri.reshape(-1, 3), tri.mean(axis=1)])
@@ -1307,7 +1291,6 @@ def _clearances(ctx: Context) -> dict[str, Any]:
             if start + i < j:
                 near.append((int(meshed[start + i]), int(meshed[j])))
     for a, b in near:
-        checkpoint()
         (la, ha), (lb, hb) = boxes[a], boxes[b]
         # each cloud where the other's box (and the reach) is: the rest cannot be nearest
         ina = np.all((clouds[a][0] >= lb - reach) & (clouds[a][0] <= hb + reach), axis=1)
@@ -1460,7 +1443,6 @@ def _trapped(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items, pitches, balls = [], [], []
     for part in range(len(ctx.parts)):
-        checkpoint()
         made = _grid(ctx, part)
         exact = _inner_shells(ctx, part)
         if made is None:
@@ -1548,9 +1530,7 @@ def _bed(ctx: Context) -> dict[str, Any]:
     items, contact, xs, ys = [], 0.0, [], []
     sharp = 0.0
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         for info in infos:
-            checkpoint()
             n = info.surface.normal
             if info.surface.kind != "plane" or n is None or n[2] > -0.9999 or not ctx.on_plate(info.zmax):
                 continue
@@ -1578,9 +1558,7 @@ def _stairs(ctx: Context) -> dict[str, Any]:
     items, bins = [], np.zeros(4)
     edges = [0.5, 5.0, 10.0, 15.0, SHALLOW_DEG]
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         for info in infos:
-            checkpoint()
             if not info.samples:
                 continue
             tilt = np.degrees(np.arccos(np.clip([abs(float(s.normal[2])) for s in info.samples], 0.0, 1.0)))
@@ -1610,7 +1588,6 @@ def _knife_edges(ctx: Context) -> dict[str, Any]:
     minimum = rules.wall_minimum(ctx.options)
     items = []
     for part in range(len(ctx.parts)):
-        checkpoint()
         _knife_zones(ctx, part)
         for run in ctx._runs[part]:  # type: ignore[attr-defined]
             under = run["angles"] < mo.KNIFE_DEG - mo.ANGLE_EPS
@@ -1664,10 +1641,8 @@ def _cosmetic(ctx: Context) -> set[int]:
     """The faces a support mark spoils, as owners: each part's faces of 5% of its area or more, holes aside."""
     chosen = set()
     for part, infos in enumerate(ctx.faces):
-        checkpoint()
         total = sum(info.area for info in infos) or 1.0
         for info in infos:
-            checkpoint()
             hole = info.group is not None and ctx.rounds[info.group].concave
             if info.area >= 0.05 * total and not hole:
                 chosen.add((part << 20) | info.ordinal)
@@ -1707,7 +1682,6 @@ def _sections(ctx: Context) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     best: dict[str, Any] = {}
     for part in range(len(ctx.parts)):
-        checkpoint()
         reading = _section(ctx, part)
         if reading is None:
             continue
@@ -1786,7 +1760,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     from cad._internal.dfm import Unmeasured
 
     if not document.parts:
-        raise Unmeasured("not_measured", "the document has no parts to print")
+        raise Unmeasured("document_empty", "the document has no parts to print")
     return _report(Context(document, options), candidates, {})
 
 
@@ -1802,7 +1776,7 @@ def measure_each(document: brep.Document, each: list[dict[str, Any]]) -> list[di
     from cad._internal.dfm import Unmeasured
 
     if not document.parts:
-        raise Unmeasured("not_measured", "the document has no parts to print")
+        raise Unmeasured("document_empty", "the document has no parts to print")
     if len({options.get("samples") for options in each}) > 1:
         raise ValueError("measure_each: the options differ in samples, which decide what is read once")
     ctx, kept, found = Context(document, each[0]), {}, []

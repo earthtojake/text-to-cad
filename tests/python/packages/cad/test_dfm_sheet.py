@@ -489,7 +489,7 @@ class RecognitionTest(unittest.TestCase):
         # past an inch it is plate, no sheet shop's work: text-to-cad's own floor, said as its own
         (plate,) = [f for f in checked(bd.Box(160, 120, 30)).findings if f.severity in ("error", "warning")]
         self.assertEqual((plate.severity, plate.code), ("error", "sheet.thickness_limit"))
-        self.assertIn("text-to-cad, text-to-cad's own figure", plate.source)
+        self.assertTrue(plate.source.startswith("text-to-cad, its own figure"), plate.source)
 
     def test_a_tube_is_a_closed_section_and_a_slit_one_a_rolled_sheet_at_its_wall(self) -> None:
         tube = bd.Cylinder(20, 100) - bd.Cylinder(18, 100)
@@ -521,7 +521,7 @@ class NotJudgedTest(unittest.TestCase):
         (warned,) = [f for f in rolled.findings if f.severity in ("error", "warning")]
         self.assertEqual((warned.severity, warned.code), ("warning", "sheet.bend_radius_max"))
         self.assertIn("25 ratio is over the 10 ratio recommended maximum", warned.message)
-        self.assertIn("text-to-cad, text-to-cad's own figure", warned.source)
+        self.assertTrue(warned.source.startswith("text-to-cad, its own figure"), warned.source)
 
     def test_relief_depth_and_channel_proportions_are_said_measured_not_judged(self) -> None:
         shallow = checked(tabbed(relief=(3.0, 0.5)))  # wide enough, 0.5 mm past the tangent line

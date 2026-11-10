@@ -652,7 +652,6 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
                                   "message": f"failed to read {read or 'the document'}: {error}"}}
     else:
         checked = manufacturing_check().held(source, check, read)
-        fresh = bool(checked.pop("read", False)) or fresh
     return {"reports": [], "files": [], "checked": {**checked, **said, "read": fresh,
                                                     **({"digest": digest} if "path" in spec else {})}}
 

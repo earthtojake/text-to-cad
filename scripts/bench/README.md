@@ -116,12 +116,12 @@ server (Xvfb on a machine with no screen).
 ## Manufacturing checks on real parts
 
 ```sh
-.venv/bin/python scripts/bench/dfm_bench.py --root ../text-to-cad/models --limit 40          # every process
+.venv/bin/python scripts/bench/dfm_bench.py --root models --limit 40                      # every process
 .venv/bin/python scripts/bench/dfm_bench.py --root "$KICAD_3DMODELS" --limit 60 --process printing
 .venv/bin/python scripts/bench/dfm_bench.py --dry-run --root models                           # the files, smallest first
 ```
 
-`dfm_bench.py` runs `cad.step.check` for each process (`cnc`, `sheet`, `molding`, `printing`, or the
+`dfm_bench.py` runs `cad.step.dfm` for each process (`cnc`, `sheet`, `molding`, `printing`, or the
 `--process` given) on every STEP file under each `--root`, smallest first, `--limit` of them, in this
 process (the checkout's environment holds both integrations). A worktree holds no built model, so point
 `--root` at a checkout whose models are built, or at any folder of STEP files (KiCad's 3D models). It

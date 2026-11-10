@@ -29,7 +29,6 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
-from cad._internal.dfm import checkpoint
 
 __all__ = ["CHORD_MM", "PAIRS", "SELF_CROSSING_SEGMENTS", "Loop", "Pocket", "Tab", "Width", "arc_points", "area",
            "cast", "crossings", "distance", "feret", "hull", "inside", "min_rectangle", "nearest", "nest", "pockets",
@@ -128,7 +127,6 @@ def inside(points: np.ndarray, loops: Sequence[Loop]) -> np.ndarray:
     """Whether each point lies inside an odd number of the loops (even-odd): inside a region's material
     when ``loops`` are its outer loop and its holes. A whole circle is read exactly; a sampled loop only for
     the points in its box."""
-    checkpoint()
     points = np.asarray(points, dtype=float).reshape(-1, 2)
     count = np.zeros(len(points), dtype=np.int64)
     if not len(points):
@@ -237,7 +235,6 @@ def cast(origins: np.ndarray, directions: np.ndarray, loops: Sequence[Loop], ski
     beyond ``skip`` (inf for none), the loop it crosses (-1 for none) and the segment's index in that loop
     (-1 on a whole circle, which is crossed exactly). A sampled loop is tried only by the rays that cross
     its box."""
-    checkpoint()
     origins = np.asarray(origins, dtype=float).reshape(-1, 2)
     directions = np.asarray(directions, dtype=float).reshape(-1, 2)
     hit = np.full(len(origins), np.inf)
@@ -380,7 +377,6 @@ def nearest(loops: Sequence[Loop]) -> list[tuple[float, int] | None]:
     found: list[tuple[float, int] | None] = []
     few = min(len(loops) - 1, 16)
     for i, loop in enumerate(loops):
-        checkpoint()
         # two boxes are no further apart than what they hold
         gap = np.linalg.norm(np.maximum(0.0, np.maximum(lo - hi[i], lo[i] - hi)), axis=1)
         gap[i] = np.inf
@@ -637,7 +633,6 @@ def self_crossings(loop: Loop) -> list[tuple[float, float]] | None:
         return None
     found = []
     for start in range(0, n, max(1, PAIRS // n)):
-        checkpoint()
         stop = min(n, start + max(1, PAIRS // n))
         crossing = _segments_cross(a[start:stop], b[start:stop], a, b, proper=True)
         i, j = np.nonzero(crossing)
@@ -682,7 +677,6 @@ def nest(loops: Sequence[Loop]) -> tuple[list[int], list[int]]:
     hi = np.array([loop.bbox()[1] for loop in loops]).reshape(-1, 2)
     depth, parent = [], []
     for i, loop in enumerate(loops):
-        checkpoint()
         probe = loop.points[0]
         around = np.nonzero((areas > areas[i]) & (lo <= probe + 1e-9).all(axis=1) & (hi >= probe - 1e-9).all(axis=1))[0]
         holders = [int(j) for j in around if inside(probe[None], [loops[int(j)]])[0]]

@@ -26,7 +26,7 @@ segment) are cut twice; a contour crossing itself or another leaves a sliver; a 
 doubled-back line; a run of many short lines turning a little at a time is a curve drawn as chords.
 
 The closed contours are nested (an outline, its holes, an island in a hole: a piece that falls out) and
-measured in the plane with ``cad._internal.meshops_sheet``, as the flat pattern of a bent part is
+measured in the plane with ``cad._internal.sheet_plane``, as the flat pattern of a bent part is
 (``_dfm_sheet``): each part's size, holes (diameter, slot width), hole-to-edge and hole-to-hole distances
 (edge to edge), notches, tabs, the narrowest web of material and the narrowest gap. A bend layer's lines
 are read as the bends' centre lines: each hole's distance to the nearest (``hole_to_bend``; a line that
@@ -44,8 +44,8 @@ from typing import Any
 
 import numpy as np
 
-from cad._internal import meshops_sheet as plane
-from cad._internal.dfm import Unmeasured, checkpoint
+from cad._internal import sheet_plane as plane
+from cad._internal.dfm import Unmeasured
 
 __all__ = ["measure"]
 
@@ -177,7 +177,6 @@ def _read(document: Any, intent: Any, factor: float) -> dict[str, Any]:
     ``annotations`` and the entities ``unread`` on cut layers, and each layer's record (``layers``)."""
     found: dict[str, Any] = {"pieces": [], "bend_lines": [], "annotations": [], "unread": [], "layers": {}}
     for entity in document.modelspace():
-        checkpoint()
         top = entity.dxftype()
         handle = str(entity.dxf.handle)
         layer = str(entity.dxf.get("layer", "0") or "0")
@@ -673,6 +672,10 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         "cut_layer_count": len(cut_layers), "piece_count": len(pieces), "bend_line_count": len(bend_lines),
         "unread": read["unread"][:ITEM_CAP], "unread_count": len(read["unread"]),
         "is_drawing": bool(is_drawing), "drawing_evidence": evidence or None}
+    # What a flat drawing does not hold: its rules judge nothing here, and the result says so (``rules``'
+    # ``not_measured``); the bent part's check judges them.
+    report["not_measured"] = {family: "a cut file is flat: it holds no bend, relief, hem or thickness to read"
+                              for family in ("bends", "reliefs", "hems", "not_sheet")}
     report["scale"] = {"units_unknown": unknown, "units_suspect": unknown,
                        "note": (f"$INSUNITS is {code}: the file's units are not set, so no size is compared with a "
                                 "rule; save it in mm or inches") if unknown else f"lengths in {unit}, read as mm"}
@@ -683,7 +686,6 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     families["open_geometry"] = _unexplained(problems, families["overlaps"], pieces)
     loops: list[plane.Loop] = []
     for chain in chains:
-        checkpoint()
         loop = _loop(chain)
         if len(loop.points) < 2:
             continue
@@ -718,7 +720,6 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     lows = np.array([loop.bbox()[0] for loop in loops]).reshape(-1, 2)
     highs = np.array([loop.bbox()[1] for loop in loops]).reshape(-1, 2)
     for i in range(len(loops)):
-        checkpoint()
         touching = np.nonzero((lows[i + 1:] <= highs[i] + 1e-9).all(axis=1) & (highs[i + 1:] >= lows[i] - 1e-9).all(axis=1))[0]
         for j in touching + i + 1:
             for point in plane.crossings(loops[i], loops[j])[:2]:
@@ -757,7 +758,6 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
 
     middles = np.array([(line.points[0] + line.points[-1]) / 2 for line in bend_lines]).reshape(-1, 2)
     for o in outlines:
-        checkpoint()
         mine = held.get(o, [])
         circle = loops[o].circle
         long, short, _ = (2 * circle[2], 2 * circle[2], 0.0) if circle else plane.min_rectangle(loops[o].points)

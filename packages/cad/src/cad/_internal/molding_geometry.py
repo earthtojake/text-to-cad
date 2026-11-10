@@ -26,7 +26,6 @@ from typing import Any
 
 import numpy as np
 
-from cad._internal.dfm import checkpoint
 
 __all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "lateral_directions",
            "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster",
@@ -426,7 +425,6 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
     sorted_x = centroid[along_x, 0]
     widest = float(reach.max()) if len(reach) else 0.0
     for start in range(0, len(p_all), chunk):
-        checkpoint()
         index = np.arange(start, min(len(p_all), start + chunk))
         span = 2.0 * float(np.max(upper[index])) * (1 + 1e-9) + widest
         lo_p, hi_p = p_all[index].min(axis=0) - span, p_all[index].max(axis=0) + span

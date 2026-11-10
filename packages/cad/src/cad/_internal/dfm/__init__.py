@@ -25,33 +25,37 @@ Every process module has:
 
 **Not measured.** A check that did not judge what it was asked to is ``not_checked``, never ``ok``
 (``manufacturing.finish``), and a process's measurement says what it did not measure through its report
-alone, three ways: ``Unmeasured(code, message)`` raised for a source nothing can be measured of (no part, no
-closed solid, a file that does not read); a family answered as ``{"error": "..."}`` and named in the
-report's ``partial_sections`` (``measurement_failed``); and a family's ``unmeasured_faces``, the refs of the
-faces the kernel failed to intersect its rays with, where its rules judge nothing (``rays_unintersected``).
-An item that carries no figure for a rule (``None``) is not judged by it: the rule is ``partial`` and says
-so (``rule_partly_judged``, a warning), so a rule that does not apply to some of a family's items says which
-with ``item_when`` rather than leave their figure out.
+alone: ``Unmeasured(code, message)`` raised for a source nothing can be measured of (no part, no closed
+solid, a file that does not read); a family answered as ``{"error": "..."}`` and named in the report's
+``partial_sections`` (``measurement_failed``); a family's ``unmeasured_faces``, the refs of the faces the
+kernel failed to intersect its rays with, where its rules judge nothing (``rays_unintersected``); and an
+item's figure left ``None``, which its rule says it did not judge (``rule_partly_judged``). Each makes the
+check not checked.
 
-**Stopping a check.** A check the engine runs can be asked to stop (its worker's ``cancel``): the request
-only sets a flag (``stop``), and the measurement stops at its next ``checkpoint`` -- between parts, families,
-faces and rays, each in the integration's own Python loops -- raising ``Cancelled`` from its own frame, so
-nothing is interrupted halfway through a kernel call or while it holds a lock. A stop asked during a kernel
-call takes effect when that call returns: the longest is the whole part's one mesh, about 10 to 20 s on a part
-of 1606 faces, where every other stretch between two checkpoints was a few seconds at most (a large face's
-own mesh, the file's read). A check in a process no one stops (the caller's own) never stops.
+**Does not apply.** What cannot be measured of a thing by its nature is no failure to measure, and is said
+another way, so the two are never one ``None``: a figure that does not apply to an item (a lone rib's gap to
+a neighbour, an open step's width, a hem's flange height) is named in the item's ``not_applicable``
+(``_common.not_applicable``, set where the module annotates its items before the rules read them), or the
+rule leaves such items out by ``item_when``; a family a source does not hold (a mesh's holes, a cut file's
+bends) is named in the report's ``not_measured`` (``{family: why}``), its rules not evaluated and the result
+saying so once (``families_not_measured``, a fact). A family a report simply lacks, where a rule that applies
+reads it, was not measured (``measurement_failed``).
+
+**No stopping from inside.** A measurement runs to its end or its process ends: a check the engine runs is
+measured in one of its checks processes, which holds nothing of anyone's, and the engine stops one by killing
+that process -- a check past its time or its memory, one nobody waits for, the engine stopping. Nothing here
+asks a measurement to stop, and a check in the caller's own process never stops.
 """
 
 from __future__ import annotations
 
 import importlib
-import threading
 from types import ModuleType
 from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 
-__all__ = ["COMMON", "PROCESSES", "Cancelled", "Unmeasured", "checkpoint", "module", "stop"]
+__all__ = ["COMMON", "PROCESSES", "Unmeasured", "module"]
 
 #: The processes a check measures for, in the order the help lists them.
 PROCESSES = ("cnc", "sheet", "molding", "printing")
@@ -67,29 +71,6 @@ class Unmeasured(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
-
-
-class Cancelled(BaseException):
-    """A check asked to stop (``stop``), raised at its next ``checkpoint``: a ``BaseException``, so no
-    family's ``except Exception`` takes it for a measurement that failed."""
-
-
-_STOPPING = threading.Event()
-
-
-def stop(asked: bool = True) -> None:
-    """The check running in this process asked to stop at its next ``checkpoint`` (``asked``), or let run
-    (``False``: a check starting clears what an earlier one was asked)."""
-    if asked:
-        _STOPPING.set()
-    else:
-        _STOPPING.clear()
-
-
-def checkpoint() -> None:
-    """``Cancelled`` when the check running here was asked to stop (``stop``); else nothing, at once."""
-    if _STOPPING.is_set():
-        raise Cancelled
 
 
 def module(process: str) -> ModuleType:

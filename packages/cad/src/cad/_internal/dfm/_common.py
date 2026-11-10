@@ -9,8 +9,23 @@ from typing import Any
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding
 
-__all__ = ["UNITS_LARGE_MM", "UNITS_SMALL_MM", "first_error", "mm", "partial_findings", "require", "require_bool",
-           "require_finite", "require_int", "require_text", "scale_findings", "units_doubt", "where"]
+__all__ = ["ANGLE_EPS", "KNIFE_DEG", "UNITS_LARGE_MM", "UNITS_SMALL_MM", "first_error", "mm", "not_applicable",
+           "occurrence_count", "occurrences", "partial_findings", "require", "require_bool", "require_finite",
+           "require_int", "require_text", "scale_findings", "units_doubt", "where"]
+
+#: Every process's: a convex edge whose material angle is under this many degrees is a **knife edge**, not a
+#: corner (printing's and CNC's ``knife_edges``). The
+#: material at distance ``d`` from an edge of angle ``a`` is ``2 d tan(a / 2)`` thick, so it is thinner than a
+#: minimum wall ``t`` for ``t / (2 tan(a / 2))`` from the edge: half a wall at a box's 90 deg corner (the one
+#: bead every corner is), 1.2 walls at 45 deg, 1.9 at 30, 5.7 at 10 -- past 45 deg the sliver under the
+#: minimum is deeper than a whole wall, which a printer cannot lay. 45 deg is also the slope the guides
+#: (Hubs FDM) hold self-supporting: a chamfer of 45 deg or more leaves no knife edge.
+KNIFE_DEG = 45.0
+
+#: An angle within this many degrees of a limit is at the limit, not under it: a 45 deg chamfer the kernel
+#: makes reads 44.999999999999936 on one axis and 45.000000000000014 on the other, and both are 45 (Hubs FDM:
+#: "up to 45°" self-supports). Every comparison of a surface's angle with a limit subtracts it.
+ANGLE_EPS = 1e-6
 
 #: A part under this across (its box's diagonal, mm) is implausible for anything these processes make: it is
 #: probably drawn in metres or inches and read as millimetres.
@@ -72,6 +87,27 @@ def where(xyz: Any) -> str | None:
 
 def mm(value: Any) -> str:
     return "-" if value is None else f"{value:g}"
+
+
+def not_applicable(item: dict[str, Any], *fields: str) -> None:
+    """``item`` says these figures do not apply to it (its ``not_applicable``): a rule that reads one asks nothing
+    of the item, where a figure merely missing was not measured and is said (``rules``). For a figure that
+    cannot exist of the item -- a lone rib's gap to a neighbour, an open step's width -- never for one that
+    could not be read."""
+    named = item.setdefault("not_applicable", [])
+    named.extend(field for field in fields if field not in named)
+
+
+def occurrences(report: dict[str, Any]) -> dict[str, int]:
+    """How many times each part measured occurs, by its ref's owner (``bodies``: the occurrences turned alike are
+    measured once and counted): what a total of a family's items multiplies by."""
+    return {str(body.get("owner") or ""): int(body.get("occurrences") or 1)
+            for body in report.get("bodies") or () if isinstance(body, dict)}
+
+
+def occurrence_count(report: dict[str, Any]) -> int:
+    """The parts as made: every occurrence of every part measured."""
+    return sum(occurrences(report).values())
 
 
 def first_error(value: Any) -> str | None:

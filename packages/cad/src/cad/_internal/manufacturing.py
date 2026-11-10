@@ -16,9 +16,8 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
-finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in the kernel process
-that holds the document (``_held``, ``cad.engine.api.check``), a file in this process only where no engine can
-be reached; an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), in this process, each
+finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
+processes (``_held``, ``cad.engine.api.check``), a file in this process only where no engine can be reached; an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), in this process, each
 finding at ``x, y, z``. The report is the result's
 ``measurements``, facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
 practice, no shop's -- every rule a limit on one measured figure with the published guide that states it, a
@@ -32,7 +31,8 @@ error (warnings are recommendations: the part is made, at a cost or a risk). ``f
 error -- the part cannot be made by this process as drawn -- or, with ``strict``, a warning. ``not_checked``:
 the check did not judge what it was asked to -- a source that does not read or holds no solid
 (``Unmeasured``), a family that could not be measured (``measurement_failed``), faces the kernel failed to
-intersect rays with (``rays_unintersected``), rules that judged nothing (``rules_none_evaluated``) -- which is
+intersect rays with (``rays_unintersected``), a rule whose items lack a figure that should have been measured
+(``rule_partly_judged``), rules that judged nothing (``rules_none_evaluated``) -- which is
 no verdict and never a pass; ``reason`` is the code of the finding that says so. A failure wins over what
 was not checked: an error found is the part's whatever else was not judged. ``ok`` is True for ``ok`` alone.
 
@@ -362,8 +362,9 @@ def _label(source: Any) -> Path:
 _ORDER = {"error": 0, "warning": 1, "info": 2}
 #: The findings that say the check did not judge what it was asked to, whatever their severity: a family that
 #: could not be measured, faces the kernel failed to intersect rays with (what is measured across them is
-#: not), rules that judged nothing. Any of them and the result is ``not_checked``, never ``ok``.
-NOT_CHECKED = frozenset({"measurement_failed", "rays_unintersected", "rules_none_evaluated"})
+#: not), a rule whose items carry no figure that should have been measured, rules that judged nothing. Any of
+#: them and the result is ``not_checked``, never ``ok``.
+NOT_CHECKED = frozenset({"measurement_failed", "rays_unintersected", "rule_partly_judged", "rules_none_evaluated"})
 #: What puts every other figure in doubt, said before the errors whatever its severity: what was not checked,
 #: a mesh not watertight or not sound (its walls, voids and volume are of an open or broken surface), units
 #: that look wrong (every length off by a factor).
@@ -412,6 +413,7 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
         report["rules"] = record
         failing = record["failing"]
         found.extend(verdicts)
+        found.extend(_unmeasured_families(report, record))
         lost = sorted({ref for outcome in record["outcomes"] for ref in outcome.get("unmeasured_faces") or ()})
         if lost and not any(finding.code == "rays_unintersected" for finding in found):
             named = ", ".join(lost[:8]) + (f" and {len(lost) - 8} more" if len(lost) > 8 else "")
@@ -473,6 +475,39 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
                        status=status, reason=next(iter(unchecked), None) if status == "not_checked" else None)
 
 
+def _unmeasured_families(report: dict[str, Any], record: dict[str, Any]) -> list[CheckFinding]:
+    """What the rules could not judge for want of a whole family: one this source does not measure by its nature
+    (the report's ``not_measured``: a mesh's holes, a cut file's bends), said once as a fact with the rules it
+    leaves unjudged (``families_not_measured``, info); and one the report lacks though a rule that applies
+    reads it (an outcome's ``absent``), which no one has said: ``measurement_failed``, so the check is not
+    checked."""
+    found: list[CheckFinding] = []
+    by_nature = report.get("not_measured") or {}
+    unjudged: dict[str, list[str]] = {}
+    absent: dict[str, list[str]] = {}
+    for outcome in record["outcomes"]:
+        if outcome["status"] != "not_evaluated":
+            continue
+        if outcome.get("absent"):
+            absent.setdefault(outcome["family"], []).append(outcome["rule"])
+        elif outcome["family"] in by_nature:
+            unjudged.setdefault(outcome["family"], []).append(outcome["rule"])
+    if unjudged:
+        reasons = "; ".join(dict.fromkeys(str(by_nature[family]) for family in unjudged))
+        rules_said = ", ".join(rule for rules_of in unjudged.values() for rule in rules_of)
+        found.append(CheckFinding(
+            "info", "families_not_measured",
+            f"{', '.join(unjudged)} {'is' if len(unjudged) == 1 else 'are'} not measured on this source "
+            f"({reasons}): {rules_said} judge nothing here, which is no pass", "rules",
+            "check the part's exact geometry (its STEP or its model) for them"))
+    for family, rules_of in absent.items():
+        found.append(CheckFinding(
+            "error", "measurement_failed",
+            f"{family} was not measured: the report holds no such family, so {', '.join(rules_of)} "
+            f"judge{'s' if len(rules_of) == 1 else ''} nothing", family))
+    return found
+
+
 def measure(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,
             candidates: bool, given: dict[str, Any] | None = None, strict: bool = False) -> CheckResult:
     """Measure ``source`` with its integration, then ``finish`` it: a B-rep's through the engine, where the
@@ -516,9 +551,10 @@ def _here(document_type: str, source: Any, process: str | None, resolved: dict[s
 
 def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
           given: dict[str, Any] | None, label: Path, *, local: bool = True, strict: bool = False) -> CheckResult | None:
-    """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory where the document
-    is held -- a model's in its warm worker, a STEP's or an xbf's in the engine's checks process, read once --
-    or answered from the result the engine kept for an unchanged document, then finished here.
+    """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory in one of the
+    engine's checks processes -- a model's from the bytes the engine holds of it, a STEP's or an xbf's from its
+    file, each read once -- or answered from the result the engine kept for an unchanged document, then
+    finished here.
 
     None -- measured in this process instead, as before the engine measured checks -- for a file when no
     engine can be reached, when the engine is of a release that measures no check in memory, or when another

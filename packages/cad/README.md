@@ -647,8 +647,9 @@ src/cad/
   _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
                          #   signature and options, its integration's measuring imported when it
                          #   runs (manufacturing), each process's options, rules and findings
-                         #   (dfm/, its README the mechanism), the numpy geometry both integrations'
-                         #   checks share (meshops_*), the runner of one operation the server's
+                         #   (dfm/, its README the mechanism), the numpy geometry the checks measure
+                         #   with (meshops_printing, a mesh's, shared by both integrations;
+                         #   molding_geometry; sheet_plane), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
                          #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the

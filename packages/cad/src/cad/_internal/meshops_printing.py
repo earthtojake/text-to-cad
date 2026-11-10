@@ -28,7 +28,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-from cad._internal.dfm import checkpoint
+from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG  # every process's: a knife edge, an angle at its limit
+
 
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG",
            "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Caster", "Cavity", "Crossings", "Grid", "cavity_at", "SPREADS", "Smooth", "SEALED_EXACT", "TRAPPED_METHOD", "trapped_item", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "smooth", "spread_points", "cavities", "crossings", "down_to",
@@ -40,18 +41,6 @@ __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "K
 _JITTER = (0.0763932 * (math.sqrt(5) - 1), 0.0447214 * (math.sqrt(3) - 1))
 
 
-#: A convex edge whose material angle is under this many degrees is a **knife edge**, not a corner. The
-#: material at distance ``d`` from an edge of angle ``a`` is ``2 d tan(a / 2)`` thick, so it is thinner than a
-#: minimum wall ``t`` for ``t / (2 tan(a / 2))`` from the edge: half a wall at a box's 90 deg corner (the one
-#: bead every corner is), 1.2 walls at 45 deg, 1.9 at 30, 5.7 at 10 -- past 45 deg the sliver under the
-#: minimum is deeper than a whole wall, which a printer cannot lay. 45 deg is also the slope the guides
-#: (Hubs FDM) hold self-supporting: a chamfer of 45 deg or more leaves no knife edge.
-KNIFE_DEG = 45.0
-
-#: An angle within this many degrees of a limit is at the limit, not under it: a 45 deg chamfer the kernel
-#: makes reads 44.999999999999936 on one axis and 45.000000000000014 on the other, and both are 45 (Hubs FDM:
-#: "up to 45°" self-supports). Every comparison of a surface's angle with a limit subtracts it.
-ANGLE_EPS = 1e-6
 #: The digits a figure a rule judges is kept to, both paths: a limit is compared with the measurement, never
 #: with a figure rounded for display first (a 0.79996 mm wall is under 0.8 mm).
 JUDGED = 9
@@ -188,7 +177,6 @@ def smooth(V: np.ndarray, F: np.ndarray, within_deg: float = 30.0) -> Smooth:
     ends = np.cumsum(taken)
     begin = 0
     while begin < len(flat):
-        checkpoint()
         stop = max(begin + 1, int(np.searchsorted(ends, (ends[begin - 1] if begin else 0) + _SMOOTH_PAIRS)))
         rows = np.repeat(np.arange(begin, stop), taken[begin:stop])
         nth = np.arange(len(rows)) - np.repeat(ends[begin:stop] - taken[begin:stop] - (ends[begin - 1] if begin else 0),
@@ -270,7 +258,6 @@ class Caster:
         top = len(self.levels[-1][0])
         block = max(1, RAY_PAIRS // (top * _FAN))
         for at in range(0, len(origins), block):
-            checkpoint()
             rays = np.repeat(np.arange(at, min(at + block, len(origins))), top)
             nodes = np.tile(np.arange(top), len(rays) // top)
             for level in range(len(self.levels) - 1, -1, -1):
@@ -413,7 +400,6 @@ def wall_support(cast: Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.n
         active = np.flatnonzero(state == WALKING)
         if not len(active):
             break
-        checkpoint()
         length, ahead = cast(m[active], d[active])
         state[active[~np.isfinite(length)]] = LOST
         keep = np.isfinite(length)
@@ -695,7 +681,6 @@ def components(mask: np.ndarray) -> np.ndarray:
     big = np.iinfo(np.int64).max
     labels = np.where(mask, np.arange(mask.size, dtype=np.int64).reshape(mask.shape), big)
     while True:
-        checkpoint()  # a sweep at a time: a maze of air takes many
         changed = False
         for axis in (2, 1, 0):
             moved = np.moveaxis(labels, axis, -1)
@@ -750,7 +735,6 @@ def _depth(air: np.ndarray, steps: int) -> np.ndarray:
     depth = np.zeros(air.shape, dtype=np.int16)
     current = air.copy()
     for step in range(1, steps + 1):
-        checkpoint()
         current &= ~_near(~current, full=step % 2 == 0)
         if not current.any():
             break
@@ -767,7 +751,6 @@ def inscribed(material: np.ndarray, steps: int) -> np.ndarray:
 def _dilate(mask: np.ndarray, within: np.ndarray, steps: int) -> np.ndarray:
     grown = mask.copy()
     for step in range(1, steps + 1):
-        checkpoint()
         grown |= _near(grown, full=step % 2 == 0) & within
     return grown
 
@@ -794,7 +777,6 @@ def _flood(seed: np.ndarray, mask: np.ndarray) -> np.ndarray:
         ids[~moved.ravel()] = 0
         runs.append((axis, ids, moved.shape))
     while True:
-        checkpoint()  # a sweep at a time: a maze of air takes many
         before = count
         for axis, ids, shape in runs:
             cells = np.ascontiguousarray(np.moveaxis(grown, axis, -1)).ravel()
@@ -882,7 +864,6 @@ def _throat(caster: Caster, start: np.ndarray, inward: np.ndarray, pitch: float,
     best: dict[str, Any] | None = None
     opened = 0
     for _station in range(256):
-        checkpoint()
         read = _section(caster, at, way, 4.0 * ceiling)
         if read is not None and read[1] <= ceiling:
             # the walls' own line: the direction their normals are all square to (the least of their spread)

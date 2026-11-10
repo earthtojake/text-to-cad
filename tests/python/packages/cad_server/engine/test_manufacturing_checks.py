@@ -303,8 +303,10 @@ class SameResultTest(unittest.TestCase):
         step = fixture.folder / "part.step"
         bd.export_step(bd.Box(30, 20, 6) - bd.Pos(5, 0, 0) * bd.Cylinder(2, 6), str(step))
         xbf = fixture.folder / f"{fixture.ids[1]}.xbf"
-        for document_type, path in (("step", step), ("xbf", xbf)):
-            for process in PROCESSES:
+        # A file's reader is what differs from a model's, not its process (every process was compared above):
+        # each file type by two processes, each process by one file.
+        for document_type, path, processes in (("step", step, ("cnc", "molding")), ("xbf", xbf, ("sheet", "printing"))):
+            for process in processes:
                 with self.subTest(file=path.name, process=process):
                     held = getattr(cad, document_type).dfm(path, process=process)
                     self.assertEqual(_plain(held), _plain(_today(document_type, path, path.resolve(), process)))

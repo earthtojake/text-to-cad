@@ -11,7 +11,7 @@ Every part of the document is measured along the pull on its B-rep, each finding
   the part blocks is trapped (a zero-draft one only when both ways are blocked), but one in a crevice
   (``_CREVICE``: another face a hair off it), which is said as that. Trapped faces that touch are one group,
   split where its trapped points lie apart (two snaps under one lid are two features); what releases each is
-  found by more rays (``meshops_molding.classify_undercut``, along the feature's own directions first:
+  found by more rays (``molding_geometry.classify_undercut``, along the feature's own directions first:
   ``_own_directions``), one nothing releases read again on denser points before it is said (``_denser``);
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
   it), the nominal wall (the area-weighted median), each face's thin and thick readings (``feature``: a rib's
@@ -44,8 +44,7 @@ from typing import Any
 
 import numpy as np
 
-from cad._internal import meshops_molding as ops
-from cad._internal.dfm import checkpoint
+from cad._internal import molding_geometry as ops
 from cad._internal.dfm._common import mm
 from cad._internal.dfm.molding import BUMP_OFF_MM, DEFAULT_PULL, better_pull, dominates
 from cad.build123d import _dfm_brep
@@ -59,8 +58,6 @@ _FACE_POINTS = 6000
 #: Rays the undercut release search spends on one part, at most (largest features first).
 _RELEASE_RAYS = 200000
 _MOST_PER_FACE = 400
-#: The denser set of surface points the rolling ball is tested against.
-_BALL_POINTS = 6000
 #: Points along each edge a curved face's draft is also read at (``_Geometry.boundary_normals``).
 _BOUNDARY_POINTS = 9
 #: The sampled points the wall thickness is read at, at most (each a rolling ball solved exactly).
@@ -100,12 +97,11 @@ def _xyz(point: Any) -> list[float]:
     return [round(float(value), 4) + 0.0 for value in point]
 
 
-# How many (ray, face) pairs ``_mesh_crosses`` screens between two checkpoints.
+# How many (ray, face) pairs ``_mesh_crosses`` screens at once: the batch's arrays bound its memory.
 _CROSSES_AT_ONCE = 1 << 16
 
 
 def _safe(fn: Any, *args: Any) -> Any:
-    checkpoint()  # between families
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - a family that fails is reported, never raised
@@ -121,7 +117,6 @@ def _samples(face: Any, count: int) -> list[tuple[np.ndarray, np.ndarray, float]
     area it stands for: the face's triangulation, each triangle cut into n x n by its LONGEST edge against the
     spacing ``count`` asks for (so a long thin triangle down a bore is sampled along its length, not once at
     its middle), each sub-triangle's centre mapped back to the surface through the triangle's UV."""
-    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.TopLoc import TopLoc_Location
@@ -339,11 +334,10 @@ class _Geometry:
             self._by_face = (starts, counts, a, b - a, c - a)
         starts, counts, a, e1, e2 = self._by_face
         if len(ray) > _CROSSES_AT_ONCE:
-            # A batch at a time, each a checkpoint apart: a large part has millions of pairs to screen.
+            # A batch at a time: a large part has millions of pairs to screen.
             return np.concatenate([self._mesh_crosses(ray[at:at + _CROSSES_AT_ONCE], face[at:at + _CROSSES_AT_ONCE],
                                                       origins, directions)
                                    for at in range(0, len(ray), _CROSSES_AT_ONCE)])
-        checkpoint()
         per = counts[face]
         # Only a face of few triangles is screened (a large face is one exact test, cheaper than its
         # triangles); a face with none is left to the exact test.
@@ -440,7 +434,6 @@ class _Geometry:
                     grid_of[key] = self._grid(d_all[members[0]])
 
         for key, members in groups.items():
-            checkpoint()  # a batch of rays at a time
             members = np.asarray(members)
             grid = grid_of.get(key)
             # Every (ray, face) pair whose box the ray might cross: the faces over each ray's grid cell, or every
@@ -490,7 +483,6 @@ class _Geometry:
                 if begin >= stop:
                     continue
                 index = int(ray[begin])
-                checkpoint()
                 line = gp_Lin(gp_Pnt(*o_all[index]), gp_Dir(*d_all[index]))
                 best, which = math.inf, 0
                 for k in range(begin, stop):
@@ -569,7 +561,6 @@ def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_Fac
     drafts: list[_FaceDraft] = []
     along_all = geo.normals @ pull
     for ordinal, (surface, area) in enumerate(zip(geo.surfaces, geo.areas), start=1):
-        checkpoint()
         mine = geo.owner == ordinal
         along = along_all[mine]
         weights = geo.weights[mine]
@@ -628,8 +619,12 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
     histogram: dict[str, float] = {}
     edges = _HIST_DEG + [wall_limit]
     zero_faces: list[dict[str, Any]] = []
+    walls = zeros = 0
     for geo, faces in zip(geos, drafts):
-        total += float(geo.areas.sum())
+        # A total counts a part once for each time it occurs (the occurrences turned alike are measured once,
+        # ``Part.occurrences``); its items are the faces measured, each once.
+        times = geo.part.occurrences
+        total += times * float(geo.areas.sum())
         contact = geo.contact
         for face in faces:
             area = float(geo.areas[face.ordinal - 1])
@@ -638,8 +633,9 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
             mine = geo.owner == face.ordinal
             if mine.any() and float(geo.weights[mine & contact].sum()) >= 0.5 * float(geo.weights[mine].sum()):
                 continue  # a face lying on another of the part's solids: no wall of the molded part
-            wall += area
-            opening[face.opens] += area
+            wall += times * area
+            walls += times
+            opening[face.opens] += times * area
             low, high = _extent(geo, face.ordinal, pull)
             # How far along the pull the face runs with no draft: its whole depth where its draft is one figure
             # (a plane, a cylinder along the pull); else the span of its points that read none -- a dome's rim,
@@ -659,18 +655,19 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
             for lo_deg, hi_deg in zip(edges[:-1], edges[1:]):
                 if hi_deg <= lo_deg:
                     continue
-                band = float(share[(face.sample_drafts >= lo_deg) & (face.sample_drafts < hi_deg)].sum())
+                band = times * float(share[(face.sample_drafts >= lo_deg) & (face.sample_drafts < hi_deg)].sum())
                 if band > 0:
                     key = f"{lo_deg:g}-{hi_deg:g}deg"
                     histogram[key] = round(histogram.get(key, 0.0) + band, 2)
             if face.zero_area > 0:
-                zero += face.zero_area
+                zero += times * face.zero_area
+                zeros += times
                 zero_faces.append({"location": item["location"], "area_mm2": _r(face.zero_area, 2),
                                    "centroid_xyz": item["xyz"], "surface": item["surface"],
                                    "extent_along_pull_mm": item["depth_mm"], "opens_toward": face.opens})
             else:
-                drafted += area
-                drafted_moment += area * float(np.sum(face.sample_drafts * share) / max(share.sum(), 1e-12))
+                drafted += times * area
+                drafted_moment += times * area * float(np.sum(face.sample_drafts * share) / max(share.sum(), 1e-12))
     items.sort(key=lambda item: (item["draft_deg"], -(item["area_mm2"] or 0)))
     zero_faces.sort(key=lambda face: -(face["area_mm2"] or 0))
     result: dict[str, Any] = {
@@ -678,13 +675,13 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
         "wall_area_mm2": _r(wall, 2), "wall_area_pct_of_surface": _r(100 * wall / total, 1) if total else 0.0,
         "non_wall_area_mm2": _r(total - wall, 2), "wall_draft_histogram_mm2": histogram,
         "wall_area_by_opening_mm2": {key: _r(value, 2) for key, value in opening.items()},
-        "zero_draft_wall_area_mm2": _r(zero, 2), "zero_draft_face_count": len(zero_faces),
+        "zero_draft_wall_area_mm2": _r(zero, 2), "zero_draft_face_count": zeros,
         "zero_draft_tangent_area_mm2": 0.0,
         "zero_draft_tangent_note": "exact geometry: a curved face tangent to the pull along a line has no area there",
         "drafted_wall_area_mm2": _r(drafted, 2),
         "drafted_wall_mean_draft_deg": _r(drafted_moment / drafted, 3) if drafted else None,
         "largest_zero_draft_faces": zero_faces[:8],
-        "wall_face_count": len(items),
+        "wall_face_count": walls,
         "items": items[:_ITEMS],
         "method": ("per face on the B-rep: a plane's angle to the pull exactly, a cylinder's or cone's whose axis "
                    "runs along the pull exactly (zero, the half-angle), any other face the least over points "
@@ -753,7 +750,6 @@ def _contacts(geo: _Geometry) -> tuple[np.ndarray, list[dict[str, Any]]]:
     owners = home[geo.owner - 1]
     pairs: dict[tuple[int, int], dict[str, Any]] = {}
     for other, solid in enumerate(solids):
-        checkpoint()
         low, high = boxes[other]
         near = np.nonzero((owners != other) & (owners >= 0) & np.all(stepped >= low, axis=1)
                           & np.all(stepped <= high, axis=1))[0]
@@ -879,7 +875,6 @@ def _face_groups(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
     """Trapped faces (at least two trapped points, or a fiftieth of the face), grouped where they touch."""
     faces = []
     for ordinal in range(1, len(geo.faces) + 1):
-        checkpoint()
         mine = geo.owner == ordinal
         count = int((trapped.trapped & mine).sum())
         share = float(geo.weights[trapped.trapped & mine].sum()) / max(float(geo.weights[mine].sum()), 1e-12)
@@ -992,7 +987,6 @@ def _stroke(geo: _Geometry, release: dict[str, Any], index: np.ndarray) -> float
 
 def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: bool = True,
                    depth: bool = True) -> dict[str, Any]:
-    checkpoint()  # a part at a time
     trapped = _trap(geo, pull, zero_tol)
     items: list[dict[str, Any]] = []
     kept: list[np.ndarray] = []
@@ -1140,9 +1134,17 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
     if parts is None:
         parts = [_undercut_part(geo, pull, zero_tol) for geo in geos]
     items = sorted((item for part in parts for item in part["items"]), key=lambda item: -(item["trapped_area_mm2"] or 0))
-    surface = sum(part["surface"] for part in parts)
-    area = sum(part["area"] for part in parts)
-    releases = [item.get("release") for item in items]
+    # A total counts a part once for each time it occurs (``Part.occurrences``: each occurrence is its own molded
+    # part, with its own slides); the items are the features measured, each once.
+    times = [geo.part.occurrences for geo in geos]
+
+    def total(key: str) -> float:
+        return sum(count * part[key] for count, part in zip(times, parts))
+
+    def counted(key: str, value: Any) -> int:
+        return sum(count for count, part in zip(times, parts) for item in part["items"] if item.get(key) == value)
+
+    surface, area = total("surface"), total("area")
     crevices = [crevice for part in parts for crevice in part["crevices"]]
     result = {
         "pull_axis": [_r(v) for v in pull],
@@ -1155,25 +1157,26 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
                    "few points is read again on denser ones; each part is tested against itself"),
         "candidate_area_mm2": _r(area, 2),
         "candidate_area_pct_of_surface": _r(100 * area / surface, 2) if surface else 0.0,
-        "candidate_face_count": sum(part["faces"] for part in parts),
-        "leaning_blocked_area_mm2": _r(sum(part["leaning"] for part in parts), 2),
-        "trapped_zero_draft_area_mm2": _r(sum(part["zero"] for part in parts), 2),
+        "candidate_face_count": int(total("faces")),
+        "leaning_blocked_area_mm2": _r(total("leaning"), 2),
+        "trapped_zero_draft_area_mm2": _r(total("zero"), 2),
         "largest_candidate_faces": sorted((face for part in parts for face in part["largest"]),
                                           key=lambda face: -(face["area_mm2"] or 0))[:8],
-        "undercut_count": len(items),
-        "external_count": sum(1 for item in items if item.get("kind") == "external"),
-        "internal_count": sum(1 for item in items if item.get("kind") == "internal"),
+        "undercut_count": sum(count * len(part["items"]) for count, part in zip(times, parts)),
+        "external_count": counted("kind", "external"),
+        "internal_count": counted("kind", "internal"),
         # a part's side actions are its distinct slide directions: one slide serves every feature along its way
-        "side_action_count": sum(len(part["slides"]) for part in parts),
+        "side_action_count": sum(count * len(part["slides"]) for count, part in zip(times, parts)),
         "side_action_directions": [name for part in parts for name in part["slides"]],
-        "lifter_count": releases.count("lifter"),
-        "collapsible_core_count": releases.count("collapsible_core"),
-        "unreleasable_count": releases.count("none"),
-        "bump_off_count": releases.count("bump_off"),
-        "unsearched_count": releases.count("unknown"),
-        "unconfirmed_count": sum(part["unconfirmed"] for part in parts),
-        "crevice_count": len(crevices),
-        "crevice_area_mm2": _r(sum(crevice["area_mm2"] or 0.0 for crevice in crevices), 3),
+        "lifter_count": counted("release", "lifter"),
+        "collapsible_core_count": counted("release", "collapsible_core"),
+        "unreleasable_count": counted("release", "none"),
+        "bump_off_count": counted("release", "bump_off"),
+        "unsearched_count": counted("release", "unknown"),
+        "unconfirmed_count": int(total("unconfirmed")),
+        "crevice_count": sum(count * len(part["crevices"]) for count, part in zip(times, parts)),
+        "crevice_area_mm2": _r(sum(count * (crevice["area_mm2"] or 0.0) for count, part in zip(times, parts)
+                                   for crevice in part["crevices"]), 3),
         "crevices": crevices[:20],
         "items": items[:_ITEMS],
     }
@@ -1207,7 +1210,6 @@ def _thickness_subset(geo: _Geometry) -> np.ndarray:
     by_face = np.argsort(geo.owner, kind="stable")
     bounds = np.searchsorted(geo.owner[by_face], np.arange(1, faces + 2))
     for ordinal, area in enumerate(geo.areas, start=1):
-        checkpoint()
         own = by_face[bounds[ordinal - 1]:bounds[ordinal]]
         want = int(min(len(own), max(least, round(_THICK_POINTS * area / total))))
         if not want:
@@ -1224,7 +1226,6 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
     vertices, triangles, owners = geo.mesh
     cap = np.full(len(geo.points), np.inf)
     for ordinal, surface in enumerate(geo.surfaces, start=1):
-        checkpoint()
         if surface.concave is False and surface.kind in ("cylinder", "sphere", "torus"):
             bend = surface.minor_radius if surface.kind == "torus" else surface.radius
             cap[geo.owner == ordinal] = float(bend or np.inf)
@@ -1238,7 +1239,6 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
     bound = bound_all
     convex: dict[int, set[int]] = {}
     for edge in geo.edges:
-        checkpoint()
         a, b = edge.faces
         # A convex edge, or a tangent join onto a convex curved face (whose chords crease like an edge).
         if (not edge.concave and not edge.smooth) or (edge.smooth and (geo.surfaces[a - 1].concave is False
@@ -1255,7 +1255,6 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         nominal = ops.weighted_median(values, geo.weights)
     per_face: dict[int, dict[str, Any]] = {}
     for ordinal in range(1, len(geo.faces) + 1):
-        checkpoint()
         mine = (geo.owner == ordinal) & finite
         if not mine.any():
             continue
@@ -1348,7 +1347,6 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
         corners = vertices[triangles]
         tri_hi, tri_lo = corners.max(axis=1), corners.min(axis=1)
     for _, ordinal in order[:_THICK_REFINED_FACES]:
-        checkpoint()
         face = per_face[ordinal]
         shape = geo.faces[ordinal - 1]
         surface = BRep_Tool.Surface_s(shape.wrapped)
@@ -1442,7 +1440,6 @@ def _refine_thin(geo: _Geometry, per_face: dict[int, dict[str, Any]], bound: np.
     boxes = np.array([[*(lambda b: (b.min.X, b.min.Y, b.min.Z, b.max.X, b.max.Y, b.max.Z))(f.bounding_box())]
                       for f in geo.faces])
     for _, ordinal in order[:_REFINED_FACES]:
-        checkpoint()
         face = per_face[ordinal]
         if len(links.get(ordinal, [])) > _REFINE_EDGES:
             continue
@@ -1592,7 +1589,6 @@ def _side_walls(geo: _Geometry, measured: _Thickness, faces: list[int]) -> dict[
 def _transitions_part(geo: _Geometry, measured: _Thickness, skip: set[int]) -> list[dict[str, Any]]:
     """The part's steps (``ops.steps`` over its planar faces) and, on its free-form faces no step takes in, the
     rolling ball's steepest change (``ops.transitions``)."""
-    checkpoint()  # a part at a time
     nominal = measured.nominal
     if nominal is None or nominal <= 0:
         return []
@@ -1756,7 +1752,6 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
     """The part's ribs (see the module). A rib a trapped face touches -- one of its own faces, or a face beside
     them no larger than its side, not its base -- is a snap arm, its barb that face (``kind``: ``snap``, else
     ``rib``): judged by the snap rule, not the rib's height and spacing."""
-    checkpoint()  # a part at a time
     links = geo.neighbours()
     trapped = trapped or set()
     kinds = kinds if kinds is not None else {}
@@ -1891,7 +1886,6 @@ def _radius_at(surface: Any, point: np.ndarray) -> float:
 
 def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int],
                  kinds: dict[int, str] | None = None) -> list[dict[str, Any]]:
-    checkpoint()  # a part at a time
     links = geo.neighbours()
     kinds = kinds if kinds is not None else {}
     items: list[dict[str, Any]] = []
@@ -1899,7 +1893,6 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
              if _round(surface) and surface.concave and surface.axis is not None]
     taken: set[int] = set()
     for ordinal, surface in enumerate(geo.surfaces, start=1):
-        checkpoint()
         if not _round(surface) or surface.concave is not False or surface.axis is None or ordinal in taken:
             continue
         axis = np.asarray(surface.axis)
@@ -1945,7 +1938,6 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
 
 
 def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int]) -> list[dict[str, Any]]:
-    checkpoint()  # a part at a time
     links = geo.neighbours()
     items: list[dict[str, Any]] = []
 
@@ -1954,7 +1946,6 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
         return _length(min(values) if values else nominal)
 
     for edge in geo.edges:
-        checkpoint()
         a, b = edge.faces
         if not edge.concave or edge.smooth or a in used or b in used:
             continue
@@ -1969,7 +1960,6 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
                       "angle_deg": _r(edge.angle_deg, 2), "length_mm": _r(edge.length, 3),
                       "wall_mm": _r(reference, 3), "ratio_to_wall": 0.0, "xyz": _xyz(edge.midpoint)})
     for ordinal, surface in enumerate(geo.surfaces, start=1):
-        checkpoint()
         if ordinal in used or surface.kind not in ("cylinder", "torus", *_FREEFORM):
             continue
         # A fillet: joined tangentially to at least two faces (its ends may meet caps at sharp edges).
@@ -1999,7 +1989,6 @@ def _features_family(name: str, per_part: list[list[dict[str, Any]]], key: str, 
 
 
 def _projection_part(geo: _Geometry, pull: np.ndarray) -> tuple[dict[str, Any], dict[str, Any], np.ndarray]:
-    checkpoint()  # a part at a time
     vertices, triangles, _owners = geo.mesh
     u, v = ops.basis(pull)
     flat = np.stack([vertices @ u, vertices @ v], axis=1)
@@ -2085,7 +2074,6 @@ def _parting_part(geo: _Geometry, drafts: list[_FaceDraft], projection: dict[str
     elements: list[dict[str, Any]] = []
     opening = {face.ordinal: face.opens for face in drafts}
     for edge in geo.edges:
-        checkpoint()
         a, b = edge.faces
         if {opening.get(a), opening.get(b)} != {"+pull", "-pull"} or a in trapped or b in trapped:
             continue
@@ -2385,7 +2373,6 @@ def _pull_check(geos: list[_Geometry], pull: np.ndarray, rotation: np.ndarray, r
                 "note": "nothing is trapped and no wall is without draft along this pull: no pull does better"}
     rows = []
     for name, axis in _named_pulls(geos, rotation, (pull,)):
-        checkpoint()  # a pull at a time
         draft = _draft(geos, [_face_drafts(geo, axis, zero_tol) for geo in geos], axis, wall_limit, zero_tol)
         row: dict[str, Any] = {"pull": name, "axis": [_r(v) for v in rotation.T @ axis], "measured": "draft",
                                "wall_area_mm2": draft["wall_area_mm2"],
@@ -2393,8 +2380,10 @@ def _pull_check(geos: list[_Geometry], pull: np.ndarray, rotation: np.ndarray, r
                                "min_wall_draft_deg": (draft.get("min_wall_draft") or {}).get("draft_deg")}
         if dominates(row, chosen):
             parts = [_undercut_part(geo, axis, zero_tol, classify=False) for geo in geos]
-            row.update(undercut_candidate_area_mm2=_r(sum(part["area"] for part in parts), 2),
-                       undercut_count=sum(len(part["items"]) for part in parts), measured="trapped")
+            times = [geo.part.occurrences for geo in geos]  # as ``_undercuts`` totals them
+            row.update(undercut_candidate_area_mm2=_r(sum(n * part["area"] for n, part in zip(times, parts)), 2),
+                       undercut_count=sum(n * len(part["items"]) for n, part in zip(times, parts)),
+                       measured="trapped")
             if not row["undercut_count"]:
                 row.update(side_action_count=0, lifter_count=0, unreleasable_count=0, measured="released")
             elif dominates(row, chosen):
@@ -2435,7 +2424,8 @@ def _candidates(geos: list[_Geometry], wall_limit: float, zero_tol: float) -> di
                           if float(key.split("-")[1].rstrip("deg")) <= 1.0)
             return {**_pull_row(draft, under), "wall_area_below_1deg_mm2": _r(below_1, 2),
                     "flat_parting": parting["flat_parting_possible"],
-                    "projected_area_mm2": sum(item["projected_area_mm2"] or 0 for item, _p, _v in projected),
+                    "projected_area_mm2": sum(item["occurrences"] * (item["projected_area_mm2"] or 0)
+                                              for item, _p, _v in projected),
                     "depth_from_parting_mm": parting["depth_from_parting_mm"]}
 
         measured = _safe(row)

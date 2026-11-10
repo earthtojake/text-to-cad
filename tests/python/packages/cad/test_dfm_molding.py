@@ -3,7 +3,7 @@
 """Injection molding's measurements on exact geometry, family by family, on tiny parts built here: each
 expected figure is the construction's (a wall extruded with a 2 degree taper has 2 degrees of draft, a cone
 its half-angle, a plate cut 3 thick is 3 thick). The planted-defect corpus is ``test_dfm_molding_corpus``;
-this is the facts each verdict reads, the shared geometry (``cad._internal.meshops_molding``) and the type
+this is the facts each verdict reads, the shared geometry (``cad._internal.molding_geometry``) and the type
 side's rules and clamp estimate."""
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import build123d as bd
 import numpy as np
 
 import cad
-from cad._internal import meshops_molding as ops
+from cad._internal import molding_geometry as ops
 from cad._internal.dfm import molding as type_side
 from cad._internal.dfm.rules import RuleSet
 from cad.build123d import _dfm_brep
@@ -336,6 +336,8 @@ class UndercutTest(unittest.TestCase):
         outcome = next(o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "molding.undercut_unreleasable")
         self.assertEqual((outcome["status"], outcome["unmeasured"]), ("not_evaluated", 1))
         self.assertIn(("warning", "undercuts_unsearched"), {(f.severity, f.code) for f in result.findings})
+        # what was not measured is no verdict: the check is not checked, never OK
+        self.assertEqual((result.status, result.reason), ("not_checked", "rule_partly_judged"))
 
     def test_a_sealed_void_is_released_by_nothing(self) -> None:
         result = _check(bd.Box(20, 20, 20) - bd.Sphere(5))
@@ -525,9 +527,9 @@ class ThicknessTest(unittest.TestCase):
             self.assertIn("molding.wall_min", {f.code for f in result.findings})
             self.assertAlmostEqual(thickness["nominal_mm"], 2.0, places=3)
         # the uniform cup it was cut from: no face refined under its wall
-        plain = _check(cup.part).measurements["thickness"]
-        self.assertGreater(plain["min_mm"], 1.95)
-        self.assertNotIn("molding.wall_min", {f.code for f in _check(cup.part).findings})
+        plain = _check(cup.part)
+        self.assertGreater(plain.measurements["thickness"]["min_mm"], 1.95)
+        self.assertNotIn("molding.wall_min", {f.code for f in plain.findings})
 
     def test_alike_features_read_alike_thick_in_every_placement(self) -> None:
         # four blind-hole floors in bosses on a 2 mm cup, each 4 mm of material under it: turned, their samples
@@ -809,10 +811,15 @@ class CandidatesAndPartsTest(unittest.TestCase):
         pair = bd.Compound([bd.Box(10, 10, 10), bd.Pos(10, 0, 0) * bd.Box(10, 10, 10)])
         pair.label = "pair"
         result = _check(pair)
-        (said,) = [f for f in result.findings if f.code == "solids_touching"]
-        self.assertIn("solids 1 and 2", said.message)
+        # one thing said once: the part's several solids are every process's warning, which says of molding that
+        # their contacts are left out; each pair is a fact of the report
+        (said,) = [f for f in result.findings if f.code in ("several_solids", "solids_touching")]
+        self.assertEqual(said.code, "several_solids")
+        self.assertIn("where two touch without being fused", said.message)
         self.assertIn("fuse", said.hint)
-        self.assertAlmostEqual(result.measurements["touching"]["items"][0]["contact_area_mm2"], 100.0, delta=1.0)
+        (touching,) = result.measurements["touching"]["items"]
+        self.assertEqual(touching["solids"], [1, 2])
+        self.assertAlmostEqual(touching["contact_area_mm2"], 100.0, delta=1.0)
         self.assertEqual(result.measurements["undercuts"]["candidate_area_mm2"], 0.0)
         self.assertNotIn("several_bodies", {f.code for f in result.findings})
         # the contact faces are no walls: six sides of the pair, not eight

@@ -16,7 +16,6 @@ from typing import Any, Iterable
 
 import numpy as np
 
-from cad._internal.dfm import checkpoint
 from cad.build123d import _dfm_brep as brep
 
 __all__ = ["Hit", "Model", "Stations", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "framed",
@@ -418,7 +417,6 @@ class Model:
             meshes = []
             empty = (np.zeros((0, 3)), None, np.zeros((0, 3), dtype=int), np.zeros(0))
             for face in self.faces:
-                checkpoint()
                 location = TopLoc_Location()
                 triangulation = BRep_Tool.Triangulation_s(face.wrapped, location)
                 if triangulation is None or triangulation.NbTriangles() == 0:
@@ -465,7 +463,6 @@ class Model:
         return found
 
     def _sample(self, ordinal: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        checkpoint()
         nodes, uvs, tris, areas = self._mesh()[ordinal - 1]
         total = float(areas.sum())
         if not len(tris) or total <= 0.0:
@@ -675,7 +672,6 @@ class Model:
         (``IntCurvesFace_Intersector``), nearest box first, until no nearer crossing can follow."""
         gp_Dir, gp_Lin, gp_Pnt = _gp()  # noqa: N806 - the kernel's names
 
-        checkpoint()  # a ray at a time: a check asked to stop stops between rays
         o = np.asarray(origin if isinstance(origin, np.ndarray) else list(origin), dtype=float)
         d = unit(direction)
         self.rays_cast += 1

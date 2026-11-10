@@ -1,7 +1,7 @@
 """The manufacturing check of exact geometry: what ``cad.<type>.dfm(source, process=...)`` runs for a
 STEP, an xbf or a document the engine holds, once its options are resolved (``cad._internal.manufacturing``)
--- in the engine's kernel process that holds the document (``held``), or in this process where no engine
-can be reached (``measure``) -- and what ``cad.build123d.dfm(shape, process=...)`` runs for a live shape.
+-- in one of the engine's checks processes (``held``), or in this process where no engine can be reached
+(``measure``) -- and what ``cad.build123d.dfm(shape, process=...)`` runs for a live shape.
 
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
@@ -19,10 +19,9 @@ from typing import Any
 
 import numpy as np
 
-from cad._internal.dfm import Cancelled, checkpoint, stop  # what the engine's worker stops a check by
 from cad.build123d import _dfm_brep
 
-__all__ = ["Cancelled", "checked", "checkpoint", "dfm", "held", "measure", "measure_declared", "stop"]
+__all__ = ["checked", "dfm", "held", "measure", "measure_declared"]
 
 
 #: A solid of less volume than this fraction of its box's diagonal cubed holds no material: zero volume.
@@ -61,7 +60,8 @@ _PAIRS = 256
 _READ_AS = {
     "cnc": "; each is judged as a part of its own (its own stock, setups and tool access), as each is machined",
     "molding": "; they are read together, so they shadow each other (its undercuts, walls and bosses are read "
-               "across them)",
+               "across them), and where two touch without being fused their contact is no surface of the molded "
+               "part: it is left out of its draft and undercuts (measurements.touching lists each pair)",
 }
 
 
@@ -91,7 +91,6 @@ def _several(part: _dfm_brep.Part, name: str, closed: list[Any], process: str) -
     shared: list[str] = []
     unknown = max(0, len(pairs) - _PAIRS)
     for i, j in pairs[:_PAIRS]:
-        checkpoint()
         try:
             common = float(_geometry.overlap_volume(closed[i], closed[j]))
         except Exception:  # noqa: BLE001 - a boolean the kernel cannot finish is no verdict on the pair
@@ -122,13 +121,12 @@ def _integrity(document: _dfm_brep.Document, process: str) -> list[dict[str, Any
     ``several_solids`` (``_several``), said alike in every process. Printing's own ``solid`` family judges its
     solids' shells and soundness (with the boolean check), so for printing only the faces beside the solids
     and the count of solids are said here."""
-    from cad._internal.dfm import Unmeasured, checkpoint
+    from cad._internal.dfm import Unmeasured
     from cad.build123d import _geometry
 
     found: list[dict[str, Any]] = []
     refused: list[str] = []
     for part in document.parts:
-        checkpoint()
         name = part.owner or part.name or "the part"
         closed, opened, loose = _closed_solids(part)
         if not closed:
@@ -187,11 +185,10 @@ def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, A
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
               candidates: bool) -> dict[str, Any]:
-    from cad._internal.dfm import Unmeasured, checkpoint
+    from cad._internal.dfm import Unmeasured
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
-    checkpoint()
     doubt = _integrity(document, process)
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     report = module.measure(document, options, candidates)
@@ -239,16 +236,14 @@ def measure_declared(document_type: str, source: Any, given: dict[str, Any],
     return _declared(_dfm_brep.read(document_type, source), document_type, given, candidates, document_type)
 
 
-def held(source: Any, check: dict[str, Any], read: Any = None, keep: str | None = None) -> dict[str, Any]:
-    """The check an engine's kernel process runs of a document it holds (``source``, an ``export.Source``:
-    a model's in its worker, a file's or a held document's in the checks process), as ``check`` asks it
+def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
+    """The check one of the engine's checks processes runs of a document it holds (``source``, an
+    ``export.Source``: a STEP's or an xbf's file, a held document's bytes), as ``check`` asks it
     (``{"type", "process", "resolved", "candidates", "given"}``, its options resolved by the caller,
     ``manufacturing.options``), measured in memory (``_dfm_brep.of_source``). Plain data, which the caller
     finishes (``manufacturing.finish``): ``{"measured": {"process", "resolved", "report"}}``; ``{"unmeasured":
     {"code", "message"}}``; ``{"refused": words}`` for what ``manufacturing.declared`` refuses (the command
-    line's to fix). ``read``: what a reading failure is said as, ``failed to read ...``. ``keep``: what the
-    document is, a build's parts read back kept for its next check (``_dfm_brep.of_source``); the answer's
-    ``read`` says whether this check read any part anew.
+    line's to fix). ``read``: what a reading failure is said as, ``failed to read ...``.
 
     Its measurements equal ``measure``'s and ``measure_declared``'s of the same document read from a file."""
     from cad._internal.dfm import Unmeasured
@@ -256,10 +251,9 @@ def held(source: Any, check: dict[str, Any], read: Any = None, keep: str | None 
 
     document_type, process = check["type"], check.get("process")
     candidates = bool(check.get("candidates"))
-    made = _dfm_brep.made
     try:
         try:
-            document = _dfm_brep.of_source(source, keep)
+            document = _dfm_brep.of_source(source)
         except Unmeasured:
             raise
         except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
@@ -271,10 +265,10 @@ def held(source: Any, check: dict[str, Any], read: Any = None, keep: str | None 
             resolved = dict(check["resolved"])
             report = _measured(document, document_type, process, resolved, candidates)
     except Unmeasured as failure:
-        return {"unmeasured": {"code": failure.code, "message": failure.message}, "read": _dfm_brep.made != made}
+        return {"unmeasured": {"code": failure.code, "message": failure.message}}
     except ArgumentRefused as refused:
-        return {"refused": str(refused), "read": _dfm_brep.made != made}
-    return {"measured": {"process": process, "resolved": resolved, "report": report}, "read": _dfm_brep.made != made}
+        return {"refused": str(refused)}
+    return {"measured": {"process": process, "resolved": resolved, "report": report}}
 
 
 def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidates: bool = False,

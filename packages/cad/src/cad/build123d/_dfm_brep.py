@@ -4,10 +4,9 @@ on the B-rep (OCP), never on a mesh.
 **The parts.** A STEP or an xbf is read by the engine's own loader (``cad.engine.document.Loaded``), so a
 part, its faces and their ordinals are the ones ``cad <type> inspect`` names: a finding's location is a ref
 in its grammar (``plate/face 7``; ``bracket/face 3`` in a document of one part, under its name), which
-``cad xbf inspect DOC REF`` resolves to the very face. A document the engine holds (its id, a model's
-handle) is measured where the engine holds it, in the kernel process that holds it (``of_source``): a
-model's document in its script's warm worker, a file's or a document's no warm worker holds in the engine's
-checks process, each as its reader read it -- nothing exported, written or read again. A live shape
+``cad xbf inspect DOC REF`` resolves to the very face. A check the engine runs is measured in one of its
+checks processes (``of_source``): a STEP's or an xbf's file, or the bytes of a document the engine holds (a
+model's), each as its reader read it -- nothing exported or written. A live shape
 (``cad.build123d.cnc(shape)``) is read by its labels, as the engine would name its document.
 
 **Every occurrence as it stands.** A part used several times is one ``Part`` for each way it stands
@@ -17,16 +16,14 @@ placed (``placements``: how far each lies from the first); an occurrence turned 
 its own, at its own refs, measured as it stands. So what depends on how a part stands -- a print's overhangs,
 a molding's draft against the pull -- is judged for every occurrence, what does not is measured once per
 geometry by the processes that read it so (``copies``), and a total counts ``occurrences``
-(``Document.facts``). A live shape's leaves that share one geometry are read the same way (``parts_of``).
+(``Document.facts``); a print, whose parts stand among each other on one plate, measures every occurrence
+where it stands (``every_occurrence``). A live shape's leaves that share one geometry are read the same way (``parts_of``).
 
 **Never the held shapes themselves.** A check meshes faces (``BRepMesh``), which writes a triangulation
 into the shape it meshes: on the document the engine holds, the next check would find the last one's
 mesh (a finer one is kept, not made again) and measure otherwise than a fresh read does. So each part is
-measured on a copy that shares nothing with the held document: a read document's part copied with its
-geometry and whatever mesh it was read with (``BRepBuilderAPI_Copy``), a build's part written and read
-once (``mesh.read_shape``), which is bit for bit the part its saved xbf reads back as (``mesh.shape_bytes``).
-A build's parts read back are kept for its next check, by its geometry keys (``_PRISTINE``), and never
-measured: every check measures a copy of them, so a second process checked reads nothing again.
+measured on a copy that shares nothing with the held document: its geometry and whatever mesh it was read
+with (``BRepBuilderAPI_Copy``), so a second process checked finds the document as it was read.
 
 **The measures.** A face's surface (``surface``: a plane's normal, a cylinder's or a cone's axis and
 radius, which way the material lies); an edge between two faces (``edges``: concave or convex, the angle
@@ -42,11 +39,11 @@ import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable
 
 import numpy as np
 
-from cad._internal.dfm import Unmeasured, checkpoint
+from cad._internal.dfm import Unmeasured
 
 __all__ = ["Document", "Edge", "Part", "Rays", "Sample", "Surface", "edges", "inside", "of_source", "parts_of", "read",
            "samples", "surface"]
@@ -248,7 +245,6 @@ def _loaded(loaded: Any, copy: bool = False) -> Document:
     root = refs.structure_tree(structure)
     standing = _Standing()
     for node in root.parts():
-        checkpoint()
         payload = node.payload
         prototype = int(payload["prototype"])
         path = refs.path_text(root, node)
@@ -277,90 +273,14 @@ def read(document_type: str, source: Any) -> Document:
         raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
 
 
-# A build's parts as its saved xbf reads them back (``of_source``), kept by the document they were made for
-# (``keep``), the most recent last: each its geometry key's part, written and read once, never measured --
-# each check measures a copy (``_copied``). A document's next version keeps the parts it shares with this one
-# (their keys: a digest of their geometry) and drops the rest, so a document holds one version's parts. Held to
-# ``_PRISTINE_KEPT`` documents and ``KEPT_BYTES`` of their parts (each its written bytes, ``_PRISTINE_BYTES``),
-# and dropped whole when the worker sheds what its checks read (``forget``, ``worker.shed``).
-_PRISTINE: "dict[str, dict[str, Any]]" = {}
-_PRISTINE_BYTES: "dict[str, dict[str, int]]" = {}
-_PRISTINE_KEPT = 4
-KEPT_BYTES = 256 * 2**20
-# The parts written and read back for ``_PRISTINE`` so far: a test's count of what a check made anew.
-made = 0
-
-
-def forget() -> None:
-    """Every build's parts read back, dropped (``worker.shed``)."""
-    _PRISTINE.clear()
-    _PRISTINE_BYTES.clear()
-
-
-def _pristine(source: Any, keep: str | None) -> dict[str, Any]:
-    """The build's parts, by their geometry key, as its saved xbf reads them back: those ``keep`` holds already
-    taken from it, the rest written and read once (``mesh.read_shape``, counted in ``made``), never measured."""
-    global made
-
-    from cad.engine.mesh import _write, read_shape
-
-    held = _PRISTINE.pop(keep, {}) if keep is not None else {}
-    sizes = _PRISTINE_BYTES.pop(keep, {}) if keep is not None else {}
-    wanted = {proto["key"] for proto in source.structure["prototypes"]}
-    parts = {key: shape for key, shape in held.items() if key in wanted}
-    sizes = {key: size for key, size in sizes.items() if key in parts}
-    for key in sorted(wanted - set(parts)):
-        checkpoint()
-        written = _write(source.shapes[key])
-        parts[key], sizes[key] = read_shape(written), len(written)
-        made += 1
-    if keep is not None and sum(sizes.values()) <= KEPT_BYTES:
-        _PRISTINE[keep], _PRISTINE_BYTES[keep] = parts, sizes  # the most recent last
-        while len(_PRISTINE) > _PRISTINE_KEPT or sum(sum(row.values()) for row in _PRISTINE_BYTES.values()) > KEPT_BYTES:
-            oldest = next(iter(_PRISTINE))
-            _PRISTINE.pop(oldest)
-            _PRISTINE_BYTES.pop(oldest, None)
-    return parts
-
-
-def of_source(source: Any, keep: str | None = None) -> Document:
-    """The parts of a document the engine holds in this process (an ``export.Source``): one its reader read
-    -- a STEP's or an xbf's file, a held document's bytes -- as that reader read it (``source.loaded``),
-    which is what ``read`` reads; a build's own, from the build's structure and shapes, each part written
-    and read once, as its saved xbf reads back. Never the held shapes themselves (the module's docstring).
-    ``keep``: what the document is (a model's script and name), whose build's parts read back are kept for
-    its next check (``_PRISTINE``), each check measuring a copy of them. ``Unmeasured`` for a mesh, which
-    holds no B-rep."""
-    if source.loaded is not None:
-        return _loaded(source.loaded, copy=True)
-    if source.mesh is not None or not source.shapes:
+def of_source(source: Any) -> Document:
+    """The parts of a document one of the engine's checks processes holds (an ``export.Source`` its reader
+    read: a STEP's or an xbf's file, a held document's bytes), as that reader read it (``source.loaded``), which
+    is what ``read`` reads -- each part a copy, never the held shapes themselves (the module's docstring).
+    ``Unmeasured`` for a source no reader read: a mesh, which holds no B-rep."""
+    if source.loaded is None:
         raise Unmeasured("document_unreadable", f"{source.name} holds no B-rep to measure")
-    import build123d as bd
-
-    from cad.engine import refs
-    from cad.engine.document import material_from_json
-
-    structure = source.structure
-    pristine = _pristine(source, keep)
-    root = refs.structure_tree(structure)
-    standing = _Standing()
-    for node in root.parts():
-        checkpoint()
-        payload = node.payload
-        prototype = int(payload["prototype"])
-        path = refs.path_text(root, node)
-        proto = structure["prototypes"][prototype]
-        instance = structure["instances"][int(payload["instance"])]
-
-        def make(proto: Any = proto, instance: Any = instance, node: Any = node, path: str = path) -> Part:
-            # A copy of the part read back, which this check may mesh: the kept one is never measured.
-            placed = bd.Shape.cast(_copied(pristine[proto["key"]]).Moved(_trsf(instance["matrix"])))
-            return Part(name=proto["name"], owner=refs.owner_text(root, node), shape=placed, paths=(path,),
-                        face_names={int(key): text for key, text in (proto.get("faceNames") or {}).items()},
-                        material=material_from_json(proto.get("material")))
-
-        standing.add(prototype, *_placement(instance["matrix"]), path, make)
-    return standing.document(structure["name"])
+    return _loaded(source.loaded, copy=True)
 
 
 def parts_of(shape: Any, name: str | None = None) -> Document:
@@ -406,6 +326,35 @@ def parts_of(shape: Any, name: str | None = None) -> Document:
 
         standing.add(geometry, *_placement_of(placed.wrapped), path, make)
     return standing.document(tree["name"])
+
+
+def every_occurrence(document: Document) -> Document:
+    """``document`` with a part for every occurrence, each placed where it stands and named by its own path
+    (which is its ref's owner): for a process whose measures depend on where the parts stand among each other
+    and on the plate -- a print's clearances, its support, its bed, its build volume -- which the occurrences
+    turned alike do not share. The first occurrence is the part itself; each other its shape moved, sharing
+    its geometry."""
+    import dataclasses
+
+    import build123d as bd
+    from OCP.gp import gp_Trsf, gp_Vec
+    from OCP.TopLoc import TopLoc_Location
+
+    parts: list[Part] = []
+    for part in document.parts:
+        if part.occurrences == 1:
+            parts.append(part)
+            continue
+        for index, (path, shift) in enumerate(zip(part.paths, part.placements)):
+            if index == 0:
+                parts.append(dataclasses.replace(part, occurrences=1, paths=(path,), placements=((0.0, 0.0, 0.0),)))
+                continue
+            trsf = gp_Trsf()
+            trsf.SetTranslation(gp_Vec(*(float(value) for value in shift)))
+            moved = bd.Shape.cast(part.shape.wrapped.Moved(TopLoc_Location(trsf)))
+            parts.append(Part(name=part.name, owner=path, shape=moved, paths=(path,),
+                              face_names=dict(part.face_names), material=part.material))
+    return Document(name=document.name, parts=parts, source=document.source, empty=list(document.empty))
 
 
 # --- copies ----------------------------------------------------------------------------------------------
@@ -519,7 +468,6 @@ def copies(parts: list[Part], mirrored: bool = True) -> dict[int, Copy]:
     one shape are one part already."""
     groups: dict[tuple[Any, ...], list[int]] = {}
     for index, part in enumerate(parts):
-        checkpoint()
         try:
             groups.setdefault(_signature(part), []).append(index)
         except Exception:  # noqa: BLE001 - a part the kernel cannot read so is measured on its own
@@ -530,7 +478,6 @@ def copies(parts: list[Part], mirrored: bool = True) -> dict[int, Copy]:
             continue
         firsts: list[tuple[int, np.ndarray, tuple[float, float]]] = []
         for index in members:
-            checkpoint()
             try:
                 probes = _probes(parts[index])
                 shape = parts[index].shape
@@ -638,7 +585,6 @@ def surface(face: Any) -> Surface:
     """The surface of a face (see ``Surface``). A B-spline or Bezier face that IS a plane, cylinder, cone,
     sphere or torus within a tight tolerance (``_canonical``) is read as that surface: ``extrude(taper=)``,
     a loft, a fillet between such faces and many STEP exporters write analytic geometry as splines."""
-    checkpoint()
     from OCP.BRepAdaptor import BRepAdaptor_Surface
 
     adaptor = BRepAdaptor_Surface(face.wrapped, True)
@@ -841,7 +787,6 @@ def edges(part: Part) -> list[Edge]:
     found: list[Edge] = []
     walked: dict[int, list[tuple[Any, Any]]] = {}  # each face's edges walked once, not once an edge
     for index in range(1, ancestry.Extent() + 1):
-        checkpoint()
         listed = ancestry.FindFromIndex(index)  # iterating an OCCT list from Python costs milliseconds an item
         owners = ([] if listed.Size() == 0 else [listed.First()] if listed.Size() == 1
                   else [listed.First(), listed.Last()] if listed.Size() == 2 else list(listed))
@@ -1499,7 +1444,6 @@ class Rays:
         passes each (``_sense``), in the same order."""
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
 
-        checkpoint()  # a ray at a time: a check asked to stop stops between rays
 
         o = np.asarray(list(origin), dtype=float)
         d = np.asarray(list(direction), dtype=float)
@@ -1626,10 +1570,6 @@ class Rays:
         return found
 
 
-#: The least angle along a curved edge is refined to this many degrees' change (golden-section search).
-LEAST_ANGLE_TOL = 1e-6
-
-
 def least_edge_angle(part: Part, edge: Edge, fractions: np.ndarray, angles: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """``fractions`` and ``angles`` with the edge's least angle added where it lies: a golden-section search of
     ``edge_angles`` between the samples either side of the least sampled one -- at an end, between it and its
@@ -1728,7 +1668,6 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
     the same however the part is turned) cut into triangles
     of about equal area, each sample the surface at one's middle, with its outward normal and its share
     of the face's area."""
-    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.TopLoc import TopLoc_Location
 
@@ -1796,7 +1735,6 @@ def triangles(shape: Any, deflection: float, angular: float = 0.5) -> tuple[np.n
     owners: list[np.ndarray] = []
     offset = 0
     for ordinal in range(1, faces.Extent() + 1):
-        checkpoint()
         face = TopoDS.Face(faces.FindKey(ordinal))
         location = TopLoc_Location()
         triangulation = BRep_Tool.Triangulation_s(face, location)
@@ -1815,14 +1753,6 @@ def triangles(shape: Any, deflection: float, angular: float = 0.5) -> tuple[np.n
     if not tris:
         return np.zeros((0, 3)), np.zeros((0, 3), dtype=int), np.zeros(0, dtype=int)
     return np.vstack(vertices), np.vstack(tris).astype(int), np.concatenate(owners).astype(int)
-
-
-def walk_faces(document: Document) -> Iterator[tuple[Part, int, Any]]:
-    """Every face of every part: its part, its ordinal and the face."""
-    for part in document.parts:
-        for ordinal, face in enumerate(part.faces(), start=1):
-            checkpoint()
-            yield part, ordinal, face
 
 
 def least_segments(face: Any, across: Any, whole_across: bool = False) -> list[tuple[float, np.ndarray, np.ndarray,

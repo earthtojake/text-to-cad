@@ -136,7 +136,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         broken = self.folder / "broken.stl"
         broken.write_bytes(b"solid nothing\nfacet nonsense\n")
         for document_type, path, reasons in (("step", face, {"not_solid"}),
-                                             ("stl", broken, {"mesh_unreadable", "measurement_failed"})):
+                                             ("stl", broken, {"mesh_empty"})):
             with self.subTest(document_type=document_type):
                 code, out, _ = _run(document_type, str(path), "--process", "printing", "--json")
                 payload = json.loads(out)

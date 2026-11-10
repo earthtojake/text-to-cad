@@ -38,8 +38,8 @@ from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
-from cad._internal.dfm._common import mm, where
-from cad._internal.dfm.rules import Rule, RuleSet, Source
+from cad._internal.dfm._common import mm, not_applicable, occurrence_count, where
+from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
 __all__ = ["CLAMP_FACTORS", "DEFAULT_PULL", "MEASURED_FROM", "OPTIONS", "RULES", "WALL_RANGES", "better_pull",
@@ -72,10 +72,6 @@ RJC = Source("rjc-tonnage", "RJC Mold", "Injection molding machine tonnage",
              "https://rjcmold.com/guides/injection-molding-machine-tonnage/", _ACCESSED)
 PT = Source("pt-tonnage", "Plastics Technology", "Clamp tonnage: more is better, right?",
             "https://www.ptonline.com/columns/clamp-tonnage-more-is-betterright", _ACCESSED)
-#: The floors no guide states (``_OWN``): what they cite, so no finding puts text-to-cad's number in a publisher's
-#: mouth. Each rule's note says what the floor rests on.
-OWN = Source("text-to-cad", "text-to-cad", "its own feasibility floor, no published guide's",
-             "https://github.com/earthtojake/text-to-cad", "2026-11-10")
 
 _IN = 25.4
 #: Protolabs' recommended wall thickness by resin (its table, in inches, "adapted from
@@ -111,7 +107,8 @@ _RELEASED = ("side_action", "lifter", "collapsible_core", "unknown")
 BUMP_OFF_MM = 0.1
 
 
-#: How the note of a floor of text-to-cad's own begins: no publisher's number (it cites ``OWN``).
+#: How the note of a floor of text-to-cad's own begins: no publisher's number (it cites ``rules.OWN``, so no
+#: finding puts text-to-cad's number in a publisher's mouth). Each rule's note says what the floor rests on.
 _OWN = "text-to-cad's own floor, no guide's: "
 #: A wall with no draft at all (under ``zero_tol``) fails where it runs deeper than this along the pull. The
 #: guides only recommend (Protolabs 0.5 deg on vertical faces, Hubs 2 deg) and say what no draft does (Hubs:
@@ -144,12 +141,12 @@ def _draft_rules(source: str, least: float, severity: str, preferred: tuple[floa
                  note: str = "", least_note: str = "") -> tuple[Rule, ...]:
     rules = [
         # The floor: a deep wall, or a deep rib, with no draft at all. Its limit is --zero-tol (``scale_by``).
-        Rule("molding.draft_zero", "draft", "draft_deg", "min", 1.0, "deg", "draft of a deep wall", "text-to-cad",
+        Rule("molding.draft_zero", "draft", "draft_deg", "min", 1.0, "deg", "draft of a deep wall", OWN.id,
              scale_by="zero_tol_deg", item_when={**_WALL_FACE, "deep": True}, note=_DRAFT_FLOOR_NOTE,
              detail=f"no draft on a wall {{zero_draft_depth_mm:g}} mm deep along the pull, over "
                     f"{DRAFT_FLOOR_DEPTH_MM:g} mm",
              fix="draft this wall: {taper}; " + f"{least:g} deg at least, 2 deg where the design allows"),
-        Rule("molding.draft_zero", "ribs", "draft_deg", "min", 1.0, "deg", "draft of a tall rib", "text-to-cad",
+        Rule("molding.draft_zero", "ribs", "draft_deg", "min", 1.0, "deg", "draft of a tall rib", OWN.id,
              scale_by="zero_tol_deg", item_when={"deep": True}, note=_DRAFT_FLOOR_NOTE,
              detail=f"no draft on a rib {{height_mm:g}} mm tall, over {DRAFT_FLOOR_DEPTH_MM:g} mm",
              fix="draft the rib's sides, the rib thinner toward its tip"),
@@ -199,21 +196,21 @@ def _wall_rules() -> tuple[Rule, ...]:
     thick = max(high for _low, high in WALL_RANGES.values())
     return (
         Rule("molding.wall_too_thin", "thickness", "thickness_mm", "min",
-             {k: WALL_FLOOR_SHARE * v[0] for k, v in WALL_RANGES.items()}, "mm", "wall thickness", "text-to-cad",
+             {k: WALL_FLOOR_SHARE * v[0] for k, v in WALL_RANGES.items()}, "mm", "wall thickness", OWN.id,
              by="resin", when={"resin_listed": True}, item_when=listed, note=note,
              detail=f"{WALL_FLOOR_SHARE:g} of Protolabs' recommended minimum for {{resin}}",
              fix="thicken this wall: it is far under the resin's recommended {wall_range_said}"),
-        Rule("molding.wall_too_thin", "thickness", "thickness_mm", "min", thin, "mm", "wall thickness", "text-to-cad",
+        Rule("molding.wall_too_thin", "thickness", "thickness_mm", "min", thin, "mm", "wall thickness", OWN.id,
              when={"resin_listed": False}, item_when=listed, note=note,
              detail="the least recommended minimum of any resin in Protolabs' table; no resin of it was named",
              fix="thicken this wall, or name the resin it is molded in (--material)"),
         Rule("molding.wall_too_thick", "thickness", "thickness_mm", "max",
-             {k: WALL_CEILING_MULTIPLE * v[1] for k, v in WALL_RANGES.items()}, "mm", "wall thickness", "text-to-cad",
+             {k: WALL_CEILING_MULTIPLE * v[1] for k, v in WALL_RANGES.items()}, "mm", "wall thickness", OWN.id,
              by="resin", when={"resin_listed": True}, item_when=listed, note=note,
              detail=f"{WALL_CEILING_MULTIPLE:g} times Protolabs' recommended maximum for {{resin}}",
              fix="core this section out: it is far over the resin's recommended {wall_range_said}"),
         Rule("molding.wall_too_thick", "thickness", "thickness_mm", "max", thick, "mm", "wall thickness",
-             "text-to-cad", when={"resin_listed": False}, item_when=listed, note=note,
+             OWN.id, when={"resin_listed": False}, item_when=listed, note=note,
              detail="the greatest recommended maximum of any resin in Protolabs' table; no resin of it was named",
              fix="core this section out, keeping the wall uniform"),
         Rule("molding.wall_min", "thickness", "thickness_mm", "min", {k: v[0] for k, v in WALL_RANGES.items()}, "mm",
@@ -318,7 +315,7 @@ _AXES = ("x", "y", "z")
 
 
 def pull(spec: str) -> None:
-    """A pull as the measurement reads it (``meshops_molding.pull_vector``), checked with the standard library
+    """A pull as the measurement reads it (``molding_geometry.pull_vector``), checked with the standard library
     alone: an axis by its name (``z``, ``-y``, ``+x``) or three comma-separated components, not all zero."""
     text = str(spec).strip().lower()
     if (text[1:] if text[:1] in "+-" else text) in _AXES:
@@ -481,7 +478,7 @@ def _hint_fields(report: dict[str, Any]) -> None:
     ``taper`` (which way to lean it) and a corner's ``radius_target_mm`` (the radius the rule asks, in
     millimetres); for the draft floor, whether a wall runs ``deep`` with no draft (``zero_draft_depth_mm`` over
     ``DRAFT_FLOOR_DEPTH_MM`` along the pull) or a rib stands that tall; for an undercut's message, what releases
-    it in words (``release_said``)."""
+    it in words (``release_said``); and a lone rib's gap, which does not apply (``_common.not_applicable``)."""
     draft = report.get("draft")
     if isinstance(draft, dict) and "error" not in draft:
         for item in draft.get("items") or ():
@@ -491,6 +488,9 @@ def _hint_fields(report: dict[str, Any]) -> None:
     if isinstance(ribs, dict) and "error" not in ribs:
         for item in ribs.get("items") or ():
             item["deep"] = float(item.get("height_mm") or 0.0) > DRAFT_FLOOR_DEPTH_MM
+            if item.get("gap_mm") is None:
+                # a lone rib: no rib or wall beside it to stand a gap from, so its spacing rule asks nothing
+                not_applicable(item, "gap_to_wall", "gap_to_thickness")
     undercuts = report.get("undercuts")
     if isinstance(undercuts, dict) and "error" not in undercuts:
         for item in undercuts.get("items") or ():
@@ -521,20 +521,14 @@ def _release_said(item: dict[str, Any]) -> str:
 
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
-    bodies = report.get("bodies") or []
-    if len(bodies) > 1:
+    # Several parts (every occurrence counted): an assembly. A part of several solids is ``several_solids``, said
+    # alike in every process where the document is read (their contacts, left out of draft and undercuts, are
+    # the report's ``touching``).
+    parts = occurrence_count(report)
+    if parts > 1:
         found.append(CheckFinding("warning", "several_bodies",
-                                  f"{len(bodies)} parts: an assembly, not one molded part; each is measured on its "
+                                  f"{parts} parts: an assembly, not one molded part; each is measured on its "
                                   f"own, none shadows another", "bodies"))
-    touching = report.get("touching") or {}
-    for pair in touching.get("items") or ():
-        found.append(CheckFinding(
-            "warning", "solids_touching",
-            f"{pair['part']}: solids {pair['solids'][0]} and {pair['solids'][1]} touch over "
-            f"{pair['contact_area_mm2']:g} mm2 without being fused ({', '.join(pair['faces'][:4])}): one molded part "
-            "is one solid -- their contact is no surface of it and is left out of its draft and undercuts",
-            pair.get("location"), "fuse them into one solid (`a + b` in build123d) before checking, or check each "
-                                   "solid as its own part"))
     if candidates:
         return found
     _hint_fields(report)

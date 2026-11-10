@@ -24,8 +24,8 @@ from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
-from cad._internal.dfm._common import mm, where
-from cad._internal.dfm.rules import Rule, RuleSet, Source
+from cad._internal.dfm._common import mm, not_applicable, where
+from cad._internal.dfm.rules import OWN, Rule, RuleSet, Source
 from cad.results import CheckFinding
 
 __all__ = ["BUILD_VOLUMES", "DEFAULT_ANGLE", "DEFAULT_LAYER", "MEASURED_FROM", "OPTIONS", "RULES", "TECHNOLOGIES",
@@ -67,9 +67,6 @@ def _src(ident: str, publisher: str, title: str, url: str) -> Source:
 
 
 HUBS = "Protolabs Network (Hubs)"
-#: The source of a rule that is text-to-cad's own (no guide states it): ``printing.knife_edge``,
-#: ``printing.horizontal_hole``.
-OWN = "text-to-cad-own"
 SOURCES = {source.id: source for source in (
     _src("hubs-thin-walls", HUBS, "DFM tips for 3D printed parts with thin walls",
          "https://www.hubs.com/knowledge-base/dfm-tips-for-3d-printed-parts-with-thin-walls/"),
@@ -100,10 +97,9 @@ SOURCES = {source.id: source for source in (
     _src("xometry-fdm-tips", "Xometry (Xometry Pro)",
          "FDM 3D printing design tips: best practices and techniques for stronger prints",
          "https://xometry.pro/en/articles/fdm-design-tips/"),
-    # a rule no fetched guide states: text-to-cad's own figure, said as such in every verdict of it
-    Source(OWN, "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
-           "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
-           _VERSION),
+    # a rule no fetched guide states (``printing.knife_edge``, ``printing.horizontal_hole``, a wall by the nozzle
+    # given): text-to-cad's own figure, said as such in every verdict of it
+    OWN,
 )}
 
 #: A typical machine per technology, mm, and the source it is read from: the build volume the fit is
@@ -217,7 +213,7 @@ def _walls(supported: list[Row], free: list[Row]) -> list[Rule]:
                                 when={"technology": tuple(row[0] for row in chosen), "nozzle_given": False},
                                 detail="; ".join(part for part in (_AT_LIMIT if near else "", assumed) if part))
             found.append(Rule(
-                rid, "wall_thickness", "thickness_mm", "min", {"fdm": NOZZLE_BEADS}, "mm", what, OWN,
+                rid, "wall_thickness", "thickness_mm", "min", {"fdm": NOZZLE_BEADS}, "mm", what, OWN.id,
                 severity="warning" if near else "error", by="technology", scale_by="nozzle",
                 when={"technology": "fdm", "nozzle_given": True}, item_when=item_when, fix=mended,
                 note=f"{NOZZLE_BEADS:g} beads of the nozzle given (--nozzle): text-to-cad's own scaling of Hubs's 0.8 "
@@ -314,7 +310,7 @@ def _general() -> tuple[Rule, ...]:
         add("warp", tech, 177.8, "protolabs-7mistakes", "warning")
     add("section", "pbf", 10.0, "hubs-metal", "warning")
     # text-to-cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
-    add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN, "warning")
+    add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN.id, "warning")
     found: list[Rule] = _walls(rows["wall_s"], rows["wall_u"])
     found += _rules("printing.hole_diameter", "holes", "diameter_mm", "min", "mm", "hole diameter", rows["hole"],
                     "open it to at least {limit:g} mm, or drill it after printing")
@@ -335,8 +331,7 @@ def _general() -> tuple[Rule, ...]:
                     rows["hround"], "give it a teardrop or flat top, or turn the part so the hole stands vertical: "
                     "above {limit:g} mm its crown sags", {"orientation": "horizontal", "teardrop": False},
                     "text-to-cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
-                    "is hard to remove and turning the part 90 deg removes it",
-                    detail="text-to-cad's own figure: no fetched guide states one")
+                    "is hard to remove and turning the part 90 deg removes it")
     # the rule judges a gap or a contact; bodies that pass through each other are their own finding
     found += _rules("printing.clearance", "clearances", "distance_mm", "min", "mm", "clearance between parts",
                     rows["clear"], "open the clearance to at least {limit:g} mm (parts printed together fuse); "
@@ -387,11 +382,11 @@ def _general() -> tuple[Rule, ...]:
     # radius of less than 0.4mm on a design is printed as 0.4mm") and the part is still made
     found += _rules("printing.knife_edge", "knife_edges", "thickness_mm", "min", "mm",
                     "material at a knife edge (a convex edge under 45 deg)",
-                    [(technology, limit, OWN, "warning", "") for technology, limit, *_ in rows["wall_u"]],
+                    [(technology, limit, OWN.id, "warning", "") for technology, limit, *_ in rows["wall_u"]],
                     "blunt it -- a flat or round at least {limit:g} mm across -- or open its angle to 45 deg or more",
                     note="the material thins to nothing at an acute edge: judged against the unsupported-wall "
                          "minimum; the tip prints rounded (Hubs SLS: a radius under 0.4 mm prints as 0.4 mm)",
-                    detail="text-to-cad's own figure: no fetched guide states one; the tip prints rounded")
+                    detail="the tip prints rounded")
     found += _rules("printing.section_thickness", "sections", "thickness_mm", "max", "mm", "solid section thickness",
                     rows["section"], "hollow or lattice it under {limit:g} mm: thick metal sections warp")
     return tuple(found)
@@ -542,6 +537,8 @@ def _at_limit(report: dict[str, Any], resolved: dict[str, Any]) -> None:
     limits = _limits("printing.escape_hole_diameter", resolved)
     for item in _ok(report.get("trapped_volumes")).get("items") or ():
         value, slack = item.get("min_escape_hole_mm"), item.get("escape_hole_uncertainty_mm")
+        if value is None and item.get("escape_holes") == 0:
+            not_applicable(item, "min_escape_hole_mm")  # a sealed cavity has no hole to size: escape_holes' to judge
         if not isinstance(value, (int, float)) or "escape_at_limit" in item:
             continue
         under = [limit for limit in limits if value < limit]
@@ -581,8 +578,8 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       + "; ".join(repairs) + ". A slicer may read the file as it is differently",
                                       "mesh", "export it again from the model, or repair the file"))
         if (mesh.get("body_count") or 0) > 1:
-            found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: walls are "
-                                      "measured per body", "mesh"))
+            found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: each is "
+                                      "measured on its own, their clearances between", "mesh"))
         overlap = _ok(report.get("gaps")).get("overlap")
         if overlap:
             found.append(CheckFinding("warning", "mesh_overlap", f"faces lie on faces {overlap['gap_mm']:g} mm apart "
@@ -620,9 +617,11 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         first = (bounded["boolean_edges"] or bounded["topology"])[0]
         found.append(CheckFinding("warning", "soundness_bounded", "; ".join(said), first.get("location"),
                                   "check the parts in the slicer (or one at a time) where a self-intersection matters"))
-    if (solid.get("body_count") or 0) > 1:
-        found.append(CheckFinding("info", "several_bodies", f"{solid['body_count']} solids in {solid['part_count']} "
-                                  "part(s): each is measured on its own, their clearances between", "solid"))
+    # Several parts, every occurrence one (a part of several solids is ``several_solids``, said alike in every
+    # process where the document is read).
+    if (solid.get("part_count") or 0) > 1:
+        found.append(CheckFinding("info", "several_bodies", f"{solid['part_count']} parts: each is measured on its "
+                                  "own, their clearances between", "solid"))
     # Bodies that pass through each other: one finding a pair (the clearance rule judges gaps and contacts).
     crossing = [item for item in _ok(report.get("clearances")).get("items") or () if item.get("kind") == "overlap"]
     for item in crossing[:8]:

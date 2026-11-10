@@ -1386,6 +1386,10 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         open_mesh = isinstance(report.get("mesh"), dict) and report["mesh"].get("watertight") is False
         report["trapped_volumes"] = _safe(_trapped_facts, field, kept, open_mesh, split[1] if split else None)
         report["sections"] = _safe(_section_facts, field)
+    # What a mesh does not hold: no cylinder's axis, no face to read a hole, a pin or a raised detail by. Their
+    # rules judge nothing here, and the result says so (``rules``' ``not_measured``).
+    report["not_measured"] = {family: "a mesh holds no axis or face to read them by"
+                              for family in ("holes", "pins", "details")}
     _mark_partial(report)
     return report
 

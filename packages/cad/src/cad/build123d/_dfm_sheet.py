@@ -31,7 +31,7 @@ end is curved). Two bends meeting tangent with no flat between meet at a joint, 
 walk passes through (``_joints``): a joggle where they turn opposite ways, a compound bend where they turn the
 same way; a flange between two opposed bends is an offset's web (``web_of``). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
 to each other, to each bend in four conventions), flanges' lengths, reliefs, notches, tabs and webs are all
-measured on it, in the plane, by ``cad._internal.meshops_sheet``; each found place is mapped back onto the
+measured on it, in the plane, by ``cad._internal.sheet_plane``; each found place is mapped back onto the
 part for its ref.
 """
 
@@ -43,8 +43,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-from cad._internal import meshops_sheet as plane
-from cad._internal.dfm import Unmeasured, checkpoint
+from cad._internal import sheet_plane as plane
+from cad._internal.dfm import Unmeasured
 from cad._internal.dfm import sheet as rules_side
 from cad.build123d import _dfm_brep as brep
 
@@ -308,7 +308,6 @@ def _samples(face: Any, count: int) -> list[brep.Sample]:
     of the face's area: the face's triangulation's triangles taken at evenly spaced fractions of its
     cumulative area, each sample the surface at its triangle's middle (``_dfm_brep.samples`` evaluates every
     sub-triangle's; this evaluates only those taken, the surface's properties made once)."""
-    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.BRepGProp import BRepGProp_Face
     from OCP.gp import gp_Pnt, gp_Vec
@@ -1470,7 +1469,6 @@ class _Analysis:
 
     def locate(self, point: Any) -> tuple[str, list[float]]:
         """The ref of the part's face nearest a point of the flat pattern, and the point on the part."""
-        checkpoint()
         import build123d as bd
 
         p = np.asarray(point, dtype=float).reshape(1, 2)
@@ -2033,7 +2031,6 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     for name in ("notches", "tabs", "webs", "gaps"):
         families[name] = (lambda name=name: outline(name))
     for name, run in families.items():
-        checkpoint()  # between families
         was = brep.failures(screens)
         try:
             out[name] = run()
@@ -2064,13 +2061,12 @@ _SORT = {"not_sheet": ("deviation_mm", True), "sharp_bends": (None, False), "ben
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The sheet report of ``document``: facts alone, every family's ``items`` at a ref."""
     if not document.parts:
-        raise Unmeasured("empty_document", "the document holds no part to measure")
+        raise Unmeasured("document_empty", "the document holds no part to measure")
     results: list[dict[str, Any]] = []
     # A part that is another's geometry moved (``brep.copies``) is measured once, its first's items said again at
     # its own refs and places: a sheet is read in its own frame, wherever it stands.
     copies = brep.copies(document.parts) if len(document.parts) > 1 else {}
     for index, part in enumerate(document.parts):
-        checkpoint()
         copy = copies.get(index)
         if copy is not None:
             first = document.parts[copy.of]

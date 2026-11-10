@@ -18,7 +18,9 @@ import ezdxf
 
 from cad import dxf
 
-CLEAN_CODES = {"rules_general"}
+# what every clean cut file says: whose the rules are, and what a flat drawing holds none of (its bends, reliefs,
+# hems and thickness: the bent part's check judges them)
+CLEAN_CODES = {"rules_general", "families_not_measured"}
 
 
 def _plate(msp, width=120.0, height=80.0, layer="CUT"):

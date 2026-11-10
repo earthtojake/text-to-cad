@@ -12,7 +12,6 @@ engine's own resolver says so.
 from __future__ import annotations
 
 import math
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,7 +38,9 @@ class RulesTest(unittest.TestCase):
                                         {"radius_mm": 2.0, "location": "plate/face 9"},
                                         {"radius_mm": None, "location": "plate/face 11"}]}}
         found, record = evaluate(report, _set(rule), {})
-        self.assertEqual([(f.code, f.location, f.severity) for f in found], [("cnc.corner", "plate/face 7", "error")])
+        # the corner under the limit fails; the one whose radius was not read is said, whatever the rest made
+        self.assertEqual([(f.code, f.location, f.severity) for f in found],
+                         [("cnc.corner", "plate/face 7", "error"), ("rule_partly_judged", "plate/face 11", "warning")])
         # the verdict in a line, and as data: nothing is read out of the message
         self.assertEqual(found[0].message, "internal corner radius 0.5 mm is under the 1 mm minimum")
         self.assertEqual((found[0].rule, found[0].value, found[0].limit, found[0].unit, found[0].op, found[0].source,
@@ -176,6 +177,34 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(record["none_found"], ["hole"])
         self.assertEqual([f.code for f in found], ["mesh_wall"])
 
+    def test_a_figure_that_does_not_apply_is_unsaid_and_one_not_measured_is_never_silent(self) -> None:
+        rule = Rule("r", "f", "v", "min", 1.0, "mm", "v", "s")
+        # a figure the item says does not apply to it (a lone rib's gap): the rule asks nothing of it
+        lone = {"f": {"items": [{"v": None, "not_applicable": ["v"], "location": "p/face 1"}]}}
+        found, record = evaluate(lone, _set(rule), {})
+        self.assertEqual((found, record["outcomes"][0]["status"], record["none_found"]), ([], "passed", ["r"]))
+        # every item lacks a figure that should have been measured: not evaluated, and said
+        found, record = evaluate({"f": {"items": [{"v": None, "location": "p/face 1"}]}}, _set(rule), {})
+        self.assertEqual(record["outcomes"][0]["status"], "not_evaluated")
+        self.assertEqual([(f.code, f.location) for f in found], [("rule_partly_judged", "p/face 1")])
+        self.assertIn("r judged 0 of 1 f", found[0].message)
+        # a family the report lacks is marked for the check to say; one its source does not measure says why
+        _, record = evaluate({}, _set(rule), {})
+        self.assertEqual((record["outcomes"][0]["status"], record["outcomes"][0].get("absent")), ("not_evaluated", True))
+        _, record = evaluate({"not_measured": {"f": "a mesh holds none"}}, _set(rule), {})
+        self.assertEqual((record["outcomes"][0]["reason"], "absent" in record["outcomes"][0]),
+                         ("f was not measured: a mesh holds none", False))
+
+    def test_text_to_cad_s_own_limits_cite_one_source_in_every_table(self) -> None:
+        from cad._internal import dfm
+        from cad._internal.dfm.rules import OWN
+
+        for process in dfm.PROCESSES:
+            with self.subTest(process=process):
+                table = dfm.module(process).RULES
+                self.assertIs(table.source(OWN.id), OWN)
+                self.assertEqual([source.id for source in table.sources if source.publisher == OWN.publisher], [OWN.id])
+
     def test_a_warning_says_its_limit_is_recommended(self) -> None:
         """A recommendation's message never reads as a feasibility limit."""
         rule = Rule("r", "f", "v", "min", 1.0, "deg", "wall draft", "s", severity="warning")
@@ -262,7 +291,8 @@ class RulesTest(unittest.TestCase):
         for process in dfm.PROCESSES:
             sources = [root / "_internal" / "dfm" / f"{process}.py", root / "build123d" / "_dfm_brep.py",
                        *(root / "build123d").glob(f"_dfm_{process}*.py"), *(root / "trimesh").glob(f"_{process}.py"),
-                       *(root / "_internal").glob("meshops_*.py"),
+                       *(root / "_internal" / name for name in ("meshops_printing.py", "molding_geometry.py",
+                                                                "sheet_plane.py")),
                        *([root / "build123d" / "_dfm_dxf.py"] if process == "sheet" else [])]
             text = "".join(path.read_text(encoding="utf-8") for path in sources)
             for rule in dfm.module(process).RULES.rules:
@@ -788,56 +818,6 @@ class SummaryTest(unittest.TestCase):
                                          r".*failed: \S+ x1$")
 
 
-class CheckpointTest(unittest.TestCase):
-    """A check asked to stop stops between its faces, in every process: its measurement reaches a checkpoint
-    (``cad._internal.dfm.checkpoint``) at least once a face, in each module that does the work, and the stop
-    goes through every family's ``except Exception``. Counted, never timed."""
-
-    # A thin drilled plate, a sheet: every process measures it whole.
-    SITES = {"cnc": {"_dfm_cnc.py:run", "_dfm_cnc_model.py:_cast", "_dfm_cnc_model.py:_sample"},
-             "sheet": {"_dfm_sheet.py:_part", "_dfm_sheet.py:_samples", "meshops_sheet.py:inside",
-                       "_dfm_brep.py:_crossings"},
-             "molding": {"_dfm_molding.py:_safe", "_dfm_molding.py:cast_faces", "meshops_molding.py:ball_thickness"},
-             "printing": {"_dfm_printing.py:_safe", "_dfm_printing.py:_first_hits", "_dfm_brep.py:samples"}}
-
-    class Recorder:
-        """Stands for the flag ``checkpoint`` reads: each read recorded, and set from the ``stop_at``-th on."""
-
-        def __init__(self, stop_at: int | None = None) -> None:
-            self.count, self.stop_at, self.sites = 0, stop_at, set()
-
-        def is_set(self) -> bool:
-            frame = sys._getframe(2)
-            self.count += 1
-            self.sites.add(f"{Path(frame.f_code.co_filename).name}:{frame.f_code.co_name}")
-            return self.stop_at is not None and self.count >= self.stop_at
-
-    def test_every_process_reaches_a_checkpoint_at_every_face_and_stops_there(self) -> None:
-        from unittest import mock
-
-        from cad._internal import dfm
-        from cad.build123d import _dfm_check
-
-        holes = bd.Compound(children=[bd.Pos(i * 8 - 16, j * 8 - 16, 0) * bd.Cylinder(1.5, 4)
-                                      for i in range(5) for j in range(5)])
-        part = bd.Box(60, 60, 2) - holes
-        faces = len(part.faces())
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "plate.step"
-            bd.export_step(part, str(path))
-            for process, sites in self.SITES.items():
-                with self.subTest(process=process):
-                    resolved = manufacturing.options("step", process, {})
-                    recorder = self.Recorder()
-                    with mock.patch.object(dfm, "_STOPPING", recorder):
-                        _dfm_check.measure("step", path, process, resolved, False)
-                    self.assertGreaterEqual(recorder.count, faces, sorted(recorder.sites))
-                    self.assertLessEqual(sites, recorder.sites, sorted(recorder.sites))
-                    with mock.patch.object(dfm, "_STOPPING", self.Recorder(stop_at=recorder.count // 2)), \
-                            self.assertRaises(dfm.Cancelled):
-                        _dfm_check.measure("step", path, process, resolved, False)
-
-
 def _lofted() -> bd.Shape:
     """A free-form part: a loft through three sections (two B-spline faces), a slot cut across it."""
     a = bd.Sketch() + bd.Ellipse(20, 12)
@@ -1239,6 +1219,23 @@ class StatesTest(unittest.TestCase):
         self.assertIn("block/face 3", next(f.message for f in result.findings if f.code == "rays_unintersected"))
         self.assertIn("partial", {o["status"] for o in result.measurements["rules"]["outcomes"]})
 
+    def test_a_figure_or_a_family_not_measured_is_not_checked_and_one_a_source_lacks_by_nature_is_said(self) -> None:
+        report, resolved = self._measured()
+        # a hole whose diameter was not read: its rules judge nothing of it, which is no pass
+        holes = {**report["holes"], "items": [{**report["holes"]["items"][0], "diameter_mm": None}]}
+        result = self._finish({**report, "holes": holes}, resolved)
+        self.assertEqual((result.status, result.reason), ("not_checked", "rule_partly_judged"))
+        # a family the report lacks, which rules that apply read
+        lacking = {key: value for key, value in report.items() if key != "holes"}
+        result = self._finish(lacking, resolved)
+        self.assertEqual((result.status, result.reason), ("not_checked", "measurement_failed"))
+        self.assertIn("holes was not measured", result.findings[0].message)
+        # ... unless its source does not measure it by its nature: said once, a fact, and the rest is judged
+        result = self._finish({**lacking, "not_measured": {"holes": "this source holds no axis"}}, resolved)
+        said = next(f for f in result.findings if f.code == "families_not_measured")
+        self.assertEqual((result.status, said.severity), ("ok", "info"))
+        self.assertIn("cnc.hole_diameter", said.message)
+
     def test_an_error_found_fails_the_part_whatever_else_was_not_checked(self) -> None:
         report, resolved = self._measured()
         holes = {**report["holes"], "items": [{**report["holes"]["items"][0], "diameter_mm": 0.01}]}
@@ -1308,13 +1305,49 @@ class OccurrencesTest(unittest.TestCase):
                 self.assertEqual((facts["part_count"], facts["occurrence_count"], facts["solid_count"]), (2, 3, 3))
                 self.assertAlmostEqual(facts["volume_mm3"], 30000.0, places=3)  # every occurrence's material
 
+    def test_every_process_counts_every_occurrence(self) -> None:
+        import copy
+
+        import cad.build123d as cb
+
+        tees = self._tees()
+        # a print is its parts together on one plate: every occurrence a body, judged where it stands
+        printed = cb.printing(tees)
+        solid = printed.measurements["solid"]
+        self.assertEqual((solid["part_count"], solid["body_count"]), (3, 3))
+        self.assertAlmostEqual(solid["volume_mm3"], 30000.0, places=2)
+        self.assertRegex(printed.summary, r" 30000 mm3, 3 body\(ies\)")
+        overhangs = {str(f.location).rsplit("/", 1)[0] for f in printed.findings if f.code == "printing.overhang_angle"}
+        self.assertEqual(overhangs, {"asm/tee.2", "asm/tee.3"})
+        # a block with a hole through its side (an undercut along z), measured once and counted twice, against
+        # one of it alone
+        holed = bd.Box(20, 20, 20) - bd.Rotation(0, 90, 0) * bd.Cylinder(3, 20)
+        holed.label = "holed"
+        one, two = (bd.Compound(label="asm", children=[copy.copy(holed).moved(bd.Location((60 * k, 0, 0)))
+                                                        for k in range(count)]) for count in (1, 2))
+        self.assertEqual([part.occurrences for part in brep.parts_of(two).parts], [2])
+        alone, both = cb.molding(one), cb.molding(two)
+        for family, total in (("draft", "wall_area_mm2"), ("draft", "zero_draft_wall_area_mm2"),
+                              ("draft", "wall_face_count"), ("undercuts", "candidate_area_mm2"),
+                              ("undercuts", "undercut_count"), ("projection", "projected_area_mm2")):
+            with self.subTest(total=f"{family}.{total}"):
+                self.assertGreater(alone.measurements[family][total], 0)
+                self.assertAlmostEqual(both.measurements[family][total], 2 * alone.measurements[family][total], places=1)
+        self.assertIn("2 parts", next(f.message for f in both.findings if f.code == "several_bodies"))
+        rows = [cb.molding(shape, candidates=True).measurements["pulls"]["candidates"] for shape in (one, two)]
+        self.assertAlmostEqual(rows[1][0]["projected_area_mm2"], 2 * rows[0][0]["projected_area_mm2"], places=1)
+        self.assertRegex(cb.cnc(two).summary, r": 2 part\(s\), 1\d{4}(\.\d+)? mm3")
+        plates = bd.Compound(label="asm", children=[bd.Pos(60 * k, 0, 0) * bd.Box(40, 30, 2) for k in range(2)])
+        self.assertRegex(cb.sheet_metal(plates).summary, r"sheet 2 parts, 2 mm, 0 bend\(s\)")
+
     def test_an_occurrence_turned_another_way_is_judged_as_it_stands(self) -> None:
         from cad.build123d import printing
 
         asm = self._tees()
         result = printing(asm)
         overhangs = [f.location for f in result.findings if f.code == "printing.overhang_angle"]
-        self.assertTrue(overhangs and all(str(where).startswith("asm/tee.2/") for where in overhangs), overhangs)
+        # the caps up overhang, each where it stands; the cap down prints clean
+        self.assertEqual({str(where).rsplit("/", 1)[0] for where in overhangs}, {"asm/tee.2", "asm/tee.3"}, overhangs)
         # the same tees with the mushroom first: the verdict is the part's, not its first occurrence's
         turned = bd.Compound(label="asm", children=list(reversed(asm.children)))
         self.assertEqual(sorted(f.code for f in printing(turned).findings if f.severity != "info"),

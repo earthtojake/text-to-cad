@@ -114,9 +114,9 @@ from typing import Any, Callable
 
 import numpy as np
 
-from cad._internal.dfm import Unmeasured, checkpoint
+from cad._internal.dfm import Unmeasured
 from cad._internal.dfm import cnc as rules_side
-from cad._internal.meshops_printing import ANGLE_EPS, KNIFE_DEG
+from cad._internal.dfm._common import ANGLE_EPS, KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_holes import holes as find_holes
 from cad.build123d._dfm_cnc_holes import threads as find_threads
@@ -222,7 +222,7 @@ def _solids(part: brep.Part) -> list[brep.Part]:
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The cnc report of ``document``: facts alone, every family's ``items`` at a ref."""
     if not document.parts:
-        raise Unmeasured("no_geometry", "the document has no part to measure")
+        raise Unmeasured("document_empty", "the document has no part to measure")
     # each solid is a part to machine: a part holding several is judged solid by solid, and said
     parts = [own for part in document.parts for own in _solids(part)]
     several = [part for part in document.parts if len(part.solids()) > 1]
@@ -252,7 +252,6 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     missed: dict[int, dict[int, int]] = {}
     owners: list[brep.Part] = []  # per model: the part it stands for (a copy's own, for its refs)
     for index, part in enumerate(parts):
-        checkpoint()
         copy = copies.get(index)
         if len(part.faces()) > FACE_BUDGET:
             failed.setdefault("model", f"{part.name}: {len(part.faces())} faces, over the {FACE_BUDGET} a check "
@@ -587,7 +586,6 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     lost = {} if lost is None else lost
 
     def run(name: str, step: Callable[[], Any]) -> Any:
-        checkpoint()  # between families
         if name in failed:
             return None
         was = brep.failures([model.screen])
@@ -1439,7 +1437,6 @@ def _refine(model: Model, item: dict[str, Any], outward: bool) -> None:
     there as across a wall (``OPPOSED``), and an exact ray along it from the face
     meets the face across first, at that distance: sampled rays land a few points per face and miss the
     thinnest line between two holes."""
-    checkpoint()
     i, j = item.get("_face"), item.get("_opposite")
     key = "width_mm" if outward else "thickness_mm"
     if not i or not j or i == j or _touching(model, i, j):
@@ -1497,7 +1494,6 @@ def _knife_edges(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
         if all(model.surface(f).kind == "plane" for f in edge.faces):
             angles, points = np.full(len(fractions), float(edge.angle_deg)), None
         else:
-            checkpoint()
             points, angles = brep.edge_angles(model.part, edge, fractions)
         under = np.isfinite(angles) & (angles < KNIFE_DEG - ANGLE_EPS)
         if not under.any():

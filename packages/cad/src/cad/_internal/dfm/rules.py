@@ -16,10 +16,19 @@ figure of that name where it carries one, a part's own thickness among several, 
 rule applies only where the context matches ``when`` (elsewhere it is recorded ``not_applicable``, never
 dropped) and to the items matching ``item_when`` (``not_applicable`` too where no item carries the fields it
 reads: a mesh's walls, against a rule for supported walls). A family measured with nothing to judge -- no
-hole, no wall under its threshold -- passes, ``none found``. A figure that was not measured, or a family that
-was not, is no verdict: it is counted (``not_evaluated``), never passed, and a rule that judged some of its
-items and not the rest is ``partial``, never ``passed`` (``rule_partly_judged`` says which; where the kernel
-failed on the faces, the check is not checked: ``manufacturing.finish``). A table whose rules come in
+hole, no wall under its threshold -- passes, ``none found``.
+
+**Does not apply, or was not measured.** An item with no figure for a rule (``None``) says which it is. A
+figure that does not apply to the item -- a lone rib has no gap to a neighbour, an open step no width, a sharp
+corner no tool that fits it -- is named in the item's ``not_applicable`` (a list of its fields): the rule asks
+nothing of the item and nothing is missing. Any other missing figure was not measured, which is no verdict
+and never a pass: the rule is ``partial`` (it judged the rest) or ``not_evaluated`` (it judged none), and
+``rule_partly_judged`` names the items, which makes the check not checked (``manufacturing.finish``). A family
+is the same: one a source does not measure by its nature is named in the report's ``not_measured`` (a mesh's
+holes, a cut file's bends: ``{family: why}``), its rules ``not_evaluated`` with that reason and said once
+(``families_not_measured``); one that failed is ``{"error": ...}`` (``measurement_failed``); one a report
+simply lacks, where a rule that applies reads it, was not measured either, and its outcome says so
+(``absent``), which ``finish`` says as ``measurement_failed`` too. A table whose rules come in
 variants by one context key (``RuleSet.selector``: printing's ``technology``) has no figure for a value none
 of a rule id's variants names: that rule is ``not_evaluated`` too, and a check that evaluated nothing is said
 (``rules_none_evaluated``) rather than read as a pass. Whatever its variants, the record holds one outcome
@@ -42,7 +51,7 @@ from typing import Any
 
 from cad.results import CheckFinding
 
-__all__ = ["Rule", "RuleSet", "Source", "evaluate"]
+__all__ = ["OWN", "Rule", "RuleSet", "Source", "evaluate"]
 
 #: Verdicts a rule writes as findings, at most, before the rest are counted in one more.
 SHOWN_PER_RULE = 8
@@ -61,6 +70,13 @@ class Source:
     def as_data(self) -> dict[str, str]:
         return {"id": self.id, "publisher": self.publisher, "title": self.title, "url": self.url,
                 "accessed": self.accessed}
+
+
+#: The source of every limit that is text-to-cad's own, in every process's table: a feasibility floor or a
+#: rule of thumb no published guide states. A rule that cites it says in its ``note`` what the figure rests on,
+#: and its finding's ``source`` reads ``text-to-cad, ...``, never a publisher's name.
+OWN = Source("text-to-cad", "text-to-cad", "its own figure: no published guide states one",
+             "https://github.com/earthtojake/text-to-cad", "")
 
 
 @dataclass(frozen=True)
@@ -319,7 +335,14 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             outcomes.append(outcome)
             continue
         if items is None:
-            outcome.update(status="not_evaluated", reason=f"{rule.family} was not measured")
+            # Not measured: by the source's nature (the report says why), because it failed (its own error), or
+            # because the report lacks it -- which no one has said yet (``absent``: ``finish`` does).
+            family = report.get(rule.family)
+            by_nature = (report.get("not_measured") or {}).get(rule.family)
+            outcome.update(status="not_evaluated", reason=f"{rule.family} was not measured"
+                           + (f": {by_nature}" if by_nature else ""))
+            if not by_nature and not (isinstance(family, Mapping) and "error" in family):
+                outcome["absent"] = True
             outcomes.append(outcome)
             continue
         if not readable:
@@ -332,6 +355,8 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         judged[id(outcome)] = (read, unread) = ({}, {})
         for (index, item), limit in zip(items, limits):
             value = _number(item.get(rule.field))
+            if value is None and rule.field in (item.get("not_applicable") or ()):
+                continue  # the figure does not apply to this item, and the item says so: nothing is missing
             if value is None or limit is None:
                 unread[id(item)] = _feature(item, rule)
                 continue
@@ -415,16 +440,17 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                        for location, here in rest], **said))
     outcomes = _one_per_rule(rule_set, context, outcomes, judged)
     for outcome in outcomes:
-        # A rule that judged some of its items and not the rest says so: its pass is of the judged ones alone.
+        # A rule that did not judge every item it has says so, whatever it made of the rest: a figure that was
+        # not measured is no verdict (one that does not apply is the item's ``not_applicable``, and unsaid).
         lacking = outcome.pop("_unread", None) or []
-        if outcome["status"] == "partial" and lacking:
+        if lacking:
             shown_at = ", ".join(lacking[:3]) + (f" and {len(lacking) - 3} more" if len(lacking) > 3 else "")
             findings.append(CheckFinding(
                 "warning", "rule_partly_judged",
                 f"{outcome['rule']} judged {outcome['evaluated']} of {outcome['evaluated'] + len(lacking)} "
-                f"{outcome['family']}: {len(lacking)} carry no {outcome['field']} ({shown_at}), so the rule "
-                f"gives them no verdict", lacking[0],
-                f"read measurements.{outcome['family']} for them and judge them by hand"))
+                f"{outcome['family']}: {len(lacking)} carry no {outcome['field']} ({shown_at}), which was not "
+                f"measured, so the rule gives them no verdict", lacking[0],
+                f"read measurements.{outcome['family']} for them and judge them by hand, or check again"))
     record = {
         "title": rule_set.title, "version": rule_set.version, "note": rule_set.note,
         "context": {key: value for key, value in context.items() if _plain(value)},

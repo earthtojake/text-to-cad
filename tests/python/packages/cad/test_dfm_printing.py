@@ -88,7 +88,8 @@ class OverhangTest(unittest.TestCase):
         self.assertEqual({f.code for f in result.findings if f.severity == "error"}, set())
         knife = next(f for f in result.findings if f.code == "printing.knife_edge")
         self.assertEqual(knife.severity, "warning", "the 30 deg tip is a knife, reported once: it prints rounded")
-        self.assertIn("text-to-cad's own figure", knife.message)
+        self.assertIn("the tip prints rounded", knife.message)
+        self.assertTrue(knife.source.startswith("text-to-cad, its own figure"), knife.source)  # no publisher's
 
     def test_the_overhang_rule_follows_the_angle_limit_given(self) -> None:
         # a 50 deg underside: over FDM's cited 45, under a printer's 55 given; a 30 deg one passes a 25 given
@@ -746,13 +747,15 @@ class RulesTest(unittest.TestCase):
             with self.subTest(nozzle=nozzle):
                 self.assertEqual(bool(walls), 0.6 < limit)
                 self.assertEqual(result.measurements["knife_edges"]["min_wall_mm"], limit)
+                # where the limit comes from is the finding's ``source``, never its message
                 if nozzle is None:
                     self.assertIn("assuming the common 0.4 mm nozzle: give --nozzle", walls[0].message)
-                    self.assertIn("Protolabs Network (Hubs)", walls[0].message)
+                    self.assertTrue(walls[0].source.startswith("Protolabs Network (Hubs), "), walls[0].source)
+                    self.assertEqual((walls[0].value, walls[0].limit, walls[0].unit, walls[0].op), (0.6, 0.8, "mm", "min"))
                 elif walls:
-                    self.assertIn("1.2 mm minimum", walls[0].message)
                     self.assertIn("2 beads of the 0.6 mm nozzle given", walls[0].message)
-                    self.assertIn("text-to-cad's own figure", walls[0].message)
+                    self.assertTrue(walls[0].source.startswith("text-to-cad, its own figure"), walls[0].source)
+                    self.assertEqual((walls[0].value, walls[0].limit), (0.6, 1.2))
 
     def test_rules_with_no_figure_for_the_technology_judge_nothing_and_say_so(self) -> None:
         import dataclasses
