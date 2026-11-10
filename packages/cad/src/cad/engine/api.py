@@ -321,7 +321,7 @@ def _failed(answer: dict[str, Any]) -> Exception:
 
     text = str(answer["failed"])
     if answer.get("stopped"):
-        return Stopped(text)  # the engine stopping under it (``Daemon.check``): run it again
+        return Stopped(text)  # the engine stopping under it (``checks_runner.Runner``): run it again
     module, _, name = str(answer.get("kind") or "").partition(":")
     kind: Any = None
     if module == "builtins" or module == "cad.engine" or module.startswith("cad.engine."):

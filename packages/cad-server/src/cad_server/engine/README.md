@@ -1061,8 +1061,8 @@ unknown until one has, and again once the base is made again, which retires them
 own process and a model's document exported and read back there; a `cad` command with no kernel sends either to
 the base's environment (`manufacturing.through_engine`, `integration_env`). So does a file's check where no
 engine can be reached. Either way `api.check` says so in one line on stderr, in the process that can then
-measure it: nothing keeps such a check, so it is measured again each time it is asked. An engine's answer says
-`measured_in: "engine"`.
+measure it: nothing keeps such a check, so it is measured again each time it is asked. What the engine measured
+`api.check` returns as `measured_in: "engine"` (`api.IN_ENGINE`; `IN_CALLER` is the caller's to say of its own).
 
 The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them (held to one to the machine's
 cores, which `cad status` says), else half the machine's cores, one at least and four at most, each a kernel

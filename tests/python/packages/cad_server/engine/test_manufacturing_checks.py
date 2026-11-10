@@ -1102,7 +1102,7 @@ class EngineTest(unittest.TestCase):
             answered = thread.result(self)
             self.assertIsInstance(answered, EngineError)
             self.assertEqual(answered.reason, "process_lost")
-            self.assertIn("the check is not run again", str(answered))
+            self.assertIn("The check is not run again", str(answered))
             if killed:
                 self.assertIn("killed by the system, usually for memory", str(answered))
         hold.write_text("", encoding="utf-8")
@@ -1568,12 +1568,12 @@ class RunnerTest(unittest.TestCase):
         exited = "the checks process exited ({}) during a manufacturing check"
         answer = lost(Gone(exited.format(1), during=True, code=1))
         self.assertEqual(answer["reason"], "process_lost")
-        self.assertIn("the check is not run again", answer["failed"])
+        self.assertIn("The check is not run again", answer["failed"])
         self.assertNotIn("usually for memory", answer["failed"])
         if hasattr(signal, "SIGKILL"):
             answer = lost(Gone(exited.format(-9), during=True, code=-9))
-            self.assertIn("exited (-9) during a manufacturing check; it was killed by the system, usually for memory: "
-                          "the part may be too large to check on this machine", answer["failed"])
+            self.assertIn("exited (-9) during a manufacturing check: killed by the system, usually for memory -- "
+                          "the part may be too large to check on this machine. The check is not run again", answer["failed"])
         for error in (Gone("the checks process did not start", unready=True),
                       KernelProcessesUnavailable("the CAD kernel's environment could not be made")):
             with self.subTest(error=error):

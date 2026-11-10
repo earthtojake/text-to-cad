@@ -357,13 +357,14 @@ class Runner:
                 done = answer.get("done")
                 measured = done.get("checked") if isinstance(done, dict) else None
                 if isinstance(measured, dict):
-                    self.store.counted(read=bool(measured.get("read")))
                     if ident is not None:
                         current = self._version(ident) == before
                         moved = not current  # built again under the check: its result is of a version gone
                     else:
                         current = measured.get("digest") == before
                         moved = bool(measured.get("changed"))  # rewritten while it was read: of no version at all
+                    if not measured.get("changed"):
+                        self.store.counted(read=bool(measured.get("read")))
                     if moved:
                         answer = {"failed": SUPERSEDED, "reason": "superseded"}
                     by = measured.get("measures")
@@ -567,10 +568,9 @@ def _lost(said: str, code: int | None) -> str:
     the system killed, why it usually does."""
     head, tail, detail = said.partition(WORKER_STDERR)
     killed = getattr(signal, "SIGKILL", None)
-    why = ("; it was killed by the system, usually for memory: the part may be too large to check on this machine"
+    why = (": killed by the system, usually for memory -- the part may be too large to check on this machine"
            if killed is not None and code == -int(killed) else "")
-    return (f"{head}{why}: the check is not run again; that process held nothing but the files it had read for "
-            f"checks, and the next check starts a fresh one{tail}{detail}")
+    return f"{head}{why}. The check is not run again; the next check starts a fresh process{tail}{detail}"
 
 
 def file_key(path: str) -> str:
