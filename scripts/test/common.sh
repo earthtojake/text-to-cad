@@ -24,6 +24,9 @@ export CAD_ENGINE_STANDBY=0
 # prints its Python stack before it goes: workers inherit it from the run, so the model log the
 # client prints, and so the failing test's output, says where.
 export PYTHONFAULTHANDLER=1
+# A run started from a Claude Code session inherits its marker, which makes every CAD MCP session a
+# test opens list no tools (cad_server/mcp/host.py, claude_code): the tests that want it set it.
+unset CLAUDE_CODE_ENTRYPOINT CAD_MCP_CARDS
 
 # The three packages' source trees, the library's first: every suite runs on this checkout's own
 # packages, never on whatever the interpreter has installed (a worktree's venv may point at another).

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad-server"
-version = "0.11.4"
+version = "0.11.5"
 description = "The CAD server for text-to-cad: the device's daemon that builds, keeps and serves CAD documents, the CAD Viewer, the CAD app's MCP endpoint, and the command that runs and installs them."
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
   # The library at this very release, without its kernel: the document model, the protocol, the
   # words the verbs say. Exact: one release of the two is one product.
-  "cad==0.11.4",
+  "cad==0.11.5",
   # The server makes the environment its workers run in, and each release's an update installs, with
   # uv: a dependency, so it is always there (its wheel carries the binary, `uv.find_uv_bin`), on a
   # machine with no uv on PATH too.
@@ -68,7 +68,7 @@ include = ["cad_server", "cad_server.*"]
 # __init__), and it is found at call time by cad_server.assets. A glob takes no dot folder, so the
 # plugin's manifest folders are named. Verified by scripts/release/check-wheel-contents.sh.
 cad_server = ["py.typed", "_runtime/**/*", "_runtime/plugin/.claude-plugin/*", "_runtime/plugin/.codex-plugin/*",
-              "_runtime/plugin/.cursor-plugin/*"]
+              "_runtime/plugin/.cursor-plugin/*", "_runtime/plugin/.grok-plugin/*"]
 # The viewer server's catalog ordering is ICU root collation, read from this table at
 # runtime; it ships beside the code that reads it.
 "cad_server.viewer" = ["collation.json"]

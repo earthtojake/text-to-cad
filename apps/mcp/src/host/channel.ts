@@ -1,4 +1,5 @@
 import { HostError } from './bridge';
+import type { Refusal } from './server';
 
 /**
  * Whether a host says it carries an app's `tools/call` to the app's server: the `serverTools` its
@@ -40,16 +41,25 @@ export type ChannelState = 'unknown' | 'open' | 'none';
 
 export interface Channel {
   readonly state: ChannelState;
+  /**
+   * Whether CAD's server refused one of this page's calls for its capability (`host/server.ts`'s
+   * `Refusal`): the host carries the calls, but none can do anything, now or later -- the page has no
+   * capability, or one from before CAD restarted. Null until one is refused; it never goes back.
+   */
+  readonly refusal: Refusal | null;
   /** A call came back with the server's answer, whatever it said. */
   answered(): void;
   /** The host refused a call itself (`isHostRefusal`). */
   refused(): void;
+  /** The server refused a call for its capability. */
+  refusedCapability(refusal: Refusal): void;
   subscribe(listener: (state: ChannelState) => void): () => void;
 }
 
 export function createChannel(declared: boolean): Channel {
   let state: ChannelState = declared ? 'open' : 'unknown';
   let answered = false;
+  let refusal: Refusal | null = null;
   const listeners = new Set<(state: ChannelState) => void>();
   const become = (next: ChannelState) => {
     if (next === state) return;
@@ -58,8 +68,16 @@ export function createChannel(declared: boolean): Channel {
   };
   return {
     get state() { return state; },
+    get refusal() { return refusal; },
     answered() { if (state === 'none') return; answered = true; become('open'); },
     refused() { if (!answered) become('none'); },
+    refusedCapability(why) {
+      if (refusal) return;
+      refusal = why;
+      answered = true;
+      state = 'open'; // the host carried it: what changed is the refusal, which every listener is told
+      for (const listener of [...listeners]) listener(state);
+    },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }
