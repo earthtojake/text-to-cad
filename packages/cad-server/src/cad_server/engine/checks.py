@@ -1,13 +1,13 @@
 """The manufacturing checks' results the daemon keeps, so the same check of an unchanged document
-measures nothing (``Daemon.check``), and the checks processes that measure the checks no warm worker does
-(``Pool``).
+measures nothing (``Checks``, ``Disk``), and the checks processes that measure every check (``Pool``). A
+check's life -- asked, waiting, measuring, answered or stopped -- is ``checks_runner.Runner``'s.
 
 A result is kept under its document and the version of it that was measured: a model document by its
 id and its generation (``models.Models``' ``version``: a token of its build's own, kept by a run that
 changed nothing in the worker that holds it, new for anything else), a file by its path and the digest of
 its bytes. Beside that, the check itself: the document type, the process, the resolved options, the
 candidates flag and, with no process, the options given, the release of the library that measured it, the
-caller's (``Daemon.check`` measures nothing in another's), and the digest of that library's code
+caller's (the engine measures nothing in another's), and the digest of that library's code
 (``contract.measuring``'s ``code``), so a checkout's edited copy of a release and the published one never share
 a result. What measured it -- that code and the versions of the libraries a check measures with, the measuring
 process's ``contract.measuring`` -- is kept with the result (``by``), and the result is served to a caller that
@@ -31,20 +31,16 @@ Its version there is one that outlives the engine: a model's revision (its build
 and inputs the same revision in any process: the key its cache file is kept by; a build with no key has none,
 and keeps nothing on disk), a file's bytes' digest. A file's name is the digest of that version and of the
 check; it holds both, the result and what measured it. Each is written whole (``registry.Folder.write``), a
-document keeps one
-version's (a result of another version is removed as one of the new is written), and the whole store is held
-to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least recently used (by its time on disk, set again by each
-read) going first. One that does not read -- not JSON, not the shape written, another version's or check's under
-its name -- is removed, never served, and a document's ``checks/`` folder left empty goes with its last. A cache
-folder that cannot be written keeps nothing on disk, and is not walked again: its mark is tried again by the next
-result kept once the engine has written anything else there since (``cache.WRITTEN``, ``Checks.writable``), once
-the base is made again (``Daemon.made_base``), or once the cache folder is another -- never on a timer.
-A document's cache file found unreadable takes its folder, and the results in it, with it (``cache.Cache.remove``,
-which tells ``Checks.dropped``). A result is
-written under the registry's lock of its document (``Registry.lock``), which its deletion holds, and a document
-deleted since its check began (``Checks.deleted``, told by ``Registry.delete``) keeps nothing; a deletion drops
-the document's entries from the index, and a cache folder wiped (the mark the index was made against, ``MARK``,
-gone) is indexed again, the half-written files a stopped engine left (``*.json.*.tmp``) swept as it is.
+document keeps one version's (a result of another version is removed as one of the new is written), and the
+whole store is held to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least recently used (by its time on disk,
+set again by each read) going first. One that does not read -- not JSON, not the shape written, another
+version's or check's under its name -- is removed, never served, and a document's ``checks/`` folder left empty
+goes with its last. The files are listed once, at the store's first use (the half-written ones a stopped engine
+left, ``*.json.*.tmp``, swept then); one found gone since -- its folder wiped, or removed with its document's
+unreadable cache file -- leaves the list as it is asked for. A cache folder that cannot be written keeps nothing
+on disk: each result kept tries its own write, and nothing is remembered of the failure. A result is written
+under the registry's lock of its document (``Registry.lock``), which its deletion holds, and a document deleted
+since its check began (``Checks.deleted``, told by ``Registry.delete``) keeps nothing.
 """
 
 from __future__ import annotations
@@ -59,7 +55,8 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTES", "DISK_BYTES", "DISK_LIMIT", "LIMIT", "POOL", "Checks", "Disk", "Pool", "digest", "pool_size"]
+__all__ = ["BYTES", "DISK_BYTES", "DISK_LIMIT", "LIMIT", "POOL", "Checks", "Disk", "Pool", "Withdrawn", "digest",
+           "pool_size"]
 
 # At most this many results kept in memory, and this many bytes of them (their JSON).
 LIMIT = 128
@@ -69,8 +66,6 @@ DISK_LIMIT = 1024
 DISK_BYTES = 256 * 2**20
 # The format of a result's file on disk: another is a file that does not read.
 FORMAT = 1
-# The cache folder's mark the disk's index was made against (``Disk._indexed``): a token, in ``documents/``.
-MARK = "documents/.checks-index"
 
 
 def digest(path: Path) -> str | None:
@@ -93,17 +88,11 @@ class Disk:
     def __init__(self, folder: Callable[[], Any], limit: int = DISK_LIMIT, budget: int = DISK_BYTES) -> None:
         self.folder, self.limit, self.budget = folder, limit, budget
         self.lock = threading.Lock()
-        # Each result's file, by its place in the cache folder: its size and its time, indexed at the first use,
-        # and again once the cache folder's mark (``MARK``) is not the one indexed against (``place``): gone with a
-        # folder wiped, or another engine's, made since.
+        # Each result's file, by its place in the cache folder: its size and its time, listed at the first use
+        # of a cache folder (``root``: the one listed).
         self.index: dict[str, tuple[int, float]] | None = None
-        self.place: bytes | None = None
+        self.root: Any = None
         self.bytes = 0
-        # The cache folder whose mark could not be written (its root): nothing is kept there, nor indexed, until
-        # the cache folder is another; ``retry``: a write there succeeded since (``writable``), so the next result
-        # kept tries its mark again.
-        self.unwritable: Any = None
-        self.retry = False
 
     def _held(self) -> tuple[Any, Any]:
         """The cache folder and the lock of a document's writes there (``Registry.lock``; none for a folder
@@ -130,26 +119,15 @@ class Disk:
         return f"{DOCUMENTS}/{ident}/checks" + (f"/{name}" if name else "")
 
     def _indexed(self, held: Any) -> dict[str, tuple[int, float]]:
-        """The index (call with the lock held): every result's file, listed and stated once, nothing read; listed
-        again once the folder's mark is gone (a person wiped the cache folder) or not the one it was indexed
-        against, the half-written files there swept, and the mark made where there is none."""
-        place = held.read(MARK)
-        if self.index is not None and place is not None and place == self.place:
+        """The index (call with the lock held): every result's file, listed and stated once per cache folder,
+        nothing read, the half-written files there swept."""
+        root = getattr(held, "root", held)
+        if self.index is not None and root == self.root:
             return self.index
         from cad.engine.ids import is_id
         from cad_server.engine.registry import DOCUMENTS
 
-        if place is None:
-            place = os.urandom(8).hex().encode("ascii")
-            try:
-                held.write(MARK, place)
-            except OSError:
-                # A folder that takes no mark keeps nothing: remembered, so no later use walks it again until it
-                # takes a write (``writable``).
-                self.unwritable, self.index, self.bytes, self.place, self.retry = _root(held), {}, 0, None, False
-                return self.index
-        self.unwritable, self.retry = None, False
-        self.index, self.bytes, self.place = {}, 0, place
+        self.index, self.bytes, self.root = {}, 0, root
         for ident in held.names(DOCUMENTS):
             if not is_id(ident):
                 continue
@@ -189,15 +167,16 @@ class Disk:
 
     def get(self, ident: str, version: str, check: str) -> tuple[dict[str, Any], Any] | None:
         """The result kept on disk of ``check`` of document ``ident`` at ``version`` and what measured it
-        (``by``), or None; a file that does not read as one is removed."""
+        (``by``), or None; a file that does not read as one is removed, and one gone leaves the index."""
         held, _locks = self._held()
-        if held is None or (self.unwritable is not None and self.unwritable == _root(held)):
+        if held is None:
             return None
         _prefix, name = self._name(version, check)
         inside = self._inside(ident, name)
         with self.lock:
             data = held.read(inside)
             if data is None:
+                self._remove_entry(inside)  # gone with its folder since it was listed
                 return None
             try:
                 found = json.loads(data.decode("utf-8"))
@@ -225,10 +204,9 @@ class Disk:
         """``result`` written as ``check``'s of document ``ident`` at ``version``, measured ``by``, whole, under
         the registry's lock of the document -- unless ``still()``, asked under it, says the document was deleted
         meanwhile; the document's results of any other version removed, the store held to its bounds. A folder
-        that cannot be written keeps nothing, and is not tried again until it has taken another write
-        (``unwritable``, ``writable``)."""
+        that cannot be written keeps nothing."""
         held, locks = self._held()
-        if held is None or (self.unwritable is not None and not self.retry and self.unwritable == _root(held)):
+        if held is None:
             return
         prefix, name = self._name(version, check)
         data = json.dumps({"format": FORMAT, "version": version, "check": check, "result": result,
@@ -240,8 +218,6 @@ class Disk:
             if not still():
                 return  # deleted since the check began: its folder is gone, and stays gone
             index = self._indexed(held)
-            if self.unwritable is not None:
-                return  # no mark could be written: nothing is kept there
             for other in held.names(self._inside(ident)):
                 if other.endswith(".json") and not other.startswith(f"{prefix}-"):
                     self._remove(held, self._inside(ident, other))
@@ -255,12 +231,6 @@ class Disk:
             while index and (len(index) > self.limit or self.bytes > self.budget):
                 self._remove(held, min(index, key=lambda place: index[place][1]))
 
-    def writable(self) -> None:
-        """The cache folder taken a write since its mark could not be (the engine's own, or the base made again):
-        its mark is tried again by the next result kept, and the folder indexed then."""
-        with self.lock:
-            self.retry = self.unwritable is not None
-
     def deleted(self, ident: str) -> None:
         """Document ``ident``'s entries dropped from the index: its folder went with it (``Registry.delete``)."""
         with self.lock:
@@ -272,13 +242,7 @@ class Disk:
 
     def status(self) -> dict[str, Any]:
         with self.lock:
-            return {"held": None if self.index is None else len(self.index), "bytes": self.bytes,
-                    **({"unwritable": True} if self.unwritable is not None else {})}
-
-
-def _root(held: Any) -> Any:
-    """A cache folder as ``Disk.unwritable`` remembers it: its root."""
-    return getattr(held, "root", held)
+            return {"held": None if self.index is None else len(self.index), "bytes": self.bytes}
 
 
 class Checks:
@@ -407,19 +371,6 @@ class Checks:
         if self.disk is not None:
             self.disk.deleted(ident)
 
-    def writable(self) -> None:
-        """The engine wrote into its cache folder (``cache.WRITTEN``), or made the base again: a folder whose mark
-        could not be written is tried again by the next result kept (``Disk.writable``)."""
-        if self.disk is not None:
-            self.disk.writable()
-
-    def dropped(self, ident: str) -> None:
-        """Document id ``ident``'s folder in the cache gone with its cache file, which did not read
-        (``cache.Cache.remove``): its results on disk went with it, so they leave the disk's index. The document
-        is not deleted, and what memory keeps of it stays."""
-        if self.disk is not None:
-            self.disk.deleted(ident)
-
     def status(self) -> dict[str, Any]:
         with self.lock:
             found = {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused,
@@ -456,6 +407,12 @@ def pool_size() -> tuple[int, str | None]:
 
 # The key of the checks process of a pool's first slot; the others' are it and their number (``checks-2``).
 SLOT = "checks"
+# How often a check waiting for a slot asks whether it still waits (``Pool.take``'s ``gave_up``).
+GAVE_UP_SECONDS = 0.2
+
+
+class Withdrawn(Exception):
+    """A check that stopped waiting for a slot (``Pool.take``'s ``gave_up``)."""
 
 
 class Pool:
@@ -467,9 +424,14 @@ class Pool:
     system is not under memory pressure; with no room, it waits for a busy one, as it does when every slot is busy,
     saying so once. While it can take no slot, for either reason, a check whose caller is still there asks its
     ``reap`` each time it wakes: a check whose callers have all gone gives up its slot, and the memory its process
-    holds, to it (``Daemon._reap``). A process is started,
-    held to the memory caps and shed by the supervisor as every service's is: an idle one is retired for memory
-    with the render processes, and none on a timer."""
+    holds, to it (``checks_runner.Runner``). An idle process is started, held to the memory caps and shed by the
+    supervisor as every service's is, retired for memory with the render processes; one measuring is held to its
+    check's own limits by the runner.
+
+    What measures in them (``known``, ``learn``: ``contract.measuring``'s code and libraries) is the base's: the
+    server's own, read at each ask, where the engine's kernel environment is the server's; else what the latest
+    checks process started since the base was made said in an answer -- unknown until one has, and again once the
+    base is made again, which retires them all (``rebased``)."""
 
     def __init__(self, supervisor: Any, size: int, note: str | None = None) -> None:
         self.supervisor, self.size, self.note = supervisor, max(1, size), note
@@ -477,6 +439,50 @@ class Pool:
         self.busy: dict[str, float] = {}  # each slot measuring, since when (``time.time``)
         self.last: dict[str, str] = {}  # each slot's last document
         self.rss = 0.0  # the last resident memory a checks process said, in MiB (``size_of``)
+        self.measures: dict[str, Any] | None = None  # the base's, as a checks process started since ``since`` said
+        self.since = time.time()  # when the base was last made
+
+    def known(self, said: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        """What measures in a checks process started now: the server's own, read now (``contract.measure``: a
+        checkout's edits included, its code hashed again only once a source file's size or time changed), where
+        the engine's kernel environment is the server's; else the base's as a checks process started since it
+        was last made said it (``said``: one such process's, kept), None until one has."""
+        from cad.engine import places
+
+        try:
+            own = bool((places.kernel(make=False) or {}).get("own"))
+        except Exception:  # noqa: BLE001 - no base to tell: nothing known
+            own = False
+        if own:
+            from cad.engine.contract import measure
+
+            return measure()
+        with self.lock:
+            if said is not None:
+                self.measures = said
+            return self.measures
+
+    def learn(self, process: Any, answer: dict[str, Any]) -> None:
+        """What measures in ``process``, as its answer to a check says it: the base's, once a process started
+        since the base was last made says it; a process unlike the base as it is now (one started before it was
+        made again) is retired as its check lets it go, so the next check starts a fresh one."""
+        done = answer.get("done") if isinstance(answer, dict) else None
+        if not isinstance(done, dict):
+            return
+        said = (done.get("checked") or {}).get("measures") if isinstance(done.get("checked"), dict) else done.get("measures")
+        if not isinstance(said, dict):
+            return
+        current = self.known(said if getattr(process, "started", 0.0) >= self.since else None)
+        if current is not None and said != current:
+            self.supervisor.retire(process, "base")
+
+    def rebased(self) -> None:
+        """The base made again: what measures in it is unknown until a fresh checks process says, and every
+        checks process of the base before it is retired -- an idle one now, a busy one as its check ends."""
+        with self.lock:
+            self.since, self.measures = time.time(), None
+        for process in self.supervisor.processes("checks"):
+            self.supervisor.retire(process, "base")
 
     def slots(self) -> list[str]:
         return [SLOT if number == 1 else f"{SLOT}-{number}" for number in range(1, self.size + 1)]
@@ -536,8 +542,6 @@ class Pool:
         memory for another process: an abandoned check's process killed, its slot and its memory made free.
         ``defer``, asked before it takes a free slot: true (its callers have gone, and a check someone waits for
         waits too), it leaves the slot to that one and waits on."""
-        from cad_server.engine.supervisor import GAVE_UP_SECONDS, Withdrawn
-
         told = False
         while True:
             deferring = defer is not None and defer()

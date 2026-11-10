@@ -6,7 +6,7 @@
     snapshot(source=None, *, job, the same flags) -> list[Drawn]
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
-    check(source, check) -> dict (a manufacturing check, measured where the document is held)
+    check(source, check) -> dict (a manufacturing check, measured in the engine's checks processes)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -43,17 +43,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
-__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Stopped", "Unanswered", "Unreached", "Written",
-           "check",
-           "export",
-           "hand_over", "observers", "serve", "snapshot", "status", "stop", "inspect"]
+__all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "Report", "Served", "Stopped",
+           "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers", "serve", "snapshot",
+           "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
     (``module.Name``), where its answer said (``type``: a failure, never a refusal), which the verb's facts
-    tell its observers (``_error``)."""
+    tell its observers (``_error``); ``reason``: why a manufacturing check did not complete, one short word
+    (``check``), None for any other failure."""
 
     raised: str | None = None
+    reason: str | None = None
 
 
 def _files(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -320,7 +321,7 @@ def _failed(answer: dict[str, Any]) -> Exception:
 
     text = str(answer["failed"])
     if answer.get("stopped"):
-        return Stopped(text)  # the engine stopping under it (``Daemon.check``): run it again
+        return Stopped(text)  # the engine stopping under it (``checks_runner.Runner``): run it again
     module, _, name = str(answer.get("kind") or "").partition(":")
     kind: Any = None
     if module == "builtins" or module == "cad.engine" or module.startswith("cad.engine."):
@@ -334,6 +335,8 @@ def _failed(answer: dict[str, Any]) -> Exception:
         failed = EngineError(text)
         if isinstance(answer.get("type"), str):
             failed.raised = answer["type"]  # what the engine failed with: the facts' type (``_error``)
+        if isinstance(answer.get("reason"), str):
+            failed.reason = answer["reason"]  # why a check did not complete (``check``)
         return failed
     try:
         error = kind(text)
@@ -633,41 +636,62 @@ class Unreached(ConnectionError):
     """No engine could be reached or started for a check (``check``): its words, the client's
     (``client.connect``: none registered, a sandbox that cannot start one, the system's refusal)."""
 
+    reason = "unreachable"
+
 
 class Unanswered(EngineError):
     """An engine that measured no check answered one: a server of a release before checks in memory, or one
-    whose library, and whose worker's, is another release than this (``Daemon.check``), so it measured nothing:
-    its answer carried no ``checked``."""
+    whose library is another release, or other code or libraries, than this (``checks_runner.Runner``), so it
+    measured nothing: its answer carried no ``checked``."""
+
+    reason = "unanswered"
 
 
 class Stopped(EngineError):
     """The engine stopped while it measured a check (``check``): an update moving the device to another
     release, or ``cad stop``. Nothing is measured here instead: the check is the engine's to run again."""
 
+    reason = "stopped"
+
 
 STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
            "run the check again")
+#: Where a check was measured, as its answer says it (``check``'s ``measured_in``): in the engine, or -- what a
+#: caller that measures it itself after ``Unreached`` or ``Unanswered`` says of its own result -- in the caller.
+IN_ENGINE, IN_CALLER = "engine", "caller"
 
 
 def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
-    """A manufacturing check of a document, measured where the engine holds it (``worker._check``): a
-    document's handle or id in the worker that holds it -- a model's in its script's warm worker, nothing
-    exported or read again -- a STEP's or an xbf's path, or a document no warm worker holds, in the engine's
-    checks process, a file read once while its bytes stay as they were. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its
-    options resolved by the caller (``manufacturing.options``). The same check of an unchanged document is
-    answered from the results the engine keeps (``reused``: true), measuring nothing, and one asked while the
-    same one runs waits for it, which is said on stderr; a check runs to its end even if its caller goes, as a
-    build does, so asking again finds its result. The answer says the
-    release whose library measured it (``release``); a worker retired for its memory after the check is said
-    on stderr (``retired``). ``Unanswered`` from a server that measured nothing: of a release before checks in
-    memory, or of another than this library's, which the engine says before anything is measured.
+    """A manufacturing check of a document, measured in the engine's checks processes (``worker._check``): a
+    STEP's or an xbf's path, read once while its bytes stay as they were, or a document the engine holds (its
+    handle or id), from the bytes it holds of it -- never in a model's worker, so nothing of that model waits
+    for its check. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its options resolved
+    by the caller (``manufacturing.options``). The same check of an unchanged document is answered from the
+    results the engine keeps (``reused``: true), measuring nothing, and one asked while the same one runs waits
+    for it, which is said on stderr; a check runs to its end even if its caller goes, so asking again finds its
+    result. The answer says the release whose library measured it (``release``) and where
+    (``measured_in``: ``IN_ENGINE``).
 
     Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",
-    "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. ``Unreached`` when no
-    engine can be reached; a refusal as its type (``serve.NotHeld`` for an id the engine does not hold); an
-    ``EngineError`` for a check that failed there -- its worker gone, or cancelled by a build of its script --
-    and ``Stopped`` for an engine that stopped before it answered (an update), never measured here instead."""
+    "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. A refusal is raised as its
+    type (``serve.NotHeld`` for an id the engine does not hold). A check that did not complete is never a
+    result: it raises, with one word for why (``reason``) --
+
+    - ``Unreached`` (``unreachable``): no engine can be reached or started;
+    - ``Unanswered`` (``unanswered``): the engine measured nothing -- of a release before checks in memory, or of
+      another release, code or libraries than this library's, which it says before anything is measured;
+    - ``Stopped`` (``stopped``): the engine stopped before it answered (an update, ``cad stop``);
+    - an ``EngineError`` whose ``reason`` is ``cancelled`` (every caller of it had gone and its process was given
+      to another check), ``over_time`` or ``over_memory`` (past a check's limits, ``CAD_ENGINE_CHECK_SECONDS``
+      and ``CAD_ENGINE_CHECK_RSS_MB``), ``process_lost`` (its checks process exited under it), ``no_kernel``
+      (none could be started), ``superseded`` (its document was built again, or its file rewritten, while it
+      was measured) or ``error`` (the measuring itself failed).
+
+    After ``Unreached`` (of a file) or ``Unanswered`` a caller with the kernel may measure the document
+    itself, and says ``IN_CALLER`` in its result: one line on stderr says, there, why the engine measures
+    nothing and that such a check is kept by no one, so it is measured again each time it is asked."""
     from cad.engine import client
+    from cad.engine.contract import measuring, release
     from cad.engine.export import MESHES, ExportRefused
 
     source = _called(source, True)
@@ -675,15 +699,16 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     if "path" in spec and Path(spec["path"]).suffix.lower() in MESHES:
         raise ExportRefused(f"{Path(spec['path']).name} is a mesh: its check is measured from its triangles")
     cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
+    mine = measuring()
     try:
         connection = client.connect()
     except ConnectionError as error:
+        if "path" in spec:  # a file is its caller's to measure; a document the engine holds is no one else's
+            _outside(mine, f"no CAD server could be reached ({error})")
         raise Unreached(str(error)) from None
-    from cad.engine.contract import measuring, release
-
     # Its release and what measures here (``contract.measuring``): no process unlike it measures it.
     order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd, "caller": release(),
-             "measures": measuring(), "check": {**check, "token": os.urandom(8).hex()}}
+             "measures": mine, "check": {**check, "token": os.urandom(8).hex()}}
 
     def relay(message: dict[str, Any]) -> None:
         if message.get("stream") == "waiting":  # what it waits for: the same check running, or a busy process
@@ -698,11 +723,23 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
         raise Stopped(STOPPED) from None
     checked = done.get("checked") if isinstance(done, dict) else None
     if not isinstance(checked, dict):
-        # Another release's server, or one before the check in memory, answers with no check, having measured nothing.
+        # Another release's server, or one of other code or libraries, answers with no check, having measured nothing.
+        _outside(mine, "the CAD server running is of another release, code or libraries than this library")
         raise Unanswered("the CAD server running measured no check: it is of another release than this library")
-    if checked.get("retired"):
-        print(f"cad: {checked['retired']}", file=sys.stderr, flush=True)
-    return {**checked, **({"reused": True} if done.get("reused") else {})}
+    return {**checked, "measured_in": IN_ENGINE, **({"reused": True} if done.get("reused") else {})}
+
+
+def _outside(measures: dict[str, Any], why: str) -> None:
+    """One line on stderr from a process that can measure a check itself (one with the kernel:
+    ``contract.measuring`` names its libraries), as the engine measures nothing for it: why, and what a check
+    measured outside the engine costs."""
+    if not measures.get("libraries"):
+        return  # a command with no kernel measures nothing itself: the process it hands the check to says it
+    try:
+        print(f"cad: {why}, so nothing keeps this manufacturing check: measured in this process, it is measured "
+              "again each time it is asked", file=sys.stderr, flush=True)
+    except OSError:
+        pass
 
 
 def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,

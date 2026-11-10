@@ -37,17 +37,12 @@ from cad.engine._measuring import MEASURING, measure, measuring
 from cad.engine.previous import FORMAT, version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["CHECKS_SINCE", "CONTRACT", "KERNEL", "MEASURING", "PROTOCOL", "answers_checks", "interpreter", "measure",
-           "measures_for", "measuring", "notice", "refusal", "release", "spelled"]
+__all__ = ["CONTRACT", "KERNEL", "MEASURING", "PROTOCOL", "interpreter", "measure", "measures_for", "measuring",
+           "notice", "refusal", "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
 PROTOCOL = 1
-# The first release whose worker measures a manufacturing check (an ``export`` carrying ``check``) and
-# answers ``cancel``: additions to protocol 1, which the server sends only to a worker of this release or
-# later (``answers_checks``), never to an older one, which would answer such an export with nothing. Named
-# ahead of the release that ships it: a release pull request that would leave it past itself is refused.
-CHECKS_SINCE = "0.12.0"
 # OCP's major.minor: the CAD kernel the library pins (``cadquery-ocp-novtk>=8.0,<8.1``), whose shapes
 # and documents cross between a worker and the server's own kernel processes.
 KERNEL = "8.0"
@@ -91,16 +86,6 @@ def measures_for(asked: Any, mine: Any) -> bool:
         return False
     return asked.get("code") == mine.get("code") and all(
         version is None or mine["libraries"].get(name) == version for name, version in asked["libraries"].items())
-
-
-def answers_checks(worker: Any) -> bool:
-    """Whether a worker of release ``worker`` measures a manufacturing check and answers ``cancel``
-    (``CHECKS_SINCE`` or later, a development build of it included); False for one that is no release."""
-    found, since = _order(worker), _order(CHECKS_SINCE)
-    if found is None or since is None:
-        return False
-    # A development or pre-release build of CHECKS_SINCE has them: compare by the release numbers alone there.
-    return found >= since or found[:2] == since[:2]
 
 
 def spelled(contract: Any) -> str:

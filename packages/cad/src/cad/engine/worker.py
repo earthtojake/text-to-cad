@@ -29,19 +29,14 @@ build too, from the last build that named the document -- so a page asking about
 element never waits on a build.
 
 An ``export`` request with ``check`` (``{"type", "process", "resolved", "candidates", "given", "token"}``,
-``api.check``) and no destinations is a manufacturing check of the document it names, measured where it is
-held (``_check``: the integration ``cad.registry.manufacturing_check`` names), answered ``{"id", "done": {"checked": ...}}``. A
-``{"id", "op": "cancel", "token"}`` request, answered by the thread that reads the requests as soon as it reads
-it -- once the kernel call in progress returns, as OCP holds Python's lock through a call -- (``{"id",
-"cancelled"}``: whether one was; the daemon waits for no such answer), asks the check of that token to stop
-(``_cancel``): a check
-running stops at its next checkpoint (the integration's ``checkpoint``: between parts, families, faces and
-rays, so after whatever kernel call it is in, the whole part's mesh the longest), one still queued is
-dropped before it starts, and either is answered as cancelled (``cancelled``). The daemon asks it when a
-build of the worker's script arrives, and only then: a check outlives its caller, as a build does. A process
-over its memory cap after a check is retired as after a build, and the check's answer says so (``retired``). The
-daemon sends ``check`` and ``cancel`` only to a process of the library of the caller's release, and never to one
-before ``contract.CHECKS_SINCE``; it checks another worker's document from the bytes its ``result`` gives.
+``api.check``) and no destinations is a manufacturing check, which the daemon asks of its checks processes
+alone -- this program started for a slot of the daemon's pool, never a model's worker -- of a file (``path``)
+or of the bytes of a document the engine holds (``document``, its bytes after the line), measured in memory
+(``_check``: the integration ``cad.registry.manufacturing_check`` names) and answered ``{"id", "done":
+{"checked": ...}}``. Nothing stops a check from within: the daemon holds it to its limits from outside and
+kills the process of one it stops, which holds nothing but what it read for checks. A checks process over its
+memory cap after a check drops what it read (``shed``) and, still over it, is retired as a worker is after a
+build.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
@@ -230,12 +225,10 @@ def retirement(reports: list[dict[str, Any]], resident: float | None, cap: float
 def resident_after_build(cap: float | None) -> float | None:
     """This worker's resident memory after a build (``resident_mb``), measured again after a
     collection where it is over its cap (``cap``): the cycles the build and the uncollected ones
-    before it left are not what the worker holds, nor what the checks it measured read (``shed``, dropped
-    first). Under the cap nothing is collected here: that is paid once the worker is idle (the module
-    docstring)."""
+    before it left are not what the worker holds. Under the cap nothing is collected here: that is
+    paid once the worker is idle (the module docstring)."""
     resident = resident_mb()
     if resident is not None and cap is not None and resident > cap:
-        shed()  # what the checks it measured read, first: never what a build holds
         gc.collect()
         resident = resident_mb()
     return resident
@@ -523,72 +516,7 @@ def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     return header, document.to_bytes(source.xcaf, source.shapes.values())
 
 
-# --- a manufacturing check of a held document ---------------------------------------------------------
-
-
-# A cancelled check's answer, which its caller raises (``api.check``).
-CANCELLED = ("the manufacturing check was cancelled before it finished: its document is being replaced by a "
-             "build of its script; check it again once the build is done")
-
-# Cancelling (``_cancel``): the token of the check this worker is running, and the tokens of checks queued
-# here that were cancelled before they started (a few, the most recent last).
-_RUNNING: dict[str, Any] = {"token": None}
-_RUNNING_LOCK = threading.Lock()
-_DROPPED: list[str] = []
-_DROPPED_KEPT = 16
-
-
-def _cancel(token: Any, queued: Callable[[str], bool]) -> bool:
-    """The check of ``token`` asked to stop, by the thread that reads the requests: the one running is
-    flagged and stops at its next checkpoint (the integration's ``checkpoint``, between parts, families,
-    faces and rays: never inside a kernel call); one still queued (``queued``) is dropped before
-    it starts. Whether either was: a check that already answered, or another's, is left alone."""
-    if not isinstance(token, str) or not token:
-        return False
-    found = queued(token)
-    # Noted before the running one is looked at, as ``_check`` notes the running one before it looks here:
-    # whichever comes second sees the other, so a check starting as its cancel comes is stopped either way.
-    _DROPPED.append(token)
-    del _DROPPED[:-_DROPPED_KEPT]
-    with _RUNNING_LOCK:  # the flag set only while its check runs, so none carries into a build
-        if _RUNNING["token"] == token:
-            from cad.registry import manufacturing_check
-
-            manufacturing_check().stop()  # loaded already: the check running loaded it
-            return True
-    return found
-
-
-def _seam() -> tuple[Path, float] | None:
-    """A test's seam, read at each check from the environment that check runs in (the one its worker adopted
-    for the request, a standby taken for a later caller's included; the checks process's own, the daemon's):
-    ``CAD_ENGINE_CHECK_WAIT`` naming a file makes the check say it is measuring (``<file>.reached``, holding
-    this process's pid) and wait, at most ``CHECK_WAIT_SECONDS``, until that file is there -- stopping at a
-    checkpoint while it waits -- so a test can build, cancel or kill the process while a check runs. Unset,
-    nothing."""
-    named = os.environ.get("CAD_ENGINE_CHECK_WAIT")
-    return (Path(named), CHECK_WAIT_SECONDS) if named else None
-
-
-CHECK_WAIT_SECONDS = 120.0
-
-
-def _waited() -> None:
-    seam = _seam()
-    if seam is None:
-        return
-    from cad.registry import manufacturing_check
-
-    checkpoint = manufacturing_check().checkpoint
-    named, seconds = seam
-    try:
-        Path(f"{named}.reached").write_text(str(os.getpid()), encoding="utf-8")
-    except OSError:
-        return  # a seam that cannot be written (an earlier test's, gone) never fails a real check
-    deadline = time.monotonic() + seconds
-    while not named.exists() and time.monotonic() < deadline:
-        checkpoint()
-        time.sleep(0.01)
+# --- a manufacturing check, in a checks process ---------------------------------------------------------
 
 
 # The files a checks process holds, by path: each the digest of the bytes it read, their source and their size,
@@ -598,8 +526,8 @@ def _waited() -> None:
 # its memory cap (``shed``).
 _FILES: "dict[str, tuple[str, Any, int]]" = {}
 _FILES_KEPT = 4
-# The bytes each of a process's memos of what a check read holds at most (``_FILES``, ``_DOCUMENTS``, and a
-# build's parts read back, ``_dfm_brep``'s): one larger is read for its check and not kept.
+# The bytes each of a checks process's memos of what a check read holds at most (``_FILES``, ``_DOCUMENTS``):
+# one larger is read for its check and not kept.
 KEPT_BYTES = 256 * 2**20
 
 
@@ -611,19 +539,27 @@ def _bounded(memo: "dict[str, Any]", count: int, size: Callable[[Any], int]) -> 
 
 
 def shed() -> None:
-    """What this process holds of the checks it measured, dropped: the files and documents it read
-    (``_FILES``, ``_DOCUMENTS``) and a build's parts read back (``_dfm_brep``'s), as it is over its memory cap
-    (``resident_after_build``), so a person's warm worker is not kept large by a check."""
+    """What this checks process holds of the checks it measured, dropped: the files and documents it read
+    (``_FILES``, ``_DOCUMENTS``)."""
     _FILES.clear()
     _DOCUMENTS.clear()
-    held = sys.modules.get("cad.build123d._dfm_brep")
-    if held is not None:
-        held.forget()
+
+
+def resident_after_check(cap: float | None) -> float | None:
+    """A checks process's resident memory after a check (``resident_mb``): over its cap (``cap``), what it read
+    for checks is dropped first (``shed``) and it is measured again after a collection, so it is retired only
+    for what it cannot let go."""
+    resident = resident_mb()
+    if resident is not None and cap is not None and resident > cap:
+        shed()
+        gc.collect()
+        resident = resident_mb()
+    return resident
 
 
 def _file(path: Path) -> tuple[Any, str | None, bool]:
     """A STEP's or an xbf's file as a source, read once while its bytes stay as they were (``_FILES``), the
-    digest of the bytes it was read from -- None where they changed while it was read, so no one keeps a result
+    digest of the bytes it was read from -- None where they changed while it was read, so nothing is measured
     of them -- and whether it was read now."""
     import hashlib
 
@@ -643,7 +579,7 @@ def _file(path: Path) -> tuple[Any, str | None, bool]:
         return held[1], before, False
     source = export.Source.from_loaded(document.Loaded(path))
     if digest() != before:
-        return source, None, True  # rewritten while it was read: measured, never kept
+        return source, None, True  # rewritten while it was read: no version of the file is what was read
     try:
         size = path.stat().st_size
     except OSError:
@@ -680,70 +616,44 @@ def _document(spec: dict[str, Any], payload: bytes) -> tuple[Any, bool]:
 
 
 def _check(request: dict[str, Any]) -> dict[str, Any]:
-    """An ``export`` request with ``check``: the document it names -- a model this worker built (by ``script``
-    and ``function``), a document's bytes (``document``: one no warm worker holds, or one an older worker
-    saved, read once per version: ``_document``), or a STEP's or an xbf's file (``_file``) -- checked in memory
-    (its integration's ``held``, a build's parts read back once per version), stopping at a checkpoint when
-    cancelled (``_cancel``). Answers ``{"reports": [], "files": [], "checked"}``, the ``checked`` saying the
-    release that measured it, whether it read the document, or a build's parts, anew (``read``) and, for a file,
-    the digest of the bytes it measured; the integration's ``Cancelled`` when stopped."""
-    from cad.engine import build as engine_build
+    """An ``export`` request with ``check``: the document it names -- the bytes of one the engine holds
+    (``document``, read once per version: ``_document``) or a STEP's or an xbf's file (``_file``) -- checked in
+    memory (its integration's ``held``). Answers ``{"reports": [], "files": [], "checked"}``, the ``checked``
+    saying the release that measured it, what measures here (``measures``), whether it read the document anew
+    (``read``) and, for a file, the digest of the bytes it measured -- or, where they changed while it read
+    them, ``changed`` and nothing measured: no version of the file is those bytes. A caller of other code or
+    libraries than this process's is answered with no ``checked``, nothing measured."""
     from cad.engine import export
     from cad.engine.contract import measures_for, measuring, release
-    from cad.engine.ids import canonical
     from cad.registry import manufacturing_check
 
     spec = request["source"]
     check = request["check"]
-    token = check.get("token")
     mine = measuring()
     if not measures_for(check.get("measures"), mine):
         # Another code or library than the caller's: nothing measured, and the caller measures it its own way.
         return {"reports": [], "files": [], "release": release(), "measures": mine}
-    measured_by = manufacturing_check()
-    Cancelled, stop = measured_by.Cancelled, measured_by.stop
+    said = {"release": release(), "measures": mine}
     read = Path(spec["path"]).name if "path" in spec else None  # how a reading failure names it
-    digest, fresh, keep = None, False, None
-    with _RUNNING_LOCK:
-        stop(False)
-        _RUNNING["token"] = token
+    digest, fresh = None, False
     try:
-        if token in _DROPPED:
-            raise Cancelled  # cancelled before it started
-        try:
-            if "document" in spec:
-                source, fresh = _document(spec, request.get("payload") or b"")
-            elif spec.get("held") and "script" in spec:
-                reads, keep = engine_build.held_reads, f"{canonical(spec['script'])}::{spec.get('function')}"
-                source = engine_build.held(Path(spec["script"]), spec.get("function"))
-                fresh = engine_build.held_reads != reads  # a model taken from the cache: its bytes read now
-                if source is None:
-                    # A fresh worker in a retired one's place holds nothing: refused as not held, as the daemon
-                    # refuses one, so its caller reads the document again from where it is held now.
-                    from cad.engine.serve import NotHeld
-
-                    raise NotHeld(f"{spec.get('function')} is no longer held: run the program that builds it again")
-            elif "path" in spec:
-                source, digest, fresh = _file(Path(spec["path"]))
-            else:
-                raise export.ExportRefused("a check reads a document the engine holds or a STEP's or an xbf's file")
-        except ValueError as error:
-            if isinstance(error, export.ExportRefused) or hasattr(error, "rebuild"):
-                raise
-            checked = {"unmeasured": {"code": "document_unreadable",
-                                      "message": f"failed to read {read or 'the document'}: {error}"}}
-        except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
-            checked = {"unmeasured": {"code": "document_unreadable",
-                                      "message": f"failed to read {read or 'the document'}: {error}"}}
+        if "document" in spec:
+            source, fresh = _document(spec, request.get("payload") or b"")
+        elif "path" in spec:
+            source, digest, fresh = _file(Path(spec["path"]))
+            if digest is None:
+                return {"reports": [], "files": [], "checked": {**said, "read": True, "digest": None, "changed": True}}
         else:
-            _waited()
-            checked = measured_by.held(source, check, read, keep)
-            fresh = bool(checked.pop("read", False)) or fresh  # a build's parts read back now
-    finally:
-        with _RUNNING_LOCK:
-            _RUNNING["token"] = None
-            stop(False)
-    return {"reports": [], "files": [], "checked": {**checked, "release": release(), "read": fresh, "measures": mine,
+            raise export.ExportRefused("a check reads a document the engine holds or a STEP's or an xbf's file")
+    except export.ExportRefused:
+        raise
+    except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
+        checked = {"unmeasured": {"code": "document_unreadable",
+                                  "message": f"failed to read {read or 'the document'}: {error}"}}
+    else:
+        checked = manufacturing_check().held(source, check, read)
+        fresh = bool(checked.pop("read", False)) or fresh
+    return {"reports": [], "files": [], "checked": {**checked, **said, "read": fresh,
                                                     **({"digest": digest} if "path" in spec else {})}}
 
 
@@ -759,14 +669,6 @@ def refusal(error: BaseException) -> dict[str, str]:
     kind = type(error)
     part = getattr(error, "part", None)
     return {"kind": f"{kind.__module__}:{kind.__qualname__}", **({"part": part} if isinstance(part, str) else {})}
-
-
-def failure(error: BaseException) -> dict[str, Any]:
-    """An export's failure as this worker answers it: a refusal by its type and part (``refusal``) -- a document
-    not held (``serve.NotHeld``) with its state and what builds it again, as the daemon refuses one -- and a
-    failure (a file not written, a ``BuildError``) by its type (``frames.failed_type``)."""
-    held = {"state": getattr(error, "state"), "rebuild": getattr(error, "rebuild")} if hasattr(error, "rebuild") else {}
-    return {"failed": str(error), **(refusal(error) or frames.failed_type(error)), **held}
 
 
 def main() -> int:
@@ -805,12 +707,6 @@ def main() -> int:
 
     requests: "queue.Queue[dict[str, Any] | None]" = queue.Queue()
 
-    def queued(token: str) -> bool:
-        """Whether a check of ``token`` waits in this worker's queue."""
-        with requests.mutex:
-            return any(isinstance(row, dict) and (row.get("check") or {}).get("token") == token
-                       for row in requests.queue)
-
     def read() -> None:
         """Every request as it comes: a ``where`` answered here and now, the rest queued
         for the build loop."""
@@ -822,10 +718,7 @@ def main() -> int:
                     request = json.loads(line)
                     if request.get("bytes"):
                         request["payload"] = asked.read(int(request["bytes"]))
-                    if request.get("op") == "cancel":
-                        # Answered at once: whether a check of that token was running or queued here.
-                        send({"id": request.get("id"), "cancelled": _cancel(request.get("token"), queued)})
-                    elif request.get("op") == "where":
+                    if request.get("op") == "where":
                         try:
                             found = made_by(request["doc"], request["key"], request["kind"], int(request["ordinal"]))
                         except Exception:  # noqa: BLE001 - a question it cannot answer is answered with nothing
@@ -896,27 +789,22 @@ def main() -> int:
                 cwd = request.get("cwd")
                 os.chdir(cwd or home)
                 if op == "export" and request.get("check"):
-                    # A manufacturing check, measured in memory; over the cap after it, retired as a build is.
-                    from cad.registry import manufacturing_check
+                    # A manufacturing check, measured in memory; over the cap after it, retired as after a build.
+                    from cad.engine.export import ExportRefused
 
                     try:
-                        done: dict[str, Any] | None = _check(request)
-                    except manufacturing_check().Cancelled:
-                        done = None
-                    cap = request_cap(request)
-                    resident = resident_after_build(cap)
-                    retire = resident is not None and cap is not None and resident > cap
-                    rss = {"rssMb": None if resident is None else round(resident), **({"retire": True} if retire else {})}
-                    if done is not None and retire and "checked" in done:
-                        # Said to the caller: a person's warm worker, and its memo, go with this check.
-                        done["checked"]["retired"] = (
-                            f"the worker held {resident:.0f} MB after the check, over its {cap:.0f} MB cap "
-                            "(CAD_ENGINE_WORKER_RSS_MB): it is retired, its documents kept, and the next build of "
-                            "its script starts a fresh worker" if request["source"].get("held") else
-                            f"the checks process held {resident:.0f} MB after the check, over its {cap:.0f} MB cap "
-                            "(CAD_ENGINE_WORKER_RSS_MB): it is retired, and the next check starts a fresh one")
-                    send({"id": ident, "done": done, **rss} if done is not None else
-                         {"id": ident, "failed": CANCELLED, "cancelled": True, **rss})
+                        done = _check(request)
+                    except ExportRefused:
+                        raise  # a request that names nothing to check: refused by its type, below
+                    except Exception as error:  # noqa: BLE001 - the check's own failure: its words, not its stack
+                        traceback.print_exc()  # the stack on this process's stderr, never in the answer
+                        send({"id": ident, "failed": f"{type(error).__name__}: {error}"})
+                    else:
+                        cap = request_cap(request)
+                        resident = resident_after_check(cap)
+                        retire = resident is not None and cap is not None and resident > cap
+                        send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
+                              **({"retire": True} if retire else {})})
                 elif op == "export":
                     # An export's frames, or a snapshot's for a request that draws (``job_progress``).
                     said = job_progress(lambda frame: send({"id": ident, "progress": frame}), request, cwd=cwd)
@@ -933,7 +821,8 @@ def main() -> int:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
             except (BuildError, ValueError, OSError) as error:
-                send({"id": ident, **failure(error)})
+                # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
+                send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})
