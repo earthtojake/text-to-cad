@@ -264,6 +264,12 @@ class UnfoldTest(unittest.TestCase):
         self.assertEqual(len(lines.edges()), 2)
         round_holes = [i for i in items(report, "holes") if i["kind"] == "round"]
         self.assertEqual([i["diameter_mm"] for i in round_holes], [6.0])
+        # a flat plate has no bend line, and unfolds to the same two layers, one of them empty
+        cut = sheet.unfold(bd.Box(100, 60, 2), bend_lines=True)
+        self.assertEqual([child.label for child in cut.children], ["CUT", "BEND"])
+        outline, lines = cut.children
+        self.assertAlmostEqual(outline.area, 6000.0, places=6)
+        self.assertEqual(len(lines.edges()), 0)
 
     def test_the_flat_overlaps_where_flanges_collide_in_it_and_not_where_a_fuse_loses_area(self) -> None:
         t, r = 2.0, 2.0

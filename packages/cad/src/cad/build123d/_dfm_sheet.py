@@ -2249,8 +2249,9 @@ def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None
     thickness (the shop's, from its bend table; default Hubs's air-bending chart by ``material`` and each
     bend's radius). One part gives its flat ``Face`` (or a ``Compound`` of the
     pieces that do not join); several parts, a ``Compound`` of each one's. With ``bend_lines`` the result
-    is a ``Compound`` of the cut outline labelled ``CUT`` and the bends' centre lines labelled ``BEND``: a
-    DXF writes each label as its own layer. ``ValueError`` for a shape that is not one thickness of sheet.
+    is a ``Compound`` of the cut outline labelled ``CUT`` and the bends' centre lines labelled ``BEND`` (an
+    empty one for a flat plate, which has none): a DXF writes each label as its own layer. ``ValueError`` for a
+    shape that is not one thickness of sheet.
     """
     import build123d as bd
 
@@ -2261,6 +2262,6 @@ def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None
         return cut
     cut.label = "CUT"
     lines = [line for item in found for line in item.bend_lines]
-    bends = bd.Compound(children=lines) if lines else bd.Compound()
+    bends = bd.Compound(children=lines) if lines else bd.Compound([])  # (Compound() of nothing is refused)
     bends.label = "BEND"
     return bd.Compound(children=[cut, bends])
