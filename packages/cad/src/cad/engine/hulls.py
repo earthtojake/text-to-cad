@@ -50,6 +50,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+import zipfile
+import zlib
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -157,7 +159,9 @@ def _read(path: Path) -> list[Hull] | None:
             count = int(held["count"])
             return [(np.asarray(held[f"p{at}"], dtype=np.float32).reshape(-1, 3),
                      np.asarray(held[f"t{at}"], dtype=np.uint32).reshape(-1, 3)) for at in range(count)]
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, EOFError, TypeError, zipfile.BadZipFile, zlib.error):
+        # Each is a damaged cache file: empty (EOFError), not a zip or truncated (BadZipFile), a corrupt
+        # compressed member (zlib.error), a count that is not a scalar (TypeError), a wrong-shaped array (ValueError).
         return None
 
 

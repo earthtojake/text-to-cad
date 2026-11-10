@@ -371,6 +371,36 @@ class FirstNeedTest(_Folder):
                 hulls._engine(told.append)
 
 
+    def test_a_cache_file_that_does_not_read_is_decomposed_again(self) -> None:
+        import io
+
+        from cad.engine import hulls
+
+        def archive(compressed: bool = False, **arrays: Any) -> bytes:
+            held = io.BytesIO()
+            (np.savez_compressed if compressed else np.savez)(held, **arrays)
+            return held.getvalue()
+
+        good = {"count": np.array(1), "t0": np.zeros((1, 3), np.uint32)}
+        packed = archive(True, count=np.array(1), p0=np.arange(900, dtype=np.float32), t0=good["t0"])
+        damaged = {
+            "empty": b"",
+            "truncated zip": b"PK\x03\x04" + b"\0" * 40,
+            "corrupt stream": packed[:100] + bytes(b ^ 255 for b in packed[100:160]) + packed[160:],
+            "wrong-shaped array": archive(**good, p0=np.zeros((4, 2), np.float32)),
+            "count not a number": archive(count=np.array([1, 2])),
+            "no hull arrays": archive(count=np.array(1)),
+        }
+        for name, content in damaged.items():
+            with self.subTest(name):
+                path = self.folder / f"{name}.npz"
+                path.write_bytes(content)
+                self.assertIsNone(hulls._read(path))
+        whole = self.folder / "whole.npz"
+        whole.write_bytes(archive(**good, p0=np.zeros((3, 3), np.float32)))
+        self.assertEqual(len(hulls._read(whole) or []), 1)
+
+
 @unittest.skipUnless(importlib.util.find_spec("coacd"), "coacd is the coacd extra's: requirements-dev.txt installs it")
 class CoacdTest(_Folder):
     def test_coacd_cuts_an_l_shaped_part_into_hulls_that_mujoco_compiles(self) -> None:

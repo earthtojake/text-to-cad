@@ -1043,8 +1043,8 @@ def status_text(answer: dict[str, Any]) -> str:
 
 # Each verb: its help, the function adding its arguments to a parser, and the function running it.
 VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, str], int]]] = {
-    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF, URDF or SDF files, by suffix; a GLB "
-               "carries the document's motions as clips, a DXF draws a planar one, an MJCF, a URDF and an SDF are its "
+    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF or URDF files, by suffix; a GLB "
+               "carries the document's motions as clips, a DXF draws a planar one, an MJCF and a URDF are its "
                "robot description",
                _export_arguments, _export),
     "snapshot": ("draw a document or a file the viewer opens as the CAD Viewer does, into a PNG", _snapshot_arguments,
