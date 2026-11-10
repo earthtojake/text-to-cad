@@ -19,7 +19,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
 its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
@@ -215,8 +216,8 @@ the report then names every error they went ahead with.
 
 Show the person each model you create or change, and any model or file they ask to see. If your
 tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once: a
-model's page is the `view:` line its run prints, and a file's is the `url` that
+absolute path; its description says the rest. Otherwise give the person the page's link once, to
+open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
 `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
 download: give its path. Never screenshot the viewer to check your own work; review with
 `cad <type> snapshot`. If it fails to launch, say so.
