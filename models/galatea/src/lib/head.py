@@ -110,10 +110,12 @@ def _head(hw, links):
     light = geo.common(geo.cut(form(back), form(back + skin.LINER_T), "fascia's floor"), slot, "status light")
     fascia = geo.carve(fascia, slot, "status light's slot")
 
-    # The helmet's own lines: a slot at each temple over a microphone, three vents across the nape.
+    # The helmet's own lines: a slot at each temple over a microphone, filled flush by its grille, and three vents across the nape.
+    grilles = []
     for s in (1, -1):
-        helmet = geo.carve(helmet, skin.from_side([(16, 1640), (34, 1672)], [(37, 1670), (19, 1638)], s * 40 if s > 0 else -120,
-                                                  120 if s > 0 else -40), "temple slot")
+        slot = skin.from_side([(16, 1640), (34, 1672)], [(36, 1670.7), (18, 1638.7)], s * 40 if s > 0 else -120, 120 if s > 0 else -40)
+        grilles.append(part(skin.solids(geo.common(helmet, slot, "temple grille")), "trim_temple", "accent"))
+        helmet = geo.carve(helmet, slot, "temple slot")
     for z, wide in ((1624, 46), (1634, 54), (1644, 58)):
         helmet = geo.carve(helmet, geo.box(wide, 80, 2.2, (0, 120, z)), "nape vent")
 
@@ -129,7 +131,7 @@ def _head(hw, links):
         pads = pad if pads is None else pads + pad
 
     links["head"] += [part(frame_part, "head_frame", "frame"), part(skin.solids(pads - frame_part), "pad_head", "frame"),
-                      part(skin.solids(helmet), "helmet", "shell"),
+                      part(skin.solids(helmet), "helmet", "shell"), *grilles,
                       part(skin.solids(shield), "face_shield", "smoke35"), part(skin.solids(liner), "head_liner", "under"),
                       part(skin.solids(fascia), "face_fascia", "under"),
                       part(skin.solids(house), "sensor_bar", "module"), *lenses, part(skin.solids(light), "status_light", "light")]

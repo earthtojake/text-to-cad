@@ -56,6 +56,9 @@ _FINISHES = {
     # Light guides: the head's and the chest's status lines.
     "light": lambda: _look(plastics.pc(), "light_white", color="#eef4ff", metalness=0.0, roughness=0.4,
                            emissive="#dfeaff", emissive_intensity=0.9),
+    # The accents, and there are few: a hairline ring at a joint, a sleeve's rim, the wordmark. Aluminium, anodised champagne.
+    "accent": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "accent_champagne", color="#c4a57a", metalness=1.0,
+                            roughness=0.32),
     # Structure: 7075 aluminium, anodised black, so that what shows between the panels reads as one
     # under-body with the liners and the drives.
     "frame": lambda: _look(metals.aluminum(metals.Alu.G7075_T6), "frame_black", color="#2b2d31",

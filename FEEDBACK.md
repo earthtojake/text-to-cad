@@ -1,7 +1,8 @@
 # Feedback on text-to-cad, from building `models/galatea`
 
-Notes kept while modelling an articulated humanoid of 700 to 850 parts with the cad skill
-(`cad-server 0.11.4-dev.0` from this checkout, 4 cores, 15 GB). Each entry says what
+Notes kept while modelling an articulated humanoid of 700 to 850 parts with the cad skill,
+and then filming it with the render skill (`cad-server 0.11.4-dev.0` to `0.11.6-dev.0` from
+this checkout, 4 cores, 15 GB, no GPU). Each entry says what
 happened, where, and what would have helped. Newest findings are appended to each section.
 
 ## Review discipline (a note to the agent, and a suggestion for the skill)
@@ -171,6 +172,47 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     it with a bare `AssertionError` from the tree library, no message. Taking `.solids()`
     of every boolean's result before labelling it is the workaround.
 
+25. **A warm rebuild kept a prototype's old Python state.** I gave `kit.proto` a new
+    attribute on the shapes it returns (`_stood`, the location a vendor solid already
+    carries) and read it in `mirror_tree`. The build line said `lib/kit.py` had changed
+    and rebuilt in seconds, and the right-hand drives were still placed the old way, 6
+    degrees off their bolt holes: the memo's hits handed back shapes made before the
+    change, without the attribute. `cad stop` and `cad delete` did not clear it (the
+    bodies came back from the disk cache under the same key); a further edit on a fresh
+    worker did, 174 s cold. A check of the brackets against the drives found it, not the
+    build. A memo hit should not survive a change to the function that made the shape, or
+    the skill should say that a plain attribute set on a shape is not part of what is
+    cached.
+
+26. **`moved()` on a leaf of the model's tree copies the tree.** Posing one solid for a
+    check, `leaf.moved(location)` took 13.6 s and 2.5 GB for a thumb pad of twelve faces:
+    build123d copies the shape's parents with it. Four workers doing that ran the machine
+    out of memory. `type(leaf)(leaf.wrapped)` first, a shape with no parent, makes it
+    instant. Worth a line beside `handle.shape`: detach a leaf before you move it.
+
+27. **A loft to a point ends in a cusp or a dimple.** `loft([... sections, Vertex])` came
+    to the helmet's crown as a cone a millimetre high with sides at 30 degrees, and
+    overshot the heel's point by 1.7 mm, leaving a dimple. Neither shows in a shaded
+    snapshot; both show at once in a path tracer. Rows added near the point (entry 24)
+    made the whole foot ring: its width 90 mm away changed by 6 mm, and with three rows
+    the solid came back inside out, 40 times its volume, and valid. What works is to
+    drill the end out round its axis and fill the mouth with
+    `BRepOffsetAPI_MakeFilling`, each rim edge added with its face at `GeomAbs_G1`
+    (`geo.smooth_tip` in the model). A `cap=` on the skill's loft notes, or that recipe,
+    would have saved two hours.
+
+28. **`Face.center()` of a cylinder's wall is a point on the wall,** not on its axis, and
+    `shape.volume` of a lofted solid moved by 3,000 mm3 when a 790 mm3 hole was drilled
+    in it (entry 9 again: a guard that compares volumes needs a per cent of slack, or
+    `BRepGProp` with a tolerance).
+
+29. **The GLB names a material after its physical grade, not its look.** Blender gets
+    `Alu_G7075_T6`, `Alu_G7075_T6.001`, `PC_GENERIC`, `PC_GENERIC.001` for looks the model
+    calls `frame_black`, `accent_champagne`, `smoke35` and `light_white`. A render script
+    cannot say "the face shield's look" by name; it has to go through the part
+    (`model.objects["head/face_shield"]` and its slots). The look's own name on the
+    material would let a script restyle by look.
+
 ## Gaps that cost real time
 
 11. **No interference check.** The skill's rule (overlap volume 0 for every pair, posed
@@ -271,6 +313,69 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     way to a form that goes only where its sections say, and a clearance measured from
     the sections is not one measured from the solid.
 
+30. **A maker's STEP file is one shrink-wrapped skin, and everything exact is slow on
+    it.** RobStride's RS04 is a single solid of some 3,000 faces. `bounding_box()` of one
+    placed copy took 3 s (110 s for the robot's 33), and an exact intersection with a
+    bracket took seconds more, so the interference check went from five minutes to out
+    of memory. The cure was mine to find: a plain envelope per model (cans, lobes, a
+    sector for the connector), held by a check to containing the maker's solid, and
+    measured in its place. The skill's vendor-part page could say it: place the real
+    solid for the picture and the mass, check against an envelope.
+
+31. **The skill says to keep a vendor's STEP beside the model; this repository keeps no
+    CAD file in Git.** The five drives are 53 MB. What reconciles the two is a fetch
+    script that names the maker's commit and each file's checksum, and an ignored
+    `vendor/` folder. A `cad step fetch <url> --sha256 ...` (or a documented pattern for
+    it) would make that the path of least effort, and the build's error for a missing
+    xbf could name the command.
+
+32. **A change to the motions alone rebuilt the whole robot on another worker.** After
+    an edit to `lib/poses.py` (two motions added, no geometry touched) a check that
+    imports `trimesh` ran in a worker of its own integration set, and that worker built
+    everything: `warm in 251.85s: bodies 2 run; 6154 misses, 0 hits`. The worker that
+    had built the robot a minute earlier would have taken seconds. The kernel memo lives
+    in a worker; the disk cache holds whole bodies by key. A memo shared between workers
+    (or bodies keyed apart from the motions written on them) would have saved four
+    minutes each time.
+
+33. **On a machine without a GPU, EEVEE ends the process.** `scene.render.engine =
+    "BLENDER_EEVEE"` and a render print `Couldn't open libEGL.so.1` and abort (exit 134),
+    with no Python exception to catch. So does the compositor's glare, from the skill's
+    own snippet, until `scene.render.compositor_device = "CPU"` is set. The render skill
+    drafts in EEVEE throughout; on a headless Linux box every draft has to be Cycles
+    (960 x 540 at 10 samples took 4 to 10 s here, which is fine). The skill could say so,
+    `cad doctor` could report whether EEVEE can start, and the snippet could set the
+    compositor's device.
+
+34. **The first `cad run` of a bpy script failed after 48 minutes** with `uv could not
+    make the blender integration's environment: Downloaded numpy`, at a moment when the
+    machine was out of memory for other reasons. The second run made the environment in
+    under a minute. The message named the last line uv printed, not what went wrong.
+
+35. **A smoked window cannot be exported.** The model's face shield is
+    `transmission=0.35` over a near-black colour, which the viewer draws as smoked glass.
+    The GLB carries the same two numbers, and Blender reads them as a black surface: the
+    base colour tints what passes, so a third of nothing passes. The render skill says a
+    transmissive look "refracts rather than fades"; for a tint the script had to set its
+    own (a mid-grey base, transmission 1). A note in the looks table, or an exported
+    attenuation colour, would cover it.
+
+36. **An exported clip keeps the fixed link fixed.** The pelvis is the mechanism's
+    ground, so in Blender the robot crouches by lifting its feet and walks in the air.
+    The film needed its own `plant`: read a foot's world matrix at every frame and key
+    the root's so the foot stays put (and, walking, move the root as fast as the feet go
+    back). `cad.blender` could offer `model.plant("l_foot")`, or the export a `--ground`
+    link. `model.objects[path]` and `model.bounds()` at a frame made it thirty lines.
+
+37. **The skill's sample counts are for another kind of picture.** It says 128 to 512
+    samples with OIDN make a clean final. A CAD model has no textures, only flat looks
+    and edges, which is what the denoiser is best at: here a frame at 8 samples was hard
+    to tell from one at 24, and the film was rendered at 14 to 20. On four cores Cycles
+    took 1.0 s a sample at 1600 x 900 whatever else was set (denoising, the compositor
+    and persistent data together were under a second), so the sample count is the whole
+    budget. A line saying "for a model with scalar looks, start at 16" would have saved
+    me from planning a thirteen-hour render.
+
 ## What worked well
 
 - `@memo` on the shared stage: nine models in 90 s, a pose edit in 0.6 s.
@@ -293,3 +398,15 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   for the housings, then twenty minutes of the build line's part count and the exact
   check saying which brackets no longer fitted. A parametric model in a real language is
   what made a change of that size affordable in an afternoon.
+- A maker's STEP into the model: `cad step export RS04.stp RS04.xbf` once, then
+  `xbf.read` in the build, and `cad step inspect` and `cad step snapshot` to find a
+  mounting face and a bolt circle on it. Five drives were in the robot, aligned and
+  mirrored, in an afternoon, and their real shapes found five interferences my cans
+  drawn from the datasheet had hidden.
+- `cad run` on a script that imports `bpy`: no set-up at all after the first run, and
+  `cad.blender.load` opens a 77 MB GLB of 689 parts with ten clips in 5.5 s, every part
+  under its own path. Planting feet, following a link with the camera and restyling one
+  part's look were each a few lines because of that.
+- A GLB of the whole robot at 0.08 mm with ten clips exports in 26 to 37 s.
+- `Text` with a font file, extruded and intersected with a layer lofted 0.35 mm outside
+  a skin, gives a raised wordmark that follows the surface, in 11 s.

@@ -103,6 +103,13 @@ POSES = {
     },
     # Both hands closed.
     "fists": {**READY, **hands(curl=1.0, thumb=0.85, opp=62)},
+    # Asleep on its feet: the legs almost straight, the arms hanging, the chest eased forward and the head bowed.
+    "rest": {
+        **leg("l", forward=0, drop=3, yaw=4), **leg("r", forward=0, drop=3, yaw=4),
+        **both(shoulder_pitch=5, shoulder_roll=5, shoulder_yaw=6, elbow=12, wrist_roll=8, wrist_pitch=4, wrist_yaw=2),
+        **hands(curl=0.4, thumb=0.3, opp=20), "waist_yaw": 0, "waist_roll": 0, "waist_pitch": 11, "neck_yaw": 0, "neck_roll": 0,
+        "neck_pitch": 36,
+    },
 }
 
 for _name, _pose in POSES.items():
@@ -168,4 +175,7 @@ MOTIONS = [
               (2.3, _with("ready", neck_yaw=-58, neck_pitch=10, neck_roll=-12)),
               (3.3, _with("ready", neck_yaw=0, neck_pitch=22, neck_roll=18)), (4.3, "ready")], "cubic"),
     ("grasp", [(0.0, "ready"), (1.2, "fists"), (2.0, "fists"), (3.2, "ready")], "cubic"),
+    # The film's own two (`film.py`): it wakes, and it settles its weight on one leg.
+    ("wake", [(0.0, "rest"), (0.7, "rest"), (3.4, "ready")], "cubic"),
+    ("settle", [(0.0, "ready"), (2.8, "contrapposto"), (6.0, "contrapposto")], "cubic"),
 ]

@@ -249,11 +249,67 @@ def _extrapolate(a, b, dz):
     return tuple(b[k] + (b[k] - a[k]) * f for k in range(7)) + (b[7],)
 
 
-def loft(rows, shrink=0.0, extend=0.0, bottom=None, top=None, count=40, seam=90.0):
+TIP_R = 10.0        # a pointed end is made again within this radius of its axis, or less on a slender one
+
+
+def smooth_tip(solid, apex, direction, radius=TIP_R):
+    """`solid` with the surface round its point made again: a cap, within `radius` of the axis
+    through `apex` along `direction`, that leaves the surface about it tangentially all round.
+
+    A loft run to a point does not end smoothly: the kernel's surface comes to the point as a cusp, a
+    millimetre high with sides at 30 degrees (the crown of a helmet), or overshoots it and leaves a
+    dimple (a blunt heel). Rows added near the point do not cure it: the loft's spline rings along its
+    whole length when its rows are crowded at one end. So the end is drilled out round its axis and the
+    hole's mouth is filled by a surface held tangent to the loft's own face along the rim; the form
+    outside the hole is untouched."""
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid, BRepBuilderAPI_Sewing
+    from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling
+    from OCP.GeomAbs import GeomAbs_G1
+    from OCP.TopoDS import TopoDS
+
+    d, tip, deep = bd.Vector(*direction).normalized(), bd.Vector(*apex), 0.8 * radius
+    body = solid - cyl(radius, 2.0 * deep, tuple(tip - d * deep), tuple(d))
+    off_axis = lambda p: ((p - tip) - d * (p - tip).dot(d)).length
+    wall = [face for face in body.faces() if face.geom_type == bd.GeomType.CYLINDER and abs(face.radius - radius) < 1e-6
+            and off_axis(face.center()) < radius + 1e-3]
+    floor = [face for face in body.faces() if face.geom_type == bd.GeomType.PLANE and abs((face.center() - tip).dot(d) + deep) < 1e-6
+             and off_axis(face.center()) < 1e-3]
+    if not wall or len(floor) != 1:
+        raise WrongBoolean(f"a tip drilled {radius} wide has {len(wall)} wall faces and {len(floor)} floors")
+    hole = [*wall, *floor]
+    others = [face for face in body.faces() if not any(face.is_same(h) for h in hole)]
+    filling = BRepOffsetAPI_MakeFilling(3, 15, 2, False, 1e-5, 1e-4, 1e-2, 0.1, 8, 9)
+    rim = 0
+    for face in others:
+        for edge in face.edges():
+            if any(edge.is_same(e) for w in wall for e in w.edges()):
+                filling.Add(edge.wrapped, face.wrapped, GeomAbs_G1, True)
+                rim += 1
+    if not rim:
+        raise WrongBoolean("a drilled tip has no rim on the loft's surface")
+    filling.Build()
+    if not filling.IsDone():
+        raise WrongBoolean("a tip's cap could not be filled")
+    sewing = BRepBuilderAPI_Sewing(1e-4)
+    for face in others:
+        sewing.Add(face.wrapped)
+    sewing.Add(filling.Shape())
+    sewing.Perform()
+    made = bd.Solid(BRepBuilderAPI_MakeSolid(TopoDS.Shell(sewing.SewedShape())).Solid())
+    if made.volume < 0:
+        made = bd.Solid(made.wrapped.Reversed())
+    if not made.is_valid or abs(made.volume - solid.volume) > 0.01 * solid.volume + 2.0 * radius ** 3:    # `volume` is good to a per cent here
+        raise WrongBoolean(f"a tip's cap made {made.volume:.0f} of a solid of {solid.volume:.0f}")
+    return made
+
+
+def loft(rows, shrink=0.0, extend=0.0, bottom=None, top=None, count=40, seam=90.0, tip=None):
     """A solid lofted through sections (rows of `S`), bottom to top. `shrink` insets every
     section, `extend` continues the loft past both ends (or (low, high) for each), and
-    `bottom`/`top` close an end in a point instead of a flat. `seam` is the angle, from +X
-    toward +Y, of the surface's one seam line: put it where the skin is cut away."""
+    `bottom`/`top` close an end in a point (x, y, z) instead of a flat, the surface round the
+    point made again within `tip` of the axis (`smooth_tip`; by default as wide as the end
+    row lets it be). `seam` is the angle, from +X toward +Y, of the surface's one seam line:
+    put it where the skin is cut away."""
     rows = sorted(rows)
     lo, hi = extend if isinstance(extend, tuple) else (extend, extend)
     if lo:
@@ -261,18 +317,25 @@ def loft(rows, shrink=0.0, extend=0.0, bottom=None, top=None, count=40, seam=90.
     if hi:
         rows = [*rows, _extrapolate(rows[-2], rows[-1], hi)]
     sections = [section_face(row, shrink, count, seam) for row in rows]
+    as_point = lambda v: (v.X, v.Y, v.Z) if isinstance(v, bd.Vertex) else tuple(v)
     if bottom is not None:
-        sections.insert(0, bottom if isinstance(bottom, bd.Vertex) else bd.Vertex(*bottom))
+        sections.insert(0, bd.Vertex(*as_point(bottom)))
     if top is not None:
-        sections.append(top if isinstance(top, bd.Vertex) else bd.Vertex(*top))
-    return bd.loft(sections)
+        sections.append(bd.Vertex(*as_point(top)))
+    solid = bd.loft(sections)
+    for point, row, way in ((bottom, rows[0], -1), (top, rows[-1], 1)):
+        if point is not None:
+            radius = tip or min(TIP_R, 0.45 * (min(row[3:7]) - shrink))       # within the end row's least half-width
+            solid = smooth_tip(solid, as_point(point), (0, 0, way), radius)
+    return solid
 
 
-def shell(rows, thickness=2.6, count=40, bottom=None, top=None, seam=90.0):
+def shell(rows, thickness=2.6, count=40, bottom=None, top=None, seam=90.0, tip=None):
     """A thin-walled skin: (skin, cavity, outer). The skin is open at each flat end; the
     cavity is the solid inside it, which trims a mount pad to the skin's inner surface; the
-    outer solid seats a screw on the skin's outside (`seat`)."""
-    outer = loft(rows, bottom=bottom, top=top, count=count, seam=seam)
+    outer solid seats a screw on the skin's outside (`seat`). `tip` is the radius a pointed
+    end's outside is made again within (`loft`)."""
+    outer = loft(rows, bottom=bottom, top=top, count=count, seam=seam, tip=tip)
     inset = lambda v, d: None if v is None else (v[0], v[1], v[2] + d)
     cavity = loft(rows, shrink=thickness, extend=(0.0 if bottom else 10.0, 0.0 if top else 10.0), count=count,
                   bottom=inset(bottom, thickness), top=inset(top, -thickness), seam=seam)

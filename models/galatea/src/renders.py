@@ -36,7 +36,8 @@ LENS = {"projection": "perspective", "focalLength": 85}
 LEFT_HAND = [f"l_{link}" for link in ("forearm", "forearm_distal", "wrist_link", *HAND_LINKS)]
 HAND_OUT = {"l_shoulder_roll": 24, "l_elbow": 30}          # the left hand held clear of the hip
 # The skins by label (or its beginning): what the undressed stills leave out.
-SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back")
+SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back",
+         "trim_", "wordmark")
 STILLS = {
     "hero": (stances.galatea_contrapposto, "24:5", (1600, 2400), {}),
     "front": (galatea, "0:2", (1400, 2400), {}),

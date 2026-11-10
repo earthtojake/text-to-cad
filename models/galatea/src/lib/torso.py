@@ -2,7 +2,8 @@
 
 Pelvis: two plates and a wall. Three actuators stand between the plates, the two hip yaw
 drives bolted to the lower plate with their outputs down, the waist yaw drive bolted to
-the upper plate with its output up; each one's end cap shows through the opposite plate.
+the upper plate with its output up. The upper plate is a closed deck over the hip drives;
+the waist drive's end cap shows through the lower one.
 
 Waist: a universal joint. The lumbar yoke turns on the waist yaw drive and holds a spider
 between a bearing plate in front and an upright behind (roll, driven from behind); the chest
@@ -12,6 +13,8 @@ on the chest).
 Chest: a frame carrying the shoulder and neck drives, the compute module in front of the
 spine and the battery behind it, under a liner and one pearl vest: breastplate, back and
 straps. The liner runs on down past the waist as the abdomen, over the waist's three drives.
+The battery comes out through a hatch in the back, which carries three vents and the
+robot's name; the breastplate carries the status light, a chevron like the vest's hems.
 """
 
 import build123d as bd
@@ -77,9 +80,7 @@ def _pelvis(hw, links):
     lower = outline
     for x, y, r in ((-HX, 0, rotor_hole), (HX, 0, rotor_hole), (0, WAIST_AXIS_Y, cap_hole)):
         lower -= bd.Pos(x, y) * bd.Circle(r)
-    upper = outline
-    for x, y, r in ((-HX, 0, cap_hole), (HX, 0, cap_hole), (0, WAIST_AXIS_Y, rotor_hole)):
-        upper -= bd.Pos(x, y) * bd.Circle(r)
+    upper = outline - bd.Pos(0, WAIST_AXIS_Y) * bd.Circle(rotor_hole)         # a closed deck over the hip drives, 1 mm over their covers
     wall = geo.plate_xy(outline - bd.offset(outline, amount=-6.0), PZ0 + PLATE_T, PZ1 - PLATE_T)
     wall -= geo.plate_xz(geo.slot(-26, 1042, 26, 1042, 13), 40, 120)       # a window on the waist drive, at the back
     waist_at = (0.0, WAIST_AXIS_Y, PZ1 - PLATE_T)
@@ -165,6 +166,15 @@ def _waist(hw, links):
 # swings them down.
 HEM = ((-43.0, 1146.0), (WY, 1109.0), (152.0, 1142.0))
 SHOULDER_HOLE = 57.0       # the round opening about each shoulder: the pitch drive's ring plate (54) stands in it
+# The vest's hems in the front and back views (x, z): each a shallow V, (height at the centre, rise per mm to a side).
+FRONT_HEM, BACK_HEM = (1250.0, 46.0 / 260.0), (1222.0, 40.0 / 260.0)
+# The status light on the breastplate, a chevron on the front hem's slope: half-width, its point's height, its stroke.
+LIGHT = (30.0, 1447.0, 3.2)
+# The battery's hatch in the back (x, z): half-width, top, and how far its lower edge runs above the back hem. The
+# battery behind it is 150 wide and stands from 1260 to 1430.
+HATCH = (82.0, 1442.0, 22.0)
+VENTS = ((1402.0, 46.0), (1412.0, 54.0), (1422.0, 58.0))       # the hatch's vents (z, width): the nape's three, again
+NAME = ("G A L A T E A", 7.0, 1272.0, 0.35)                    # the wordmark on the hatch: text, capital height, z, how proud
 CHEST_ROWS = skin.register("chest", [geo.S(z, 0, cy, rx=rx, ry=ry, n=n, ryn=ryn) for z, cy, rx, ry, n, ryn in (
     (1096, 26, 104, 118, 3.4, 66),
     (1150, 26, 108, 124, 3.4, 68),
@@ -194,12 +204,27 @@ def _chest(hw, links):
     tools = [geo.plate_yz(under, -260, 260),                               # everything under the hem
              *[geo.cyl(SHOULDER_HOLE, 100, (s * 150, 0, SHZ), (1, 0, 0), centered=True) for s in (1, -1)]]   # round openings about the shoulders
     flank = geo.polygon((-22, 1080), (-10, 1376), (10, 1438), (62, 1438), (66, 1080))
-    front_edge = geo.polygon((-260, 1080), (-260, 1296), (0, 1250), (260, 1296), (260, 1080))
-    back_edge = geo.polygon((-260, 1080), (-260, 1262), (0, 1222), (260, 1262), (260, 1080))
-    window = skin.from_front(geo.slot(-26, 1452, 26, 1452, 1.6))
+    hem = lambda at: geo.polygon((-260, 1080), (-260, at[0] + 260 * at[1]), (0, at[0]), (260, at[0] + 260 * at[1]), (260, 1080))
+    (half, point, stroke), rise = LIGHT, FRONT_HEM[1]
+    window = skin.from_front(geo.polygon((-half, point + half * rise), (0, point), (half, point + half * rise),
+                                         (half, point + half * rise + stroke), (0, point + stroke), (-half, point + half * rise + stroke)))
+    # The hatch: the back's middle, cut free by one shut line. Its lower edge runs parallel to the hem below it.
+    (wide, top, over), (low, rise) = HATCH, BACK_HEM
+    door = geo.polygon((-wide, top), (wide, top), (wide, low + over + wide * rise), (0, low + over), (-wide, low + over + wide * rise))
+    corner = lambda face, x, z: face.vertices().sort_by(lambda v: abs(v.X - x) + abs(v.Y - z))[0]
+    for x, z, radius in ((-wide, top, 12.0), (wide, top, 12.0), (wide, low + over + wide * rise, 10.0),
+                         (-wide, low + over + wide * rise, 10.0), (0, low + over, 16.0)):
+        door = bd.fillet(corner(door, x, z), radius)
+    behind = dict(y0=40.0, y1=skin.WIDE)
     panel = skin.trim(form.panel, [*tools, geo.plate_yz(flank, 80, 260), geo.plate_yz(flank, -260, -80),
-                                   skin.from_front(front_edge, y1=40.0), skin.from_front(back_edge, y0=40.0, y1=skin.WIDE), window],
-                      "chest panel")
+                                   skin.from_front(hem(FRONT_HEM), y1=40.0), skin.from_front(hem(BACK_HEM), **behind), window,
+                                   skin.from_front(door, **behind)], "chest panel")
+    hatch = geo.common(form.panel, skin.from_front(bd.offset(door, amount=-skin.GAP), **behind), "battery hatch")
+    for z, across in VENTS:
+        hatch = geo.carve(hatch, geo.box(across, 80, 2.2, (0, 140, z)), "hatch vent")
+    text, tall, z, proud = NAME
+    raised = geo.cut(geo.loft(CHEST_ROWS, shrink=-proud), form(0.0), "wordmark's layer")
+    name = geo.common(raised, skin.lettering(text, tall, bd.Plane(origin=(0, 40, z), x_dir=(-1, 0, 0), z_dir=(0, 1, 0)), 200.0), "wordmark")
     liner = skin.trim(form.liner, [*tools, window], "chest liner")
     light = geo.common(form.liner, window, "status light")
 
@@ -233,11 +258,14 @@ def _chest(hw, links):
     module = geo.box(110, 84, 100, (0, 6, 1300))                         # y -36..48, z 1250..1350, on the spine
     deck = geo.cut(geo.common(geo.box(400, 300, 2.0, (0, 0, 1497.0)), cavity, "neck deck"),
                    geo.cyl(37, 20, (0, NECK_BASE[1], 1490), (0, 0, 1)), "neck deck's hole")          # z 1496..1498
+    collar = geo.tube(41.0, 38.5, 1.2, (0, NECK_BASE[1], 1498.0), (0, 0, 1))                         # a hairline round the neck, on the deck
 
     links["chest"] += [part(frame, "thorax_frame", "frame"), part(skin.solids(pads - frame), "pad_chest", "frame"),
                        part(skin.solids(liner), "liner_chest", "under"), part(skin.solids(panel), "panel_chest", "shell"),
+                       part(skin.solids(hatch), "panel_hatch", "shell"), part(skin.solids(name), "wordmark", "accent"),
                        part(battery, "battery", "battery"), part(module, "compute_module", "module"),
-                       part(skin.solids(light), "status_light", "light"), part(deck, "liner_neck_deck", "under")]
+                       part(skin.solids(light), "status_light", "light"), part(deck, "liner_neck_deck", "under"),
+                       part(collar, "trim_collar", "accent")]
     stator, rotor = hw.actuator("RS03", (S0, 0.0, SHZ), (1, 0, 0), x_dir=(0, 1, 0), name="shoulder_pitch")
     links["chest"] += _both_sides(stator)
     links["shoulder_yoke"] += rotor                                       # the left one; the arm's mirror makes the right

@@ -142,10 +142,12 @@ def _hip(hw, links):
                        (small + t, lf + lr + 3.0 + t), (0.0, lf + lr + 3.0 + t), (0.0, lf + lr + 3.0), (small, lf + lr + 3.0),
                        (small, lf + 2.0), (HIP_CAP_R - t, lf + 2.0)], pitch_at, (1, 0, 0))
     cup -= geo.box(13.0, 12.0, 30.0, (xr(C1) + 45.4, 0, HZ - rr - 12.0))            # the connector: 7 across, 41 to 49 behind the face
+    ring = geo.tube(small + t - 2.6, small + t - 5.1, 1.0, (xr(C1) + lf + lr + 2.0 + t, 0, HZ), (1, 0, 0))   # a hairline let into the cap's end, flush
+    cup = geo.cut(cup, ring, "hip cap's ring groove")
     links["hip_cradle"] += [part(cradle, "hip_cradle", "frame"), *roll_rotor,
                             *hw.rotor_screws("RS04", roll_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0)), *pitch_stator,
                             hw.pivot_cap(19, (xr(-C1), 0, HZ), (-1, 0, 0), label="hip_bearing_cap"),
-                            part(cup, "panel_hip", "under")]
+                            part(cup, "panel_hip", "under"), part(ring, "trim_hip", "accent")]
     links["thigh"] += [*pitch_rotor, *hw.rotor_screws("RS04", pitch_at, (-1, 0, 0), PLATE_T, x_dir=(0, -1, 0), sunk=5.0)]
 
 
@@ -196,6 +198,8 @@ def _thigh(hw, links):
                        pin((xr(-P1), 0, KZ), (1, 0, 0), 10.0, 2 * P1, label="knee_axle"),
                        hw.pivot_cap(17, (xr(P1), 0, KZ), (1, 0, 0), label="knee_cap"),
                        hw.pivot_cap(17, (xr(-P1), 0, KZ), (-1, 0, 0), label="knee_cap"),
+                       part(geo.tube(19.6, 17.2, 1.0, (xr(P1), 0, KZ), (1, 0, 0)), "knee_ring", "accent"),       # a hairline round each cap
+                       part(geo.tube(19.6, 17.2, 1.0, (xr(-P1), 0, KZ), (-1, 0, 0)), "knee_ring", "accent"),
                        part(skin.solids(pads - femur), "pad_thigh", "frame"),
                        part(skin.solids(liner), "liner_thigh", "under"), part(skin.solids(panel), "panel_thigh", "shell")]
     links["knee_crank"] += rotor
@@ -304,7 +308,7 @@ def _foot(hw, links):
         geo.S(60, 2.5, 16, rx=52, ry=28, n=3.2, ryn=10),
         geo.S(112, 3, 15, rx=53, ry=23, n=3.2, ryn=9),
     ]
-    skin, cavity, shell_outer = (along * s for s in geo.shell(rows, SKIN_T, bottom=(0, 20, -85)))
+    skin, cavity, shell_outer = (along * s for s in geo.shell(rows, SKIN_T, bottom=(0, 20, -85), tip=8.0))   # a blunt heel: its point is a dimple 10 across
     rim = geo.polygon((95, 58), (62, 56), (36, 41), (0, 36), (-80, 34), (-125, 34), (-125, 140), (95, 140))
     skin -= geo.half_space((0, 0, 10.5), (0, 0, -1))
     skin -= geo.plate_yz(rim, xr(-90), xr(90))

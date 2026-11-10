@@ -22,7 +22,8 @@ from galatea import galatea
 from lib.hand import HAND_LINKS
 
 OUT = Path(__file__).resolve().parents[1] / "tmp" / "review"
-SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back")
+SKINS = ("panel_", "liner_", "helmet", "face_shield", "head_liner", "face_fascia", "foot_shell", "toe_cap", "hand_back",
+         "trim_", "wordmark")
 GROUPS = {
     "pelvis": ["pelvis"], "waist": ["lumbar_yoke", "waist_cross"], "chest": ["chest"], "neck": ["neck", "neck_stem"],
     "head": ["head"], "hip": ["l_hip_yoke", "l_hip_cradle"], "thigh": ["l_thigh", "l_knee_crank", "l_knee_rod"],

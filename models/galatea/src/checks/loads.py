@@ -37,7 +37,7 @@ from lib.poses import POSES, READY, both, side, walk
 
 G = 9.81
 BRIEF = 0.75            # the share of a drive's peak a pose may ask of it and still count as held, briefly
-STANDING = ("standing straight", "ready", "contrapposto", "wave")     # held as long as one likes: within every rated torque
+STANDING = ("standing straight", "ready", "contrapposto", "wave", "rest")     # held as long as one likes: within every rated torque
 ROD_MARGIN = 1.5
 GRIP = (dims.SHOULDER_X - 30.0, 0.0, 800.0)          # where a carried load hangs from the left hand
 SOLE_EDGE = 44.0                                     # from the ankle's roll axis to the sole's outer edge, mm
@@ -50,6 +50,7 @@ CASES = [
     ("ready", POSES["ready"], "lr", {}),
     ("contrapposto", POSES["contrapposto"], "lr", {}),
     ("wave", POSES["wave"], "lr", {}),
+    ("rest", POSES["rest"], "lr", {}),
     ("bow", POSES["bow"], "lr", {}),
     ("crouch", POSES["crouch"], "lr", {}),
     ("poise, on the left leg", POSES["poise"], "l", {}),

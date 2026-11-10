@@ -25,7 +25,7 @@ GAP = 1.6
 WIDE = 500.0
 
 # Labels (or their beginnings) of the parts that are skin, which no skin has to hold.
-SKIN_LABELS = ("helmet", "face_shield", "head_liner", "face_fascia", "panel_", "liner_", "pad_", "status_light")
+SKIN_LABELS = ("helmet", "face_shield", "head_liner", "face_fascia", "panel_", "liner_", "pad_", "status_light", "trim_", "wordmark")
 
 FORMS = {}
 
@@ -97,3 +97,18 @@ def solids(shape):
     if not found:
         raise geo.WrongBoolean("nothing is left of a skin")
     return found[0] if len(found) == 1 else bd.Compound(found)
+
+
+FONT = "/usr/share/fonts/opentype/inter/Inter-Medium.otf"     # the wordmark's face, Inter, where this computer has it
+CAP = 0.727                                                    # ... whose capitals are this part of its size
+
+
+def lettering(text, height, plane, depth):
+    """`text` as prisms `depth` long standing on `plane`, its capitals `height` tall and centred
+    on the plane's origin. Set in Inter where the font file is there, in the kernel's default
+    face elsewhere (the letters then differ; nothing else does)."""
+    import os
+
+    face = dict(font_path=FONT) if os.path.exists(FONT) else {}
+    word = bd.Text(text, font_size=height / CAP, align=(bd.Align.CENTER, bd.Align.CENTER), **face)
+    return bd.extrude(plane * word, amount=depth)

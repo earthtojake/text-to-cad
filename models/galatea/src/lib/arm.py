@@ -24,6 +24,7 @@ EZ, WZ, YZ = ELBOW[2], WRIST[2], WRIST_YAW[2]
 RZ = WRIST_ROLL[2]
 SKIN_T = 2.6
 BALL_R = 46.0
+RIM = 1.5                   # a sleeve's upper rim, in champagne: this much of the pearl panel's top
 ARM_LINKS = ("shoulder_yoke", "shoulder_block", "upper_arm", "forearm", "forearm_distal", "wrist_link")
 
 
@@ -130,6 +131,8 @@ def _upper_arm(hw, links):
     form = skin.Form(UPPER_ARM_ROWS)
     rim = skin.from_side([(-200, ARM_RIM[0] - 200 * ARM_RIM[1]), (200, ARM_RIM[0] + 200 * ARM_RIM[1])], [(200, 1000), (-200, 1000)])
     liner, panel = skin.trim(form.liner, [rim], "upper arm liner"), skin.trim(form.panel, [rim], "upper arm panel")
+    top = geo.half_space((0, 0, UPPER_ARM_ROWS[-1][0] - RIM), (0, 0, 1))        # the sleeve's upper rim, under the shoulder's pod
+    trim, panel = geo.common(panel, top, "upper arm rim"), geo.cut(panel, top, "upper arm panel under its rim")
     pads = None
     for origin, direction in [((SX + 20, 0, z), (1, 0, 0)) for z in (1240, 1300)]:
         pad = geo.mount_pad(form.cavity, origin, direction, 5.0, 80.0)
@@ -144,7 +147,8 @@ def _upper_arm(hw, links):
     stator, rotor = hw.actuator("RS06", elbow_at, (1, 0, 0), x_dir=(0, 1, 0), name="elbow")
     links["upper_arm"] += [part(top + housing + plate + ribs, "humerus", "frame"), *stator,
                            part(skin.solids(pads - (top + housing + plate + ribs)), "pad_upper_arm", "frame"),
-                           part(skin.solids(liner), "liner_upper_arm", "under"), part(skin.solids(panel), "panel_upper_arm", "shell")]
+                           part(skin.solids(liner), "liner_upper_arm", "under"), part(skin.solids(panel), "panel_upper_arm", "shell"),
+                           part(skin.solids(trim), "trim_upper_arm", "accent")]
     links["forearm"] += [*rotor, *hw.rotor_screws("RS06", elbow_at, (1, 0, 0), 10.0, x_dir=(0, 1, 0))]
 
 
@@ -173,6 +177,8 @@ def _forearm(hw, links):
     form = skin.Form(FOREARM_ROWS)
     opening = geo.cyl(45, 200, WRIST, (0, 1, 0), centered=True)            # round opening about the wrist
     liner, panel = skin.trim(form.liner, [opening], "forearm liner"), skin.trim(form.panel, [opening], "forearm panel")
+    top = geo.half_space((0, 0, FOREARM_ROWS[-1][0] - RIM), (0, 0, 1))          # the forearm's upper rim, under the cuff
+    trim, panel = geo.common(panel, top, "forearm rim"), geo.cut(panel, top, "forearm panel under its rim")
     pads = None
     for origin, direction in [((SX, s * 8, 1003), (0, s, 0)) for s in (1, -1)]:
         pad = geo.mount_pad(form.cavity, origin, direction, 5.0, 80.0)
@@ -188,6 +194,7 @@ def _forearm(hw, links):
                                 part(lug + stem + block + fork, "radius", "frame"), part(skin.solids(pads - (lug + stem + block + fork)), "pad_forearm", "frame"),
                                 part(sleeve, "forearm_tube", "carbon"),
                                 part(skin.solids(liner), "liner_forearm", "under"), part(skin.solids(panel), "panel_forearm", "shell"),
+                                part(skin.solids(trim), "trim_forearm", "accent"),
                                 *wp_stator]
     links["wrist_link"] += [*wp_rotor, *hw.rotor_screws("RS05", pitch_at, (0, -1, 0), 10.0, x_dir=(1, 0, 0))]
 

@@ -26,7 +26,7 @@ from lib.dims import ACTUATORS
 from lib.poses import POSES
 
 STANDING = {"zero": {}, **{name: POSES[name] for name in ("ready", "stride", "contrapposto", "reach", "wave",
-                                                           "present", "crouch", "bow", "poise", "fists")}}
+                                                           "present", "crouch", "bow", "poise", "fists", "rest")}}
 PLANTED = {"bow": "l_foot", "crouch": "l_foot"}     # poses that tip the pelvis are set down on a foot, as `stances.py` does
 DYNAMIC = {"stride"}                                # a frame of a gait: reported, not required to balance
 

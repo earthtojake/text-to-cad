@@ -34,24 +34,32 @@ def _ears(length, width):
     return bd.Pos(width / 2 - 3.0, 0, 0) * ear + bd.Pos(-width / 2, 0, 0) * ear
 
 
+ROUND = 3.0          # a phalanx's long edges, and its fingertip's
+
+
 def _bone(length, width, root_width, tip=False):
     """A phalanx: a barrel `root_width` wide on the hinge, a neck, the body and, unless it is
-    the fingertip, a fork for the next hinge."""
+    the fingertip, a fork for the next hinge. The body's long edges are rounded; a fingertip
+    is one bar with a round end, rounded all the way about."""
     neck = geo.box(root_width, THICK - 2, 10, (0, 0, -5))
     if tip:
-        body = geo.box(width - 2, THICK, length - 8 - 6.5, (0, 0, -8 - (length - 14.5) / 2))
-        nose = geo.cyl(6.5, width - 2, (0, 0, -length + 6.5), (1, 0, 0), centered=True)
-        shape = _barrel(root_width) + neck + body + nose
+        half = (width - 2) / 2
+        bar = geo.plate_yz(geo.hull([(0, -8, THICK / 2), (0, -length + THICK / 2, THICK / 2)]), -half, half)
+        bar -= geo.half_space((0, 0, -8), (0, 0, 1))                      # square where it meets the neck
+        bar = bd.fillet([edge for edge in bar.edges() if abs(abs(edge.center().X) - half) < 1e-6 and edge.center().Z < -8.5], ROUND)
+        shape = _barrel(root_width) + neck + bar
     else:
         body = geo.box(width - 2, THICK, length - 8 - 9, (0, 0, -8 - (length - 17) / 2))
+        body = bd.fillet(body.edges().filter_by(bd.Axis.Z), ROUND)
         shape = _barrel(root_width) + neck + body + _ears(length, width)
         shape -= geo.cyl(2.5, width + 2, (0, 0, -length), (1, 0, 0), centered=True)
     return shape - geo.cyl(2.5, width + 2, (0, 0, 0), (1, 0, 0), centered=True)      # the hinge pin's bore
 
 
 def _pad(length, width, tip=False):
+    """The rubber on a phalanx's palmar face, as wide as the flat between its rounded edges."""
     start, end = (10.0, length - 3.0) if tip else (12.0, length - 13.0)
-    return geo.box(width - 4, 2.5, end - start, (0, THICK / 2 + 1.25, -(start + end) / 2))
+    return geo.box(width - 2 - 2 * ROUND, 2.5, end - start, (0, THICK / 2 + 1.25, -(start + end) / 2))
 
 
 class _Bones:
@@ -123,6 +131,7 @@ def _thumb(links, bones):
     loc = frame(base, z_dir=tuple(-k for k in d), x_dir=(1, 0, 0))
     width = 17.0
     body = geo.box(width - 2, THICK, THUMB_BONES[0] - 9, (0, 0, -(THUMB_BONES[0] - 9) / 2))
+    body = bd.fillet(body.edges().filter_by(bd.Axis.Z), ROUND)
     fork = _ears(THUMB_BONES[0], width) - geo.cyl(2.5, width + 2, (0, 0, -THUMB_BONES[0]), (1, 0, 0), centered=True)
     meta = ring + arm + loc * (body + fork)
     meta -= geo.cyl(4.0, 30, (THUMB_BASE[0], THUMB_BASE[1], THUMB_BASE[2] - 15), (0, 0, 1))     # the pivot's bore
