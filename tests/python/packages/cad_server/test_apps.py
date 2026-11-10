@@ -504,6 +504,15 @@ class WindowsTest(Tree):
         # The MSI's App Paths entry, where there is one, first.
         self.assertEqual(apps.windows(environ, {"Plasticity.exe": machine}.get)["plasticity"], machine)
 
+    def test_solid_edge_in_siemens_folder_before_its_older_releases_folder(self) -> None:
+        program_files = self.root / "Program Files"
+        environ = {"ProgramFiles": str(program_files)}
+        older = executable(program_files / "Solid Edge ST10" / "Program" / "Edge.exe")
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidedge": older})
+        current = executable(program_files / "Siemens" / "Solid Edge 2026" / "Program" / "Edge.exe")
+        os.utime(current, (1_000_000, 1_000_000))  # written before the older one: the folder, not the time, decides
+        self.assertEqual(apps.windows(environ, lambda exe: None), {"solidedge": current})
+
     def test_solidworks_is_windows_alone(self) -> None:
         # No macOS or Linux build: no bundle, identifier or command is looked for.
         self.assertNotIn("solidworks", {**apps.MAC_BUNDLES, **apps.MAC_IDS, **apps.LINUX_COMMANDS})
@@ -519,9 +528,9 @@ class LinuxTest(unittest.TestCase):
         self.assertEqual(apps.linux(commands.get), {"vscode": "/usr/bin/code", "zed": "/usr/bin/zeditor",
                                                     "pycharm": "/snap/bin/pycharm-community",
                                                     "freecad": "/opt/freecad/FreeCAD", "blender": "/usr/bin/blender"})
-        # Fusion, SolidWorks and Rhino have no Linux build: no command finds them. Plasticity's packages put `plasticity` on PATH.
+        # Fusion, SolidWorks, Solid Edge and Rhino have no Linux build: no command finds them. Plasticity's packages put `plasticity` on PATH.
         everything = apps.linux(lambda name: f"/usr/bin/{name}")
-        self.assertFalse({"fusion", "solidworks", "rhino"} & set(everything))
+        self.assertFalse({"fusion", "solidworks", "solidedge", "rhino"} & set(everything))
         self.assertEqual(everything["plasticity"], "/usr/bin/plasticity")
 
 
@@ -531,7 +540,8 @@ class KindsTest(unittest.TestCase):
         ids = {kind: [entry["id"] for entry in apps.apps_for(kind, every)]
                for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
-                               "step": ["fusion", "solidworks", "rhino", "plasticity", "freecad", "bambu", "orca", "prusa"],
+                               "step": ["fusion", "solidworks", "solidedge", "rhino", "plasticity", "freecad", "bambu", "orca",
+                                        "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
                                "3mf": ["bambu", "orca", "prusa", "freecad"],
                                "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
@@ -541,7 +551,8 @@ class KindsTest(unittest.TestCase):
                                      "pycharm": "PyCharm", "sublime": "Sublime Text", "fusion": "Autodesk Fusion",
                                      "solidworks": "SolidWorks", "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
                                      "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
-                                     "kicad-nightly": "KiCad nightly", "rhino": "Rhino", "plasticity": "Plasticity"})
+                                     "kicad-nightly": "KiCad nightly", "rhino": "Rhino", "plasticity": "Plasticity",
+                                     "solidedge": "Solid Edge"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],
                          ["finder", "explorer", "files"])
 

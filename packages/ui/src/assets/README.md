@@ -43,8 +43,8 @@ published under a licence this package can ship, one colour (the text's), each p
   `cursor`, `zedindustries`, `pycharm`, `sublimetext`, `freecad`, `bambulab`, `blender` and
   `rhinoceros` icons of [Simple Icons](https://simpleicons.org) 16.37.0, CC0.
 
-Every other app (Autodesk Fusion, SolidWorks, Inventor, Solid Edge, OrcaSlicer, PrusaSlicer,
-Plasticity, and KiCad, whose mark Simple Icons lists under GPL-3.0) is drawn with Lucide's
+Every other app (Autodesk Fusion, SolidWorks, Solid Edge, OrcaSlicer, PrusaSlicer, Plasticity,
+and KiCad, whose mark Simple Icons lists under GPL-3.0) is drawn with Lucide's
 `AppWindow` until a mark under such a licence exists; no mark is drawn here by hand. The places
 are Lucide's `Globe` (the browser), `Folder` (the file manager) and `ExternalLink` (the default app).
 The marks are their owners' trademarks, shown only to name the app a file opens in.

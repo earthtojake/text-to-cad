@@ -66,7 +66,8 @@ __all__ = ["APPS", "BLENDER_SCRIPT", "DETECTED", "KINDS", "REFRESH_SECONDS", "De
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
         "sublime": "Sublime Text", "fusion": "Autodesk Fusion", "solidworks": "SolidWorks", "freecad": "FreeCAD",
         "bambu": "Bambu Studio", "orca": "OrcaSlicer", "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
-        "kicad-nightly": "KiCad nightly", "rhino": "Rhino", "plasticity": "Plasticity"}
+        "kicad-nightly": "KiCad nightly", "rhino": "Rhino", "plasticity": "Plasticity",
+        "solidedge": "Solid Edge"}
 # The apps that take each kind of file, in the menu's order. A kind not here takes none: the file
 # manager and the default app alone.
 # SolidWorks takes a STEP, which it imports as a part or an assembly a person saves as its own (FeatureWorks
@@ -75,7 +76,7 @@ APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycha
 # Blender reads without an add-on.
 _MESHES = ("bambu", "orca", "prusa", "freecad")
 KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
-         "step": ("fusion", "solidworks", "rhino", "plasticity", "freecad", "bambu", "orca", "prusa"),
+         "step": ("fusion", "solidworks", "solidedge", "rhino", "plasticity", "freecad", "bambu", "orca", "prusa"),
          "stl": (*_MESHES, "blender"), "3mf": _MESHES, "glb": ("blender",),
          "kicad_pcb": ("kicad", "kicad-nightly"), "kicad_sch": ("kicad", "kicad-nightly")}
 
@@ -96,7 +97,7 @@ _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 # macOS: each app's bundles, as globs under each folder of ``MAC_FOLDERS``, in order of preference,
-# and its bundle identifiers, which Spotlight finds a bundle by wherever it is (SolidWorks has no macOS build).
+# and its bundle identifiers, which Spotlight finds a bundle by wherever it is (SolidWorks and Solid Edge have no macOS build).
 MAC_BUNDLES = {
     "vscode": ("Visual Studio Code.app",),
     "cursor": ("Cursor.app",),
@@ -138,7 +139,8 @@ MAC_KICAD_ID = "org.kicad.kicad"
 WINDOWS_EXES = {"vscode": "Code.exe", "cursor": "Cursor.exe", "zed": "Zed.exe", "pycharm": "pycharm64.exe",
                 "sublime": "sublime_text.exe", "fusion": "Fusion360.exe", "solidworks": "SLDWORKS.exe",
                 "freecad": "FreeCAD.exe", "bambu": "bambu-studio.exe", "orca": "orca-slicer.exe", "prusa": "prusa-slicer.exe",
-                "blender": "blender.exe", "rhino": "Rhino.exe", "plasticity": "Plasticity.exe"}
+                "blender": "blender.exe", "rhino": "Rhino.exe", "plasticity": "Plasticity.exe",
+                "solidedge": "Edge.exe"}
 WINDOWS_FOLDERS = {
     "vscode": (("LOCALAPPDATA", "Programs", "Microsoft VS Code", "Code.exe"),
                ("ProgramFiles", "Microsoft VS Code", "Code.exe")),
@@ -158,6 +160,9 @@ WINDOWS_FOLDERS = {
     "prusa": (("ProgramFiles", "Prusa3D", "PrusaSlicer", "prusa-slicer.exe"),),
     "blender": (("ProgramFiles", "Blender Foundation", "Blender*", "blender.exe"),),
     "rhino": (("ProgramFiles", "Rhino *", "System", "Rhino.exe"),),
+    # Siemens\Solid Edge <year> from 2019 on, Solid Edge <release> (ST10, V20 ...) before; Community Edition's is the same.
+    "solidedge": (("ProgramFiles", "Siemens", "Solid Edge *", "Program", "Edge.exe"),
+                  ("ProgramFiles", "Solid Edge *", "Program", "Edge.exe")),
     # Its per-user installer's (Squirrel: a stub that starts the newest app-<version>), then its MSI's.
     "plasticity": (("LOCALAPPDATA", "Plasticity", "Plasticity.exe"), ("ProgramFiles", "Plasticity", "Plasticity.exe")),
 }
@@ -166,7 +171,7 @@ _APP_PATHS = r"Software\Microsoft\Windows\CurrentVersion\App Paths"
 WINDOWS_KICAD_FOLDERS = (("ProgramFiles", "KiCad"), ("LOCALAPPDATA", "Programs", "KiCad"))
 _UNINSTALL = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
-# Linux: each app's commands, in order of preference (Fusion, SolidWorks and Rhino have no Linux build).
+# Linux: each app's commands, in order of preference (Fusion, SolidWorks, Solid Edge and Rhino have no Linux build).
 LINUX_COMMANDS = {"vscode": ("code",), "cursor": ("cursor",), "zed": ("zed", "zeditor"),
                   "pycharm": ("pycharm", "pycharm-community", "pycharm-professional"), "sublime": ("subl",),
                   "freecad": ("freecad", "FreeCAD"), "bambu": ("bambu-studio",), "orca": ("orca-slicer",),
