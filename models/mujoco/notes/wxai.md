@@ -1,7 +1,11 @@
 # WidowX AI (follower): Trossen's STEP to a MuJoCo description
 
 `src/wxai.py` reads `upstream/wxai/wxai_follower.step` and returns the articulated arm. Its `__main__`
-builds the arm and writes `out/wxai/wxai.xml` and `wxai.urdf`, with meshes beside them.
+builds the arm and writes the plain exports, `out/wxai/export/wxai.xml` and `wxai.urdf`, with meshes
+beside them: each part collides as its mesh, and there are no actuators. `src/wxai_mujoco.py` is the
+arm's MuJoCo function: it makes the model a `mujoco.MjSpec`, takes the carriages' collisions away, adds
+the actuators and a commanded pose, and saves `out/wxai/wxai.xml`, the file the comparison with
+Menagerie reads.
 The axis and travel measurements are in `src/lib/step_axes.py`. Every number in the model comes from the
 STEP's geometry or from Trossen's published specification. The model uses only the official link and
 joint names and the sign conventions of Menagerie's `trossen_wxai` and Trossen's URDF.
@@ -177,7 +181,8 @@ Menagerie's link_6 is shown with camera_mount_d405 (0.600 kg), and its carriage 
 
 ## Collision
 
-Every part is a mesh, which MuJoCo collides as its convex hull. The dummies are already blocky convex-ish
+Collision is a simulation's choice, made in the MuJoCo function (`src/wxai_mujoco.py`). Every part
+keeps the mesh the spec gives it, which MuJoCo collides as its convex hull. The dummies are already blocky convex-ish
 envelopes, so a hull is close for most of them. A primitive fitted to the oriented bounding box is worse
 for the L-shaped and yoke links.
 
@@ -186,19 +191,39 @@ Two hulls are poor:
   the fingers.
 - link_2's hull fills the step under its shoulder end.
 
-Menagerie decomposes both into 3 to 5 convex pieces. text-to-cad would need the part split into convex
-parts in the model.
+Menagerie decomposes both into 3 to 5 convex pieces. `cad.mujoco.decompose(s, "link_6")` in the MuJoCo
+function would do the same; the benchmark keeps one hull a part, as its first pass had.
 
-The **carriages collide as nothing**. Each one's rack arm reaches across, so the two hulls overlap by
+The **carriages collide as nothing**: the function deletes their collision geoms (`s.delete(geom)` over
+`collisions(s, "carriage_left")`). The spec had excluded each carriage's body from link_6 (their meshes
+touch as built), which would also stop a finger, in its carriage's body, from colliding with link_6;
+with the carriages' collisions gone the function removes those two excludes too. Each one's rack arm reaches across, so the two hulls overlap by
 18.5 mm as built and would jam the gripper. The fingers and pads carry every grasp contact.
 
-Two pairs still touch at rest. In both cases the solids do not touch; only the hulls do:
-- base_link / link_1, by 3 mm. MuJoCo does not filter this pair because base_link is welded to the
-  world.
-- link_2 / link_5, by 1.4 mm in the folded pose.
+One pair still touches at rest, where the solids do not and only the hulls do: link_2 / link_5, by
+1.4 mm in the folded pose (the saved file's one validation warning). base_link / link_1 touched by
+3 mm too; the MJCF writer now excludes every jointed pair touching at rest, that one among them.
 
-Menagerie excludes base_link/link_1 and link_3/link_5 by hand. Here that is the scene's `<exclude>`,
-which text-to-cad cannot declare (Gaps).
+Menagerie excludes base_link/link_1 and link_3/link_5 by hand. An exclude between two bodies no joint
+connects is the MuJoCo function's (`s.add_exclude(bodyname1="link_2", bodyname2="link_5")`); the
+benchmark adds none, as its first pass had none.
+
+## Actuators and the commanded pose
+
+In the MuJoCo function, none of it from the references:
+
+- One position actuator a joint, named for it, the two carriages one each (two joints in the model).
+  Each force bound is the model's: `limits(arm, joint, effort=, velocity=)` from the specification's
+  "Joint limits" table (27 N*m and 6.2832 rad/s for joints 0 to 2, 7 N*m and 9.4248 rad/s for joints 3
+  to 5) and its "Max Gripping Force", 100 N, for each carriage (the table gives the gripper no speed).
+- `kp` 600 N*m/rad for joints 0 to 2, 100 for joints 3 to 5 and 10000 N/m for the carriages, each with
+  `dampratio` 1: chosen, not measured.
+- No joint armature, damping or dry friction: Trossen publishes none.
+- A key `home` that commands joint_0 30, joint_1 60, joint_2 45, joint_3 20, joint_4 -20 and joint_5
+  45 degrees with each carriage at 11 mm, as `qpos` and as `ctrl`.
+
+`python src/check.py wxai` is the proof it works: started at `home`, after 2500 steps of 2 ms (5 s)
+under gravity the worst joint (joint_3) is 0.0134 rad from its command, with no contact.
 
 ## Frames and states
 
@@ -241,12 +266,15 @@ gripping-force formula.
 
 ## Validation
 
-- `cad mjcf validate out/wxai/wxai.xml --compile required`: OK. It compiles under MuJoCo 4.0.0 with 9
-  bodies, 8 joints, 28 geoms, 14 meshes and 1 key; the moving mass is 3.656 kg (4.000 with the base).
-  - One warning, `contacts_at_rest`: the base_link/link_1 and link_2/link_5 hulls (above).
-  - Info notes: pyramidal cone and default solref (the consumer's choice), and no `home` key.
-- `cad urdf validate out/wxai/wxai.urdf`: OK. Root base_link, 11 links, 10 joints (8 movable), total
-  mass 4 kg.
+- `cad mjcf validate out/wxai/wxai.xml --compile required` (the MuJoCo function's file): OK. It
+  compiles under MuJoCo 4.0.0 with 9 bodies, 8 joints, 8 actuators, 16 meshes and 2 keys (`gripper_open`,
+  `home`); the mass is 4.000 kg with the base.
+  - One warning, `contacts_at_rest`: the link_2/link_5 hulls (above).
+- `cad mjcf validate out/wxai/export/wxai.xml --compile required` (the plain export): OK, with the same
+  warning naming a second pair, the two carriages' hulls (18.5 mm), which the plain export collides.
+- `cad urdf validate out/wxai/export/wxai.urdf`: OK. Root base_link, 11 links, 10 joints (8 movable),
+  total mass 4 kg. Two warnings, `zero_velocity` on the two carriage joints: the specification gives
+  the gripper no speed.
 
 ## Snapshots
 
@@ -299,8 +327,8 @@ import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
      child stays where the STEP has it.
    - The engine did not catch it: a turned child would simply have been "as built". kinematics.md
      could say that the RigidJoint must share the hinge's X.
-4. **No contact exclusion.** Fixed: the MJCF writer excludes jointed pairs touching at rest; `exclude(a, b)`
-   declares others. No exclusion could be declared, so a hull pair that touches at rest (base_link/link_1
+4. **No contact exclusion.** Fixed: the MJCF writer excludes jointed pairs touching at rest; any other
+   pair is the MuJoCo function's (`s.add_exclude`). No exclusion could be declared, so a hull pair that touches at rest (base_link/link_1
    across a coaxial bearing) can only be excluded in the scene. Menagerie hand-writes the same
    `<exclude>`s.
 5. **A part fixed to a link cannot stay a body of its own.** Fixed: `body(part, name)`. Menagerie and the URDF keep
@@ -312,7 +340,8 @@ import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
    velocity=)`, and `cad urdf validate` warns of a 0. The spec gives both (27/7 N*m;
    6.28 and 9.42 rad/s), but there is no declaration for them, and a ROS controller reads 0 velocity
    literally.
-7. **One collision hull per part, no decomposition**: link_6 and link_2 (above).
+7. **One collision hull per part, no decomposition**: link_6 and link_2 (above). Fixed:
+   `cad.mujoco.decompose(s, part)` in the MuJoCo function.
 8. **URDF renames a joint that shares a link's name.** Fixed: links and joints are named in their own kinds.
    (`pinion_racks`: joints `left`, `pinion` written
    as `left_2`, `pinion_2`, and the `<mimic>` names follow). URDF keeps joints and links in separate

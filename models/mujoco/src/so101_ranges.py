@@ -1,6 +1,6 @@
 """The SO-101's joint stops from its own geometry: a self-collision sweep of the exported description.
 
-    python src/so101_ranges.py            # after src/so101.py has written out/so101/so101.xml
+    python src/so101_ranges.py            # after src/so101.py has written out/so101/export/so101.xml
 
 The STEP carries no joint limits. A servo's travel bounds nothing (the ST3215 turns a full 360
 degrees under position control: Waveshare's specification, "Mechanical Limited Angle: No Limit"),
@@ -31,7 +31,7 @@ import mujoco
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-MJCF = HERE.parent / "out/so101/so101.xml"
+MJCF = HERE.parent / "out/so101/export/so101.xml"
 SKIP = re.compile(r"screw|nut|050375033")  # fasteners and connectors: inside the parts they hold
 SPACING = 0.6  # mm between surface samples
 PITCH = 1.0  # mm, the occupancy grid

@@ -24,7 +24,12 @@ What the model does (``notes/so101.md`` records why, and what was tried):
    parent's at the world axis, a ``RigidJoint`` on the child's at the axis' plane, connected at 0.
 5. Gives every part what a simulator needs: an effective density for the printed parts (the maker's
    print settings), a calibrated one for the servo bodies (the servo's published mass), the STEP's
-   own materials for metal; collision shapes per part; a ``tcp`` frame at the static jaw's tip.
+   own materials for metal; each servo's published torque and speed as its joint's drive limits; a
+   ``tcp`` frame at the static jaw's tip. The two jaws are each split into a cradle and a finger where
+   the gripper servo's case ends, so each piece is a part of its own.
+
+What a simulation chooses for the arm -- which parts collide and as what, the servos' actuators, a
+commanded pose -- is not here: it is the arm's MuJoCo function, ``so101_mujoco.py``.
 
 Limits come from a self-collision sweep of the exported description (``so101_ranges.py``).
 """
@@ -38,7 +43,7 @@ from pathlib import Path
 import build123d as bd
 import numpy as np
 from cad import model, step
-from cad.build123d import collision, frame
+from cad.build123d import frame, limits
 
 from lib.step_links import (Printed, assign, centroid, cylinder_axes, leaves, mesh, nearest_link, printed_density,
                             volume_and_area)
@@ -99,6 +104,10 @@ PRINT_INFILL = 0.15
 # 24.7 x 45.2 x 35 mm case, 39 cm^3), so its PPS density (1637 kg/m^3) would weigh 78 g. The body's
 # density is set so a servo with both STEP horns (steel, kept) weighs the published mass.
 SERVO_MASS = 55.0  # g
+# The drive's limits, the same for all six: the ST3215 at 12 V (Feetech's and Waveshare's specification): stall
+# torque 30 kg*cm = 2.94 N*m, no-load speed 45 rpm = 4.71 rad/s.
+SERVO_EFFORT = 2.94  # N*m
+SERVO_VELOCITY = 4.71  # rad/s
 # Molex 50-37-5033 (KK 254 crimp housing, 3 circuits): nylon 6/6 (Molex's datasheet); the STEP gives
 # it no material. bd_materials' nylon density.
 
@@ -136,7 +145,7 @@ def _servo_density(servo: list) -> float:
 def _split_jaw(parts: list, label: str, case_points, direction):
     """Split the printed part ``label`` of ``parts`` (in place) by the plane through the farthest
     point of the servo case along ``direction``, normal to it: ``<label>_cradle`` and
-    ``<label>_finger``, each with the part's material, colour and a hull of its own. Returns the finger."""
+    ``<label>_finger``, each with the part's material and colour. Returns the finger."""
     part = next(item for item in parts if item.label == label)
     reach = case_points @ direction
     origin = case_points[int(np.argmax(reach))]
@@ -150,7 +159,6 @@ def _split_jaw(parts: list, label: str, case_points, direction):
         piece.label = f"{label}_{side}"
         _material(piece, part.material)
         piece.color = part.color
-        collision(piece, "mesh")
         found[side] = piece
     parts[parts.index(part):parts.index(part) + 1] = [found["cradle"], found["finger"]]
     return found["finger"]
@@ -214,7 +222,7 @@ def so101():
             direction = -direction
         joints[name] = (holder, drive.link, at, direction, servo)
 
-    # Parts: placed where they stand, named, given materials and collision shapes.
+    # Parts: placed where they stand, named and given materials.
     servo_density = _servo_density(next(iter(servos.values())))
     links: dict[str, list] = {link: [] for link in PRINTED}
     taken: set[str] = set()
@@ -234,21 +242,17 @@ def so101():
             volume, area = volume_and_area(part)
             density = printed_density(volume, area, solid=PLA_DENSITY, shell=PRINT_SHELL, infill=PRINT_INFILL)
             _material(part, plastics.pla(density=round(density, 1)))
-            collision(part, "mesh")  # MuJoCo collides its convex hull
         elif leaf.top.startswith(SERVO) and HORN not in leaf.name:
             _material(part, plastics.pps(density=round(servo_density, 1)))
-            collision(part, "box" if leaf.name.startswith(CASE) else "none")
         elif leaf.top.startswith("050375033"):
             _material(part, plastics.nylon())
-            collision(part, "none")
-        else:  # screws, nuts, horns: the STEP's own steel
-            collision(part, "none")
+        # screws, nuts, horns: the STEP's own steel
         links[leaf.link].append(part)
 
-    # The two jaws collide as their own shapes, not as one hull each: a jaw printed in one piece with
-    # the cradle around its servo is concave, and its hull would fill the space between the jaws. Each
-    # is split, in the model, by the plane where the gripper servo's case ends along the jaw (the
-    # servo's far face): the cradle on one side, the finger on the other, each hulled on its own.
+    # The two jaws are two parts each: a jaw printed in one piece with the cradle around its servo is
+    # concave, and a simulator that collides a part as its convex hull would fill the space between the
+    # jaws. Each is split by the plane where the gripper servo's case ends along the jaw (the servo's
+    # far face): the cradle on one side, the finger on the other.
     roll, pivot = joints["wrist_roll"][3], joints["gripper"][3]
     case = [leaf.placed() for leaf in joints["gripper"][4] if leaf.name.startswith(CASE)]
     case_points = np.vstack([mesh(part, 0.5, 0.5)[0] for part in case])
@@ -271,14 +275,17 @@ def so101():
     assemblies = {link: bd.Compound(children=parts, label=link) for link, parts in links.items()}
     for name, (parent, child, at, direction, _servo) in joints.items():
         axis = bd.Axis(tuple(at), tuple(direction))
-        limits = LIMITS.get(name)
+        stops = LIMITS.get(name)
         bd.RevoluteJoint(name, assemblies[parent], axis=axis,
-                         angular_range=limits if limits else (-math.inf, math.inf))
+                         angular_range=stops if stops else (-math.inf, math.inf))
         bd.RigidJoint(name, assemblies[child], bd.Plane(origin=axis.position, z_dir=axis.direction).location)
     for parent, child in JOINTS:
         name = JOINTS[(parent, child)]
         assemblies[parent].joints[name].connect_to(assemblies[child].joints[name], angle=0)  # as built: the STEP pose
-    return bd.Compound(children=list(assemblies.values()), label="so101")
+    arm = bd.Compound(children=list(assemblies.values()), label="so101")
+    for name in joints:
+        limits(arm, name, effort=SERVO_EFFORT, velocity=SERVO_VELOCITY)
+    return arm
 
 
 if __name__ == "__main__":
@@ -287,6 +294,6 @@ if __name__ == "__main__":
     started = time.time()
     arm = so101()
     built = time.time()
-    OUT.mkdir(parents=True, exist_ok=True)
-    arm.export(OUT / "so101.xml", OUT / "so101.urdf")
+    (OUT / "export").mkdir(parents=True, exist_ok=True)
+    arm.export(OUT / "export/so101.xml", OUT / "export/so101.urdf")
     print(f"built in {built - started:.1f} s, exported in {time.time() - built:.1f} s")

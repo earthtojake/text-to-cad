@@ -1,9 +1,13 @@
 """Compare the descriptions text-to-cad made from each maker's STEP with the hand-made references.
 
     python src/compare.py              # every robot
-    python src/compare.py so101        # one: (a) our MJCF vs Menagerie's, (b) our URDF vs the maker's
+    python src/compare.py so101        # one: (a) our MuJoCo file vs Menagerie's, (b) our URDF vs the maker's
     python src/compare.py so101 --ours menagerie/robotstudio_so101/so101.xml \\
         --theirs upstream/so101/Simulation/SO101/so101_new_calib.urdf   # any two files
+
+"Ours" is (a) ``out/<robot>/<robot>.xml``, the file the robot's MuJoCo function saves
+(``src/<robot>_mujoco.py``: the model with a simulation's choices, as Menagerie's file is), and (b)
+``out/<robot>/export/<robot>.urdf``, the model's plain export (``src/<robot>.py``).
 
 Writes ``reports/<robot>.md`` (to read) and ``reports/<robot>.json`` (every number); a pair named
 with --ours/--theirs writes ``reports/<robot>.<ours>-vs-<theirs>.md/.json``. Prints a line per
@@ -80,19 +84,19 @@ def run_pair(label: str, ours: Path, theirs: Path, configs: int) -> dict:
 def run_robot(name: str, configs: int, ours: Path | None = None, theirs: Path | None = None) -> bool:
     robot = ROBOTS[name]
     if ours is not None:
-        pairs = [(f"{rel(ours)} vs {rel(theirs)}", ours, theirs)]
+        pairs = [(f"{rel(ours)} vs {rel(theirs)}", ours, theirs, name)]
         stem = f"{name}.{tag(ours)}-vs-{tag(theirs)}"
         command = f"python src/compare.py {name} --ours {rel(ours)} --theirs {rel(theirs)}"
     else:
         out = OUT / name
-        pairs = [("(a) MJCF vs Menagerie", out / f"{name}.xml", robot.menagerie_path),
-                 ("(b) URDF vs the maker's", out / f"{name}.urdf", robot.vendor_urdf_file)]
+        pairs = [("(a) MuJoCo function vs Menagerie", out / f"{name}.xml", robot.menagerie_path, f"{name}_mujoco"),
+                 ("(b) URDF vs the maker's", out / "export" / f"{name}.urdf", robot.vendor_urdf_file, name)]
         stem = name
         command = f"python src/compare.py {name}"
     results, missing = [], []
-    for label, a, b in pairs:
+    for label, a, b, script in pairs:
         if not a.is_file():
-            msg = (f"{label}: {rel(a)} not found; make it with `python src/{name}.py`" if ours is None
+            msg = (f"{label}: {rel(a)} not found; make it with `python src/{script}.py`" if ours is None
                    else f"{label}: {a} not found")
             print(f"{name}: {msg}", file=sys.stderr)
             missing.append(msg)

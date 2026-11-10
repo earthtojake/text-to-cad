@@ -1,10 +1,10 @@
 """Trossen WidowX AI (follower), from Trossen's own STEP to a robot description.
 
-    python src/wxai.py      # builds the model, exports out/wxai/wxai.xml, wxai.urdf
+    python src/wxai.py      # builds the model, exports out/wxai/export/wxai.xml, wxai.urdf
 
 The model READS the maker's assembly STEP (``upstream/wxai/wxai_follower.step``, fetched by
 ``src/fetch.py wxai``) and adds only what a careful engineer would: which parts move together (the
-links), the joints found on the geometry, materials, collision, limits from Trossen's published
+links), the joints found on the geometry, materials, limits from Trossen's published
 specification, and two named frames found on the geometry. No number is copied from Trossen's URDF
 or from MuJoCo Menagerie's ``trossen_wxai``; their link and joint NAMES and their sign conventions
 are used so the comparison matches by name. ``notes/wxai.md`` says what was tried and what it gave.
@@ -22,7 +22,7 @@ import build123d as bd
 from bd_materials import FinishedMaterial, metals, plastics
 from bd_materials.core import RangeMaterial
 from cad import model, step
-from cad.build123d import collision, frame, mechanism_state
+from cad.build123d import frame, limits, mechanism_state
 from threejs_materials import PbrProperties
 
 from lib.step_axes import cylinder_lines, free_directions, free_travel, shared_axis
@@ -82,6 +82,18 @@ LIMITS = {
     "joint_4": (-90.0, 90.0),
     "joint_5": (-180.0, 180.0),
 }
+
+# The drives' limits, from the same table: velocity (rad/s) and effort (N*m, nominal) per joint; and the
+# gripper's "Max Gripping Force", 100 N, as each carriage's effort (the table gives the gripper no speed).
+DRIVES = {
+    "joint_0": (6.2832, 27.0),
+    "joint_1": (6.2832, 27.0),
+    "joint_2": (6.2832, 27.0),
+    "joint_3": (9.4248, 7.0),
+    "joint_4": (9.4248, 7.0),
+    "joint_5": (9.4248, 7.0),
+}
+GRIPPER_FORCE = 100.0  # N
 
 # Each carriage's travel from closed (pads touching, the STEP pose) to open, mm: MEASURED on the CAD by
 # a self-collision sweep (``measure_gripper()`` below: lib/step_axes.free_travel of the carriage, its
@@ -196,7 +208,7 @@ def own(part: bd.Shape, world: bd.Location) -> bd.Location:
 def wxai():
     parts = read_parts()
 
-    # --- materials and collision, on the finished parts ------------------------------------------
+    # --- materials, on the finished parts ------------------------------------------------------
     plain_mass = 0.0
     for name, made in PLAIN.items():
         parts[name].material = made()
@@ -207,14 +219,6 @@ def wxai():
                             "Anodised aluminium, black", "#2a2a2c", 0.6, 0.5)
     for name in ACTUATED:
         parts[name].material = link_material
-    for name, part in parts.items():
-        # Each part's convex hull: the dummies are already blocky envelopes, so a hull is close for every
-        # part but link_6 (its rails and end stops span +-90 mm in Y: the hull fills the gripper's throat
-        # behind the fingers) and link_2 (the hull fills the step under its shoulder end). The carriages
-        # collide as nothing: each one's rack arm reaches across to the other side, so the two hulls
-        # overlap by 18.5 mm as built and would jam the gripper; they run inside link_6, and the fingers
-        # and pads, which carry every contact a grasp makes, keep theirs. See notes.
-        collision(part, "none" if name.startswith("carriage_") else "mesh")
 
     # --- the arm: six revolute joints on the bearing lines the parts share -------------------------
     for joint, (parent, child, _sign, _whose) in JOINTS.items():
@@ -255,6 +259,10 @@ def wxai():
           own(parts["camera_housing_d405"], camera_frame(parts["camera_housing_d405"])))
 
     arm = bd.Compound(children=[parts[name] for name in PARTS], label="wxai")
+    for joint, (velocity, effort) in DRIVES.items():
+        limits(arm, joint, effort=effort, velocity=velocity)
+    for side in ("left", "right"):
+        limits(arm, f"{side}_carriage_joint", effort=GRIPPER_FORCE)
     mechanism_state(arm, "gripper_open", left_carriage_joint=GRIPPER_TRAVEL, right_carriage_joint=GRIPPER_TRAVEL)
     return arm
 
@@ -277,7 +285,7 @@ if __name__ == "__main__":
     started = time.perf_counter()
     built = wxai()
     print(f"built in {time.perf_counter() - started:.1f} s")
-    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "export").mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
-    built.export(OUT / "wxai.xml", OUT / "wxai.urdf")
+    built.export(OUT / "export/wxai.xml", OUT / "export/wxai.urdf")
     print(f"exported in {time.perf_counter() - started:.1f} s")

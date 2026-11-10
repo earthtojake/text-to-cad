@@ -1,8 +1,8 @@
 # CAD to MuJoCo benchmark
 
 Takes a robot maker's raw CAD through text-to-cad's whole process -- the assembly STEP read into a
-model, its parts grouped into links, its joints found from the geometry, materials and collision
-declared, the mechanism exported as MJCF and URDF -- and compares the result with the
+model, its parts grouped into links, its joints found from the geometry, materials declared, the
+mechanism exported as URDF and made a MuJoCo file by its MuJoCo function -- and compares the result with the
 description Google built by hand in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
 and with the maker's own URDF. The comparison is what refines the method: every difference is
 either a fact the CAD cannot carry (actuators, gains, contact tuning), a decision the model
@@ -55,11 +55,23 @@ document), and most others (no raw CAD published).
 cd models/mujoco
 python3 src/fetch.py              # the STEPs, the makers' URDFs and Menagerie, pinned (src/sources.py)
 python3 src/fetch.py op3          # one robot: so101, wxai, xarm7, rebot_devarm, op3
-python src/so101.py               # the model: reads the STEP, exports out/so101/so101.{xml,urdf}
+python src/so101.py               # the model: reads the STEP, exports out/so101/export/so101.{xml,urdf}
+python src/so101_mujoco.py        # its MuJoCo function: saves out/so101/so101.xml, assets/ and scene.xml
 python src/wxai.py
+python src/wxai_mujoco.py
+python src/check.py               # the proof each robot works, with numbers
 python src/compare.py             # reports/<robot>.md and .json
-cad run mujoco-studio --model out/so101/so101.xml   # look at it in MuJoCo Studio
+cad run mujoco-studio --model out/so101/scene.xml   # look at it in MuJoCo Studio
 ```
+
+Each robot is two scripts. The model (`src/<robot>.py`) holds what is true of the machine: parts,
+materials, joints, stops, the drives' published torque and speed, frames. Its plain exports collide
+each part as its mesh and have no actuators. The MuJoCo function (`src/<robot>_mujoco.py`) holds what
+is chosen for a simulation: it makes the model a `mujoco.MjSpec` (`cad.mujoco.spec`), chooses each
+part's collision, adds a position actuator a joint and a key that commands a pose, and saves the
+robot's file (`cad.mujoco.save`). `compare.py` compares that file with Menagerie's, and the plain URDF
+with the maker's. `check.py` compiles the saved file, runs the health checks, loads the folder after
+copying it elsewhere, counts the collision geoms and holds the commanded pose under gravity.
 
 Everything fetched or written lands in folders Git ignores (`upstream/`, `menagerie/`, `out/`,
 `reports/`): the repository holds the scripts alone, and every source is pinned by commit or by
@@ -110,6 +122,19 @@ with the STEP's bores: the STEP carries newer revisions of those parts (follower
 references' meshes (v1). The jaw's mass is high because the servo's horns turn with it here; Menagerie
 also has a camera mount this STEP does not.
 
+**Do the robots work?** (`python src/check.py`, MuJoCo 4.0.0, Linux x86-64.) Each saved file
+compiles, loads after its folder is copied elsewhere, and has no health-check error:
+
+| Measure | SO-101 | WidowX AI |
+| --- | --- | --- |
+| Bodies / joints / actuators / keys | 7 / 6 / 6 / 1 (`home`) | 9 / 8 / 8 / 2 (`gripper_open`, `home`) |
+| Mass | 0.6368 kg | 4.0001 kg |
+| Collision geoms | 31 (18 box, 13 mesh) | 13 (13 mesh) |
+| Health-check warnings | none | 1: link_2 and link_5's hulls meet by 1.43 mm in the folded pose |
+| Holds `home` under gravity: 2500 steps of 2 ms, threshold 0.02 | worst joint elbow_flex, 0.0072 rad off, no contact (kp 60) | worst joint joint_3, 0.0134 rad off, no contact (kp 600, 100; carriages 10000) |
+| Plain `export/<robot>.xml` | no errors, no warnings | no errors; the same warning, and the two carriages' hulls (18.5 mm) |
+| Plain `export/<robot>.urdf` | no errors, no warnings | no errors; 2 warnings: the carriage joints have no published speed |
+
 **The comparison tool** never compares joint values or frames directly: it registers the root links'
 shapes, then finds each joint's matching pose, parent first. Validated by its self-test (an imposed
 transform recovered to 1e-12, offsets to 1e-5 deg) and by Menagerie against the SO-101 maker's own
@@ -137,13 +162,13 @@ ranked by how much they cost a CAD-to-simulation user:
    the MJCF writes no body for it and the second finger's `<equality><joint>` on the first, the URDF
    its `<mimic>`, one control as Menagerie has.
 4. **Fixed: no contact exclusion.** Hulls of adjacent links that overlap at rest needed `<exclude>`; the
-   MJCF writer now excludes every jointed pair touching at rest (the world-welded first joint's too),
-   and `exclude(a, b)` declares any other pair.
+   MJCF writer now excludes every jointed pair touching at rest (the world-welded first joint's too).
+   Any other pair is the MuJoCo function's, in MuJoCo's own API (`s.add_exclude`).
 5. **Fixed: one convex hull per part.** A concave part (a link with a pocket, a gripper body) collided
-   as its hull. `collision(part, "decomposed", max_hulls=, threshold=)` now collides it as the convex
-   hulls CoACD cuts its mesh into (`cad[coacd]`), one geom each (`<part>_hull<i>`) in the MJCF and the
-   URDF, while its visual stays whole; the hulls are cached by the part's mesh and options, and the
-   contact rule tests each hull.
+   as its hull. `cad.mujoco.decompose(s, part, max_hulls=, threshold=)`, in the MuJoCo function, now
+   collides it as the convex hulls CoACD cuts its mesh into (`cad[coacd]`), one geom each
+   (`<part>_hull<i>`), while its visual stays whole; the hulls are cached by the part's mesh and
+   options. `fit(s, part, kind)` collides a part as a primitive fitted to its exact solid.
 6. **Fixed: the joint recipe is fragile on a vendor STEP.** Face axes carry 1e-17 noise that can flip
    build123d's default plane X, turning a link 90 deg at angle 0. kinematics.md's recipe now builds the
    rigid joint from the hinge's own frame (`hinge.location`) and snaps a direction read from geometry,
@@ -162,9 +187,13 @@ ranked by how much they cost a CAD-to-simulation user:
    tree's leaves on its own B-rep without the copy. And `cad mjcf snapshot` failed when the daemon
    started without a display; a snapshot the daemon cannot draw is now drawn by the calling process
    where it has a display (`xvfb-run cad mjcf snapshot ...`).
-10. **Fixed: the joint's and the surface's dynamics.** A servo's reflected inertia, damping and
-   dry friction are the hardware's, so `limits(assembly, joint, armature=, damping=, friction=)` declares
-   them in the model (MJCF `armature`, `damping`, `frictionloss`; URDF `<dynamics>`), and
-   `friction(part, coefficient)` a surface's contact friction (MJCF geom `friction`). Actuators, gains,
-   `condim` and contact softness are the experiment's: the consumer's own, in the documented scene
-   layer (native `MjSpec`), which the skill shows.
+10. **Fixed: nowhere to put a simulation's choices.** A servo's reflected inertia, damping and dry
+   friction, a surface's contact friction, actuators, gains and contact tuning are not facts the CAD
+   holds. They go in the robot's MuJoCo function, on the `mujoco.MjSpec` `cad.mujoco.spec` makes of
+   the model, in MuJoCo's own API (`joint.armature`, `geom.friction`, `s.add_actuator`), and
+   `cad.mujoco.save` writes the robot's file. The model keeps the hardware's facts, the drive's
+   torque and speed among them (`limits(assembly, joint, effort=, velocity=)`).
+11. **Fixed: no way to list a spec's parts.** The SO-101 has 133 parts and its MuJoCo function chooses
+   by a rule (every part but the printed ones and the servo cases collides as nothing), but a part
+   could only be named one at a time, and a wrong name listed the first twelve. `cad.mujoco.parts(s)`
+   now answers every part's label path. Found by this benchmark's port to MuJoCo functions.
