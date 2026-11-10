@@ -248,13 +248,14 @@ class PocketsTest(unittest.TestCase):
                       found[0].message)
         self.assertIn("4 mm tall", found[0].message)
         self.assertIn("radius of 1.25 mm or more (recommended", found[0].hint)
-        # one cavity, one finding: its four corners share the cavity's ref, the finding names one corner's edge
-        # and counts the others; each corner keeps its own edge
-        self.assertEqual(len(found), 1)
-        self.assertEqual({c["location"] for c in corners}, {found[0].location})
-        self.assertEqual(sum(f"{c['edge']}," in found[0].message for c in corners), 1)
-        self.assertIn("(and 3 more at this ref)", found[0].message)
+        # a corner is a feature: one finding a corner, at its own edge, the cavity's floor among its refs; the
+        # rule's hint and its source are said once for the four
+        self.assertEqual(sorted(f.location for f in found), sorted(c["edge"] for c in corners))
         self.assertEqual(len({c["edge"] for c in corners}), 4)
+        self.assertEqual({c["location"] for c in corners}, {"part/face 11"})
+        self.assertTrue(all("part/face 11" in f.refs and f.refs[0] == f.location for f in found))
+        self.assertTrue(all(f.source.startswith("text-to-cad, ") for f in found))  # the 0.025 mm is our own floor
+        self.assertEqual(sum("cnc.internal_corner_sharp, 4 place(s)" in line for line in result.human_lines()), 1)
         # open on one side and cut from it, the same sharp corner is a side mill's root
         step = bd.Box(40, 30, 12) - bd.Pos(15, 0, 6) * bd.Box(20, 10, 8)
         self.assertNotIn("cnc.internal_corner_sharp", _codes(_check(_part(step))))
@@ -566,8 +567,10 @@ class PartsTest(unittest.TestCase):
         both = bd.Compound([plate, bd.Pos(0, 0, 11) * bd.Box(50, 40, 10)])
         result = cnc(_part(both, "pair"))
         self.assertTrue(result.ok)
-        self.assertEqual(_judged(result), set())
-        self.assertIn("cnc.solids_judged_apart", _codes(result))
+        # said once, by the warning every process gives of such a part, with how this one reads it
+        self.assertEqual(_judged(result), {"several_solids"})
+        (said,) = [f for f in result.findings if f.code == "several_solids"]
+        self.assertIn("each is judged as a part of its own", said.message)
         self.assertEqual(sorted(i["setup_count"] for i in result.measurements["setups"]["items"]), [0, 1])
         self.assertEqual([i["size_mm"] for i in result.measurements["stock"]["items"]],
                          [[100.0, 60.0, 10.0], [50.0, 40.0, 10.0]])

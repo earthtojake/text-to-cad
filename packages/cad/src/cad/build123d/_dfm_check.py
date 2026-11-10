@@ -57,10 +57,19 @@ _OVERLAP = 1e-6
 _PAIRS = 256
 
 
+#: How a process's measurement reads a part of several solids, said with ``several_solids``.
+_READ_AS = {
+    "cnc": "; each is judged as a part of its own (its own stock, setups and tool access), as each is machined",
+    "molding": "; they are read together, so they shadow each other (its undercuts, walls and bosses are read "
+               "across them)",
+}
+
+
 def _several(part: _dfm_brep.Part, name: str, closed: list[Any], process: str) -> list[dict[str, Any]]:
     """What a part of several solids says, alike in every process: ``several_solids`` (a warning: a process
     makes one solid a part, so the solids are judged as the process's module reads them, together or each on
-    its own, and the part is not one piece), and ``not_sound`` (an error) where two of them share volume --
+    its own -- ``_READ_AS`` says which, so no process says it again -- and the part is not one piece), and
+    ``not_sound`` (an error) where two of them share volume --
     interpenetrating solids are no part: its volume, walls and reach are of material counted twice. A pair is
     compared where their boxes meet, ``_PAIRS`` pairs at most (said where more remain). Printing's own
     ``solid`` family finds shared volume with its boolean check, so it is not looked for twice."""
@@ -68,7 +77,8 @@ def _several(part: _dfm_brep.Part, name: str, closed: list[Any], process: str) -
 
     where = part.ref("face", 1)
     found = [{"severity": "warning", "code": "several_solids", "location": where,
-              "message": f"{name} is {len(closed)} solids in one part: a process makes a part of one solid",
+              "message": f"{name} is {len(closed)} solids in one part: a process makes a part of one solid"
+                         + _READ_AS.get(process, ""),
               "hint": "fuse them into one solid (`a + b` in build123d) if they are one piece, or make each its own "
                       "part (its own label in an assembly)"}]
     if process == "printing":

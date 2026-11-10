@@ -8,7 +8,7 @@ and size; the milling rules that do not apply there are said, ``cnc.turning_not_
 
 The rules (``RULES``) are general practice. A number a published guide states cites it (Protolabs Network's
 CNC design guide and its service's page: the evidence, not a shop's limit). A feasibility floor no guide states
-is text-to-cad's own and says so, with its reason (``OWN``: its message reads ``source: text-to-cad``, never a
+is text-to-cad's own and says so, with its reason (``OWN``: its finding's ``source`` reads ``text-to-cad, ...``, never a
 publisher's name). A warning is a recommendation, a cost or a risk; an error is a part no general shop makes as
 drawn: a face no tool reaches, a tool that does not exist at that depth, a part beyond any general machine. A
 limit that follows the tools given (``--tools``) is the smallest tool's; without ``--tools`` the floor is one

@@ -50,7 +50,7 @@ floor where it does not, each finding saying which; `--tools` moves the tool's):
   diameters without a steady rest (a warning), cross holes square to the axis (through it or beside
   it); a flat, a keyway or an off-axis hole is live tooling.
 - **One solid a part.** A part that holds several separate solids is judged solid by solid, each its
-  own stock and setups (`cnc.solids_judged_apart` says so): fuse what is one piece, export the rest
+  own stock and setups (`several_solids` says so): fuse what is one piece, export the rest
   as an assembly's parts.
 - The material and the process on the part: `part.material = metals.aluminum(process=machined())`
   (`bd_materials.processes`); `cad model dfm "$ID"` then needs no `--process` or `--material`.
@@ -82,8 +82,8 @@ The options that change the verdicts:
 The rules are general, no shop's: a shop's own machine sizes, lathe capacity and feature limits (its
 narrowest engraved line, its turned diameters and grooves) are compared with the measurements
 (`stock`, `turning`, `turned_diameters`, `grooves`, `holes`). An error means no general shop makes
-the part as drawn; a warning that it is made, dearer or less true. A finding's message names its
-source: the guide's, or `text-to-cad` for a floor of its own (its reason in the rule's note,
+the part as drawn; a warning that it is made, dearer or less true. A finding names its
+`source`: the guide's, or `text-to-cad` for a floor of its own (its reason in the rule's note,
 `measurements.rules`). A part of over 20000 faces is not measured, and says so. A mesh is refused:
 check the STEP or the model.
 

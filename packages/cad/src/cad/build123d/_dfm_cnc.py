@@ -394,12 +394,6 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         report["model"] = {"error": failed["model"]}
     report["partial_sections"] = sorted(name for name in failed)
     report["partial"] = bool(failed)
-    for part in several:
-        unintersected.append({
-            "severity": "info", "code": "cnc.solids_judged_apart", "location": part.ref("face", 1),
-            "message": f"{part.owner or part.name} holds {len(part.solids())} separate solids: each is judged as a "
-                       "part of its own (its own stock, setups and tool access), as each is machined",
-            "hint": "export them as an assembly's parts, or fuse them where they are one piece"})
     if unintersected:
         report["findings"] = unintersected
     return report
