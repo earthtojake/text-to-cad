@@ -32,17 +32,17 @@ There are two routes to one:
 | **A robot's MuJoCo file: collision shapes, joint dynamics, actuators** | A MuJoCo function: `spec(model())`, `fit`, `decompose` and `collisions`, MuJoCo's own API, then `save(...)`, run with `cad run`. | [The MuJoCo function](#the-mujoco-function), [MuJoCo environment](references/mujoco-environment.md#the-mujoco-function) |
 | **A robot from its vendor STEP** (an arm's downloaded assembly) | Read it, group its parts into links, find each axis from the geometry, then declare, export and compare the MJCF with the URDF, and write its MuJoCo function. | [From a vendor STEP](references/from-a-vendor-step.md) |
 | **Joint limits from the parts** | `cad model ranges <id>`: each joint swept alone until its parts meet, then the stops written into the joint's range in the model. | [Generate from CAD](#generate-from-cad) |
-| **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each piece, composed with MuJoCo's own `MjSpec` in a scene function, saved with `save`, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
-| **Tune a MuJoCo model's physics** | The model-health findings of `cad mjcf validate --compile required`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
+| **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each piece, composed with MuJoCo's own `MjSpec` in a scene function, saved with `save`, then `cad mujoco check`. | [MuJoCo environment](references/mujoco-environment.md) |
+| **Tune a MuJoCo model's physics** | The model-health findings of `cad mujoco check`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
 | **Describe a robot's links and joints by hand** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
 | **Add MoveIt planning groups, end effectors, named states, collision pairs** | The URDF's link/joint table, then a `.srdf` beside it and `cad srdf validate`. | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md) |
-| **MuJoCo model by hand** | The MJCF (`robot.xml`, and a `scene.xml` that includes it), then `cad mjcf validate --compile required`. | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
+| **MuJoCo model by hand** | The MJCF (`robot.xml`, and a `scene.xml` that includes it), then `cad mujoco check`. | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | **Link meshes from a CAD model for a hand-written file** | One mesh per link in the link's frame: `cad model export <id> link.stl`. | [Meshes](references/meshes.md) |
 | **Mass, center of mass, inertia** | Materials on the CAD parts (generated, exact), `mass()` where the hardware's weight is measured and `point_mass()` for what the CAD leaves out; else a formula or a throwaway script, never intuition. | [Inertials](references/inertials.md) |
 | **Close a nonlinear four-bar in the CAD Viewer** | `<tcad:four_bar>` on the derived URDF joint. | [Four-bar](references/urdf-four-bar.md) |
-| **See the robot, a pose or a named state** | `cad urdf snapshot`, `cad srdf snapshot` or `cad mjcf snapshot`; MuJoCo Studio for the person. | [Snapshots](references/snapshots.md) |
-| **Check a change** | The format's `validate` command, then its review. | [Check each change](#check-each-change) |
-| **Open an existing URDF, SRDF or MJCF** | Show it to the person. | [Show the model](#show-the-model) |
+| **See the robot, a pose or a named state** | `cad urdf snapshot` or `cad srdf snapshot` (the CAD model's `cad model snapshot` for a robot with one); an MJCF is opened by the person in MuJoCo Studio. | [Snapshots](references/snapshots.md) |
+| **Check a change** | The format's check (`cad urdf validate`, `cad srdf validate`, `cad mujoco check`), then its review. | [Check each change](#check-each-change) |
+| **Open an existing URDF, SRDF or MJCF** | Show it to the person: a URDF or an SRDF in the CAD Viewer, an MJCF in MuJoCo Studio. | [Show the model](#show-the-model) |
 
 ## Setup
 
@@ -58,9 +58,9 @@ only just added, its server may still be starting: try again for up to a minute 
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
 person any next step `cad setup` prints.
 
-`cad doctor --check` also reports the installation in use and the server's release. Validation needs
-nothing beyond the Python standard library; a snapshot and a generated description draw on the CAD
-kernel. `cad mjcf validate --compile required` and `cad run mujoco-studio` use MuJoCo's headless core
+`cad doctor --check` also reports the installation in use and the server's release. A URDF's and an
+SRDF's validation need nothing beyond the Python standard library; a snapshot and a generated description draw on the CAD
+kernel. `cad mujoco check` and `cad run mujoco-studio` use MuJoCo's headless core
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
 `mujoco` gets the same. `decompose()` in a MuJoCo function uses CoACD, `cad[coacd]` (one wheel,
@@ -239,15 +239,16 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/gripper_mujoco.py
-cad mjcf validate sim/scene.xml --compile required
+cad mujoco check sim/scene.xml
 ```
 
 `fit`, `decompose`, `collisions` and `parts` are the only helpers: the first three name a part by its
 label path, as `cad model inspect` prints it, and `parts(s)` lists every path. Everything else (`armature`, `damping`, `frictionloss`,
 `add_exclude`, `add_actuator`, sensors, keys) is MuJoCo's API, used directly. `save` writes the file
 with its meshes in `assets/` beside it, so the folder travels, and a `scene.xml` beside it when there
-is none. This file replaces the plain export: a robot's own file carries its actuators, as a
-Menagerie robot's does. The helpers, what `save` does, and MuJoCo 4.0.0's traps are in
+is none, then prints the check's warnings, what the model collides as (`collisions:`) and its
+contact excludes (`excludes:`): read both lines against the choices the function made. This file
+replaces the plain export: a robot's own file carries its actuators, as a Menagerie robot's does. The helpers, what `save` does, and MuJoCo 4.0.0's traps are in
 [MuJoCo environment](references/mujoco-environment.md#the-mujoco-function), with a scene composed
 around it.
 
@@ -373,57 +374,60 @@ whatever it says), and a geom or joint takes attributes from the default class i
 4. A body with no joint is welded to its parent; a floating base gets `<freejoint/>`. Leave inertia
    to the compiler from the geoms where it can, else compute an `<inertial>` ([Inertials](references/inertials.md)).
 5. Ship a `<key name="home">` whose `qpos` (and `ctrl`) is the model's length.
-6. Check it ([MJCF checks](references/mjcf-checks.md)): `cad mjcf validate --compile required`, then
-   a snapshot of `home` and of each joint moved.
+6. Check it ([MJCF checks](references/mjcf-checks.md)): `cad mujoco check`, its `collisions` and
+   `excludes` lines read against what was meant, then the model opened in MuJoCo Studio for the
+   person, at `home` and with each joint moved.
 7. Clear every model-health warning the compile reports before tuning any physics, then tune one
    parameter at a time from a baseline, validating after every write
    ([Tuning](references/mujoco-environment.md#tuning)).
 
 ## Check each change
 
-Each format has its validator and its snapshot; a generated file is checked like a hand-written one:
+Each format has its check, and a URDF and an SRDF their snapshot; a generated file is checked like a
+hand-written one:
 
 ```bash
 cad urdf validate path/to/robot.urdf
 cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
 cad srdf validate path/to/robot.srdf --strict
-cad mjcf validate path/to/scene.xml --compile required
-cad mjcf validate path/to/scene.xml --compile required --strict --json
+cad mujoco check path/to/scene.xml
+cad mujoco check path/to/scene.xml --strict --json
 cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30}'
 cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
-cad mjcf snapshot path/to/scene.xml review.png --pose home
 cad run mujoco-studio --model path/to/scene.xml
 ```
 
 A snapshot's `--pose` takes a turn in degrees and a slide in metres, though the file holds
 radians: `{"shoulder_pitch": 30}` is 30 degrees, and 0.5 is half a degree, drawn as if at zero.
 
-`cad run mujoco-studio` shows the person an MJCF as MuJoCo itself runs it, in MuJoCo Studio's web
-viewer: it reloads the model as the file changes and prints a URL for the person to open; it comes
+An MJCF is MuJoCo's own file: `cad mujoco check` compiles it with MuJoCo and says what it collides
+as, and no `cad` command draws one. `cad run mujoco-studio` shows the person an MJCF as MuJoCo itself
+runs it, in MuJoCo Studio's web viewer: it reloads the model as the file changes and prints a URL for the person to open; it comes
 with `cad[mujoco]` (fetched once), and it listens on every network interface with no authentication,
 so it is for this computer or a trusted network.
 
 | Change | Check it with |
 | --- | --- |
 | A CAD model's mechanism, materials, `frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` or `link()` | Run it, export again (or run its MuJoCo function again), and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
-| A MuJoCo function | Run it, then `cad mjcf validate` on the `scene.xml` beside the file it saved with `--compile required`, and read every warning `save` printed; its collisions in a snapshot (`--display collision`). |
-| A scene script | Run it, then `cad mjcf validate` on the scene it wrote with `--compile required`: every model-health warning cleared or explained; `--pose home` in a snapshot. |
+| A MuJoCo function | Run it and read what `save` printed: every warning, and the `collisions` and `excludes` lines against the choices made (each part's kind, no exclude left between bodies now apart); then `cad mujoco check` on the `scene.xml` beside the file it saved. |
+| A scene script | Run it, then `cad mujoco check` on the scene it wrote: every model-health warning cleared or explained; its `home` key in MuJoCo Studio. |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |
 | A mesh, its scale or its placement | A snapshot: meshes at sane scale and pose; ~1000x too large or small is a `scale` bug. |
 | An inertial | The [sanity gates](references/inertials.md#sanity-gates). |
 | Any `.srdf` | `cad srdf validate` (it cross-checks every name, chain, state and pair against the paired URDF); named states in a snapshot (`--pose group/state`). |
 | A URDF with an SRDF beside it | `cad srdf validate` on that SRDF again, and its group states against the new limits. |
-| Any MJCF | `cad mjcf validate --compile required` (MuJoCo's own compiler and the model-health checks, fetched once as `cad[mujoco]`); the `home` key in a snapshot (`--pose home`). |
+| Any MJCF | `cad mujoco check` (MuJoCo's own compiler, the model-health checks, what collides and the contact excludes; `cad[mujoco]` fetched once); the `home` key in MuJoCo Studio. |
 | MuJoCo physics (solver, contacts, gains) | The tuning loop: one parameter changed, validated, and run in MuJoCo Studio against the baseline ([Tuning](references/mujoco-environment.md#tuning)). |
 | A MoveIt or ROS consumer | Its own load when available: RViz, robot_state_publisher's TF tree, MoveIt Setup Assistant (IK for the primary group, plan to a named state). |
 
 - One run validates ONE file and collects every finding (severity, code, XML path) with a summary.
   `--strict` treats warnings as failures; `--json` prints one line of `{"ok", "path", "findings":
   [{"severity", "code", "message", "location", "hint"}], "summary"}`, where `location` is the XML
-  path. It exits 1 if the target fails its checks, and 2, with nothing checked, for a command line
+  path (`cad mujoco check`'s is the file, and it adds `measurements`: every collision geom and
+  exclude). It exits 1 if the target fails its checks, and 2, with nothing checked, for a command line
   it refuses -- a file of another format, one that is not there, an option or a value it does not
-  take (`--compile` is `auto`, `required` or `never`) -- which `--json` says as one
+  take -- which `--json` says as one
   `{"ok": false, "error", "reason"}`. Relative targets resolve from the working directory: run
   from the workspace that owns the files.
 - A clean check is a guardrail, not proof: it cannot show that a joint origin or axis matches the
@@ -446,3 +450,7 @@ open in the app's browser pane where it has one, or their browser: a model's pag
 `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
 download: give its path. Never screenshot the viewer to check your own work; review with
 `cad <type> snapshot`. If it fails to launch, say so.
+
+An MJCF is the exception: the CAD Viewer and `cad_show` do not open one. Show the person the CAD
+model it was generated from, and for the MJCF itself run `cad run mujoco-studio --model FILE` and
+give them the URL it prints.

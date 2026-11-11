@@ -125,10 +125,10 @@ A compact report:
 Validated: path/to/scene.xml
 Target consumer: MuJoCo 3.3
 Checks run:
-- cad mjcf validate --compile required: passed with 2 warnings (inertia_from_visuals on two finger links)
-- joint motion: base_yaw positive motion verified in snapshots; gripper joints skipped
-- home key: drawn with --pose home
-- viewer review: live link returned, or explicit launch failure
+- cad mujoco check: passed with 2 warnings (inertia_from_visuals on two finger links)
+- collisions and excludes: read against the model; 12 collision geoms, 5 excludes, all touching at rest
+- joint motion: base_yaw positive motion verified in the CAD model's snapshots; gripper joints skipped
+- MuJoCo Studio: URL given to the person, or explicit launch failure
 Assumptions:
 - Assumed mesh units are meters.
 - Assumed camera site is coincident with the wrist camera's optical centre.

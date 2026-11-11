@@ -6,6 +6,12 @@ are the library's README ([`packages/cad/README.md`](../../packages/cad/README.m
 and laws 24 to 29); the mechanism is the engine README's **Document types and integrations**
 ([`packages/cad-server/src/cad_server/engine/README.md`](../../packages/cad-server/src/cad_server/engine/README.md)).
 
+A document type is a file cad **shows**: every type has a view (`document`, `mesh`, `drawing`, `robot`,
+`plot`), is listed by the CAD Viewer and has a snapshot. A file cad only writes or checks is not one,
+however much cad does with it: an MJCF is an export's destination and the `mujoco` integration's to
+check (`cad mujoco check`), and MuJoCo Studio shows it. For such a file, give its tool's integration an
+operation instead ([Adding an integration](adding-an-integration.md)).
+
 A type usually arrives with the tool that makes or checks it. That tool is an **integration**, and
 adding one has its own guide: [Adding an integration](adding-an-integration.md). The
 [walkthrough](#walkthrough-a-type-and-its-integration-together-kicad) below adds both at once, with

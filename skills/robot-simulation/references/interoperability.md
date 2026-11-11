@@ -76,7 +76,7 @@ Renamed links or joints, changed limits, or restructured chains invalidate the S
 
 A robot with a CAD model here gets its MJCF generated from the model ([above](#one-description-two-writers)), and its scene composed in code ([mujoco-environment.md](mujoco-environment.md)). For a robot that has only a hand-written URDF: MuJoCo loads a URDF directly (`MjModel.from_xml_path("robot.urdf")`, with a `<mujoco><compiler .../></mujoco>` extension element inside `<robot>` for its compiler settings), and its `compile` sample saves what it loaded as MJCF. That is the usual start for a robot that has a URDF; text-to-cad ships no converter in either direction. Keep the URDF the source of the structure and record it (path and revision) in the MJCF's ledger comment. Never re-author the same robot independently in MJCF: the two drift apart where no validator looks.
 
-A converted MJCF is a draft. Fix, then validate with `cad mjcf validate --compile required` ([mjcf-checks.md](mjcf-checks.md)):
+A converted MJCF is a draft. Fix, then check with `cad mujoco check` ([mjcf-checks.md](mjcf-checks.md)):
 
 - **angle units**: the saved file may say `angle="degree"` or nothing (degrees); set `<compiler angle="radian"/>` and confirm every `range`, `ref` and `euler` is radians;
 - **mesh scale**: a URDF's `scale` becomes the `<mesh scale>`; a millimetre STL without it is 1000x too large ([meshes.md](meshes.md));
@@ -88,8 +88,8 @@ The joint names carry over; keep them, so the URDF, the SRDF and the MJCF name o
 
 ## CAD Viewer
 
-CAD Viewer can review `.urdf`, `.srdf` and MJCF (`.xml` with a `<mujoco>` root, `.mjcf`) files visually and help catch gross placement or resource issues. It cannot prove simulator dynamics, inertial validity, joint-axis semantics, or planning correctness.
+CAD Viewer can review `.urdf` and `.srdf` files visually and help catch gross placement or resource issues. It does not open an MJCF: that is MuJoCo's own file, which the person opens in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`). It cannot prove simulator dynamics, inertial validity, joint-axis semantics, or planning correctness.
 
 After creating or modifying a file, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
-An SRDF is drawn as its paired URDF's geometry, opened at its `home` group state when it declares one ([snapshots.md](snapshots.md)). An MJCF opens at `qpos0` with its keyframes as poses ([mjcf-authoring.md](mjcf-authoring.md#what-the-viewer-draws)).
+An SRDF is drawn as its paired URDF's geometry, opened at its `home` group state when it declares one ([snapshots.md](snapshots.md)).

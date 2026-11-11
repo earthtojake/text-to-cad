@@ -385,18 +385,19 @@ cad model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
 ```bash
 cad model export "$ID" sim/arm.xml          # --zero <state> only where step 6 re-zeroed
 cad model export "$ID" description/arm.urdf
-cad mjcf validate sim/scene.xml --compile required
+cad mujoco check sim/scene.xml
 cad urdf validate description/arm.urdf
-cad mjcf snapshot sim/scene.xml tmp/mjcf.png --pose '{"shoulder": 30}' --camera right
 cad urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --camera right
 ```
 
-`--pose` is in degrees for each format, as for the model, though the files hold radians.
+`--pose` is in degrees, as for the model, though the files hold radians.
 
-Read each export's summary first: the links, the joints, the mass, the collisions. Then
-compare the MJCF snapshot with the URDF snapshot of the same pose and camera. Both files come from
-one model, so the robot must stand the same way and each joint must turn the same way in both. A
-difference is a bug in a writer, whatever the validators say. Report it, and do not ship around it.
+Read each export's summary first: the links, the joints, the mass, the collisions. Both files come
+from one model, so the two summaries must name the same links and joints and the same mass, and
+`cad mujoco check` must count the same bodies and joints. Then compare the URDF snapshot with the
+model's snapshot of step 6 at the same pose and camera: the robot must stand the same way and each
+joint must turn the same way. A difference is a bug in a writer, whatever the checks say. Report it,
+and do not ship around it. No `cad` command draws an MJCF; the person sees it in Studio (step 9).
 
 ## 8. The MuJoCo function
 
@@ -474,8 +475,15 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/arm_mujoco.py
-cad mjcf validate sim/scene.xml --compile required
+cad mujoco check sim/scene.xml
 ```
+
+The run prints what `save` checked: each warning, then a `collisions:` line (the collision geoms by
+kind and by body, and the moving bodies that collide as nothing) and an `excludes:` line (each
+contact exclude and how its two bodies stand at rest). Read both against the lists above: every
+case a `box`, every printed part its hulls, nothing left on a link whose parts were all deleted by
+mistake, and no exclude between two bodies now apart that nobody meant (`s.delete(exclude)`).
+`cad mujoco check sim/arm.xml --json` has every geom's name, kind and size.
 
 Where step 6 re-zeroed, the spec counts from the same state: `spec(arm(), zero="<state>")`, as the
 export's `--zero` does. `inheritrange=True` takes each control range from the joint's range. A joint with no range (a
@@ -485,14 +493,27 @@ point for [tuning](mujoco-environment.md#tuning), not a datasheet value.
 
 **Look at the hulls.** A part that reaches its cap of hulls (16 by default) says so as it is done:
 `decomposed bracket: 16 hulls, the cap (max_hulls=16) in 8.1 s`. At the cap, CoACD merged hulls to
-fit, so some of them bridge a concave region. Whether that matters depends on what touches it: look
-before you change anything. Draw the collision geoms, each hull in its own colour, beside the visual
-snapshot at the same pose and camera:
+fit, so some of them bridge a concave region. Whether that matters depends on what touches it: find
+out before you change anything. Move the joint whose parts enter the concave region through its
+range and ask MuJoCo what touches, from a throwaway script (`cad run tmp/touch.py`):
 
-```bash
-cad mjcf snapshot sim/scene.xml tmp/collision.png --display collision --pose home --camera right
-cad mjcf snapshot sim/scene.xml tmp/visual.png --pose home --camera right
+```python
+import mujoco
+
+m = mujoco.MjModel.from_xml_path("sim/arm.xml")
+d = mujoco.MjData(m)
+joint = m.joint("jaw")
+for value in (joint.range[0], sum(joint.range) / 2, joint.range[1]):
+    d.qpos[:] = m.qpos0
+    d.qpos[joint.qposadr[0]] = value
+    mujoco.mj_forward(m, d)
+    print(round(float(value), 3), [(m.geom(c.geom1).name, m.geom(c.geom2).name) for c in d.contact[:d.ncon]])
 ```
+
+A contact between two hulls at a pose where the parts clear each other in the CAD (`cad model
+snapshot` at the same pose) is a hull bridging the gap. A pair of bodies the file excludes makes no
+contact at all, so read the `excludes` line first. The person can see the hulls themselves in
+Studio (step 9).
 
 A hull that fills a pocket a neighbour moves into, a slot, or the gap between jaws is contact the
 simulator makes and the hardware does not: raise that part's cap (`decompose(s, part,
@@ -505,12 +526,12 @@ bridge its concave places, by a few millimetres on a link a few hundred millimet
 lower `threshold` or more hulls hardly changes that: the deepest bridge stays, and a fine threshold
 costs tens of times longer. So two links that clear each other by less than that beside a concave
 place (a wrist parked against the upper arm in the drawn pose) overlap at rest as hulls, and
-`cad mjcf validate` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
+`cad mujoco check` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
 the hardware's working range, exclude the pair in the function, by the links' body names
 (`s.add_exclude(bodyname1="wrist_link", bodyname2="upper_arm_link")`), with a comment saying the
 simulator lets them pass through each other: MuJoCo excludes bodies whole, not single geoms. Where
 they must still collide, no hull setting clears them: try a fitted shape on the convex one of the
-pair (`"cylinder"`, `"capsule"`), and validate again until the warning is gone.
+pair (`"cylinder"`, `"capsule"`), and check again until the warning is gone.
 
 ## 9. Studio
 

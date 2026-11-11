@@ -6,7 +6,7 @@
 For ``out/<robot>/<robot>.xml`` (written by ``src/<robot>_mujoco.py``) it prints:
 
 - that MuJoCo compiles it, and what it holds (bodies, joints, actuators, keys, total mass);
-- the health checks ``cad mjcf validate --compile required`` runs: every error and warning;
+- what ``cad mujoco check`` says of it (``cad.mujoco.check``): every error and warning;
 - that the folder loads after it is copied elsewhere (the robot's file and its ``scene.xml``);
 - its collision geoms by kind, and, with ``--before FILE``, each one's kind and size against the
   geom of the same name in that file (an older build of the same robot);
@@ -44,10 +44,11 @@ def colliding(model: mujoco.MjModel) -> dict[str, tuple[str, tuple[float, ...]]]
 
 
 def findings(path: Path) -> tuple[list[str], list[str]]:
-    """The errors and warnings of ``cad mjcf validate --compile required`` (an ``.xml``) or ``cad urdf validate``."""
-    from cad import mjcf, urdf
+    """The errors and warnings of ``cad mujoco check`` (an ``.xml``) or ``cad urdf validate``."""
+    from cad import mujoco as cad_mujoco
+    from cad import urdf
 
-    result = mjcf.validate(path, compile="required") if path.suffix == ".xml" else urdf.validate(path)
+    result = cad_mujoco.check(path) if path.suffix == ".xml" else urdf.validate(path)
     said = {"error": [], "warning": []}
     for finding in result.findings:
         if finding.severity in said:

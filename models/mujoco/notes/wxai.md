@@ -266,12 +266,15 @@ gripping-force formula.
 
 ## Validation
 
-- `cad mjcf validate out/wxai/wxai.xml --compile required` (the MuJoCo function's file): OK. It
+- `cad mujoco check out/wxai/wxai.xml` (the MuJoCo function's file): OK. It
   compiles under MuJoCo 4.0.0 with 9 bodies, 8 joints, 8 actuators, 16 meshes and 2 keys (`gripper_open`,
   `home`); the mass is 4.000 kg with the base.
   - One warning, `contacts_at_rest`: the link_2/link_5 hulls (above).
-- `cad mjcf validate out/wxai/export/wxai.xml --compile required` (the plain export): OK, with the same
-  warning naming a second pair, the two carriages' hulls (18.5 mm), which the plain export collides.
+  - It says what collides: 13 mesh geoms on 9 bodies (link_6 3, each carriage's body 2: its finger and
+    pad), and the 6 contact excludes, each pair touching at rest.
+- `cad mujoco check out/wxai/export/wxai.xml` (the plain export): OK, with the same warning naming a
+  second pair, the two carriages' hulls (18.5 mm), which the plain export collides; 15 geoms and 8
+  excludes, link_6 with each carriage among them.
 - `cad urdf validate out/wxai/export/wxai.urdf`: OK. Root base_link, 11 links, 10 joints (8 movable),
   total mass 4 kg. Two warnings, `zero_velocity` on the two carriage joints: the specification gives
   the gripper no speed.
@@ -283,9 +286,10 @@ gripping-force formula.
 - Menagerie drawn at the same pose (a scratch picture, not committed): the two match link for link. Menagerie's
   meshes show the pocketing and the D405 that the dummies lack.
 
-The shared daemon was started without a display, so its `cad mjcf snapshot` fails with "no X
-display". The pictures were drawn in-process instead, with `xvfb-run -a python -c "from cad.engine
-import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
+The pictures are of the robot's description, drawn from the plain URDF (`cad urdf snapshot
+out/wxai/export/wxai.urdf out/wxai/wxai.png`); cad draws no MJCF, which MuJoCo Studio shows (`cad run
+mujoco-studio --model out/wxai/scene.xml`). The shared daemon was started without a display, so the
+snapshot failed with "no X display" and the pictures were drawn in-process instead, under `xvfb-run`.
 
 ## Timings
 

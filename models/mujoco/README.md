@@ -70,8 +70,12 @@ each part as its mesh and have no actuators. The MuJoCo function (`src/<robot>_m
 is chosen for a simulation: it makes the model a `mujoco.MjSpec` (`cad.mujoco.spec`), chooses each
 part's collision, adds a position actuator a joint and a key that commands a pose, and saves the
 robot's file (`cad.mujoco.save`). `compare.py` compares that file with Menagerie's, and the plain URDF
-with the maker's. `check.py` compiles the saved file, runs the health checks, loads the folder after
+with the maker's. `check.py` compiles the saved file, runs `cad mujoco check`'s checks, loads the folder after
 copying it elsewhere, counts the collision geoms and holds the commanded pose under gravity.
+
+An MJCF is MuJoCo's own file: cad writes it and checks it (`cad mujoco check out/so101/so101.xml`: what
+MuJoCo refuses or warns of, what collides as what, the contact excludes) and MuJoCo Studio shows it.
+The CAD Viewer shows the model and the plain URDF.
 
 Everything fetched or written lands in folders Git ignores (`upstream/`, `menagerie/`, `out/`,
 `reports/`): the repository holds the scripts alone, and every source is pinned by commit or by
@@ -184,9 +188,9 @@ ranked by how much they cost a CAD-to-simulation user:
    `--joint` names the joints to sweep).
 9. **Fixed: reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf
    deep-copies the whole tree (7 s and 400 MB a call); `leaves(tree)` (`cad.build123d`) now places a read
-   tree's leaves on its own B-rep without the copy. And `cad mjcf snapshot` failed when the daemon
-   started without a display; a snapshot the daemon cannot draw is now drawn by the calling process
-   where it has a display (`xvfb-run cad mjcf snapshot ...`).
+   tree's leaves on its own B-rep without the copy. And a snapshot of the exported robot
+   failed when the daemon started without a display; a snapshot the daemon cannot draw is now drawn by
+   the calling process where it has a display (`xvfb-run cad urdf snapshot ...`).
 10. **Fixed: nowhere to put a simulation's choices.** A servo's reflected inertia, damping and dry
    friction, a surface's contact friction, actuators, gains and contact tuning are not facts the CAD
    holds. They go in the robot's MuJoCo function, on the `mujoco.MjSpec` `cad.mujoco.spec` makes of

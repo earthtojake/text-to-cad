@@ -114,7 +114,7 @@ if __name__ == "__main__":
 ```bash
 cad run src/gripper.py
 cad model export "$ID" sim/gripper.xml
-cad mjcf validate sim/gripper.xml --compile required
+cad mujoco check sim/gripper.xml
 ```
 
 `$ID` is the gripper's `id:` line from the run. The export writes `sim/gripper.xml` and its meshes,
@@ -197,7 +197,7 @@ What to read in it:
   an `include` of the robot, a floor, a light, a skybox), yours to edit and never written over, or a
   scene in code.
 
-The robot file alone validates with `defaults_not_recommended` (a pyramidal cone, the default
+The robot file alone checks with `defaults_not_recommended` (a pyramidal cone, the default
 `solref`) and `mass_summary` as infos: solver settings are the scene's, so they are expected here.
 
 ## The MuJoCo function
@@ -240,12 +240,21 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/gripper_mujoco.py
-cad mjcf validate sim/scene.xml --compile required
-cad mjcf snapshot sim/scene.xml tmp/collision.png --display collision --pose home
+cad mujoco check sim/scene.xml
 ```
 
 `cad run` sees the `mujoco` import and adds `cad[mujoco]`. The function's file replaces the plain
 export at the same path: it is the robot's file now, actuators and all, as a Menagerie robot's is.
+The run ends with what `save` checked of it:
+
+```text
+collisions: 3 collision geoms (box 3) on 3 bodies: palm 1 (box 1); left 1 (box 1); right 1 (box 1)
+excludes: 3 contact excludes, each between two bodies whole: palm and left touching at rest; palm and right touching at rest; left and right 30 mm apart at rest
+wrote /path/to/sim/gripper.xml
+```
+
+Read both lines against the function: three boxes, as fitted; and the exclude between the two
+fingers, which stand apart when open, is the one the function added on purpose.
 
 **`spec(thing, zero=, tolerance=, assets=)`** takes a model call's handle (as here), a build123d
 shape, a `.step`, an `.xbf`, or an MJCF path: an authored model, an export, a Menagerie robot.
@@ -310,7 +319,9 @@ the file with MuJoCo's own writer, copies every mesh and texture the spec names 
 it, so the folder travels, and removes the meshes its last save of that file wrote that it no
 longer names (never another file). It writes a `scene.xml` beside the file when there is none and
 the spec has no floor of its own (a floor, a light and the robot framed), and never writes over
-one. Then it prints the health checks' warnings and `wrote <path>`. A spec MuJoCo refuses is
+one. Then it checks the file as `cad mujoco check` does and prints each warning, what the model
+collides as (`collisions:`), its contact excludes (`excludes:`) and `wrote <path>`
+([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)). A spec MuJoCo refuses is
 refused in MuJoCo's words, and nothing is written. A relative path is taken against the working
 directory.
 
@@ -361,14 +372,14 @@ the defaults above its `<include>`, and leave the floor and light as written:
 - **Defaults go above the `<include>`.** A class the included file defines copies the top-level
   defaults that stand at the `<include>`. A `<geom solref>` written after it reaches the elements in
   no class (the floor), but none in the robot's classes, and every element of a generated robot is
-  in its class. `cad mjcf validate` warns `defaults_after_include` where it is below.
+  in its class. `cad mujoco check` warns `defaults_after_include` where it is below.
 - The option and `solref` lines clear `defaults_not_recommended`.
 - A key the model's mechanism states make has no `ctrl`, so every position actuator commands 0, the
   zero pose (`home`, exported with `--zero home`). A key that commands another pose is the robot's,
   `s.add_key(name=..., qpos=..., ctrl=...)` in its MuJoCo function, with a `ctrl` per actuator in
   actuator order.
 
-Validate the scene after every edit (`cad mjcf validate sim/scene.xml --compile required`). A scene
+Check the scene after every edit (`cad mujoco check sim/scene.xml`). A scene
 that composes other models goes in code instead (below).
 
 ## The scene in code
@@ -451,7 +462,7 @@ What each step does, and the traps:
   and texture absolutely and clears the spec's own folders: load a Menagerie robot through `spec()`
   too, never `MjSpec.from_file`: `save` refuses a scene that attached one, in MuJoCo's words (`Error
   opening file`) and naming `spec(path)`. A scene written another way that cannot find a mesh fails
-  `cad mjcf validate` with `mesh_file_not_found`.
+  `cad mujoco check` with `compile_failed`, in MuJoCo's words.
 - **`save` makes the folder travel.** It copies every file the scene names, the attached robots'
   included, into `sim/assets/` beside `sim/pick.xml` and names each there (two files of one name
   become two, the second `_2`), so the folder loads on another computer. A scene has a floor of its
@@ -483,18 +494,18 @@ its last link and a MuJoCo function of its own, and the gripper attached at that
 ## Check and show the scene
 
 ```bash
-cad mjcf validate sim/pick.xml --compile required
+cad mujoco check sim/pick.xml
 ```
 
 On the scene above it prints:
 
 ```text
 warning: joint_limits_at_rest at sim/pick.xml: 1 joint(s) lie outside their range at qpos0: joint 'panda/joint4' is 0 rad, range [-3.072, -0.0698] rad ([-176, -3.999] deg) Hint: ...
-info: geom_not_drawn at sim/pick.xml <worldbody> geom 'floor': an unbounded plane (a size of 0) is not drawn by the viewer; its grid stands in for the floor
-info: joint_not_posable at sim/pick.xml body 'block/block' joint 'block/free': a free joint is not posable in the viewer: body 'block/block' is drawn where it is authored
 info: compiled at sim/pick.xml: compiled by MuJoCo 4.0.0: 13 bodies, 10 joints, 68 geoms, 62 meshes, 4 keyframes
 info: mass_summary at sim/pick.xml: moving mass 16.27 kg in 12 moving bodies, 15 degrees of freedom (nv), 8 actuators (nu); moving geometry spans 0.622 x 0.302 x 1.12 m at qpos0
-OK sim/pick.xml: MJCF 'pick', 13 bodies, 10 joints (1 coupled), 8 actuators, 53 visuals, 62 mesh files, 3 keyframes
+info: collisions at sim/pick.xml: 15 collision geoms (mesh 11, box 3, plane 1) on 13 bodies: world 1 (plane 1); panda/link0 1 (mesh 1); ...; gripper/palm 1 (box 1); gripper/left 1 (box 1); gripper/right 1 (box 1); and 1 more. Moving bodies that collide as nothing: panda/attachment
+info: excludes at sim/pick.xml: 4 contact excludes, each between two bodies whole: panda/link0 and panda/link1 0.994 mm apart at rest; gripper/palm and gripper/left touching at rest; gripper/palm and gripper/right touching at rest; gripper/left and gripper/right 30 mm apart at rest
+OK sim/pick.xml: MuJoCo model 'pick', 13 bodies, 10 joints, 8 actuators, 15 collision geoms, 62 meshes, 4 keys
 ```
 
 Read every line:
@@ -510,15 +521,22 @@ Read every line:
   `impratio` and `solref`, above anything it includes.
 - `mass_summary`: 16 kg moving in 15 degrees of freedom and 8 actuators, about a metre tall. A
   number off by 1000 is a unit; a count off by one is a joint or an actuator missing.
+- `collisions`: the gripper's three boxes came through the attach, the floor collides as a plane
+  (the block is the row past the twelve the line names; `--json` has every one), and the one moving
+  body that collides as nothing is the Panda's attachment frame, which has no geometry. A robot's
+  link missing here lost its collision.
+- `excludes`: the Panda's own (its base and first link, Menagerie's) and the gripper's three, the
+  two fingers apart because the gripper is open. An exclude nobody meant between two bodies that
+  stand apart is one to remove ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)).
+- The last line counts 4 keys: the scene's `home` and the children's, prefixed.
 
-Then look at it. A still for your own review, and MuJoCo itself for the person:
+Then show it. No `cad` command draws an MJCF: the check above is your review, and MuJoCo itself
+shows the scene to the person:
 
 ```bash
-cad mjcf snapshot sim/pick.xml tmp/home.png --pose home
 cad run mujoco-studio --model sim/pick.xml
 ```
 
-The still draws the model at `home` as the viewer reads it (the free block where it is authored).
 MuJoCo Studio compiles and simulates the scene in the person's browser, reloading as `pick.xml`
 changes: give the person the URL it prints. It listens on every interface with no authentication
 (Studio's own limitation), so run it on this computer or a trusted network.
@@ -534,7 +552,7 @@ is a modelling error, and no solver setting fixes one; tuning around it hides it
    Studio (rests still, slips, jitters, sinks into the floor, explodes).
 2. **One parameter at a time**, in the scene script for what the scene owns, in the robot's MuJoCo
    function for what it chooses, and in the model for what the geometry owns. Change one, run the
-   script, `cad mjcf validate sim/pick.xml --compile required` after every write, run the same
+   script, `cad mujoco check sim/pick.xml` after every write, run the same
    scenario, and keep the change or revert it.
 3. **Record** each kept change and the reason in a comment beside it in the script that made it.
 
@@ -583,10 +601,9 @@ it: change it in the MuJoCo function where contact is wrong, never to steady the
 
 ## What is not supported
 
-- Reading compiled models (`.mjb`) and packages (`.mjz`), and textures: the viewer and the checks
-  read the XML and its STL and OBJ meshes.
-- Playing a simulation in the CAD Viewer: it opens an MJCF kinematically, with a slider per joint
-  and the keys as poses. MuJoCo Studio is where a simulation runs.
+- Compiled models (`.mjb`) and packages (`.mjz`): the check reads the XML, as MuJoCo compiles it.
+- An MJCF in the CAD Viewer or the CAD app, or a still of one: it is MuJoCo's own file. `cad mujoco
+  check` checks it, and MuJoCo Studio is where it is seen and where a simulation runs.
 - Converting between URDF and MJCF beyond what MuJoCo's own loader does with a URDF
   ([interoperability.md](interoperability.md#mjcf)). A robot with a CAD model is generated in each
   format from that model instead.

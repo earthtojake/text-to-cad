@@ -13,8 +13,8 @@ The conventions below are MuJoCo Menagerie's (google-deepmind/mujoco_menagerie),
 3. Keep a ledger as a comment block at the top of `robot.xml`: frames, joints and their positive motion, units, mesh sources and scale, assumptions ([urdf-ledger.md](urdf-ledger.md) has the shape).
 4. Write the compiler line, the default classes and the assets first, then the body tree, then actuators, equalities and keyframes.
 5. Compute inertials and unit conversions with formulas or a throwaway script, never freehand ([inertials.md](inertials.md)). Mesh files and scale: [meshes.md](meshes.md).
-6. Validate with `cad mjcf validate scene.xml --compile required` ([mjcf-checks.md](mjcf-checks.md)).
-7. Snapshot the `home` key and each joint moved; show the model ([Show the model](../SKILL.md#show-the-model)). To show it as MuJoCo compiles and simulates it: `cad run mujoco-studio --model path/to/scene.xml`, MuJoCo Studio's web viewer, which reloads the model as the file changes; the person opens the URL it prints.
+6. Check with `cad mujoco check scene.xml` ([mjcf-checks.md](mjcf-checks.md)), and read its `collisions` and `excludes` lines against the collision each body was meant to have.
+7. Show the model as MuJoCo compiles and simulates it: `cad run mujoco-studio --model path/to/scene.xml`, MuJoCo Studio's web viewer, which reloads the model as the file changes; the person opens the URL it prints, at the `home` key and with each joint moved. No `cad` command draws an MJCF ([Looking at the model](#looking-at-the-model)).
 8. Clear every model-health warning the compile reports before tuning anything ([below](#tuning)).
 9. Report assumptions, skipped checks and risks ([guardrails.md](guardrails.md#the-report)).
 
@@ -50,7 +50,7 @@ Split the robot from its world:
 </mujoco>
 ```
 
-An include is read relative to the main file's folder and splices the included file's children in; each file is included once. Validate and snapshot `scene.xml` to see the robot standing in its world, and `robot.xml` to see it alone.
+An include is read relative to the main file's folder and splices the included file's children in; each file is included once. Check `scene.xml`, and open it in MuJoCo Studio to see the robot standing in its world; check `robot.xml` when it is used alone.
 
 ## Default classes
 
@@ -81,7 +81,7 @@ MuJoCo collides every geom unless told not to, so a visual mesh needs `contype="
 - **visual** geoms: `group="2"`, no contacts. Full-detail meshes, materials.
 - **collision** geoms: `group="3"`. Primitives (`box`, `capsule`, `cylinder`, `sphere`) sized from the part, or a coarse convex mesh; name a collision mesh with a `_c` suffix (`link1_c`). MuJoCo hulls every mesh it collides, so a concave visual mesh used for collision collides as its convex hull; a concave part that must keep its pocket collides as several convex meshes, one geom each (a model generated from CAD: `decompose()` in its MuJoCo function, whose hulls are `<part>_hull<i>`).
 
-The CAD Viewer and `cad mjcf snapshot` draw groups 0 to 2, as MuJoCo's own viewer does by default, and leave 3 and up out, so a model following this convention shows its visuals and hides its collision geoms. A geom left in group 0 is drawn whether it is meant for collision or not.
+MuJoCo's own viewer draws groups 0 to 2 by default and leaves 3 and up out, so a model following this convention shows its visuals and hides its collision geoms. A geom left in group 0 is drawn whether it is meant for collision or not, and collides unless its class says otherwise: `cad mujoco check` warns `visual_geoms_collide` and lists what collides.
 
 A geom's size is MuJoCo's: half sizes for a `box`, a radius (and a half length) for a `sphere`, `capsule` or `cylinder`. `fromto="x1 y1 z1 x2 y2 z2"` places a capsule, cylinder or box between two points instead of `pos` and an orientation.
 
@@ -99,8 +99,8 @@ A geom's size is MuJoCo's: half sizes for a `box`, a radius (and a half length) 
 - `type="hinge"` (the default) turns about `axis`, `type="slide"` slides along it; `axis` is in the body's frame, never of zero length.
 - `range` in radians (with `angle="radian"`) or metres. With `autolimits="true"` a range limits the joint; without a range a hinge turns freely.
 - `ref` is the joint's value in the authored pose (MuJoCo's `qpos0`). Leave it at zero unless the source says otherwise.
-- `type="ball"` and `free` exist for spherical joints and floating bodies; the viewer draws such a body where it is authored and cannot pose it.
-- Two joints that move together are coupled by `<equality><joint joint1="follower" joint2="leader" polycoef="0 1 0 0 0"/></equality>`: `joint1 = polycoef[0] + polycoef[1] * joint2` (a gripper's second finger). The viewer follows a linear coupling and treats a polynomial one as a joint of its own.
+- `type="ball"` and `free` exist for spherical joints and floating bodies.
+- Two joints that move together are coupled by `<equality><joint joint1="follower" joint2="leader" polycoef="0 1 0 0 0"/></equality>`: `joint1 = polycoef[0] + polycoef[1] * joint2` (a gripper's second finger).
 
 ## Inertia
 
@@ -115,7 +115,7 @@ Let the compiler compute each body's mass and inertia from its geoms where they 
 
 ## Tuning
 
-Check model health before tuning: `cad mjcf validate scene.xml --compile required` and clear each `contacts_at_rest`, `visual_geoms_collide`, `inertia_from_visuals`, `scale_suspect` and `joint_limits_at_rest` warning ([mjcf-checks.md](mjcf-checks.md#model-health)). Each is a modelling error, and no solver setting fixes it. Then tune by method: a baseline scenario from `home`, one parameter changed at a time, validated after every write and compared against the baseline in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`), kept or reverted, and the reason written beside it. What to try and in which order is [mujoco-environment.md](mujoco-environment.md#tuning).
+Check model health before tuning: `cad mujoco check scene.xml` and clear each `contacts_at_rest`, `visual_geoms_collide`, `inertia_from_visuals`, `scale_suspect` and `joint_limits_at_rest` warning ([mjcf-checks.md](mjcf-checks.md#model-health)). Each is a modelling error, and no solver setting fixes it. Then tune by method: a baseline scenario from `home`, one parameter changed at a time, validated after every write and compared against the baseline in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`), kept or reverted, and the reason written beside it. What to try and in which order is [mujoco-environment.md](mujoco-environment.md#tuning).
 
 ## Keyframes
 
@@ -131,15 +131,14 @@ Every model ships a `home` key, the pose a person and a controller start from:
 - `ctrl` lists one value per actuator, in actuator order.
 - Radians and metres, always.
 
-The viewer opens the model as MuJoCo does, at `qpos0` (each joint at its `ref`), not at `home`; `home` and every other key are poses to choose (`cad mjcf snapshot model.xml out.png --pose home`).
+MuJoCo opens the model at `qpos0` (each joint at its `ref`), not at `home`; `home` and every other key are poses to choose, in MuJoCo Studio or with `mj_resetDataKeyframe`.
 
-## What the viewer draws
+## Looking at the model
 
-The CAD Viewer (`cad viewer model.xml`) shows an MJCF in its robot view, a slider per hinge and slide joint, and `cad mjcf snapshot` draws the same still. It reads the model with its own reader, not MuJoCo, so it draws less than MuJoCo compiles:
+An MJCF is MuJoCo's own file, and MuJoCo is what reads it: no `cad` command or view draws one.
 
-- drawn: `sphere`, `capsule`, `cylinder`, `box`, a `plane` with a size, and STL and OBJ meshes, in groups 0 to 2, each in its `rgba` or material colour;
-- not drawn, each said as a finding: `hfield`, `sdf` (signed distance field) and `ellipsoid` geoms, a plane with no size (the viewer's grid stands in for the floor), an MSH or inline mesh, and what `<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` would expand into (MuJoCo's compiler makes those bodies; the reader sees nothing);
-- not posable: a `ball` or `free` joint's body, drawn where it is authored;
-- not read: textures, sites, cameras, lights, tendons, sensors and actuators (the model keeps them; the viewer does not draw them).
+- **Checked**: `cad mujoco check model.xml` compiles it with MuJoCo and says what MuJoCo refused or warned of, the model-health findings, what collides as what and the contact excludes ([mjcf-checks.md](mjcf-checks.md)).
+- **Seen**: `cad run mujoco-studio --model model.xml` serves it in MuJoCo Studio's web viewer, as MuJoCo compiles and simulates it; the person opens the URL it prints.
+- **A still of its kinematics**: where the robot has a CAD model or a URDF, snapshot that (`cad model snapshot`, `cad urdf snapshot`; [snapshots.md](snapshots.md)).
 
-Not supported at all: compiled models (`.mjb`) and packages (`.mjz`), exporting the compiled geometry, converting between URDF and MJCF, and playing a simulation. For the model exactly as MuJoCo compiles it, `cad mjcf validate --compile required`.
+Not supported: compiled models (`.mjb`) and packages (`.mjz`), exporting the compiled geometry, converting between URDF and MJCF, and playing a simulation.

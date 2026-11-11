@@ -92,7 +92,7 @@ A part read from a STEP or an xbf keeps the file's colours until it is given a m
 replaces its colour like any other part's, in the viewer and every export alike. To keep the
 file's colour, set it again after the material: `color = part.color; part.material = plastics.pe();
 part.color = color`. Faces the file paints (a cable's red and black wires) keep their colours
-either way, and the viewer, the GLB, the MJCF and the URDF all draw them.
+either way: the viewer draws them, and the GLB, the MJCF and the URDF all carry them.
 
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family

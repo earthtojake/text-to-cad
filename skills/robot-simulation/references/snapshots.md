@@ -1,7 +1,8 @@
 # Snapshots
 
-`cad urdf snapshot`, `cad srdf snapshot` and `cad mjcf snapshot` draw the robot to a
-PNG still, as the CAD Viewer shows it, rendered by OCCT:
+`cad urdf snapshot` and `cad srdf snapshot` draw the robot to a PNG still, as the CAD Viewer shows
+it, rendered by OCCT. An MJCF has no snapshot: it is MuJoCo's own file, which no `cad` command
+draws ([an MJCF](#an-mjcf), below).
 
 ```bash
 cad urdf snapshot path/to/robot.urdf review.png
@@ -9,9 +10,6 @@ cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "
 cad srdf snapshot path/to/robot.srdf review.png
 cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad srdf snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
-cad mjcf snapshot path/to/scene.xml review.png --pose home
-cad mjcf snapshot path/to/scene.xml review.png --pose '{"joint1": 30, "finger_joint2": 0.02}'
-cad mjcf snapshot path/to/scene.xml collision.png --display collision --pose home
 ```
 
 ## Poses
@@ -31,11 +29,6 @@ one colour of the Parts palette).
   found. The robot opens at every joint zero, then this SRDF's `home` group state if it declares
   one. `--pose` names a group state (`group/name`, or a name only one group has) or gives joint
   values over that opening pose.
-- **MJCF**: the model opens at qpos0 (every control at zero, each joint's `ref`), as MuJoCo opens
-  it; `--pose` names a `<keyframe>` key (`home`) or gives joint values over that -- a hinge's in
-  degrees, a slide's in metres, around `ref`. A hinge with no `range` has no limits; a `ball` or
-  `free` joint is drawn where it is authored and takes no value; a body with several joints is posed
-  by each in turn. A linear `<equality><joint>` coupling is followed, as a mimic is.
 
 ## What each draws
 
@@ -54,33 +47,26 @@ A mesh in another format (`.dae`, `.obj`), a remote URI, a package no folder abo
 is, or a missing file is refused by name, and a link mesh that cannot be loaded fails the snapshot
 rather than leaving the link out.
 
-### MJCF
+### An MJCF
 
-What the viewer and `cad mjcf snapshot` draw is what [mjcf-authoring.md](mjcf-authoring.md) lists:
-the geoms of groups 0 to 2 (3 and up are a model's collision geoms, as MuJoCo's own viewer hides
-them) -- `sphere`, `capsule`, `cylinder` and `box` meshed by the server, a `plane` with a size as a
-thin slab, a `mesh` whose asset is an STL or an OBJ under `meshdir` (the mesh `scale` applied) -- in
-the geom's `rgba`, else its material's (a textured material draws MuJoCo's plain grey; no texture
-is drawn). Not drawn, each said by `cad mjcf validate`: an unbounded plane (the viewer's grid stands
-in for a floor), a heightfield, a signed-distance geom, an ellipsoid, an inline or MSH mesh, and whatever
-`<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` would expand to. A `.xml` whose
-root is not `<mujoco>`, an include that is not there, a mesh file that is not there and the
-validator's own errors refuse the file before anything renders.
+No `cad` command draws a MuJoCo model's file. What to use in its place:
 
-`--display collision` draws instead what MuJoCo collides: every geom whose `contype` or
-`conaffinity` is not 0, whatever its group, each in its own colour, so that each hull of a
-decomposed part stands apart (a mesh geom collides as its convex hull, and a hull file already is
-one). Compare it with the visual snapshot at the same pose and camera: a pocket, a slot or the gap
-between jaws that the hulls fill is a gap the simulator does not have. It combines with a mode
-(`--display collision,wireframe`) and with `--pose`. A URDF, an SRDF and a model's document are
-refused by name: snapshot the MJCF exported from the same model.
+- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad model snapshot
+  "$ID" out.png --pose home`) or the URDF exported beside it (`cad urdf snapshot robot.urdf out.png
+  --pose '{"elbow": 45}'`): the same links, joints and zero.
+- **What it collides as**: read `cad mujoco check` ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)):
+  the collision geoms by kind and by body, and each contact exclude with how its two bodies stand at
+  rest; `--json` has every geom's kind and size. A table says exactly what a MuJoCo function left
+  colliding, which a picture of boxes inside meshes does not.
+- **The model as MuJoCo compiles and simulates it**: the person opens it in MuJoCo Studio (`cad run
+  mujoco-studio --model path/to/scene.xml`).
 
 ## Display, camera and annotations
 
 A normal snapshot uses Solid mode, and every snapshot is light, whatever the viewer's theme. A
 robot file carries each part's colour and its material's name, not the material's look: a `cad model
 snapshot` draws a metal's sheen (its flat faces dark where they mirror the studio's dark side, so a
-grey arm shows black panels), while the MJCF's and the URDF's stills draw the same parts in their flat
+grey arm shows black panels), while the URDF's still draws the same parts in their flat
 colours. The two compare by shape and pose, not by shading.
 `--display` takes any of the viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`,
 ...), `exploded=AMOUNT`, or the display object: `camera` (projection and focal length) and `clip`
@@ -100,4 +86,4 @@ Link meshes are resolved relative to the description, so they must be present: a
 LFS pointer is not a mesh and fails the snapshot. Run `git lfs checkout <mesh dir>` first.
 
 OUT is written exactly as given and must be a `.png`; check the exit status before reading it. Use
-`cad urdf snapshot --help` (or `srdf`, `mjcf`) for the complete current interface.
+`cad urdf snapshot --help` (or `srdf`) for the complete current interface.
