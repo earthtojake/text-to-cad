@@ -117,7 +117,7 @@ trimesh = [
   "networkx>=3.2,<4",
 ]
 # The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
-# one dependency (cad.mujoco) -- and MuJoCo Studio. An MJCF's validate compiles the model with the core, so
+# one dependency (cad.mujoco) -- and MuJoCo Studio. `cad mujoco check` compiles a model with the core, so
 # what MuJoCo refuses is a finding in its own words. Studio's web viewer is the person's window onto a model
 # (`cad run mujoco-studio --model scene.xml`, cad.mujoco._command): a Python package with its own command line,
 # so it comes with the extra as kicad-cli comes with cad[kicad]; it serves the page from this process, so it

@@ -1,6 +1,6 @@
 """A URDF read into a robot's articulation (``robot_model``), and an SRDF's group states over the
 URDF it plans for: what the stills (``formats/robot.py``) and the viewer's payload (the server's
-``robot_payload``) each take a view of. In the engine, as ``mjcf_source`` is, because every reader of a
+``robot_payload``) each take a view of. In the engine, because every reader of a
 URDF reads it here; the standard library alone (``tests/python/global/test_robot_modules_stdlib_pure.py``).
 The type's own check is the validation family's (``cad.urdf._source``), which the payload runs first.
 

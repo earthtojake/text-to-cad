@@ -1,4 +1,4 @@
-"""The model-health checks ``cad mjcf validate --compile`` runs on a model MuJoCo compiled.
+"""The model-health checks ``cad mujoco check`` runs on a model MuJoCo compiled.
 
 MuJoCo's modelling guide ("Model tuning") lists what to rule out before tuning anything: geoms that
 intersect at ``t = 0``, visual geoms that collide, inertias computed from the wrong geoms, a unit or

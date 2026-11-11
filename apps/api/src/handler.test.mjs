@@ -290,25 +290,6 @@ test("the install command's channels are stored as what happened, and the -githu
   assert.deepEqual(store.rows, []);
 });
 
-test('schema 10 counts MuJoCo models, which no older schema names', async () => {
-  const file = { name: 'files', kind: 'mjcf', count: 1 };
-  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 10, events: [file] })).status, 204);
-  for (const schema of [6, 7, 8, 9]) {
-    assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema, events: [file] })).status, 400, String(schema));
-  }
-  // Everything else is schema 9's: a refused snapshot of one names the part of the request it refused.
-  const refused = { name: 'snapshot_failure', kind: 'mjcf', reason: 'bad_request', part: 'camera', count: 1 };
-  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 10, events: [refused] })).status, 204);
-  const unnamed = { ...refused, part: undefined };
-  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 10, events: [unnamed] })).status, 400);
-  // An MJCF's collision view is schema 10's part too; schema 9 never named it.
-  const collision = { name: 'snapshot_failure', kind: 'model', reason: 'bad_request', part: 'display.collision', count: 1 };
-  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 10, events: [collision] })).status, 204);
-  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 9, events: [collision] })).status, 400);
-  const clip = { ...collision, part: 'display.clip' };
-  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 9, events: [clip] })).status, 204);
-});
-
 test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
   const kinds = ['model', 'xbf'];
   const events = kinds.flatMap(kind => [

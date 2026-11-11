@@ -160,7 +160,7 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
 
     parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
-        document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf, MJCF .xml or .mjcf), "
+        document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
                        "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a "
                        "model's, which cad run SCRIPT.py prints: drawn from what the engine holds)")
         + "; with --job, drawn in place of every job's input")
@@ -174,10 +174,9 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                              "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
                              "sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), "
-                                          "collision (an MJCF's: the geoms MuJoCo collides in place of its visuals, each "
-                                          "its own colour), or the display JSON object (mode, grid, camera, clip, exploded, "
-                                          "hidden, isolated: part refs the picture leaves out, or alone draws; collision), or "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
+                                          "the display JSON object (mode, grid, camera, clip, exploded, "
+                                          "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
                                           "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
                                           "window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; "
@@ -246,7 +245,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
 def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) -> dict[str, Any] | None:
     """A picture the engine could not draw for want of an OpenGL context (``snapshot.no_gl``: on Linux, a daemon
     with no X display), drawn instead by the installation's base -- the environment that holds the kernel --
-    run from this process, so on this process's display (``xvfb-run cad mjcf snapshot ...``): the same snapshot,
+    run from this process, so on this process's display (``xvfb-run cad urdf snapshot ...``): the same snapshot,
     which there, the engine failing it again, is drawn by that process itself (``snapshot.drawable_here``). None
     where it is no such failure, where this process carries the kernel (the library drew here already, or could
     not), or where it has no display to lend (Linux with no ``DISPLAY``): the engine's failure stands. What it

@@ -1,6 +1,6 @@
 """An SDF (SDFormat) read into a robot's articulation (``robot_model``): what the stills
 (``formats/robot.py``) and the viewer's payload (the server's ``robot_payload``) each take a view of.
-In the engine, as ``mjcf_source`` is, because every reader of an SDF reads it here; the standard
+In the engine, because every reader of an SDF reads it here; the standard
 library alone (``tests/python/global/test_robot_modules_stdlib_pure.py``). The type's own check is the
 validation family's (``cad.sdf._validation``), which the payload runs first.
 

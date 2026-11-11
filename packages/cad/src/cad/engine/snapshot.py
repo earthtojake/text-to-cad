@@ -8,9 +8,8 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.stl``, ``.3mf``, ``.glb``: a mesh file, read by its reader (``formats/``: numpy, zip and XML,
   OCCT's glTF reader) into a structure and part buffers as a document's are, with the viewer's
   feature edges, and drawn by the documents' own path; a GLB's base colour textures through OCCT.
-- ``.urdf``, ``.sdf``, ``.srdf``, ``.xml``, ``.mjcf``: a robot (an MJCF a MuJoCo model's), its link
-  meshes placed by the viewer's forward kinematics (``formats/robot.py``), drawn as a document is;
-  ``--pose`` poses it (a group state's or an MJCF keyframe's name, or joint values).
+- ``.urdf``, ``.sdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
+  kinematics (``formats/robot.py``), drawn as a document is; ``--pose`` poses it.
 - ``.dxf``: a drawing, from above, in its pens, in the viewer's 2D look (``render/drawing.py``).
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
   colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
@@ -97,7 +96,7 @@ __all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "dr
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "collision"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated"})
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
@@ -148,8 +147,7 @@ RENDER_SCALE_RANGE = (1.0, 3.0)
 class SnapshotRefused(ValueError):
     """A request the snapshot will not draw, said before anything renders. ``part``: which part of the
     request it refused, one word (``refusing``: ``source``, ``out``, ``display``, ``display.mode``,
-    ``display.exploded``, ``display.clip``, ``display.grid``, ``display.visibility``, ``display.collision``,
-    ``camera``, ``pose``,
+    ``display.exploded``, ``display.clip``, ``display.grid``, ``display.visibility``, ``camera``, ``pose``,
     ``size``, ``annotation``, ``measurements``, ``references``, ``job``), never the value given: what the
     server's telemetry counts a refusal by (``cad_server.analytics.SNAPSHOT_PARTS``); None where none said."""
 
@@ -260,8 +258,7 @@ def exploded_amount(display: dict[str, Any]) -> float:
 
 @refusing("display")
 def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, ``collision`` (an MJCF's collision geoms, each its
-    own colour, in place of its visuals), any of them by commas (``hidden-line,exploded=0.6``), or
+    """``--display``: a mode, ``exploded=AMOUNT``, both by commas (``hidden-line,exploded=0.6``), or
     the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
     (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
     ``render/schematic.py``)."""
@@ -286,14 +283,11 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                 name, equals, amount = token.partition("=")
                 if name == "exploded" and "exploded" not in display:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
-                elif token == "collision" and "collision" not in display:
-                    display["collision"] = True
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "exploded=AMOUNT moves the parts apart, and collision draws an MJCF's "
-                                          "collision geoms (one of each, by commas)",
+                                          "and exploded=AMOUNT moves the parts apart (one of each, by commas)",
                                           part="display.mode")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
@@ -308,10 +302,6 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                               part="display.mode")
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false", part="display.grid")
-    if "collision" in display and not isinstance(display["collision"], bool):
-        raise SnapshotRefused("display.collision is true or false", part="display.collision")
-    if display.get("collision") is False:
-        del display["collision"]  # the visuals, as with none: one reading of the file
     _visibility(display)
     if grid:
         display["grid"] = True
@@ -672,7 +662,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".xml", ".mjcf", ".dxf", ".kicad_pcb", ".kicad_sch")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
 MESHES = (".stl", ".3mf", ".glb")
 
 
@@ -857,7 +847,7 @@ def snapshot(document: Path, out: Path, *, display: dict[str, Any] | None = None
     """Draw ``document`` -- an ``.xbf`` or a ``.step`` the engine serves and meshes, or a file its
     reader reads (``FILES``: a mesh, a robot, a drawing) -- into ``out`` (a ``.png``); returns what
     was drawn and how long each stage took. ``pose``: a configuration's name (a robot's group
-    state, an MJCF's keyframe) or ``{joint: value}``, the engine placing each link by its pairs from the ground (a
+    state) or ``{joint: value}``, the engine placing each link by its pairs from the ground (a
     robot's by its joints from its root); None draws the document as built (a robot where the
     viewer opens it); a mesh has no mechanism to pose. ``source``: the document is a
     build's, held in this process (``draw``). ``annotation`` (``parse_annotation``'s) and

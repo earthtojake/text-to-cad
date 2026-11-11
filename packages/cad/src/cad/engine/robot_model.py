@@ -1,12 +1,12 @@
 """A robot description as its readers articulate it: a tree of links, each placed at rest, with the
-visuals drawn on it and the joints between them -- what the engine's three readers of a robot
-description make (``urdf_source``: a URDF and an SRDF's group states over it; ``sdf_source``: an SDF;
-``mjcf_source``: an MJCF) and what the viewer's payload (the server's ``robot_payload``) and the
+visuals drawn on it and the joints between them -- what the engine's readers of a robot
+description make (``urdf_source``: a URDF and an SRDF's group states over it; ``sdf_source``: an SDF)
+and what the viewer's payload (the server's ``robot_payload``) and the
 stills (``formats/robot.py``) each take a view of. A description is read once, here; the two views
 translate shapes and units, and decide what each can draw.
 
 **The articulation** (``Articulation``): each link's rest frame in the description's space (the
-description as written, every joint at zero; an MJCF's at each joint's ``ref``), a 4x4 of lists in
+description as written, every joint at zero), a 4x4 of lists in
 metres; each link's visuals (``Visual``: its placement in its link's frame, its shape -- ``("box",
 {"size"})``, ``("cylinder"|"capsule", {"radius", "length"})``, ``("sphere", {"radius"})`` in full
 sizes, ``("file", path, scale)`` for a mesh file, the path None where the reference names no local
@@ -135,7 +135,7 @@ class Dialect:
 class Visual:
     """A link's visual as the viewer and the stills take one: its placement in its link's frame, its shape --
     ``("box"|"cylinder"|"sphere"|"capsule", dimensions)`` in full sizes or ``("file", path, scale)`` -- its
-    colour (``#rrggbb``), its alpha and the name a row calls it; an MJCF's geom (``geom``); a URDF's or an
+    colour (``#rrggbb``), its alpha and the name a row calls it; a URDF's or an
     SDF's mesh reference as written (``reference``), colour as written (``rgba``) and facts (``facts``)."""
 
     id: str
@@ -145,7 +145,6 @@ class Visual:
     color: str
     alpha: float
     label: str
-    geom: Any = None
     reference: str = ""
     rgba: tuple[float, ...] | None = None
     facts: dict[str, Any] | None = None
@@ -155,8 +154,8 @@ class Visual:
 class LinkJoint:
     """A joint between two links as the viewer poses one: ``fixed``, ``revolute``, ``continuous`` or
     ``prismatic``; its frame (the anchor, at rest, in the model's space) and axis (a unit vector there); its
-    range in radians or metres around zero (None: unbounded); the leader it follows, if any; an MJCF's joint
-    (``source``); a URDF's ``<tcad:four_bar>`` as written (``four_bar``: its ``driver``, lengths and zero
+    range in radians or metres around zero (None: unbounded); the leader it follows, if any;
+    a URDF's ``<tcad:four_bar>`` as written (``four_bar``: its ``driver``, lengths and zero
     angles, the element's ``namespace``); its facts as written (``facts``)."""
 
     name: str
@@ -168,15 +167,13 @@ class LinkJoint:
     lower: float | None
     upper: float | None
     mimic: tuple[str, float, float] | None = None
-    source: Any = None
     four_bar: dict[str, Any] | None = None
     facts: dict[str, Any] | None = None
 
 
 @dataclass
 class Articulation:
-    """The model as a tree of links: each link's rest frame, its visuals, the joints (an MJCF's parents first,
-    a URDF's and an SDF's as declared), the poses (in the viewer's control units: degrees for a turn, metres
+    """The model as a tree of links: each link's rest frame, its visuals, the joints (as declared), the poses (in the viewer's control units: degrees for a turn, metres
     for a slide) and the inertials, by link; the description's ``name``, an SRDF's ``home`` state, each
     link's collisions as written, an SDF's account of itself (``sdf``) and the description files read
     (``sources``)."""

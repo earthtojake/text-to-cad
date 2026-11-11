@@ -1,4 +1,4 @@
-"""Compiling an MJCF with MuJoCo, for ``cad mjcf validate --compile``.
+"""Compiling an MJCF with MuJoCo, for ``cad mujoco check`` (``_check``).
 
 MuJoCo's compiler is the one reader that knows every rule of the format: a mesh too small to hull, a
 body with no inertia to move, a name used twice across an include, a default class that does not exist.
@@ -84,13 +84,13 @@ def compile_findings(path: Path, *, mode: str = "auto") -> FindingsReport:
         return findings
     if not installed():
         if mode == "required":
-            findings.add("error", "compile_unavailable", f"MuJoCo is not installed here, and --compile required asks "
-                                                         f"for it", path=where,
+            findings.add("error", "compile_unavailable", "MuJoCo is not installed here, and the check is its "
+                                                         "compiler's", path=where,
                          hint=f"install {EXTRA} in this environment; the cad command makes an environment of it "
                               f"on first need")
         else:
             findings.add("info", "compile_skipped", f"not compiled with MuJoCo: {EXTRA} is not installed here "
-                                                    f"(--compile required makes that environment)", path=where)
+                                                    "(cad mujoco check makes that environment)", path=where)
         return findings
     try:
         model, warnings = compile_model(path)

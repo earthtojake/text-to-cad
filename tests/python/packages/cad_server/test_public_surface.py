@@ -33,15 +33,15 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
     "cad.sdf": ("validate",),
-    "cad.mjcf": ("validate",),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cad.sdf", "validate"),
-    # An MJCF's: run here, or for --compile required where mujoco is not installed, in cad[mujoco]'s environment.
-    "mjcf validate": ("cad.mjcf", "validate"),
+    # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
+    # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
+    "mujoco check": ("cad.mujoco", "check"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
@@ -78,8 +78,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf",
-                             "mjcf")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
@@ -132,10 +131,12 @@ def _verb(target: tuple[str, str]):
 
 
 def _commands() -> set[str]:
-    """Every command the dispatcher answers: each document type's operations, and the rest."""
+    """Every command the dispatcher answers: each document type's operations, each integration's on its tool's
+    own files, and the rest."""
     from cad_server.cli.document_types import OPERATIONS
+    from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
 
-    return {*cli._COMMANDS, *(f"{document_type} {operation}" for document_type, operation in OPERATIONS)}
+    return {*cli._COMMANDS, *(f"{name} {operation}" for name, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS))}
 
 
 def _adapter_surface(name: str) -> frozenset[str]:
@@ -182,13 +183,14 @@ class Manifest(unittest.TestCase):
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
                         "store", "daemon", "daemon status", "where", "install", "mcp", "export", "snapshot", "inspect",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
-                        "kicad_sch check", "pcb drc"):
+                        "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",
                        "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
                        "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
-                       "cad_server.cli.srdf_validate", "cad_server.kicad.schematic"):
+                       "cad_server.cli.srdf_validate", "cad_server.kicad.schematic", "cad_server.cli.mjcf", "cad.mjcf",
+                       "cad.engine.mjcf_source"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
                 importlib.import_module(module)

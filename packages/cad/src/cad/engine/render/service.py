@@ -40,9 +40,7 @@ the document from a server of this process, and draw it once.
 reader in the process that draws it, into a structure and part buffers as a document's are (a
 DXF: a drawing, ``drawing.py``): a render process of its own per file in the daemon
 (``{"op": "open", "path"}`` answered ``{"opened": {...}}``, again whenever a file it read has
-changed: ``formats.stale``), or once in this process (``draw_here``). An MJCF's collision view
-(``display.collision``) is another reading of its file, held by a process of its own (``{"op": "open",
-"path", "collision": true}``).
+changed: ``formats.stale``), or once in this process (``draw_here``).
 
 Nothing is written: the verb writes the one PNG it is given.
 """
@@ -247,9 +245,8 @@ def picture(canvas: Any, paint: Callable[[np.ndarray], None] | None, still: Any,
 class Held:
     """One document as a renderer holds it (see the module docstring)."""
 
-    def __init__(self, path: Path, name: str | None = None, *, collision: bool = False) -> None:
+    def __init__(self, path: Path, name: str | None = None) -> None:
         self.path = Path(path)
-        self.collision = collision  # a robot file's collision geoms, not its visuals (``display.collision``)
         # What a picture's refusals call the document: its file's name, or the model's own for a build's
         # document that no file holds, drawn under a stand-in path (``snapshot._occt``).
         self.name = name or self.path.name
@@ -272,7 +269,7 @@ class Held:
         from cad.engine import formats
 
         started = time.perf_counter()
-        found = formats.read(self.path, collision=self.collision)
+        found = formats.read(self.path)
         read = round((time.perf_counter() - started) * 1000)
         self.kind, self.poser, self.files, self.warnings = found.kind, found.pose, found.files, found.warnings
         held = self.hold(found.structure, found.buffers, found.shapes)
@@ -350,12 +347,6 @@ class Held:
 
         if self.structure is None:
             raise RuntimeError("the renderer holds no document")
-        if bool(still.display.get("collision")) != self.collision:
-            # The daemon and ``draw_here_each`` open a robot file's collision view apart, so only a document
-            # meets this: what it collides as is the MJCF's, once exported.
-            raise SnapshotRefused(f"display.collision draws an MJCF's collision geoms (cad mjcf snapshot); {self.name} "
-                                  "is no MJCF: export the model as one (cad model export ID robot.xml) and snapshot it",
-                                  part="display.collision")
         started = time.perf_counter()
         timings: dict[str, int] = {}
         shown, posed = self.structure, None
@@ -430,17 +421,10 @@ class Held:
                       **({"kind": self.kind, "warnings": self.warnings} if self.kind else {}), "timings": timings}
 
 
-def holder(path: Path, *, collision: bool = False) -> Any:
+def holder(path: Path) -> Any:
     """What holds the file at ``path`` that is no document, for ``open`` and ``draw``: a drawing's
-    (a DXF, ``drawing.Held``), a board's (a ``.kicad_pcb``, ``board.Held``), else a document's --
-    with ``collision``, an MJCF's collision geoms (``formats.read`` refuses any other file)."""
+    (a DXF, ``drawing.Held``), a board's (a ``.kicad_pcb``, ``board.Held``), else a document's."""
     from cad.engine import formats
-
-    if collision:
-        if Path(path).suffix.lower() not in formats.ROBOTS:
-            raise formats.FormatError(f"{Path(path).name}: display.collision draws an MJCF's collision geoms "
-                                      "(cad mjcf snapshot), not this file's")
-        return Held(Path(path), collision=True)
 
     if Path(path).suffix.lower() == ".kicad_pcb":
         from cad.engine.render.board import Held as Board
@@ -497,21 +481,15 @@ def draw_here_each(document: Path, stills: list[Any], *, source: Any = None) -> 
     # A worker's mesh export source holds triangles, no B-rep for shape_data. Its picture
     # still uses the render reader, which also preserves textures, feature edges and units.
     if (source is None or source.mesh is not None) and foreign(document):
-        # A robot file's visuals and its collision geoms are two readings of it, each held apart.
-        found: dict[int, tuple[bytes, dict[str, Any]]] = {}
-        for collision in (False, True):
-            wanted = [at for at, still in enumerate(stills) if bool(still.display.get("collision")) == collision]
-            if not wanted:
-                continue
-            held = holder(document, collision=collision)
-            try:
-                opened = held.open()
-                for at, (data, report) in zip(wanted, _drawn(held, [stills[at] for at in wanted])):
-                    report["timings"] = {"readMs": opened["readMs"], **report["timings"]}
-                    found[at] = (data, report)
-            finally:
-                held.close()
-        return [found[at] for at in range(len(stills))]
+        held = holder(document)
+        try:
+            opened = held.open()
+            drawn = _drawn(held, stills)
+        finally:
+            held.close()
+        for _data, report in drawn:
+            report["timings"] = {"readMs": opened["readMs"], **report["timings"]}
+        return drawn
     if source is not None:
         server = Server(mesh_mode="inline", cache=MESHES)
         ident = server.put(document, source.structure,
@@ -585,7 +563,7 @@ def main() -> int:
                 if held is not None:
                     held.close()
                 held = None
-                opened = holder(Path(request["path"]), collision=bool(request.get("collision")))
+                opened = holder(Path(request["path"]))
                 with pool():
                     answer = opened.open()
                 held = opened

@@ -131,11 +131,12 @@ document measures nothing, after a restart too. Where the
 engine measures nothing (none to reach, another release's), and for a mesh and a DXF, it runs in this process where
 its environment holds the type's integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
 run` makes a program's: `_internal/integration_env.py`).
-An MJCF, a MuJoCo model, has `cad mjcf validate MODEL.xml [--compile auto|required|never]` (its structure,
-defaults, bodies, joints, geoms and mesh references, then MuJoCo's compiler, the `mujoco` integration's:
-`auto` where this environment holds it, `required` in the environment of `cad[mujoco]` the engine makes
-once) and `cad mjcf snapshot MODEL.xml OUT.png [--pose KEY|JSON]` (a keyframe by name, or joint values);
-the viewer lists a `.xml` only when its root is `<mujoco>`. `cad serve`,
+An MJCF, a MuJoCo model's file, is no document type: cad writes one (an export's `.xml`) and never shows
+one. `cad mujoco check MODEL.xml [--strict]` is the `mujoco` integration's operation on it (`cad
+<integration> <operation> FILE`, `cli/integrations.py`): MuJoCo's own compiler, what it refuses or warns
+of, the model-health checks, what the model collides as and its contact excludes, run in this process where
+its environment holds mujoco, else in the environment of `cad[mujoco]` the engine makes once; `cad run
+mujoco-studio --model MODEL.xml` shows the person the model in MuJoCo Studio. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the
 integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's

@@ -34,7 +34,6 @@ TYPES = {
     "urdf": ("snapshot", "validate"),
     "srdf": ("snapshot", "validate"),
     "sdf": ("snapshot", "validate"),
-    "mjcf": ("snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
@@ -65,7 +64,7 @@ class TheCommandTable(unittest.TestCase):
     def test_help_groups_the_commands_by_type(self) -> None:
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
-        self.assertIn("document types (cad <type> <operation> FILE):", said)
+        self.assertIn("document types, the files cad shows (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
         self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, solve, ranges +model: a document id, held in memory\n")
         code, said, _ = _run(["step", "--help"])
@@ -109,9 +108,10 @@ class TheCommandTable(unittest.TestCase):
                                  {"ok": False, "error": f"no such file: {missing}", "reason": "not_found", **state})
         code, _, err = _run(["urdf", "validate", "robot.txt"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.txt is not a urdf file: cad urdf takes .urdf\n"))
-        # An .xml is MJCF's: refused by the type it is, before anything runs.
+        # An .xml is no document type: a MuJoCo model's file, which its integration's command takes.
         code, _, err = _run(["urdf", "validate", "robot.xml"])
-        self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is a mjcf, not a urdf: use cad mjcf validate\n"))
+        self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf "
+                                          "(cad mujoco check takes .xml and .mjcf)\n"))
 
     def test_a_file_whose_path_holds_a_hash_is_its_type_s(self) -> None:
         """A folder or a file named with a '#' (project#1) is the file whole, as ``cad.engine.addresses.parts``
@@ -236,9 +236,10 @@ _MJCF = ('<mujoco model="arm"><worldbody><body name="a"><joint name="j" type="hi
          '<geom type="box" size=".1 .1 .1"/></body></worldbody></mujoco>')
 
 
-class MjcfValidate(unittest.TestCase):
-    """``cad mjcf validate``: the generated mirror of ``cad.mjcf.validate``, run here, or, for ``--compile
-    required`` where this environment holds no mujoco, in the environment of ``cad[mujoco]``."""
+class MujocoCheck(unittest.TestCase):
+    """``cad mujoco check``: an integration's operation on a file of its tool's own, which is no document type
+    (``cad_server.cli.integrations``). The generated mirror of ``cad.mujoco.check``, run here where this
+    environment holds mujoco, else in the environment of ``cad[mujoco]``."""
 
     def setUp(self) -> None:
         import tempfile
@@ -249,49 +250,71 @@ class MjcfValidate(unittest.TestCase):
         self.model = Path(folder.name) / "arm.xml"
         self.model.write_text(_MJCF, encoding="utf-8")
 
-    def test_a_good_model_is_ok_and_a_bogus_compile_mode_is_a_usage_error(self) -> None:
-        code, said, _ = _run(["mjcf", "validate", str(self.model), "--json", "--compile", "never"])
+    def test_the_command_table_names_the_integration_apart_from_the_types(self) -> None:
+        self.assertEqual({"mujoco": "cad_server.cli.mujoco"}, cli.INTEGRATION_COMMANDS)
+        self.assertFalse(set(cli.INTEGRATION_COMMANDS) & set(cli.TYPE_COMMANDS), "a name is a type's or an integration's")
+        self.assertEqual(("mujoco check", ["arm.xml"]), cli.resolve(["mujoco", "check", "arm.xml"]))
+        self.assertIsNone(cli.resolve(["mujoco", "validate", "arm.xml"]))
+        code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
-        answer = json.loads(said)
-        self.assertTrue(answer["ok"])
-        self.assertIn("MJCF 'arm', 1 bodies, 1 joint, 0 actuators", answer["summary"])
-        code, said, err = _run(["mjcf", "validate", str(self.model), "--compile", "bogus"])
-        self.assertEqual((code, said), (2, ""))
-        self.assertIn("argument --compile: invalid choice: 'bogus'", err)
+        self.assertIn("integrations, for a tool's own file cad checks and does not show (cad <integration> <operation> "
+                      "FILE):\n  mujoco  check  ", said)
+        code, said, _ = _run(["mujoco", "--help"])
+        self.assertEqual(0, code)
+        self.assertIn("usage: cad mujoco <operation> FILE [options]", said)
+        self.assertIn("operations (on .xml, .mjcf):\n  check  ", said)
+        # MJCF was never a document type's command: the old spelling is an unknown command, the new one named.
+        code, _, err = _run(["mjcf", "validate", str(self.model)])
+        self.assertEqual((code, err), (2, "cad: unknown command 'mjcf' (did you mean 'mujoco'?); 'cad --help' lists the "
+                                          "commands\n"))
 
     def test_the_parser_is_the_generated_one(self) -> None:
-        from cad_server.cli.document_types import build_parser
+        from cad_server.cli.integrations import build_parser
 
-        text = " ".join(build_parser("mjcf", "validate").format_help().split())
-        for option in ("--strict", "--compile {auto,required,never}", "--verbose", "--json"):
+        text = " ".join(build_parser("mujoco", "check").format_help().split())
+        for option in ("--strict", "--verbose", "--json", "PATH"):
             self.assertIn(option, text)
+        self.assertNotIn("--compile", text, "the check is MuJoCo's compile: there is no mode without it")
 
-    def test_compile_required_without_mujoco_runs_in_its_environment(self) -> None:
+    def test_a_wrong_operation_a_wrong_file_and_a_missing_one_are_the_command_line_s(self) -> None:
+        for argv, words in (
+                (["mujoco"], "cad mujoco: cad mujoco needs an operation\n"),
+                (["mujoco", "chek", "arm.xml"], "cad mujoco: cad mujoco has no operation 'chek' (did you mean 'check'?); "
+                                                "it has check; 'cad mujoco --help' says what each does\n"),
+                (["mujoco", "check", "arm.urdf"], "cad mujoco check: arm.urdf is a urdf, not a file cad mujoco check "
+                                                  "takes (.xml or .mjcf): use cad urdf validate\n"),
+                (["mujoco", "check", "notes.txt"], "cad mujoco check: notes.txt is not a file cad mujoco check takes: "
+                                                   "it takes .xml or .mjcf\n"),
+                (["mujoco", "check", "nowhere.xml"], "cad mujoco check: no such file: nowhere.xml\n")):
+            with self.subTest(argv=argv):
+                code, out, err = _run(argv)
+                self.assertEqual((code, out), (2, ""))
+                self.assertTrue(err.startswith(words), err)
+        code, out, err = _run(["mujoco", "check", "nowhere.xml", "--json"])
+        self.assertEqual((code, err), (2, ""))
+        self.assertEqual(json.loads(out), {"ok": False, "error": "no such file: nowhere.xml", "reason": "not_found"})
+
+    def test_without_mujoco_here_the_check_runs_in_its_environment(self) -> None:
         from unittest import mock
 
         from cad_server._internal import integration_env
 
         calls: list[tuple] = []
 
-        def call(python, document_type, operation, args, kwargs):
-            calls.append((python, document_type, operation, args, kwargs))
-            return {"ok": True, "path": args[0], "summary": "OK elsewhere", "measurements": {},
+        def call(python, name, operation, args, kwargs):
+            calls.append((python, name, operation, args, kwargs))
+            return {"ok": True, "path": args[0], "summary": "OK elsewhere", "measurements": {"collisions": {"geoms": 1}},
                     "findings": [{"severity": "info", "code": "compiled", "message": "compiled by MuJoCo",
                                   "location": "arm.xml", "hint": None}]}
 
         with mock.patch.object(integration_env, "carries", lambda name: False), \
                 mock.patch.object(integration_env, "environment", lambda name, told: f"/env/{name}/python"), \
                 mock.patch.object(integration_env, "call", call):
-            code, said, _ = _run(["mjcf", "validate", str(self.model), "--compile", "required", "--json"])
-            self.assertEqual(0, code)
-            self.assertEqual("OK elsewhere", json.loads(said)["summary"])
-            self.assertEqual([("/env/mujoco/python", "mjcf", "validate", [str(self.model.resolve())],
-                               {"compile": "required"})], calls)
-            # Any other mode runs here, whatever this environment holds.
-            code, said, _ = _run(["mjcf", "validate", str(self.model), "--compile", "auto", "--json"])
-            self.assertEqual(0, code)
-            self.assertEqual(1, len(calls))
-            self.assertNotEqual("OK elsewhere", json.loads(said)["summary"])
+            code, said, _ = _run(["mujoco", "check", str(self.model), "--strict", "--json"])
+        self.assertEqual(0, code)
+        answer = json.loads(said)
+        self.assertEqual(("OK elsewhere", {"collisions": {"geoms": 1}}), (answer["summary"], answer["measurements"]))
+        self.assertEqual([("/env/mujoco/python", "mujoco", "check", [str(self.model.resolve())], {"strict": True})], calls)
 
 
 if __name__ == "__main__":

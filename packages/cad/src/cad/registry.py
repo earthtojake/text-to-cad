@@ -34,14 +34,18 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
-           "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integrations_of",
+__all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+           "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integration_help",
+           "integrations_of",
            "manufacturing_check", "platform_of", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
 OPERATIONS = ("export", "snapshot", "inspect", "dfm", "solve", "ranges", "drc", "erc", "validate")
+#: What an integration does to a file of its tool's own that is no document type (a file we check and never
+#: show): a closed set too. ``check`` answers findings, as a type's check does (``cad.results.CheckResult``).
+INTEGRATION_OPERATIONS = ("check",)
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -96,6 +100,11 @@ class Integration:
     extra: str | None
     process: str
     probe: Probe | None = None
+    #: What it does to a file of its tool's own that is no document type (``INTEGRATION_OPERATIONS``): ``cad
+    #: <integration> <operation> FILE`` and ``cad.<integration>.<operation>``, one to one, as a type's are. A
+    #: file that has a document type has its operations there, never here; ``files`` are the suffixes it takes.
+    operations: tuple[Operation, ...] = ()
+    files: tuple[str, ...] = ()
     modules: tuple[str, ...] = ()
     distributions: tuple[str, ...] = ()
     #: The distributions that ARE it (its own and the other builds of its modules), of which one a resolution
@@ -126,6 +135,22 @@ class Integration:
     python: str | None = None
     platforms: tuple[str, ...] = ()
     homes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for operation in self.operations:
+            if operation.name not in INTEGRATION_OPERATIONS:
+                raise ValueError(f"{self.name}: {operation.name!r} is not an integration's operation "
+                                 f"({', '.join(INTEGRATION_OPERATIONS)})")
+        if bool(self.operations) != bool(self.files):
+            raise ValueError(f"{self.name}: an integration's operations take its tool's own files, and one with "
+                             "neither names neither")
+
+    @property
+    def operation_names(self) -> tuple[str, ...]:
+        return tuple(operation.name for operation in self.operations)
+
+    def operation(self, name: str) -> Operation | None:
+        return next((operation for operation in self.operations if operation.name == name), None)
 
 
 @dataclass(frozen=True)
@@ -305,13 +330,6 @@ _TYPES = (
         "application/xml; charset=utf-8", "robot", ("worlds", "models", "links", "joints", "mesh references"),
         (Operation("validate", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
     DocumentTypeEntry(
-        "mjcf", "MJCF", "a MuJoCo model (MJCF XML): its bodies, joints and geoms, read as a robot with its "
-                        "mesh assets", (".xml", ".mjcf"), "application/xml; charset=utf-8", "robot",
-        ("bodies", "joints", "geoms", "mesh references", "keyframes"),
-        (Operation("validate", "check it for conformance: structure, defaults, bodies, joints, geoms and mesh "
-                               "references, and compile it with MuJoCo where cad[mujoco] is installed (--compile "
-                               "required makes that environment)", "mujoco"), _SNAPSHOT)),
-    DocumentTypeEntry(
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
@@ -375,9 +393,15 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         holds="trimesh", download_mb=40),
     "mujoco": Integration(
         "mujoco", "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no "
-                  "renderer) and MuJoCo Studio's web viewer: an MJCF's validate compiles the model with the core, so "
-                  "what MuJoCo refuses is a finding with MuJoCo's own words, and `cad run mujoco-studio --model "
-                  "scene.xml` serves the model in Studio for the person to open in a browser", extra="mujoco",
+                  "renderer) and MuJoCo Studio's web viewer: cad.mujoco makes a document a mujoco.MjSpec, chooses "
+                  "a part's collision on it and saves it; `cad mujoco check robot.xml` compiles a MuJoCo model "
+                  "with the core, so what MuJoCo refuses is a finding with MuJoCo's own words; and `cad run "
+                  "mujoco-studio --model scene.xml` serves the model in Studio for the person to open in a browser",
+        extra="mujoco",
+        operations=(Operation("check", "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo "
+                                       "refuses or warns of, the model-health checks, what collides as what, and "
+                                       "the contact excludes", "mujoco"),),
+        files=(".xml", ".mjcf"),
         process="in-process", modules=("mujoco",), distributions=("mujoco-core", "mujoco-studio"),
         identity=("mujoco", "mujoco-core", "mujoco-studio"), commands=("mujoco-studio",),
         holds="MuJoCo's headless core and MuJoCo Studio", download_mb=20),
@@ -529,6 +553,21 @@ def help_text(document_type: str) -> str:
     return "\n".join(lines)
 
 
+def integration_help(name: str) -> str:
+    """An integration's help, worked out from this table: what it is, its extra, and its operations on its
+    tool's own files (none for an integration whose files are all document types)."""
+    entry = INTEGRATIONS[name]
+    lines = [f"{entry.name}: {entry.summary}",
+             "extra: " + (f"cad[{entry.extra}]" if entry.extra else "none (a program the person installs)")]
+    if entry.operations:
+        lines.append(f"operations (on {', '.join(entry.files)}):")
+        width = max(len(operation.name) for operation in entry.operations)
+        lines.extend(f"  {operation.name.ljust(width)}  {operation.summary}" for operation in entry.operations)
+    else:
+        lines.append("operations: none of its own; the document types it serves have them")
+    return "\n".join(lines)
+
+
 def as_data() -> dict[str, Any]:
     """The table as data, for the JavaScript side (``--js``) and its parity test."""
     return {
@@ -565,7 +604,10 @@ def main(argv: list[str] | None = None) -> int:
     if len(argv) == 1 and argv[0] in DOCUMENT_TYPES:
         sys.stdout.write(help_text(argv[0]) + "\n")
         return 0
-    sys.stderr.write(f"usage: python -m cad.registry --js | --json | {{{','.join(DOCUMENT_TYPES)}}}\n")
+    if len(argv) == 1 and argv[0] in INTEGRATIONS:
+        sys.stdout.write(integration_help(argv[0]) + "\n")
+        return 0
+    sys.stderr.write(f"usage: python -m cad.registry --js | --json | {{{','.join([*DOCUMENT_TYPES, *INTEGRATIONS])}}}\n")
     return 2
 
 

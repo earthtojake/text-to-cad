@@ -22,7 +22,6 @@ and a still reads them through it (``render/occt.py`` ``camera_in_millimetres``,
 | ``.3mf`` | ``threemf.py`` (zip + XML) | its objects placed by its build, each triangle's colour, its unit |
 | ``.glb`` | ``glb.py`` (OCCT's ``RWGltf_CafReader``) | its node tree, meshes, materials and textures |
 | ``.urdf``, ``.sdf``, ``.srdf`` | ``robot.py`` (XML) | the link meshes placed by forward kinematics |
-| ``.xml``, ``.mjcf`` | ``robot.py`` over ``cad.mjcf._source`` (XML) | an MJCF's bodies' geoms, placed alike |
 | ``.dxf`` | ``dxf.py`` (text) | lines, arcs, circles, polylines, splines, ellipses, solids |
 
 A conversion reads a mesh file with these readers' numpy halves and no kernel
@@ -48,10 +47,10 @@ if TYPE_CHECKING:  # a reader's module loads no kernel until it reads (the viewe
 __all__ = ["DRAWING", "Foreign", "FormatError", "KINDS", "MESHES", "Part", "Placed", "ROBOTS", "assemble", "files_of",
            "read", "stale"]
 
-KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".xml": "mjcf",
-         ".mjcf": "mjcf", ".dxf": "dxf", ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
+KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".dxf": "dxf",
+         ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
 MESHES = (".stl", ".3mf", ".glb")
-ROBOTS = (".urdf", ".sdf", ".srdf", ".xml", ".mjcf")
+ROBOTS = (".urdf", ".sdf", ".srdf")
 DRAWING = ".dxf"
 
 
@@ -173,23 +172,15 @@ def assemble(kind: str, path: Path, name: str, parts: list[Part], placed: list[P
     return Foreign(kind, Path(path), structure, buffers, shapes, files, pose, list(warnings or []))
 
 
-def read(path: Path, *, collision: bool = False) -> Any:
+def read(path: Path) -> Any:
     """The file at ``path`` read by its suffix's reader: a ``Foreign`` (a mesh file, a robot), or a
-    ``dxf.Drawing``; with ``collision``, an MJCF's collision geoms (``robot.robot_file``). Raises
-    ``FormatError`` naming what it cannot read."""
+    ``dxf.Drawing``. Raises ``FormatError`` naming what it cannot read."""
     path = Path(path).resolve()
     suffix = path.suffix.lower()
     if suffix not in KINDS:
         raise FormatError(f"{path.name}: the stills read {', '.join(KINDS)} files, not {suffix or 'this'}")
     if not path.is_file():
         raise FormatError(f"no file {path}")
-    if collision and suffix not in ROBOTS:
-        raise FormatError(f"{path.name}: display.collision draws an MJCF's collision geoms (cad mjcf snapshot), not a "
-                          f"{KINDS[suffix].upper()}'s")
-    if collision:
-        from cad.engine.formats.robot import robot_file
-
-        return robot_file(path, collision=True)
     if suffix == ".stl":
         from cad.engine.formats.meshes import stl_file
 

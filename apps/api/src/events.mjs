@@ -51,8 +51,7 @@
  * request a refusal named (`part`, `SNAPSHOT_PARTS`: a word cadgen chose, never the value; `none` for a failure
  * that was no refusal), and two more reasons a snapshot or a build failed, the machine's: no OpenGL context
  * (`no_gl`, a snapshot's) and no kernel process the engine could start (`no_kernel`). A schema before it sends
- * none of them, and its rows are read, and keyed, as ever. Schema 10 is schema 9 with one more format, MuJoCo's
- * models (`mjcf`), and one more part a snapshot's refusal names, an MJCF's collision view (`display.collision`).
+ * none of them, and its rows are read, and keyed, as ever.
  */
 
 import { createHash } from 'node:crypto';
@@ -93,7 +92,6 @@ const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
-const KINDS_10 = new Set([...KINDS_8, 'mjcf']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 // What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
@@ -176,8 +174,6 @@ const BUILD_FAILURES_9 = new Set([...BUILD_FAILURES, 'no_kernel']);
 const SNAPSHOT_PARTS = new Set(['source', 'out', 'display', 'display.mode', 'display.exploded', 'display.clip',
   'display.grid', 'display.visibility', 'camera', 'pose', 'size', 'annotation', 'measurements', 'references', 'job',
   'other']);
-// Schema 10's: an MJCF's collision view (`display.collision`, `cad mjcf snapshot --display collision`).
-const SNAPSHOT_PARTS_10 = new Set([...SNAPSHOT_PARTS, 'display.collision']);
 // A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
 const MAX_AT = 100_000_000_000;
 // Ours: the namespace every row's id is made in (`idOf`).
@@ -292,7 +288,7 @@ const READERS = {
     // Before schema 9 a failure names no part, and its row's key is as it ever was (a batch sent again keeps its ids).
     if (!parts) return { key: `snapshot_failure ${kind} ${reason}`, fields: { kind, reason, count } };
     // A refusal names the part of the request it refused; any other failure, none.
-    const part = reason === 'bad_request' ? oneOf(event.part, parts, `${at}.part`)
+    const part = reason === 'bad_request' ? oneOf(event.part, SNAPSHOT_PARTS, `${at}.part`)
       : (event.part === 'none' ? 'none' : fail(`${at}.part is none: only a refusal names a part`));
     return { key: `snapshot_failure ${kind} ${reason} ${part}`, fields: { kind, reason, part, count } };
   },
@@ -383,12 +379,7 @@ const SCHEMAS = new Map([
   // Which part of a snapshot's request a refusal named, and the machine's two reasons more: no OpenGL context, no
   // kernel process.
   [9, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
-    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: SNAPSHOT_PARTS,
-    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
-  // MuJoCo models (`mjcf`), and the refusal of an MJCF's collision view (`display.collision`); nothing else. Schema 9
-  // and older keep their own vocabulary.
-  [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_10,
-    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: SNAPSHOT_PARTS_10,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
 ]);
 

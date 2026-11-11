@@ -2,11 +2,13 @@
 ``cad[mujoco]``: ``mujoco-core``, the compiler and the Python bindings, numpy their one dependency, and
 ``mujoco-studio``, MuJoCo Studio's web viewer; no window system).
 
-What it does for the MJCF document type (``cad.mjcf``): ``compile_findings`` compiles a model with
-MuJoCo's own compiler and says what it refused, in its words, as findings (``cad mjcf validate
---compile``). Reading an MJCF for the viewer and the stills is the type's own (``cad.mjcf._source``),
-the standard library alone: nothing here is needed to open one. ``cad run mujoco-studio --model FILE`` shows
-the person a model in Studio's web viewer (``_command``: the environment's own ``mujoco-studio``).
+An MJCF is MuJoCo's own file and no document type: cad writes one and asks MuJoCo about one, and never
+reads or shows one itself. ``check`` compiles a model with MuJoCo's own compiler and answers a check's result
+-- what MuJoCo refused or warned of, in its words, the model-health checks, what the model collides as and
+its contact excludes (``_check``; ``cad mujoco check FILE`` is its command, the integration's one operation
+in ``cad.registry``). ``compile_model`` and ``compile_findings`` are the compile alone. ``cad run
+mujoco-studio --model FILE`` shows the person a model in Studio's web viewer (``_command``: the environment's
+own ``mujoco-studio``).
 
 What it does for every document: ``spec`` makes one a ``mujoco.MjSpec`` (``_spec``): a model call's
 handle, a build123d shape, a STEP or an xbf described as a robot and written as the engine's MJCF
@@ -24,7 +26,29 @@ extra is missing says so by name (``cad[mujoco]``), as every integration's does.
 
 from __future__ import annotations
 
-__all__ = ["collisions", "compile_findings", "compile_model", "decompose", "fit", "parts", "save", "spec"]
+from pathlib import Path
+
+from cad.results import CheckResult
+
+__all__ = ["check", "collisions", "compile_findings", "compile_model", "decompose", "fit", "parts", "save", "spec"]
+
+
+def check(path: Path, *, strict: bool = False, verbose: bool = False) -> CheckResult:
+    """Compile one MuJoCo model with MuJoCo and check it.
+
+    MuJoCo's own compiler reads the model, so what it refuses or warns of is said in its words. Then
+    the model-health checks of MuJoCo's modelling guide run on the compiled model, and two facts are
+    said of it: what collides as what, body by body, and each contact exclude with how its two bodies
+    stand at rest (every geom and exclude a row of the result's measurements). Errors always block;
+    under ``strict`` warnings do too.
+
+    path: the .xml or .mjcf file to check.
+    strict: treat warnings as blocking.
+    verbose: narrate the target on stderr.
+    """
+    from cad.mujoco._check import check as _check
+
+    return _check(path, strict=strict, verbose=verbose)
 
 
 def compile_model(path):
@@ -98,7 +122,8 @@ def save(spec, path):
     """Write ``spec`` (a ``mujoco.MjSpec``) to ``path`` by MuJoCo's own writer, every file it names copied into
     ``assets/`` beside it, a ``scene.xml`` beside it where there is none and the spec has no floor of its own (no
     plane geom on its world body: a scene gets none); the spec handed in is left as it was.
-    Prints the health checks' warnings and ``wrote <path>``; the path written (``cad.mujoco._save``)."""
+    Prints the check's warnings, what the model collides as, its contact excludes and ``wrote <path>``; the
+    path written (``cad.mujoco._save``)."""
     from cad.mujoco._save import save as _save
 
     return _save(spec, path)

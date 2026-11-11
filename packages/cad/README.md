@@ -49,17 +49,22 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `mjcf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
-  `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
+  `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
+  shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
+  MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
+  MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
   `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
-  kind: in-process, separate process, or both.
+  kind: in-process, separate process, or both. An integration has operations of its own only on a file of its
+  tool's that is no document type (`cad mujoco check robot.xml`, `cad.mujoco.check`): a closed set too,
+  `check` today, answering findings as a type's check does.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -82,8 +87,8 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF, SRDF and MJCF checks (an MJCF
-compiled by MuJoCo where `cad[mujoco]` is installed); a 3D
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
@@ -464,7 +469,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
     integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
-    process kind and, for an external program, its probe (the program, the oldest version our code supports, the
+    process kind, the operations it has on a file of its tool's own that is no document type, with the
+    suffixes they take (`mujoco`: `check` on `.xml` and `.mjcf`), and, for an external program, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -478,7 +484,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 25. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
     has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
     with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
-    objects (`sdf.GZ_CHECK_MODES`, `mjcf.COMPILE_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
+    objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
     file of another type is refused by name before anything runs (`part.glb is a glb, not a stl`). A
     type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
     neutral about producers: it imports no third-party library.
@@ -500,7 +506,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type per document type; a return none takes fails loudly, naming the types the document is made of and
     the integration that would add more.
 
-28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
+28. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> <file>` for a
+    tool's own file.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
     for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `ranges` a
     mechanism's joint stops, `drc` a board's design rule check, `erc` a
@@ -511,8 +518,17 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     per operation: a check (`dfm`, `solve`, `ranges`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
+    A document type is a file cad shows, so a file cad writes or checks and never shows has no type's
+    command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
+    <file>`, one to one with `cad.<integration>.<operation>` (`cad mujoco check robot.xml`: a MuJoCo
+    model, which MuJoCo Studio shows). The noun is still the file, named by the tool that owns its format.
+    A name is a type's or an integration's, never both; an operation lives in one place, so a file that
+    has a document type has its operations there and its integration has none for it (no `cad kicad drc`
+    beside `cad kicad_pcb drc`); and an integration is never a way to name the means of a type's
+    operation (`cad stl dfm` is trimesh's and nobody says so). An integration's operations are a closed
+    set too (`check`, answering findings as a type's check does).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
-    --help` groups the commands by type. The commands that are no document's -- setup, update,
+    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
     uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
     top-level.
 
@@ -620,9 +636,6 @@ src/cad/
                          #   B-rep type's solve and ranges: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
-  mjcf/                  # a MuJoCo model (MJCF XML): its reader (_source.py, the standard
-                         #   library alone: includes, defaults, bodies, joints, geoms, keyframes)
-                         #   and validate, compiled by the mujoco integration where it is installed
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
                          #   still engine/render/board.py); drc, export and edit (a with
@@ -641,9 +654,13 @@ src/cad/
                          #   (overhangs, walls, trapped volumes, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_printing), the
                          #   mesh read and cleaned (_mesh), and the check every mesh type runs (_check)
-  mujoco/                # the mujoco integration, MuJoCo's headless core and Studio (mujoco-core, mujoco-studio): an MJCF
-                         #   compiled by MuJoCo's own compiler, what it refuses and warns as
-                         #   findings (_compile)
+  mujoco/                # the mujoco integration, MuJoCo's headless core and Studio (mujoco-core, mujoco-studio): a
+                         #   document as a mujoco.MjSpec (_spec), a part's collision chosen on it
+                         #   (_parts), the spec saved as a folder that travels (_save), and check, its
+                         #   one operation on a MuJoCo model's file, which is no document type: the
+                         #   model compiled by MuJoCo's own compiler, what it refuses and warns as
+                         #   findings (_compile), the model-health checks (_health), what collides as
+                         #   what and the contact excludes as data (_report, _check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -1029,6 +1046,10 @@ What 0.11.8 adds:
   exact solid) and `decompose` (CoACD's convex hulls of its mesh, `cad[coacd]`) find and replace a part's
   collision by its label path; everything else is MuJoCo's own API; `save` writes the spec as a folder that
   travels.
+- **`cad.mujoco.check` checks a MuJoCo model's file** (`cad mujoco check robot.xml`): MuJoCo's own compile,
+  the model-health checks, what the model collides as and its contact excludes, as a check's result. An
+  MJCF is no document type: cad writes one and asks MuJoCo about one, and MuJoCo Studio shows it (`cad run
+  mujoco-studio --model robot.xml`). `check` is the first operation of an integration's own (law 28).
 - **`ranges` finds each joint's stops** from the parts' surfaces (**Joint stops**).
 
 What a model, a script or a check written for 0.11.7 meets now:

@@ -64,6 +64,30 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertRegex(integration.python or "3.13", r"^3\.\d+$", "a Python line, as uv is asked for one")
                 self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
+        # An integration has operations of its own only on a file of its tool's that is no document type (a file
+        # cad checks and never shows): a MuJoCo model's, which mujoco checks. A name is a type's or an
+        # integration's, a suffix one or the other's, and a type's file has its operations there alone.
+        self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf"))},
+                         {name: (found.operation_names, found.files)
+                          for name, found in registry.INTEGRATIONS.items() if found.operations})
+        self.assertEqual(("check",), registry.INTEGRATION_OPERATIONS)
+        self.assertFalse(set(registry.INTEGRATIONS) & set(registry.DOCUMENT_TYPES))
+        for found in registry.INTEGRATIONS.values():
+            self.assertEqual(bool(found.operations), bool(found.files))
+            self.assertFalse([suffix for suffix in found.files if registry.by_extension(suffix)],
+                             "a suffix that is a document type's is not an integration's too")
+            for operation in found.operations:
+                self.assertEqual(found.name, operation.integration)
+        self.assertNotIn("mjcf", registry.DOCUMENT_TYPES, "an MJCF is written and checked, never shown: no type")
+        self.assertIsNone(registry.type_of("robot.xml"))
+        self.assertIn("operations (on .xml, .mjcf):\n  check  ", registry.integration_help("mujoco"))
+        self.assertIn("operations: none of its own", registry.integration_help("trimesh"))
+        with self.assertRaisesRegex(ValueError, "'validate' is not an integration's operation"):
+            registry.Integration("tool", "a tool", "tool", "in-process",
+                                 operations=(registry.Operation("validate", "check it"),), files=(".tool",))
+        with self.assertRaisesRegex(ValueError, "operations take its tool's own files"):
+            registry.Integration("tool", "a tool", "tool", "in-process",
+                                 operations=(registry.Operation("check", "check it"),))
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},

@@ -82,7 +82,6 @@ export function entryUrdfAssetHash(entry) {
   return [
     entryAssetHash(entry, "urdf"),
     entryAssetHash(entry, "srdf"),
-    entryAssetHash(entry, "sdf"),
-    entryAssetHash(entry, "mjcf")
+    entryAssetHash(entry, "sdf")
   ].filter(Boolean).join(":");
 }

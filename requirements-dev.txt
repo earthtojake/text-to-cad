@@ -8,9 +8,9 @@
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
 # its trimesh extra, so `cad <type> dfm` measures a mesh in this environment and the server makes no
 # environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py); and with
-# its mujoco extra (mujoco-core and mujoco-studio, about 20 MB), so `cad mjcf validate --compile` compiles here
+# its mujoco extra (mujoco-core and mujoco-studio, about 20 MB), so `cad mujoco check` compiles here
 # the same way and `cad run mujoco-studio` serves Studio's web viewer from here; and with its coacd extra (one
-# wheel, about 3 MB), so a robot description decomposes a part declared `collision(part, "decomposed")` here.
+# wheel, about 3 MB), so a MuJoCo function's `decompose` cuts a part into convex hulls here.
 # The netgen and calculix extras are not here: a stress study (`cad <type> solve`) is the fea job's, which
 # installs them (scripts/test/test-fea.sh); without them, here, the command makes cad[build123d,calculix,netgen].
 # Nor is the blender extra: bpy has builds for Python 3.13 alone, and `cad run` makes the environment of a script

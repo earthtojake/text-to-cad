@@ -1,22 +1,15 @@
-"""A robot description -- a URDF, an SDF, an SRDF with the URDF it plans for, or an MJCF -- as the stills
+"""A robot description -- a URDF, an SDF, or an SRDF with the URDF it plans for -- as the stills
 hold it: every link visual's mesh a part, placed where its link stands at the pose asked.
 
 **Reading** is the engine's, once for the stills and the viewer's payload alike: a URDF and an SRDF's
-group states over it by ``cad.engine.urdf_source``, an SDF by ``cad.engine.sdf_source``, an MJCF by
-``cad.engine.mjcf_source``, each into the one articulation (``cad.engine.robot_model``: every link's
-frame at rest in the robot's space, in metres -- the description as written, every joint at zero; an
-MJCF's at each joint's ``ref`` -- its visuals, its joints with their mimics and four-bars, its named
-poses), which the viewer's payload (``cad_server.robot_payload``) takes its own view of. This is the
+group states over it by ``cad.engine.urdf_source``, an SDF by ``cad.engine.sdf_source``, each into
+the one articulation (``cad.engine.robot_model``: every link's frame at rest in the robot's space, in
+metres -- the description as written, every joint at zero -- its visuals, its joints with their mimics
+and four-bars, its named poses), which the viewer's payload (``cad_server.robot_payload``) takes its own view of. This is the
 stills' view: numpy frames, each visual's shape as the stills draw it (``_drawn``), its colour, the
 joints the stills pose (fixed, revolute, continuous, prismatic), an SDF's links one tree (a joint to
 the world holds its child where it is), an SRDF's group states the poses and its ``home`` the
-opening, an MJCF's keyframes the poses by their names (a body a link, the world the root, a hinge
-revolute -- continuous without a range -- a slide prismatic, a ball or a free joint fixed, a body of
-several joints a chain of one-joint links, an equality coupling a mimic, the geoms of groups 0 to 2
-its visuals). An MJCF's collision view (``display.collision``, ``robot_file(..., collision=True)``) draws
-instead the geoms MuJoCo collides (a ``contype`` or ``conaffinity`` not 0, a mesh as the convex hull its
-file is), each its own colour of the Parts palette, so each hull of a decomposed part stands apart; a
-URDF, an SDF or an SRDF has none, refused by name. Where the stills have always read a detail differently from the payload, the stills'
+opening. Where the stills have always read a detail differently from the payload, the stills'
 dialect keeps it (``_STILLS``).
 
 **Posing**: a control is a revolute or continuous joint (degrees) or a prismatic one (metres);
@@ -26,11 +19,11 @@ describe, as the viewer's ``fourBarCoupling.js`` solves it). A link moves with e
 each joint turns its subtree about its axis through its origin (or slides it along the axis), from
 the root down, held to a golden its own code made. The robot opens as the viewer opens it -- every
 control at zero, an SRDF's ``home`` group state over that -- and ``--pose`` names a group state
-(``group/name``, or a name only one group has), an MJCF's keyframe (its name), or gives joint values
+(``group/name``, or a name only one group has), or gives joint values
 over the opening pose; an unknown joint, a joint that is not a control and a value past its limits
 are refused by name.
 
-**Meshes**: a link mesh is an STL, an OBJ or a 3MF (its numbers as they are, which the description's
+**Meshes**: a link mesh is an STL or a 3MF (its numbers as they are, which the description's
 mesh scale makes metres) or a GLB (metres), each drawn as the stills draw that file; a box,
 cylinder, sphere or capsule is made by the kernel and meshed as a part is (``mesh.py``). The
 robot is drawn in millimetres, and a length of it -- where ``display.clip.at`` stands, a Quick Edit
@@ -56,12 +49,11 @@ from cad.engine.formats import Foreign, FormatError, Part, Placed, assemble, fil
 from cad.engine.mesh_uri import package_root
 from cad.engine.robot_model import Dialect, SourceError
 
-__all__ = ["Robot", "RobotError", "package_file", "package_root", "read_mjcf", "read_robot", "robot_file"]
+__all__ = ["Robot", "RobotError", "package_file", "package_root", "read_robot", "robot_file"]
 
 MOVING = ("revolute", "continuous", "prismatic")
 ANGULAR = ("revolute", "continuous")
-DRAWABLE = (".stl", ".obj", ".3mf", ".glb")
-MJCF = (".xml", ".mjcf")
+DRAWABLE = (".stl", ".3mf", ".glb")
 LIMIT_TOLERANCE = 1e-6  # degrees or metres a value may pass a limit by: its own rounding
 _INTERSECTION_TOLERANCE = 1e-12
 
@@ -147,9 +139,9 @@ class Robot:
         return {**{name: 0.0 for name in self.controls()}, **self.home}
 
     def values(self, asked: Any) -> tuple[dict[str, float], str | None]:
-        """The controls' values for ``asked``: None (the opening pose), a group state's name (an
-        MJCF's keyframe's), or ``{joint: value}`` over the opening pose. Refused by name: an unknown
-        state or joint, a joint that is no control, a value that is no number or past its limits."""
+        """The controls' values for ``asked``: None (the opening pose), a group state's name, or
+        ``{joint: value}`` over the opening pose. Refused by name: an unknown state or joint, a
+        joint that is no control, a value that is no number or past its limits."""
         values, named = self.opening(), None
         if asked is None:
             return values, None
@@ -160,13 +152,12 @@ class Robot:
                 found = [key for key in self.poses if key.split("/", 1)[-1] == asked]
                 if len(found) != 1:
                     states = ", ".join(sorted(self.poses)) or "none"
-                    what = "keyframe" if self.kind == "mjcf" else "group state"
-                    raise ValueError(f"{self.name} has {'no ' + what if not found else 'several ' + what + 's'} "
-                                     f"{asked!r}{'' if not found else ' (' + ', '.join(found) + ')'}; its {what}s: {states}")
+                    raise ValueError(f"{self.name} has {'no group state' if not found else 'several group states'} "
+                                     f"{asked!r}{'' if not found else ' (' + ', '.join(found) + ')'}; its group states: {states}")
                 named = found[0]
             asked = self.poses[named]
         if not isinstance(asked, dict):
-            raise ValueError("a pose is a group state's (or a keyframe's) name or {joint: value}")
+            raise ValueError("a pose is a group state's name or {joint: value}")
         controls = self.controls()
         by_name = {joint.name: joint for joint in self.joints}
         for name, value in asked.items():
@@ -321,7 +312,7 @@ def _read(reader: Any, path: Path, **options: Any) -> Any:
 
 
 def _drawn(visual: Any, base: Path, where: str, kind: str) -> tuple:
-    """A visual's shape as the stills draw it: ``("file", path, scale)`` -- an STL, OBJ, 3MF or GLB that
+    """A visual's shape as the stills draw it: ``("file", path, scale)`` -- an STL, 3MF or GLB that
     is there -- ``("box", (x, y, z))``, ``("cylinder"|"capsule", (radius, length))`` or ``("sphere",
     (radius,))``; refused by name where the stills cannot draw it."""
     shape = visual.shape
@@ -335,7 +326,7 @@ def _drawn(visual: Any, base: Path, where: str, kind: str) -> tuple:
             raise RobotError(f"{where} names {reference!r}, which is not a local file: copy it beside the description "
                              "and name it by a relative path")
         if found.suffix.lower() not in DRAWABLE:
-            raise RobotError(f"{where} names {found.name}: the stills draw STL, OBJ, 3MF and GLB link meshes, not "
+            raise RobotError(f"{where} names {found.name}: the stills draw STL, 3MF and GLB link meshes, not "
                              f"{found.suffix or 'this'} files")
         if not found.is_file():
             raise RobotError(f"{where} names {reference!r}, and no file is at {found}")
@@ -425,65 +416,8 @@ def _followers(robot: Robot, name: str) -> None:
             raise RobotError(f"{name} joint {joint.name!r} follows {leader!r}, which is no moving joint of the robot")
 
 
-# --- MJCF (the mjcf type's own reader, cad.engine.mjcf_source) ---------------------------------------
-
-
-def read_mjcf(path: Path, *, collision: bool = False) -> Robot:
-    """An MJCF as a robot: ``cad.engine.mjcf_source``'s model, articulated as the viewer poses it (a link per body,
-    a chain of one-joint links for a body of several joints), each visual's shape in the tuple a URDF's
-    gives (``_drawn``), its keyframes the poses by their names; with ``collision``, its geoms that collide as
-    the visuals. Refused with the reader's errors."""
-    from cad.engine.mjcf_source import articulate
-    from cad.engine.mjcf_source import read_mjcf as read_model
-
-    path = Path(path)
-    model, findings = read_model(path)
-    if model is None:
-        raise RobotError(f"{path.name} cannot be read as an MJCF:\n{findings.formatted()}")
-    articulation = articulate(model, collision=collision)
-    files: list[Path] = [Path(file) for file in model.files] or [path]
-    visuals: dict[str, list[Visual]] = {}
-    for link, found in articulation.visuals.items():
-        visuals[link] = []
-        for visual in found:
-            mesh = _mjcf_shape(visual.shape, f"{path.name} link {link!r} visual {visual.label!r}")
-            if mesh[0] == "file" and mesh[1] not in files:
-                files.append(mesh[1])
-            visuals[link].append(Visual(np.asarray(visual.local, float), mesh, visual.color, visual.label))
-    joints = [Joint(joint.name, joint.type, joint.parent, joint.child, frame=np.asarray(joint.frame, float),
-                    axis=None if joint.axis is None else np.asarray(joint.axis, float), lower=joint.lower,
-                    upper=joint.upper, mimic=joint.mimic) for joint in articulation.joints]
-    links = {name: np.asarray(frame, float) for name, frame in articulation.links.items()}
-    robot = Robot("mjcf", model.name, articulation.root, links, visuals, joints,
-                  poses={name: dict(values) for name, values in articulation.poses.items()}, files=files)
-    _followers(robot, path.name)
-    return robot
-
-
-def _mjcf_shape(shape: tuple, where: str) -> tuple:
-    """An articulated visual's shape (full sizes, metres, as a dictionary) as the mesh tuple a URDF's visual
-    carries: ``("file", path, scale)``, ``("box", (x, y, z))``, ``("cylinder"|"capsule", (radius, length))``
-    or ``("sphere", (radius,))``."""
-    kind = shape[0]
-    if kind == "file":
-        return ("file", Path(shape[1]), tuple(float(value) for value in shape[2]))
-    dimensions = shape[1]
-    if kind == "box":
-        return ("box", tuple(float(value) for value in dimensions["size"]))
-    if kind in ("cylinder", "capsule"):
-        return (kind, (float(dimensions["radius"]), float(dimensions["length"])))
-    if kind == "sphere":
-        return ("sphere", (float(dimensions["radius"]),))
-    raise RobotError(f"{where} is a {kind}; the stills draw a mesh, box, cylinder, sphere or capsule")
-
-
-def read_robot(path: Path, *, collision: bool = False) -> Robot:
+def read_robot(path: Path) -> Robot:
     suffix = Path(path).suffix.lower()
-    if suffix in MJCF:
-        return read_mjcf(path, collision=collision)
-    if collision:
-        raise RobotError(f"{Path(path).name}: display.collision draws an MJCF's collision geoms (cad mjcf snapshot), "
-                         f"not a {suffix.lstrip('.').upper()}'s: snapshot the MJCF exported from the same model")
     return read_urdf(path) if suffix == ".urdf" else read_sdf(path) if suffix == ".sdf" else read_srdf(path)
 
 
@@ -538,14 +472,6 @@ def _mesh_parts(mesh: tuple, colour: str, where: str) -> list[tuple[Part, np.nda
         corners = read_stl(source)
         points = corners.reshape(-1, 3)
         return [(mesh_part(source.stem, points, np.arange(len(points)).reshape(-1, 3), scale=1000.0 * uniform), np.eye(4))]
-    if suffix == ".obj":
-        from cad.engine.formats.obj import ObjError, read_obj
-
-        try:
-            points, triangles = read_obj(source)
-        except ObjError as error:
-            raise RobotError(f"{where}: {error}") from None
-        return [(mesh_part(source.stem, points, triangles, scale=1000.0 * uniform), np.eye(4))]
     if suffix == ".3mf":
         from cad.engine.formats.threemf import ThreeMfError, read_3mf
 
@@ -591,24 +517,12 @@ def _linear(colour: str) -> tuple[float, float, float, float]:
     return tuple(round(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4, 6) for c in channels) + (1.0,)
 
 
-def robot_file(path: Path, *, collision: bool = False) -> Foreign:
+def robot_file(path: Path) -> Foreign:
     """The robot at ``path`` as the stills hold it: a part per link mesh (shared by every visual of
     one file, scale and colour), an instance per visual placed at the opening pose, each link's
-    visuals one colour of the Parts palette; ``pose`` places them at another. With ``collision`` (an
-    MJCF's), its collision geoms instead, each a colour of the palette of its own, in every mode."""
+    visuals one colour of the Parts palette; ``pose`` places them at another."""
     path = Path(path)
-    robot = read_robot(path, collision=collision)
-    if collision:
-        from cad.engine.render.look import LOOK
-
-        shown = 0
-        for link in robot.links:
-            for visual in robot.visuals.get(link, ()):
-                visual.color = LOOK.palette[shown % len(LOOK.palette)]
-                shown += 1
-        if not shown:
-            raise RobotError(f"{path.name}: no geom of {robot.name} collides (each has contype and conaffinity 0, or "
-                             "no shape the stills draw)")
+    robot = read_robot(path)
     parts: list[Part] = []
     made: dict[tuple, list[tuple[int, np.ndarray]]] = {}
     visuals: list[tuple[str, np.ndarray, str, str]] = []  # link, placement in the link's frame (mm), path, colour
@@ -641,7 +555,7 @@ def robot_file(path: Path, *, collision: bool = False) -> Foreign:
         frames = robot.placements(values)
         return [Placed(part, frames[visuals[at][0]] @ visuals[at][1], visuals[at][2],
                        _linear(visuals[at][3]) if visuals[at][3] else None,
-                       None if collision else links.index(visuals[at][0]), *named[at])
+                       links.index(visuals[at][0]), *named[at])
                 for part, at in rows]
 
     opening, _named = robot.values(None)

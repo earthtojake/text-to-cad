@@ -28,8 +28,8 @@ in only where their bytes changed, and the files the last ``save`` (or export) o
 ``assets/`` and this one no longer names are removed -- only those its own list names (``.<name>.meshes`` in
 ``assets/``), never a file another list still names, nor any other file.
 
-Then the health checks ``cad mjcf validate --compile`` runs (``compile_findings``) read the written file, and
-each warning is printed, then ``wrote <path>``. A relative ``path`` is taken against the working directory.
+Then the file written is checked as ``cad mujoco check`` checks one (``_check.check``): each warning is
+printed, then what the model collides as and its contact excludes, one line each, then ``wrote <path>``. A relative ``path`` is taken against the working directory.
 """
 
 from __future__ import annotations
@@ -195,9 +195,13 @@ def _scene(mujoco: Any, target: Path, name: str) -> str:
 
 
 def _findings(target: Path) -> list[str]:
-    """The health checks' errors and warnings on the file written (``compile_findings``), each a line."""
-    from cad.mujoco._compile import compile_findings
+    """What ``cad mujoco check`` says of the file written (``_check.check``), each a line: the health checks' errors
+    and warnings, then what the model collides as and its contact excludes, the two facts a MuJoCo function's
+    choices change."""
+    from cad.mujoco._check import check
 
-    findings = compile_findings(target, mode="auto")
-    return [f"{finding.severity}: {finding.message}" + (f" ({finding.hint})" if finding.hint else "")
-            for finding in [*findings.errors, *findings.warnings]]
+    found = check(target)
+    lines = [f"{finding.severity}: {finding.message}" + (f" ({finding.hint})" if finding.hint else "")
+             for finding in found.findings if finding.severity in ("error", "warning")]
+    return lines + [f"{finding.code}: {finding.message}" for finding in found.findings
+                    if finding.code in ("collisions", "excludes")]

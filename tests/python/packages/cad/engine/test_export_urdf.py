@@ -480,18 +480,35 @@ class EngineTest(_Folder):
         xbf = self.folder / "XBF/turned.xbf"
         api.export(xbf, self.folder / "mjcf" / "turned.xml", daemon=False, progress=False)
         api.export(xbf, self.folder / "urdf" / "turned.urdf", daemon=False, progress=False)
-        mjcf_robot, urdf_robot = read_robot(self.folder / "mjcf" / "turned.xml"), read_robot(self.folder / "urdf" / "turned.urdf")
+        urdf_robot = read_robot(self.folder / "urdf" / "turned.urdf")
+        # The MJCF as MuJoCo itself stands it: each body's frame in the world, the hinge at an angle.
+        import mujoco
+
+        model = mujoco.MjModel.from_xml_path(str(self.folder / "mjcf" / "turned.xml"))
+        data = mujoco.MjData(model)
+
+        def stood(degrees: float) -> dict[str, np.ndarray]:
+            data.qpos[:] = model.qpos0
+            data.qpos[model.joint("elbow").qposadr[0]] = np.radians(degrees)
+            mujoco.mj_kinematics(model, data)
+            frames = {}
+            for name in ("base", "arm"):
+                frame = np.eye(4)
+                # MuJoCo's metres, as the stills place a robot: in millimetres.
+                frame[:3, :3], frame[:3, 3] = data.body(name).xmat.reshape(3, 3), 1000.0 * data.body(name).xpos
+                frames[name] = frame
+            return frames
+
         # The URDF roots at an empty link at the world's frame, and every link of the MJCF stands where the URDF
         # stands it, at zero and with the hinge turned.
         self.assertEqual(urdf_robot.root, "base_link")
         np.testing.assert_allclose(urdf_robot.placements(urdf_robot.values(None)[0])["base"][:3, :3],
                                    [[1, 0, 0], [0, 0, -1], [0, 1, 0]], atol=1e-6)
         for values in (None, {"elbow": 40}):
-            built = mjcf_robot.placements(mjcf_robot.values(values)[0])
+            built = stood(40.0 if values else 0.0)
             placed = urdf_robot.placements(urdf_robot.values(values)[0])
             for name in ("base", "arm"):
                 np.testing.assert_allclose(placed[name], built[name], atol=1e-6, err_msg=f"{name} at {values}")
-
 
     def test_a_built_hinge_exports_to_a_urdf_whose_links_move_as_its_mechanism_does(self) -> None:
         (self.folder / "hinge.py").write_text(textwrap.dedent(HINGE), encoding="utf-8")

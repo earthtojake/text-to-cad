@@ -1319,7 +1319,7 @@ def stop() -> bool:
 #               here (raised in this process, as against told by the daemon or a report), part (a snapshot's
 #               refusal: the part of the request it named, ``SnapshotRefused.part``; where it named one)}
 #     source    export, snapshot: what it read -- "xbf", "step", "glb", "stl", "threemf", "dxf", "urdf",
-#               "sdf", "srdf", "mjcf", "model" (a script's model) or "other"
+#               "sdf", "srdf", "model" (a script's model) or "other"
 #     found     snapshot: the source file is there (a model's always is)
 #     outputs   export: each destination, {kind, seconds (None for one not written)}
 #     pose      snapshot: a pose was asked for
@@ -1331,8 +1331,8 @@ observers: list[Callable[[dict[str, Any]], None]] = []
 _HEARD = threading.local()  # what the daemon's answers said while a verb ran in this thread (``_heard``)
 _ENGINE = os.path.dirname(os.path.abspath(__file__)) + os.sep
 _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".stl": "stl", ".3mf": "threemf",
-             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".xml": "mjcf", ".mjcf": "mjcf",
-             ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
+             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
+             ".kicad_sch": "kicad_sch"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
 _DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daemon's word (``services.WORKER``)

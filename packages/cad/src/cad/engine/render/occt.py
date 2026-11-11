@@ -55,7 +55,7 @@ from cad.engine.render.shapes import LINES, FaceGroup, prototype_shapes
 
 MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
 #: The robot descriptions (``formats.robot``): their link meshes draw no edges where the faces are lit.
-ROBOTS = frozenset({"urdf", "srdf", "sdf", "mjcf"})
+ROBOTS = frozenset({"urdf", "srdf", "sdf"})
 PRESETS = {
     "front": ((0, -1, 0), (0, 0, 1)), "back": ((0, 1, 0), (0, 0, 1)), "right": ((1, 0, 0), (0, 0, 1)),
     "left": ((-1, 0, 0), (0, 0, 1)), "top": ((0, 0, 1), (0, 1, 0)), "bottom": ((0, 0, -1), (0, 1, 0)),
