@@ -143,7 +143,8 @@ which points both at the checkout.
   `packages/core` ([README](packages/core/README.md)) is `@cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))
   is `@cad/ui`, the shared FileViewer, renderers, controls and styles.
-- `apps/docs/` ([README](apps/docs/README.md)): documentation site.
+- `apps/docs/` ([README](apps/docs/README.md)): the site, texttocad.dev: the homepage and the
+  documentation under `/docs`, which shows `docs/` as it is and its own guides (`apps/docs/content/`).
 - `apps/api/` ([README](apps/api/README.md)): `api.texttocad.dev`, its own Vercel project:
   the version feed (read from PyPI) and the CAD app's consented analytics.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
@@ -192,7 +193,8 @@ which points both at the checkout.
 - The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
   share their structure, install commands, summary, the link to `docs/install.md` and
   Contributing: change them together. The per-app installs, updates and reinstalls live in
-  `docs/install.md` alone, never in the docs app (`apps/docs/README.md`).
+  `docs/install.md` alone: the docs app shows that file as it is, at `/docs/install`, and never
+  keeps a copy (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo

@@ -4,10 +4,12 @@ The documentation website (Next.js) — texttocad.dev. A @cad/core CLIENT: the
 hero and example scenes render real CAD models in the browser through the
 same shared runtime the viewer uses.
 
-**PURPOSE** — the public documentation and marketing site.
+**PURPOSE** — the public documentation and marketing site: the homepage, and the documentation
+under `/docs` ([The documentation](#the-documentation)).
 
-**MAY DEPEND ON** — compiled `@cad/core` exports and this app's own
-npm dependencies. Never another app or the running CAD server.
+**MAY DEPEND ON** — compiled `@cad/core` exports, this app's own npm dependencies, and, as it
+builds, the repository's guides (`docs/`), which the documentation sets as they are. Never another
+app or the running CAD server.
 The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
 
@@ -15,7 +17,8 @@ or consumer-owned declarations are required.
 `api.texttocad.dev`, which the CAD server talks to, is its own project: [`apps/api`](../api/README.md).
 
 Normal development, checks and deployment use existing static assets and do not
-start Python; regenerating an asset is an explicit operation. The hero reads one
+start Python; regenerating an asset is an explicit operation (the hero's GLB, and the
+documentation's copy of the registry, `src/lib/docs/registry.generated.json`). The hero reads one
 static GLB with core's GLB path, the CAD Viewer's, and plays its clip with core's
 GLB animation runtime. It needs no FileViewer host or Python backend.
 
@@ -56,12 +59,64 @@ clip and verify playback before committing the refreshed GLB.
 ## The shape of the app
 
 ```
-src/app/         # routes
-src/components/  # site components incl. the CAD hero renderers
-src/lib/         # site utilities
+src/app/         # routes; docs/ is the documentation, docs-md/ its pages as Markdown
+src/components/  # site components incl. the CAD hero renderers; docs/ is the documentation's
+src/lib/         # site utilities; docs/ is the documentation's map, sources and registry
+content/         # the documentation's own pages, Markdown
 public/hero/     # the hero's GLB, a plain file (never LFS)
 scripts/         # loading-icon export and verification; the install scripts' copy into public/
 ```
+
+## The documentation
+
+`/docs` is the documentation: installing, the guides (one per workflow), every document type and
+integration, the architecture, the `cad` command, the migration guides and contributing. It is this
+app's own shell, no docs framework: the sections at the left (a drawer on a phone or a tablet), the
+page, and its contents at the right, in the site's tokens and primitives.
+
+- **The map** is `src/lib/docs/nav.ts`: every page, its section and its file. A page that is not in
+  the map does not exist (`dynamicParams = false`), and the sidebar, the sitemap, `/llms.txt` and the
+  search all read the map.
+- **One copy of everything.** A page is either a file of the repository's (`docs/install.md`,
+  `docs/contributing/*.md`, `docs/migrations/*.md`), set as it is, its relative links resolved to the
+  site's pages or to GitHub; or a page written for the site, `content/<page>.md`: the guides, the
+  architecture and each type's and integration's introduction, which say for a person what the skills
+  say to an agent and the package READMEs to a contributor, and link them. The site never keeps a
+  second copy of a repository file.
+- **The registry's pages.** The document types and the integrations are the library's registry
+  (`cad.registry`): `src/lib/docs/registry.generated.json` is that table
+  (`python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`), held to it by
+  `tests/python/packages/cad/test_registry.py`. Each type and integration gets a page from it, its
+  facts, operations and what writes it under an introduction in `content/`; a new entry in the
+  registry needs its introduction, or the build fails (and
+  `tests/python/global/test_docs_site_pages.py`, on every change).
+- **Markdown, not MDX** (`src/lib/docs/source.ts`, `src/components/docs/markdown.tsx`): a repository
+  file says `<state>` and `{...}` as text. A page of `content/` has a front matter of `title` and
+  `description` and no `#` heading; it links another page as `/docs/<page>`, a file of the repository
+  as `repo:<path from the root>` and anything else by its full URL. `> [!NOTE]` is a callout. Fenced
+  code is highlighted as the site builds (Shiki), never in the browser.
+- **Files are read on the server, as the site builds.** Every route of the documentation is static.
+  Only server components and route handlers read files; a client module (`"use client"`) never
+  reaches a Node module, which `scripts/test/check-dependencies.mjs` holds.
+- **The build is the link check.** A page with no file, a `/docs` link that is no page, an anchor
+  that is no heading of its page and a repository path that does not exist each fail `next build`,
+  so `npm run check` fails on them. The `repo:` links are also checked by the policy test above, since
+  a rename elsewhere in the tree does not run the site's build.
+- **Search** is an index the site builds, `/docs/search.json` (every page cut at its headings), fetched
+  when the dialog first opens (the button, `/`, or Ctrl or Command with K) and searched in the
+  browser: no service, nothing sent.
+- **A live model** on a page (`docModels` in the map; `src/components/docs/model-embed.tsx`): a GLB of
+  `public/`, read and lit by core as the CAD Viewer reads any GLB, its parts in their colours, its clip
+  playing, turned by dragging. Today that is the hero's planetary gear, on the mechanisms guide and
+  the GLB page: no new CAD file. It loads when it scrolls into view, three.js with it, plays only on
+  screen in a visible tab and holds still for reduced motion. Another model is another small GLB,
+  committed as the hero's is (a plain file, listed in `test_no_cad_assets_tracked.py` with a size cap).
+- **For agents**, every page is also Markdown at `/docs/<page>.md` (`/docs.md` for `/docs`), its links
+  absolute and the registry's sections included, and `/llms.txt` lists them all.
+
+To add a page: write `content/<section>/<page>.md`, add it to the map, and run `npm run check`.
+To show another file of the repository: add it to the map with `repo(...)`; its first `#` heading is
+its title.
 
 ## Brand and loading icon
 
@@ -115,9 +170,10 @@ Every button shows a pointer. Every section title
 shares one heading scale. Each section title links to its
 own anchor (`#features`), as GitHub's headings do, so following it puts
 that address in the bar. The header is bare: at the left the C mark and "text-to-cad" set as a
-title (semibold), one link home, on every size and always shown; at the right the version as its
-release tag names it (`v<VERSION>`, on a phone 360px or wider) and GitHub with its star count, the
-two at one size and weight (text-sm, medium). It has no
+title (semibold), one link home, on every size and always shown; at the right Docs (the
+documentation, the header's one link into the site), the version as its
+release tag names it (`v<VERSION>`, on a phone 400px or wider) and GitHub with its star count, the
+three at one size and weight (text-sm, medium). It has no
 section links, no burger, no Discord link and no theme toggle: the site follows the system's light
 or dark theme, on load and as it changes (`layout.tsx`'s theme script sets the `.dark` class).
 
@@ -128,7 +184,8 @@ agents' logos shrink with the height, so all of it still fits down to a 600-pixe
 The text is centred across it and anchored high, under a gap that grows with the screen's height
 (at most 8rem), so a tall screen's spare height gathers between the install box and the agents,
 where the gear's corner turns. In it: the TEXTTOCAD wordmark at full size (up to
-800px), the tagline, then the two calls to action, the site's own outline Buttons at one neutral style (GitHub with a divider and its
+800px), the tagline, then the calls to action, the site's own outline Buttons at one neutral style (Docs, from a tablet up: on a phone
+the header's is in reach and a third button would wrap; GitHub with a divider and its
 star count, Join Discord; `src/components/hero-section.tsx`, the links and the star count from
 `src/lib/github.ts`, which the header shares). Then the one-line install box, which is the page's
 Install and carries its stable address, `#install` (`src/components/install-box.tsx`: the ONE-LINE
@@ -153,8 +210,9 @@ arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`), s
 Icons (MIT) in the same tile, each tile a luminance mask over the text colour, so its black square
 vanishes into the page (no blend mode: iOS Safari never blends a scroller's contents with the page). The logos are not
 links, and nothing follows them in the hero: under their names as much room as the label has over
-their glyphs, so the strip closes the first screen evenly. Then Features (below). The site has no
-Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
+their glyphs, so the strip closes the first screen evenly. Then Features (below). The homepage has no
+Install section and no telemetry note, and the site keeps no per-app install of its own (the
+documentation shows the repository's `docs/install.md` as it is, at `/docs/install`): the privacy policy, linked
 from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
 part, bugs and plugin requests, questions and ideas, and code, skills and models, with
@@ -165,7 +223,8 @@ text fill the content width. Command text remains monospace.
 The homepage and the repository README share their structure and are changed
 together: the install commands, what they
 do, the link to installing by hand, the features and Contributing. Updates are on
-`docs/install.md`, with each app's own commands, which both link, and the telemetry in full is
+`docs/install.md`, with each app's own commands, which the README links and the site shows at
+`/docs/install`, and the telemetry in full is
 the privacy policy. The site has the hero and the agents carousel. The page's copy lives in
 `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
@@ -189,7 +248,8 @@ The homepage's Features are the README's, item for item and word for word (`feat
 `featuresIntro` in `src/lib/content.ts`; `test_plugin_manifests.py` holds the two lists to one text,
 and every skill's folder to a feature that links it). Each feature is a tile
 (`src/components/feature-grid.tsx`): a line drawing of the file it makes over that file's name, in
-a caption bar, then its name, linking to the page that documents it, and what it does.
+a caption bar, then its name, linking to its guide in the documentation (`guide`; the README links
+the skill, `path`), and what it does.
 The drawings (`src/components/feature-art.tsx`) are inline SVG in the site's tokens, so they follow
 the light and dark themes: the part in the foreground, construction in the muted ink, what the
 feature adds in the brand blue, a check's finding in the destructive red. Two parts run through

@@ -4,7 +4,7 @@
 
 Design physical products with AI.
 
-[Website](https://www.texttocad.dev)
+[Website](https://www.texttocad.dev) · [Docs](https://www.texttocad.dev/docs)
 
 [![cad](https://img.shields.io/pypi/v/cad?style=flat&logo=pypi&logoColor=white&label=cad)](https://pypi.org/project/cad/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)

@@ -21,12 +21,18 @@ add_repo_path("packages/cad/src")
 from cad import registry  # noqa: E402
 
 GENERATED = repo_path("packages", "core", "src", "lib", "documentTypes.generated.js")
+DOCS = repo_path("apps", "docs", "src", "lib", "docs", "registry.generated.json")
 
 
 class TheTableIsTheSource(unittest.TestCase):
     def test_the_javascript_is_generated_from_the_registry(self) -> None:
         self.assertEqual(registry.as_js(), GENERATED.read_text(encoding="utf-8"),
                          "regenerate: python -m cad.registry --js > packages/core/src/lib/documentTypes.generated.js")
+
+    def test_the_docs_site_reads_the_registry(self) -> None:
+        # The documentation site's pages of the types and the integrations are this table's own words.
+        self.assertEqual(registry.as_docs_json(), DOCS.read_text(encoding="utf-8"),
+                         "regenerate: python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json")
 
     def test_every_type_is_well_formed(self) -> None:
         seen: dict[str, str] = {}

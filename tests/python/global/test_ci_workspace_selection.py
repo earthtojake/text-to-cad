@@ -459,7 +459,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_prose_and_metadata_select_nothing(self):
         # The light contracts read them, and static runs those on every change.
-        for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs/install.md", "docs/contributing/testing.md",
+        for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md",
                      "skills/cad/SKILL.md", ".claude-plugin/plugin.json", "models/README.md",
                      "packages/cad-server/src/cad_server/engine/README.md", "apps/api/package.json",
                      ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
@@ -525,6 +525,12 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "apps/web/README.md": jobs_on("web_client"),
             "apps/mcp/package.json": jobs_on("mcp", "packaging"),
             "apps/docs/package.json": jobs_on("docs", "core_js"),
+            # The documentation site sets the repository's guides and its own pages, and resolves
+            # their links: its build is their check. Its copy of the registry runs the registry's test.
+            "docs/install.md": jobs_on("docs"),
+            "docs/contributing/testing.md": jobs_on("docs"),
+            "apps/docs/content/guides/renders.md": jobs_on("docs"),
+            "apps/docs/src/lib/docs/registry.generated.json": jobs_on("docs", "core_js", "packages"),
             "tests/browser/viewer-e2e.mjs": jobs_on("web_viewer"),
             # The installer rehearsals: the installers, their folder and the workflows; a release.
             "scripts/install/install.sh": jobs_on("installer", "docs", "packages"),

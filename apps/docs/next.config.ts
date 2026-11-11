@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/install", destination: "/#install", permanent: false }];
   },
+  // /docs/<page>.md, and /docs.md for /docs itself: a page of the documentation as Markdown, for an
+  // agent (app/docs-md).
+  async rewrites() {
+    return [
+      { source: "/docs.md", destination: "/docs-md" },
+      { source: "/docs/:path(.+)\\.md", destination: "/docs-md/:path" },
+    ];
+  },
   // texttocad.dev/install.sh and /install.ps1: the one-line installer, copied into public/ from
   // scripts/install/ as the site builds (scripts/install-scripts.mjs). Plain text, so `irm` hands
   // PowerShell a string and a browser shows the script; kept five minutes, so a release reaches

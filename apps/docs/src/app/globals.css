@@ -186,3 +186,72 @@
     html { scroll-behavior: auto; }
   }
 }
+
+/* The documentation's text (`Markdown`, components/docs/markdown.tsx): a page's Markdown, set in the
+   site's tokens. The headings share the site's one section-title size; a heading's link to itself
+   shows when the heading is hovered or the link focused. */
+.docs-prose {
+  @apply text-[15px] leading-7 text-foreground/90;
+}
+.docs-prose > :first-child { @apply mt-6; }
+.docs-prose :is(p, ul, ol, blockquote, .docs-table, .docs-code, .docs-callout, .docs-facts) { @apply my-4; }
+.docs-prose :is(h2, h3, h4) { @apply scroll-mt-20 font-semibold tracking-tight text-foreground; }
+.docs-prose h2 { @apply mt-10 mb-3 border-t border-border pt-6 text-heading leading-8; }
+.docs-prose h3 { @apply mt-8 mb-2 text-lg leading-7; }
+.docs-prose h4 { @apply mt-6 mb-2 text-base; }
+.docs-prose .docs-anchor {
+  @apply ml-2 inline-flex rounded-sm align-middle text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100;
+}
+.docs-prose .docs-anchor svg { @apply size-[0.7em]; }
+.docs-prose :is(h2, h3, h4):hover .docs-anchor { @apply opacity-100; }
+.docs-prose a:not(.docs-anchor) {
+  @apply font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground;
+}
+.docs-prose strong { @apply font-semibold text-foreground; }
+.docs-prose ul { @apply list-disc pl-6; }
+.docs-prose ol { @apply list-decimal pl-6; }
+.docs-prose li { @apply my-1.5 pl-1; }
+.docs-prose li > :is(ul, ol) { @apply my-1.5; }
+.docs-prose li::marker { @apply text-muted-foreground; }
+.docs-prose li > p { @apply my-2; }
+.docs-prose .contains-task-list { @apply list-none pl-1; }
+.docs-prose .task-list-item input { @apply mr-2 align-middle; }
+.docs-prose hr { @apply my-8 border-border; }
+.docs-prose blockquote { @apply border-l-2 border-border pl-4 text-muted-foreground; }
+.docs-prose :not(pre) > code {
+  /* Its own short line height, so a line with code in it is no taller than one without. */
+  @apply rounded-md bg-muted px-[0.3em] py-[0.1em] font-mono text-[0.86em] leading-[1.3] break-words text-foreground;
+}
+.docs-prose a code { @apply underline decoration-border underline-offset-4; }
+
+/* A table scrolls sideways inside its own box, never the page. */
+.docs-prose .docs-table { @apply overflow-x-auto rounded-xl border border-border; }
+.docs-prose table { @apply w-full border-collapse text-sm leading-6; }
+.docs-prose th { @apply border-b border-border bg-muted/60 px-3 py-2 text-left font-medium whitespace-nowrap text-foreground; }
+.docs-prose td { @apply border-b border-border px-3 py-2 align-top; }
+.docs-prose tr:last-child td { @apply border-b-0; }
+.docs-prose td:first-child code { @apply whitespace-nowrap; }
+
+/* Fenced code (`CodeBlock`): Shiki's two themes as CSS variables on each token, the light one on
+   the light surface and the dark one on charcoal. */
+.docs-code { @apply relative overflow-hidden rounded-xl border border-border bg-muted/50; }
+.docs-code pre { @apply overflow-x-auto px-4 py-3.5 font-mono text-[13px] leading-6; }
+.docs-code pre:focus-visible { @apply outline-2 -outline-offset-2 outline-ring; }
+.docs-code .shiki span { color: var(--shiki-light); }
+.dark .docs-code .shiki span { color: var(--shiki-dark); }
+
+/* A callout (`> [!NOTE]`): its kind's name over its text, a warning in the destructive red. */
+.docs-callout { @apply rounded-xl border border-border bg-muted/40 px-4 py-3 text-[14px] leading-6; }
+.docs-callout::before {
+  content: attr(data-label);
+  @apply mb-1 block text-label font-medium tracking-[0.1em] text-brand uppercase;
+}
+.docs-callout:is([data-callout="warning"], [data-callout="caution"])::before { @apply text-destructive; }
+.docs-callout > :is(p, ul, ol) { @apply my-1; }
+
+/* A type's or an integration's facts (`RegistrySections`): a name and its value a row. */
+.docs-facts { @apply overflow-hidden rounded-xl border border-border text-sm leading-6; }
+.docs-facts > div { @apply grid gap-x-4 gap-y-0.5 border-b border-border px-3 py-2 sm:grid-cols-[9rem_minmax(0,1fr)]; }
+.docs-facts > div:last-child { @apply border-b-0; }
+.docs-facts dt { @apply font-medium text-foreground; }
+.docs-facts dd { @apply min-w-0 text-foreground/90; }

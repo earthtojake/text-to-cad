@@ -170,6 +170,8 @@ RULES: tuple[Rule, ...] = (
     Rule((*(f"{project}/{name}" for project in PACKAGE_PROJECTS for name in ("README.md", "LICENSE")),
           "packages/aliases/*/README.md"), select(flags=["packaging"]), final=True),
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),
+    # The documentation site's own pages are its build's: it sets them and resolves their links.
+    Rule(("apps/docs/content/**",), select(flags=["docs"]), final=True),
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
     # Shared by every job, or the selection itself: everything runs.
@@ -196,6 +198,12 @@ RULES: tuple[Rule, ...] = (
     # js-core, beside docs: check-dependencies.mjs walks every app's source, and the web and mcp
     # jobs run it for theirs.
     Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
+    # The site's copy of the registry, held to the library's by the registry's own test.
+    Rule(("apps/docs/src/lib/docs/registry.generated.json",),
+         select(packages=[f"{PACKAGES_SUITE}/cad/test_registry.py"])),
+    # The repository's guides are pages of the documentation site, which its build sets as they are
+    # and whose links and anchors it resolves (apps/docs/src/lib/docs/nav.ts).
+    Rule(("docs/**",), select(flags=["docs"])),
     Rule(("skills/**",), NOTHING),  # prose and scripts the light contracts and light suites read
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
     # The installer rehearsals (install-linux.yml, install-windows.yml, which test.yml calls): the
@@ -254,7 +262,7 @@ RULES: tuple[Rule, ...] = (
         ".github/dependabot.yml", ".github/release.yml", ".github/FUNDING.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", ".grok-plugin/**", "gemini-extension.json",
         "*.mcp.json", "plugin.json", "mcp.json", "skills.sh.json",
-        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/**",
+        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE",
         ".gitignore",
         "models/**",
     ), NOTHING),
