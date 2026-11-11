@@ -425,6 +425,11 @@ def install() -> bool:
             elif not getattr(static, "__kernel_memo__", False):
                 setattr(cls, attr, _query(f"{cls_name}.{attr}", static))
         kernel_history.install()
+        # What each connect_to does to the part it moves, for the harvest's check that a child stands where it
+        # was built at its joint's zero (``mechanism.watch``): installed, as the memo is, before a body runs.
+        from cad.engine import mechanism
+
+        mechanism.watch()
         # build123d's booleans and ``clean`` unify through the class its topology module imported:
         # the one-place class (``_one_place``), as a model's own unify is.
         from build123d.topology import shape_core
@@ -789,6 +794,9 @@ def uninstall() -> bool:
         if getattr(unify, "__kernel_one_place__", False):
             shape_core.ShapeUpgrade_UnifySameDomain = unify.__mro__[1]
         kernel_history.uninstall()
+        from cad.engine import mechanism
+
+        mechanism.unwatch()
         _installed = False
         return True
 
@@ -3822,6 +3830,15 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get(CONFIGURATIONS) or {}, state),
         _normalize(state_dict.get(COUPLINGS) or {}, state),
         _normalize(state_dict.get(ANIMATIONS) or {}, state),
+        # What a part declares for a robot description (``declarations``): a hit hands back the attributes
+        # the first run's result held, so they are its input, as its material is.
+        _normalize(state_dict.get("_frames") or {}, state),
+        state_dict.get("_body"),
+        _normalize(state_dict.get("_drives") or {}, state),
+        _normalize(state_dict.get("_mass"), state),
+        _normalize(state_dict.get("_points") or {}, state),
+        bool(state_dict.get("_free")),
+        state_dict.get("_link"),
     )
     children = tuple(_shape_key(child, state) for child in state_dict.get("_NodeMixin__children") or ())
     return _intern((placed, attrs, children))

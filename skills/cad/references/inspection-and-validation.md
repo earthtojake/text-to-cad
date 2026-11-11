@@ -40,45 +40,69 @@ def bracket():
 
 A model's `.shape`, `step.read(path)` and `xbf.read(path)` return a build123d tree.
 Each node's `location` is relative to its parent. `.children`, `.descendants` and
-`.leaves` expose those nodes without accumulating ancestor placements. Before comparing
-parts in different sub-assemblies, copy these helpers into the project's check script:
+`.leaves` expose those nodes without accumulating ancestor placements. `leaves(tree)`
+(`cad.build123d`) hands back every leaf placed where it stands in the tree's frame:
+a new shape with the leaf's label, colour and material, no parent, on the same B-rep.
+Use it rather than `node.located(...)` or `node.moved(...)` on a node of a read tree:
+build123d copies the node with its parent, so each such call copies the whole
+assembly (seconds and hundreds of megabytes a call on a large vendor STEP).
+`leaves(tree, paths=True)` gives `(path, leaf)` pairs, `path` the labels from the root:
 
 ```python
-import build123d as bd
-
-
-def world_parts(node, parent=None):
-    here = (bd.Location() if parent is None else parent) * node.location
-    if node.children:
-        for child in node.children:
-            yield from world_parts(child, here)
-    else:
-        yield node.located(here)   # a copy with the full placement, not an extra move
+from cad import step
+from cad.build123d import leaves
 
 
 def find_part(tree, label):
-    matches = [part for part in world_parts(tree) if part.label == label]
+    matches = [part for part in leaves(tree) if part.label == label]
     if len(matches) != 1:
         raise ValueError(f"Expected one part labelled {label!r}, found {len(matches)}")
     return matches[0]
 ```
 
-These are project helpers, not the library's imports. `find_part` requires a unique leaf label:
-it refuses both missing and repeated labels. For repeated components, walk a known branch
-while accumulating its parents' locations, or use an occurrence path with
-`cad <type> inspect` ([references](#references)).
+`find_part` is a project helper, not the library's: it requires a unique leaf label and
+refuses both missing and repeated labels. For repeated components, pick by path
+(`leaves(tree, paths=True)`) or use an occurrence path with `cad <type> inspect`
+([references](#references)).
 
 ```python
-from cad import step
+import build123d as bd
 from kit import kit
 
 doc = kit().shape
-for part in world_parts(doc):
+for part in leaves(doc):
     print(part.label, part.volume, part.bounding_box().center())
 
 finger = find_part(doc, "index_finger")
 top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
 plate = find_part(step.read("kit.step"), "plate")
+arm_parts = [part for path, part in leaves(step.read("arm.step"), paths=True) if "Forearm" in path[1]]
+```
+
+A vendor STEP's parts take a robot's declarations the same way: loop its placed leaves,
+match each label by pattern, declare on the leaf, and build the model from those leaves. A
+declaration on a leaf of `leaves()` is the leaf's own (it is a copy, not the tree's node), so
+the model returns them, grouped into one assembly per link where joints join them:
+
+```python
+from fnmatch import fnmatch
+
+import build123d as bd
+from cad import model, step
+from cad.build123d import body, leaves, mass
+
+
+@model
+def arm():
+    parts = []
+    for part in leaves(step.read("arm.step")):
+        name = part.label.lower()
+        if fnmatch(name, "servo*case*"):
+            mass(part, 40)                           # the datasheet's grams, not volume x density
+        elif fnmatch(name, "*camera*"):
+            body(part, "camera")                     # a body of its own, for the camera's frame
+        parts.append(part)
+    return bd.Compound(children=parts, label="arm")
 ```
 
 - Calling a model from a plain script builds it in the server (a replay when nothing
@@ -256,7 +280,11 @@ closure
 The state is the server's: `live` (a worker holds it), `held` (the server holds it, no
 worker), whether its cache has it on disk, and when it was built. `--json` prints the same as `{"summary", "closure"}`, and `--query closure` the
 closure alone. For the names alone, `--query structure` prints the same lists without the
-bounds, volume and masses, and measures nothing. Nothing is built or meshed, and each part is
+bounds, volume and masses, and measures nothing. Where the model declares what a part or an assembly
+weighs (`mass`, `point_mass`), the masses are the robot description's -- the declared total, the solids
+scaled to it -- and a `declared` line says how much is declared and how much computed at the
+materials' densities, each declared mass and point mass under it (`--json`: `declared`); a mass the
+description cannot carry is `declared    refused:` in its words. Nothing is built or meshed, and each part is
 measured once: an inspection after an edit measures only the parts it changed. A part with a solid
 inside out (its faces pointing inward, a negative volume a boolean can leave, which a run and a
 snapshot do not show) is named under `volume` as `inside out` (`--json`: `inverted`, its occurrences):
@@ -273,6 +301,8 @@ angle_degrees = u.get_angle(v)
 signed_angle_degrees = u.get_signed_angle(v, normal)
 center = circular_edge.arc_center
 radius = circular_edge.radius
+axis = cylindrical_face.axis_of_rotation   # Axis (a point on it, its direction); None for a plane
+bore = cylindrical_face.radius
 size = shape.bounding_box().size
 ```
 
@@ -294,7 +324,9 @@ press-fit pin, a bearing in its bore) is named as such, not inferred from where 
 sits in the tree. A part meant to sit on, bolt to or bear against another measures
 `closest_points` distance 0 against it; above 0 is a gap, and the part floats. Over
 many parts, two `bounding_box(optimal=False)` envelopes that do not meet rule a pair
-out, leaving the exact queries for the pairs that remain. Both measure the parts as
+out, leaving the exact queries for the pairs that remain. A solid-to-solid `closest_points`
+on large parts (a vendor STEP's printed parts, thousands of faces each) takes seconds a pair, so
+filter first, and measure from a point (`bd.Vertex(*p)`) where a point answers the question. Both measure the parts as
 built: a part clear there can still pass through another in a pose
 ([reviewing motion](kinematics.md#reviewing-motion)).
 

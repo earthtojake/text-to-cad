@@ -189,6 +189,8 @@ WARNING_CASES = [
     ),
     ("missing_effort", _wrap(_joint(limit='<limit lower="-1" upper="1" velocity="1"/>')), "missing_effort"),
     ("missing_velocity", _wrap(_joint(limit='<limit lower="-1" upper="1" effort="1"/>')), "missing_velocity"),
+    ("zero_effort", _wrap(_joint(limit='<limit lower="-1" upper="1" effort="0" velocity="1"/>')), "zero_effort"),
+    ("zero_velocity", _wrap(_joint(limit='<limit lower="-1" upper="1" effort="1" velocity="0"/>')), "zero_velocity"),
     (
         "inertia_triangle_inequality",
         _wrap('<link name="base"><inertial><mass value="1"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="1"/></inertial></link>'),
@@ -347,6 +349,18 @@ class UrdfFindingsTests(unittest.TestCase):
         xml_text = _wrap(_joint(limit='<limit lower="-1" upper="1" effort="0" velocity="0"/>'))
         error_codes, _ = self._codes(xml_text)
         self.assertFalse(error_codes)
+
+    def test_a_mimic_s_zero_drive_is_not_warned(self) -> None:
+        # A mimic follows its leader: no controller drives it, so its zeros bound nothing.
+        xml_text = _wrap(
+            '<link name="a"/><link name="b"/><link name="c"/>'
+            '<joint name="j1" type="revolute"><parent link="a"/><child link="b"/><axis xyz="0 0 1"/>'
+            '<limit lower="-1" upper="1" effort="1" velocity="1"/></joint>'
+            '<joint name="j2" type="revolute"><parent link="b"/><child link="c"/><axis xyz="0 0 1"/>'
+            '<limit lower="-1" upper="1" effort="0" velocity="0"/><mimic joint="j1"/></joint>'
+        )
+        _, warning_codes = self._codes(xml_text)
+        self.assertFalse({"zero_effort", "zero_velocity"} & warning_codes, warning_codes)
 
     def test_eigenvalues_match_diagonal_for_diagonal_tensor(self) -> None:
         eigenvalues = sorted(

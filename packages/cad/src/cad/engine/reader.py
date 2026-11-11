@@ -365,10 +365,12 @@ def _parse(path: str) -> tuple[dict[str, Any], bytes]:
     Interface_Static.SetIVal_s("read.stepcaf.subshapes.name", 1)  # the names the file gives elements
     if reader.ReadFile(os.fspath(path)) != IFSelect_RetDone:
         raise ValueError(f"cannot read the STEP file {path}")
-    from cad.engine.document import refuse_external_files
+    from cad.engine.document import correct_step_densities, forget_step_attributes, refuse_external_files
 
     refuse_external_files(reader, path)
     reader.Transfer(doc)
+    correct_step_densities(doc, path)
+    forget_step_attributes(doc, path)
     from cad.engine.step_style import read_visual_styles
 
     read_visual_styles(reader, doc)

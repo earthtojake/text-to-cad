@@ -126,7 +126,7 @@ class SrdfValidateCliTests(unittest.TestCase):
         self.assertIn("not a parent-to-child path", output)
 
     def test_non_srdf_suffix_fails(self) -> None:
-        path = self._write("robot.xml", SAMPLE_SRDF)
+        path = self._write("robot.txt", SAMPLE_SRDF)
         exit_code, output = self._run(str(path))
         self.assertEqual(exit_code, 2)  # the command line's: a file of no type, before anything is read
         self.assertIn("is not a srdf file: cad srdf takes .srdf", output)

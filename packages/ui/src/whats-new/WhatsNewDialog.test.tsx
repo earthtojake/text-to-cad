@@ -33,11 +33,10 @@ it("an update says what's new: the release's title, each item a bold title and i
   expect(dialog).toBeTruthy();
   expect(screen.getByRole('heading', { name: "What's New (v0.11.0)" })).toBeTruthy();
   expect([...dialog!.querySelectorAll('li strong')].map(node => node.textContent)).toEqual(
-    ['KiCad.', 'Updates install themselves.', 'Manufacturing checks.']);
-  expect(dialog!.querySelector('li')?.textContent).toContain('Design PCBs with KiCad: “Design a 9-key macropad');
-  // A body's backticks are code.
-  expect([...dialog!.querySelectorAll('li code')].map(node => node.textContent)).toEqual(
-    ['cad update auto off', 'cad step dfm part.step --process molding']);
+    ['KiCad.', 'Blender.', 'MuJoCo.']);
+  expect(dialog!.querySelector('li')?.textContent).toContain('Design circuit boards with KiCad: “Design a 9-key macropad PCB.”');
+  // What a feature is for and a prompt, never a command.
+  expect(dialog!.querySelectorAll('li code')).toHaveLength(0);
   // Read by a screen reader as its title and its notes; the button has the focus.
   expect(dialog!.getAttribute('aria-describedby')).toBe(dialog!.querySelector('ul')!.id);
   expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Got it']);

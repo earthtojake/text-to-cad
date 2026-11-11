@@ -3,8 +3,18 @@
 A **document type** is what is in a file: one lowercase underscore id, the same in Python, the CLI,
 the registry, the server, the viewer and the JavaScript. The definitions and the laws they bind
 are the library's README ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions**
-and laws 24 to 29); the mechanism is the engine README's **Document types and integrations**
+and laws 23 to 28); the mechanism is the engine README's **Document types and integrations**
 ([`packages/cad-server/src/cad_server/engine/README.md`](../../packages/cad-server/src/cad_server/engine/README.md)).
+
+A document type is a file cad **shows**: every type has a view (`document`, `mesh`, `drawing`, `robot`,
+`plot`), is listed by the CAD Viewer and has a snapshot. A file cad only writes or checks is not one,
+however much cad does with it: an MJCF is an export's destination and the `mujoco` integration's to
+check (`cad mujoco check`), and MuJoCo Studio shows it. For such a file, give its tool's integration an
+operation instead ([Adding an integration](adding-an-integration.md)).
+
+This guide records what the types so far needed. A type that does not fit it is thought through on its
+own terms, starting from [the tool](adding-an-integration.md#start-from-the-tool), and the guide and
+the laws are amended in the same change.
 
 A type usually arrives with the tool that makes or checks it. That tool is an **integration**, and
 adding one has its own guide: [Adding an integration](adding-an-integration.md). The

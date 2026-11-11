@@ -7,7 +7,7 @@ A model's namespace is its script's folder; its name is its function's, or the o
 gives it. An explicit name is claimed (``claimed``): refused while the registry's record of it
 says another file of the folder declared it at that file's last run, naming both ``file:line``;
 a run of that file that declares it no more gives it up (``released``). What a script declares
-is what its last run said (law 23): no script but the run's own is read. A run's model with
+is what its last run said (law 22): no script but the run's own is read. A run's model with
 nothing to take up -- no document in its worker, no cache file at its id -- re-attaches
 (``reattach``) the record of a script that is gone, or is this very script under another
 spelling, with the same name, function and bytes (``fingerprint``): the record is re-pointed
