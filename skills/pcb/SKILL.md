@@ -227,7 +227,8 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 The board view supports layers, selection, Measure, annotations and Quick Edit, in 2D and in 3D.
 Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or
 graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
-drag names an area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\
+drag draws a box that takes anything it touches. A box that takes nothing names an area, a box on the layer the person works on
+(`#F.Cu@x10y5..x20y15`). The panel at the left (⌘\ or Ctrl+\
 hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
 schematic blocks their footprints record (by kind on a board that records none): a block picks every
 part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
@@ -296,7 +297,8 @@ selection, Measure, annotations and Quick Edit, and its panel: one search over *
 and, for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
-junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
+junction or no-connect, as its Selection Filter ticks them, and a drag draws a box that picks anything
+it touches.
 **Parts** lists the parts by the sheet they are placed on, each with its pins, and **Nets** the nets
 with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
