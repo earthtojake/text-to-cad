@@ -164,11 +164,12 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                         help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
                              "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
                              "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
-                             "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
-                             "sizeProfile); the other flags override every job")
+                             "dimensions, at its output settings (padding, tightFrame, transparent, background, "
+                             "renderScale, sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
-                                          "the display JSON object (mode, grid, camera, clip, exploded, "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=sharp "
+                                          "(no line where faces meet smoothly or a face closes on itself), or "
+                                          "the display JSON object (mode, grid, camera, clip, exploded, edges, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
                                           "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "

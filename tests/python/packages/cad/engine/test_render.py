@@ -255,6 +255,25 @@ class HeldTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "display.isolated is a list of part refs"):
             parse_display('{"isolated": "block"}', False)
 
+    def test_sharp_edges_alone_leaves_out_the_lines_where_faces_meet_smoothly_or_close_on_themselves(self) -> None:
+        """``display.edges`` ``sharp``: each part's feature lines are drawn and its tangent and seam lines are
+        not, so a cylinder's seam and a fillet's ends leave no line on a shaded part; the faces are as they were."""
+        self.assertEqual(parse_display("solid,edges=sharp", False), {"mode": "solid", "edges": "sharp"})
+        self.assertEqual(parse_display('{"edges": "all"}', False), {"edges": "all"})
+        with self.assertRaisesRegex(SnapshotRefused, "display.edges 'dotted' is not one of all, sharp"):
+            parse_display("edges=dotted", False)
+        every = pixels(self.draw(display={"mode": "solid"})[0])
+        scene = self.held.scenes[False]
+        drawn = len(scene.shown)
+        smooth = sum(1 for index, instance in enumerate(scene.structure["instances"]) if index not in scene.hidden
+                     for line in ("tangent", "seam") if line in scene.parts[instance["prototype"]].edges)
+        self.assertGreater(smooth, 0, "the fixture has a seam or a tangent line to leave out")
+        sharp = pixels(self.draw(display={"mode": "solid", "edges": "sharp"})[0])
+        self.assertEqual(drawn - len(scene.shown), smooth)
+        differing = np.abs(sharp.astype(int) - every.astype(int)).max(-1) > 8
+        self.assertTrue(0 < differing.mean() < 0.05, "lines gone, and nothing else changed")
+        self.assertLess(mismatch(pixels(self.draw(display={"mode": "solid"})[0]), every), 0.001, "and back again")
+
     def test_rows_differ_where_they_should(self) -> None:
         """Each row draws something of its own: the goldens cannot all be one picture."""
         solid = pixels(self.draw(**ROWS["solid"])[0])
