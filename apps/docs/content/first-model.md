@@ -66,7 +66,7 @@ The `id:` names the model's document. It comes from the script's path and the fu
 
 ## See it on screen
 
-Your agent shows you the model. In apps with the CAD app, the viewer opens inside the app, as a card in Claude Desktop or a tab in Codex. In the others you get the `view:` link to open in your browser. You can also run `cad viewer` yourself, which opens the CAD Viewer's home. See [the CAD Viewer](/docs/guides/cad-viewer).
+Your agent shows you the model. In apps with the CAD app, the viewer opens inside the app, as a card in Claude Desktop or a tab in Codex. In the others you get the `view:` link to open in your browser. You can also run `cad viewer` yourself, which opens the CAD Viewer's home. See [the CAD Viewer](/docs/viewer).
 
 ## Ask for a change
 
@@ -96,7 +96,7 @@ cad model export "$ID" STEP/bracket.step STL/bracket.stl
 
 ## Where to go next
 
-- [Parts and assemblies](/docs/guides/parts-and-assemblies): assemblies, configurations and what else a model can do.
-- [The CAD Viewer](/docs/guides/cad-viewer): what you can do on the page.
+- [Parts and assemblies](/docs/skills/parts-and-assemblies): assemblies, configurations and what else a model can do.
+- [The CAD Viewer](/docs/viewer): what you can do on the page.
 - [Supported agents](/docs/agents): what each app shows and how.
 - [The cad command](/docs/reference/commands): running and checking things yourself.

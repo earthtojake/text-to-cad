@@ -22,4 +22,4 @@ cad glb snapshot GLB/hero.glb tmp/hero.png
 
 ## Related
 
-[Renders](/docs/guides/renders) loads a GLB into [Blender](/docs/integrations/blender) for photoreal images and video, and [mechanisms](/docs/guides/mechanisms) explains the motions a GLB carries as animations. The options are in [a GLB for another renderer](repo:skills/cad/references/exports.md#a-glb-for-another-renderer).
+[Renders](/docs/skills/renders) loads a GLB into [Blender](/docs/integrations/blender) for photoreal images and video, and [mechanisms](/docs/skills/parts-and-assemblies#mechanisms-and-animation) explains the motions a GLB carries as animations. The options are in [a GLB for another renderer](repo:skills/cad/references/exports.md#a-glb-for-another-renderer).

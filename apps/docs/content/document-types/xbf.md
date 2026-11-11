@@ -31,4 +31,4 @@ An XBF read into a model brings its geometry, names, colours and materials. Its 
 
 ## Related
 
-[Parts and assemblies](/docs/guides/parts-and-assemblies) covers composing models from files. The details of what an XBF holds are in [exports](repo:skills/cad/references/exports.md#the-xbf-is-save-as). The type that an XBF is a file of is the [model](/docs/document-types/model).
+[Parts and assemblies](/docs/skills/parts-and-assemblies) covers composing models from files. The details of what an XBF holds are in [exports](repo:skills/cad/references/exports.md#the-xbf-is-save-as). The type that an XBF is a file of is the [model](/docs/document-types/model).

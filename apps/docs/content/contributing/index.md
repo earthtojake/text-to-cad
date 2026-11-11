@@ -35,9 +35,11 @@ Branch from `main` and open pull requests against `main`. External contributors 
 
 Releases are made by the maintainers. Do not change `VERSION` in a normal pull request.
 
-## Guides
+## Guides in the repository
 
-- [Writing a skill](/docs/contributing/writing-a-skill): add a workflow for your agent.
-- [Adding a document type](/docs/contributing/adding-a-document-type): teach text-to-cad a new kind of file.
-- [Adding an integration](/docs/contributing/adding-an-integration): connect a tool text-to-cad runs for you.
-- [Testing](/docs/contributing/testing): the rules for tests, adding one, and reading a red CI run.
+These are written for whoever changes the repository, an agent as often as a person, so they live there and open on GitHub.
+
+- [Writing a skill](repo:docs/contributing/writing-a-skill.md): add a workflow for your agent.
+- [Adding a document type](repo:docs/contributing/adding-a-document-type.md): teach text-to-cad a new kind of file.
+- [Adding an integration](repo:docs/contributing/adding-an-integration.md): connect a tool text-to-cad runs for you.
+- [Testing](repo:docs/contributing/testing.md): the rules for tests, adding one, and reading a red CI run.

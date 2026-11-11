@@ -31,4 +31,4 @@ with kicad_sch.edit("board.kicad_sch") as s:
 
 ## Related
 
-[Circuit boards](/docs/guides/circuit-boards) covers the flow from schematic to board, and the [KiCad](/docs/integrations/kicad) integration page says what runs on your computer. The [schematic reference](repo:skills/pcb/references/schematic.md) has the details.
+[Circuit boards](/docs/skills/circuit-boards) covers the flow from schematic to board, and the [KiCad](/docs/integrations/kicad) integration page says what runs on your computer. The [schematic reference](repo:skills/pcb/references/schematic.md) has the details.

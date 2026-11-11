@@ -24,4 +24,4 @@ cad run mujoco-studio --model sim/scene.xml
 
 ## Related
 
-[Robots](/docs/guides/robots) covers the route from a CAD model to a simulation. [CoACD](/docs/integrations/coacd) backs the convex collision shapes a spec can use. The [MJCF checks](repo:skills/robot-simulation/references/mjcf-checks.md) reference lists what `cad mujoco check` reports.
+[Robots](/docs/skills/robotics-and-simulation) covers the route from a CAD model to a simulation. [CoACD](/docs/integrations/coacd) backs the convex collision shapes a spec can use. The [MJCF checks](repo:skills/robot-simulation/references/mjcf-checks.md) reference lists what `cad mujoco check` reports.

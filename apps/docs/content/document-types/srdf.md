@@ -22,4 +22,4 @@ The `--pose arm/ready` form draws the group state `ready` of the group `arm`, so
 
 ## Related
 
-[Robots](/docs/guides/robots) shows the whole path from a CAD model to a URDF and an SRDF. The [SRDF authoring](repo:skills/robot-simulation/references/srdf-authoring.md) reference covers groups and states, and [disabled collisions](repo:skills/robot-simulation/references/srdf-disabled-collisions.md) covers the collision pairs.
+[Robots](/docs/skills/robotics-and-simulation) shows the whole path from a CAD model to a URDF and an SRDF. The [SRDF authoring](repo:skills/robot-simulation/references/srdf-authoring.md) reference covers groups and states, and [disabled collisions](repo:skills/robot-simulation/references/srdf-disabled-collisions.md) covers the collision pairs.

@@ -19,4 +19,4 @@ Nothing starts the Blender app. Your own Blender preferences and add-ons never l
 
 ## Related
 
-[Renders](/docs/guides/renders) goes from a model to a finished image or video, starting from a [GLB](/docs/document-types/glb). See the [render skill](repo:skills/render/SKILL.md).
+[Renders](/docs/skills/renders) goes from a model to a finished image or video, starting from a [GLB](/docs/document-types/glb). See the [render skill](repo:skills/render/SKILL.md).

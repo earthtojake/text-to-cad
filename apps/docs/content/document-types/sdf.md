@@ -20,4 +20,4 @@ cad sdf snapshot worlds/arena.sdf tmp/arena.png
 
 ## Related
 
-[Robots](/docs/guides/robots) covers the robot description formats text-to-cad works with. The [robot-simulation skill](repo:skills/robot-simulation/SKILL.md) is the nearest reference, and its [interoperability](repo:skills/robot-simulation/references/interoperability.md) page covers how URDF, SRDF and MJCF fit together.
+[Robots](/docs/skills/robotics-and-simulation) covers the robot description formats text-to-cad works with. The [robot-simulation skill](repo:skills/robot-simulation/SKILL.md) is the nearest reference, and its [interoperability](repo:skills/robot-simulation/references/interoperability.md) page covers how URDF, SRDF and MJCF fit together.

@@ -19,4 +19,4 @@ You install nothing. The `cad` command makes an environment holding `cad[netgen]
 
 ## Related
 
-[Stress studies](/docs/guides/stress-studies) takes a part from a load case to a safety factor. The [fea skill](repo:skills/fea/SKILL.md) is the reference your agent follows.
+[Stress studies](/docs/skills/stress-checks) takes a part from a load case to a safety factor. The [fea skill](repo:skills/fea/SKILL.md) is the reference your agent follows.

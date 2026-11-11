@@ -38,4 +38,4 @@ Run the script with `cad run`. It gives the script the [KiCad](/docs/integration
 
 ## Related
 
-[Circuit boards](/docs/guides/circuit-boards) covers the whole flow. See the [pcb skill](repo:skills/pcb/SKILL.md) and its [native files reference](repo:skills/pcb/references/board-api.md).
+[Circuit boards](/docs/skills/circuit-boards) covers the whole flow. See the [pcb skill](repo:skills/pcb/SKILL.md) and its [native files reference](repo:skills/pcb/references/board-api.md).

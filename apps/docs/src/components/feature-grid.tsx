@@ -8,8 +8,8 @@ import { siteConfig } from "@/lib/site";
 
 /**
  * The homepage's Features (`features`, the README's Features): one tile per feature, each a picture of
- * the file it makes over that file's name in a caption bar, then its name, linking to its guide in
- * the documentation, and what it does (its summary's links are markdown, as the README's are).
+ * the file it makes over that file's name in a caption bar, then its name, linking to its page in
+ * the documentation's Skills, and what it does (its summary's links are markdown, as the README's are).
  * Two columns from a tablet up, one on a phone.
  */
 
@@ -103,7 +103,7 @@ export function FeatureGrid() {
             <div className="flex-1 space-y-1 px-4 pt-3 pb-4">
               <h3 className="text-sm font-medium text-foreground">
                 <Link
-                  href={feature.guide}
+                  href={feature.page}
                   className="inline-flex items-center gap-1.5 rounded-sm underline-offset-4 hover:underline"
                 >
                   {feature.name}

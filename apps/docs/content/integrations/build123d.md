@@ -19,4 +19,4 @@ To use a Python of your own, `cad requirement build123d` prints the requirement 
 
 ## Related
 
-[Parts and assemblies](/docs/guides/parts-and-assemblies) and [mechanisms](/docs/guides/mechanisms) use it throughout. The [build123d reference](repo:skills/cad/references/build123d-modeling.md) is what your agent reads when it models.
+[Parts and assemblies](/docs/skills/parts-and-assemblies) and [mechanisms](/docs/skills/parts-and-assemblies#mechanisms-and-animation) use it throughout. The [build123d reference](repo:skills/cad/references/build123d-modeling.md) is what your agent reads when it models.

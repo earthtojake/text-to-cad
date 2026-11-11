@@ -3,7 +3,7 @@ title: The CAD Viewer and the CAD app
 description: The two ways you see a document, in your browser and inside your agent app, and how each reaches the CAD server.
 ---
 
-You look at documents in two places: the **CAD Viewer**, a page in your browser, and the **CAD app**, the same viewer drawn inside an agent app as a tab or a card. Both are views onto the one CAD server on your computer, and both draw with the same shared interface code. For how you use the viewer's tools, see the [CAD Viewer guide](/docs/guides/cad-viewer).
+You look at documents in two places: the **CAD Viewer**, a page in your browser, and the **CAD app**, the same viewer drawn inside an agent app as a tab or a card. Both are views onto the one CAD server on your computer, and both draw with the same shared interface code. For how you use the viewer's tools, see the [CAD Viewer guide](/docs/viewer).
 
 ## The CAD Viewer
 

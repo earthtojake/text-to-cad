@@ -24,4 +24,4 @@ cad dxf dfm DXF/gasket.dxf --process sheet --material aluminum --thickness 3 --k
 
 ## Related
 
-[DXF profiles](/docs/guides/dxf-profiles) covers drawings in full, and [SendCutSend](/docs/guides/sendcutsend) prepares files for that service. See [2D profiles and DXF](repo:skills/cad/references/2d-profiles-and-dxf.md) for the rules a drawing follows.
+[DXF profiles](/docs/skills/parts-and-assemblies#dxf-profiles-and-flat-patterns) covers drawings in full, and [SendCutSend](/docs/skills/fabrication-services#sendcutsend) prepares files for that service. See [2D profiles and DXF](repo:skills/cad/references/2d-profiles-and-dxf.md) for the rules a drawing follows.

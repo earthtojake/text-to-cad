@@ -37,4 +37,4 @@ A STEP that names other files as its parts is refused: export it again from the 
 
 ## Related
 
-[Parts and assemblies](/docs/guides/parts-and-assemblies) covers using vendor files, and [SendCutSend](/docs/guides/sendcutsend) uses STEP as the upload file. [Exports](repo:skills/cad/references/exports.md#formats) lists what each format keeps.
+[Parts and assemblies](/docs/skills/parts-and-assemblies) covers using vendor files, and [SendCutSend](/docs/skills/fabrication-services#sendcutsend) uses STEP as the upload file. [Exports](repo:skills/cad/references/exports.md#formats) lists what each format keeps.

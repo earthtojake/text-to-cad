@@ -201,9 +201,9 @@ RULES: tuple[Rule, ...] = (
     # The site's copy of the registry, held to the library's by the registry's own test.
     Rule(("apps/docs/src/lib/docs/registry.generated.json",),
          select(packages=[f"{PACKAGES_SUITE}/cad/test_registry.py"])),
-    # The repository's guides are pages of the documentation site, which its build sets as they are
-    # and whose links and anchors it resolves (apps/docs/src/lib/docs/nav.ts).
-    Rule(("docs/**",), select(flags=["docs"])),
+    # The install guide and the migration guides are pages of the documentation site, which its
+    # build sets as they are and whose links and anchors it resolves (apps/docs/src/lib/docs/nav.ts).
+    Rule(("docs/install.md", "docs/migrations/**"), select(flags=["docs"])),
     Rule(("skills/**",), NOTHING),  # prose and scripts the light contracts and light suites read
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
     # The installer rehearsals (install-linux.yml, install-windows.yml, which test.yml calls): the
@@ -262,7 +262,7 @@ RULES: tuple[Rule, ...] = (
         ".github/dependabot.yml", ".github/release.yml", ".github/FUNDING.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", ".grok-plugin/**", "gemini-extension.json",
         "*.mcp.json", "plugin.json", "mcp.json", "skills.sh.json",
-        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE",
+        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/contributing/**",
         ".gitignore",
         "models/**",
     ), NOTHING),

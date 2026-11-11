@@ -9,14 +9,14 @@ It works with any agent that supports plugins or skills. See [supported agents](
 
 ## What it can make
 
-- **Parts and assemblies**: models written as Python scripts with build123d and OpenCASCADE, exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms. See [parts and assemblies](/docs/guides/parts-and-assemblies).
-- **Circuit boards**: KiCad schematics and boards, placed, routed and checked with electrical and design rule checks (ERC and DRC). See [circuit boards](/docs/guides/circuit-boards).
-- **Manufacturing checks**: whether a part can be machined, cut and bent, moulded or 3D printed, and what to change where it cannot. See [manufacturing checks](/docs/guides/manufacturing-checks).
-- **Stress checks**: whether a part, or an assembly of bonded parts, holds under its loads, solved with CalculiX. See [stress studies](/docs/guides/stress-studies).
-- **Engineering drawings**: dimensioned PDF sheets projected from the part's geometry. See [engineering drawings](/docs/guides/engineering-drawings).
-- **Renders**: photoreal stills, turntables and films made with Blender. See [renders](/docs/guides/renders).
-- **Fabrication services**: checks of DXF and STEP files against SendCutSend's guide, and sliced 3D prints sent to Bambu Connect or Bambu Studio. See [SendCutSend](/docs/guides/sendcutsend) and [3D printing](/docs/guides/3d-printing).
-- **Robotics and simulation**: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo. See [robots](/docs/guides/robots).
+- **Parts and assemblies**: models written as Python scripts with build123d and OpenCASCADE, exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms. See [parts and assemblies](/docs/skills/parts-and-assemblies).
+- **Circuit boards**: KiCad schematics and boards, placed, routed and checked with electrical and design rule checks (ERC and DRC). See [circuit boards](/docs/skills/circuit-boards).
+- **Manufacturing checks**: whether a part can be machined, cut and bent, moulded or 3D printed, and what to change where it cannot. See [manufacturing checks](/docs/skills/manufacturing-checks).
+- **Stress checks**: whether a part, or an assembly of bonded parts, holds under its loads, solved with CalculiX. See [stress studies](/docs/skills/stress-checks).
+- **Engineering drawings**: dimensioned PDF sheets projected from the part's geometry. See [engineering drawings](/docs/skills/engineering-drawings).
+- **Renders**: photoreal stills, turntables and films made with Blender. See [renders](/docs/skills/renders).
+- **Fabrication services**: checks of DXF and STEP files against SendCutSend's guide, and sliced 3D prints sent to Bambu Connect or Bambu Studio. See [SendCutSend](/docs/skills/fabrication-services#sendcutsend) and [3D printing](/docs/skills/fabrication-services#3d-printing).
+- **Robotics and simulation**: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo. See [robots](/docs/skills/robotics-and-simulation).
 
 ## How it works
 
@@ -28,7 +28,7 @@ Files such as STEP or STL are made when you ask for them, not on every run.
 
 - [Install](/docs/install): one command sets up text-to-cad in every agent app on your computer.
 - [Your first model](/docs/first-model): a walk-through from a fresh install to a part on screen.
-- Guides: start with [parts and assemblies](/docs/guides/parts-and-assemblies) or [the CAD Viewer](/docs/guides/cad-viewer).
+- Skills: start with [parts and assemblies](/docs/skills/parts-and-assemblies), then see [the CAD Viewer](/docs/viewer).
 - [Document types](/docs/document-types): the file kinds text-to-cad builds, shows and checks.
 - [Integrations](/docs/integrations): the tools it runs for you, such as build123d, KiCad and Blender.
 - [Architecture](/docs/architecture): how the engine, the viewer and the CAD app fit together.

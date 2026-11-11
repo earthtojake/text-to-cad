@@ -23,4 +23,4 @@ cad stl dfm stand.stl --process printing --technology fdm --material petg
 
 ## Related
 
-[Manufacturing checks](/docs/guides/manufacturing-checks) covers every process, and [3D printing](/docs/guides/3d-printing) takes a checked part to a slicer.
+[Manufacturing checks](/docs/skills/manufacturing-checks) covers every process, and [3D printing](/docs/skills/fabrication-services#3d-printing) takes a checked part to a slicer.

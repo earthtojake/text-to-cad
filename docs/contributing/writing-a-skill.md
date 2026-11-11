@@ -111,6 +111,6 @@ tool's description, which only agents that have the tool read, never in a skill.
 - [ ] It installs nothing and imports no other skill.
 - [ ] A feature in README.md's Features and the docs site's (`features` in
       `apps/docs/src/lib/content.ts`, the same list) links it, and `skills.sh.json` lists it.
-- [ ] A guide on the docs site says for a person what the skill says to an agent: what to ask, what
-      the agent does, what comes out and the limits (`apps/docs/content/guides/<name>.md`, added to
-      the map, `apps/docs/src/lib/docs/nav.ts`; its feature's `guide` links it).
+- [ ] Its feature's page in the docs site's Skills says for a person what the skill is: what it
+      makes, how it works and where it stops (`apps/docs/content/skills/<feature>.md`, one page a
+      feature, in the map, `apps/docs/src/lib/docs/nav.ts`; the feature's `page` links it).

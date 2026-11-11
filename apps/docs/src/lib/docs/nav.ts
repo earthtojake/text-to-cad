@@ -16,7 +16,7 @@ export type DocSource =
   | { kind: "repo"; file: string };
 
 export type DocPage = {
-  /** The path under /docs: "" is /docs itself, "guides/renders" is /docs/guides/renders. */
+  /** The path under /docs: "" is /docs itself, "skills/renders" is /docs/skills/renders. */
   slug: string;
   source: DocSource;
   /** The name in the sidebar, where it is not the page's title. */
@@ -37,7 +37,7 @@ const planetary: DocModel = {
 };
 
 export const docModels: Record<string, DocModel> = {
-  "guides/mechanisms": planetary,
+  "skills/parts-and-assemblies": planetary,
   "document-types/glb": planetary,
 };
 
@@ -62,25 +62,24 @@ export const docSections: DocSection[] = [
       { slug: "", source: { kind: "content", file: "index.md" }, label: "Introduction" },
       repo("install", "docs/install.md", "Install"),
       content("first-model"),
+      content("viewer"),
       content("agents"),
     ],
   },
   {
-    title: "Guides",
+    // One page per feature of the README (`features` in src/lib/content.ts links each): what the
+    // skill behind it is, what it makes, how it works and where it stops.
+    title: "Skills",
     pages: [
       "parts-and-assemblies",
-      "cad-viewer",
-      "mechanisms",
-      "dxf-profiles",
+      "circuit-boards",
       "manufacturing-checks",
-      "stress-studies",
+      "stress-checks",
       "engineering-drawings",
       "renders",
-      "circuit-boards",
-      "robots",
-      "sendcutsend",
-      "3d-printing",
-    ].map((name) => content(`guides/${name}`)),
+      "fabrication-services",
+      "robotics-and-simulation",
+    ].map((name) => content(`skills/${name}`)),
   },
   {
     title: "Document types",
@@ -107,6 +106,9 @@ export const docSections: DocSection[] = [
     ],
   },
   {
+    // The contributing guides (docs/contributing) are written for whoever changes the repository,
+    // an agent as often as a person: the Contributing page links them on GitHub, and the site does
+    // not set them.
     title: "Reference",
     pages: [
       content("reference/commands"),
@@ -116,16 +118,7 @@ export const docSections: DocSection[] = [
       repo("migrations/0.7-to-0.8", "docs/migrations/migrating-0.7-to-0.8.md", "0.7 to 0.8"),
       repo("migrations/0.4-to-0.5", "docs/migrations/migrating-0.4-to-0.5.md", "0.4 to 0.5"),
       repo("migrations/opencascade-8", "docs/migrations/migrating-to-opencascade-8.md", "OpenCASCADE 8"),
-    ],
-  },
-  {
-    title: "Contributing",
-    pages: [
-      index("contributing"),
-      repo("contributing/writing-a-skill", "docs/contributing/writing-a-skill.md"),
-      repo("contributing/adding-a-document-type", "docs/contributing/adding-a-document-type.md"),
-      repo("contributing/adding-an-integration", "docs/contributing/adding-an-integration.md"),
-      repo("contributing/testing", "docs/contributing/testing.md"),
+      index("contributing", "Contributing"),
     ],
   },
 ];

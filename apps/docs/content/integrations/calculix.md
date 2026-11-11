@@ -17,4 +17,4 @@ You install nothing. The `cad` command makes an environment with `cad[calculix]`
 
 ## Related
 
-[Stress studies](/docs/guides/stress-studies) shows a study from request to result. See the [linear static](repo:skills/fea/references/linear-static.md) reference for what a study can and cannot say.
+[Stress studies](/docs/skills/stress-checks) shows a study from request to result. See the [linear static](repo:skills/fea/references/linear-static.md) reference for what a study can and cannot say.

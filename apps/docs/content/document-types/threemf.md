@@ -23,4 +23,4 @@ In a model, `@threemf("standoff.3mf", tolerance=0.02)` writes one on each run.
 
 ## Related
 
-[3D printing](/docs/guides/3d-printing) slices a 3MF or an STL, and [manufacturing checks](/docs/guides/manufacturing-checks) checks the mesh can be printed. The [print3d skill](repo:skills/print3d/SKILL.md) covers slicing.
+[3D printing](/docs/skills/fabrication-services#3d-printing) slices a 3MF or an STL, and [manufacturing checks](/docs/skills/manufacturing-checks) checks the mesh can be printed. The [print3d skill](repo:skills/print3d/SKILL.md) covers slicing.

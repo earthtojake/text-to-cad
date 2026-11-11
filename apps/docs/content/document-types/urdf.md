@@ -23,4 +23,4 @@ cad urdf snapshot description/arm.urdf tmp/review.png --pose '{"shoulder_pitch":
 
 ## Related
 
-[Robots](/docs/guides/robots) covers both routes, and [mechanisms](/docs/guides/mechanisms) explains the joints a model declares. The [URDF authoring](repo:skills/robot-simulation/references/urdf-authoring.md) reference is the one to read for a hand-written file.
+[Robots](/docs/skills/robotics-and-simulation) covers both routes, and [mechanisms](/docs/skills/parts-and-assemblies#mechanisms-and-animation) explains the joints a model declares. The [URDF authoring](repo:skills/robot-simulation/references/urdf-authoring.md) reference is the one to read for a hand-written file.

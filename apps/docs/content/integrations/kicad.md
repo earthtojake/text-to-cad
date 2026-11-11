@@ -19,4 +19,4 @@ text-to-cad never runs your own KiCad install. Checks and edits run in private K
 
 ## Related
 
-[Circuit boards](/docs/guides/circuit-boards) covers the whole flow. The [pcb skill](repo:skills/pcb/SKILL.md) is the reference your agent follows.
+[Circuit boards](/docs/skills/circuit-boards) covers the whole flow. The [pcb skill](repo:skills/pcb/SKILL.md) is the reference your agent follows.

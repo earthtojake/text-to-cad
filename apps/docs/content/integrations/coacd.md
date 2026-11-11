@@ -17,4 +17,4 @@ You install nothing and your script names nothing. The first time a part is deco
 
 ## Related
 
-[Robots](/docs/guides/robots) covers collision shapes for a simulation. The [meshes reference](repo:skills/robot-simulation/references/meshes.md) says how the hulls are written beside the model.
+[Robots](/docs/skills/robotics-and-simulation) covers collision shapes for a simulation. The [meshes reference](repo:skills/robot-simulation/references/meshes.md) says how the hulls are written beside the model.

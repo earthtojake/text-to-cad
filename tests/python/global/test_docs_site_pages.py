@@ -39,6 +39,15 @@ class TheDocsSiteNamesFilesThatExist(unittest.TestCase):
         self.assertTrue(files, "no repository files found in the documentation's map")
         self.assertEqual([path for path in files if not (REPO_ROOT / path).is_file()], [])
 
+    def test_every_feature_links_a_skills_page_that_exists(self) -> None:
+        # The homepage's tiles link the documentation's Skills, a page a feature (`page` in the site's copy).
+        copy = (DOCS_APP / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        pages = re.findall(r'page: "/docs/(skills/[^"#]+)"', copy)
+        self.assertEqual(len(pages), len(re.findall(r'^    id: "', copy, re.M)), "a feature with no page")
+        self.assertEqual([page for page in pages if not (CONTENT / f"{page}.md").is_file()], [])
+        written = sorted(path.stem for path in (CONTENT / "skills").glob("*.md"))
+        self.assertEqual(sorted(page.split("/")[1] for page in pages), written, "a Skills page no feature links")
+
     def test_every_document_type_and_integration_has_its_page(self) -> None:
         # The map takes both lists from the registry; each entry's page opens with text written for it.
         registry = json.loads(REGISTRY.read_text(encoding="utf-8"))

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export type DocsNavigation = { title: string; pages: { href: string; label: string }[] }[];
 
 // The sections a reader starts in stay open; the long reference lists open with their own pages.
-const OPEN_BY_DEFAULT = new Set(["Get started", "Guides"]);
+const OPEN_BY_DEFAULT = new Set(["Get started", "Skills"]);
 
 /** The documentation's sections and pages: the page being read is marked, and its section is open. */
 export function DocsSidebar({ sections, onNavigate }: { sections: DocsNavigation; onNavigate?: () => void }) {

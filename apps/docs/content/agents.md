@@ -32,7 +32,7 @@ How you see a model depends on what the app can draw.
 - **Grok Build and Gemini CLI** show tool results as text, so the agent gives you a CAD Viewer link.
 - **Other agents** open models in the CAD Viewer in your browser.
 
-The [CAD Viewer](/docs/guides/cad-viewer) is the same in a card, a tab and the browser. [Viewer and CAD app](/docs/architecture/viewer-and-cad-app) explains how the hosts differ.
+The [CAD Viewer](/docs/viewer) is the same in a card, a tab and the browser. [Viewer and CAD app](/docs/architecture/viewer-and-cad-app) explains how the hosts differ.
 
 ## The agents the skills reach
 

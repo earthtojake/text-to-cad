@@ -22,4 +22,4 @@ The second command checks the mesh can be printed, using the [trimesh](/docs/int
 
 ## Related
 
-[3D printing](/docs/guides/3d-printing) takes a part from model to sliced file, and [manufacturing checks](/docs/guides/manufacturing-checks) covers the printing check. See [print tolerance](repo:skills/cad/references/exports.md#print-tolerance) for how to choose a value.
+[3D printing](/docs/skills/fabrication-services#3d-printing) takes a part from model to sliced file, and [manufacturing checks](/docs/skills/manufacturing-checks) covers the printing check. See [print tolerance](repo:skills/cad/references/exports.md#print-tolerance) for how to choose a value.

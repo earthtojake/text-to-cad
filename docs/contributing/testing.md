@@ -196,7 +196,7 @@ decide which tests reach it. The components:
 | `js-ui (units)`, `js-ui (browser)` | `packages/ui` | The UI's type check and units; its browser specs |
 | `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
-| `docs` | `apps/docs`, `docs/` (the documentation site sets it), `scripts/brand`, the one-line installers | Lint, the Next build, which resolves every link of the documentation, icon verification, the brand marks |
+| `docs` | `apps/docs`, `docs/install.md` and `docs/migrations` (the documentation site sets them), `scripts/brand`, the one-line installers | Lint, the Next build, which resolves every link of the documentation, icon verification, the brand marks |
 | `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed |
 | `kicad` | the packages, its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | `blender` | the packages, its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |

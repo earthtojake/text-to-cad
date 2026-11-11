@@ -40,4 +40,4 @@ cad model export "$ID" STEP/bracket.step STL/bracket.stl
 
 ## Related
 
-[Parts and assemblies](/docs/guides/parts-and-assemblies) shows models from the first request to the finished export, and [your first model](/docs/first-model) walks through one. The rules for writing a model are in the [model contract](repo:skills/cad/references/model-contract.md).
+[Parts and assemblies](/docs/skills/parts-and-assemblies) shows models from the first request to the finished export, and [your first model](/docs/first-model) walks through one. The rules for writing a model are in the [model contract](repo:skills/cad/references/model-contract.md).

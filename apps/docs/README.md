@@ -8,7 +8,7 @@ same shared runtime the viewer uses.
 under `/docs` ([The documentation](#the-documentation)).
 
 **MAY DEPEND ON** — compiled `@cad/core` exports, this app's own npm dependencies, and, as it
-builds, the repository's guides (`docs/`), which the documentation sets as they are. Never another
+builds, the repository's install and migration guides (`docs/`), which the documentation sets as they are. Never another
 app or the running CAD server.
 The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
@@ -69,8 +69,9 @@ scripts/         # loading-icon export and verification; the install scripts' co
 
 ## The documentation
 
-`/docs` is the documentation: installing, the guides (one per workflow), every document type and
-integration, the architecture, the `cad` command, the migration guides and contributing. It is this
+`/docs` is the documentation: installing, the skills (a page per feature of the README), every
+document type and integration, the architecture, the `cad` command, the migration guides and
+contributing. It is this
 app's own shell, no docs framework: the sections at the left (a drawer on a phone or a tablet), the
 page, and its contents at the right, in the site's tokens and primitives.
 
@@ -78,11 +79,18 @@ page, and its contents at the right, in the site's tokens and primitives.
   the map does not exist (`dynamicParams = false`), and the sidebar, the sitemap, `/llms.txt` and the
   search all read the map.
 - **One copy of everything.** A page is either a file of the repository's (`docs/install.md`,
-  `docs/contributing/*.md`, `docs/migrations/*.md`), set as it is, its relative links resolved to the
-  site's pages or to GitHub; or a page written for the site, `content/<page>.md`: the guides, the
+  `docs/migrations/*.md`), set as it is, its relative links resolved to the
+  site's pages or to GitHub; or a page written for the site, `content/<page>.md`: the Skills pages, the
   architecture and each type's and integration's introduction, which say for a person what the skills
   say to an agent and the package READMEs to a contributor, and link them. The site never keeps a
   second copy of a repository file.
+- **Skills, a page a feature.** The Skills section has one page for each feature of the README
+  (`features` in `src/lib/content.ts`; each tile on the homepage links its page): what the skill
+  behind it is, what it makes, how it works and where it stops. They are about the skills, not
+  how-to guides, and `tests/python/global/test_docs_site_pages.py` holds the pages to the features.
+- **The contributing guides are not set.** `docs/contributing/*.md` (writing a skill, adding a
+  document type or an integration, testing) are written for whoever changes the repository, an agent
+  as often as a person: the Contributing page links them on GitHub.
 - **The registry's pages.** The document types and the integrations are the library's registry
   (`cad.registry`): `src/lib/docs/registry.generated.json` is that table
   (`python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`), held to it by
@@ -107,7 +115,7 @@ page, and its contents at the right, in the site's tokens and primitives.
   browser: no service, nothing sent.
 - **A live model** on a page (`docModels` in the map; `src/components/docs/model-embed.tsx`): a GLB of
   `public/`, read and lit by core as the CAD Viewer reads any GLB, its parts in their colours, its clip
-  playing, turned by dragging. Today that is the hero's planetary gear, on the mechanisms guide and
+  playing, turned by dragging. Today that is the hero's planetary gear, on the Parts and assemblies page and
   the GLB page: no new CAD file. It loads when it scrolls into view, three.js with it, plays only on
   screen in a visible tab and holds still for reduced motion. Another model is another small GLB,
   committed as the hero's is (a plain file, listed in `test_no_cad_assets_tracked.py` with a size cap).
@@ -248,7 +256,7 @@ The homepage's Features are the README's, item for item and word for word (`feat
 `featuresIntro` in `src/lib/content.ts`; `test_plugin_manifests.py` holds the two lists to one text,
 and every skill's folder to a feature that links it). Each feature is a tile
 (`src/components/feature-grid.tsx`): a line drawing of the file it makes over that file's name, in
-a caption bar, then its name, linking to its guide in the documentation (`guide`; the README links
+a caption bar, then its name, linking to its page in the documentation's Skills (`page`; the README links
 the skill, `path`), and what it does.
 The drawings (`src/components/feature-art.tsx`) are inline SVG in the site's tokens, so they follow
 the light and dark themes: the part in the foreground, construction in the muted ink, what the
