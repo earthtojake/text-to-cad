@@ -111,7 +111,7 @@ export const docSections: DocSection[] = [
     pages: [
       content("reference/commands"),
       index("migrations", "Migrations"),
-      repo("migrations/0.10-to-next", "docs/migrations/migrating-0.10-to-next.md", "0.10 to next (draft)"),
+      repo("migrations/0.10-to-0.11", "docs/migrations/migrating-0.10-to-0.11.md", "0.10 to 0.11"),
       repo("migrations/0.8-to-0.10", "docs/migrations/migrating-0.8-to-0.10.md", "0.8 to 0.10"),
       repo("migrations/0.7-to-0.8", "docs/migrations/migrating-0.7-to-0.8.md", "0.7 to 0.8"),
       repo("migrations/0.4-to-0.5", "docs/migrations/migrating-0.4-to-0.5.md", "0.4 to 0.5"),

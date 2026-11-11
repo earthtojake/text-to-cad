@@ -292,8 +292,10 @@ _RANGES = Operation("ranges", "each joint's stops found from the geometry: the j
                               "time each way, until its parts meet another part; the stops and which parts meet, "
                               "nothing written", _KERNEL)
 
-_DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
-                     "configuration sequences")
+# What a STEP holds of a document, and what only the engine's own document holds beside it: the kernel reads
+# AP242's kinematics and has no writer for them, so a STEP, posed or not, is placements only.
+_STEP_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names")
+_DOCUMENT_CONTENT = (*_STEP_CONTENT, "mechanism", "configuration sequences")
 
 _TYPES = (
     DocumentTypeEntry(
@@ -309,7 +311,7 @@ _TYPES = (
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
-        "application/step", "document", _DOCUMENT_CONTENT,
+        "application/step", "document", _STEP_CONTENT,
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
@@ -396,9 +398,9 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
         holds="KiCad's kicad-cli", download_mb=100),
     "trimesh": Integration(
-        "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
-                   "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
-                   "and support", extra="trimesh", process="in-process",
+        "trimesh", "trimesh, the triangle-mesh library: a mesh's manufacturing check measures it with trimesh for "
+                   "3D printing -- its walls, overhangs and support; every other process is judged on exact "
+                   "geometry", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
     "mujoco": Integration(

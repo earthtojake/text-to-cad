@@ -212,9 +212,7 @@
         "names",
         "colours",
         "materials",
-        "element names",
-        "mechanism",
-        "configuration sequences"
+        "element names"
       ],
       "operations": [
         {
@@ -274,9 +272,7 @@
             "names",
             "colours",
             "materials",
-            "element names",
-            "mechanism",
-            "configuration sequences"
+            "element names"
           ]
         }
       ]
@@ -790,7 +786,7 @@
     },
     {
       "name": "trimesh",
-      "summary": "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs and support",
+      "summary": "trimesh, the triangle-mesh library: a mesh's manufacturing check measures it with trimesh for 3D printing -- its walls, overhangs and support; every other process is judged on exact geometry",
       "extra": "trimesh",
       "process": "in-process",
       "operations": [],

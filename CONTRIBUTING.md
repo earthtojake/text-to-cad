@@ -1010,6 +1010,14 @@ gh workflow run deploy-docs.yml -f ref=main
 gh workflow run deploy-docs.yml -f ref=v0.5.0  # a past release: its tag
 ```
 
+To look at a branch's site before it merges, deploy it as a preview: a URL of its own
+behind Vercel Authentication, with production untouched. Dispatch from the branch, so
+the run uses its workflow and scripts; the run's summary gives the URL:
+
+```bash
+gh workflow run deploy-docs.yml --ref my-branch -f ref=my-branch -f preview=true
+```
+
 `Deploy API` (`.github/workflows/deploy-api.yml`) deploys `api.texttocad.dev`
 on every change to `apps/api` on `main`, and redeploys `main` on dispatch
 (`gh workflow run deploy-api.yml`). It follows no release.

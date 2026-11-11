@@ -423,7 +423,8 @@ that is not there shows "File does not exist".
 A file is opened by its path (the name menu, the home) and shown by its id: the page asks the
 server for the file's envelope (`GET /api/v1/documents?path=<abs>`), whose row carries the document's `id`,
 and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or case-variant
-spelling of one file is one row. A model (a document with no file of its own) has no file menu;
+spelling of one file is one row. A model (a document with no file of its own) has no file to browse from: its ⋯ menu
+acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and
 its Files lists the folder the explorer was last in this tab, else the person's home folder
 (`home` in the server's info); a file's its own folder.
 
@@ -537,7 +538,8 @@ composer has no camera action: its note to the agent is Quick Edit.
 
 A model's page is `/<id>`, its document's id, which `cad run SCRIPT.py` prints (`view:`). The
 page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
-imports a script, and no folder lists one. A model has no file of its own: no file menu; its
+imports a script, and no folder lists one. A model has no file of its own: its ⋯ menu has the
+document's actions and its script's ([Export and job status](#export-and-job-status)); its
 name menu opens on Models, and its Files lists the folder the explorer was last in this tab
 (the tab's settings), else the person's home folder (the server's `home`): never the folder
 of the script that built it. It is in the

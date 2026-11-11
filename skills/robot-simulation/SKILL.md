@@ -64,7 +64,7 @@ kernel. `cad mujoco check` and `cad run mujoco-studio` use MuJoCo's headless cor
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
 `mujoco` gets the same. `decompose()` in a MuJoCo function uses CoACD, `cad[coacd]` (one wheel,
-about 3 MB), which the engine likewise fetches into an environment of its own the first time a part
+about 4 MB), which the engine likewise fetches into an environment of its own the first time a part
 is decomposed, and reuses after. `cad <verb> --help` gives the complete current interface.
 
 ## Generate from CAD

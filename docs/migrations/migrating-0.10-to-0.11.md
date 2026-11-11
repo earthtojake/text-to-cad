@@ -1,8 +1,8 @@
-# Migrating from 0.10 to the next release
+# Migrating from 0.10 to 0.11
 
-Draft: this guide is renamed for its release when it ships. It covers the skills, the library's
+This guide covers the skills, the library's
 imports, the `cad` command, what `cad run` runs a program in, and setting up and updating.
-The next release is a minor release, so it never installs itself: update with the update button or
+0.11 is a minor release, so it never installs itself: update with the update button or
 `cad update` when you are ready. Its patch releases then install themselves, with automatic updates on
 ([Setting up and updating](#setting-up-and-updating)).
 

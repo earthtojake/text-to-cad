@@ -9,7 +9,7 @@ A release that breaks something comes with a migration guide. Each guide says wh
 
 | From | To | Guide |
 | --- | --- | --- |
-| 0.10 | the next release | [Migrating from 0.10 (draft)](/docs/migrations/0.10-to-next) |
+| 0.10 | 0.11 | [Migrating from 0.10 to 0.11](/docs/migrations/0.10-to-0.11) |
 | 0.8 | 0.10 | [Migrating from 0.8 to 0.10](/docs/migrations/0.8-to-0.10) |
 | 0.7 | 0.8 | [Migrating from 0.7 to 0.8](/docs/migrations/0.7-to-0.8) |
 | 0.4 | 0.5 | [Migrating from 0.4 to 0.5](/docs/migrations/0.4-to-0.5) |
