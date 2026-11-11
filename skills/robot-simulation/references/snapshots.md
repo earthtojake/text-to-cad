@@ -71,7 +71,8 @@ colours. The two compare by shape and pose, not by shading.
 `--display` takes any of the viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`,
 ...), `exploded=AMOUNT`, or the display object: `camera` (projection and focal length) and `clip`
 (`{"clip": {"axis": "x", "at": 0.05}}`, `at` in metres, the file's own unit, as the viewer draws
-it). `--grid` draws the measuring grid, and `--camera`, `--size-profile`, `--width` and `--height`
+it). `--grid` draws the measuring grid, `--preview` draws the robot lit in a studio in place of a
+display mode (the picture for a person), and `--camera`, `--size-profile`, `--width` and `--height`
 frame and size it. The `--camera` presets look along the file's axes as a CAD view does: `front`
 from -Y, `back` from +Y, `right` from +X, `left` from -X, `top` from +Z, `bottom` from -Z, `iso` from
 above at a corner. A robot facing +X, as ROS lays one out (REP 103: X forward, Y left), shows its face

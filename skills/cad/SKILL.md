@@ -279,6 +279,7 @@ can be checked:
 | --- | --- |
 | A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad model inspect`; never by restating the constant, never by code after the call in the script |
 | A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
+| An assembly: parts added, moved or resized, a joint's travel | `cad model interference "$ID"`, with a `--pose` for each mechanism state and for each sequence at the times that matter ([below](#check-scripts)): no two parts share volume, exactly; a pair it could not measure is not a pass |
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
@@ -288,6 +289,8 @@ can be checked:
 cad model snapshot "$ID" tmp/review.png
 cad model snapshot "$ID" tmp/top.png --camera top --display hidden-line
 cad model snapshot "$ID" tmp/open.png --pose open
+cad model snapshot "$ID" tmp/mid.png --pose cycle@2.5   # a configuration sequence, at a time of it
+cad model snapshot "$ID" tmp/lit.png --preview          # lit in a studio: the picture for a person
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing but the PNG.
@@ -296,6 +299,9 @@ Its options say how the picture is drawn: camera (`--camera top`), display, grid
 touched or hide what covers them, instead of drawing the whole model.
 
 - A number is never read off a picture: a snapshot shows arrangement and appearance, not dimensions.
+- In an assembly, look at a part alone before it is placed, then the parts that move together, then a
+  joint at both ends of its travel, and only then the whole, from behind as well as the front: a cover
+  that half encloses what it covers is a few pixels of the whole model's picture and most of its own.
 - A check that fails or cannot decide has shown nothing about the design.
 - A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius reduced) builds a
   different design from the one asked for.
@@ -408,10 +414,22 @@ print(plate.bounding_box().size)              # the envelope: not a hole's diame
 print(closest_points(plate, post).distance)   # 0: the standoff sits on the plate
 ```
 
-- In an assembly, nothing interferes when `overlap_volume` is 0 for every pair of solids apart from
-  fits named on purpose, and a part meant to rest on another touches it when their `closest_points`
-  distance is 0. Both describe the parts as built, not a pose
+- In an assembly, nothing interferes when no two parts share volume apart from fits named on purpose.
+  `cad model interference "$ID"` answers every pair whose boxes meet, exactly, on the parts' own solids
+  (a pair with air between its parts is ruled out first, and each answer is kept, so after an edit only the
+  pairs of what changed are measured):
+  as built, and at each `--pose` given: a mechanism state, a sequence at a time (`walk@0.6`), joint values. Name a fit
+  (`--fit pin base`), and read what it could not measure: status 3 is not clear
+  ([interference](references/inspection-and-validation.md#interference)). `overlap_volume` is the same
+  measure of one pair, for a check script.
+- A part meant to rest on another touches it when their `closest_points` distance is 0, as built
   ([measurements](references/inspection-and-validation.md#measurements)).
+- A check is trusted once it has been seen to fail: plant what it guards against (a plate through
+  a thin cover, a pin a little out of its bore) and watch it report it. A test on boxes, mesh points
+  or sampled distances only picks the pairs worth measuring, and is never the verdict: a thin wall
+  has almost no volume for a point to land in, so a plate through it scores nothing.
+- Report what a check cannot see beside what it passed: the poses it did not take, the pairs it could
+  not measure, the path between two poses it checked only at its ends.
 - `cad model inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
   the root name `inspect "$ID"` prints): each part's volume times its material's density, and the
   parts that have no material.
