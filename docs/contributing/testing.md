@@ -276,7 +276,8 @@ one of its own (`setup-deps` as a whole, the pip and uv installs): a stalled
 mirror fails in minutes rather than running out its job. The blender and KiCad
 suites fetch their environments as they run and the rehearsals are installs;
 their jobs' timeouts bound those. `setup-deps` installs system packages only when the image
-lacks one, and apt gives up on a connection that says nothing for 30 seconds.
+lacks one, and apt gives up on a connection that says nothing for 30 seconds. Where a runner
+cannot resolve Ubuntu's mirrors, it points that job's apt at mirrors named elsewhere.
 Within a Python suite, a test file still running after 10 minutes prints every
 thread's stack and fails by name, the run starts no further file or suite
 (`--keep-going` included), and a line a minute says which files are running.
