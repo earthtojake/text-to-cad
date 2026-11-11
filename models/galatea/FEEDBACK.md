@@ -670,7 +670,8 @@ that did not hold as written, and what a reader should take from them instead.
   own workers, not a `cad run` program or a check's processes.
 - **26.** More than a line beside `handle.shape`: the skill's own `world_parts` helper called
   `located()` on every leaf, so it copied the tree once a leaf (6 s for 60 leaves, 28 ms with the
-  leaf taken out of its tree first).
+  leaf taken out of its tree first). 0.11.8 replaces the helper with `cad.build123d.leaves`, which
+  gives each leaf out of its tree.
 - **39.** There was a way to write "the one at the top": the path from the animation's own assembly,
   its label first (`galatea/lumbar_yoke`). The refusal listed the paths without that label, the
   first of which was the refused name itself, which is what hid it.
@@ -693,8 +694,8 @@ that did not hold as written, and what a reader should take from them instead.
 - `hidden` and `isolated` take globs (`*skin*`, `*/skin_screw`), and a name an assembly shares with
   a part inside it is the assembly, in a ref and in an animation (7, 15, 39).
 - A snapshot's `--json` gives the camera it settled on, which a job draws exactly (14). A killed
-  snapshot job's folders are swept by the next (3). `inspect` names the first eight occurrences of
-  a material and counts the rest (4). The page of a checkout with no client built says so (38). uv
+  snapshot job's folders are swept by the next (3). `inspect` names a material's first few parts
+  and counts the rest, as of 0.11.8 (4). The page of a checkout with no client built says so (38). uv
   killed mid-install is said as that (34). The KiCad test's message and the corpus's README say a
   `build.py` under `models/` is a KiCad sample's alone (49).
 - A snapshot job stands on the flat colour it asks for (`"output": {"background": "#2b2d31"}`), so a
