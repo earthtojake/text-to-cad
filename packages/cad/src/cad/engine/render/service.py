@@ -373,7 +373,8 @@ class Held:
             try:
                 shown = (self.poser or posed_structure)(self.structure, still.pose)
             except ValueError as error:  # mechanism.KinematicsError: what the pose names wrong, by name
-                raise SnapshotRefused(f"--pose: {error}", part="pose") from None
+                flag = "--motion" if isinstance(still.pose, (list, tuple)) else "--pose"
+                raise SnapshotRefused(f"{flag}: {error}", part="pose") from None
             posed = shown["kinematics"]["pose"]
         refusals(still, shown, self.name)
         hidden = hidden_instances(shown, still.display, self.name)

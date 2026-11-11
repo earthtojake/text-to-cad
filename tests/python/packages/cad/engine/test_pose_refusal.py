@@ -28,8 +28,9 @@ class PoseRefusalTest(unittest.TestCase):
     def test_a_sequence_s_name_says_it_is_a_sequence_and_shows_the_joint_value_form(self) -> None:
         self.assertEqual(self.refused("spin"),
                          "the document has no mechanism state 'spin' ('spin' is a configuration sequence, which "
-                         "plays over time: a pose is a state or joint values); its states: parked; its sequences: "
-                         "spin; its joints: hub_rotation, slide: pose one by value, --pose '{\"hub_rotation\": 90}'")
+                         "plays over time: a pose is a state or joint values, or the sequence at a time, --motion spin "
+                         "--at SECONDS); its states: parked; its sequences: spin; its joints: hub_rotation, slide: pose "
+                         "one by value, --pose '{\"hub_rotation\": 90}'")
 
     def test_a_joint_s_name_shows_that_joint_at_a_value_its_range_allows(self) -> None:
         self.assertEqual(self.refused("slide"),
@@ -56,6 +57,32 @@ class PoseRefusalTest(unittest.TestCase):
 
     def test_a_state_still_poses(self) -> None:
         self.assertEqual(mechanism.resolve(KINEMATICS, "parked")[1], "parked")
+
+    def test_a_sequence_at_a_time_is_a_pose_and_what_it_names_wrong_is_refused_by_name(self) -> None:
+        # ``[sequence, seconds]``: where the sequence has the mechanism then, eased as its clip is.
+        opening = {**KINEMATICS, "motions": {"open": {"duration": 4, "ease": "cubic", "keys": [
+            {"t": 0, "values": {"slide": 0}}, {"t": 4, "values": {"slide": 40}}]}}}
+        for seconds, slide in ((0, 0.0), (1, 6.25), (2, 20.0), (4, 40.0)):
+            values, named = mechanism.resolve(opening, ["open", seconds])
+            self.assertIsNone(named)
+            self.assertAlmostEqual(values["slide"][0], slide, places=9, msg=seconds)
+            self.assertEqual(values["hub_rotation"], (0.0,), "what the sequence does not move is as built")
+        for pose, words in ((["open", 5], "configuration sequence 'open' runs from 0 to 4 s: 5 s is outside it"),
+                            (["shut", 1], "the document has no configuration sequence 'shut'; its sequences: open"),
+                            (["parked", 1], "'parked' is a mechanism state: pose it by its name alone"),
+                            (["open"], "a sequence's pose is its name and a time in seconds"),
+                            (["open", "soon"], "a sequence's pose is its name and a time in seconds")):
+            with self.subTest(pose=pose), self.assertRaisesRegex(mechanism.KinematicsError, words):
+                mechanism.resolve(opening, pose)
+        # A sequence's own keys set a coupling's joints, which a pose by value may not: it is drawn all the same.
+        geared = {"pairs": [{"label": "ja", "type": "revolute", "links": ["frame", "a"], "limits": [[-360, 360]]},
+                            {"label": "jb", "type": "revolute", "links": ["frame", "b"], "limits": [[-360, 360]]}],
+                  "asBuilt": {"ja": 0, "jb": 0}, "configurations": {},
+                  "couplings": {"drive": {"range": [-180.0, 180.0], "terms": [["ja", 0, 1.0], ["jb", 0, -2.0]]}},
+                  "motions": {"turn": {"duration": 2, "ease": "linear", "keys": [
+                      {"t": 0, "values": {"ja": 0, "jb": 0}}, {"t": 2, "values": {"ja": 90, "jb": -180}}]}}}
+        values, _named = mechanism.resolve(geared, ("turn", 1))
+        self.assertEqual((values["ja"], values["jb"]), ((45.0,), (-90.0,)))
 
 
 if __name__ == "__main__":

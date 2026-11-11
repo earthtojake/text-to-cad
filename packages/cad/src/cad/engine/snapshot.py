@@ -61,7 +61,8 @@ refused by name before anything renders.
 
 ``--job PACKET`` replays a Quick Edit packet (the ``.snapshot.json`` the viewer writes) or a job
 file in its words (``job_pictures``): every output of every job drawn, each job a view with its
-own camera, display (its hidden and isolated parts among it), pose (``jointValues``) and, a
+own camera, display (its hidden and isolated parts among it), pose (``jointValues``, or ``motion``: a
+configuration sequence at a time, ``{"name", "at"}``) and, a
 robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
 (``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
 the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``, ``background``,
@@ -87,7 +88,8 @@ from typing import Any, Callable, TypeVar
 from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
-           "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
+           "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_motion",
+           "parse_pose",
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
@@ -133,7 +135,7 @@ MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
 PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
-JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
+JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "motion", "selection", "annotation", "measurements",
                       "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
 SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale", "background"})
@@ -305,7 +307,7 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false", part="display.grid")
     if "edges" in display and display["edges"] not in EDGES:
-        raise SnapshotRefused(f"display.edges {display['edges']!r} is not one of {', '.join(EDGES)}", part="display.edges")
+        raise SnapshotRefused(f"display.edges {display['edges']!r} is not one of {', '.join(EDGES)}", part="display")
     _visibility(display)
     if grid:
         display["grid"] = True
@@ -663,6 +665,18 @@ def parse_pose(value: str | None) -> Any:
             raise SnapshotRefused("--pose is a configuration's name or a JSON object of joint values")
         return parsed
     return text
+
+
+@refusing("pose")
+def parse_motion(value: Any, where: str = "--motion") -> list[Any]:
+    """A configuration sequence at a time, as a pose (``mechanism.at``'s ``[name, seconds]``): a job's
+    ``motion`` (``{"name": "walk", "at": 0.6}``), or the flags' ``--motion NAME --at SECONDS`` given as
+    that object. The name and the time are the document's to answer, when it is posed."""
+    if (not isinstance(value, dict) or set(value) != {"name", "at"} or not isinstance(value["name"], str)
+            or not value["name"].strip() or isinstance(value["at"], bool) or not isinstance(value["at"], (int, float))):
+        raise SnapshotRefused(f"{where} is a configuration sequence and a time of it in seconds: "
+                              '{"name": "walk", "at": 0.6}')
+    return [value["name"].strip(), float(value["at"])]
 
 
 @refusing("size")
@@ -1188,6 +1202,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
             view.get("measurements", shared.get("measurements")))
         lit = parse_references(view.get("references", shared.get("references")), document)
         posed = pose_flag if pose is not None else view.get("jointValues")
+        if pose is None and "motion" in view:
+            if view.get("jointValues") is not None:
+                raise SnapshotRefused(f"{where} gives jointValues and motion: a picture stands at one pose")
+            posed = parse_motion(view["motion"], f"{where}.motion")
         if isinstance(posed, str):
             posed = parse_pose(posed)
         if posed is not None and document.suffix.lower() in MESHES:
