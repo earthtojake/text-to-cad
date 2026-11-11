@@ -60,6 +60,16 @@ A transmissive part is one fade, never two, in every file of it: what draws tran
 and what draws none (Flat, X-ray, Parts, a snapshot, a 3MF) at that preview. The colour's
 alpha does not fade it further; to fade it everywhere, give the look a PBR `opacity` below 1.
 
+- **Leave air between glass and what lies behind it.** A see-through part lying on another (a
+  window on its liner, two surfaces from one loft) draws mottled: each part is meshed on its own,
+  to about a thousandth of its size, so their triangles cross. A gap wider than both meshes'
+  error cures it: half a millimetre on an 80 mm part, a millimetre or two on a 400 mm one.
+- **Smoked glass is a clear look with a tint, not a dark one that lets some light through.** A
+  near-black colour with `transmission=0.35` draws as smoked glass in a snapshot, which fades it,
+  and as a black surface where light is traced through it (the GLB in Blender): the colour
+  tints what passes, and a third of nothing passes. Give it
+  `transmission=1` and the tint as its colour (a mid grey).
+
 ```python
 from bd_materials import metals
 from cad.build123d import paint
@@ -191,6 +201,17 @@ handles placement itself.
   or self-crossing section produces misleading downstream loft failures, so check
   section wires as well as face validity. A ruled loft can localize a smooth-loft
   failure.
+- **A smooth loft is one spline through all its sections,** so it goes where no section
+  says: two sections added near the top of a 400 mm form moved its surface 77 mm near the
+  bottom, and the result was still valid. Space sections evenly and carry a change in their
+  values, not in more of them, or use `ruled=True`, which goes only where the sections say.
+  A clearance is measured from the solid, never worked out from the sections.
+- **A loft that ends in a `Vertex` ends in a cone point,** not a rounded cap, and on a blunt
+  end it can stand millimetres past the point; rows added near the point to round it move
+  the rest of the form. A shaded snapshot hides both and a render shows them.
+- **A revolved polyline is one conical face a segment,** and a shaded picture draws a band
+  for each. A profile that will be seen is arcs or a spline: one face. `EllipticalCenterArc`
+  and `CenterArc` take `start_angle` and `arc_size`, not a start and an end angle.
 - **Many tools:** batching independent cuts avoids rebuilding the same
   intersection network; overlapping tools may need staged cuts, and oversized
   tool extents create needless intersections. On large spline surfaces even a
@@ -198,15 +219,21 @@ handles placement itself.
   bar names the stage the time goes to.
 - **Near tangency or coincident boundaries:** a Boolean can return successfully
   with the wrong region or solid count; a direct profile construction of the same
-  shape can avoid the intersection.
+  shape can avoid the intersection. `is_valid` does not catch it, and `&`, `-` and `+`
+  make no promise of their own: where a result on a lofted or spline solid matters, hold it
+  to what it must be (its `bounding_box()` inside both operands', its volume near the one
+  expected) before building on it.
 - **Tangent chains and complex outlines:** OCCT's 3D fillets can fail or crash
   there; a profile bevel or a separately constructed transition is a workaround.
 - **2D algebra:** a `ShapeList` takes part in Python list operations, which may
   concatenate instead of fusing. Mirroring sampled points can flip wire winding
   and face normals, and an empty intersection used as a cut removes nothing.
-- **A Boolean that removes everything** returns an empty `Compound` (`&` returns None),
-  and placing that (`bd.Pos(...) * empty`) returns a plain empty `list`, so the next line
-  fails with `'list' object has no attribute 'label'`: the cut before it consumed the part.
+- **A Boolean that removes everything** returns an empty `Compound` (`&` of two `Solid`s
+  returns None), and placing that (`bd.Pos(...) * empty`) returns a plain empty `list`, so the
+  next line fails with `'list' object has no attribute 'label'`: the cut before it consumed
+  the part. An empty one among an assembly's children (`Compound(children=[...])`) fails with a
+  bare `AssertionError` from the tree. Test `result.solids()` before labelling or placing a
+  Boolean's result.
 - **Dense periodic splines:** OCP 7.9 has failed taper, inward offset and
   coincident-face fusion on some densely sampled profiles; a simpler
   representation or an explicitly constructed offset works around it.

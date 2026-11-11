@@ -393,13 +393,26 @@ duration=None, ease="cubic")` takes one of:
   (1e-3 radian, 1e-3 of the model's size), the same code always the same samples.
 
 `ease` is `cubic` (each step eased in and out, every joint arriving together at every
-waypoint) or `linear` (constant speed). A sequence is a finite clip, and a player repeats
+waypoint) or `linear` (constant speed). Between two waypoints a fraction `s` of the way in
+time, a `cubic` value is `a + (3 s^2 - 2 s^3) (b - a)` and a `linear` one `a + s (b - a)`,
+each joint on its own; a program that plays the sequence elsewhere (a simulator, a check
+that follows it in time) uses the same formula. A sequence is a finite clip, and a player repeats
 it: one that comes back writes its way back as waypoints. A coupling's name poses in
 waypoints and sweeps like a joint's. A sequence naming a mechanism state or a joint the
 assembly lacks fails the run.
 
 - **Prefer waypoints.** A sequence of waypoints is a few numbers in the document and a
   few keys in a GLB; a function of time is sampled on every run that runs its body.
+- **A path the joints must follow together is dense waypoints with `ease="linear"`.** An ease
+  moves each joint on its own between two waypoints, so two sound poses do not make a sound
+  path between them: a foot that should stay on the floor slides, the knee and the hip
+  easing separately. Solve the path in your own code (the pelvis over feet that stay, a
+  linkage that closes) and write its samples, forty to sixty of them, as waypoints.
+- **The fixed link is a choice of frame.** A mechanism has one ground, and a sequence moves
+  the joints under it: a robot whose ground is its pelvis crouches by lifting its feet. A
+  motion that is right in that frame says nothing of what a floor would hold. Check it in
+  the frame of what the robot stands on: the supporting foot's world placement at each
+  sample, which should not move, and the centre of mass over it.
 - **A sequence costs nothing outside a GLB**: STEP, STL and 3MF carry no motion.
 - Every GLB exported from the model carries each sequence as a glTF animation of its
   name, keyed within 1e-3 of the model's size of the true motion. Blender, three.js and
@@ -428,9 +441,29 @@ joint no coupling moves, and the mechanism states as presets. The playbar under 
 tools view and Preview alike, plays the document's configuration sequences (play, pause, scrub, loop, speed), so the page is
 where to review one.
 
+A sequence is drawn at a time of it, the mechanism where the playbar would have it then, and a list
+of jobs draws its frames in one command, each from one camera
+([a camera that does not move](snapshot-review.md#annotations-and-quick-edit-views)):
+
+```bash
+cad model snapshot "$ID" tmp/stride.png --pose walk@0.6
+```
+
+```json
+[{"input": "<id>", "camera": "side", "jointValues": "walk@0.0", "outputs": [{"path": "tmp/walk_00.png"}]},
+ {"input": "<id>", "camera": "side", "jointValues": "walk@0.2", "outputs": [{"path": "tmp/walk_01.png"}]}]
+```
+
+The frames stand under the mechanism's fixed link, as the sequence is written: a robot whose ground
+is its pelvis walks in the air.
+
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. Measure a pose by posing the model in the check, taking its parts placed with
+mid-motion. `cad model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
+parts at each pose it is given, a state or a sequence at a time of it: give it every state, and
+each sequence at the times that matter
+([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
+check script, pose the model there, taking its parts placed with
 `leaves(tree)` (`cad.build123d`) through `find_part`, copied from
 [Opening geometry](inspection-and-validation.md#opening-geometry). Where a joint's stops are
 the parts meeting, `cad model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):

@@ -109,8 +109,10 @@ def standoff_m4():
     return standoff_body(16, 10, 4.5)
 ```
 
-The helper needs no marking: the server keeps every kernel operation it runs, keyed by
-its inputs, so a run after an edit elsewhere replays it.
+The helper needs no marking: the server keeps every kernel operation a model runs, keyed by
+its inputs, so a run after an edit elsewhere replays it. Operations are kept per body, never
+shared between two models: a builder several models call with the same arguments is
+[marked](#memo-marks-stages), or each runs it whole.
 
 ## `@memo` marks stages
 
@@ -125,6 +127,10 @@ of the first one's result. Outside a run it is its function.
   kernel calls or more: whole sub-assembly stages (measured: 1.3 to 3 s each, twice as
   fast on an edit). Never mark per part, or a helper called many times: those measured
   under 0.1 s.
+- **Mark the body several models share.** A kernel operation is kept for the body that ran
+  it (a model's, or a `@memo` call's), so nine models that pose one robot each build the
+  robot again (each run's line says `0 hits`) unless its builder is marked: then it runs
+  once and the others replay it (`bodies 1 run, 1 replayed`).
 - **Arguments by value**: numbers, strings, bools, `None`, tuples, lists and dicts of
   them, enums and paths; build123d's `Location`, `Vector`, `Axis`, `Plane`, `Color`
   and `Rotation`; a `Material`; a shape this run made. A call given anything else (a
@@ -205,9 +211,26 @@ if __name__ == "__main__":
 ## What a run runs
 
 Each script has a warm worker in the server, and the worker keeps every kernel
-operation its models ran, keyed by its inputs. A hit hands back the objects the first
-run made; a miss makes everything downstream of it miss. So an edit costs what it
-changed, and an element keeps the name its feature history gave it.
+operation its models ran, keyed by its inputs and the body that ran it. A hit hands back
+the objects the first run made; a miss makes everything downstream of it miss. So an edit
+costs what it changed, and an element keeps the name its feature history gave it.
+
+One thing a key does not hold, and one it holds only by value:
+
+- **A shape made past build123d.** One made by calling `OCP` directly (a
+  `BRepOffsetAPI_MakeFilling`, a sewing) has no key, so every operation downstream of it
+  runs on every build and its body is never replayed. The run's line counts those calls
+  (`12 misses, 6142 hits, 31 uncached`) and says which under it (`not retained: ...`).
+  Reach for `OCP` to ask a question; to make a shape, use build123d's operation
+  (`Face.make_surface_patch` for a filled cap), or make it in a `@memo` function of values
+  that returns it as made.
+- **An attribute of your own on a shape.** A plain Python attribute a model sets on a shape
+  (`shape._stood = location`) is part of that shape's key beside its geometry, label, colour,
+  material, joints and mechanism, so code edited to set or change one runs again what is
+  made of the shape. Its value is a parameter: a number, a string, a `Location`, a tuple or a
+  dict of them. A value that is none (a function, an object of your own) cannot be compared,
+  so every operation on that shape runs on every build, which the run's line says
+  (`uncached`): keep such data beside the shape, in a dict by label.
 
 Above that, a body (a model's, or a `@memo` call's) is replayed, not run, while what it
 is made of is unchanged:
@@ -226,7 +249,16 @@ body: the clock, environment variables, randomness, a file only tested for
 module for another. A body must be a function of its inputs.
 
 A run after the server restarted, or after the script's worker retired, starts a fresh
-worker and builds cold. Every run says how each body went: `bodies 2 run, 1 replayed`.
+worker and builds cold; where the server retired the worker, the run says why under its line
+(`cold: this script's worker went 3m ago: ...`). Every run says how each body went:
+`bodies 2 run, 1 replayed`.
+
+A document's id names the model, not a state of it: it is the same after every edit. What
+names the state is the key of the code and inputs it was built from,
+`handle.report["closure"]["key"]` (`cad model inspect "$ID" --query closure` prints it): a
+file derived from a document (a simulator's description, a GLB beside a film) that records
+the key can tell whether the document has been built from other sources since. The key is
+`None` where the model's code cannot be keyed.
 
 `bracket.build(verify=True)` runs every body the server would replay and compares each
 fresh result with the logged one (`.models[0]["verify"]`); a body whose result differs

@@ -139,6 +139,10 @@ tree.links.new(layers.outputs["Image"], glare.inputs["Image"])
 tree.links.new(glare.outputs["Image"], tree.nodes.new("NodeGroupOutput").inputs[0])
 ```
 
+On a machine with no graphics driver, set `scene.render.compositor_device = "CPU"` first: the
+compositor's default device is the GPU, and without one the render ends the process
+([no graphics driver](scene-script.md#no-graphics-driver)).
+
 ## A .blend for a person
 
 At the end of the script, save the scene for a person to open in Blender 5.2 and keep working on:
