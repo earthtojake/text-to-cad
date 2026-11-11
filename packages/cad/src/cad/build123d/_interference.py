@@ -300,6 +300,8 @@ def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any
         "pairs": {"boxes_meet": candidates,
                   "measured": sum(1 for answer in answers.values() if "volume" in answer)},
         "interferences": interferences, "fits": fitted, "unmeasured": unmeasured,
+        # A check that left a pair unmeasured is not kept by the engine: asked again, it measures again.
+        "partial": bool(unmeasured),
         "seconds": round(time.monotonic() - started, 2),
     }
 

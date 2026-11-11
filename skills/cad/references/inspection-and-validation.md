@@ -399,7 +399,8 @@ FAILED arm: 2 pairs of parts share volume (5 parts at 2 stances, the boxes of 6 
   for each corner. Say so with the result.
 - From a script: `cad.model.interference(robot(), states=True, fits=[("pin", "base")])` returns the
   same result (`.ok`, `.findings`, `.measurements`). The engine measures it and keeps the result: the
-  same check of an unchanged model answers at once.
+  same check of an unchanged model answers at once. A check that left a pair unmeasured is not
+  kept: asked again, it measures again.
 
 ## Mass properties
 

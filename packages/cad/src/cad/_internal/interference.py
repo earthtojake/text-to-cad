@@ -192,7 +192,8 @@ def interference_for(document_type: str) -> Any:
 
 Every pair of parts whose boxes meet is measured exactly by the kernel on the parts' own solids, as built
 and at each stance asked, in one of the engine's checks processes. Nothing is built, meshed or written, and
-the same check of an unchanged document is answered from the result the engine keeps.
+the same check of an unchanged document is answered from the result the engine keeps: one that measured
+every pair. A check that left a pair unmeasured is not kept, and measures again when asked again.
 
 ``poses``: mechanism states' names or ``{{joint or coupling: value}}`` tables to stand at beside as built;
 ``states``: every mechanism state; ``motions``: configuration sequences by name, or ``"all"``, each at

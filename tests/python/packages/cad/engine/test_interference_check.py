@@ -100,6 +100,8 @@ class MeasureTest(unittest.TestCase):
         # Out of time before the first pair, none is counted measured: each is unmeasured, said so.
         late = _interference.measure(self.structure, self.shapes, {**asked.options(jobs=2), "seconds": 1e-9})
         self.assertEqual((late["pairs"]["measured"], len(late["unmeasured"])), (0, late["pairs"]["boxes_meet"]))
+        # Such a report is partial, which the engine does not keep; one fully measured is kept.
+        self.assertEqual((late["partial"], found["partial"]), (True, False))
 
     def test_a_named_fit_is_listed_apart_and_what_names_nothing_is_refused(self) -> None:
         found = self.measure(fits=["press,base"])
