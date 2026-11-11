@@ -153,6 +153,10 @@ ENIG, anodized, powder coat, LED lenses, ...), each a scalar look with no textur
 | --- | --- |
 | base colour, metalness, roughness, IOR, opacity, transmission, clear coat, sheen, specular, emission and its strength; iridescence in part | anisotropy (brushed metal draws plain), dispersion, a transmissive part's volume thickness (the light refracts through the real part), texture maps |
 
+A material in Blender is named by the model's look (`bpy.data.materials["frame_black"]`), so a script
+restyles a look by its name wherever it is worn; the physical material it is a look of is its custom
+property (`material["cad"]["material"]`: `Alu_G7075_T6`). Two looks of one aluminium are two materials.
+
 A transmissive look is written opaque, so a lens or a window refracts rather than fades. Its
 base colour tints what passes through it, so smoked glass written as a dark colour with a partial
 transmission (`color` near black, `transmission=0.35`), which a snapshot draws as a tint, renders

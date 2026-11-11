@@ -2833,6 +2833,12 @@ copper, 6061-T6, 304 stainless, mild steel, or the `substrate=` metal a finish i
 clear epoxy, PBT-GF30), and a scalar `PbrProperties` look, no texture map. bd_materials' own textured
 finishes (`bead_blast`, `brushed`, `zinc_plate`, `tin_plate`) draw untextured as a flat roughness 1.
 
+A GLB names each material by its look (`pbr.name`: `frame_black`, `anodized_black`), not by the physical
+material the look is of: two looks of one aluminium are two materials of two names, and what reads the file
+(Blender, `cad.blender`) finds a look by the name the model gave it. The physical material's name rides
+beside it, `extras.cad.material` (`Alu_G7075_T6`), which Blender reads as the material's custom property
+(`export/glb.py`'s `_material`).
+
 ```python
 from bd_materials import metals
 from cad.build123d import paint

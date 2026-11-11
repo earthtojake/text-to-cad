@@ -182,11 +182,14 @@ class MaterialsTest(unittest.TestCase):
         data = (self.folder / "test.glb").read_bytes()
         gltf = json.loads(data[20:20 + int.from_bytes(data[12:16], "little")])
         self.assertFalse({"images", "textures", "samplers"} & set(gltf), "no image in the file")
-        written = {m["name"]: m for m in gltf["materials"]}
+        # A GLB's material is named by its look, which is what tells two looks of one grade apart and what a
+        # render restyles by; the physical material's name rides beside it (``extras.cad.material``).
+        written = {m["extras"]["cad"]["material"]: m for m in gltf["materials"]}
+        self.assertEqual({grade: m["name"] for grade, m in written.items()},
+                         {name: material.pbr.name, metals.copper().material.name: metals.copper().pbr.name})
         self.assertNotIn("baseColorTexture", written[name]["pbrMetallicRoughness"])
         self.assertEqual([written[name]["pbrMetallicRoughness"][key] for key in ("metallicFactor", "roughnessFactor")],
                          [0.3, 0.6], "the GLB: its scalar factors")
-        self.assertIn(metals.copper().material.name, written)
 
     def test_a_glb_writes_a_transmissive_look_opaque_unless_its_opacity_fades_it(self):
         from cad.engine.export.glb import _material
@@ -453,7 +456,8 @@ class MaterialsTest(unittest.TestCase):
         data = (self.folder / "assembly.glb").read_bytes()
         length = int.from_bytes(data[12:16], "little")
         gltf = json.loads(data[20:20 + length])
-        material = next(m for m in gltf["materials"] if m["name"] == metals.aluminum().name)
+        material = next(m for m in gltf["materials"] if m["extras"]["cad"]["material"] == metals.aluminum().name)
+        self.assertEqual(material["name"], metals.aluminum().pbr.name, "named by its look")
         self.assertEqual(material["pbrMetallicRoughness"]["roughnessFactor"], 0.75)
         extensions = material["extensions"]
         self.assertEqual(extensions["KHR_materials_clearcoat"]["clearcoatFactor"], 0.6)
