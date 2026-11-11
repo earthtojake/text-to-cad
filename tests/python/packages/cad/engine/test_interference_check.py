@@ -97,6 +97,9 @@ class MeasureTest(unittest.TestCase):
         # The boxes of the near miss and of the dowel in its bore met, and each was measured to share nothing.
         self.assertGreaterEqual(found["pairs"]["measured"], 4)
         self.assertEqual(found["pairs"]["boxes_meet"], found["pairs"]["measured"])
+        # Out of time before the first pair, none is counted measured: each is unmeasured, said so.
+        late = _interference.measure(self.structure, self.shapes, {**asked.options(jobs=2), "seconds": 1e-9})
+        self.assertEqual((late["pairs"]["measured"], len(late["unmeasured"])), (0, late["pairs"]["boxes_meet"]))
 
     def test_a_named_fit_is_listed_apart_and_what_names_nothing_is_refused(self) -> None:
         found = self.measure(fits=["press,base"])

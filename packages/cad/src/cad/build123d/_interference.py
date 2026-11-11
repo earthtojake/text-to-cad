@@ -297,7 +297,8 @@ def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any
         "name": str(structure.get("name") or ""),
         "parts": int(solid.sum()), "skipped": int(len(instances) - solid.sum()),
         "stances": [name for name, _matrices in stances],
-        "pairs": {"boxes_meet": candidates, "measured": len(orders)},
+        "pairs": {"boxes_meet": candidates,
+                  "measured": sum(1 for answer in answers.values() if "volume" in answer)},
         "interferences": interferences, "fits": fitted, "unmeasured": unmeasured,
         "seconds": round(time.monotonic() - started, 2),
     }
