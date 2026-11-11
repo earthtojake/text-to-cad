@@ -8,7 +8,7 @@ A description generated from a CAD model (`cad model export <id> robot.xml` or `
 
 - one binary STL per part prototype, in **metres** and in the part's own frame, written once however many links place it, named `<model>_<part>.stl`; the description places it in its link with an origin, so no `scale` is needed or written;
 - beside the file: in `assets/` for an MJCF (its `meshdir`), in `meshes/` for a URDF, each named by relative path, so the file and its meshes move together as one folder;
-- with `cad.mujoco.spec(..., assets="dir")`, written in that folder (relative to the working directory), and without it in the engine's cache; either way the spec names every mesh by absolute path, as it does an MJCF's own (a Menagerie robot's). `cad.mujoco.save` copies every mesh a spec names into `assets/` beside the file it writes, so that folder travels ([mujoco-environment.md](mujoco-environment.md#the-mujoco-function));
+- with `cad.mujoco.spec(..., assets="dir")`, written in that folder (relative to the working directory), and without it in the engine's cache; either way the spec names every mesh by absolute path, as it does an MJCF's own. `cad.mujoco.save` copies every mesh a spec names into `assets/` beside the file it writes, so that folder travels ([mujoco-environment.md](mujoco-environment.md#the-mujoco-function));
 - meshed at the viewer's tolerance unless the export or `spec` is given `tolerance=` (millimetres);
 - each part's own mesh as its collision (which MuJoCo hulls); a MuJoCo function's `decompose()` adds the convex hulls CoACD cuts a part's mesh into, one STL per hull, `<model>_<part>_hull<i>.stl`, beside the part's whole visual.
 
@@ -65,7 +65,7 @@ Keep mesh files under the same model directory tree as the description, so the f
 
 What the CAD Viewer and the snapshots draw is narrower than what the validators accept: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which the server meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it. Each format's full list is in [snapshots.md](snapshots.md).
 
-An MJCF's meshes are MuJoCo's to read: STL, OBJ or MSH files (the menagerie's are often OBJ), found under the compiler's `meshdir` (or `assetdir`) beside the main file. A 3MF or GLB is no MuJoCo mesh at all: export the link as STL (`cad model export <id> link.stl`). No `cad` view draws an MJCF; `cad mujoco check` says a mesh file MuJoCo cannot find or read. MuJoCo hulls every mesh it collides, so an MJCF's collision mesh is its convex hull whatever its shape ([mjcf-authoring.md](mjcf-authoring.md#visual-and-collision-geoms)).
+An MJCF's meshes are MuJoCo's to read: STL, OBJ or MSH files, found under the compiler's `meshdir` (or `assetdir`) beside the main file. A 3MF or GLB is no MuJoCo mesh at all: export the link as STL (`cad model export <id> link.stl`). No `cad` view draws an MJCF; `cad mujoco check` says a mesh file MuJoCo cannot find or read. MuJoCo hulls every mesh it collides, so an MJCF's collision mesh is its convex hull whatever its shape ([mjcf-authoring.md](mjcf-authoring.md#visual-and-collision-geoms)).
 
 ## Visual vs Collision Assets
 

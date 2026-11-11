@@ -4,8 +4,6 @@ Use this reference when writing or editing a MuJoCo model: its compiler settings
 
 A robot that has a CAD model here is not authored by hand: its MJCF is generated from the model (`cad model export <id> robot.xml`), its collision shapes, joint dynamics and actuators are chosen in a MuJoCo function with `cad.mujoco.spec` and MuJoCo's own `MjSpec`, and a scene around it is composed in code the same way ([mujoco-environment.md](mujoco-environment.md)). The generated file follows every convention below; edit the model or the function, never the file. What follows is for a model written by hand, and for reading a generated one.
 
-The conventions below are MuJoCo Menagerie's (google-deepmind/mujoco_menagerie), the reference collection of MuJoCo robots; its Franka `panda.xml` is a good one to read beside this.
-
 ## Edit loop
 
 1. Locate the target `.xml`. A hand-written one is the source of truth; author and edit the XML directly. A generated one is not: change its CAD model and export again.
@@ -37,12 +35,12 @@ Lengths are metres and masses kilograms, as everywhere in this skill.
 
 Split the robot from its world:
 
-- `robot.xml` (named for the robot, `panda.xml`): the compiler, defaults, assets, the robot's body tree, its equalities and keyframes. No actuators, no floor, no light, no skybox.
-- `scene.xml`: `<include file="panda.xml"/>`, then the actuators, the floor plane, the light and anything else of the world.
+- `robot.xml` (named for the robot, `arm.xml`): the compiler, defaults, assets, the robot's body tree, its equalities and keyframes. No actuators, no floor, no light, no skybox.
+- `scene.xml`: `<include file="arm.xml"/>`, then the actuators, the floor plane, the light and anything else of the world.
 
 ```xml
-<mujoco model="panda scene">
-  <include file="panda.xml"/>
+<mujoco model="arm scene">
+  <include file="arm.xml"/>
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
@@ -58,7 +56,7 @@ Defaults are how a model stays short and consistent. Give the robot one class na
 
 ```xml
 <default>
-  <default class="panda">
+  <default class="arm">
     <joint armature="0.1" damping="1"/>
     <default class="visual">
       <geom type="mesh" contype="0" conaffinity="0" group="2"/>
@@ -104,12 +102,12 @@ A geom's size is MuJoCo's: half sizes for a `box`, a radius (and a half length) 
 
 ## Inertia
 
-Let the compiler compute each body's mass and inertia from its geoms where they represent the part (`<compiler inertiafromgeom="auto"/>`, the default, does this for a body with no `<inertial>`). Where they do not -- vendor data, a mesh that is a shell, a body whose geoms are all visual -- give the body an `<inertial pos mass diaginertia="..."/>` or `fullinertia="Ixx Iyy Izz Ixy Ixz Iyz"`, computed, never guessed ([inertials.md](inertials.md)). A visual geom with `contype="0" conaffinity="0"` still adds mass to a computed inertia (`<compiler inertiagrouprange>` counts every group by default), so a body with a visual and a collision geom of the same part counts it twice: give it an `<inertial>`, as Menagerie's Panda does, or keep the visual geoms out of the range.
+Let the compiler compute each body's mass and inertia from its geoms where they represent the part (`<compiler inertiafromgeom="auto"/>`, the default, does this for a body with no `<inertial>`). Where they do not -- vendor data, a mesh that is a shell, a body whose geoms are all visual -- give the body an `<inertial pos mass diaginertia="..."/>` or `fullinertia="Ixx Iyy Izz Ixy Ixz Iyz"`, computed, never guessed ([inertials.md](inertials.md)). A visual geom with `contype="0" conaffinity="0"` still adds mass to a computed inertia (`<compiler inertiagrouprange>` counts every group by default), so a body with a visual and a collision geom of the same part counts it twice: give it an `<inertial>`, or keep the visual geoms out of the range.
 
 ## Actuators and options
 
 - One actuator per controlled joint, named `actuator1`.. in joint order: `<position joint="joint1" kp="..." ctrlrange="..."/>` or `<motor>`/`<general>`, values from the robot's data sheet.
-- `<option integrator="implicitfast"/>`: stable for damped, position-controlled robots and Menagerie's default.
+- `<option integrator="implicitfast"/>`: stable for damped, position-controlled robots.
 - Joint `armature` (the reflected rotor inertia, from the data sheet) and a light `damping` on every actuated joint, in the robot's class.
 - Solver settings for contact belong in the scene: `<option cone="elliptic" impratio="10" timestep="0.002"/>` for manipulation, and `solref` with `solref[0]` at least twice the timestep.
 

@@ -2,7 +2,7 @@
 
 Use this reference to put CAD-made parts into a MuJoCo simulation: a mechanism written as an MJCF
 from its model, its simulator's choices made in a MuJoCo function, then a scene composed in code
-from those pieces, a Menagerie robot and whatever the simulation adds, checked, shown to the person,
+from those pieces, a robot made elsewhere and whatever the simulation adds, checked, shown to the person,
 and tuned. Hand-written MJCF is [mjcf-authoring.md](mjcf-authoring.md); every finding the checks
 print is in [mjcf-checks.md](mjcf-checks.md).
 
@@ -29,12 +29,12 @@ The scene carries the world around it. Put each where it belongs and nothing is 
 | Links and their frames, joint axes, joint limits around the as-built zero (or the `--zero` state) | Each part's collision shape: `fit()`, `decompose()`, or none (`s.delete` on its `collisions()`) | Where each robot stands, and what it is attached to (a frame, a site) |
 | Masses, centres of mass, inertia tensors (materials' densities, `mass()` totals, `point_mass()` lumps); a free base (`free()`) | Contact friction and the other contact settings on a part's collision geoms; excluded pairs (`add_exclude`) | A free body (`add_freejoint`) for a part from elsewhere that moves loose |
 | Visual meshes (STL, metres) and their colours; each part's mesh as its collision | Joint `armature`, `damping` and `frictionloss` | The floor, lights, cameras |
-| Named frames as sites (`frame()`), parts kept bodies (`body()`), link names (`link()`) | Actuators: kind, gains, control ranges | Robots from elsewhere (Menagerie), and the prefixes that keep their names apart |
+| Named frames as sites (`frame()`), parts kept bodies (`body()`), link names (`link()`) | Actuators: kind, gains, control ranges | Robots from elsewhere, and the prefixes that keep their names apart |
 | The drive's force bound (`limits(effort=)`, `actuatorfrcrange`) | Sensors, and keys with a `ctrl` | Solver settings: timestep, cone, `impratio`, contact softness (`solref`, `solimp`) |
 | Couplings as `<equality><joint>`, a loop's closing joint as `connect`s of two sites, mechanism states as keys | An equality's `solref` where a loop must hold stiffer than MuJoCo's default | The scene's own `home` key over every joint and actuator; controllers, policies, the simulation loop |
 
 The first column is regenerated from the model on every change, never edited. The second is the
-robot's own file, as a Menagerie robot's file carries its actuators. The third is the scene's. The
+robot's own file. The third is the scene's. The
 numbers in the second and third come from the robot's data sheet and the tuning below, not from the
 CAD.
 
@@ -193,8 +193,8 @@ What to read in it:
   zero, a follower where its leader puts it. No `ctrl`: a plain export has no actuators.
 - **Not in it**: a chosen collision shape, joint dynamics, actuators, sensors, a floor, a light,
   solver settings beyond the integrator. The robot's MuJoCo function adds the robot's choices
-  (below); a scene adds the rest: the `scene.xml` an export writes beside the robot once (Menagerie's:
-  an `include` of the robot, a floor, a light, a skybox), yours to edit and never written over, or a
+  (below); a scene adds the rest: the `scene.xml` an export writes beside the robot once (an
+  `include` of the robot, a floor, a light, a skybox), yours to edit and never written over, or a
   scene in code.
 
 The robot file alone checks with `defaults_not_recommended` (a pyramidal cone, the default
@@ -244,7 +244,7 @@ cad mujoco check sim/scene.xml
 ```
 
 `cad run` sees the `mujoco` import and adds `cad[mujoco]`. The function's file replaces the plain
-export at the same path: it is the robot's file now, actuators and all, as a Menagerie robot's is.
+export at the same path: it is the robot's file now, actuators and all.
 The run ends with what `save` checked of it:
 
 ```text
@@ -257,7 +257,7 @@ Read both lines against the function: three boxes, as fitted; and the exclude be
 fingers, which stand apart when open, is the one the function added on purpose.
 
 **`spec(thing, zero=, tolerance=, assets=)`** takes a model call's handle (as here), a build123d
-shape, a `.step`, an `.xbf`, or an MJCF path: an authored model, an export, a Menagerie robot.
+shape, a `.step`, an `.xbf`, or an MJCF path: an authored model, an export, a robot made elsewhere.
 `zero=` takes a document's robot at a mechanism state, as an export's `--zero` does; `tolerance=`
 meshes its parts finer, in millimetres; `assets=` writes its meshes into a folder relative to the
 working directory instead of the engine's cache (a document only, for each of the three).
@@ -305,7 +305,7 @@ path and say how many parts share it. Give those parts distinct labels in the mo
 geoms through `collisions`. Never name a part by a generated geom name (`left_collision`): the
 writer's rules make those.
 
-**A spec read from an `.xml`** (a Menagerie robot, an export) has no solids and no label paths: its
+**A spec read from an `.xml`** (a robot made elsewhere, an export) has no solids and no label paths: its
 parts are its meshes, named by mesh name (`spec("sim/arm.xml")` names the palm `palm`), and a
 refusal lists them. `decompose` and `collisions` work on it; `fit` is refused.
 
@@ -386,7 +386,7 @@ that composes other models goes in code instead (below).
 
 A scene is the same thing one level up: a function that makes a `mujoco.MjSpec`, attaches the
 robots to it, adds the floor and the rest, and returns it; `save` writes it. `spec()` makes each CAD
-piece or Menagerie robot a spec, and a robot's own MuJoCo function makes one with its choices made.
+piece or robot from elsewhere a spec, and a robot's own MuJoCo function makes one with its choices made.
 Everything else is MuJoCo's own API, used directly: `attach` with a `prefix` and a `site` or a
 `frame`, `add_body`, `add_geom`, `add_joint`, `add_freejoint`, `add_site`, `add_camera`,
 `add_light`, `add_key`, `add_actuator`, `add_sensor`, `add_equality`. The scene script is the one
@@ -394,17 +394,14 @@ script that writes the scene, as `exports.py` is the one that writes files:
 
 ```python
 # src/pick.py
-# /// script
-# dependencies = ["mujoco-menagerie"]
-# ///
 import mujoco
-import mujoco_menagerie
 from cad.mujoco import save, spec
 
 from gripper import block
 from gripper_mujoco import gripper_mujoco
 
-HOME_ARM = [0, 0, 0, -1.57079, 0, 1.57079, -0.7853]   # Menagerie's Panda home, radians
+ARM = "robots/arm/arm.xml"   # an arm made elsewhere: its maker's MJCF, its meshes beside it
+HOME_ARM = [0, 0, 0, -1.57079, 0, 1.57079, -0.7853]   # its ready pose (its file's `home` key), radians
 
 
 def pick(hand: mujoco.MjSpec, part) -> mujoco.MjSpec:
@@ -419,9 +416,8 @@ def pick(hand: mujoco.MjSpec, part) -> mujoco.MjSpec:
     scene.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[0, 0, 0.05])
 
     # The arm at the origin, the gripper (its choices made) on its flange, the CAD block loose on the floor.
-    panda = mujoco_menagerie.get("franka_emika_panda").path() / "panda_nohand.xml"   # the arm without its hand
-    scene.attach(spec(panda), prefix="panda/", frame=scene.worldbody.add_frame())
-    scene.attach(hand, prefix="gripper/", site=scene.site("panda/attachment_site"))
+    scene.attach(spec(ARM), prefix="arm/", frame=scene.worldbody.add_frame())
+    scene.attach(hand, prefix="gripper/", site=scene.site("arm/attachment_site"))   # the site its file has for a tool
     scene.attach(spec(part), prefix="block/", frame=scene.worldbody.add_frame(pos=[0.5, 0, 0]))
     scene.body("block/block").add_freejoint(name="block/free")
 
@@ -453,13 +449,13 @@ What each step does, and the traps:
   robot's spec ([above](#the-mujoco-function)), so save the robot's own file, where one is wanted,
   before the scene attaches it (`hand = gripper_mujoco()`, `save(hand, "sim/gripper.xml")`, then
   `pick(hand, block())`); `save` leaves `hand` usable.
-- **`spec(thing)`** for each piece with no choices to make: the block, the Panda (its own file
+- **`spec(thing)`** for each piece with no choices to make: the block, the arm (its own file
   carries its actuators). Without `assets=`, a document's meshes go to a folder of the engine's
   cache named by their content.
 - **Every spec names its files by absolute path.** MuJoCo resolves an attached model's meshes by
   its own folder when it compiles, but the scene's writer names them bare, so a robot read with
   `MjSpec.from_file` and attached loses its meshes when the scene is saved. `spec()` names each mesh
-  and texture absolutely and clears the spec's own folders: load a Menagerie robot through `spec()`
+  and texture absolutely and clears the spec's own folders: load a robot made elsewhere through `spec()`
   too, never `MjSpec.from_file`: `save` refuses a scene that attached one, in MuJoCo's words (`Error
   opening file`) and naming `spec(path)`. A scene written another way that cannot find a mesh fails
   `cad mujoco check` with `compile_failed`, in MuJoCo's words.
@@ -472,20 +468,19 @@ What each step does, and the traps:
 - **`attach`** copies the child into the scene under a `prefix`, at a `frame` (a placement in the
   parent) or a `site` (the arm's flange). Every name of the child is prefixed (bodies, joints, geoms,
   sites, actuators, default classes, keys): `gripper/left`, `gripper/grip`,
-  `panda/attachment_site`. The child's root body has no joint, so it is welded where it is attached.
+  `arm/attachment_site`. The child's root body has no joint, so it is welded where it is attached.
 - **A free body.** A part with no mechanism is one body under the world; `add_freejoint` on it, after
   attaching, makes it loose. Its 7 `qpos` values are its position, then its quaternion.
 - **Options.** Each piece carries its own `<option integrator>`; a scene whose integrator differs
-  makes MuJoCo warn once about the conflict when attaching, and the scene's own is kept (Menagerie's
-  files do the same). Set the scene's option first, as here, and the warning does not come.
-- **Keys.** The children's keys come along prefixed (`panda/home`, `gripper/closed`), each padded to
+  makes MuJoCo warn once about the conflict when attaching, and the scene's own is kept. Set the scene's option first, as here, and the warning does not come.
+- **Keys.** The children's keys come along prefixed (`arm/home`, `gripper/closed`), each padded to
   the scene's length with every other joint at `qpos0`. Give the scene its own `home` over every
   joint: `qpos` is 1 per hinge or slide, 4 per ball, 7 per free joint, in MuJoCo's joint order (the
   body tree, depth first), and `ctrl` one
-  per actuator, in actuator order (the Panda's seven, then the gripper's `grip`). A key of the wrong
+  per actuator, in actuator order (the arm's seven, then the gripper's `grip`). A key of the wrong
   length is no pose.
 - **Composing two models of one family** of default classes is safe: classes are prefixed with the
-  model, so the gripper's `visual` and the Panda's are `gripper/visual` and `panda/panda/visual`.
+  model, so the gripper's `visual` is `gripper/visual` and the arm's its own under `arm/`.
 
 A robot made in the same project attaches the same way: an arm model of its own with a `frame()` on
 its last link and a MuJoCo function of its own, and the gripper attached at that site
@@ -500,18 +495,18 @@ cad mujoco check sim/pick.xml
 On the scene above it prints:
 
 ```text
-warning: joint_limits_at_rest at sim/pick.xml: 1 joint(s) lie outside their range at qpos0: joint 'panda/joint4' is 0 rad, range [-3.072, -0.0698] rad ([-176, -3.999] deg) Hint: ...
+warning: joint_limits_at_rest at sim/pick.xml: 1 joint(s) lie outside their range at qpos0: joint 'arm/joint4' is 0 rad, range [-3.072, -0.0698] rad ([-176, -3.999] deg) Hint: ...
 info: compiled at sim/pick.xml: compiled by MuJoCo 4.0.0: 13 bodies, 10 joints, 68 geoms, 62 meshes, 4 keyframes
 info: mass_summary at sim/pick.xml: moving mass 16.27 kg in 12 moving bodies, 15 degrees of freedom (nv), 8 actuators (nu); moving geometry spans 0.622 x 0.302 x 1.12 m at qpos0
-info: collisions at sim/pick.xml: 15 collision geoms (mesh 11, box 3, plane 1) on 13 bodies: world 1 (plane 1); panda/link0 1 (mesh 1); ...; gripper/palm 1 (box 1); gripper/left 1 (box 1); gripper/right 1 (box 1); and 1 more. Moving bodies that collide as nothing: panda/attachment
-info: excludes at sim/pick.xml: 4 contact excludes, each between two bodies whole: panda/link0 and panda/link1 0.994 mm apart at rest; gripper/palm and gripper/left touching at rest; gripper/palm and gripper/right touching at rest; gripper/left and gripper/right 30 mm apart at rest
+info: collisions at sim/pick.xml: 15 collision geoms (mesh 11, box 3, plane 1) on 13 bodies: world 1 (plane 1); arm/link0 1 (mesh 1); ...; gripper/palm 1 (box 1); gripper/left 1 (box 1); gripper/right 1 (box 1); and 1 more. Moving bodies that collide as nothing: arm/attachment
+info: excludes at sim/pick.xml: 4 contact excludes, each between two bodies whole: arm/link0 and arm/link1 0.994 mm apart at rest; gripper/palm and gripper/left touching at rest; gripper/palm and gripper/right touching at rest; gripper/left and gripper/right 30 mm apart at rest
 OK sim/pick.xml: MuJoCo model 'pick', 13 bodies, 10 joints, 8 actuators, 15 collision geoms, 62 meshes, 4 keys
 ```
 
 Read every line:
 
-- `joint_limits_at_rest` at `qpos0` is the Panda's own (its elbow's range excludes zero, as
-  Menagerie ships it); the check found nothing at `home`, so start the simulation from `home`. The
+- `joint_limits_at_rest` at `qpos0` is the arm's own (its elbow's range excludes zero, as
+  its maker's file has it); the check found nothing at `home`, so start the simulation from `home`. The
   same warning at `home` is a key to fix.
 - `contacts_at_rest`, `visual_geoms_collide`, `inertia_from_visuals` and `scale_suspect` are absent:
   nothing intersects at rest, visuals do not collide, every body has its inertial, and the sizes are
@@ -523,9 +518,9 @@ Read every line:
   number off by 1000 is a unit; a count off by one is a joint or an actuator missing.
 - `collisions`: the gripper's three boxes came through the attach, the floor collides as a plane
   (the block is the row past the twelve the line names; `--json` has every one), and the one moving
-  body that collides as nothing is the Panda's attachment frame, which has no geometry. A robot's
+  body that collides as nothing is the arm's attachment frame, which has no geometry. A robot's
   link missing here lost its collision.
-- `excludes`: the Panda's own (its base and first link, Menagerie's) and the gripper's three, the
+- `excludes`: the arm's own (its base and first link, its maker's) and the gripper's three, the
   two fingers apart because the gripper is open. An exclude nobody meant between two bodies that
   stand apart is one to remove ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)).
 - The last line counts 4 keys: the scene's `home` and the children's, prefixed.

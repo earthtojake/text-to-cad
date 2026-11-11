@@ -32,7 +32,7 @@ There are two routes to one:
 | **A robot's MuJoCo file: collision shapes, joint dynamics, actuators** | A MuJoCo function: `spec(model())`, `fit`, `decompose` and `collisions`, MuJoCo's own API, then `save(...)`, run with `cad run`. | [The MuJoCo function](#the-mujoco-function), [MuJoCo environment](references/mujoco-environment.md#the-mujoco-function) |
 | **A robot from its vendor STEP** (an arm's downloaded assembly) | Read it, group its parts into links, find each axis from the geometry, then declare, export and compare the MJCF with the URDF, and write its MuJoCo function. | [From a vendor STEP](references/from-a-vendor-step.md) |
 | **Joint limits from the parts** | `cad model ranges <id>`: each joint swept alone until its parts meet, then the stops written into the joint's range in the model. | [Generate from CAD](#generate-from-cad) |
-| **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each piece, composed with MuJoCo's own `MjSpec` in a scene function, saved with `save`, then `cad mujoco check`. | [MuJoCo environment](references/mujoco-environment.md) |
+| **A MuJoCo environment: CAD parts, a robot from elsewhere, a scene** | `spec()` for each piece, composed with MuJoCo's own `MjSpec` in a scene function, saved with `save`, then `cad mujoco check`. | [MuJoCo environment](references/mujoco-environment.md) |
 | **Tune a MuJoCo model's physics** | The model-health findings of `cad mujoco check`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
 | **Describe a robot's links and joints by hand** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
 | **Add MoveIt planning groups, end effectors, named states, collision pairs** | The URDF's link/joint table, then a `.srdf` beside it and `cad srdf validate`. | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md) |
@@ -179,12 +179,12 @@ mass, a joint left out) is a line of the export's log before it. `--json` gives 
 row's `robot`. Read it before anything else: a mass of 0, a link you did not expect or a missing
 joint is a model to fix.
 
-An MJCF export to `sim/gripper.xml` writes `sim/scene.xml` beside it when there is none: MuJoCo
-Menagerie's scene, which includes the robot's file and adds a floor, a light and a skybox, so `cad run
+An MJCF export to `sim/gripper.xml` writes `sim/scene.xml` beside it when there is none:
+a scene that includes the robot's file and adds a floor, a light and a skybox, so `cad run
 mujoco-studio --model sim/scene.xml` opens it standing on something. The scene is yours to edit
 (solver settings, cameras, other bodies); an export never writes over it and says it kept it.
 
-A plain export is laid out as MuJoCo Menagerie lays out a robot (radians, `meshdir="assets"`,
+A plain export is laid out as published MuJoCo robots are (radians, `meshdir="assets"`,
 `autolimits`, `implicitfast`, a `visual` class in group 2 that collides with nothing and a
 `collision` class in group 3, explicit `<inertial>`s, a site per frame, a key per state); what each
 format drops is in [Interoperability](references/interoperability.md#one-description-two-writers).
@@ -197,7 +197,7 @@ articulated in a model first ([from a vendor STEP](references/from-a-vendor-step
 
 - **Never edit a generated file.** A change to a frame, a limit, a mass or a mesh is a change to the
   model: edit it, run it, export again. A collision shape, a damping or an actuator is a change to
-  the MuJoCo function: edit it and run it again. A floor, solver settings and a Menagerie arm go in
+  the MuJoCo function: edit it and run it again. A floor, solver settings and an arm from elsewhere go in
   the scene.
 - **Check what the kernel cannot know**: that each joint's positive motion is the one intended, and
   that the collision shapes suit the physics. A generated file can still have its joint signs wrong
@@ -248,7 +248,7 @@ label path, as `cad model inspect` prints it, and `parts(s)` lists every path. E
 with its meshes in `assets/` beside it, so the folder travels, and a `scene.xml` beside it when there
 is none, then prints the check's warnings, what the model collides as (`collisions:`) and its
 contact excludes (`excludes:`): read both lines against the choices the function made. This file
-replaces the plain export: a robot's own file carries its actuators, as a Menagerie robot's does. The helpers, what `save` does, and MuJoCo 4.0.0's traps are in
+replaces the plain export: a robot's own file carries its actuators. The helpers, what `save` does, and MuJoCo 4.0.0's traps are in
 [MuJoCo environment](references/mujoco-environment.md#the-mujoco-function), with a scene composed
 around it.
 

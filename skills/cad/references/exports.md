@@ -273,7 +273,7 @@ After each file's `wrote` line the export says what it holds, on stderr: its lin
 stands, its joints by kind and its mass, then its couplings, loops, frames, collisions,
 exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
 it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
-robot when there is none (MuJoCo Menagerie's: an `include` of the robot, a floor, a light, a skybox),
+robot when there is none (an `include` of the robot, a floor, a light, a skybox),
 which is the person's to edit and never written over. An MJCF is MuJoCo's own file: `cad mujoco check
 sim/arm.xml` compiles it with MuJoCo and checks it, and no `cad` command or view draws one (the
 person opens it in MuJoCo Studio, `cad run mujoco-studio --model sim/scene.xml`). A URDF whose root link has a mass, or whose
