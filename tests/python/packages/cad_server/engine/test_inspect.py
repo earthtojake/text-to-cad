@@ -106,6 +106,16 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(structure["materials"], [{"name": "Alu_G6061_T6", "density": 2700.0, "parts": ["hinge/base"]}])
         self.assertEqual(structure["states"], [{"name": "open", "values": {"elbow": 90.0}}])
         self.assertEqual(self.facts(), 0, "a structure measures nothing")
+        # A script asks the same of the handle its model call returns, as every verb takes one: each
+        # material's density and parts, no solid transferred to it.
+        (self.folder / "ask.py").write_text(
+            "import json\nfrom cad import model\nfrom hinge import hinge\n"
+            "print(json.dumps(model.inspect(hinge(), query='structure')['summary']['materials']))\n", encoding="utf-8")
+        asked = self.run_("ask.py")
+        self.assertEqual(asked.returncode, 0, asked.stderr)
+        self.assertEqual(json.loads(asked.stdout.splitlines()[-1]), structure["materials"])
+        (self.folder / "hinge.ran").unlink(missing_ok=True)
+        self.assertEqual(self.facts(), 0)
 
         shown = self.run_("-m", "cad_server.engine", "inspect", ident)
         self.assertEqual(shown.returncode, 0, shown.stderr)

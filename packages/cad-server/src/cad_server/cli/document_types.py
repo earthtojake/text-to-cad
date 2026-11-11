@@ -5,8 +5,13 @@ implements, then its file (or, for ``model``, a model's document id) -- ``cad xb
 arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
 robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
 others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
-location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
+wrote; ``dfm``, ``interference``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a
+severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the
+type.
+
+A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
+share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
+process (``cad._internal.interference``); this command holds no kernel and needs none.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
 check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
@@ -274,6 +279,67 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
         if integration_env.carries(integration):
             return _checked_here(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
+
+    return run
+
+
+def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentParser:
+    """``cad <type> interference``'s parser, an ADAPTER's: ``--fit`` repeats and takes two values, a pair
+    no signature derives a flag for (``cad_server._internal.cli_from_function``), and ``--pose`` is read as
+    snapshot's is."""
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    entry = DOCUMENT_TYPES[document_type]
+    parser = command_parser(prog, description=entry.operation("interference").summary)
+    parser.add_argument("document", metavar="ID" if not entry.has_file else "FILE",
+                        help="the model's document id (cad run SCRIPT.py prints it)" if not entry.has_file
+                        else f"the {entry.suffix} file")
+    parser.add_argument("--pose", action="append", default=[], metavar="POSE",
+                        help="a pose to check at beside as built, as snapshot's --pose takes one: a mechanism "
+                             "state's name, a configuration sequence at a time of it (walk@0.6), or joint and "
+                             "coupling values as JSON ('{\"elbow\": 45}'). Repeatable: the check takes the poses "
+                             "it is given, and chooses none")
+    parser.add_argument("--fit", action="append", default=[], nargs=2, metavar=("A", "B"),
+                        help="two parts meant to share volume (a press-fit pin, a bearing in its bore), each a "
+                             "ref or a glob: their overlap is listed as a fit and is no overlap to fix. Repeatable")
+    parser.add_argument("--min-volume", type=float, metavar="MM3",
+                        help="a shared volume at or below this is none (default 0.001: the rounding along a face "
+                             "where two parts touch)")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="Print the result as one JSON line on stdout instead of human lines.")
+    return parser
+
+
+def _interference(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> interference``: the library's interference check (``cad.<type>.interference``), asked of
+    the engine, which measures it in a checks process; this command holds no kernel and needs none. Its
+    ``--fit`` takes two values a time, which no signature derives a flag for, so
+    its parser is an adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
+    3 none found but a pair unmeasured, 2 an option refused by name."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+        args = _typed(_interference_parser(document_type, prog), document_type, "interference",
+                      "document").parse_args(argv)
+
+        def checked() -> Any:
+            import importlib
+
+            from cad._internal.refused import ArgumentRefused
+            from cad.engine import snapshot
+
+            # A pose as the command line writes one, read as snapshot's --pose is (a name, NAME@SECONDS, or JSON).
+            try:
+                poses = [snapshot.parse_pose(pose) for pose in args.pose]
+            except snapshot.SnapshotRefused as refused:
+                raise ArgumentRefused(str(refused)) from None
+            function = getattr(importlib.import_module(f"cad.{document_type}"), "interference")
+            return function(args.document, poses=poses, fits=[tuple(fit) for fit in args.fit],
+                            min_volume=args.min_volume)
+
+        return _verdict(checked, prog=prog, as_json=bool(getattr(args, JSON_FLAG_DEST)), source=str(args.document))
 
     return run
 
@@ -840,6 +906,8 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "dfm" and getattr(_entry.operation(_name), "family", None) == "manufacturing":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
+        elif _name == "interference":
+            OPERATIONS[(_entry.id, _name)] = _interference(_entry.id)
         elif _name == "solve" and getattr(_entry.operation(_name), "integration", None) == "calculix":
             OPERATIONS[(_entry.id, _name)] = _solve(_entry.id)
         elif _name == "ranges":
@@ -872,6 +940,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return parser_for(operation, prog, document_type=document_type)
     if document_type == "urdf":
         return _urdf_parser(prog)
+    if operation == "interference":
+        return _interference_parser(document_type, prog)
     from cad_server._internal.cli_from_function import generated_parser
 
     return generated_parser((f"cad.{document_type}", operation), prog=prog)

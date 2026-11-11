@@ -516,9 +516,15 @@ class Runner:
                 "running": rows}
 
 
+# The check that is no manufacturing process's but runs as one does (``cad._internal.interference``): which parts of
+# the document share volume, measured by ``cad.build123d._interference`` in a checks process.
+INTERFERENCE = "interference"
+
+
 def _refusal(request: dict[str, Any]) -> str | None:
     """Why a check's request is none the engine measures, in one line, or None: it names a document the engine
-    holds or a file, and a check of a B-rep type for a process it has, its options resolved."""
+    holds or a file, and a check of a B-rep type for a process it has (or the interference check,
+    ``INTERFERENCE``), its options resolved."""
     from cad._internal.dfm import PROCESSES
 
     spec, check = request.get("source"), request.get("check")
@@ -529,7 +535,7 @@ def _refusal(request: dict[str, Any]) -> str | None:
     process = check.get("process")
     if process is None:
         return None if isinstance(check.get("given", {}), dict) else "a check's given options are a table"
-    if process not in PROCESSES:
+    if process not in PROCESSES and process != INTERFERENCE:
         return f"a check's process is {', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}, not {process!r}"
     return None if isinstance(check.get("resolved"), dict) else "a check's resolved options are a table"
 

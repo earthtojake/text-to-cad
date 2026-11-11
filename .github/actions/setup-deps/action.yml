@@ -47,6 +47,36 @@ runs:
         cache: npm
         cache-dependency-path: package-lock.json
 
+    # A hosted runner's apt reads Ubuntu's own mirrors, all named under ubuntu.com. When the runner
+    # cannot resolve that name (11 November 2026: three runs over two hours, every job that fetched a
+    # package), apt waits out each mirror for each file and the job ends before a test runs. So when
+    # the name does not resolve, this job's apt reads mirrors named elsewhere, those of them that do:
+    # the same archive, and what is installed is checked against Ubuntu's keys as ever. Playwright's
+    # `--with-deps` below runs the same apt.
+    - name: Find a package mirror that answers
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        mirrors=/etc/apt/apt-mirrors.txt
+        if [ ! -f "$mirrors" ] || timeout 20 getent hosts azure.archive.ubuntu.com >/dev/null; then
+          exit 0
+        fi
+        echo "azure.archive.ubuntu.com does not resolve here."
+        answering=""
+        priority=1
+        for mirror in https://mirrors.edge.kernel.org/ubuntu/ https://mirror.arizona.edu/ubuntu/ https://mirrors.mit.edu/ubuntu/; do
+          host=${mirror#https://}
+          if timeout 20 getent hosts "${host%%/*}" >/dev/null; then
+            answering+="$mirror"$'\t'"priority:$priority"$'\n'
+            priority=$((priority + 1))
+          fi
+        done
+        if [ -z "$answering" ]; then
+          echo "Nor does any other mirror: apt is left as it was."
+          exit 0
+        fi
+        printf '%s' "$answering" | sudo tee "$mirrors"
+
     # The engine's stills are drawn by OCCT in an OpenGL context, which on a machine with no
     # screen is made on an X server's: Xvfb, with Mesa's software GL, and the font the stills'
     # text is set in. Nothing is fetched when the image already has them all; when it does not,

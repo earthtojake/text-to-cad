@@ -69,14 +69,14 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
 
 
 class SnapshotTakesThePicture(unittest.TestCase):
-    PICTURE = ("display", "camera", "grid", "pose", "width", "height", "size_profile", "daemon",
+    PICTURE = ("display", "camera", "grid", "preview", "pose", "width", "height", "size_profile", "daemon",
                "annotation", "measurements")
 
     def test_snapshot_refuses_browser_options_before_opening_a_source(self) -> None:
         from cad_server.engine.cli import parser_for
         from cad.engine.snapshot import SnapshotRefused, job_pictures
 
-        for option, value in (("preview", True), ("animation", "swing"), ("fps", 30)):
+        for option, value in (("animation", "swing"), ("fps", 30)):
             with self.subTest(option=option):
                 with self.assertRaisesRegex(TypeError, "unexpected keyword argument"):
                     cad.engine.api.snapshot("missing.xbf", "picture.png", **{option: value})

@@ -5,7 +5,7 @@ ordinary Python scripts call decorated models explicitly.
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
         model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
+        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
@@ -171,11 +171,13 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                         help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
                              "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
                              "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
-                             "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
-                             "sizeProfile); the other flags override every job")
+                             "dimensions, at its output settings (padding, tightFrame, transparent, background, "
+                             "renderScale, sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
-                                          "the display JSON object (mode, grid, camera, clip, exploded, "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS "
+                                          "(the edges of one class alone: feature, tangent or seam; edges=feature "
+                                          "draws no line where faces meet smoothly or a face closes on itself), or "
+                                          "the display JSON object (mode, grid, camera, clip, exploded, edges, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
                                           "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
@@ -191,7 +193,12 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--size-profile", choices=sorted(snapshot.SIZE_PROFILES))
-    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), or joint and coupling "
+    parser.add_argument("--preview", action="store_true",
+                        help="the viewer's Preview in place of a display mode: the model lit in a studio, in its "
+                             "materials, on a floor with its shadow, in perspective (a job's: \"preview\": true)")
+    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), a configuration "
+                                       "sequence at a time of it (walk@0.6: where the viewer's playbar shows the "
+                                       "mechanism then), or joint and coupling "
                                        "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
                                        "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
                                        "built without it (a robot where the viewer opens it)")
@@ -221,7 +228,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     try:
         # The verb as a function (``api.snapshot``), which checks the flags as ``snapshot`` does.
         report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
-                              pose=args.pose, width=args.width, height=args.height,
+                              preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                               size_profile=args.size_profile, annotation=args.annotation,
                               measurements=args.measurements).report
     except snapshot.SnapshotRefused as error:
@@ -267,7 +274,8 @@ def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) 
     document_type = "model" if is_id(document) else entry.id if entry is not None else None
     if document_type is None:
         return None
-    options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "pose": args.pose,
+    options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "preview": bool(args.preview),
+               "pose": args.pose,
                "width": args.width, "height": args.height, "size_profile": args.size_profile,
                "annotation": args.annotation, "measurements": args.measurements}
 
@@ -299,7 +307,7 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
     try:
         drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
-                             pose=args.pose, width=args.width, height=args.height,
+                             preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                              size_profile=args.size_profile, annotation=args.annotation,
                              measurements=args.measurements)
     except (snapshot.SnapshotRefused, ValueError) as error:
@@ -331,7 +339,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
     started = time.perf_counter()
     try:
         drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 pose=args.pose, width=args.width, height=args.height,
+                                 preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                                  size_profile=args.size_profile, annotation=args.annotation,
                                  measurements=args.measurements)
     except snapshot.SnapshotRefused as error:
@@ -626,7 +634,7 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append("bounds      none: no geometry")
         lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
         if summary.get("inverted"):  # a solid inside out: its faces point inward, its volume below zero
-            lines.append(f"inside out  {', '.join(summary['inverted'])}: a solid whose faces point inward")
+            lines.append(f"inside out  {_parts(summary['inverted'])}: a solid whose faces point inward")
     if summary["materials"]:
         mass = summary.get("mass")
         lines.append("materials" + (f"   {_said.number(mass)} kg in all" if mass is not None else ""))

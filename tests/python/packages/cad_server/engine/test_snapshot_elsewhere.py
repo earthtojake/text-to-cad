@@ -20,7 +20,8 @@ ID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
 
 def _args(document: str) -> argparse.Namespace:
-    return argparse.Namespace(document=document, out="robot.png", display=None, camera="iso", grid=False, pose='{"elbow": 30}',
+    return argparse.Namespace(document=document, out="robot.png", display=None, camera="iso", grid=False, preview=False,
+                              pose='{"elbow": 30}',
                               width=None, height=None, size_profile=None, annotation=None, measurements=None, json=False)
 
 

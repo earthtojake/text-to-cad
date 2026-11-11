@@ -200,7 +200,10 @@ def _material(rgba: tuple, given: dict[str, Any] | None, thickness: float) -> di
     pbr = pbr.override(metalness=0.0 if pbr.values.metalness is None else pbr.values.metalness,
                        roughness=0.5 if pbr.values.roughness is None else pbr.values.roughness)
     entry = json.loads(pbr.to_gltf().to_json())["materials"][0]
-    entry["name"] = given["material"]["name"]
+    # Named by its look (``frame_black``), which is what tells two looks of one physical material apart and
+    # what a render script restyles by; the physical material's own name (``Alu_G7075_T6``) rides beside it.
+    entry["name"] = str(given["pbr"].get("name") or given["material"]["name"])
+    entry.setdefault("extras", {})["cad"] = {"material": given["material"]["name"]}
     alpha = _alpha(rgba, pbr.values)
     entry["pbrMetallicRoughness"]["baseColorFactor"] = [*rgba[:3], alpha]
     entry["alphaMode"] = "BLEND" if alpha < 1.0 else "OPAQUE"

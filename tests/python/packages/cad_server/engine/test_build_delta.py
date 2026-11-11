@@ -263,6 +263,24 @@ class RunLineTest(unittest.TestCase):
         self.assertEqual(said.describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 1 miss, 1 hit")
         report["memo"] = {"misses": 2, "hits": 0}
         self.assertEqual(said.describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 2 misses, 0 hits")
+        # Calls that ran uncached are counted beside the hits, and why their body is not retained is said under
+        # the line with its remedy: the first four reasons, then how many more.
+        report["memo"] = {"misses": 2, "hits": 9, "uncached": 6}
+        report["bodies"] = {"m.py::m": "run"}
+        report["retention"] = {"fallbacks": {"m.py::m": [f"runs OCCT's Maker{n} uncached (1 call): remedy" for n in range(6)],
+                                             "m.py::other": ["runs OCCT's Maker uncached (1 call): another model's"]}}
+        self.assertEqual(said.describe(report, 0.1, None).splitlines(), [
+            "built m.py::m in 0.10s: bodies 1 run; 2 misses, 9 hits, 6 uncached",
+            *(f"  not retained: m.py::m runs OCCT's Maker{n} uncached (1 call): remedy" for n in range(4)),
+            "  not retained: and 2 more reasons"])
+        # A cold run of a script whose worker the engine retired says why, and names the cap that did it.
+        cold = {"ok": True, "model": "m.py::m", "memo": {"misses": 2, "hits": 0}, "bodies": {"m.py::m": "run"},
+                "timings": {}, "cold": {"reason": "RSS", "ago": 185}}
+        self.assertEqual(said.describe(cold, 67.7, True).splitlines(), [
+            "built m.py::m cold in 67.70s: bodies 1 run; 2 misses, 0 hits",
+            "  cold: this script's worker went 3m ago: the engine's processes were over their memory cap "
+            "(CAD_ENGINE_WORKER_RSS_MB, read when the engine starts)"])
+        self.assertEqual(said.describe(cold, 0.1, False), "built m.py::m warm in 0.10s: bodies 1 run; 2 misses, 0 hits")
         took = {"ok": True, "model": "m.py::m", "memo": {"bodies_loaded": 3}, "timings": {}, "bodies": {}, "cache": {"from": "memory"}}
         self.assertEqual(said.describe(took, 0.1, None), "took m.py::m in 0.10s: its document in memory holds the model's key, "
                                                           "3 bodies loaded, nothing ran")

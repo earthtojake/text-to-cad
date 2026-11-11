@@ -21,8 +21,10 @@ an id or a model must be that document (an absolute ``FILE`` the same file, a re
 last segments of its path, an id that id). A script is never a ``FILE``. An occurrence is named by the labels on the
 way to it: ``hand/finger.2`` is the second component labelled ``finger`` of ``hand``, a label
 its siblings do not share needs no number (``hand/palm``), and an owner may start at any level
-(``finger.2``, ``palm``) when what it names is one occurrence. A path whose first segment names the
-root is read from the root. A segment is matched as a label first and as ``LABEL.N`` only where no
+(``finger.2``, ``palm``) when what it names is one occurrence -- or several of which one holds all
+the others (an assembly named after a part inside it: ``stem`` is the assembly, ``stem/stem`` the
+part), which is that one, as the outermost of a glob's matches is taken (``outermost``). A path
+whose first segment names the root is read from the root. A segment is matched as a label first and as ``LABEL.N`` only where no
 sibling bears it whole; a label holding ``/``, ``,`` or a quote, or one a plain segment would
 misread, is written JSON-quoted (``"M3/M4 screw"``). An element of an assembly's part resolves
 from the assembly when one part below it holds it (a document of one part: by the document's
@@ -317,6 +319,39 @@ def owners(root: Node, segments: tuple[Segment, ...]) -> list[Node]:
     return found
 
 
+def outermost(found: list[Node]) -> list[Node]:
+    """Of the occurrences one name fits, the one that holds every other, alone (an assembly and a
+    part inside it of one label); else all of them, for the caller to refuse by name."""
+    for node in found:
+        if all(other is node or any(above is node for above in other.path()) for other in found):
+            return [node]
+    return found
+
+
+# What makes a name a glob (``matching``): a name holding one of these is matched, not resolved.
+GLOB = frozenset("*?[")
+
+
+def matching(base: Node, pattern: str) -> list[Node]:
+    """The occurrences below ``base`` a glob names: each whose segment (``screw.2``), label
+    (``screw``) or path from ``base`` -- in segments (``stem/screw.2``) or in labels
+    (``stem/screw``, so ``*/screw`` is every screw one level down) -- matches ``pattern`` as a shell
+    pattern does, case and all (``fnmatch.fnmatchcase``: ``*`` crosses ``/``). Of a match and the
+    matches below it, the outermost alone, taken whole. In tree order; none is the caller's to
+    refuse."""
+    import fnmatch
+
+    def fits(node: Node) -> bool:
+        steps = node.path()
+        steps = steps[next(at for at, step in enumerate(steps) if step is base) + 1:]
+        return any(fnmatch.fnmatchcase(text, pattern) for text in (
+            node.segment, node.label, "/".join(step.segment for step in steps), "/".join(step.label for step in steps)))
+
+    below = [node for node in base.walk() if node is not base]
+    hits = {id(node) for node in below if fits(node)}
+    return [node for node in below if id(node) in hits and not any(id(above) in hits for above in node.path()[:-1])]
+
+
 def owner_text(root: Node, node: Node) -> str:
     """The canonical owner of an occurrence: its label alone where that label names it alone in
     the document (``palm``), else its occurrence path from the root (``hand/finger.2``,
@@ -467,6 +502,8 @@ def _resolve(root: Node, selector: Selector, names: _Names, document: str, one_p
         if not held:
             raise RefError(f"{document} has no part or assembly {'/'.join(map(str, selector.owner))}; "
                            f"nearest: {_nearest(root, '/'.join(map(str, selector.owner)))}")
+        if len(held) > 1 and selector.element is None:
+            held = outermost(held)  # an element is a part's: which part is still to be said
         if len(held) > 1:
             raise RefError(f"{'/'.join(map(str, selector.owner))} names {len(held)} occurrences in {document}: "
                            f"{_shown([owner_text(root, node) for node in held])}")
@@ -561,6 +598,12 @@ def check_file(file: str | None, document: Path | None) -> None:
 
 
 # --- a served document's structure (``cad <type> inspect``) ----------------------------------------
+
+
+def glob_structure(structure: dict[str, Any], pattern: str) -> list[Node]:
+    """The occurrences of a served document's structure a glob names (``matching``, below its
+    root): structure nodes, as ``resolve_structure``'s hits hold them."""
+    return matching(structure_tree(structure), pattern)
 
 
 def resolve_structure(structure: dict[str, Any], ref: str, document: Path | None = None) -> list[Hit]:

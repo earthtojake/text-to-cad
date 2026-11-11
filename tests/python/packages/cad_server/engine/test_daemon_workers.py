@@ -506,6 +506,9 @@ class DaemonWorkerTest(daemon_fixtures.DaemonCase):
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertTrue(again.stdout.startswith("took block.py::block cold"), again.stdout)
         self.assertIn("retired: the worker held", again.stdout)
+        # And says what cost it its warm worker, naming the cap that retired it.
+        self.assertRegex(again.stdout, r"\n  cold: this script's worker went \d+s ago: the engine's processes were over "
+                                       r"their memory cap \(CAD_ENGINE_WORKER_RSS_MB, read when the engine starts\)")
         status = json.loads(self.cli("status", "--json").stdout)
         self.assertEqual(self.mine(status["workers"]), [], "each worker left the pool when it was retired")
         self.assertEqual([row["reason"] for row in self.mine(status["retired"])], ["RSS", "RSS"])

@@ -26,3 +26,16 @@ be installed beside cad is refused in one line with uv's reason: change the requ
 or, where the network is needed once, run it outside a sandbox or with its permission. A script that
 imports `bpy` (Blender) gets cad's blender integration, whose environment is made on Python 3.13, the one
 bpy 5.2.3 is built for, with cad and any other integration the script uses beside it.
+
+Two things follow from that, for a project of several scripts:
+
+- **The imports are read without running anything**: the script's own and those of the local modules
+  it imports, found in its folder, its package or its project. A module reached only through a path
+  added at run time (`sys.path.insert(0, ...)` in a check under `checks/` that imports the model from
+  the folder above) is not read, so the check stops on `No module named 'build123d'`: import
+  `build123d` in the check itself, or name `"cad[build123d]"` in its header.
+- **One header for the scripts that call one model.** Each distinct set of packages is an environment,
+  and each environment has a worker of its own in the server that holds the whole model. A check whose
+  header differs from the script that built the model builds it again in full, and several such
+  workers of a large model pass the server's memory limit, which retires one. Give the checks of a
+  project the same header (the union of what they need).

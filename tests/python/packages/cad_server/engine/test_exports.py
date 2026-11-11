@@ -283,9 +283,12 @@ class ExportTest(unittest.TestCase):
         plate = next(entry for entry in gltf["meshes"] if entry["name"] == "plate")
         looks = [gltf["materials"][primitive["material"]] for primitive in plate["primitives"]]
         self.assertEqual(len(looks), 3, "the part's own look, a painted colour and a painted material")
+        # Each named by its look, the physical material it is a look of beside it (``extras.cad.material``).
         by_name = {look.get("name"): look for look in looks}
-        self.assertEqual(by_name[metals.aluminum().name]['pbrMetallicRoughness']['metallicFactor'], 1.0)
-        self.assertIn(metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).name, by_name)
+        self.assertEqual(by_name[metals.aluminum().pbr.name]['pbrMetallicRoughness']['metallicFactor'], 1.0)
+        self.assertEqual(by_name[metals.aluminum().pbr.name]["extras"]["cad"]["material"], metals.aluminum().name)
+        steel = metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN)
+        self.assertEqual(by_name[steel.pbr.name]["extras"]["cad"]["material"], steel.name)
         self.assertIn([1.0, 0.0, 0.0, 1.0], [look["pbrMetallicRoughness"]["baseColorFactor"] for look in looks])
         # The tree as nodes: the rack lifted 6 mm, its pegs placed along it in its frame.
         rack = next(node for node in gltf["nodes"] if node["name"] == "rack")

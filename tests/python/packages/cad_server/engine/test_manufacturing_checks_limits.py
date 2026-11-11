@@ -355,7 +355,8 @@ class EngineLimitsTest(unittest.TestCase):
         self.assertIn("over a check's memory limit of 1 MB", str(answered))
         self.assertIn("CAD_ENGINE_CHECK_RSS_MB", str(answered))
         self.assertFalse(hold.exists(), "stopped by the engine, not let go")
-        self.assertEqual((_counts()["asked"], _counts()["pool"]["busy"]), (0, 0), "its slot is free again")
+        # The caller is answered before the runner lets the check's entry go: the slot is awaited, not read at once.
+        _until(self, lambda: (_counts()["asked"], _counts()["pool"]["busy"]) == (0, 0), "its slot is free again")
 
     def test_a_checks_process_over_the_memory_cap_after_a_check_is_retired(self) -> None:
         """A real cap: the checks process is over it after its check, so the next check starts another. The cap is

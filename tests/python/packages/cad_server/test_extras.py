@@ -231,6 +231,20 @@ class NamingTest(unittest.TestCase):
                          r"^the environment of the model's packages needs the network once, for notapackage, which "
                          r"uv's cache does not hold: ")
         self.assertNotIn("\n", said)
+        # uv killed mid-install gave no reason: its last line of progress is not said as one.
+        import signal
+
+        said_last = "Resolved 41 packages in 2.1s\nDownloaded numpy\n"
+        stopped = base.failure(["uv", "pip", "install"], said_last, recipe, -signal.SIGTERM)
+        self.assertEqual(stopped, "uv was stopped by SIGTERM while it made the environment of the model's packages: run "
+                                  "this again (the last uv said: Downloaded numpy)")
+        if hasattr(signal, "SIGKILL"):  # a signal Windows has no name for, and no process there exits by
+            killed = base.failure(["uv", "pip", "install"], said_last, recipe, -signal.SIGKILL)
+            self.assertEqual(killed, "uv was stopped by SIGKILL while it made the environment of the model's packages, "
+                                     "as the system does to a process when memory runs out: run this again "
+                                     "(the last uv said: Downloaded numpy)")
+        self.assertEqual(base.failure(["uv", "pip", "install"], "Downloaded numpy\n", recipe, 2),
+                         "uv could not make the environment of the model's packages: Downloaded numpy")
 
     def test_making_one_removes_releases_older_than_the_one_before_but_the_bases_and_one_a_process_runs_from(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))

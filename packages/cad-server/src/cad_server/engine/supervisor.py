@@ -992,6 +992,14 @@ class Supervisor:
                 occupied += (slot.ready is not None) + (slot.readying is not None)
         return occupied
 
+    def retirement(self, name: str, label: str) -> dict[str, Any] | None:
+        """The last retirement noted of the process ``label`` of a service that notes them by ``name``
+        (``Service.noted``: a worker's by ``script``), as ``{reason, ago}`` (seconds), or None: what
+        the run that starts it again says of its cold start."""
+        with self.lock:
+            row = next((row for row in self.retired if row.get(name) == label), None)
+        return None if row is None else {"reason": row["reason"], "ago": round(max(0.0, time.time() - row["at"]))}
+
     def _note(self, process: Any, reason: str) -> None:
         """A retirement, listed in ``status`` when its service notes them."""
         noted = process.service.noted
