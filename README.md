@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/05ae4284e95251a0e34ea0260e70f7cadc6804bf/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/0560a3f38a788c415a6babc0b3747e6fbb4354ab/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Design physical products with AI.
 
@@ -43,7 +43,7 @@ lists the apps to restart.
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/docs/install.md)
+Installing by hand, app by app, and updates: [docs/install.md](https://github.com/earthtojake/text-to-cad/blob/0560a3f38a788c415a6babc0b3747e6fbb4354ab/docs/install.md)
 
 ## ✨ Features
 
@@ -56,7 +56,7 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 - [**Engineering drawings**](skills/engineering-drawing/SKILL.md): Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.
 - [**Renders**](skills/render/SKILL.md): Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.
 - [**Fabrication services**](skills/sendcutsend/SKILL.md): [Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.
-- [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.
+- [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.
 
 ## 🛠️ Contributing
 
@@ -65,14 +65,14 @@ text-to-cad is MIT-licensed and built in the open.
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor --check` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
-  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/SECURITY.md) says.
+  security problem is reported privately, as [SECURITY.md](https://github.com/earthtojake/text-to-cad/blob/0560a3f38a788c415a6babc0b3747e6fbb4354ab/SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/CONTRIBUTING.md) has the local setup and how to
+  anywhere. [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/0560a3f38a788c415a6babc0b3747e6fbb4354ab/CONTRIBUTING.md) has the local setup and how to
   test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/05ae4284e95251a0e34ea0260e70f7cadc6804bf/AGENTS.md).
+  [AGENTS.md](https://github.com/earthtojake/text-to-cad/blob/0560a3f38a788c415a6babc0b3747e6fbb4354ab/AGENTS.md).
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
