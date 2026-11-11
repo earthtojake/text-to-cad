@@ -1000,8 +1000,10 @@ The words are the library README's (**Definitions**, laws 24 to 29); this is how
 **The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
 `DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an
 `Operation` with the integration it needs -- `decorator`, `reader` and `wire`) and `INTEGRATIONS` (each
-an `Integration`: `name`, `extra`, `process`, and for an external program its `Probe`: the program,
-the minimum version, the install hint and the variable that names it outright). `by_extension` and
+an `Integration`: `name`, `extra`, `process`, the `commands` its extra installs, for an external program
+its `Probe` -- the program, the minimum version, the install hint and the variable that names it outright
+-- and, only for a file of its tool's that is no document type, its `operations` and the `files` they
+take: `mujoco`'s `check` on `.xml` and `.mjcf`). `by_extension` and
 `type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
 file route sends, the catalog's extensions, the snapshot packets' inputs, the routes each kind
 answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
@@ -1056,7 +1058,12 @@ parser's usage error, naming the flag; a value the function itself refuses by na
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
 reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
 its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
-...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
+...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. An
+integration's operations on its tool's own files are made the same way, by `cad_server.cli.integrations`
+(`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
+its file refused by name where it is a document type's (which names that type's own check), any other
+file's, or not there, and run in this process where it holds the integration, else in that integration's
+environment. A name is a type's or an integration's, never both.
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library

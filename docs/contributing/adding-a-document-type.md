@@ -12,6 +12,10 @@ however much cad does with it: an MJCF is an export's destination and the `mujoc
 check (`cad mujoco check`), and MuJoCo Studio shows it. For such a file, give its tool's integration an
 operation instead ([Adding an integration](adding-an-integration.md)).
 
+This guide records what the types so far needed. A type that does not fit it is thought through on its
+own terms, starting from [the tool](adding-an-integration.md#start-from-the-tool), and the guide and
+the laws are amended in the same change.
+
 A type usually arrives with the tool that makes or checks it. That tool is an **integration**, and
 adding one has its own guide: [Adding an integration](adding-an-integration.md). The
 [walkthrough](#walkthrough-a-type-and-its-integration-together-kicad) below adds both at once, with

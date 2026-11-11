@@ -8,13 +8,44 @@ process, or both. The definitions and laws are the library's README
 ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 24 to 29); the
 mechanism is the engine README's **Document types and integrations**.
 
-An integration usually makes or checks a document type, and adding a type has its own guide:
-[Adding a document type](adding-a-document-type.md), whose
-[walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) adds
-KiCad's boards and the `kicad` integration together.
+## Start from the tool
 
-A smaller one is `mujoco`, which makes a document a `mujoco.MjSpec`, checks a MuJoCo model's file and
-shows the person a model. Its
+This guide records what the integrations so far needed. It is a checklist for a tool like one of
+them and not a template for the next: read it, and the laws, with a grain of salt, and decide what is
+best for this tool before fitting it to either. Three questions decide most of it.
+
+1. **What does the tool already do, and how is it reached?** Its Python API, its command line, its own
+   app. All of that stays the tool's: a script imports it, `cad run <its command>` runs it, a person
+   opens its app. We add nothing that renames or repeats it (law 30).
+2. **Who looks at its files?** A file cad shows, in the viewer, the CAD app and a snapshot, is a
+   document type ([Adding a document type](adding-a-document-type.md)). A file the tool's own app
+   shows, which cad only writes or checks, is not: it is the integration's, with at most an operation
+   of its own.
+3. **What is missing without us?** Name it: a result every check shares, a guarantee the tool does not
+   give, a fact it does not report, the tie between its objects and our documents. That is the whole
+   of what we write. If nothing is missing, the skill teaches the tool as it is and there is no
+   integration to add.
+
+The integrations so far came out in different shapes, each from those answers:
+
+| Integration | What the tool already has | What we add, and why |
+| --- | --- | --- |
+| `build123d` | the modelling API a model is written in | the model API over it, the memo, element names, the producers of every type with a decorator: the engine's documents are made from its shapes |
+| `kicad` | `kicad-cli` and an IPC API; its own editors | a board's and a schematic's `drc`, `erc` and `export` as typed commands with one result shape and the project left as found; an edit of a saved file through its API. Everything else is `cad run kicad-cli ...` |
+| `trimesh` | mesh measurements as a library | a mesh's 3D printing check: the measurements judged against cited rules, in the shape every manufacturing check answers |
+| `netgen`, `calculix` | a mesher, a solver | a B-rep type's `solve`: the study read, the document meshed and solved, the results as standard files |
+| `coacd` | convex decomposition of a mesh | nothing a person calls: it backs `cad.mujoco.decompose`, run in a process of its own, its hulls kept in the cache |
+| `blender` | all of Blender as a Python module, `bpy` | one helper, `cad.blender.load`: a GLB cad wrote, in Blender's scene, with each node's object by its name and its clips to play. The framing, the lights and the render are `bpy`'s own, in the script. No document type and no command |
+| `mujoco` | a compiler, a simulator, `MjSpec`, MuJoCo Studio | a document as an `MjSpec`, a part's collision chosen by its label path, a spec saved as a folder that travels, and one operation on a file that is no document type, `cad mujoco check` (below). No reader, no viewer and no still of an MJCF: Studio shows one |
+
+An integration that makes or checks a document type is added with that type, and the type's guide has
+a [walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) that
+adds KiCad's boards and the `kicad` integration together.
+
+## The smaller shapes
+
+`mujoco` makes a document a `mujoco.MjSpec`, checks a MuJoCo model's file and shows the person a
+model. Its
 extra, `cad[mujoco]`, is `mujoco-core` (MuJoCo's compiler and Python bindings, numpy their one dependency)
 and `mujoco-studio` (MuJoCo Studio, whose web viewer serves the page from Python: websockets beside the
 core's, no GL), about 20 MB, headless, Apache-2.0. Never `mujoco` itself, a meta-package that adds glfw and
@@ -85,8 +116,13 @@ an integration.
 
 ## Checklist
 
+- [ ] **The three questions**, [above](#start-from-the-tool), answered in the pull request: what the
+      tool already does, who looks at its files, what is missing without us.
 - [ ] **The definition test**, above: name the code of ours that calls the tool. If there is none, it
-      is not an integration; if the code is ours for a file format, it is a document type's.
+      is not an integration; if the code is ours for a file format cad shows, it is a document type's.
+- [ ] **The purpose test**, for each helper and each command we add: say what is missing without it.
+      One that renames the tool's own function or command, or does again what the tool does, is not
+      added (law 30).
 - [ ] **The name**: the tool's own project name, lowercase, a Python name. Never a capability
       (`fea`, `pcb`, `cam`).
 - [ ] **The extra and its pins**, in `packages/cad/pyproject.toml` (`[project.optional-dependencies]`):
@@ -99,7 +135,15 @@ an integration.
       only its tool decides of its environment, where it decides any (`python`, `platforms`, `homes`); and
       `alongside`, the integrations its operations need in the same environment (calculix's: the kernel,
       which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
-      command makes for it holds too.
+      command makes for it holds too; `commands`, the tool's own command lines its extra installs; and,
+      only for a file of the tool's that is no document type, `operations` and the `files` they take.
+- [ ] **An operation of its own**, only for such a file: a function `cad.<name>.<operation>` that is
+      fully annotated and answers the result every check answers, named from the closed set
+      (`cad.registry.INTEGRATION_OPERATIONS`), and its command `cad <name> <operation> FILE`, generated
+      from the function (`cad_server/cli/integrations.py`, with the two-line module
+      `cad_server/cli/<name>.py`). Pin both in `tests/python/packages/cad/test_registry.py`,
+      `test_cli_commands.py` and `test_public_surface.py`. A file that has a document type has its
+      operations there, never here.
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a

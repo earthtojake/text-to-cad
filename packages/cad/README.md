@@ -133,7 +133,11 @@ the two disagree, the engine's README is right.
 
 ## The design laws
 
-These are LAWS, not conventions: a change that violates them is wrong even when it works.
+These are LAWS, not conventions: a change that violates them is wrong even when it works. They were
+written from the document types and the tools the package had when each was written, so a new one may
+not fit. That is a reason to think again from first principles about what is best for that tool, and
+to amend the law in the same change; never to force the fit, and never to break the law quietly (an
+MJCF came to have no document type that way, and law 28 gained its second form).
 Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
@@ -548,13 +552,22 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     made on that Python with the library pinned in it, and a run's settings folders are private. That is
     why the library's floor is Python 3.13 while the server's installations run on a newer one.
 
-30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
-    <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
+30. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
+    a helper in the library and a typed command alike are added because something is missing without
+    them, and each can say what. `cad <type> <operation>` (and an integration's own `cad <integration>
+    <operation>`) runs a tool for a reason the tool's own line lacks: one result shape (law 28's
     findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
-    output path), or parity with the viewer (the same check, the same export). Everything else of the
-    tool is its own command line, run through `cad run` (`cad run kicad-cli pcb render …`), which the
-    skill documents with the tool's own flags at the pinned version; no typed command is added to
-    rename one.
+    output path), parity with the viewer (the same check, the same export), or a fact the tool does not
+    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile).
+    A helper of an integration's (`cad.<integration>.<name>`) takes the tool's objects for a reason of
+    the same kind: it ties them to our documents (a part found by its label path), does what the tool
+    leaves undone (a spec saved with its files, so the folder travels), or reports what it does not.
+    Everything else of the tool is the tool's own, used as it is: its Python API in the script that
+    imports it (law 26: nothing of it is re-exported), and its command line run through `cad run` (`cad
+    run kicad-cli pcb render …`, `cad run mujoco-studio …`), which the skill documents with the tool's
+    own flags at the pinned version. No helper and no typed command is added to rename one, and none to
+    do again what the tool does: where the tool has it, cad has none (no still of a MuJoCo model, which
+    MuJoCo Studio shows).
 
 31. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
     A producer is the engine's (law 27): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,

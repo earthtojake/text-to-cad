@@ -165,6 +165,17 @@ which points both at the checkout.
   [`apps/web/README.md`](apps/web/README.md), [`apps/docs/README.md`](apps/docs/README.md)
   and [`apps/api/README.md`](apps/api/README.md) before changing generation, rendering,
   storage, layout, or public interfaces.
+- The laws and the how-to guides record what the tools so far needed; they are not a template for the
+  next one. When adding a feature, a document type, an integration or a command, take them with a
+  grain of salt and think from first principles about what is best for that tool: what it already
+  does, who looks at its files, and what is missing without us. Where a law or a guide does not fit,
+  do not force the fit and do not quietly break it: say so, and amend it in the same change (an MJCF
+  has no document type, and law 28 changed with it).
+- No superficial wrappers. Everything added around a tool, a helper in the library or a `cad` command
+  alike, is added because something is missing without it: a result shape, a safety guarantee, a fact
+  the tool does not report. Never to rename or re-expose what the tool already does: that is used as
+  the tool's own, its Python API in the script and its command line through `cad run`
+  ([`packages/cad/README.md`](packages/cad/README.md), laws 26 and 30).
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
   link — not the tree. Where the mechanisms are: the engine's README
