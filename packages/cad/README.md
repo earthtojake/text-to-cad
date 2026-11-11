@@ -133,11 +133,17 @@ the two disagree, the engine's README is right.
 
 ## The design laws
 
-These are LAWS, not conventions: a change that violates them is wrong even when it works. They were
-written from the document types and the tools the package had when each was written, so a new one may
-not fit. That is a reason to think again from first principles about what is best for that tool, and
-to amend the law in the same change; never to force the fit, and never to break the law quietly (an
-MJCF came to have no document type that way, and law 28 gained its second form).
+These laws say how the package is built today and why, and a change to what exists follows them. They
+are not a template for what comes next: each was written from the document types and the tools the
+package had at the time. So when adding a feature, a document type, an integration or a command, read
+them with a grain of salt and think from first principles about what is best for that tool: what it
+already does, who looks at its files, and what is missing without us. Where that leads away from a law,
+do not force the fit. Say which law and why in the change, and where the law itself should read
+differently, change its text in the same change (an MJCF came to have no document type that way, and
+law 28 gained its second form). What stays wrong is departing from a law without saying so. And
+whatever is added is added for a purpose: nothing wraps a tool only to rename or repeat what the tool
+already does (law 30).
+
 Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*

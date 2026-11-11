@@ -1,6 +1,6 @@
 """The Robot Studio SO-101 follower arm, from its maker's assembly STEP to a robot description.
 
-The benchmark's question is how far text-to-cad's process gets from a robot maker's raw CAD to a
+The sample's question is how far text-to-cad's process gets from a robot maker's raw CAD to a
 MuJoCo description without copying anything from a hand-made one. Every number here comes from
 the STEP's geometry, the STEP's materials, or a physical source named beside it; Menagerie's and
 the maker's URDF/MJCF were read only for the link and joint NAMES and which printed parts make

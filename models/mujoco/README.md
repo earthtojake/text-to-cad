@@ -1,12 +1,15 @@
-# CAD to MuJoCo benchmark
+# CAD to MuJoCo: sample projects
 
-Takes a robot maker's raw CAD through text-to-cad's whole process -- the assembly STEP read into a
-model, its parts grouped into links, its joints found from the geometry, materials declared, the
-mechanism exported as URDF and made a MuJoCo file by its MuJoCo function -- and compares the result with the
-description Google built by hand in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
-and with the maker's own URDF. The comparison is what refines the method: every difference is
-either a fact the CAD cannot carry (actuators, gains, contact tuning), a decision the model
-script made and should make better, or a gap in text-to-cad.
+Two sample projects. Each takes a robot maker's raw CAD through text-to-cad's whole process -- the
+assembly STEP read into a model, its parts grouped into links, its joints found from the geometry,
+materials declared, the mechanism exported as URDF and made a MuJoCo file by its MuJoCo function --
+and checks the result against the description Google built by hand in
+[MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) and against the maker's own
+URDF. They show the method on real robots, and they are samples, not a benchmark: the simulator's
+choices in each MuJoCo function (which parts collide and as what, the actuators' gains) are a
+sample's, chosen so the robot holds a pose, not measured. Every difference from the references is
+either a fact the CAD cannot carry (actuators, gains, contact tuning), a decision the model script
+made and could make better, or a gap in text-to-cad.
 
 A robot is here only if its maker publishes the raw CAD. Of the four robots
 [MuJoCo Playground](https://playground.mujoco.org/) lists, two do:
@@ -17,7 +20,7 @@ A robot is here only if its maker publishes the raw CAD. Of the four robots
 | Trossen WidowX AI (follower) | `wxai_follower.step`, Trossen's downloads page | `wxai_follower.urdf`, trossen_arm_description (BSD-3-Clause) | `trossen_wxai/wxai_follower.xml`, from the maker's URDF |
 
 i2rt YAM and Unitree G1 publish a URDF and meshes but no STEP: there is nothing upstream of their
-descriptions to convert, so they are not benchmarked.
+descriptions to convert, so there is no sample of them.
 
 Three more from beyond Playground are fetched and pinned, not yet converted:
 
@@ -42,10 +45,10 @@ yet but the three above):
 | `robotiq_2f85`, `robotiq_2f85_v4` | the assembly STEP Menagerie's v4 README names as its own source | not stated | a small, well-known gripper with a linkage: low risk |
 | `trs_so_arm100` | `SO_5DOF_ARM100_Assembly.step` in the same SO-ARM100 repository | Apache-2.0 | the SO-101's predecessor: almost free given SO-101 |
 | `low_cost_robot_arm` | `arm.step` and per-part STEPs in AlexanderKoch-Koch/low_cost_robot | MIT | printed parts and servos, as SO-101, from another maker |
-| `ufactory_lite6` | one STEP per arm on UFACTORY's downloads page (the xArm7's is benchmarked above) | not stated | a second industrial arm, likely fused bodies: the link split must be recovered |
+| `ufactory_lite6` | one STEP per arm on UFACTORY's downloads page (the xArm7's is fetched above) | not stated | a second industrial arm, likely fused bodies: the link split must be recovered |
 | `tetheria_aero_hand_open` | left and right STEP in TetherIA/aero-hand-open | CC BY-NC-SA 4.0 | a second hand; non-commercial |
 
-Not benchmarkable: Pollen Robotics' Microduck (not in Menagerie; its CAD is an Onshape document that needs an account to export, its public meshes are CC BY-NC-SA, and its MJCF in microduck_rl was made from that same document by onshape-to-robot, so there is no independent hand-made reference), Universal Robots (STEP behind a login), Franka (SolidWorks native, no STEP), the
+Not possible as a sample: Pollen Robotics' Microduck (not in Menagerie; its CAD is an Onshape document that needs an account to export, its public meshes are CC BY-NC-SA, and its MJCF in microduck_rl was made from that same document by onshape-to-robot, so there is no independent hand-made reference), Universal Robots (STEP behind a login), Franka (SolidWorks native, no STEP), the
 Onshape-sourced models (an export needs an account, and Menagerie's model was made from the same
 document), and most others (no raw CAD published).
 
@@ -146,7 +149,7 @@ URDF (0.000 deg offsets, 0.04 mm shapes). It also found two facts about the refe
 SO-101 carries a camera mount (+13.4 g) the plain vendor URDF lacks, and Menagerie's WidowX meshes
 are not Trossen's pinned STLs.
 
-## What the benchmark found in text-to-cad
+## What the samples found in text-to-cad
 
 Fixed: a vendor STEP's densities read 1000 times too light (OCCT drops the "kilo" of kg/m^3; our own
 STEPs say grams, so no test saw it). Every gap below is fixed on this branch too; they stay listed,
@@ -200,4 +203,4 @@ ranked by how much they cost a CAD-to-simulation user:
 11. **Fixed: no way to list a spec's parts.** The SO-101 has 133 parts and its MuJoCo function chooses
    by a rule (every part but the printed ones and the servo cases collides as nothing), but a part
    could only be named one at a time, and a wrong name listed the first twelve. `cad.mujoco.parts(s)`
-   now answers every part's label path. Found by this benchmark's port to MuJoCo functions.
+   now answers every part's label path. Found by porting these samples to MuJoCo functions.

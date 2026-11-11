@@ -1,4 +1,4 @@
-"""Does a benchmark robot work? The proof, with numbers, for each robot's saved MuJoCo-function file.
+"""Does a sample robot work? The proof, with numbers, for each robot's saved MuJoCo-function file.
 
     python src/check.py                    # every robot that has a MuJoCo function
     python src/check.py so101 --before /path/to/old/out/so101/so101.xml

@@ -16,7 +16,7 @@ of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the lin
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
 before loading either URDF.
 
-[`mujoco`](mujoco/README.md) is a benchmark, not a robot of ours: it fetches two makers' raw
+[`mujoco`](mujoco/README.md) holds two sample projects from makers' CAD, not robots of ours: it fetches two makers' raw
 CAD (The Robot Studio's SO-101 and Trossen's WidowX AI assembly STEPs, pinned in
 `src/sources.py`), turns each into an articulated model and exports it as MJCF and URDF,
 then compares the result with Google's hand-made MuJoCo Menagerie model and the maker's own URDF.

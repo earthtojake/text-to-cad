@@ -168,9 +168,10 @@ which points both at the checkout.
 - The laws and the how-to guides record what the tools so far needed; they are not a template for the
   next one. When adding a feature, a document type, an integration or a command, take them with a
   grain of salt and think from first principles about what is best for that tool: what it already
-  does, who looks at its files, and what is missing without us. Where a law or a guide does not fit,
-  do not force the fit and do not quietly break it: say so, and amend it in the same change (an MJCF
-  has no document type, and law 28 changed with it).
+  does, who looks at its files, and what is missing without us. Where that leads away from a law or a
+  guide, do not force the fit: say which and why in the change, and where the law itself should read
+  differently, amend it in the same change (an MJCF has no document type, and law 28 changed with
+  it). What stays wrong is departing from one without saying so.
 - No superficial wrappers. Everything added around a tool, a helper in the library or a `cad` command
   alike, is added because something is missing without it: a result shape, a safety guarantee, a fact
   the tool does not report. Never to rename or re-expose what the tool already does: that is used as

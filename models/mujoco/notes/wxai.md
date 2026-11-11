@@ -192,7 +192,7 @@ Two hulls are poor:
 - link_2's hull fills the step under its shoulder end.
 
 Menagerie decomposes both into 3 to 5 convex pieces. `cad.mujoco.decompose(s, "link_6")` in the MuJoCo
-function would do the same; the benchmark keeps one hull a part, as its first pass had.
+function would do the same; the sample keeps one hull a part, as its first pass had.
 
 The **carriages collide as nothing**: the function deletes their collision geoms (`s.delete(geom)` over
 `collisions(s, "carriage_left")`). The spec had excluded each carriage's body from link_6 (their meshes
@@ -206,7 +206,7 @@ One pair still touches at rest, where the solids do not and only the hulls do: l
 
 Menagerie excludes base_link/link_1 and link_3/link_5 by hand. An exclude between two bodies no joint
 connects is the MuJoCo function's (`s.add_exclude(bodyname1="link_2", bodyname2="link_5")`); the
-benchmark adds none, as its first pass had none.
+sample adds none, as its first pass had none.
 
 ## Actuators and the commanded pose
 

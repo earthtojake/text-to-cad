@@ -316,8 +316,8 @@ laws are `packages/cad/README.md`'s. Start from
 the tool already does and what is missing, then
 [Adding a document type](docs/contributing/adding-a-document-type.md) where the tool's file is one. Each
 is a record of what the tools so far needed and a checklist for the ones like them, not a template: a
-tool that does not fit is thought through on its own terms, and the guide and the laws are amended with
-it.
+tool that does not fit is thought through on its own terms: the change says where it departs and why,
+and the guide and the laws are amended with it where they should read differently.
 
 ## Source Boundaries
 

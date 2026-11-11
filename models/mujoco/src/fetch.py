@@ -1,4 +1,4 @@
-"""Fetch the benchmark's sources: each robot's STEP and its maker's URDF, and Menagerie's models.
+"""Fetch the samples' sources: each robot's STEP and its maker's URDF, and Menagerie's models.
 
     python src/fetch.py            # every robot
     python src/fetch.py so101      # one
@@ -28,7 +28,7 @@ from pathlib import Path
 
 from sources import MENAGERIE, MENAGERIE_REPO, ROBOTS, Download, File, GitSource
 
-USER_AGENT = "text-to-cad-benchmark-fetch"
+USER_AGENT = "text-to-cad-samples-fetch"
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:

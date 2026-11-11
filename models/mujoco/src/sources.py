@@ -1,6 +1,6 @@
-"""Where each benchmark robot's files come from, pinned, and where they land.
+"""Where each sample robot's files come from, pinned, and where they land.
 
-A robot is in the benchmark only when its maker publishes its raw CAD (a STEP of the assembly):
+A robot is a sample here only when its maker publishes its raw CAD (a STEP of the assembly):
 the point is to take that CAD through text-to-cad's whole process -- a model, its mechanism, an
 export to MJCF and URDF -- and compare the result with the description Google made by hand in
 MuJoCo Menagerie. Two of MuJoCo Playground's four robots qualify:
