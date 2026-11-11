@@ -13,7 +13,7 @@ The ledger lives in the file, immediately after the XML declaration, as XML comm
 ```xml
 <?xml version="1.0"?>
 <!--
-  robot: <name> | consumers: <RViz / Gazebo / MoveIt / driver / viewer>
+  robot: <name> | consumers: <RViz / MoveIt / MuJoCo / driver / viewer>
   units: meters, kilograms, radians | frames: +X forward, +Y left, +Z up (REP-103)
   root: <root_link> | source of dimensions: <CAD file / drawing / measured / assumption>
   meshes: <dir>, exported per-link in link frame, source units <mm|m>, scale <...>
@@ -31,7 +31,7 @@ Update the ledger in the same edit that changes the modeled facts. A stale ledge
 Record:
 
 - robot name
-- target consumers: RViz, robot_state_publisher, Gazebo/Ignition, MoveIt, real robot driver, or other
+- target consumers: RViz, robot_state_publisher, MoveIt, MuJoCo, real robot driver, or other
 - unit convention: meters, kilograms, seconds, radians unless the project explicitly states otherwise
 - frame convention: REP-103-style body convention when applicable, or a documented exception
 - mesh unit convention: meters, millimeters, inches, or other

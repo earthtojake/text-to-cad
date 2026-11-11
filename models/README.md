@@ -16,6 +16,13 @@ of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the lin
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
 before loading either URDF.
 
+[`mujoco`](mujoco/README.md) holds two sample projects from makers' CAD, not robots of ours: it fetches two makers' raw
+CAD (The Robot Studio's SO-101 and Trossen's WidowX AI assembly STEPs, pinned in
+`src/sources.py`), turns each into an articulated model and exports it as MJCF and URDF,
+then compares the result with Google's hand-made MuJoCo Menagerie model and the maker's own URDF.
+Nothing it fetches or writes is committed: `python src/fetch.py` downloads the sources into
+ignored folders.
+
 Every model of the old corpus is ported, but for tendon_hand's 56 review models (reviews
 and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git history) and
 `tom`, the arm, which lives in its own repository. One file is no model:
@@ -45,6 +52,13 @@ what a run, a build or an export writes (Git holds code, never CAD or mesh files
 XBF, no KiCad file a sample's scripts write, and no `.blend`, which a render's bpy script makes), review media
 (`.gitignore` keeps images and video out of this tree) or runtime debris. One project renders with Blender:
 `orbit_clock`'s `render.py`, a bpy script `cad run` runs, writes its stills into the project's gitignored `RENDERS/`.
+
+Two rules reach a new project from outside this folder, and the policy suite holds both; run it
+(`scripts/test/test-global.sh`, under a minute) before the first push. A script named `build.py` under `models/` is
+a KiCad sample's build and nothing else: `test_generated_kicad_files_untracked.py` asks every folder that tracks
+one which KiCad files it writes, so a script that builds anything else takes another name. And every tracked path
+is one a CI rule names (`scripts/github-workflows/select_checks.py`): a file under `models/` is, a new file at the
+repository's root is not until a rule there names it, so a project's notes go in its own folder.
 
 ## The files the corpus writes
 
@@ -154,6 +168,7 @@ marker costs a model body that is no longer one piece.
 | [`tests`](tests/README.md) | the three original manual cases plus four photographic Preview models in `preview_studio/source.py` (`joint_playground.urdf`, no model and named nowhere, kept in `unported/`) | manual-validation fixtures, never CI input: the Render floor, a 32-part rebuild during a load, materials and motion on 11 parts; plus machined metal, a painted regulator, glass/liquid contents and an open mixed-material instrument for matched rendering review |
 | [`w16`](w16/src/README.md) | 13 system files (`@memo` stages, 10-281 s cold each) + one model | a 2,575-occurrence (794-part) quad-turbo W16 whose museum cutaway is its own geometry; finishes as catalogue materials by colour (restored after native material assignment); OCCT's fuzzy booleans run through build123d's, so the memo keys them; the crank train as 180 joints paired by label (prismatic pistons and valves; revolute crank, rods, cams, sprockets, followers, pump, pulleys, rotors) and rigid fastenings, the slider-crank and valve loops solved in Python: the `crank` motion, one 720-degree cycle, and the `explode` and `running_reveal` GLB animations, the old tables' translations on top of the running engine and the crankcase hidden |
 | [`f14d`](f14d/src/README.md) | 10 system files (9 `@memo` stages, 2.4-574 s cold each; `nozzles` a plain function) + one model | a 2,392-occurrence (903-part) F-14D: one lofted skin cut by the diverter slots and the cockpit opening (574 s of a 644 s cold build); instanced fastener, wick and perforation rows as placed prototypes; `lib` made a package (a namespace package is never imported afresh: see its README); colours; the `teardown` and `explodedHold` clips as GLB animations of the systems and their act-2 groups |
+| [`galatea`](galatea/src/README.md) | `vendor.py` (fetches the drives' STEP files), `galatea.py` (one `@memo` stage, `links()`), `stances.py`, a styling model, two study scripts, a fit measure, a stills script, two review-sheet scripts, seven checks and `film.py` (a Blender render script) | a 1.76 m humanoid designed here, 689 placements of about 170 parts: 33 RobStride drives as their maker's own STEP solids (fetched at a named commit, converted to xbf, stood in an actuator's frame and placed as prototypes, the mirrored side included), machined frames, and two-layer skins (a pearl panel over a black liner, lofted through superellipse sections, a pointed end mended by a filled cap), a raised wordmark set with `Text`, the right side the mirror of the left; 72 revolute joints paired by label, the knee and ankle parallelogram linkages and the fingers' tendons as 14 couplings, 11 configurations and 10 motions, a gait among them; nine standing models that share the stage; standing poses written as where the pelvis goes over feet that stay (a six-joint leg solver in plain Python), and the motions that move it as sampled paths of such poses; `fit.py`, which measures each skin's clearance to its mechanism through its travel without the kernel; checks on the model's own solids, posed in Python: the brackets against the maker's drives, exact interference as built, at every pose and motion, through every joint's travel and at the corners of the travel of the joints that share a centre (with a planted test of the check itself), attachment, balance at every pose and along every motion on a floor (feet that stay, the centre of mass and the centre of pressure over them), linkage closure and the static load on every drive against its datasheet's rated and peak torque; a film of it: a `bpy` script that loads the GLB with `cad.blender`, plants the feet of each clip on a floor, wipes the skins away with a shader and renders thirteen shots in Cycles; and `sim/`, the robot as a MuJoCo model written from the CAD model by a script (73 bodies, the linkages as joint equalities, inertials summed from the parts, a position servo for each drive), which stands, bows, reaches and squats on a floor and is where the motions' faults were found |
 | [`macropad`](electronics/macropad/README.md) | a KiCad project (4 sheets, a 2-layer board) + 6 CAD scripts | a board made through KiCad's API from its schematic and checked (ERC, DRC, `check_macropad.py`); a printed tray, switch plate, keycaps and knob read from the board file (`kicad_pcb.read`) and from its STEP (an xbf), an exploding assembly, a fit over every board solid; the project's own footprint models as declared STEP files |
 | [`eurorack_lfo`](electronics/eurorack_lfo/README.md) | a KiCad project (3 sheets, one placed twice; a 2-layer board) + 8 CAD scripts | a 10HP panel whose every hole is a part's axis on the board, a laser-cut DXF and its facts for a cutting service, hardware on the real stack-up, the explode; the board routed with `cad.kicad.route` as its plan directs (`scripts/board_03_route.py`) |
 | [`orbit_clock`](electronics/orbit_clock/README.md) | a KiCad project (5 sheets, a 4-layer round board) + 4 CAD scripts | 144 parts placed on two rings from a radius and a count, the LED chain routed as arcs, project libraries; a baffle with a cell over every LED read from the board, a diffuser, a stand and a two-material 3MF |
@@ -184,6 +199,7 @@ resident memory during the cold build.
 | `lyra` | 18 | 92 / 111 | 8.7 s | 1.3 s |
 | `juno` | 29 | 246 / 363 (the robot) | 32 s | 4.9 s |
 | `tendon_hand` | 56 in 5 scripts | | 20-257 s a script | 1.0-2.5 s |
+| `galatea` | the robot and its 9 standing poses | about 170 / 689 | 4 min the robot (the drives' xbf files there already); the nine poses 6 min from nothing, the first of them building the robot again and the rest 12 s each (2026-11-10, 4 cores, nothing else running) | 0.1 s |
 | `moonwatch` case, dial, bracelet, finishing sampler | 4 | 8-54 | 5.7-49 s | 0.14-0.36 s |
 | `moonwatch` movement | 1 | | 178 s | 0.45 s |
 | `moonwatch` (the full watch) | 1 | 258 / 301 | 255 s | 4.3 s |

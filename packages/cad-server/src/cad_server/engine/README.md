@@ -121,7 +121,7 @@ def hinge():
     return mechanism_state(bd.Compound(children=[base, arm], label="hinge"), "raised", elbow=90)
 ```
 
-A posed or partial file is a function, never an option (law 22): `export` writes the document
+A posed or partial file is a function: `export` writes the document
 as its code built it. `posed(assembly, state)` (`cad.build123d`, beside `mechanism_state`) is a
 copy of the assembly, sharing its geometry, with every part where a mechanism state, or
 `{joint label or coupling name: value}`, puts it -- each link moved by its placement at those
@@ -237,8 +237,9 @@ Vite, Jupyter and Next.js take theirs; when another program holds it, the next f
 (`daemon.PORTS_TRIED` above it, then any), which the engine remembers in its record and takes at
 every later start, whatever release it runs, so its links stay what they were. The start that rolls says so once, on the
 stderr of the client whose request bound the port (a build's, when its page bound it; or `cad
-server`'s) and in `cad status`:
-`3245 is held by <name> (pid N); the engine serves on 3246 and keeps it`. A remembered port
+server`'s) and in `cad status`, as a fact with nothing to act on (the engine works on the port it
+took, and whatever holds 3245 -- another installation's server, a test's -- is left running):
+`the engine serves on port 3246 and keeps it for its links: 3245 is in use by <name> (pid N)`. A remembered port
 that is free is used, and one held is rolled from the same way. When 3245 is free again at a start,
 the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
 made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the
@@ -654,13 +655,16 @@ failure: the next asker makes it again.
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
-| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
+| `description.py`, `describe.py`, `declarations.py`, `hulls.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), what a model declares for it (`body`, `frame`, `free`, `limits`, `link`, `mass`, `point_mass`), and a part's convex hulls for `cad.mujoco.decompose`, kept in the engine's cache (`hulls`) |
+| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF and a URDF with their meshes beside them from the robot description (`mjcf`, `urdf`), and the body pairs that touch at rest, which the MJCF excludes (`contact`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or a GLB's, an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
-| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
-| `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
+| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (the stills' view of the engine's one read of each, `urdf_source` and `sdf_source`: numpy frames, the shapes the stills draw, forward kinematics held to a golden), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
+| `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way; a `package://` one in the ROS package the description is in (`package_file`) |
+| `robot_model.py` | the one articulation every reader of a robot description makes (`Articulation`: each link's rest frame, its `Visual`s, the `LinkJoint`s with their mimics and four-bars, the named poses, an SRDF's home, the facts as written) and the `Dialect` a consumer reads by where the viewer's payload and the stills have read a detail differently (its refusals' words by code, `degrees`, a nested model's canonical link); matrices as lists, the standard library alone |
+| `urdf_source.py`, `sdf_source.py` | a URDF (and an SRDF's group states over it) and an SDF (its frame graph by the SDFormat rules, nested models by scoped name), each read once into `robot_model`'s articulation: the stills (`formats/robot.py`) and the viewer's payload (the server's `robot_payload.py`) are two views of that read; the standard library alone |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`, `CHECKS`): **Services** |
@@ -671,7 +675,8 @@ failure: the next asker makes it again.
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model**; what measures a manufacturing check (`measuring`, from `_measuring.py`, of the standard library alone, which `cad.engine` takes as it is imported) |
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
-| `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
+| `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), what a robot file holds (`robot`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
+| `weights.py` | what a document weighs as its robot description weighs it, for `inspect`: the description's **Mass** rule over the engine's volumes, with no kernel -- each part's mass, its point masses, which is declared and which computed (`Weights.said`), and the description's refusal in its words |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
@@ -692,18 +697,25 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              integration declares (kicad-cli) with that integration,
                                              headless; a script that imports bpy with the blender
                                              integration, on Python 3.13, the one bpy is built for
+cad run mujoco-studio --model scene.xml      MuJoCo Studio's web viewer on the model, reloaded as it
+                                             changes: the person opens the URL it prints
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
-cad model export ID DST [DST ...] [--tolerance MM] [--angle DEG] [--json]
+cad model export ID DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
                                              a model, by its document id: the document the engine holds
-cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--json]
+cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
                                              SRC an .xbf or a .step; --tolerance and --angle (a model's, an
                                              xbf's, a STEP's) mesh a .glb, an .stl or a .3mf to MM and
                                              DEG (Mesh)
+                                             DST .step, .glb, .stl, .3mf, .dxf, .xbf, or .xml: an MJCF of the
+                                             document (the robot description), its meshes in assets/ beside it,
+                                             a scene.xml beside it where none is; .urdf: the same as ROS reads
+                                             it, meshes/ beside it; --zero takes either at a mechanism state;
+                                             what each holds said on stderr (--json: its row's robot)
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
-                [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
+                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
 cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
@@ -719,6 +731,11 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
+cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
+                                             integration's operation), compiled by MuJoCo: what it
+                                             refuses or warns of, the model-health checks, what collides
+                                             as what and the contact excludes; in cad[mujoco]'s
+                                             environment (made first) where this one holds no mujoco
 cad model|xbf|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
 cad model|xbf|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
@@ -739,6 +756,12 @@ cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius
                                              trimesh integration's (at x, y, z); the general
                                              rules' verdicts (no shop's limits) and
                                              every measurement
+cad model|xbf|step interference SRC [--pose NAME|NAME@SECONDS|JSON]...
+                [--fit A B]... [--min-volume MM3] [--json]
+                                             which parts share volume: every pair whose boxes meet
+                                             answered, by the kernel wherever their meshes do not show
+                                             air between them, as built and at each pose given; a named fit
+                                             listed apart; each pair not measured said, and never passed
 cad model|xbf|step solve SRC [--occurrence PART] [--json]
                                              a stress study's setup, the kernel's: the parts, the pairs
                                              that touch and a part's faces by ref; writes nothing
@@ -770,7 +793,7 @@ The rule: `cad <document_type> <operation> <file>`, the type's id as the registr
 has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
 type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
 before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
-file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
+file of no type (`robot.dae is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
 there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
 names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
 schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
@@ -978,13 +1001,15 @@ in. Its structure says how long the parse took and which process made it
 
 ## Document types and integrations
 
-The words are the library README's (**Definitions**, laws 24 to 29); this is how they work.
+The words are the library README's (**Definitions**, laws 23 to 28); this is how they work.
 
 **The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
 `DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an
 `Operation` with the integration it needs -- `decorator`, `reader` and `wire`) and `INTEGRATIONS` (each
-an `Integration`: `name`, `extra`, `process`, and for an external program its `Probe`: the program,
-the minimum version, the install hint and the variable that names it outright). `by_extension` and
+an `Integration`: `name`, `extra`, `process`, the `commands` its extra installs, for an external program
+its `Probe` -- the program, the minimum version, the install hint and the variable that names it outright
+-- and, only for a file of its tool's that is no document type, its `operations` and the `files` they
+take: `mujoco`'s `check` on `.xml` and `.mjcf`). `by_extension` and
 `type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
 file route sends, the catalog's extensions, the snapshot packets' inputs, the routes each kind
 answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
@@ -1039,7 +1064,12 @@ parser's usage error, naming the flag; a value the function itself refuses by na
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
 reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
 its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
-...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
+...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. An
+integration's operations on its tool's own files are made the same way, by `cad_server.cli.integrations`
+(`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
+its file refused by name where it is a document type's (which names that type's own check), any other
+file's, or not there, and run in this process where it holds the integration, else in that integration's
+environment. A name is a type's or an integration's, never both.
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library
@@ -1084,6 +1114,39 @@ the base's environment (`manufacturing.through_engine`, `integration_env`). So d
 engine can be reached. Either way `api.check` says so in one line on stderr, in the process that can then
 measure it: nothing keeps such a check, so it is measured again each time it is asked. What the engine measured
 `api.check` returns as `measured_in: "engine"` (`api.IN_ENGINE`; `IN_CALLER` is the caller's to say of its own).
+
+**The interference check** (`cad <type> interference`, `cad.<type>.interference`: a model's, an xbf's, a STEP's)
+is asked and answered the same way and is no manufacturing process's: the caller resolves its options
+(`cad._internal.interference.options`: the poses, the mechanism states, the configuration sequences and their
+samples, the named fits, its limits) and asks `api.check` with `process: "interference"`, which the runner takes
+beside a process's (`checks_runner.INTERFERENCE`) and the checks process hands to its own measurer
+(`registry.interference_check`, `cad.build123d._interference`, whose docstring is the mechanism). So it has a
+check's whole life -- a slot of the pool, the limits, the kept result by the document's version and the options,
+`superseded` when the model is built again. What it measures: each pose is every part's placement (as built,
+or the mechanism's forward kinematics at a pose or at a sample of a sequence); the pairs whose boxes meet there
+-- each part's tight box, turned with the part -- are answered once
+for each way two parts stand to one another, so the copies of a part and the parts no pose moves cost one
+answer. An answer is read from what was kept, else ruled out by the two parts' meshes, else measured. **Kept**:
+each answer is written to the cache (`<cache>/interference`) under the two parts' geometry keys and the
+placement of one in the other's frame, as it is made, with each geometry's tight box; so a model built again is
+measured only where a part that changed is one of the two, a check stopped by its time goes on from what it had
+measured, and a check that left a pair unmeasured is not kept whole (`partial`), so it is asked again. **Ruled
+out**: the kernel takes seconds over a pair and minutes over a maker's drive beside a lofted cover, and most pairs
+whose boxes meet have air between them, so the two parts are meshed (0.05 mm at most) and asked of the kernel's
+own proximity test (`BRepExtrema_ShapeProximity`: a tree of each mesh's triangles); with no triangle of one
+within the two meshes' deflections of the other's, and no shell of either inside a solid of the other, they share
+nothing. **Measured**: every other pair, by `overlap_volume` on the parts' own solids, the pairs of the fewest
+faces first. The pairs are measured in a few processes the checks process starts for the check (one a
+core, four at most, each a kernel of its own, outside the memory the engine's rule counts, each ended by a small guard process
+the moment the checks process is gone), because a
+Boolean cannot be stopped from inside: a pair past its time (five minutes) has its process killed and is
+answered **unmeasured** (`over_time`), as is one whose process exited (`process_lost`), one the kernel refused
+(`error`) and every pair not reached
+within the check's own time (twenty minutes, kept under `CAD_ENGINE_CHECK_SECONDS`, so a long check answers with
+what it measured and goes on from there when asked again); neither limit is an option of the check. The result is a
+`CheckResult`: `failed` with an `overlapping_parts` finding a pair, as a stress study names the same fact; `not_checked` (`unmeasured`) where none was found
+but a pair went unmeasured; `ok` only with none of either. A caller of another release or code than the checks
+processes' is not measured for (`Unanswered`): there is no measuring in the caller.
 
 The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them (held to one to the machine's
 cores, which `cad status` says), else half the machine's cores, one at least and four at most, each a kernel
@@ -1231,6 +1294,38 @@ board's `--to glb` holds its copper, mask and silkscreen too, each KiCad's own m
 and its parts alone. A
 schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
 run the same way.
+
+**A MuJoCo model's check.** An MJCF is MuJoCo's own file and no document type: the engine writes one
+(`export/mjcf.py`) and reads none, the viewer lists none, and no still is drawn of one -- MuJoCo Studio shows
+it (`cad run mujoco-studio --model FILE`). What cad does with one is the `mujoco` integration's operation,
+`cad mujoco check FILE` (`cad.mujoco.check`, `cli/integrations.py`: the registry gives an integration
+operations only on its tool's own files, with the suffixes they take). It is MuJoCo's compiler on the file
+(`cad.mujoco._compile`: `MjModel.from_xml_path`, its warnings caught through `mju_user_warning`), what it
+refuses an error and what it warns a warning, in its words; the model-health checks on the compiled model
+(`_health`); and two facts as infos, each row of them in the result's `measurements` (`_report`): what the
+model collides as (the geoms with a `contype` or `conaffinity` not 0, by kind and by body, and the moving
+bodies that collide as nothing) and each contact exclude with how far apart its two bodies' collision geoms
+stand at `qpos0` (`mj_geomDistance`). It runs in the command's own process where that holds mujoco, else
+in the environment of `cad[mujoco]` at the installation's release, made once by the engine (`mujoco-core`
+and `mujoco-studio`, about 20 MB: the compiler and the bindings, and Studio's web viewer, no GL). A
+MuJoCo function's `save` says the same of the file it wrote.
+
+**A part's convex hulls.** `cad.mujoco.decompose(spec, part, max_hulls=16, threshold=None)` replaces a part's
+collision in a MuJoCo function's spec with the convex hulls CoACD cuts its mesh into, the `coacd` integration's
+(`cad.coacd._decomposer`), while its visual stays the part whole. It hands the mesh, with its options, to `hulls.py`,
+which reads each mesh's hulls from the engine's cache (`places.cache_dir()/hulls/<digest>.npz`, the digest of the
+recipe -- CoACD's release line, the weld, seed 0 --, the options and the mesh's bytes; never the model's folder),
+and decomposes the misses in one child interpreter of the calling environment, or of the coacd integration's
+environment (`python -m cad.coacd._decomposer`: CoACD's native library carries a TBB of its own beside OCCT's,
+logs from native code to file descriptor 1 and can die on a mesh it cannot repair, so the process that holds the
+kernel never loads it), keeping what it made. One decomposition is one mesh with one set of options. Each hull is a
+mesh asset `<mesh>_hull<i>` (a file in the engine's cache) and a collision geom `<part>_hull<i>`. A decomposition
+the cache does not hold needs coacd: where the calling environment does not hold it (a script `cad run` runs, whose
+imports name `cad[mujoco]`, or a Python of its own), the device's engine makes `cad[coacd]`'s environment on first
+need over its door (`{"op": "integration", "integration": "coacd"}`, `integration_env.made`) and the child runs
+there, so no script names it in its header. It is refused by name, naming the part and the extra, only where CoACD
+has no wheel, no engine answers, or the making fails; a hit needs no coacd at all. `cad[coacd]` is one wheel, about
+3 MB, for macOS arm64, Linux x86-64 and aarch64 and Windows x86-64.
 
 **A GLB in Blender's scene.** `cad.blender.load` is the `blender` integration's one helper, for a script that
 renders with bpy (Blender as a Python module, its extra `cad[blender]`), run by `cad run` in the environment
@@ -1582,7 +1677,7 @@ environment it runs in (`prefix`): the current installation's, which `cad doctor
 
 A document outlives the worker that built it, the engine's memory and the engine itself, and lives
 until a person deletes it (**Delete**; [models.py](models.py), the library's `cad.engine.serve`). What the
-engine knows of a model comes from a run alone (law 23): a run of its script pushes the model's
+engine knows of a model comes from a run alone (law 22): a run of its script pushes the model's
 code, its key and its document, and outside a run the engine reads and watches no script and runs
 nothing -- a file document's bytes, which are the disk, and the registry's records, which runs
 wrote, are no model's code. A document's state (`models.STATES`, what `cad status` lists):
@@ -2056,14 +2151,26 @@ engine, beside the document, and the document's scene brings them as its own lig
 rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
 page put up in place of the theme's. Preview is drawn as any file's is.
 
-`cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
-browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
+`cad <type> snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
+`snapshot(preview=True)`) draws the viewer's Preview in place of a display mode, by the same raster: the
+model in its materials under the viewer's rig (`photographicStudioRig.js`: its key from the same direction
+at the same strength, shadowing the model, and the look's `studio.hdr` -- the viewer's room and softboxes --
+at full strength as the image-based light), in perspective unless the display says otherwise, in the
+viewer's studio (its backdrop sweep, its floor at the model's lowest point, the floor's shadow baked as the
+viewer bakes it), and tone-mapped as the viewer tone-maps (three's Neutral: OCCT's raster has no tone
+mapping, so the model is drawn alone on black and on white, its cover and colour read from the two, and
+what the curve changes laid over the model's pixels -- `occt.Scene._tone`; the studio, drawn in the
+viewer's finished colours, is untouched, and a camera under the floor, which sees the model through it,
+takes the share of that change the floor lets through). It is not the viewer's picture pixel for pixel, and no browser
+draws it: a frame holds no light past 1, so a highlight comes out the tone a full white does; there is no
+ambient occlusion and no reflection in the floor; glass is drawn at its preview alpha; and OCCT's baked
+reflections read lighter on a polished metal. The first Preview of a document bakes its light (seconds).
 
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
 light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
-which a snapshot refuses), a drawing's white paper, a board's and a schematic's light colours --
+drawn only when asked for), a drawing's white paper, a board's and a schematic's light colours --
 whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
 and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
@@ -2187,7 +2294,12 @@ process (`Service.draws`) is started with it, and a model's worker is told it wi
 (`worker.told_display`) -- the daemon's own `DISPLAY` and `XAUTHORITY`, else an Xvfb's the daemon starts
 at the first picture where `Xvfb` is on PATH (a cookie of its own, which only this user can read) and
 stops with it;
-where none can be made the snapshot fails, naming what to install. Nothing is written but OUT.
+where none can be made the engine fails the picture (`snapshot.NO_GL`). The caller then draws it itself where it
+can (`snapshot.drawable_here`: the kernel in its process and a context it makes, on its own `DISPLAY`), saying so
+on stderr -- a held document's picture from an xbf the engine exports to a temporary folder --; a `cad` command
+that carries no kernel but has a display (`xvfb-run cad urdf snapshot ...`) runs the same snapshot in the
+installation's base from its own process, which draws it so (`cli._drawn_elsewhere`); and with neither the
+snapshot fails, naming what to install. Nothing is written but OUT.
 
 `SRC` may also be a file the viewer opens that is no document, each read by its reader
 (`formats/`) and drawn by OCCT in the same look, through the daemon by a render process of its own
@@ -2208,12 +2320,21 @@ per file (read again when a file it read changes) or with `daemon=False` in this
 - **A robot** (`.urdf`, `.sdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
   `package://NAME/...` one in the ROS package the description is in: the nearest folder above it
   named NAME or holding a `package.xml` that names it, as the viewer finds it too; a
-  box, cylinder, sphere or capsule made and meshed by the kernel), each link's in one colour of
-  the Parts palette, placed by the viewer's forward kinematics (`lib/urdf/kinematics.js` and
-  `fourBarCoupling.js`, ported and held to a golden its own code made: mimic joints and four-bar
-  linkages followed) where the viewer opens the robot -- every control at zero, an SRDF's `home`
+  box, cylinder, sphere or capsule made and meshed by the kernel), each in its colour. Solid and
+  Parts draw its faces alone, as the viewer draws a robot: a link mesh's edges are its triangles'
+  folds, which along a thin curved part (a cable's wires, tessellated at the engine's angle) are
+  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it) and an SDF are each read
+  once, in the engine (`urdf_source.py`, `sdf_source.py`, into the one
+  articulation of `robot_model.py`: every link's frame at rest, its visuals, its joints with their
+  mimics and four-bars, its named poses), and the viewer's payload (the server's
+  `robot_payload.py`) and the stills (`formats/robot.py`) are two views of that read, each
+  translating shapes and units and deciding what it can draw; where the two have always read a
+  detail differently, each consumer's `Dialect` keeps its own (its words for a refusal, among
+  them). The stills place the links by forward kinematics held to a golden its own code made
+  (mimic joints and four-bar linkages followed, the linkage solved as `fourBarCoupling.js` solves
+  it) where the viewer opens the robot -- every control at zero, an SRDF's `home`
   group state over that. `--pose` names an SRDF group state (`group/name`, or a name one group
-  has) or gives joint values (degrees, metres) over the opening pose; an unknown joint, a joint
+  has), or gives joint values (degrees, metres) over the opening pose; an unknown joint, a joint
   that is no control and a value past its limits are refused by name.
 - **A drawing** (`.dxf`) is drawn as the viewer's DXF pane draws it: from above, fitted with its
   16 px margin, lines, arcs, polylines, splines, ellipses, solids, solid hatches, blocks and
@@ -2240,7 +2361,7 @@ decorator and no build flag draws one.
 
 ### Viewer exports
 
-The browser's Export action writes the displayed document as its code built it (law 22),
+The browser's Export action writes the displayed document as its code built it,
 through `export/viewer.py` and the same worker writer as `cad <type> export`. Its source is the
 displayed document and revision, nothing else (`viewer.exports.specification`: `{doc,
 revision}`); no part, no pose, and nothing of the view -- selection, visibility, Clip, Explode,
@@ -2279,7 +2400,7 @@ result without killing a worker shared with another caller.
 The xbf is the model's result; STEP, GLB, STL, 3MF and DXF are exports of a document, and an
 xbf can be one too. One writer, `export.translate(document, kind, path)`,
 writes every one, whether a decorator declares the file or `cad <type> export` asks for it: the
-same document writes the same bytes. The file holds what the code built (law 22). Every file is written beside its
+same document writes the same bytes. The file holds what the code built. Every file is written beside its
 target and moved over it, and only when its bytes change (`atomic_replace.put`): a target that
 holds them already is left as it is (`cad <type> export` says `unchanged`). In a folder that takes no
 new file (read-only), the bytes are made aside and compared, so an unchanged file passes, and a
@@ -2388,7 +2509,7 @@ changed or new one fails in one line naming the folder and its mode.
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
   error refuses the file, saying which. `export.dxf.validate_dxf_file` runs them on any DXF.
-- **No option selects a part or a state** (law 22): a file of one part is that part's own
+- **No option selects a part or a state**: a file of one part is that part's own
   model (a function returning it), and a posed file a model returning the assembly posed
   (`posed(arm(), "folded")`, `cad.build123d`). Snapshot's `--pose` is the picture's: ad
   hoc, never cached, never declared.
@@ -2423,7 +2544,7 @@ forward kinematics at eight points inside every step.
 **GLB keys.** A bake keys a track where its curve needs it: a motion's every placement on the keys
 its hardest one needs, an animation's eased channel CUBICSPLINE, three values a key. The GLB
 writes each track that is not STEP as LINEAR keys, the fewest within `KEY_MM` (0.1 mm) and
-`KEY_DEGREES` (0.1°) of the bake (`export/keys.py`), constants rather than options (law 22): a
+`KEY_DEGREES` (0.1°) of the bake (`export/keys.py`), constants rather than options: a
 tenth of a millimetre is under a pixel of a 1 m model filling a 4K screen. The bake's curve is
 sampled densely (a CUBICSPLINE step as often as keeps its Hermite within 5% of the tolerance of
 the chord between two samples, so a line that holds the samples holds the curve); from each kept
@@ -2530,7 +2651,17 @@ or that joins two parts rigid joints make one body has no value the standard can
 joint matching two rigid joints alike, a linear joint connected to a revolute one (a pin in a
 slot, which no AP242 lower pair is) and a mechanism state's value a pair cannot take (another
 count of numbers than the joint's, a coupling's value outside the coupling's range) are left
-out and warned; pairs that close a loop are kept and not posed. The warnings are the build's
+out and warned; pairs that close a loop are kept and not posed (a robot description closes them:
+below). A child `connect_to` turned about its joint's own axis at its zero though it was built where
+it stands fails the build too: where a `RigidJoint` stood at its joint's origin with its Z on the
+joint's axis before the connection (a joint connected again: before its first), the child at the
+pair's zero must stand where it was built, turned by no more than 1e-9 radian times the model's
+size in millimetres (at least 1), and the refusal names the joint, the turn, how far the parts moved
+and the frame to build the `RigidJoint` at (a revolute's `joint.location`, a slide's position in its
+part's orientation). The engine records each `connect_to` as a model's body runs it
+(`mechanism.watch`, installed with the kernel's patches); a `RigidJoint` elsewhere, or one whose Z
+the connection turns onto the axis (a wheel built at the origin, put on its axle), is a placement,
+which `connect_to` makes as build123d's joints do. The warnings are the build's
 report (`kinematics.warnings`), never the document's. The harvest's errors are a mechanism state,
 a configuration sequence or a coupling naming a joint its assembly does not hold, a mechanism
 state putting a joint outside the joint's range, said in one line (`mechanism state
@@ -2544,7 +2675,7 @@ is written as:
 | Function | Its joints | AP242 |
 | --- | --- | --- |
 | `gear_pair(assembly, name, **joints)` | revolute joints, a ratio each (degrees per unit of its value) | `KinematicPairWithMotionCoupling`, `Kind` `gear_pair`, from the first-named joint to each other one |
-| `rack_and_pinion_pair(assembly, name, **joints)` | the first-named a revolute joint (the pinion) or a prismatic one (the rack), every other of the other kind, a ratio each | `Kind` `rack_and_pinion_pair`, from the first-named joint to each other one |
+| `rack_and_pinion_pair(assembly, name, **joints)` | the first-named a revolute joint (the pinion, which may hold no part) or a prismatic one (the rack), every other of the other kind, a ratio each | `Kind` `rack_and_pinion_pair`, from the first-named joint to each other one |
 | `screw_pair(assembly, name, joint=pitch)` | one cylindrical joint and its pitch, the millimetres it travels per 360 degrees of turn; the coupling's value is its turn | Part 105's `SCREW_PAIR` (`pitch`) |
 
 Its joints move together, each by its ratio, and only through it, each named by its label. At
@@ -2567,6 +2698,14 @@ joint, any coupling's ball joint (no coupler relates a ball's three angles) -- f
 by name, as does a coupling of one value alone and one whose joints' limits leave it no range
 around as built. A function coupling, a cam or a loop is no part of the mechanism: a
 configuration sequence says it.
+
+**A pinion that holds no part.** A rack and pinion's first-named joint may be a `RevoluteJoint` on
+the part that carries it, connected to nothing: a reference axis where the CAD draws no pinion, so
+two slides (a parallel gripper's fingers) couple to each other through it. The harvest makes it a
+revolute pair from its carrier's link to a `KINEMATIC_LINK` of no part (AP242's needs no shape),
+named by its label, at the value its joint holds (0 unless posed): the coupler is AP242's, the
+coupling's name poses wherever a joint's does, and the pinion's range bounds the coupling as any
+joint's does. A robot description has no link for it (below).
 
 ```python
 import build123d as bd
@@ -2807,6 +2946,12 @@ copper, 6061-T6, 304 stainless, mild steel, or the `substrate=` metal a finish i
 clear epoxy, PBT-GF30), and a scalar `PbrProperties` look, no texture map. bd_materials' own textured
 finishes (`bead_blast`, `brushed`, `zinc_plate`, `tin_plate`) draw untextured as a flat roughness 1.
 
+A GLB names each material by its look (`pbr.name`: `frame_black`, `anodized_black`), not by the physical
+material the look is of: two looks of one aluminium are two materials of two names, and what reads the file
+(Blender, `cad.blender`) finds a look by the name the model gave it. The physical material's name rides
+beside it, `extras.cad.material` (`Alu_G7075_T6`), which Blender reads as the material's custom property
+(`export/glb.py`'s `_material`).
+
 ```python
 from bd_materials import metals
 from cad.build123d import paint
@@ -2817,6 +2962,68 @@ housing.material.pbr = housing.material.pbr.override(
 housing.color = "#606b78"  # assign after material: build123d's setter sets colour
 paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
 ```
+
+**What a model declares for a robot description.** Beside its material, a part may say what a robot
+description needs that geometry does not decide, each a fact of the machine (`cad.build123d`'s `body`, `frame`,
+`free`, `limits`, `link`, `mass`, `point_mass`): `frame(part, "tool", bd.Pos(160, 0, 25))` (in the part's own frame,
+before its placement); `body(part, name=None)`, a body of its own fixed to the link it would merge into;
+`limits(assembly, "elbow", effort=27, velocity=6.28)` (N*m or N, rad/s or m/s), kept on the part that holds each
+revolute or linear joint of that label; `mass(shape, grams)`, what a part or an assembly weighs in all, its solids
+keeping their densities' ratios (one density where none has one) and scaled alike to make it up, an inner
+declaration fixing its own subtree and an outer one scaling only the solids no inner one holds (`describe.py`'s
+**Mass**, which refuses a total its point masses and inner masses reach, or one its solids have no volume to
+carry); `point_mass(part, grams, at, name=, inertia=)`, a lump at a point in the part's own frame that every `mass`
+above it counts; `free(shape)`, a base not bolted to the world (each link hung from the world that holds a part at
+or below it floats); and `link(shape, name)`, the name of the link its parts make. ISO 10303-105 bounds no drive and
+has no ground that floats, so `limits` and `free` are facts of the machine that are not kinematics, kept here and
+not in the mechanism (law 13). How a simulator collides a part, which pairs never collide, contact friction and a
+joint's dynamics are a simulation's choices, made in a MuJoCo function (`cad.mujoco`), never declared on the
+model. All travel with the prototype, in the structure (`frames`, and `body`, `drives`, `mass` -- each declaration
+at or above the part, as levels above it and grams --, `pointMasses`, `free` -- the levels above the part declared
+free -- and `link` -- each name at or above the part, as levels above it and the name -- where declared) and the xbf
+(a JSON string under `DECLARATIONS_GUID` on the part's label, written only where a part declares something), and
+two parts that differ only in them are two prototypes. The robot description reads them (`describe.py`: a body a
+link on a fixed joint, a drive a joint's `effort` and `velocity`, the masses and point masses each link's inertial,
+a free node a `floating` joint from the ground, a link name the link's), and gives each part its own mesh as its
+collision. An MJCF export writes a collision geom of each part's mesh (MuJoCo collides it as its convex hull),
+sites, child bodies, `<contact><exclude>` for every pair that touches at rest across a moving joint
+(`export/contact.py`), `actuatorfrcrange`, and a free base's `<freejoint>` (its seven values in every key); a URDF a
+fixed joint and a link, `<limit>`'s effort and velocity, a `<collision>` of each part's mesh, its root the free
+base, and an empty `base_link` before a root that has a mass (KDL takes no inertia on the root) or whose frame is
+not the world's (its first part's own frame, turned or moved), at the root's placement, so every link stands where
+the MJCF stands it. Each writer keeps links and joints in a namespace each, as MJCF and URDF do, and says a rename
+in its kind (`export.note`, the export's log).
+
+**The zero, the scene and what an export says** (`describe.py`'s **The zero**, `export/mjcf.py`'s **The
+scene**, `Description.summary`). An export to an MJCF or a URDF may name a mechanism state (`--zero`,
+`zero=`; `export.zero_of` refuses one for any other kind, the daemon forwards it, a worker's row says it,
+and the client refuses a server that wrote without it): the description is taken there, each joint's
+origin moved by its value at the state, its limits, as-built value and coupling offset with it, and the
+poses around it. A name no state has is refused, the states named. An MJCF export writes Menagerie's
+`scene.xml` beside the robot where none is (an `include` of it, a `statistic`, a floor at or below its
+lowest point, a light, a skybox, MuJoCo's built-in textures alone) and never writes over one, saying
+which in the export's log. Each robot writer says what its file holds (`export.described`): `translate`
+hands the description's summary, with the notes the file was written with, to the worker, whose row
+carries it as `robot`; `said.robot` puts it in a line or two on stderr after the file's line, and
+`--json` gives the row's `robot`. The description's warnings are notes of the file, so they are the
+export's log lines.
+
+**Couplings and loops in a robot description** (`describe.py`, `description.py`'s **Loops**). A
+coupling's joints follow its first-named one; a virtual pinion is no link or joint, so its racks
+follow the first of them by the ratio of their ratios: MJCF writes the follower's `<equality><joint
+polycoef="0 r 0 0 0">`, URDF its `<mimic multiplier="r">`, and the file has the one control the
+hardware has. A mechanism whose pairs close a loop is described as a tree and its closures: the
+pairs followed from the ground breadth first in the mechanism's pair order, and each pair that
+reaches a link the tree holds already a `Closure` (its frame on each of its two links, the two
+checked to coincide as built within the tolerance the harvest reads every pair to, else refused by
+name). A closure that would be a slide is traded for its loop's revolute or ball pair nearest it, as
+MuJoCo has no slide equality. The MJCF writes each closure as a site on each body
+(`<name>/1`, `<name>/2`) and `connect` equalities of them: one for a ball, two for a hinge (the
+second pair of sites `export.mjcf.AXIS_SPAN` along the axis), so the point and the axis's direction
+are held and the turn is free; its range is not enforced, and said; `contact` excludes its two
+bodies where they touch at rest. The URDF leaves a closure out and says so; the CAD Viewer's
+`<tcad:four_bar>` is never generated. A mechanism state that moves a joint of a loop is left out of
+the description's poses, and `ranges` sweeps no joint of a loop.
 
 `FinishedMaterial.material` is the native physical dataclass; `.pbr` is a native
 `threejs_materials.PbrProperties`. Catalogue factories return fresh finished materials.
@@ -3099,13 +3306,20 @@ an element answers its facts and, of a model's document, `made_by`, with its can
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it
 weighs: each part's volume, measured on its solids (its facts, below), times its material's
 density, summed -- `{ref, parts, volume (mm³), mass (kg, null when no part has a material),
-unweighed (the parts without one, by path)}`, and for one part its path, material and density.
+unweighed (the parts without one, by path)}`, and for one part its path, material and density. Where
+the model declares a mass or point masses (`mass`, `point_mass`), they weigh as its robot description
+weighs them (`weights.py`, the description's **Mass** over the engine's volumes, every part measured,
+since a declared mass scales its solids together), and `declared` says which is which: `{mass, declared,
+computed (kg: the solids below no declared mass, at their densities), masses (each declared node's name,
+path and grams), pointMasses (each part's, by name, in grams), scaled (the parts scaled to a declared
+mass)}`, or `{mass: null, refused}` in the description's words.
 A ref of several selectors answers a list. A ref that names nothing, or several things where
 it names one, is refused by name (exit 2). Without a REF it serves the document the same way and
 summarises it before its closure (`api._summary`, `query="summary"`): its state (`model_info`'s, with
 `cached` when the engine's cache holds it at its revision; `file` for a file's document), its parts,
 its bounds (each part's box beside its volume placed where its occurrences stand), its
-volume, its materials and their masses, its joints, mechanism states, configuration sequences and
+volume, its materials and their masses (`declared`, as a ref's: as the robot description weighs a
+declared mass and point masses), its joints, mechanism states, configuration sequences and
 animations (the structure's `animations`: each name and duration), and a model's declared files.
 `query="structure"` (`--query structure`) is the same without its bounds, volume and masses, and
 measures nothing: the lists alone.
@@ -3587,7 +3801,10 @@ kernel work an edit elsewhere leaves untouched: roughly a thousand kernel calls 
 per part, never on a helper called many times; whole sub-assembly stages are the usual
 candidates (tom's six stages, movement's three layers: 1.3–3 s each, and twice as fast on an
 edit), while per-part markers measured under 0.1 s. Nested `@xbf` is never needed for caching:
-the operation-level memo handles every kernel call in any model, markers or not.
+the operation-level memo handles every kernel call in any model, markers or not. The one other
+case is a builder several models call with the same arguments (nine posed copies of one
+assembly): an operation's entry is keyed by the body that ran it, so two models never share one,
+and unmarked the builder runs whole in each; marked, it runs once and the rest replay it.
 
 A verifying build (`Model.build(verify=True)`) runs every
 body the memo would replay -- a model's and every `@memo` call's -- and compares each fresh

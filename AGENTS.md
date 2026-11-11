@@ -39,13 +39,14 @@ exact version, ask which one. A release pull request comes one of two ways:
 
 Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
 bumps the minor below 1.0 and the major from 1.0, and a release that breaks nothing installs itself on
-every device (a patch below 1.0, a patch or minor from 1.0), so Version Check refuses a migration guide
+every device (a patch below 1.0, a patch or minor from 1.0), so `Test`'s version check refuses a migration guide
 in one. What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
 bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
 
 Merge a release pull request only on the user's explicit word, once its checks
-pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
-its Version Check vets the bump (a branch of this repository only, a version past
+pass: the merge is the release. `Test` runs every job for a `VERSION` change (the
+installer rehearsals and the Python 3.13 floor among them), and its `static` job
+vets the bump (a branch of this repository only, a version past
 `main`'s and the latest tag, every stamp in step). `Publish Release`
 (`release-publish.yml`) runs on the merge: it builds the plugin ZIP, the bundle
 and the wheel and sdist of each of the release's four projects on PyPI (`cad`,
@@ -114,7 +115,8 @@ which points both at the checkout.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
 - `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
-  `docs/contributing/`: [writing a skill](docs/contributing/writing-a-skill.md),
+  `docs/contributing/`: [testing](docs/contributing/testing.md) (the rules, adding a test or a CI
+  job, a red run), [writing a skill](docs/contributing/writing-a-skill.md),
   [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
@@ -163,6 +165,18 @@ which points both at the checkout.
   [`apps/web/README.md`](apps/web/README.md), [`apps/docs/README.md`](apps/docs/README.md)
   and [`apps/api/README.md`](apps/api/README.md) before changing generation, rendering,
   storage, layout, or public interfaces.
+- The laws and the how-to guides record what the tools so far needed; they are not a template for the
+  next one. When adding a feature, a document type, an integration or a command, take them with a
+  grain of salt and think from first principles about what is best for that tool: what it already
+  does, who looks at its files, and what is missing without us. Where that leads away from a law or a
+  guide, do not force the fit: say which and why in the change, and where the law itself should read
+  differently, amend it in the same change (an MJCF has no document type, and law 27 changed with
+  it). What stays wrong is departing from one without saying so.
+- No superficial wrappers. Everything added around a tool, a helper in the library or a `cad` command
+  alike, is added because something is missing without it: a result shape, a safety guarantee, a fact
+  the tool does not report. Never to rename or re-expose what the tool already does: that is used as
+  the tool's own, its Python API in the script and its command line through `cad run`
+  ([`packages/cad/README.md`](packages/cad/README.md), laws 25 and 29).
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
   link — not the tree. Where the mechanisms are: the engine's README
@@ -207,15 +221,17 @@ which points both at the checkout.
   Enforced by `tests/python/global/test_tests_are_self_contained.py`.
 - Every test runs in CI. Each test file is reached by a runner under
   `scripts/test/`, every runner is called by a `test.yml` job on the changes that
-  can break it, and a collector that finds nothing fails the run rather than
-  reporting a group that never ran. A test no CI job runs is dead: wire it in or
-  delete it. There are no manual-only test gates. Enforced by
+  can break it (the release tier, the Python floor and the installer rehearsals, on a
+  full run: before a release ships, and nightly), and a collector that finds nothing
+  fails the run rather than reporting a group that never ran. A test no CI job runs
+  is dead: wire it in or delete it. There are no manual-only test gates. Enforced by
   `tests/python/global/test_ci_workspace_selection.py`.
 - Tests and CI are short and succinct. Test a contract, a user flow or a fixed bug,
   once, at the cheapest level that exercises the real path: a unit or jsdom test
   first, a real browser (WebGL) only for what needs one. Await the condition, never
   a fixed sleep or a wall-clock bound; a flaky test is fixed or deleted, never
-  retried. CI time is a budget: the `web` job stays within 7 minutes, and a
+  retried. CI time is a budget: each `js-ui` job stays within 7 minutes, a test file
+  within 120 seconds on Linux CI (240 on Windows; one that outgrows it is split), and a
   change that lengthens any job says what it costs and why in its PR.
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
@@ -229,7 +245,7 @@ which points both at the checkout.
   Python the server's installations run on (3.14, `cad_server._internal.launch.PYTHON`):
   a call the floor's standard library lacks parses and fails only when it runs, so CI
   runs the library's, the server's and the shim's suites on the floor too
-  (`scripts/test/test-floor.sh`).
+  (`scripts/test/test-floor.sh`), on every full run: before a release ships, and nightly.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
 - The server's packaged runtime (`_runtime/viewer`, `_runtime/mcp` and `_runtime/plugin`) is BUILT,
@@ -300,15 +316,16 @@ when touching shared surfaces or before handoff:
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-api.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
-  `--print-weights`; `test-js.sh` takes `--select core|ui|web|mcp|all`. See
+  `--print-weights`; `test-js.sh` takes `--select core|ui|ui-units|ui-browser|web|mcp|all`. See
   [`scripts/README.md`](scripts/README.md).
-- In GitHub Actions, `test.yml` runs one job per concern, each only when the
-  change reaches it: `scripts/github-workflows/select_checks.py` maps every
-  changed path to the tests that read it, and the Python jobs run just those
-  files. A test that reads a new kind of path gets a rule there
-  ([CONTRIBUTING.md#ci](CONTRIBUTING.md#ci)); an unknown path, `VERSION`, `packages/core`, the
-  lockfiles and the test machinery run everything, as does a manual dispatch.
-  Required check names stay stable.
+- In GitHub Actions, `test.yml` runs one job per concern, each whole on its one
+  flag and only when the change reaches it: `scripts/github-workflows/select_checks.py`
+  maps every changed path to its component (the packages, the UI, an app, a suite), a
+  component to the jobs that run it, and a changed test file to itself
+  ([docs/contributing/testing.md](docs/contributing/testing.md#ci)); an unknown path, `VERSION`, `packages/core`, the
+  lockfiles and the test machinery run everything, as do a manual dispatch and the
+  nightly run. `main` requires one check, `CI`, which fails when any job did, so a
+  job is added, renamed or sharded without a branch-protection change.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or shared packages: build exports with `npm run build:packages`,

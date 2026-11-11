@@ -8,6 +8,7 @@ the world, colour, the engines and the GPU.
 - [Lights and the world](#lights-and-the-world)
 - [Colour](#colour)
 - [Engines and the GPU](#engines-and-the-gpu)
+- [No graphics driver](#no-graphics-driver)
 
 ## Running it
 
@@ -132,3 +133,29 @@ cards), HIP AMD's and oneAPI Intel's. Print `scene.cycles.device` and the device
 script's output, so a run on the CPU is never mistaken for one on the GPU. 128 to 512 samples
 with OIDN make a clean final; a draft in Cycles (for glass, emission or a translucent part, where
 EEVEE disagrees) takes 32 to 64.
+
+On the CPU the sample count is the whole budget (a frame's time is its samples times a constant),
+and a model with scalar looks (flat colours, no texture maps) needs few: the denoiser has only
+edges and smooth gradients to keep. Measured on four cores at 960 x 540, a frame of painted,
+metal, clear-coated and glass parts at 16 samples with OIDN took 14 s and differed from the one
+at 512 samples (4 minutes) by 0.6 of 255 a pixel on average; at 32, 24 s and 0.5. Start a CPU
+final at 16 to 32 samples, compare one frame against four times as many, and raise the count only
+where that shows a difference (fine glass, a soft shadow's edge, depth of field).
+
+## No graphics driver
+
+EEVEE and the compositor's default device draw with the GPU through a graphics driver. A headless
+Linux machine without one cannot start either: the render prints `Couldn't open libEGL.so.1` and
+the process aborts (exit 134), with nothing raised in Python. Find out before rendering, and use
+Cycles on the CPU for drafts as well as finals:
+
+```python
+import ctypes.util
+import sys
+
+headless = sys.platform == "linux" and ctypes.util.find_library("EGL") is None
+scene.render.engine = "CYCLES" if final or headless else "BLENDER_EEVEE"
+if headless:
+    scene.render.compositor_device = "CPU"  # the default, "GPU", aborts the same way
+    scene.cycles.samples = 16 if final else 8
+```

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -116,6 +117,25 @@ class StagingTest(unittest.TestCase):
             atomic_replace.replace_atomic(stage, target)
         self.assertEqual(target.read_bytes(), b"glTF")
         self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["part.glb"])
+
+    def test_a_killed_writer_s_staging_folder_goes_with_the_next_write_once_it_is_stale(self) -> None:
+        target = self.folder / "view.png"
+        stale, fresh, other = (self.folder / name for name in
+                               (".view.abcd1234.tmp", ".view.wxyz5678.tmp", ".viewer.abcd1234.tmp"))
+        for left in (stale, fresh, other):
+            left.mkdir()
+            (left / "view.png").write_bytes(b"half a picture")
+        old = time.time() - atomic_replace.STALE_SECONDS - 60
+        os.utime(stale, (old, old))
+        os.utime(other, (old, old))  # another target's: only its own writer sweeps it
+        with atomic_replace.staging(target) as stage:
+            stage.write_bytes(b"PNG")
+            atomic_replace.replace_atomic(stage, target)
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()),
+                         [".view.wxyz5678.tmp", ".viewer.abcd1234.tmp", "view.png"])
+        os.utime(fresh, (old, old))
+        self.assertEqual(atomic_replace.put(target, lambda path: path.write_bytes(b"PNG")), (False, 3))
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), [".viewer.abcd1234.tmp", "view.png"])
 
     @unittest.skipIf(os.name == "nt", "a symbolic link another user leaves is a POSIX folder's")
     def test_writers_never_write_through_or_move_a_link_left_at_a_predictable_name(self) -> None:

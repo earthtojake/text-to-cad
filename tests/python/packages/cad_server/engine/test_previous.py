@@ -165,6 +165,32 @@ class PreviousTest(unittest.TestCase):
         self.assertEqual(found[0]["cache"]["reason"], "the engine's cache holds none of it")
         self.assertEqual(found[1]["cache"], {"used": True, "from": "cache"})
 
+    def test_a_worker_holding_an_older_state_takes_the_one_another_worker_built_and_saved(self) -> None:
+        # Two workers of one script (a check with another header is another environment's): this one built
+        # the kit, the sources changed, and the other built that state and saved it. This one takes it, by
+        # its key, in place of building it again in full.
+        import subprocess
+        import sys
+
+        self.source()
+        self.kit()
+        self.source(peg=12)
+        code = ("import sys; from pathlib import Path; from cad.engine import build; "
+                "from tests.python.packages.cad_server.engine.test_previous import keep; "
+                "script, cache = Path(sys.argv[1]), Path(sys.argv[2]); "
+                "assert build.build(script, ['kit'], cwd=script.parent, cache=str(cache))[0]['ok']; "
+                "keep(script, 'kit', cache)")
+        done = subprocess.run([sys.executable, "-c", code, str(self.script), str(self.cache)], capture_output=True,
+                              text=True, cwd=Path(__file__).resolve().parents[5])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        report = self.kit()
+        self.assertEqual(report["cache"], {"used": True, "from": "cache"})
+        self.assertEqual(report["bodies"], {"kit.py::kit": "loaded"})
+        self.assertEqual(self.kit()["cache"], {"used": True, "from": "memory"})
+        # A state neither holds is built, and says what changed since this worker's own.
+        self.source(peg=14)
+        self.assertEqual(self.kit()["cache"]["reason"], "../kit.py: peg changed")
+
     def test_an_edit_after_a_restart_writes_the_cold_bytes(self) -> None:
         self.cold()
         self.restart()

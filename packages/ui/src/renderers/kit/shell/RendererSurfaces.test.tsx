@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // `gpu`, where a test sets it: what the viewport says of its WebGL renderer (`softwareRendering`),
 // and the Render scenes it was asked to prepare ahead.
 const viewport = vi.hoisted(() => ({ props: null as any, preview: null as any, annotationAt: null as null | ((x: number, y: number) => string | null),
+  annotationsInBox: null as null | ((box: { left: number, top: number, right: number, bottom: number }) => string[]),
   gpu: null as null | { software: boolean; prepared: number } }));
 vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
@@ -21,6 +22,7 @@ vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
     useImperativeHandle(ref, () => ({
       captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }),
       annotationAt: (x: number, y: number) => viewport.annotationAt?.(x, y) ?? null,
+      annotationsInBox: (box: any) => viewport.annotationsInBox?.(box) ?? [],
       promptCamera: () => ({ camera: { position: [0, -100, 0], target: [0, 0, 0], up: [0, 0, 1], orthographicHalfHeight: 40 }, width: 800, height: 600 }),
       ...(viewport.gpu ? {
         softwareRendering: () => viewport.gpu!.software,
@@ -228,6 +230,56 @@ it("under Select a press on the annotation picks its mark before anything under 
   press(10, 10);
   fireEvent.keyDown(canvas, { key: 'Delete' });
   expect(viewport.props.annotation.items.map((item: any) => item.id)).toEqual(['b', 'c']);
+  viewport.annotationAt = null;
+});
+
+it("under Box select a drag from empty space takes the ink the box touches, with what was drawn with it, then hands the box on; Shift adds, a plain box replaces; a drag from the ink is Select's", () => {
+  // In the page's pixels: a box reaching x < 100 takes 'a' (drawn with 'a2'), one starting below y = 100 takes 'b'.
+  viewport.annotationsInBox = box => (box.left < 100 ? ['a'] : box.top > 100 ? ['b'] : []);
+  // A press at the top-left corner lands on 'c', which a press picks: a drag from there is no box.
+  viewport.annotationAt = (x: number, y: number) => (x < 5 && y < 5 ? 'c' : null);
+  const { canvas, overlay } = mount(testHost(), undefined, 'panel-box.harness', { current: document.body });
+  act(() => viewport.props.annotation.add([{ ...ink('a'), group: 'arrow' }, { ...ink('a2'), group: 'arrow' }, ink('b'), ink('c')]));
+  const selected = () => viewport.props.annotation.selected;
+  const drag = (from: [number, number], to: [number, number], shiftKey = false) => {
+    fireEvent.pointerDown(canvas, { button: 0, clientX: from[0], clientY: from[1], shiftKey, pointerId: 1, pointerType: 'mouse' });
+    fireEvent.pointerMove(canvas, { clientX: to[0], clientY: to[1], buttons: 1, shiftKey, pointerId: 1, pointerType: 'mouse' });
+    fireEvent.pointerUp(canvas, { button: 0, clientX: to[0], clientY: to[1], shiftKey, pointerId: 1, pointerType: 'mouse' });
+  };
+  drag([10, 10], [60, 60]);
+  expect(selected()).toEqual(['a', 'a2']);
+  expect(overlay('box')).toBe('10,10,60,60');
+  // A drag from the model (the harness's right half) is the camera's, Shift with it: no box is drawn or handed on.
+  drag([600, 300], [450, 200], true);
+  expect([selected(), overlay('box'), document.querySelector('[data-box-select]')]).toEqual([['a', 'a2'], '10,10,60,60', null]);
+  drag([300, 300], [200, 200], true);
+  expect(selected()).toEqual(['a', 'a2', 'b']);
+  expect(overlay('box')).toBe('+200,200,300,300');
+  // The same box left to right takes the same: a plain one, in place of the rest.
+  drag([200, 200], [300, 300]);
+  expect([selected(), overlay('box')]).toEqual([['b'], '200,200,300,300']);
+  // It looks the same whichever way it goes, as the drag crosses back over its start: one solid blue outline.
+  fireEvent.pointerDown(canvas, { button: 0, clientX: 300, clientY: 300, pointerId: 1, pointerType: 'mouse' });
+  const look = (x: number) => {
+    fireEvent.pointerMove(canvas, { clientX: x, clientY: 350, buttons: 1, pointerId: 1, pointerType: 'mouse' });
+    const { style } = document.querySelector<HTMLElement>('[data-box-select]')!;
+    return `${style.borderStyle} ${style.borderColor}`;
+  };
+  expect([look(350), look(250), look(320)]).toEqual(Array(3).fill('solid rgb(41, 121, 255)'));
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(document.querySelector('[data-box-select]')).toBeNull();
+  // A plain box over no ink lets go of the ink, as it replaces the rest of the selection.
+  drag([300, 10], [400, 60]);
+  expect(selected()).toEqual([]);
+  // A drag from on the ink is Select's: the press picks that ink, and no box is drawn or handed on.
+  drag([1, 1], [50, 50]);
+  expect([selected(), overlay('box'), document.querySelector('[data-box-select]')]).toEqual([['c'], '300,10,400,60', null]);
+  // A tap is a click: it picks what it lands on, and hands no box on.
+  drag([10, 10], [60, 60]);
+  fireEvent.pointerDown(canvas, { button: 0, clientX: 1, clientY: 1, pointerId: 1, pointerType: 'mouse' });
+  fireEvent.pointerUp(canvas, { button: 0, clientX: 1, clientY: 1, pointerId: 1, pointerType: 'mouse' });
+  expect([selected(), overlay('box')]).toEqual([['c'], '10,10,60,60']);
+  viewport.annotationsInBox = null;
   viewport.annotationAt = null;
 });
 

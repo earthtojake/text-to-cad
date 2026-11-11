@@ -5,8 +5,13 @@ implements, then its file (or, for ``model``, a model's document id) -- ``cad xb
 arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
 robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
 others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
-location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
+wrote; ``dfm``, ``interference``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a
+severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the
+type.
+
+A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
+share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
+process (``cad._internal.interference``); this command holds no kernel and needs none.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
 check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
@@ -25,10 +30,14 @@ A B-rep
 type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
 the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
 DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
-CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. A KiCad
+CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` sweeps each joint of the
+document's mechanism against its parts' surfaces and says where each stops (``cad step ranges arm.step``,
+``cad model ranges <id> --step 0.5 --json``), writing nothing; it runs here when this environment holds the kernel,
+else in the installation's base, which does. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
-environment of ``cad[kicad]``.
+environment of ``cad[kicad]``. (A MuJoCo model's file is no document type: its check is the mujoco
+integration's, ``cad mujoco check``, ``cad_server.cli.integrations``.)
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -274,6 +283,67 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     return run
 
 
+def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentParser:
+    """``cad <type> interference``'s parser, an ADAPTER's: ``--fit`` repeats and takes two values, a pair
+    no signature derives a flag for (``cad_server._internal.cli_from_function``), and ``--pose`` is read as
+    snapshot's is."""
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    entry = DOCUMENT_TYPES[document_type]
+    parser = command_parser(prog, description=entry.operation("interference").summary)
+    parser.add_argument("document", metavar="ID" if not entry.has_file else "FILE",
+                        help="the model's document id (cad run SCRIPT.py prints it)" if not entry.has_file
+                        else f"the {entry.suffix} file")
+    parser.add_argument("--pose", action="append", default=[], metavar="POSE",
+                        help="a pose to check at beside as built, as snapshot's --pose takes one: a mechanism "
+                             "state's name, a configuration sequence at a time of it (walk@0.6), or joint and "
+                             "coupling values as JSON ('{\"elbow\": 45}'). Repeatable: the check takes the poses "
+                             "it is given, and chooses none")
+    parser.add_argument("--fit", action="append", default=[], nargs=2, metavar=("A", "B"),
+                        help="two parts meant to share volume (a press-fit pin, a bearing in its bore), each a "
+                             "ref or a glob: their overlap is listed as a fit and is no overlap to fix. Repeatable")
+    parser.add_argument("--min-volume", type=float, metavar="MM3",
+                        help="a shared volume at or below this is none (default 0.001: the rounding along a face "
+                             "where two parts touch)")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="Print the result as one JSON line on stdout instead of human lines.")
+    return parser
+
+
+def _interference(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> interference``: the library's interference check (``cad.<type>.interference``), asked of
+    the engine, which measures it in a checks process; this command holds no kernel and needs none. Its
+    ``--fit`` takes two values a time, which no signature derives a flag for, so
+    its parser is an adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
+    3 none found but a pair unmeasured, 2 an option refused by name."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+        args = _typed(_interference_parser(document_type, prog), document_type, "interference",
+                      "document").parse_args(argv)
+
+        def checked() -> Any:
+            import importlib
+
+            from cad._internal.refused import ArgumentRefused
+            from cad.engine import snapshot
+
+            # A pose as the command line writes one, read as snapshot's --pose is (a name, NAME@SECONDS, or JSON).
+            try:
+                poses = [snapshot.parse_pose(pose) for pose in args.pose]
+            except snapshot.SnapshotRefused as refused:
+                raise ArgumentRefused(str(refused)) from None
+            function = getattr(importlib.import_module(f"cad.{document_type}"), "interference")
+            return function(args.document, poses=poses, fits=[tuple(fit) for fit in args.fit],
+                            min_volume=args.min_volume)
+
+        return _verdict(checked, prog=prog, as_json=bool(getattr(args, JSON_FLAG_DEST)), source=str(args.document))
+
+    return run
+
+
 def _checked_here(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
     """The check run in this process, which holds its integration: the library's function, called as the
     command calls it (``_command``: its refusals name the flags), its exit status the check's (``_verdict``)."""
@@ -396,6 +466,49 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
 
     return emit(studied, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
                 verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=True)
+
+
+# --- the joint stops of a document with a mechanism: read, meshed and swept by the kernel ---------------------
+
+
+def _ranges(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> ranges SOURCE [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops (``cad.<type>.ranges``),
+    run here when this environment holds the kernel, else in the installation's base, which does
+    (``cad_server._internal.integration_env``), its options refused here first."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad._internal.ranges import INTEGRATION, RESOLUTION, StopsResult, options
+        from cad.results import CheckFinding, CheckResult
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                            _verb, emit, generated_parser, run_cli)
+
+        target = (f"cad.{document_type}", "ranges")
+        parser = _typed(generated_parser(target, prog=prog), document_type, "ranges", "source")
+        if integration_env.carries(INTEGRATION):
+            return run_cli(_verb(target), argv, prog=prog, parser=parser)
+        parsed = parser.parse_args(argv)
+        positional, keywords = _call_arguments(_verb(target), parsed,
+                                               explicit_keywords=_explicit_option_dests(parser, argv))
+
+        def said(line: str) -> None:
+            print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+        def swept() -> CheckResult:
+            options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", RESOLUTION),
+                    joint=tuple(keywords.get("joint") or ()))
+            python = integration_env.environment(INTEGRATION, said)
+            sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
+                       for value in positional]
+            found = integration_env.call(python, document_type, "ranges", sources, keywords)
+            return StopsResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                               findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                               summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+        return emit(swept, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
+                    verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=False)
+
+    return run
 
 
 # --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
@@ -793,8 +906,12 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "dfm" and getattr(_entry.operation(_name), "family", None) == "manufacturing":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
+        elif _name == "interference":
+            OPERATIONS[(_entry.id, _name)] = _interference(_entry.id)
         elif _name == "solve" and getattr(_entry.operation(_name), "integration", None) == "calculix":
             OPERATIONS[(_entry.id, _name)] = _solve(_entry.id)
+        elif _name == "ranges":
+            OPERATIONS[(_entry.id, _name)] = _ranges(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
         else:
@@ -823,6 +940,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return parser_for(operation, prog, document_type=document_type)
     if document_type == "urdf":
         return _urdf_parser(prog)
+    if operation == "interference":
+        return _interference_parser(document_type, prog)
     from cad_server._internal.cli_from_function import generated_parser
 
     return generated_parser((f"cad.{document_type}", operation), prog=prog)
@@ -881,8 +1000,14 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
                       "wrong_type")
     if found is None:
+        from cad.registry import INTEGRATIONS
+
+        # A tool's own file that is no document type (a MuJoCo model's .xml): its integration's command takes it.
+        owner = next((item for item in INTEGRATIONS.values() if suffix.lower() in item.files), None)
         raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
-                      f"{' or '.join(entry.extensions)}", "wrong_type")
+                      f"{' or '.join(entry.extensions)}"
+                      + (f" (cad {owner.name} {owner.operation_names[0]} takes {' and '.join(owner.files)})"
+                         if owner is not None else ""), "wrong_type")
     if not os.path.exists(os.path.expanduser(given)):
         raise Failure(f"no such file: {source}", "not_found")
 

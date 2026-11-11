@@ -94,13 +94,15 @@ class Report:
 @dataclass
 class Written:
     """One file an export wrote, or found holding its bytes already and left as it was
-    (``written`` False)."""
+    (``written`` False); a robot description's (an MJCF, a URDF) with what it holds (``robot``:
+    ``Description.summary``, with the notes it was written with), None for any other file."""
 
     path: Path
     kind: str
     bytes: int
     seconds: float
     written: bool = True
+    robot: dict[str, Any] | None = None
 
 
 @dataclass
@@ -203,21 +205,22 @@ class Document:
             raise TypeError(f"{verb} of {self.name}: the body that calls it is building it; {verb} the "
                             "document the model call returns, once the build is done")
 
-    def export(self, *destinations: Any, tolerance: float | None = None, angle: float | None = None) -> list[Written]:
+    def export(self, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
+               zero: str | None = None) -> list[Written]:
         """``export(handle, *destinations)``: the document written to each destination; a GLB, an STL or a
-        3MF meshed to within ``tolerance`` (mm) and ``angle`` (degrees) when either is given, as ``export``
-        does."""
+        3MF meshed to within ``tolerance`` (mm) and ``angle`` (degrees) when either is given, a robot
+        description taken at the mechanism state ``zero`` when one is given, as ``export`` does."""
         self._outside("export")
-        return _said(_exporting(self, destinations, tolerance=tolerance, angle=angle), destinations)
+        return _said(_exporting(self, destinations, tolerance=tolerance, angle=angle, zero=zero), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 pose: Any = None, width: int | None = None, height: int | None = None,
+                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
                  measurements: Any = None) -> Drawn:
         """``snapshot(handle, out, ...)``: the document drawn into ``out`` (a ``.png``); every option is
-        the ``snapshot`` verb's, about the picture (law 22)."""
+        the ``snapshot`` verb's, about the picture."""
         self._outside("snapshot")
-        return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid,
+        return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid, preview=preview,
                                     pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon,
                                     annotation=annotation, measurements=measurements))
 
@@ -521,14 +524,18 @@ def _source(source: Any) -> dict[str, Any]:
 
 
 def export(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
+           zero: str | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
-    ``.glb``, ``.stl``, ``.3mf``, and ``.dxf`` of a planar document): the document of an
+    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the
+    document's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,
+    ``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``
+    folder beside it, ``export/urdf.py``): the document of an
     ``.xbf``, of a ``.step`` read into one, of a handle (``Document``) or a document id (the one the
     engine holds, never built), or of a ``Model`` (called first, as this program's own call of it builds it); or a mesh file (``.glb``,
     ``.stl``, ``.3mf``) to the other two mesh kinds, each file holding what its format carries,
-    with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP or DXF is made from one). Several
+    with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF, MJCF or URDF is made from one). Several
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
     carries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are
@@ -537,7 +544,12 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, angl
     ``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or
     ``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then
     meshed again at the finer of each for these files, and each file says it; every destination is
-    then a GLB, an STL or a 3MF. A call the program's own
+    then a GLB, an STL or a 3MF. An MJCF and a URDF are the robot description at the as-built state,
+    unless ``zero`` names a mechanism state to take every joint's zero at (``describe``'s **The zero**:
+    the bodies posed there, each joint's value there its zero, its limits and the other states around
+    it); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it
+    holds, and the program's own call says it on stderr after the file's line (``said.robot``). A call
+    the program's own
     code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
@@ -548,7 +560,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, angl
     if bar is not None:
         log = bar.around(log or (lambda _text: None))  # a line of the log goes above the bar
     try:
-        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, angle), destinations)
+        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, angle, zero), destinations)
     finally:
         if bar is not None:
             bar.close()
@@ -570,8 +582,8 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
                progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
-               angle: float | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of
+               angle: float | None = None, zero: str | None = None) -> list[Written]:
+    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of, zero_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
@@ -579,6 +591,7 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     for destination in resolved:
         kind_of(destination)
     tolerance, angle = tolerance_of(tolerance, resolved), angle_of(angle, resolved)
+    zero = zero_of(zero, resolved)
     source = _called(source, daemon)
     spec = _source(source)
     if "path" in spec:
@@ -592,7 +605,8 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     shown = log or (lambda _text: None)
     order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd,
              **({"tolerance": tolerance} if tolerance is not None else {}),
-             **({"angle": angle} if angle is not None else {})}
+             **({"angle": angle} if angle is not None else {}),
+             **({"zero": zero} if zero is not None else {})}
     done = _exported(order, spec, shown, daemon, progress)
     unmet = [option for option, asked in (("tolerance", tolerance), ("angle", angle))
              if asked is not None and any(row.get(option) != asked for row in done["files"])]
@@ -601,8 +615,12 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
         raise EngineError(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
                           f"own {' and '.join(unmet)}: it is older than this library. Update it (cad update) and "
                           "export again")
-    return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True))
-            for row in done["files"]]
+    if zero is not None and any(row.get("zero") != zero for row in done["files"]):
+        # A server of a release before the zero describes the robot as built, and says no zero.
+        raise EngineError(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
+                          "not at the zero state: it is older than this library. Update it (cad update) and export again")
+    return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True),
+                    row.get("robot")) for row in done["files"]]
 
 
 def _called(source: Any, daemon: bool) -> Any:
@@ -753,7 +771,7 @@ def _outside(measures: dict[str, Any], why: str) -> None:
 
 
 def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
-             grid: bool = False, pose: Any = None, width: int | None = None,
+             grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
              measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
@@ -765,7 +783,8 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     annotation's ink was drawn in, which the packet holds. ``out`` a folder (a path ending in a
     separator, or one that is there) is given a name inside it, the source's stem and the time
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
-    was (``snapshot.write_png``).
+    was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
+    model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
     ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
     ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
@@ -783,7 +802,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
     frames, bar = progressing.sink(progress)
     try:
-        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, pose=pose,
+        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                          width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                          measurements=measurements, progress=frames)
     finally:
@@ -791,14 +810,14 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
             bar.close()
 
 
-def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, pose: Any,
+def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
         if out is not None:
             raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
-        return _job(job, source, display=display, camera=camera, grid=grid, pose=pose, width=width,
+        return _job(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose, width=width,
                     height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
@@ -806,12 +825,12 @@ def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, gri
     from cad.engine import snapshot as drawing
 
     out = drawing.picture_path(out, source)
-    return _snapshot(source, out, display=display, camera=camera, grid=grid, pose=pose,
+    return _snapshot(source, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                      width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                      measurements=measurements, progress=progress)
 
 
-def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, pose: Any,
+def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None = None) -> Drawn:
     from cad.engine import snapshot as drawing
@@ -827,13 +846,28 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         spec = _source(source)
         if isinstance(annotation, (str, Path)) and not str(annotation).lstrip().startswith("{"):
             annotation = str(Path(annotation).expanduser().resolve())  # read in the worker, beside its packets
-        draw = {"out": str(out), "display": display, "camera": camera, "grid": grid,
+        draw = {"out": str(out), "display": display, "camera": camera, "grid": grid, "preview": bool(preview),
                 "pose": drawing.parse_pose(pose) if isinstance(pose, str) else pose, "width": width,
                 "height": height, "size_profile": size_profile, "annotation": annotation,
                 "measurements": drawing.parse_measurements(measurements)}
         order = {"op": "export", "source": spec, "destinations": [], "draw": draw,
                  "cwd": str(source.cwd) if isinstance(source, Document) else os.getcwd()}
-        found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
+        try:
+            found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
+        except Exception as error:
+            # An engine with no OpenGL context: drawn here, where this process can draw (``snapshot.drawable_here``),
+            # from an xbf of the document the engine exports (an export draws nothing).
+            if not (daemon and "id" in spec and drawing._here_instead(error)):
+                raise
+            import tempfile
+
+            with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
+                saved = Path(folder) / "document.xbf"
+                export(spec["id"], saved, progress=False)
+                found = _snapshot(saved, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+                                  width=width,
+                                  height=height, size_profile=size_profile, daemon=False, annotation=annotation,
+                                  measurements=measurements, progress=progress).report
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
@@ -841,7 +875,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
     shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
                                           board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
                                           schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
-    found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed,
+    found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed, preview=bool(preview),
                              size=None if width is None and height is None and size_profile is None else size,
                              daemon=daemon, pose=drawing.parse_pose(pose) if isinstance(pose, str) else pose,
                              annotation=drawing.parse_annotation(annotation),
@@ -868,14 +902,14 @@ def _whole(source: Any) -> None:
                           part="source")
 
 
-def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
+def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
          measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
     """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
     from cad.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
-    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, pose=pose,
+    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                                     width=width, height=height, size_profile=size_profile, annotation=annotation,
                                     measurements=measurements)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)
@@ -951,9 +985,12 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
 
     from cad.engine import refs
     from cad.engine.said import weighed
+    from cad.engine.weights import declares
 
     from cad.engine.addresses import key, parts, split
 
+    if isinstance(source, Document):
+        source = source.id  # the handle a model call returns, as every verb takes it: its document, by its id
     named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
@@ -1021,6 +1058,8 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     # Every part a part's or an assembly's ref weighs, measured in one read (its facts by key).
     weighs = sorted({structure["prototypes"][node.payload["prototype"]]["key"]
                      for hit in hits if hit.kind is None for node in hit.node.parts()})
+    if weighs and declares(structure):  # a declared mass scales the parts beside the ref's too: every part measured
+        weighs = sorted({prototype["key"] for prototype in structure["prototypes"]})
     measured = get("/volumes?keys=" + ",".join(quote(key, safe="") for key in weighs)) if weighs else {}
     volumes = {key: facts["volume"] for key, facts in measured.items()}
     boxes = {key: facts.get("box") for key, facts in measured.items()}
@@ -1137,12 +1176,14 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
-    materials and their masses, where any part has one, and the parts whose texture maps are not drawn
-    (``untextured``); its joints,
+    materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
+    and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); the
+    parts whose texture maps are not drawn (``untextured``); its joints,
     mechanism states, configuration sequences and animations; and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
+    from cad.engine.weights import declares, weigh
 
     model = None
     if not isinstance(path, Path):
@@ -1201,13 +1242,31 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     joints = [{"name": pair.get("label"), "type": pair.get("type"), "range": pair.get("limits"),
                "units": pair.get("units"), "asBuilt": built.get(pair.get("label"))}
               for pair in kinematics.get("pairs") or []]
+    declared = None
+    if measured and declares(structure):
+        # A part or an assembly declared to weigh grams, and the point masses a part declares, weigh as the robot
+        # description weighs them (``weights``): the materials' masses, the total and the parts that weigh nothing.
+        weights = weigh(structure, {key: facts.get("volume") for key, facts in each.items()})
+        declared = weights.said()
+        for row in materials.values():
+            row["mass"] = None
+        for at, instance in enumerate(instances):
+            material = (prototypes[instance["prototype"]].get("material") or {}).get("material")
+            if material and weights.parts.get(at) is not None:
+                row = materials[material["name"]]
+                row["mass"] = (row["mass"] or 0.0) + weights.parts[at]
+        if weights.refused is None:
+            unweighed = [instance["path"] for at, instance in enumerate(instances) if not weights.weighs(at)]
     weighed = [row["mass"] for row in materials.values() if row["mass"] is not None]
+    if declared is not None:
+        weighed = [] if declared["mass"] is None else [declared["mass"]]
     found = {
         "name": structure.get("name"), "id": ident, "state": state,
         "parts": {"occurrences": len(instances), "distinct": len(prototypes), "root": (structure.get("tree") or {}).get("name")},
         "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
-        "unweighed": unweighed if materials else [],
+        "unweighed": unweighed if materials or declared else [],
+        **({"declared": declared} if declared is not None else {}),
         # Each part whose materials' texture maps are drawn as their scalar look (``untextured``).
         "untextured": [{"part": prototype.get("name") or prototype["key"], "materials": prototype["untextured"]}
                        for prototype in prototypes if prototype.get("untextured")],

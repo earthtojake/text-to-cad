@@ -422,7 +422,7 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.row(ident, "held")
         out = {kind: self.folder / f"held.{kind}" for kind in ("xbf", "step")}
 
-        # The document as built, mechanism and all: a posed file is a model of its own (law 22).
+        # The document as built, mechanism and all: a posed file is a model of its own.
         answer = self.ask({"op": "export", "source": {"id": ident}, "destinations": [str(p) for p in out.values()],
                            "cwd": str(self.folder), "env": dict(os.environ)})
         self.assertIn("done", answer, answer)
@@ -476,7 +476,7 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.assertFalse((self.folder / "hinge.ran").exists(), "nothing ran the script")
 
     def test_a_document_no_cache_keeps_names_its_rebuild_and_nothing_runs_it(self) -> None:
-        # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache``'s).
+        # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache_keeping``'s).
         tiny = {**self.env, "CAD_ENGINE_MEMORY_MB": "0.001", "CAD_CACHE_DIR": engine_daemon.unwritable(self.folder)}
         unsaved = self.built("arm", env=tiny)
         command = f"cad run {self.folder / 'arm.py'}"

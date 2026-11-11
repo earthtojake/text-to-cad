@@ -157,6 +157,39 @@ class NamingTest(unittest.TestCase):
         self.assertEqual(sent, [{"failed": "--index-url=https://x is no requirement: name a package, a pin, extras, "
                                            "or a local path or wheel", "base": True}])
 
+    def test_the_engine_makes_an_integration_s_environment_for_a_process_of_its_own_that_lacks_it(self) -> None:
+        """``{"op": "integration"}`` (a worker's decomposition, ``cad.engine.hulls``): the engine's making of the
+        environment ``cad[coacd]`` names followed, its lines log frames, then its Python; an integration the
+        registry does not name, or a making that failed, refused in one line."""
+        from cad_server._internal import integration_env
+        from cad_server.engine.daemon import Daemon
+
+        made: list = []
+
+        class Making:
+            def follow(self, told):
+                told("making the coacd integration's environment, once")
+                return made.pop() if made else None
+
+        sent: list = []
+        with mock.patch.object(integration_env, "carries", return_value=False), \
+                mock.patch.object(extras, "making", lambda spec: (sent.append(spec.integrations), Making())[1]), \
+                mock.patch.object(integration_env, "environment", return_value="/env/bin/python"):
+            Daemon.integration({"op": "integration", "integration": "coacd"}, sent.append)
+            self.assertEqual(sent, [("coacd",), {"log": "making the coacd integration's environment, once"},
+                                    {"ok": True, "python": "/env/bin/python"}])
+            sent.clear()
+            made.append("uv cannot reach the network")
+            Daemon.integration({"op": "integration", "integration": "coacd"}, sent.append)
+            self.assertEqual(sent[-1], {"failed": "uv cannot reach the network"})
+            sent.clear()
+            Daemon.integration({"op": "integration", "integration": "nonsense"}, sent.append)
+            self.assertRegex(sent[0]["failed"], r"^no integration 'nonsense': one of .*coacd")
+        with mock.patch.object(integration_env, "carries", return_value=True):
+            sent.clear()
+            Daemon.integration({"op": "integration", "integration": "coacd"}, sent.append)
+            self.assertEqual(sent, [{"ok": True, "python": sys.executable}], "one that carries it is its own")
+
     def test_an_environment_says_in_plain_words_what_it_holds(self) -> None:
         """An integration's environment holds the integration, not "the model's packages", and says about how
         big it is; one with a program's packages names them."""
@@ -198,6 +231,20 @@ class NamingTest(unittest.TestCase):
                          r"^the environment of the model's packages needs the network once, for notapackage, which "
                          r"uv's cache does not hold: ")
         self.assertNotIn("\n", said)
+        # uv killed mid-install gave no reason: its last line of progress is not said as one.
+        import signal
+
+        said_last = "Resolved 41 packages in 2.1s\nDownloaded numpy\n"
+        stopped = base.failure(["uv", "pip", "install"], said_last, recipe, -signal.SIGTERM)
+        self.assertEqual(stopped, "uv was stopped by SIGTERM while it made the environment of the model's packages: run "
+                                  "this again (the last uv said: Downloaded numpy)")
+        if hasattr(signal, "SIGKILL"):  # a signal Windows has no name for, and no process there exits by
+            killed = base.failure(["uv", "pip", "install"], said_last, recipe, -signal.SIGKILL)
+            self.assertEqual(killed, "uv was stopped by SIGKILL while it made the environment of the model's packages, "
+                                     "as the system does to a process when memory runs out: run this again "
+                                     "(the last uv said: Downloaded numpy)")
+        self.assertEqual(base.failure(["uv", "pip", "install"], "Downloaded numpy\n", recipe, 2),
+                         "uv could not make the environment of the model's packages: Downloaded numpy")
 
     def test_making_one_removes_releases_older_than_the_one_before_but_the_bases_and_one_a_process_runs_from(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))
@@ -286,6 +333,13 @@ class ChoosingTest(unittest.TestCase):
         self.assertEqual(scan.scan(script=self.folder / "dynamic.py"), set(), "an import by name is not seen")
         self.assertEqual(scan.scan(module="lib", cwd=self.folder), {"build123d"})
         self.assertEqual(scan.scan(code="import OCP.TopoDS", cwd=self.folder), {"build123d"})
+        # The materials a model gives its parts are the kernel's, imported alone too, and a run that lacks them says so.
+        self.assertEqual(scan.scan(code="from bd_materials import plastics", cwd=self.folder), {"build123d"})
+        from cad._internal.integrations import missing
+
+        self.assertEqual(missing(ModuleNotFoundError("No module named 'bd_materials'", name="bd_materials")),
+                         "bd_materials comes with cad's build123d integration: add `cad[build123d]` to the script's "
+                         "header")
         # cad's own namespace of an integration (the registry's) is that integration, however it is imported.
         for code, found in (("from cad.build123d import paint", {"build123d"}), ("from cad import build123d", {"build123d"}),
                             ("import cad.kicad._session", {"kicad"}), ("from cadgen.build123d import memo", {"build123d"}),

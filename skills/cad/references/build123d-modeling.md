@@ -60,6 +60,16 @@ A transmissive part is one fade, never two, in every file of it: what draws tran
 and what draws none (Flat, X-ray, Parts, a snapshot, a 3MF) at that preview. The colour's
 alpha does not fade it further; to fade it everywhere, give the look a PBR `opacity` below 1.
 
+- **Leave air between glass and what lies behind it.** A see-through part lying on another (a
+  window on its liner, two surfaces from one loft) draws mottled: each part is meshed on its own,
+  to about a thousandth of its size, so their triangles cross. A gap wider than both meshes'
+  error cures it: half a millimetre on an 80 mm part, a millimetre or two on a 400 mm one.
+- **Smoked glass is a clear look with a tint, not a dark one that lets some light through.** A
+  near-black colour with `transmission=0.35` draws as smoked glass in a snapshot, which fades it,
+  and as a black surface where light is traced through it (the GLB in Blender): the colour
+  tints what passes, and a third of nothing passes. Give it
+  `transmission=1` and the tint as its colour (a mid grey).
+
 ```python
 from bd_materials import metals
 from cad.build123d import paint
@@ -73,11 +83,34 @@ polished.pbr = polished.pbr.override(roughness=0.15)
 paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], polished)
 ```
 
+Each family is a module of `bd_materials` and each material a function of it (bd_materials 0.2):
+
+- `metals`: `aluminum`, `stainless`, `mild_steel`, `alloy_steel`, `spring_steel`, `tool_steel`,
+  `titanium`, `brass`, `copper`, `bronze`, `magnesium`, `gold`, `silver`
+- `plastics`: `pla`, `petg`, `abs_`, `asa`, `nylon`, `pc`, `pp`, `pe`, `pom`, `ptfe`, `pmma`,
+  `peek`, `pps`, `tpu`, `rubber`, `phenolic`, `fr4`, `cfrp`
+- `resins`: `standard`, `tough`, `high_temp`, `flexible`, `transparent`, `castable`, `ceramic`, `esd`
+- `wood`: `hardwood`, `softwood`, `oak`, `maple`, `walnut`, `birch`, `beech`, `ash`,
+  `american_cherry`, `spruce`, `pine`, `engineered_wood`, `mdf`, `osb`
+- `glass`: `soda_lime`, `borosilicate`; `paper`: `paper`, `cardboard`, `foamboard`;
+  `textile`: `woven`, `felt`, `leather`
+
+There is no `metals.steel()`: plain steel is `mild_steel()`. A grade is a name, as
+`bd_materials.material_names()` lists them: `part.material = "alu_g6061_t6"`.
+
+A part read from a STEP or an xbf keeps the file's colours until it is given a material, which
+replaces its colour like any other part's, in the viewer and every export alike. To keep the
+file's colour, set it again after the material: `color = part.color; part.material = plastics.pe();
+part.color = color`. Faces the file paints (a cable's red and black wires) keep their colours
+either way: the viewer draws them, and the GLB, the MJCF and the URDF all carry them.
+
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
 with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
-There is no text-to-cad material class or adapter.
+There is no text-to-cad material class or adapter. A measured weight is declared beside the
+material, `mass(part, grams)` from `cad.build123d` ([kinematics](kinematics.md#declaring-for-a-simulator));
+a simulator's contact friction is a choice made for the simulation, not declared on the model.
 
 For boards, electronic parts and process finishes, which `bd_materials` lacks or draws poorly
 untextured, `cad.build123d.materials` has named looks. Each returns a fresh native
@@ -168,6 +201,17 @@ handles placement itself.
   or self-crossing section produces misleading downstream loft failures, so check
   section wires as well as face validity. A ruled loft can localize a smooth-loft
   failure.
+- **A smooth loft is one spline through all its sections,** so it goes where no section
+  says: two sections added near the top of a 400 mm form moved its surface 77 mm near the
+  bottom, and the result was still valid. Space sections evenly and carry a change in their
+  values, not in more of them, or use `ruled=True`, which goes only where the sections say.
+  A clearance is measured from the solid, never worked out from the sections.
+- **A loft that ends in a `Vertex` ends in a cone point,** not a rounded cap, and on a blunt
+  end it can stand millimetres past the point; rows added near the point to round it move
+  the rest of the form. A shaded snapshot hides both and a render shows them.
+- **A revolved polyline is one conical face a segment,** and a shaded picture draws a band
+  for each. A profile that will be seen is arcs or a spline: one face. `EllipticalCenterArc`
+  and `CenterArc` take `start_angle` and `arc_size`, not a start and an end angle.
 - **Many tools:** batching independent cuts avoids rebuilding the same
   intersection network; overlapping tools may need staged cuts, and oversized
   tool extents create needless intersections. On large spline surfaces even a
@@ -175,15 +219,21 @@ handles placement itself.
   bar names the stage the time goes to.
 - **Near tangency or coincident boundaries:** a Boolean can return successfully
   with the wrong region or solid count; a direct profile construction of the same
-  shape can avoid the intersection.
+  shape can avoid the intersection. `is_valid` does not catch it, and `&`, `-` and `+`
+  make no promise of their own: where a result on a lofted or spline solid matters, hold it
+  to what it must be (its `bounding_box()` inside both operands', its volume near the one
+  expected) before building on it.
 - **Tangent chains and complex outlines:** OCCT's 3D fillets can fail or crash
   there; a profile bevel or a separately constructed transition is a workaround.
 - **2D algebra:** a `ShapeList` takes part in Python list operations, which may
   concatenate instead of fusing. Mirroring sampled points can flip wire winding
   and face normals, and an empty intersection used as a cut removes nothing.
-- **A Boolean that removes everything** returns an empty `Compound` (`&` returns None),
-  and placing that (`bd.Pos(...) * empty`) returns a plain empty `list`, so the next line
-  fails with `'list' object has no attribute 'label'`: the cut before it consumed the part.
+- **A Boolean that removes everything** returns an empty `Compound` (`&` of two `Solid`s
+  returns None), and placing that (`bd.Pos(...) * empty`) returns a plain empty `list`, so the
+  next line fails with `'list' object has no attribute 'label'`: the cut before it consumed
+  the part. An empty one among an assembly's children (`Compound(children=[...])`) fails with a
+  bare `AssertionError` from the tree. Test `result.solids()` before labelling or placing a
+  Boolean's result.
 - **Dense periodic splines:** OCP 7.9 has failed taper, inward offset and
   coincident-face fusion on some densely sampled profiles; a simpler
   representation or an explicitly constructed offset works around it.

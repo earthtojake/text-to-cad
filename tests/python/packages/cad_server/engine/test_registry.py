@@ -214,7 +214,7 @@ class RegistryDaemonTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
         # The registry alone, with a cache folder nothing can write: a restart knows an id by its
-        # record and its command. What the cache adds is ``test_cache``'s.
+        # record and its command. What the cache adds is ``test_cache_restart``'s.
         cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(cls.engine),
                                          "CAD_STATE_DIR": str(cls.state),
                                          "CAD_CACHE_DIR": engine_daemon.unwritable(cls.folder),

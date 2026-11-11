@@ -1,7 +1,7 @@
 """The engine's X display (``cad_server/engine/display.py``): what a process that draws is started with on
 Linux -- the daemon's own ``DISPLAY``, else an Xvfb the daemon starts once and stops with it, else nothing --
 and nothing on macOS or Windows. Xvfb here is a stand-in that says a display and waits; the real one draws
-in ``test_render.py``'s ``EngineDisplayTest``, on Linux."""
+in ``test_render_daemon.py``'s ``EngineDisplayTest``, on Linux."""
 
 from __future__ import annotations
 

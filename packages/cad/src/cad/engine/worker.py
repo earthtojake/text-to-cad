@@ -428,12 +428,15 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     PNG where the request has one (``{"out", option: value}``, the snapshot verb's: a
     model's picture is drawn from the document in this worker's memory). A GLB, an STL or a 3MF is
     meshed to within the request's ``tolerance`` and ``angle`` where it gives either
-    (``export/__init__.py``), and its row says it. Answers what was written."""
+    (``export/__init__.py``), and its row says it; a robot description (an MJCF, a URDF) is taken at the
+    request's ``zero`` state where it gives one, its row saying it, and its row carries what it holds
+    (``robot``: ``Description.summary``, with its notes). Answers what was written."""
     from cad.engine import build as engine_build
     from cad.engine import export
 
     tolerance = export.tolerance_of(request.get("tolerance"), request["destinations"])
     angle = export.angle_of(request.get("angle"), request["destinations"])
+    zero = export.zero_of(request.get("zero"), request["destinations"])
     source_spec = request["source"]
     built: list[dict[str, Any]] = []
     if "id" in source_spec:
@@ -495,17 +498,20 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
         # Each destination written, counted of them all (``progress.py``: an export's ``write``).
         say("write", detail=target.name, count=[index, len(request["destinations"])])
         before = _stat(target)
+        robot: list[dict[str, Any]] = []
         if request.get("original"):
             from cad.engine.export.viewer import original
             size = original(source, target, request["expected"])
         else:
-            size = export.translate(source, None, target, tolerance, log, angle)
+            size = export.translate(source, None, target, tolerance, log, angle, zero, robot.append)
         seconds = time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
         files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
                       "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
                       **({"tolerance": tolerance} if tolerance is not None else {}),
-                      **({"angle": angle} if angle is not None else {})})
+                      **({"angle": angle} if angle is not None else {}),
+                      **({"zero": zero} if zero is not None else {}),
+                      **({"robot": robot[0]} if robot else {})})
     drawn = None
     if request.get("draw"):
         from cad.engine import snapshot
@@ -713,7 +719,7 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
     libraries than this process's is answered with no ``checked``, nothing measured."""
     from cad.engine import export
     from cad.engine.contract import measures_for, measuring, release
-    from cad.registry import manufacturing_check
+    from cad.registry import interference_check, manufacturing_check
 
     spec = request["source"]
     check = request["check"]
@@ -739,7 +745,9 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
         checked = {"unmeasured": {"code": "document_unreadable",
                                   "message": f"failed to read {read or 'the document'}: {error}"}}
     else:
-        checked = manufacturing_check().held(source, check, read)
+        # A check is its family's to measure: an interference check's (``cad._internal.interference``), else a manufacturing one's.
+        measurer = interference_check() if check.get("process") == "interference" else manufacturing_check()
+        checked = measurer.held(source, check, read)
     return {"reports": [], "files": [], "checked": {**checked, **said, "read": fresh,
                                                     **({"digest": digest} if "path" in spec else {})}}
 

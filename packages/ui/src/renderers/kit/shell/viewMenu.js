@@ -6,7 +6,8 @@ import { english } from "../../../i18n/core.js";
  * beside it), the same groups in the same order whatever the file:
  *
  * 1. the reference: Copy Reference, what a pick would put in Quick Edit;
- * 2. the pick: Select or Deselect, Isolate or Exit isolate, Exit all isolates;
+ * 2. the pick: Select or Deselect, Isolate or Exit isolate, Exit all isolates, then, in a 3D view, Select
+ *    tangent faces and Select tangent edges where they apply (`tangentGroup`);
  * 3. what is shown: Hide others, Show all, Hide or Reveal (where the view hides anything);
  * 4. the view's own (a tree's Expand and Collapse, a schematic's sheets, a drawing's layers);
  * 5. the framing, last, always: Zoom to fit and Zoom to selection, which is off while nothing is picked.
@@ -51,6 +52,19 @@ export function pickGroup({ selected = false, onSelect = null, isolated = null, 
   if (isolated !== null && onIsolate) items.push(menuEntry("isolate", isolated ? t("tree.exitIsolate") : t("tree.isolate"), { disabled, onSelect: onIsolate }));
   if (isolatedCount > 1 && onExitIsolates) items.push(menuEntry("exit-all-isolates", t("menu.exitAllIsolates"), { disabled, onSelect: onExitIsolates }));
   return items;
+}
+
+/**
+ * Select tangent faces and Select tangent edges: actions, not settings (Fusion's and SolidWorks' tangent
+ * chain), each adding the tangent chain of the face or edge pressed, and of those of its kind selected, to
+ * the selection. Each is there only where it applies (`faces`, `edges`: over a face or while faces are
+ * selected; likewise edges), so the group can be empty.
+ */
+export function tangentGroup({ faces = false, edges = false, onFaces = null, onEdges = null, disabled = false, t = english } = {}) {
+  return [
+    faces ? menuEntry("select-tangent-faces", t("menu.selectTangentFaces"), { disabled, onSelect: onFaces }) : null,
+    edges ? menuEntry("select-tangent-edges", t("menu.selectTangentEdges"), { disabled, onSelect: onEdges }) : null,
+  ].filter(Boolean);
 }
 
 /** The framing, the same everywhere: the whole picture, and what is picked (off while nothing is). */

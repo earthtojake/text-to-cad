@@ -272,7 +272,9 @@ class UpdateEndToEndTest(unittest.TestCase):
             connection.request("GET", "/api/v1/server", headers={"Authorization": f"Bearer {token}"})
             response = connection.getresponse()
             body = response.read()
-        except OSError:
+        except (OSError, http.client.HTTPException):
+            # Refused or reset, or an answer cut short as the engine went (its headers sent, its body not:
+            # http.client's IncompleteRead, which is no OSError): no engine there, as the page's fetch finds.
             return None, {}
         finally:
             connection.close()

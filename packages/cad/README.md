@@ -53,13 +53,18 @@ These words mean one thing each, in the code, the commands and every document.
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
-  `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
+  `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
+  shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
+  MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
+  MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `netgen`, `calculix`, `blender`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
-  kind: in-process, separate process, or both.
+  kind: in-process, separate process, or both. An integration has operations of its own only on a file of its
+  tool's that is no document type (`cad mujoco check robot.xml`, `cad.mujoco.check`): a closed set too,
+  `check` today, answering findings as a type's check does.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -70,7 +75,9 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
+  `solve` (a B-rep type's stress study), `ranges` (a mechanism's joint stops,
+  found from its geometry), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -81,11 +88,16 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
+B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
+pair of parts whose boxes meet answered, as built and posed, by the engine: exactly, by the kernel, wherever the
+two parts' meshes do not show air between them); a
 B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
-CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
+CalculiX's ccx, its results a folder of standard files); a mechanism's joint stops found from its geometry
+(`cad.<type>.ranges(source)`, each joint swept against its parts); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -125,8 +137,18 @@ the two disagree, the engine's README is right.
 
 ## The design laws
 
-These are LAWS, not conventions: a change that violates them is wrong even when it works.
-Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
+These laws say how the package is built today and why, and a change to what exists follows them. They
+are not a template for what comes next: each was written from the document types and the tools the
+package had at the time. So when adding a feature, a document type, an integration or a command, read
+them with a grain of salt and think from first principles about what is best for that tool: what it
+already does, who looks at its files, and what is missing without us. Where that leads away from a law,
+do not force the fit. Say which law and why in the change, and where the law itself should read
+differently, change its text in the same change (an MJCF came to have no document type that way, and
+law 27 gained its second form). What stays wrong is departing from a law without saying so. And
+whatever is added is added for a purpose: nothing wraps a tool only to rename or repeat what the tool
+already does (law 29).
+
+Each of the 30 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
 (the distributions alike).
@@ -181,11 +203,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    a worker: the model API, the kernel side of the engine, the document model and the protocol a
    client speaks -- imports nothing of the server's or the shim's, so a model runs where only it is
    installed; it imports nothing outside itself but its own dependencies, the standard library and
-   each integration's extra, that extra only in that integration's environment (law 26; the kernel is
+   each integration's extra, that extra only in that integration's environment (law 25; the kernel is
    the `build123d` extra's, which the engine's workers run in). The server -- what runs in the daemon
    or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
-   the kernel or an integration's code (law 29). The shim (`cad_mcp`), the stdio transport
+   the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library alone. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
    which the server's commands append.
@@ -196,7 +218,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    materials per part and per painted face, element names on face, edge and vertex labels, and
    an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
    of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
-   schematic, a robot description, a mesh -- is its file, read by its type (law 25).
+   schematic, a robot description, a mesh -- is its file, read by its type (law 24).
 5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
    runs is keyed by its inputs, and so is every question it asks of what they made: a validity
    check, a volume, a distance. A hit hands back the objects the first run made, or the answer it
@@ -361,9 +383,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
     from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
     person's click.
-    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s) is fetched once, the
-    first time a command needs it, from uv's cache and the network, and works offline after that; a
-    first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
+    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
+    `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
+    it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
+    reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
     snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
     crash; a model's own process, where only the library is installed, counts nothing -- is kept
@@ -415,7 +438,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -423,16 +446,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
     URL.
 
-22. **A verb's option is about the picture or the path, never the model.** *Every document.* `export` takes a
-    document and destinations: what the file holds, its parts and their placement, colours and
-    motion, is what the code built, so no option selects a part or a state; its options, a GLB's, an
-    STL's or a 3MF's mesh tolerance and angle, are how finely the file's triangles follow that, not what it holds. `snapshot`'s
-    options describe the picture (the camera, the display, the size, the state the mechanism
-    is drawn in); `serve`'s and `status`'s the process. Anything that changes what a document
-    is, is a function in the model's code: a part's own model, or a model returning the
-    assembly in a state (`cad.build123d.posed`).
-
-23. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge of a
+22. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge of a
     model comes from a run an agent or a person starts (`python model.py`, `cad run model.py`),
     which pushes the model's code, its key and its document to the engine. The engine never reads a
     script to learn what a model is, never watches one, never infers a document from a path on
@@ -453,11 +467,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     since its run.
 
 
-24. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
+23. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
     integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
-    process kind and, for an external program, its probe (the program, the oldest version our code supports, the
+    process kind, the operations it has on a file of its tool's own that is no document type, with the
+    suffixes they take (`mujoco`: `check` on `.xml` and `.mjcf`), and, for an external program, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -468,7 +483,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     otherwise -- the HTTP API's document kinds and the analytics schemas say `3mf` -- the entry names that
     spelling (`wire`); nothing else does.
 
-25. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
+24. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
     has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
     with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
     objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
@@ -476,7 +491,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
     neutral about producers: it imports no third-party library.
 
-26. **An integration is named for its tool and holds only our code for it.** *The package.* `cad.<integration>` (code in
+25. **An integration is named for its tool and holds only our code for it.** *The package.* `cad.<integration>` (code in
     `cad/<integration>/`) holds the helpers WE define that take that tool's objects and the producers it
     registers for the types they make; it re-exports nothing of the tool (`import build123d as bd` stays
     build123d's), and imports only its own extra's dependencies. Every extra, every `cad.<name>` namespace
@@ -486,29 +501,41 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
 
-27. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
+26. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
     persistent script's output; the registry's producers -- each a type, a matcher, the code that writes
     it and its integration -- decide which makes the file of the returned value. A matcher reads the
     value's type names and modules, never importing a library to ask. Exactly one producer per return
     type per document type; a return none takes fails loudly, naming the types the document is made of and
     the integration that would add more.
 
-28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
+27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> <file>` for a
+    tool's own file.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two
+    parts share volume, `solve` a B-rep type's stress study, `ranges` a
+    mechanism's joint stops, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
+    A document type is a file cad shows, so a file cad writes or checks and never shows has no type's
+    command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
+    <file>`, one to one with `cad.<integration>.<operation>` (`cad mujoco check robot.xml`: a MuJoCo
+    model, which MuJoCo Studio shows). The noun is still the file, named by the tool that owns its format.
+    A name is a type's or an integration's, never both; an operation lives in one place, so a file that
+    has a document type has its operations there and its integration has none for it (no `cad kicad drc`
+    beside `cad kicad_pcb drc`); and an integration is never a way to name the means of a type's
+    operation (`cad stl dfm` is trimesh's and nobody says so). An integration's operations are a closed
+    set too (`check`, answering findings as a type's check does).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
-    --help` groups the commands by type. The commands that are no document's -- setup, update,
+    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
     uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
     top-level.
 
-29. **An integration runs where its extra is installed.** *The package.* An integration's code runs
+28. **An integration runs where its extra is installed.** *The package.* An integration's code runs
     in the command's own process when that environment holds the integration's extra, else in that
     integration's environment -- `cad[<integration>]` at the installation's release, made once per
     installation on first need, as `cad run` makes a program's -- run as a subprocess, the library's
@@ -524,16 +551,25 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     made on that Python with the library pinned in it, and a run's settings folders are private. That is
     why the library's floor is Python 3.13 while the server's installations run on a newer one.
 
-30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
-    <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
+29. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
+    a helper in the library and a typed command alike are added because something is missing without
+    them, and each can say what. `cad <type> <operation>` (and an integration's own `cad <integration>
+    <operation>`) runs a tool for a reason the tool's own line lacks: one result shape (law 27's
     findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
-    output path), or parity with the viewer (the same check, the same export). Everything else of the
-    tool is its own command line, run through `cad run` (`cad run kicad-cli pcb render …`), which the
-    skill documents with the tool's own flags at the pinned version; no typed command is added to
-    rename one.
+    output path), parity with the viewer (the same check, the same export), or a fact the tool does not
+    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile).
+    A helper of an integration's (`cad.<integration>.<name>`) takes the tool's objects for a reason of
+    the same kind: it ties them to our documents (a part found by its label path), does what the tool
+    leaves undone (a spec saved with its files, so the folder travels), or reports what it does not.
+    Everything else of the tool is the tool's own, used as it is: its Python API in the script that
+    imports it (law 25: nothing of it is re-exported), and its command line run through `cad run` (`cad
+    run kicad-cli pcb render …`, `cad run mujoco-studio …`), which the skill documents with the tool's
+    own flags at the pinned version. No helper and no typed command is added to rename one, and none to
+    do again what the tool does: where the tool has it, cad has none (no still of a MuJoCo model, which
+    MuJoCo Studio shows).
 
-31. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
-    A producer is the engine's (law 27): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
+30. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
+    A producer is the engine's (law 26): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
     `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
     and the file is written again from the model whenever it runs. An edit is a native file's own: the file
     is the source, and `with <type>.edit(path) as document:` opens it in its tool, in the caller's process,
@@ -609,7 +645,7 @@ src/cad/
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
-                         #   B-rep type's solve: model's, xbf's and step's)
+                         #   B-rep type's solve and ranges: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -630,19 +666,30 @@ src/cad/
                          #   (overhangs, walls, trapped volumes, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_printing), the
                          #   mesh read and cleaned (_mesh), and the check every mesh type runs (_check)
+  mujoco/                # the mujoco integration, MuJoCo's headless core and Studio (mujoco-core, mujoco-studio): a
+                         #   document as a mujoco.MjSpec (_spec), a part's collision chosen on it
+                         #   (_parts), the spec saved as a folder that travels (_save), and check, its
+                         #   one operation on a MuJoCo model's file, which is no document type: the
+                         #   model compiled by MuJoCo's own compiler, what it refuses and warns as
+                         #   findings (_compile), the model-health checks (_health), what collides as
+                         #   what and the contact excludes as data (_report, _check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
                          #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
                          #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
-                         #   _dfm_check, the entry), named material looks (materials: solder mask, ENIG,
+                         #   _dfm_check, the entry), the interference check's measuring
+                         #   (_interference), named material looks (materials: solder mask, ENIG,
                          #   anodized, ..., each a native bd_materials FinishedMaterial), and the
                          #   producers it registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
+  coacd/                 # the coacd integration, CoACD's convex decomposition: the process of its own
+                         #   that cuts a part's mesh into convex hulls for cad.mujoco.decompose
+                         #   (_decomposer), which the engine starts and keeps the hulls of (engine/hulls.py)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
   blender/               # the blender integration, bpy: a GLB loaded into Blender's scene for a
@@ -652,17 +699,20 @@ src/cad/
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
-  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
-                         #   validate) and a KiCad export return, typed
+  results.py             # the operations' shared result types: what a check (dfm, interference, solve,
+                         #   drc, erc, validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
-  _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
+  _internal/             # DocumentType (document_type), a B-rep type's interference check: its
+                         #   options and its result (interference), a 3D type's manufacturing check: its
                          #   signature and options, its integration's measuring imported when it
                          #   runs (manufacturing), each process's options, rules and findings
                          #   (dfm/, its README the mechanism), the numpy geometry the checks measure
                          #   with (meshops_printing, a mesh's, shared by both integrations;
                          #   molding_geometry; sheet_plane), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
+                         #   the joint stops a type with a mechanism runs (ranges: its signature
+                         #   and options, stdlib only; the sweep is engine/ranges.py),
                          #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the
                          #   runner `cad run` starts a program by (program: the program's
@@ -771,6 +821,36 @@ and the rest go on; each warning is on stderr (`route: warning: ...`) before rou
 an obstacle nor a connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the
 block refills the pours round the new copper. It runs in the script's process. It does not route differential
 pairs, keep a length, skew or track-angle rule, or choose what to route or in what order.
+
+## The interference check
+
+A B-rep document's `interference` says which of its parts share volume: `cad.model.interference`,
+`cad.xbf.interference` and `cad.step.interference`, one to one with `cad <type> interference SRC`. Every pair of
+parts whose boxes meet is answered, as built and at each of `poses`: a mechanism state's name, a
+configuration sequence at a time of it (`"walk@0.6"`), or `{joint: value}`, as every command takes a pose. It
+checks the poses it is given and chooses none. `fits` names the pairs meant to share volume, listed
+apart. A pair with air between its two parts is ruled out on their meshes (the kernel's own proximity test, and
+a point of each shell classified against the other's solids, so a part swallowed whole is not missed); every
+other pair is measured exactly, on the parts' own solids. The engine measures it and keeps each answer by the
+two parts' geometries and how one stands to the other: a document edited is measured again only where a part
+that changed is one of the two, and the same check of an unchanged document is answered at once.
+
+```python
+from cad import model
+
+found = model.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("bearing*", "housing")])
+for finding in found.findings:          # an `overlapping_parts` each: its two occurrences in .refs, mm3 in .value
+    print(finding.human_line())
+assert found.ok, found.summary          # not ok where a pair shares volume, or could not be measured
+```
+
+The result is a `CheckResult`: `failed` where a pair shares volume, `not_checked` (its `reason`
+`unmeasured`) where none was found but a pair could not be measured (past its five minutes or the check's
+twenty, its process lost, the kernel's refusal: each row's `reason`) -- never a pass, and asked again the check
+goes on from what it measured -- and `ok` only with every pair answered and none
+sharing. A shared volume of `min_volume` or less (0.001 mm3 by default) is none. `measurements` holds the poses, the pairs counted and how each was answered (`pairs`: `apart`,
+`kept`, `measured`), every row of `overlaps`, `fits` and `unmeasured` (each `between` its two parts, with every pose it holds at), and the measurements that took
+longest (`slowest`).
 
 ## Manufacturing checks
 
@@ -918,7 +998,7 @@ script or a prompt written for an earlier release meets now:
 A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
 parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`,
 `cad xbf solve` and `cad step solve` (a mesh has no faces a study can hold or load by, so the mesh types
-have none). It is a check (law 28): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
+have none). It is a check (law 27): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
 findings carry a severity, a code and a location, with two uses of one signature:
 
 ```python
@@ -968,6 +1048,70 @@ one thread, in a private folder with homes of its own, so it reads and writes no
 and the result names the CalculiX version that ran; `cad run ccx ARGS` runs the same program on a deck of
 a person's own (`cad.calculix._command`). The operation is the calculix integration's, which names the
 kernel and netgen `alongside`, so the `cad` command runs a study where all three are: its own process
-when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
+when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 28); a
 script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
 without one says so in one line.
+
+## Joint stops
+
+A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad.model.ranges`,
+`cad.xbf.ranges` and `cad.step.ranges`, one to one with `cad model|xbf|step ranges`. It is a check (law
+28): a `CheckResult` whose finding per joint (`joint_stops`, at the joint) says where it stops each way and
+which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
+calling process, as a study reads one (a model exported by the engine to an `.xbf` in a temporary folder
+first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
+(`engine.ranges`: surfaces sampled to a fixed resolution and measured gap by gap, the other joints as
+built): its stop is where its child link meets its parent link, and a clash with any other link before it is
+said beside; a larger clearance only narrows a range. Every part is tested against every other on its own
+surface: where a simulator stops a joint, with the collision shapes a MuJoCo function chose, is a question
+for the simulator on its file. It writes nothing and changes nothing: a model is code, and its ranges are
+written in it (law 22). Its options describe the sweep: `step` (degrees or
+millimetres), `clearance` (millimetres, 0.3 by default and at the least: the surfaces' sampling) and `joint`
+(the joints to sweep, every one a person moves by default; a name the document has no such joint by is
+refused, naming its joints). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
+process when its environment holds it, else the installation's base (law 28).
+
+## Since 0.11.8
+
+What 0.11.8 adds:
+
+- **A model declares what is true of the machine for a robot description.** `cad.build123d`'s `body`,
+  `frame`, `free`, `limits` (a drive's `effort` and `velocity`), `link`, `mass` and `point_mass` are kept
+  in the xbf beside the materials. Each is a fact of the machine; how a simulator collides a part, which
+  pairs never collide, contact friction and a joint's dynamics are a simulation's choices, made in a MuJoCo
+  function.
+- **A document exports as a robot description.** `cad model export ID robot.xml` (MJCF) and `robot.urdf`
+  write its links, exact inertials, visual meshes and colours, each part's mesh as its collision (MuJoCo
+  collides a mesh as its convex hull), sites, drive force bounds, couplings, closed loops (MJCF) and states
+  as keys, with a `scene.xml` beside an MJCF; `--zero STATE` counts every joint from a state. Its summary
+  says how the parts collide, and that a MuJoCo function is where to choose otherwise.
+- **A MuJoCo function makes the simulation's choices** (`cad.mujoco`, `cad[mujoco]`): `spec` makes a
+  document a `mujoco.MjSpec`; `parts` lists its parts' label paths; `collisions`, `fit` (a box, sphere, cylinder or capsule fitted to the part's
+  exact solid) and `decompose` (CoACD's convex hulls of its mesh, `cad[coacd]`) find and replace a part's
+  collision by its label path; everything else is MuJoCo's own API; `save` writes the spec as a folder that
+  travels.
+- **`cad.mujoco.check` checks a MuJoCo model's file** (`cad mujoco check robot.xml`): MuJoCo's own compile,
+  the model-health checks, what the model collides as and its contact excludes, as a check's result. An
+  MJCF is no document type: cad writes one and asks MuJoCo about one, and MuJoCo Studio shows it (`cad run
+  mujoco-studio --model robot.xml`). `check` is the first operation of an integration's own (law 27).
+- **`ranges` finds each joint's stops** from the parts' surfaces (**Joint stops**).
+
+What a model, a script or a check written for 0.11.7 meets now:
+
+- **A child turned about its joint's axis at its zero fails the run.** Where a child was built where it
+  stands -- its `RigidJoint` at the joint's origin, its Z on the joint's axis, its X another way (as a
+  `bd.Plane` of the axis on a turned part gives) -- and `connect_to` turned it about that axis at the joint's
+  zero, 0.11.7 built it turned. The run now fails, naming the joint, the turn and the frame to build the
+  `RigidJoint` at: a revolute's own frame, `hinge.location`, or a slide's position in its rail's
+  orientation. A `RigidJoint` whose Z is not the axis, or that stands elsewhere, places the child on the
+  joint as before.
+- **A read STEP's densities are the file's.** OCCT read a density declared in kg/m^3 (what most CAD tools
+  write) 1000 times too small; it is now read as declared, so masses from such a file are 1000 times
+  larger than 0.11.7 said. A STEP this library wrote (g/cm^3) reads as before.
+- **A read STEP's user-defined attributes are no materials.** A part parameter a CAD tool writes (`QTY`,
+  a sheet-metal default) was read as a material named for it, with no density; it is now none, and an
+  attribute that names a material (`PTC_MATERIAL_NAME`) names the part's material.
+- **`cad.urdf.validate` warns `zero_effort` and `zero_velocity`** for a joint limit of 0 that is not a
+  mimic's. With `strict`, a URDF that passed in 0.11.7 can fail: give the drive's limits.
+- **A snapshot's untriangulated faces are one warning**, naming the first parts and counting the faces,
+  where 0.11.7 said a line a part.

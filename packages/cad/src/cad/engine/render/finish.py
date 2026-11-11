@@ -117,7 +117,8 @@ def cube_faces(image: np.ndarray, size: int = CUBE_SIZE) -> np.ndarray:
 
 
 @lru_cache(maxsize=1)
-def _cube_pixmap() -> tuple[Any, float]:
+def cube_pixmap() -> tuple[Any, float]:
+    """The environment as the packed cube map OCCT lights by, and the radiance its 1 stands for."""
     from OCP.Image import Image_Format, Image_PixMap
     from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
 
@@ -147,7 +148,7 @@ def put_up(view: Any, viewer: Any, backdrop: Any) -> list[Any]:
     from OCP.V3d import V3d_AmbientLight, V3d_DirectionalLight
     from OCP.gp import gp_Dir
 
-    pixmap, brightest = _cube_pixmap()
+    pixmap, brightest = cube_pixmap()
     white = Quantity_Color(1, 1, 1, Quantity_TOC_RGB)
     ambient = V3d_AmbientLight(white)
     ambient.SetIntensity(LOOK.environment.intensity * brightest)

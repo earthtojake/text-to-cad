@@ -50,6 +50,23 @@ test("a press picks the most specific thing under it, filtered by the Select mod
   assert.equal(index.pointSelector([5, 25]), "#@x0y0");
 });
 
+test("a box takes everything it touches, even in part, as the filter and the layers drawn say", () => {
+  const index = createBoardIndex(BOARD);
+  const taken = (box, options) => index.pickBox(box, options).map((hit) => hit.selector);
+  // Over R1's left end: its pad 1 by a sliver, and the part by its outline; the track beside it is missed.
+  assert.deepEqual(taken([12, 18, 13.8, 22]), ["#R1.1", "#R1"]);
+  assert.deepEqual(taken([12, 18, 13.8, 22], { mode: "parts" }), ["#R1"]);
+  // A track reached by its width alone, its centreline outside the box; not on a layer the view leaves out.
+  assert.deepEqual(taken([14.4, 14, 15, 15]), ["#net:VIN@x9.18y-10.5"]);
+  assert.deepEqual(taken([14.4, 14, 15, 15], { layers: new Set(["B.Cu"]) }), []);
+  // A via by its rim; bare board inside a pour is nothing under All, the pour's net under Nets.
+  assert.equal(taken([20.2, 15.2, 21, 16]).length, 1);
+  assert.deepEqual(taken([20.25, 15.25, 21, 16]), []);
+  assert.deepEqual(taken([5, 5, 8, 8]), []);
+  assert.deepEqual(taken([5, 5, 8, 8], { mode: "nets" }), ["#net:GND"]);
+  assert.deepEqual(taken([Number.NaN, 0, 1, 1]), []);
+});
+
 test("a pin with two pads is one pin, and a pick on either names it", () => {
   const index = createBoardIndex(BOARD);
   assert.equal(index.pick([28.5, 9.05]).selector, "#U1.3");
@@ -394,14 +411,13 @@ test("an area holds what lies wholly inside it, on its layer alone when it names
   assert.equal(index.within([-1, -1, 41, 31], "B.Cu").vias.length, 1, "a through via is on every copper layer");
 });
 
-test("the overlay lights a text's box, a graphic's ink, an area and the box being dragged", () => {
+test("the overlay lights a text's box, a graphic's ink and an area", () => {
   const index = createBoardIndex(SAVED, SHEET);
   const frame = { transform: { scale: 10, offsetX: 0, offsetY: 0 }, width: 400, height: 300 };
   const { ctx, marks, filled } = recordingContext();
   drawBoardOverlay(ctx, index, { ...frame, selection: [index.resolve(`#text:${T(5)}`), index.resolve("#@x0y-10..x10y0")],
-    hover: index.resolve(`#shape:${T(8)}`), draft: [30, 1, 35, 4] });
-  // The draft, KiCad's window box, lighter; then the text's box (27..33 x 24.1..25.9 mm at 10 px/mm) and the area (KiCad's 0..10 x -10..0 is page 5..15 x 15..25).
-  assert.deepEqual(filled("rgba(141, 197, 255, 0.1)").map((box) => box.map((v) => Math.round(v))), [[300, 10, 350, 40]]);
+    hover: index.resolve(`#shape:${T(8)}`) });
+  // The text's box (27..33 x 24.1..25.9 mm at 10 px/mm) and the area (KiCad's 0..10 x -10..0 is page 5..15 x 15..25).
   assert.deepEqual(filled("rgba(141, 197, 255, 0.16)").map((box) => box.map((v) => Math.round(v))), [[270, 241, 330, 259], [50, 150, 150, 250]]);
   assert.ok(marks.some((mark) => mark.op === "stroke" && mark.style === "rgba(141, 197, 255, 0.55)"), "the hovered graphic's stroke");
 });
@@ -416,7 +432,7 @@ test("a rule area is a zone of its own kind, and what KiCad saved locked is take
   const index = createBoardIndex(board);
   assert.equal(index.zones.find(zone => zone.rule).net, "");
   assert.equal(index.nets.get("GND").zones.length, 1, "a rule area is on no net");
-  // Inside the rule area: the rule area, as Rule Areas takes it; Zones alone takes the pour there.
+  // Inside the rule area: the rule area, as Rule areas takes it; Zones alone takes the pour there.
   assert.equal(index.pick([34, 24], { kinds: { ruleAreas: true, zoneFill: true } }).selector, "#zone:b2");
   assert.equal(index.pick([34, 24], { kinds: { zones: true, zoneFill: true } }).selector.startsWith("#net:GND@"), true);
   assert.deepEqual(index.within([29, 19, 39, 29]).zones, [], "an area holds no rule area among its pours");

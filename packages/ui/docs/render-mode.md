@@ -49,7 +49,8 @@ file-session read boundary (`readViewSettings`, `readPreviewSettings`): what thi
 cannot read (an older per-mode tree, a mode it no longer has) is left out, the rest kept.
 The same display shape powers live `setDisplaySettings` and snapshot `--display`; either
 refuses `mode: "render"` as it refuses any mode it does not know. A snapshot turns the grid
-on with `--grid` (`display.grid`); it has no Preview rendering option. `--camera` holds
+on with `--grid` (`display.grid`), and asks for Preview with `--preview`, its own flag and no display mode
+(the engine draws it with OCCT; no browser does). `--camera` holds
 pose/framing only. A Quick Edit's views carry the mode and the grid (`display.mode`,
 `display.grid`) with Clip and Explode, so a snapshot of them replays the view.
 
