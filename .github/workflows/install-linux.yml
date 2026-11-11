@@ -4,10 +4,11 @@ name: Linux installer rehearsal
 # the runner's own Ubuntu, and in the slim Python image, which has no curl until one is installed, no procps,
 # and no uv. uv comes from its own installer. The checks are the `cad` command's: `cad --version` and `cad
 # doctor`. The Windows rehearsal goes further, through models and the uninstall (install-windows.yml); the
-# release smoke runs the wheels. A rehearsal, not a release gate: dispatched by hand, or by a push to main
-# that changes the installer or what it runs, as the Windows one is. No test.yml job runs it
-# (scripts/github-workflows/select_checks.py). Dispatched with `published`, the same steps run against what
-# people install today: the site's install.sh and the newest release on PyPI, no wheel built.
+# release smoke runs the wheels. test.yml calls it, as it does the Windows one, on a full run (so before
+# a release ships) and on a change to the installers: the selector's `installer` flag
+# (scripts/github-workflows/select_checks.py). Dispatched by hand with `published`, the
+# same steps run against what people install today: the site's install.sh and the newest release on PyPI,
+# no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -20,17 +21,18 @@ on:
         type: boolean
         required: false
         default: false
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/install-linux.yml
-      - scripts/install/install.sh
-      - packages/cad-server/src/cad_server/cli/setup.py
-      - packages/cad-server/src/cad_server/cli/uninstall.py
-      - packages/cad-server/src/cad_server/cli/doctor.py
-      - packages/cad-server/src/cad_server/_internal/providers.py
-      - packages/cad-server/src/cad_server/_internal/launch.py
-      - packages/cad-server/src/cad_server/_internal/installations.py
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to rehearse (default: the caller's commit)"
+        type: string
+        required: false
+        default: ""
+      published:
+        description: "Rehearse the published release (the site's install.sh, PyPI), not this tree's wheel"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -48,6 +50,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core packages/ui apps/web apps/mcp
@@ -57,6 +60,7 @@ jobs:
         run: scripts/bundle/bundle.sh --clean
 
       - name: Build and check the wheels
+        timeout-minutes: 10
         env:
           CAD_KEEP_WHEEL: "1"
           CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
@@ -67,7 +71,7 @@ jobs:
       - name: Keep the wheels for the rehearsals
         uses: actions/upload-artifact@v7
         with:
-          name: wheels
+          name: install-linux-wheels
           path: ${{ runner.temp }}/wheels/*.whl
           if-no-files-found: error
           retention-days: 1
@@ -94,6 +98,7 @@ jobs:
       # What the one-line command itself needs: a person on this image has run `curl ... | sh`.
       - name: curl, on the slim image
         if: matrix.image != ''
+        timeout-minutes: 5
         run: apt-get update -qq && apt-get install -y -qq curl ca-certificates
 
       - name: Check out repository
@@ -106,7 +111,7 @@ jobs:
         if: ${{ !inputs.published }}
         uses: actions/download-artifact@v8
         with:
-          name: wheels
+          name: install-linux-wheels
           path: wheels
 
       # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at

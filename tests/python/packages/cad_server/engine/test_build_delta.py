@@ -127,6 +127,39 @@ class BoundsTest(unittest.TestCase):
         self.assertEqual(self.bounds(bd.Compound(children=[turned, blob], label="pair")),
                          self.exact((sweep, turned.location), (blob, None)))
 
+    def test_a_periodic_surface_cut_from_a_hair_below_its_first_knot_is_measured_whole(self) -> None:
+        """A face's parameter range on a periodic B-spline can start a hair below the first knot and span
+        a whole period (motorbike's exhaust: -8.9e-16 to 2 pi + 2.6e-14). OCCT 8.0 cuts such a surface
+        to one with no poles (no box: the face kept its coarser one) over a hair less than a period, and
+        over a whole period or more crashes the process; the range is cut as one it handles
+        (``delta._in_period``)."""
+        import math
+
+        from OCP.Geom import Geom_CylindricalSurface, Geom_RectangularTrimmedSurface
+        from OCP.GeomConvert import GeomConvert
+        from OCP.gp import gp_Ax3
+
+        from cad.engine import delta
+
+        surface = GeomConvert.SurfaceToBSplineSurface_s(
+            Geom_RectangularTrimmedSurface(Geom_CylindricalSurface(gp_Ax3(), 10.0), 0.0, 2 * math.pi, 0.0, 20.0))
+        surface.SetUPeriodic()
+        period = surface.UPeriod()
+        hull = delta._hull(surface, -8.881784197001252e-16, period - 1e-12, 0.0, 20.0)
+        self.assertIsNotNone(hull)
+        for axis in range(2):
+            self.assertLessEqual(hull[axis], -10.0 + 1e-6, "the whole circle, not a line at its seam")
+            self.assertGreaterEqual(hull[axis + 3], 10.0 - 1e-6)
+        whole = (0.0, period)
+        self.assertEqual(delta._in_period(-8.881784197001252e-16, period + 2.6e-14, *whole), whole)
+        self.assertEqual(delta._in_period(-1e-12, period - 1e-12, *whole), whole)
+        self.assertEqual(delta._in_period(-1e-12, 3.0, *whole), (0.0, 3.0 + 1e-12))
+        self.assertEqual(delta._in_period(period - 1e-12, period + 3.0, *whole), (0.0, 3.0 + 1e-12))
+        start, end = delta._in_period(-1.0, 2.0, *whole)
+        self.assertAlmostEqual(start, period - 1.0, places=12)
+        self.assertAlmostEqual(end - start, 3.0, places=12)
+        self.assertEqual(delta._in_period(1.0, 4.0, *whole), (1.0, 4.0))
+
 
 class DeltaTest(unittest.TestCase):
     @classmethod
@@ -230,6 +263,24 @@ class RunLineTest(unittest.TestCase):
         self.assertEqual(said.describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 1 miss, 1 hit")
         report["memo"] = {"misses": 2, "hits": 0}
         self.assertEqual(said.describe(report, 0.1, None), "built m.py::m in 0.10s: bodies 1 run; 2 misses, 0 hits")
+        # Calls that ran uncached are counted beside the hits, and why their body is not retained is said under
+        # the line with its remedy: the first four reasons, then how many more.
+        report["memo"] = {"misses": 2, "hits": 9, "uncached": 6}
+        report["bodies"] = {"m.py::m": "run"}
+        report["retention"] = {"fallbacks": {"m.py::m": [f"runs OCCT's Maker{n} uncached (1 call): remedy" for n in range(6)],
+                                             "m.py::other": ["runs OCCT's Maker uncached (1 call): another model's"]}}
+        self.assertEqual(said.describe(report, 0.1, None).splitlines(), [
+            "built m.py::m in 0.10s: bodies 1 run; 2 misses, 9 hits, 6 uncached",
+            *(f"  not retained: m.py::m runs OCCT's Maker{n} uncached (1 call): remedy" for n in range(4)),
+            "  not retained: and 2 more reasons"])
+        # A cold run of a script whose worker the engine retired says why, and names the cap that did it.
+        cold = {"ok": True, "model": "m.py::m", "memo": {"misses": 2, "hits": 0}, "bodies": {"m.py::m": "run"},
+                "timings": {}, "cold": {"reason": "RSS", "ago": 185}}
+        self.assertEqual(said.describe(cold, 67.7, True).splitlines(), [
+            "built m.py::m cold in 67.70s: bodies 1 run; 2 misses, 0 hits",
+            "  cold: this script's worker went 3m ago: the engine's processes were over their memory cap "
+            "(CAD_ENGINE_WORKER_RSS_MB, read when the engine starts)"])
+        self.assertEqual(said.describe(cold, 0.1, False), "built m.py::m warm in 0.10s: bodies 1 run; 2 misses, 0 hits")
         took = {"ok": True, "model": "m.py::m", "memo": {"bodies_loaded": 3}, "timings": {}, "bodies": {}, "cache": {"from": "memory"}}
         self.assertEqual(said.describe(took, 0.1, None), "took m.py::m in 0.10s: its document in memory holds the model's key, "
                                                           "3 bodies loaded, nothing ran")

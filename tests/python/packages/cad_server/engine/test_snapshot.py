@@ -534,6 +534,9 @@ class SnapshotTest(unittest.TestCase):
                          [("view-1.png", True, 0.0, False, False, 1.0, (240, 180)),
                           ("front.png", False, 0.15, True, True, 2.0, (160, 120))])
         self.assertEqual(pictures[0][2].display["hidden"], ["peg.1"])
+        coloured = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "output": {"background": "#202830"}}]})
+        self.assertEqual([still.background for _document, _out, still in [*coloured, *pictures]],
+                         ["#202830", None, None, None])
         self.assertEqual([still.annotation for _document, _out, still in pictures], [packet["annotation"]] * 3,
                          "the packet's ink, over every view")
         # The flags override every job: SRC drawn in place of the input, and the size of every output.
@@ -548,6 +551,9 @@ class SnapshotTest(unittest.TestCase):
                 ({**packet, "jobs": [{**job, "output": {"padding": 0.5}}]}, r"padding is a number from 0 to 0.15"),
                 ({**packet, "jobs": [{**job, "output": {"renderScale": 4}}]}, r"renderScale is a number from 1 to 3"),
                 ({**packet, "jobs": [{**job, "output": {"viewLabels": True}}]}, "output has no viewLabels"),
+                ({**packet, "jobs": [{**job, "output": {"background": "grey"}}]}, "background is a colour as #rrggbb"),
+                ({**packet, "jobs": [{**job, "output": {"background": "#202830", "transparent": True}}]},
+                 "background and transparent: a picture stands on a colour or on nothing"),
                 ({**packet, "jobs": [{**job, "outputs": []}]}, "lists the pictures it writes"),
                 ({**packet, "jobs": [{**job, "outputs": [{"path": str(folder / "a.jpg")}]}]}, r"a\.jpg is not one"),
                 ({**packet, "jobs": [job, job]}, "writes .*front.png twice"),

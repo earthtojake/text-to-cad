@@ -44,9 +44,9 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
     # KiCad's electrical rules check of a saved schematic: the document type's, run by the kicad integration's kicad-cli.
     "kicad_sch erc": ("cad.kicad_sch", "erc"),
-    # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
+    # A 3D type's manufacturing check, and a DXF's as a sheet's cut file: one signature for every type.
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf")},
     # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
     **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
 }
@@ -73,6 +73,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+    # A B-rep type's interference check: its poses, motions and fits repeat, lists no signature derives.
+    **{f"{document_type} interference": frozenset({"document", "pose", "states", "motion", "motions", "samples", "fit",
+                                                   "jobs", "pair_seconds", "seconds", "min_volume"})
+       for document_type in ("model", "xbf", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.

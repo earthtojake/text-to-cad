@@ -24,13 +24,13 @@ import cad_server.cli as cli  # noqa: E402
 from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
-    "model": ("export", "snapshot", "inspect", "dfm", "solve"),
-    "xbf": ("export", "snapshot", "inspect", "dfm", "solve"),
-    "step": ("export", "snapshot", "inspect", "dfm", "solve"),
+    "model": ("export", "snapshot", "inspect", "dfm", "interference", "solve"),
+    "xbf": ("export", "snapshot", "inspect", "dfm", "interference", "solve"),
+    "step": ("export", "snapshot", "inspect", "dfm", "interference", "solve"),
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
-    "dxf": ("snapshot",),
+    "dxf": ("snapshot", "dfm"),
     "urdf": ("snapshot", "validate"),
     "srdf": ("snapshot", "validate"),
     "sdf": ("snapshot", "validate"),
@@ -66,7 +66,7 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("document types (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
-        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, solve +model: a document id, held in memory\n")
+        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve +model: a document id, held in memory\n")
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)
         self.assertIn("operations:\n  export ", said)
@@ -89,7 +89,7 @@ class TheCommandTable(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
         from cad_server.cli.document_types import OPERATIONS
 
-        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": ["--process", "printing"]}
+        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": []}
         for document_type, operation in sorted(OPERATIONS):
             entry = TYPES_TABLE[document_type]
             if not entry.has_file:
@@ -102,7 +102,10 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual((code, out, err), (2, "", f"cad {document_type} {operation}: no such file: {missing}\n"))
                 code, out, err = _run([document_type, operation, missing, *extra, "--json"])
                 self.assertEqual((code, err), (2, ""))
-                self.assertEqual(json.loads(out), {"ok": False, "error": f"no such file: {missing}", "reason": "not_found"})
+                # a manufacturing check's answers all carry the state, a command-line mistake's too
+                state = {"status": "usage"} if operation == "dfm" else {}
+                self.assertEqual(json.loads(out),
+                                 {"ok": False, "error": f"no such file: {missing}", "reason": "not_found", **state})
         code, _, err = _run(["urdf", "validate", "robot.xml"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf\n"))
 
@@ -204,7 +207,8 @@ class TheCommandTable(unittest.TestCase):
         code, out, err = _run(["step", "exprt", "--json"])
         self.assertEqual((code, err), (2, ""))
         self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": (
-            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, solve; "
+            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, interference, "
+            "solve; "
             "'cad step --help' says what each does")})
         self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
         code, out, err = _run(["stl"])

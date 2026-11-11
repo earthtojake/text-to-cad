@@ -70,7 +70,8 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
+  `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -82,9 +83,12 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
-document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
-and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
+document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
+exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
+B-rep document's interference check (`cad.<type>.interference(source, poses=..., motions=..., fits=...)`: every
+pair of parts whose boxes meet measured exactly, as built and posed, by the engine); a
+B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
+CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -414,7 +418,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `interference`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -494,12 +498,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two parts share volume, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `interference`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -625,18 +629,20 @@ src/cad/
                          #   (_session), DRC (_check), its exports (_export), a schematic's ERC
                          #   and exports (_schematic), and route, copper for the connections a
                          #   plan names, inside an edit (_route; its search, _routing: numpy)
-  trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
-                         #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
-                         #   printing (overhangs, walls, support), orientations (ranked) -- each
-                         #   taking a trimesh.Trimesh and answering its report as data (_molding,
-                         #   _printing), and the dfm every 3D type runs with them (_check)
+  trimesh/               # the trimesh integration: a mesh's 3D printing measurements -- printing
+                         #   (overhangs, walls, trapped volumes, support), orientations (ranked) -- each
+                         #   taking a trimesh.Trimesh and answering its report as data (_printing), the
+                         #   mesh read and cleaned (_mesh), and the check every mesh type runs (_check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
-                         #   named material looks (materials: solder mask, ENIG, anodized, ...,
-                         #   each a native bd_materials FinishedMaterial), and the producers it
-                         #   registers (_producers)
+                         #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
+                         #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
+                         #   _dfm_check, the entry), the interference check's measuring
+                         #   (_interference), named material looks (materials: solder mask, ENIG,
+                         #   anodized, ..., each a native bd_materials FinishedMaterial), and the
+                         #   producers it registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
@@ -650,13 +656,17 @@ src/cad/
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
-  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
-                         #   validate) and a KiCad export return, typed
+  results.py             # the operations' shared result types: what a check (dfm, interference, solve,
+                         #   drc, erc, validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
-  _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
-                         #   signature and options, the trimesh integration's measuring imported
-                         #   when it runs (manufacturing), the runner of one operation the server's
+  _internal/             # DocumentType (document_type), a B-rep type's interference check: its
+                         #   options and its result (interference), a 3D type's manufacturing check: its
+                         #   signature and options, its integration's measuring imported when it
+                         #   runs (manufacturing), each process's options, rules and findings
+                         #   (dfm/, its README the mechanism), the numpy geometry the checks measure
+                         #   with (meshops_printing, a mesh's, shared by both integrations;
+                         #   molding_geometry; sheet_plane), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
                          #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the
@@ -767,44 +777,170 @@ an obstacle nor a connection to it: a pad only a pour joins counts as apart, and
 block refills the pours round the new copper. It runs in the script's process. It does not route differential
 pairs, keep a length, skew or track-angle rule, or choose what to route or in what order.
 
-## Manufacturing checks
+## The interference check
 
-A 3D document's `dfm` measures it for a manufacturing process, with the `trimesh` integration
-(`cad[trimesh]`): `cad.model.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and
-`cad.glb.dfm`, one to one with `cad <type> dfm --process molding|printing`. The source is a file of
-the type or, for `model`, a document the engine holds (its id, or the handle a model's call returns), so a
-check script measures the model it builds:
+A B-rep document's `interference` says which of its parts share volume: `cad.model.interference`,
+`cad.xbf.interference` and `cad.step.interference`, one to one with `cad <type> interference SRC`. Every pair of
+parts whose boxes meet is measured exactly, on the parts' own solids, as built and at each stance asked:
+`poses` (mechanism states' names, or `{joint: value}`), `states` (every state), `motions` (configuration
+sequences by name, or `"all"`, each at `samples` stances). `fits` names the pairs meant to share volume, listed
+apart. The engine measures it and keeps the result; nothing is built, meshed or written.
 
 ```python
-from cad import model, stl
-from part import part                  # a model
+from cad import model
 
-result = model.dfm(part(), process="molding", pull="-z")    # draft, undercuts, projected area
-stl.dfm("part.stl", process="printing", angle_limit=40)  # overhangs, walls, support
-stl.dfm("part.stl", process="molding", candidates=True)  # the pulls ranked: x, y, z, principal axes
-result.ok, result.findings, result.measurements["draft"]["min_wall_draft"]
+found = model.interference(robot(), states=True, motions="all", fits=[("bearing*", "housing")])
+for finding in found.findings:          # an `interference` each: its two occurrences in .refs, mm3 in .value
+    print(finding.human_line())
+assert found.ok, found.summary          # not ok where a pair shares volume, or could not be measured
 ```
 
-The figures are facts, never verdicts: nothing compares them against a resin's, a printer's or a tool's
-limit. The answer is a `cad.results.CheckResult`: `measurements` every family measured, its findings
-what they show -- warnings (`zero_draft_walls`, `undercut_candidates`, `overhangs`, `units_suspect`,
-`not_watertight`, `several_bodies`, `coarse_curved_face`), each at the place it was measured (`x, y, z`
-in millimetres), and errors for what could not be measured (`measurement_failed`, `mesh_unreadable`,
-`not_finite`, `invalid_target`), which alone fail it. Each option belongs to a process: molding's
-`pull` (`z`, `-y`, `x,y,z`; default `z`), `wall_limit` (45 degrees) and `zero_tol` (0.05); printing's
-`angle_limit` (45) and `samples` (2000); `units` (`mm`, `cm`, `m`, `in`, `ft`) an STL's alone, the
-other types declaring their own; `candidates` either's. An option of the other process is refused by
-name. A mesh is measured as the viewer reads it: an STL as it is, a 3MF's or a GLB's objects placed in
-millimetres, Z up, and a model, a STEP or an xbf as the engine tessellates it.
+The result is a `CheckResult`: `failed` where a pair shares volume, `not_checked` (its `reason`
+`unmeasured`) where none was found but a pair could not be measured within its time (`pair_seconds`, 60 by
+default; the whole check's `seconds`, 1200) -- never a pass -- and `ok` only with every pair measured and none
+sharing. `measurements` holds the stances, the pairs counted, and every row of `interferences`, `fits` and
+`unmeasured`.
 
-Measured as a mesh, a curved face's draft is read from its facets, which are chords: the report says how
-far its facets disagree (`spread_deg`) and when to export finer. The trimesh integration's functions
-measure a mesh a program already holds, answering the same report as data:
-`cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
-`cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` (any file trimesh reads, an `.obj`
-or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
-`cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
-(`cad[trimesh]`), and a check without it says so in one line.
+## Manufacturing checks
+
+A 3D document's `dfm` says whether a part can be made by a process, and what to change where it cannot:
+`cad.model.dfm`, `cad.step.dfm`, `cad.xbf.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one
+with `cad <type> dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `printing`
+alone, its default: CNC, sheet and molding are judged on exact geometry, and a mesh asked for one is refused
+with the check to run instead, the STEP's or the model's), and a DXF's, `cad dxf dfm FILE`, as a sheet's cut file
+(its one process, `sheet`, the default). The source is a file of the type or, for `model`, a model's document the engine
+holds (its id, or the handle its call returns), so a check script measures the model it builds:
+
+```python
+from cad import model, step
+from cad.build123d import dfm
+from part import part                                          # a model
+
+model.dfm(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
+step.dfm("bracket.step", process="sheet", material="5052", bend_radius=1.6)
+step.dfm("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
+step.dfm("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
+found = dfm(shape, process="cnc", tools=[3, 6])                # a live build123d shape, the same result
+if found.status != "ok":                                       # "ok", "failed" or "not_checked"
+    for finding in found.findings:                             # a rule's verdict: its figure, limit and refs
+        print(finding.code, finding.location, finding.value, finding.limit, finding.unit, finding.refs)
+```
+
+**Three states.** A check answers one of three (`CheckResult.status`; the command's exit status):
+
+| `status` | exit | what it says |
+| --- | --- | --- |
+| `ok` | 0 | every part was measured and no finding is an error: the part can be made. Warnings are recommendations: it is made, at a cost or a risk |
+| `failed` | 1 | a finding is an error: the part cannot be made by this process as drawn. With `--strict` (`strict=True`), a warning fails it too |
+| `not_checked` | 3 | the check did not judge what it was asked to, so it is no verdict and never a pass: a source that does not read or holds nothing to measure (`document_unreadable`, `document_empty`, `not_solid`, a mesh's `mesh_unreadable` or `mesh_empty`, a cut file's `no_cut_geometry`, a file that is not there: `invalid_target`), a family that could not be measured (`measurement_failed`), faces the kernel failed to intersect rays with (`rays_unintersected`), a rule whose features carry no figure that should have been measured (`rule_partly_judged`), rules that judged nothing (`rules_none_evaluated`), a report with a figure that is no finite number (`not_finite`). `reason` is the code of the finding that says so |
+
+`ok` is true for `ok` alone. An error found wins over what was not checked: the part fails whatever else
+was not judged, and the line says both. Read the state from `status` (or the exit), never from a finding's
+severity: a `not_checked` result carries an `error` finding too, the one whose code is its `reason`, which
+says why nothing was judged. The command exits 3 too for a check that did not run to its end --
+the engine stopped it (its document changed under every try of it, it went past its time or its memory), lost its process
+or stopped itself, its environment gave no answer, it crashed -- where `--json` is the failure's document with `"status": "not_checked"` and a
+`reason`, and one line on stderr says `NOT CHECKED (<reason>)` and why; a library call raises those. A check its
+caller measures (a mesh's, a cut file's, a file's with no engine to reach) runs in a process of its own held to
+the same limits (`CAD_ENGINE_CHECK_SECONDS`, `CAD_ENGINE_CHECK_RSS_MB`): past one its result is `not_checked`,
+`over_time` or `over_memory`. Exit 2 stays the command line's mistake (`"status": "usage"` in its `--json`
+document): an option refused by name, a file of another type or not there, a document the engine does not hold.
+
+- **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
+  points, counterbores, threads), pockets and slots, internal corners against tool radius and depth, sharp
+  internal edges no tool makes, walls and gaps, tool access per setup direction and the setups it needs,
+  undercuts, voids, stock; turned parts' axis, diameters, bores, grooves and live-tooling features.
+- **Sheet metal** (`--thickness`, `--k-factor`, `--bend-radius`, `--kerf`, `--sheet-size`): constant
+  thickness, bends, flanges, reliefs, hems, holes and their distances to edges, holes and bends (in each
+  convention), notches, tabs and webs, measured on the part unfolded with its K-factor
+  (`cad.build123d.unfold`); a DXF's contours, overlaps, crossings, annotation and small features.
+- **Injection molding** (`--pull`, `--cavities`): per-face draft, undercuts and the side action, lifter or
+  collapsible core each needs, wall thickness and thick sections, ribs, bosses, internal corners, projected
+  area and a clamp-force estimate, the parting, the mold envelope; `--candidates` ranks the pulls.
+- **3D printing** (`--technology fdm|sls|sla|mjf|pbf`, `--build-volume`, `--layer-height`, `--nozzle`):
+  walls supported and not, gaps, holes, pins, embossed and engraved detail, overhangs, bridges and
+  cantilevers, clearances between parts, trapped volumes and their escape holes, build-volume fit, bed
+  contact and warping, stair-stepping, support; `--candidates` ranks orientations.
+
+**Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
+`build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
+(`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
+holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
+millimetres.
+The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
+one table of rules: general practice from published design guides, each rule citing its guide as the
+evidence, and text-to-cad's own floors where no guide states a limit, each labelled as its own -- no rule
+is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
+compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
+`--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is one finding for
+each feature that fails it, coded by its id, at the feature's most specific ref (a corner's edge, not one of
+its two faces), with the verdict as data -- `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`),
+`source` (the guide's publisher and title, or `text-to-cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
+and a hint saying what to change; an error is a limit the part breaks, a warning a recommendation. The
+command says a rule once -- its hint, its source and how many places -- then a short line a place, and its
+last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2
+warning(s); cnc ...; failed: cnc.internal_corner_sharp x4`. Every rule's outcome, its source and every
+failure (with the index of its item in its family) are `measurements["rules"]`, and a figure not measured is
+never a pass: a rule that could not judge some of its features says which (`rule_partly_judged`, its `refs`) and the
+check is not checked. What does not apply is no gap: a figure that cannot exist of a feature (a lone rib's
+gap to a neighbour) is named in the feature's `not_applicable`, and what a source does not hold (a mesh's
+holes, pins and details; a cut file's bends, reliefs, hems and thickness) is said once as a fact
+(`families_not_measured`), its rules not evaluated.
+
+**Every part, as it stands.** An assembly's every part is judged, and a part used several times is judged
+each way it stands: the occurrences turned alike are measured once and counted
+(`measurements["bodies"][i]`: `occurrences`, `paths`, `placements_mm`), and one turned another way is
+measured as it stands, at its own refs -- a bracket that prints clean on its back and needs support on its
+side is said at the occurrence on its side. `measurements["document"]` totals every occurrence
+(`occurrence_count`, `solid_count`, `volume_mm3`), and so does each process: a print measures every
+occurrence where it stands on the plate, and the others' totals count a part once for each time it occurs.
+Several parts are said (`several_bodies`); one part of several solids says so in every process
+(`several_solids`), and solids that share volume fail every process (`not_sound`).
+`--material` picks a material's limits, and without it the material the parts declare is read
+(`part.material = metals.aluminum()`, when every part agrees: `material_declared`); without `--process`, an
+xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,
+`plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
+`bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
+`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's, and a DXF's where it
+declares none or the wrong ones (the other types declare their own, and take no such option); an option of another process, a value of another kind
+(`axes=3.7`, `turning="no"`) and a value no machine has (an end mill over 100 mm, an FDM layer taller than
+its nozzle) are refused by name, never coerced -- by the flag on the command line (`--tools`), by the
+parameter in Python (`tools`), where a list of numbers is given as one (`tools=[3, 6]`, `stock=(100, 60,
+25)`) and a material by its name (`"Aluminium 6061"`). Every family, its JSON, every rule with its source and
+what each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
+
+The trimesh integration's functions measure a mesh a program already holds, answering its report as data:
+`cad.trimesh.printing(mesh)` and `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
+`cad run` that imports `trimesh` or `cad.trimesh` gets that integration and one that imports `build123d`
+gets the other; one that calls `cad.<type>.dfm` gets the type's -- `cad.stl.dfm`, `cad.threemf.dfm` and
+`cad.glb.dfm` trimesh, `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm` and `cad.dxf.dfm` build123d -- found by
+`cad run`'s scan of its source, with nothing in its header; a name the scan cannot see (imported by name at
+run time) the run says it lacks, in one line.
+
+**Since 0.11.7** a check judges; before, it measured, and a part passed whatever its figures were. What a
+script or a prompt written for an earlier release meets now:
+
+- **The exit and `status`.** 0 `ok`, 1 `failed`, 3 `not_checked`, 2 the command line's mistake. Exit 1 used to
+  say "could not be measured or read", which is 3 now, and a part that breaks a rule's feasibility limit, a
+  warning and a pass before, fails. `--json` gains `status` and `reason`, and every check's result carries
+  them (`drc`, `erc`, `validate` and `solve` too: `ok` or `failed`); `strict` is new.
+- **Findings.** A rule's verdict is data (`rule`, `value`, `limit`, `unit`, `op`, `source`, `refs`): read
+  those, never the message. On exact geometry a finding's `location` is a ref (`plate/face 7`) where it was
+  `x, y, z`, and the parts' facts are `measurements["document"]` and `measurements["bodies"]` where they were
+  `measurements["mesh"]`; a mesh's are as they were.
+- **What fails a part** is every finding of severity `error`, whatever its code: a rule whose `severity` is
+  `error` (`measurements["rules"]["outcomes"]`; [the manufacturing checks](src/cad/_internal/dfm/README.md#since-0117)
+  lists them as of this release), a process's own error (`sheet.not_sheet`), and the part's soundness:
+  `not_watertight`, a warning before, is an error on a mesh and on exact geometry alike, as `not_sound` is.
+- **Gone.** A mesh's molding check: `cad stl|threemf|glb dfm --process molding` is refused (exit 2), and
+  `cad.trimesh.molding` and `cad.trimesh.pulls` are not there -- molding is judged on exact geometry,
+  `cad.build123d.molding(shape)` or `cad.step.dfm(path, process="molding")`. With it went the findings
+  `coarse_curved_face`, `mesh_folds` and `probe_resolution`; `sealed_voids` is `internal_void`, one finding for
+  each void. Printing's `--candidates` answers the orientations alone, best first: run the check once without
+  it for the part's own figures.
+- **`units`** is an STL's and a DXF's (`--units`; a DXF that declares none is `not_checked` without it,
+  `units_not_set`). `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm` and `cad.glb.dfm` take
+  none, where they took `mm` alone.
 
 ## Stress studies
 

@@ -338,6 +338,30 @@ class FingerTest(_Folder):
         np.testing.assert_allclose(coupled, _vertices(document.Loaded(path), "distal", BY_HAND), atol=1e-6)
         self.assertGreater(np.abs(coupled - _vertices(document.Loaded(path), "distal")).max(), 10.0)
 
+    def test_a_posed_copy_s_states_and_sequences_name_the_poses_they_named(self) -> None:
+        # A coupling's value counts from as built and a posed copy is built at its pose: what a state, a
+        # sweep or a function of time gives the coupling is said again from there, so each is the pose it was.
+        self.finger(extra='mechanism_state(finger, "half", index_curl=0.5); mechanism_state(finger, "full", '
+                          'index_curl=1); configuration_sequence(finger, "ease", lambda t: {"index_curl": t}, '
+                          'duration=1.0)')
+        straight = document.Loaded(self.folder / self.XBF).mechanism
+        report = self.build("posed_finger", POSED.format(pose='{"index_curl": 0.6}'))
+        self.assertEqual((report.get("kinematics") or {}).get("warnings") or [], [])
+        curled = document.Loaded(self.folder / "XBF/posed_finger.xbf").mechanism
+        self.assertEqual(curled.warnings, [])
+        self.assertEqual({label: round(value[0], 9) for label, value in curled.as_built.items()}, BY_HAND)
+        self.assertEqual(sorted(curled.configurations), ["full", "half"])
+        self.assertEqual(sorted(curled.motions), ["ease", "grip"])
+        for name, values in straight.configurations.items():
+            for label, value in values.items():
+                self.assertAlmostEqual(curled.configurations[name][label][0], value[0], places=9, msg=(name, label))
+        for name, motion in straight.motions.items():
+            self.assertEqual(len(curled.motions[name].keys), len(motion.keys), name)
+            for (t, state, values), (t2, state2, values2) in zip(motion.keys, curled.motions[name].keys):
+                self.assertEqual((t, state, sorted(values)), (t2, state2, sorted(values2)), name)
+                for label, value in values.items():
+                    self.assertAlmostEqual(values2[label][0], value[0], places=9, msg=(name, t, label))
+
     def test_what_a_coupling_pose_names_wrong_is_refused_by_name_before_anything_is_written(self) -> None:
         self.finger()
         out = self.folder / "XBF/posed_finger.xbf"

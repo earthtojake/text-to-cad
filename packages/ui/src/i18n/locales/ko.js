@@ -331,6 +331,8 @@ export default {
   "whatsNew.0.11.boards.body": "KiCad로 PCB를 설계할 수 있습니다: “Design a 9-key macropad with USB-C and a rotary encoder, route it, and show me the board in 3D.”",
   "whatsNew.0.11.updates.title": "알아서 설치되는 업데이트.",
   "whatsNew.0.11.updates.body": "패치 릴리스가 백그라운드에서 설치되고, 실행 중인 작업이 없을 때 전환됩니다. `cad update auto off`로 끌 수 있습니다.",
+  "whatsNew.0.11.checks.title": "제조 가능성 검사.",
+  "whatsNew.0.11.checks.body": "부품을 CNC 가공, 판금, 사출 성형, 3D 프린팅으로 만들 수 있는지 확인할 수 있습니다: `cad step dfm part.step --process molding`.",
 
   "alert.undisplayable": "모델을 표시할 수 없습니다",
   "alert.dismiss": "닫기",

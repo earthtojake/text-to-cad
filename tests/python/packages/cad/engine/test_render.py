@@ -1,13 +1,14 @@
 """cadgen's stills drawn by OCCT (`engine/render`): the headless context, a document held and drawn
-from the engine's meshes, the render process the daemon keeps warm per served document, and golden
-pictures of the material fixture.
+from the engine's meshes, and golden pictures of the material fixture. Each material reaching OCCT's
+face aspect is `test_render_material_transport.py`'s; the render process the daemon keeps warm per
+served document, and an engine drawing on a display of its own, are `test_render_daemon.py`'s.
 
 Every test that draws makes an OpenGL context (`render/context.py`) and is skipped, saying why,
 where none can be made -- but fails on CI with an X display, which was set up to draw
 (`tests/python/support/opengl.py`). macOS draws on a hidden Cocoa window. Linux needs an X server
 with GLX -- under Xvfb: `xvfb-run -a scripts/test/test-python.sh tests/python/packages/cad/engine/test_render.py`
 -- or an OCCT built with EGL; an engine with no display draws on an Xvfb it starts itself
-(`EngineDisplayTest`). Windows draws on a hidden window.
+(`test_render_daemon.py`'s `EngineDisplayTest`). Windows draws on a hidden window.
 
 The golden pictures (`render_golden/*.png`) are the material fixture (`test_materials.py`'s bench,
 its pane hinged on the plate for a pose) at 320x240, drawn on macOS: one per display mode, and Explode,
@@ -27,12 +28,8 @@ import io
 import json
 import os
 import shutil
-import subprocess
-import sys
 import tempfile
-import textwrap
 import threading
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -41,66 +38,11 @@ import numpy as np
 
 from cad.engine.render import context
 from cad.engine.snapshot import SnapshotRefused, Still, parse_display
-from tests.python.support import opengl
-from tests.python.support.paths import add_sources
+from tests.python.support.render_stills import (BENCH, PLATFORM, SIZE, X_VARIABLES, build, drawn, gl, mismatch,
+                                                pixels, served, shapes)
 
-SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 GOLDEN = Path(__file__).resolve().parent / "render_golden"
 WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
-SIZE = (320, 240)
-PLATFORM = context.platform()  # a row a platform draws apart has a golden of its own there
-# What reaches an X display: taken from the engine's environment and its requests, where a test draws with none.
-X_VARIABLES = ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "CAD_ENGINE_DISPLAY", "CAD_ENGINE_XAUTHORITY")
-
-# The material fixture: a steel block, a brushed aluminium plate, a PLA part with a lacquered top,
-# a glass pane, and two placements of one bracket apart by a look alone. Its pane is hinged on the
-# plate's back edge, to pose.
-BENCH = """
-import build123d as bd
-from cad.build123d import mechanism_state
-from cad.engine import paint, xbf
-from bd_materials import FinishedMaterial, metals, plastics, glass
-from bd_materials.core import RangeMaterial
-from threejs_materials import PbrProperties
-
-LACQUER = FinishedMaterial(RangeMaterial(name="Red lacquer", density=1200),
-    pbr=PbrProperties.create("lacquer", color="#cb2727", metalness=0, roughness=0.4,
-                             clearcoat=1, clearcoat_roughness=0.05))
-STEEL = FinishedMaterial(metals.mild_steel().material,
-    pbr=PbrProperties.create("steel", color="#c5c7c8", metalness=1, roughness=0.4))
-ALUMINUM = FinishedMaterial(metals.aluminum().material,
-    pbr=PbrProperties.create("aluminum", color="#f5f6f6", metalness=1, roughness=0.35, anisotropy=0.3))
-PLA = FinishedMaterial(plastics.pla().material,
-    pbr=PbrProperties.create("PLA", color="#ededeB", metalness=0, roughness=0.45))
-GLASS = FinishedMaterial(glass.soda_lime().material,
-    pbr=PbrProperties.create("glass", color="#ffffff", metalness=0, roughness=0.02, ior=1.52,
-        transmission=1, attenuation_color=(0.822786, 0.930111, 0.871367), attenuation_distance=0.05))
-STAINLESS = FinishedMaterial(metals.stainless().material,
-    pbr=PbrProperties.create("stainless", color="#d6d4d1", metalness=1, roughness=0.3, anisotropy=0.3))
-
-
-@xbf("XBF/bench.xbf")
-def bench():
-    block = bd.Box(30, 30, 30)
-    block.label, block.material = "block", STEEL
-    plate = bd.Pos(50, 0, -10) * bd.Box(40, 30, 4)
-    plate.label, plate.material = "plate", ALUMINUM
-    print_ = bd.Pos(100, 0, 0) * bd.Cylinder(12, 30)
-    print_.label, print_.material = "print", PLA
-    pane = bd.Box(40, 3, 30, align=(bd.Align.CENTER, bd.Align.MIN, bd.Align.MIN))
-    pane.label, pane.material = "pane", GLASS
-    pane.color = bd.Color("#ffffff")  # Keep base alpha 1; transmission is the material's.
-    paint(print_, print_.faces().sort_by(bd.Axis.Z)[-1], LACQUER)
-    left = bd.Pos(0, -50, 0) * bd.Box(10, 10, 10)
-    left.label, left.material = "left", STAINLESS
-    right = left.moved(bd.Location((20, 0, 0)))
-    right.label, right.material = "right", FinishedMaterial(STAINLESS.material, pbr=STAINLESS.pbr.override(roughness=0.2, anisotropy=0))
-    bd.RevoluteJoint("hinge", plate, axis=bd.Axis((0, 15, 2), (1, 0, 0)), angular_range=(-90, 90))
-    bd.RigidJoint("foot", pane, joint_location=bd.Location((0, 0, 0), (0, 90, 0)))
-    plate.joints["hinge"].connect_to(pane.joints["foot"], angle=0)
-    root = bd.Compound(children=[block, plate, print_, pane, left, right], label="bench")
-    return mechanism_state(root, "open", hinge=60)
-"""
 
 # Ink on the plate (instance 1, in its own frame: its top face is z 2) and a dimension along its front.
 ANNOTATION = {"units": "mm", "parts": {}, "marks": [
@@ -121,158 +63,6 @@ ROWS = {
     "annotation": {"display": {"mode": "solid"}, "annotation": ANNOTATION, "measurements": MEASUREMENTS},
 }
 
-
-def gl() -> None:
-    """Skip, saying why, where no OpenGL context can be made (on CI with a display, fail)."""
-    opengl.require(context.available())
-
-
-def pixels(data: bytes) -> np.ndarray:
-    from PIL import Image
-
-    with Image.open(io.BytesIO(data)) as image:
-        return np.asarray(image.convert("RGB")).astype(np.int16)
-
-
-def mismatch(found: np.ndarray, golden: np.ndarray) -> float:
-    """The share of ``found``'s pixels more than 32 levels (in some channel) from every pixel of
-    ``golden`` within one pixel of them."""
-    if found.shape != golden.shape:
-        return 1.0
-    height, width = golden.shape[:2]
-    padded = np.pad(golden, ((1, 1), (1, 1), (0, 0)), mode="edge")
-    best = np.full((height, width), 255, np.int16)
-    for dy in (0, 1, 2):
-        for dx in (0, 1, 2):
-            best = np.minimum(best, np.abs(found - padded[dy:dy + height, dx:dx + width]).max(-1))
-    return float((best > 32).mean())
-
-
-def drawn(data: bytes, size: tuple[int, int]) -> np.ndarray:
-    """The picture: PNG, the size asked, and more than its backdrop."""
-    found = pixels(data)
-    assert data[:8] == b"\x89PNG\r\n\x1a\n" and found.shape == (size[1], size[0], 3), found.shape
-    backdrop = found[0, 0]
-    assert (np.abs(found - backdrop).max(-1) > 8).mean() > 0.01, "a backdrop alone"  # a line drawing covers little
-    return found
-
-
-def shapes(structure: dict) -> int:
-    """How many parts a renderer makes shapes of: one per geometry and paints (the fixture's two
-    brackets, one geometry apart by a material alone, are one)."""
-    return len({(p["key"], json.dumps(p.get("faceColors") or {}, sort_keys=True)) for p in structure["prototypes"]})
-
-
-def build(folder: Path, source: str, name: str) -> Path:
-    from cad.engine import build as engine_build
-
-    script = folder / f"{name}.py"
-    script.write_text(textwrap.dedent(source), encoding="utf-8")
-    reports = engine_build.build(script, None, cwd=folder)
-    assert all(report["ok"] for report in reports), reports
-    return folder / f"XBF/{name}.xbf"
-
-
-def served(document: Path) -> tuple[dict, dict[str, bytes]]:
-    """The document as the engine serves it, and every part's buffer, meshed in this process."""
-    from cad.engine.serve import Server
-
-    server = Server(mesh_mode="inline")
-    try:
-        doc = server.document(server.add(document))
-        server.mesh_all(doc, None)
-        structure = server.structure(doc)
-        return structure, {p["key"]: server.cache.get(p["key"]) for p in structure["prototypes"]}
-    finally:
-        server.stop()
-
-
-
-class MaterialTransportTest(unittest.TestCase):
-    """Each imported material reaches the actual native OCCT face aspect."""
-
-    def test_same_color_different_finishes_survive_each_snapshot_source(self) -> None:
-        from cad.engine import export, formats
-        from cad.engine.mesh import Mesh
-        from cad.engine.render.occt import Scene
-        from cad.engine.render.shapes import FaceGroup, prototype_shapes
-
-        folder = Path(tempfile.mkdtemp(prefix="render-material-"))
-        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        source = """
-import build123d as bd
-from bd_materials import FinishedMaterial, metals
-from cad.engine import xbf, paint
-from threejs_materials import PbrProperties
-
-@xbf("XBF/sample.xbf")
-def sample():
-    physical = metals.aluminum().material
-    metal = FinishedMaterial(physical, pbr=PbrProperties.create(
-        "same", color="#aaaacc", metalness=1, roughness=.15, opacity=.55))
-    dielectric = FinishedMaterial(physical, pbr=PbrProperties.create(
-        "same", color="#aaaacc", metalness=0, roughness=.8, opacity=.55))
-    part = bd.Box(10, 10, 10)
-    part.material, part.color = metal, bd.Color("#aaaacc", alpha=.55)
-    return paint(part, part.faces()[0], dielectric)
-"""
-        xbf = build(folder, source, "sample")
-        for suffix in (".xbf", ".step", ".glb", ".3mf"):
-            path = xbf if suffix == ".xbf" else folder / f"sample{suffix}"
-            if suffix != ".xbf":
-                export.translate(xbf, None, path)
-            if suffix in (".xbf", ".step"):
-                structure, buffers = served(path)
-                retained = {}
-            else:
-                foreign = formats.read(path)
-                structure, buffers, retained = foreign.structure, foreign.buffers, foreign.shapes
-            prototype = structure["prototypes"][0]
-            parts = retained.get(prototype["key"]) or prototype_shapes(
-                prototype, Mesh.from_bytes(buffers[prototype["key"]]))
-            scene = Scene.__new__(Scene)
-            scene.parts, scene.prototypes, scene.sources = [parts], [prototype], {}
-            results = []
-            for group in parts.faces:
-                color = prototype.get("color") if group is None else group.color if isinstance(group, FaceGroup) else group
-                source = scene._faces(0, group, tuple(color) if color is not None else None, "lit")
-                pbr = source.Attributes().ShadingAspect().Material().PBRMaterial()
-                results.append((pbr.Metallic(), pbr.Roughness(), pbr.Alpha()))
-            self.assertEqual(len(results), 2, suffix)
-            for actual, expected in zip(sorted(results), ((0., .8, .55), (1., .15, .55))):
-                for got, want in zip(actual, expected):
-                    self.assertAlmostEqual(got, want, delta=.002, msg=suffix)
-
-    def test_material_only_face_uses_inherited_color_and_invalidates_cache(self) -> None:
-        from cad.engine.formats.gltf import material_of
-        from cad.engine.render.occt import Scene
-        from cad.engine.render.service import _paints
-        from cad.engine.render.shapes import FaceGroup, prototype_shapes
-        from cad.engine.formats.buffer import buffer
-
-        material = material_of({"pbrMetallicRoughness": {"metallicFactor": 1., "roughnessFactor": .2}})
-        prototype = {"color": [.2, .3, .4, .6], "faceMaterials": {"1": material}}
-        mesh, _ = buffer(np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]),
-                         np.array([[0, 1, 2]]))
-        parts = prototype_shapes(prototype, mesh)
-        face = next(group for group in parts.faces if isinstance(group, FaceGroup))
-        self.assertIsNone(face.color, "no explicit face paint: inherit each instance")
-        self.assertNotEqual(_paints(prototype), _paints({**prototype, "faceMaterials": {}}))
-        scene = Scene.__new__(Scene)
-        scene.parts, scene.prototypes, scene.sources = [parts], [prototype], {}
-        colors = ([.2, .3, .4, .6], [.7, .1, .2, .9])
-        scene.structure = {"instances": [{"prototype": 0, "color": color} for color in colors]}
-        scene.canvas, scene.hidden, scene.shown, scene.timings = mock.Mock(), set(), [], {}
-        scene.placement, scene._rig, scene._clip = lambda _index: np.eye(4), mock.Mock(), mock.Mock()
-        with mock.patch("OCP.AIS.AIS_ConnectedInteractive"):
-            scene.show({"mode": "shaded"})
-        self.assertEqual(len(scene.sources), 2)
-        for color in colors:
-            source = scene.sources[("faces", 0, face, tuple(color), "lit")]
-            pbr = source.Attributes().ShadingAspect().Material().PBRMaterial()
-            actual = pbr.Color().GetRGB()
-            for got, want in zip((actual.Red(), actual.Green(), actual.Blue(), pbr.Alpha()), color):
-                self.assertAlmostEqual(got, want, delta=1e-6)
 
 class ContextTest(unittest.TestCase):
     def test_a_linux_with_no_display_is_refused_naming_what_to_install(self) -> None:
@@ -487,6 +277,43 @@ class HeldTest(unittest.TestCase):
         middle, top = scene.project(np.array([view["target"], np.array(view["target"]) + scene.camera["up"] * 30]))
         np.testing.assert_allclose(middle, (160, 120), atol=0.5)
         np.testing.assert_allclose(top, (160, 0), atol=0.5)
+
+    def test_a_picture_stands_on_the_flat_colour_it_asks_for_and_the_next_on_the_look_s_own(self) -> None:
+        """A job's ``output.background``: the backdrop is that colour, flat, to its corners; hidden-line's
+        faces, which are the backdrop's colour, take it too; and a picture that asks for none is as before."""
+        asked, colour = "#202830", np.array([0x20, 0x28, 0x30])
+        plain = pixels(self.draw(display={"mode": "solid"})[0])
+        data, report = self.draw(display={"mode": "solid"}, background=asked)
+        dark = pixels(data)
+        self.assertEqual(report["background"], asked)
+        for corner in (dark[0, 0], dark[0, -1], dark[-1, 0], dark[-1, -1]):
+            self.assertLessEqual(np.abs(corner.astype(int) - colour).max(), 1)
+        self.assertGreater(np.abs(plain[0, 0].astype(int) - colour).max(), 100, "the look's own backdrop is pale")
+        # The model is drawn as it was: only what was backdrop changed.
+        model = np.abs(plain.astype(int) - plain[0, 0].astype(int)).max(-1) > 40
+        same = np.abs(dark[model].astype(int) - plain[model].astype(int)).max(-1) <= 2
+        self.assertGreater(same.mean(), 0.75, "but for its edges, and what is seen through its glass")
+        hidden = pixels(self.draw(display={"mode": "hidden-line"}, background=asked)[0])
+        self.assertGreater((np.abs(hidden.astype(int) - colour).max(-1) <= 1).mean(), 0.9, "faces and backdrop alike")
+        again, report = self.draw(display={"mode": "solid"})
+        self.assertNotIn("background", report)
+        self.assertLess(mismatch(pixels(again), plain), 0.001)
+
+    def test_a_picture_reports_the_camera_it_settled_on_and_that_camera_draws_it_again_exactly(self) -> None:
+        """The report's ``view`` is the fitted camera as a job's view holds one: drawn exactly (no fit)
+        it is the same picture, and it frames a picture of fewer parts the same way, where a fit
+        would have filled the frame with them."""
+        for projection in ("orthographic", "perspective"):
+            with self.subTest(projection=projection):
+                display = {"mode": "solid", "camera": {"projection": projection}}
+                data, report = self.draw((320, 240), display=display, camera="35:20")
+                view = report["view"]
+                self.assertEqual(sorted(view), sorted(["position", "target", "up"]
+                                                      + (["orthographicHalfHeight"] if projection == "orthographic" else [])))
+                again, pinned = self.draw((320, 240), display=display, camera=view, exact=True)
+                self.assertLess(mismatch(pixels(again), pixels(data)), 0.001)
+                for key, value in view.items():
+                    np.testing.assert_allclose(pinned["view"][key], value, atol=1e-9)
 
     def test_x_ray_is_the_colour_only_model_and_gives_the_look_back(self) -> None:
         """X-ray draws the look's colour-only model (``look.py``) on OCCT's Phong program: a part's
@@ -740,228 +567,6 @@ class SeeThroughTest(unittest.TestCase):
         seen = pixels(scene.canvas.png())[at[:, 1], at[:, 0]]
         spread = int(np.abs(seen - np.median(seen, 0)).max())
         self.assertLessEqual(spread, 4, f"the pane over the box varies by {spread} levels: shards where it lies on it")
-
-
-PAIR = """
-import build123d as bd
-from cad.engine import xbf
-
-SIZE = {size}
-
-
-@xbf("XBF/pair.xbf")
-def pair():
-    block = bd.Box(SIZE, 4, 2)
-    block.label = "block"
-    peg = bd.Pos(20, 0, 0) * bd.Cylinder(2, 5)
-    peg.label = "peg"
-    return bd.Compound(children=[block, peg], label="pair")
-
-if __name__ == "__main__":
-    pair()
-"""
-
-
-class DaemonRenderTest(unittest.TestCase):
-    """`cad <type> snapshot` drawn by OCCT through the daemon: a render process per served
-    document, warm from its second picture, sent its file's new version by the next picture with
-    only the parts it lacks, gone with the daemon; and in this process with ``daemon=False`` from Python. Nothing is written but
-    the pictures, and the daemon's door, lock and clients' pipes."""
-
-    def setUp(self) -> None:
-        gl()
-        self.folder = Path(tempfile.mkdtemp(prefix="engine-render-daemon-")).resolve()
-        self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        self.env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
-                    "CAD_ENGINE_MESH": "inline"}
-        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.addCleanup(shutil.rmtree, self.state, ignore_errors=True)
-        self.addCleanup(self.cli, "stop")
-
-    def cli(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, "-m", "cad_server.engine", *args], cwd=self.folder, env=self.env,
-                              capture_output=True, text=True, timeout=300)
-
-    def snapshot(self, out: str, *flags: str) -> dict:
-        done = self.cli("snapshot", "XBF/pair.xbf", out, "--width", "200", "--height", "150", "--json", *flags)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        return json.loads(done.stdout.strip().splitlines()[-1])
-
-    def build(self, size: int, *, daemon: bool = True) -> None:
-        (self.folder / "pair.py").write_text(textwrap.dedent(PAIR.format(size=size)), encoding="utf-8")
-        # ``python pair.py`` asks the daemon; ``Model.build(daemon=False)`` builds in its own process.
-        argv = ["pair.py"] if daemon else ["-B", "-c", "import pair; pair.pair.build(daemon=False)"]
-        done = subprocess.run([sys.executable, *argv], cwd=self.folder, env=self.env, capture_output=True, text=True,
-                              timeout=300)
-        self.assertEqual(done.returncode, 0, done.stderr)
-
-    def renders(self) -> list[dict]:
-        return json.loads(self.cli("status", "--json").stdout)["renders"]
-
-    def test_a_served_document_is_drawn_warm_and_follows_its_builds(self) -> None:
-        self.build(10)
-        first = self.snapshot("first.png")
-        self.assertEqual(first["renderer"], "occt")
-        pid = first["process"]["pid"]
-        warm = self.snapshot("warm.png")
-        self.assertEqual(warm["process"]["pid"], pid)
-        self.assertFalse({"meshMs", "holdMs", "sceneMs"} & set(warm["timings"]), warm["timings"])
-        self.build(14)  # the file is rewritten: the next picture reads it, and makes the new part alone
-        version = f"{(self.folder / 'XBF/pair.xbf').stat().st_mtime_ns}-{(self.folder / 'XBF/pair.xbf').stat().st_size}"
-        edited = self.snapshot("edited.png")
-        self.assertEqual(edited["process"]["pid"], pid, "the same process, sent the file's new version")
-        [render] = self.renders()
-        self.assertEqual((render["version"], render["held"]["made"], render["held"]["kept"]), (version, 1, 1))
-        self.assertNotEqual((self.folder / "edited.png").read_bytes(), (self.folder / "first.png").read_bytes())
-        # A model, by its id, is drawn from the document its worker holds, in that worker.
-        from cad.engine.ids import model_id
-
-        done = self.cli("snapshot", model_id(self.folder / "pair.py", "pair"), "model.png", "--width", "200", "--height",
-                        "150", "--json")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        model = json.loads(done.stdout.strip().splitlines()[-1])
-        self.assertEqual((model["renderer"], "process" in model), ("occt", False))
-        # The daemon's socket (on Windows the port file standing in for it) and its lock, nothing else.
-        self.assertEqual({path.suffix or path.name for path in self.state.iterdir()},
-                         {".port", ".lock"} if os.name == "nt" else {".door", ".lock", "clients"})
-        self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*") if path.is_file()),
-                         ["XBF/pair.xbf", "edited.png", "first.png", "model.png", "pair.py", "warm.png"])
-        self.cli("stop")
-        if os.name != "nt":  # os.kill(pid, 0) asks after a process on POSIX alone
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline and _alive(pid):
-                time.sleep(0.1)
-            self.assertFalse(_alive(pid), "gone with the daemon")
-
-    def test_daemon_false_draws_in_this_process(self) -> None:
-        # A seam of the Python function's alone: no command draws outside the engine.
-        self.build(10, daemon=False)
-        code = ("import json; from cad.engine import api; print(json.dumps(api.snapshot('XBF/pair.xbf', "
-                "'cold.png', width=200, height=150, display='exploded=0.5', daemon=False).report))")
-        done = subprocess.run([sys.executable, "-c", code], cwd=self.folder, env=self.env, capture_output=True,
-                              text=True, timeout=300)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        report = json.loads(done.stdout.strip().splitlines()[-1])
-        self.assertEqual((report["renderer"], report["exploded"]), ("occt", 0.5))
-        self.assertNotIn("process", report)
-        self.assertEqual([path for path in self.state.iterdir() if path.suffix == ".door"], [], "no daemon started")
-
-
-@unittest.skipUnless(PLATFORM == "linux", "Linux draws on an X display; macOS and Windows on a hidden window")
-class EngineDisplayTest(unittest.TestCase):
-    """A Linux engine draws a model's still and a file's where the request names no ``DISPLAY``
-    (``cad_server.engine.display``): on the daemon's own display where it has one, and on an Xvfb it
-    starts itself where it has none -- no X server of the test's, no ``xvfb-run``: the CI job installs
-    Xvfb and runs its suite under ``xvfb-run``, and this test takes that display away from the engine
-    and every request it sends. The pictures are the ones drawn on the test's own display. The wheels'
-    OpenGL is GLX alone (``render/context.py``), so this is the off-screen route there is."""
-
-    def setUp(self) -> None:
-        self.folder = Path(tempfile.mkdtemp(prefix="engine-display-")).resolve()
-        self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp")).resolve()
-        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.addCleanup(shutil.rmtree, self.state, ignore_errors=True)
-        self.bare = {**{key: value for key, value in os.environ.items() if key not in X_VARIABLES},
-                     "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state), "CAD_ENGINE_MESH": "inline"}
-        self.addCleanup(self.run_in, self.bare, "-m", "cad_server.engine", "stop")
-        (self.folder / "pair.py").write_text(textwrap.dedent(PAIR.format(size=10)), encoding="utf-8")
-
-    def run_in(self, env: dict[str, str], *argv: str) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, *argv], cwd=self.folder, env=env, capture_output=True, text=True,
-                              timeout=300)
-
-    def pictures(self, env: dict[str, str]) -> dict[str, np.ndarray]:
-        """The model and its file drawn through the engine, asked with ``env``: each picture's pixels."""
-        from cad.engine.ids import model_id
-
-        found = {}
-        for name, source in (("model", model_id(self.folder / "pair.py", "pair")), ("file", "XBF/pair.xbf")):
-            done = self.run_in(env, "-m", "cad_server.engine", "snapshot", source, f"{name}.png", "--width", "200",
-                               "--height", "150", "--json")
-            self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1])["renderer"], "occt")
-            found[name] = drawn((self.folder / f"{name}.png").read_bytes(), (200, 150))
-        return found
-
-    def drawn_here(self) -> np.ndarray | None:
-        """The file drawn in a process of its own on the test's display (``daemon=False``), where it has one."""
-        if not os.environ.get("DISPLAY") or context.available() is not None:
-            return None
-        code = ("from cad.engine import api; api.snapshot('XBF/pair.xbf', 'here.png', width=200, height=150, "
-                "daemon=False)")
-        done = self.run_in({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state)}, "-c", code)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        return drawn((self.folder / "here.png").read_bytes(), (200, 150))
-
-    def test_an_engine_with_no_display_draws_on_an_xvfb_of_its_own(self) -> None:
-        if shutil.which("Xvfb") is None:
-            opengl.require("Xvfb is not on PATH (apt-get install xvfb libgl1-mesa-dri)", "no Xvfb for the engine")
-        done = self.run_in(self.bare, "pair.py")  # the daemon starts here, with no display
-        self.assertEqual(done.returncode, 0, done.stderr)
-        found = self.pictures(self.bare)
-        here = self.drawn_here()
-        for name, picture in found.items():
-            if here is not None:
-                self.assertLessEqual(mismatch(picture, here), 0.015, name)
-        # The Xvfb is the daemon's: gone with it.
-        xvfb = _xvfb_pids(self.state)
-        self.assertTrue(xvfb, "the engine started no Xvfb")
-        self.run_in(self.bare, "-m", "cad_server.engine", "stop")
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline and any(_alive(pid) for pid in xvfb):
-            time.sleep(0.1)
-        self.assertFalse([pid for pid in xvfb if _alive(pid)], "the engine's Xvfb outlived it")
-
-    def test_a_request_with_no_display_draws_on_the_engine_s(self) -> None:
-        # The field's failure: a daemon started where there is a display, asked from a shell with none.
-        if not os.environ.get("DISPLAY"):
-            opengl.require("no DISPLAY to start the engine on", "no display")
-        gl()
-        done = self.run_in({**self.bare, "DISPLAY": os.environ["DISPLAY"],
-                            **({"XAUTHORITY": os.environ["XAUTHORITY"]} if "XAUTHORITY" in os.environ else {})},
-                           "pair.py")
-        self.assertEqual(done.returncode, 0, done.stderr)
-        found = self.pictures(self.bare)
-        here = self.drawn_here()
-        for name, picture in found.items():
-            self.assertLessEqual(mismatch(picture, here), 0.015, name)
-        self.assertEqual(_xvfb_pids(self.state), [], "the engine had a display: it starts no Xvfb")
-
-
-def _xvfb_pids(engine: Path) -> list[int]:
-    """The Xvfb processes the engine in the folder ``engine`` started (``display.py``): each under the shell
-    that stops it with its daemon, whose environment names that folder; by /proc."""
-    def read(pid: str, name: str) -> list[bytes]:
-        try:
-            return Path(f"/proc/{pid}/{name}").read_bytes().split(b"\0")
-        except OSError:
-            return [b""]
-
-    def parent(pid: str) -> str:
-        try:
-            return Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").rpartition(")")[2].split()[1]
-        except (OSError, IndexError):
-            return "0"
-
-    found = []
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit() or Path(read(entry.name, "cmdline")[0].decode(errors="replace")).name != "Xvfb":
-            continue
-        shell = parent(entry.name)
-        if any(b"read -r _ <&3" in part for part in read(shell, "cmdline")) and \
-                f"CAD_ENGINE_DIR={engine}".encode() in read(parent(shell), "environ"):
-            found.append(int(entry.name))
-    return found
-
-
-def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def setUpModule() -> None:

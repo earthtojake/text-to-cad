@@ -49,6 +49,7 @@ Requirements for the script route:
 - The mesh should be watertight for volume integration; if it is not, fix the export or fall back to a documented primitive approximation.
 - Uniform density is an assumption — record the chosen density (or the total-mass target it was derived from) in the ledger.
 - CAD-native mass properties (for example OCP/OpenCascade `BRepGProp` on the STEP solid) are better than mesh integration when the STEP source is available; same rules apply.
+- A link that is a text-to-cad model of several parts in different materials is one call on its exact solids, each at its own density: in a script `cad run` runs, `cad.build123d.mass_properties([(solid, density), ...])` with the solids in the link's frame and densities in kg/mm³ returns the link's mass (kg), centre of mass (mm) and inertia about it (kg·mm²); multiply the centre by `1e-3` and the inertia by `1e-6` for the description. A bought part weighed at its maker's mass takes that mass over its solid's volume as its density. Each part's material density, without loading a solid, is `cad.model.inspect(handle, query="structure")["summary"]["materials"]`, in kg/m³: times `1e-9` for kg/mm³.
 
 For complex or parametric models it is reasonable to keep this helper script on disk next to the model's other source files and reference it from the ledger. That is optional; the checked-in URDF or SDF values remain canonical.
 

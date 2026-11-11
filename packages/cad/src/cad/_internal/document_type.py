@@ -32,7 +32,7 @@ from typing import Any
 __all__ = ["DocumentType", "ModelType", "bind", "refuse_other"]
 
 # An operation a type does not implement, read as one that needs no integration.
-_NONE = types.SimpleNamespace(integration=None)
+_NONE = types.SimpleNamespace(integration=None, family=None)
 # A type's reader, by id: the function that reads a file of it into a model.
 _READERS = {"step": "cad.engine.model.read_step", "xbf": "cad.engine.model.read_xbf",
             "stl": "cad.engine.reader.read_mesh"}
@@ -75,11 +75,18 @@ class DocumentType(types.ModuleType):
             value = _operation(self, name)
             self.__dict__[name] = value
             return value
-        if name == "dfm" and (entry.operation("dfm") or _NONE).integration == "trimesh":
+        if name == "dfm" and (entry.operation("dfm") or _NONE).family == "manufacturing":
             # The manufacturing check every 3D type shares (``cad._internal.manufacturing``).
             from cad._internal.manufacturing import dfm_for
 
             value = dfm_for(entry.id)
+            self.__dict__[name] = value
+            return value
+        if name == "interference" and name in entry.operation_names:
+            # The interference check every B-rep type shares (``cad._internal.interference``).
+            from cad._internal.interference import interference_for
+
+            value = interference_for(entry.id)
             self.__dict__[name] = value
             return value
         if name == "solve" and (entry.operation("solve") or _NONE).integration == "calculix":

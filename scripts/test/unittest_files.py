@@ -12,7 +12,7 @@ that full dotted path whose message carries the file and the traceback. It also 
 a module that resolved to a DIFFERENT file than the one asked for (a sys.path shadow),
 which `-m unittest` would run silently.
 
-    python scripts/test/unittest_files.py --top <repo root> [--jobs N] <test file>...
+    python scripts/test/unittest_files.py --top <repo root> [--jobs N] [--shard I/N] <test file>...
 
 ``--print-weights`` prints this run's measured per-file costs, the first thing to read
 when a run is slow. ``--no-skips`` fails a run in which any test skipped: for a suite whose
@@ -33,8 +33,27 @@ that was running (``person_places``, ``the_run_s``). The run's files share one b
 (``PYTHONPYCACHEPREFIX``), so the CAD kernel's libraries are compiled once a run, not once a file.
 The per-module output is printed as each finishes and the final ``Ran N tests`` / ``OK`` /
 ``FAILED`` summary aggregates every module. The loaded test set is identical to `python -m
-unittest <files>` run from --top. A file still running ``FILE_HANG_SECONDS`` after it started is
-hung: its interpreter prints every thread's stack and exits, and the run fails naming the file.
+unittest <files>` run from --top.
+
+A file still running ``FILE_HANG_SECONDS`` (``--hang-seconds``) after it started is hung: its
+interpreter prints every thread's stack and exits (its guard), and should that guard not fire, the
+runner ends the interpreter itself ``FILE_BACKSTOP_SECONDS`` later. Either way the run fails naming
+the file, and from then on starts no file it has not started (the ones running finish, each under
+its own guard): the summary says how many never ran, and ends ``RUN CUT SHORT``, and the run exits
+``HUNG_EXIT`` (3), not 1, so a caller that goes on after a failing suite can stop at a hung one. While files run, a
+``still running:`` line on stderr names each with how long it has been running, once a
+``HEARTBEAT_SECONDS``, so a run its job's timeout kills still said where it was; a run whose files
+all end within that says nothing more.
+
+``--shard I/N`` (``CAD_TEST_SHARD=I/N`` through ``run_python_unittest``) runs one of N shards of the
+files given: sorted by path, the k-th (from 0) is shard ``k % N + 1``'s, so each file is in exactly
+one shard. A shard none of the files falls to passes, saying so.
+
+``--file-budget SECONDS`` (``CAD_TEST_FILE_BUDGET``) names each file that took longer, in an ``OVER
+BUDGET`` list after the summary and, in a GitHub Actions run, as a warning on the run: a shard is no
+shorter than its slowest file, so one that outgrows the budget is split. It never fails a run: how
+long a file takes is the runner's to say and the machine's to vary, and a bound on it that failed
+would be a flake.
 """
 
 from __future__ import annotations
@@ -51,13 +70,25 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import unittest
 
-# Hung, not slow: the slowest file CI has run took about four minutes. Without this a
-# hang runs out the CI job's timeout and says nothing about where it is.
-FILE_HANG_SECONDS = 15 * 60
+# Hung, not slow: the slowest file CI has measured took about five minutes (290 s, on Windows;
+# 170 s on Linux). Without this a hang runs out the CI job's timeout and says nothing about where it
+# is; and as the run starts no file after one hung, one hang costs the job this long, not this
+# long a file.
+FILE_HANG_SECONDS = 10 * 60
+# How long past a file's own guard the runner waits before ending its interpreter itself: for a
+# child whose guard cannot fire (a test that replaced or cancelled it, an interpreter stopped).
+FILE_BACKSTOP_SECONDS = 60
+# How often the run names the files still running (``still running:``), on stderr.
+HEARTBEAT_SECONDS = 60
+# What a run in which a file hung exits with, apart from a run that failed (1): a caller that goes
+# on after a failing suite (test-python.sh --keep-going) stops at this one, where the next suite
+# would likely hang too and each would wait out its guard.
+HUNG_EXIT = 3
 # A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
 # timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
 # folder) or its folder is removed (an engine whose door is gone stops).
@@ -177,10 +208,18 @@ class _Watching(unittest.TextTestResult):
             sys.__stdout__.flush()
 
 
+_hang_report = None  # the guard's file, kept open: faulthandler writes to it from its own thread
+
+
 def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: float | None = None,
-                   places: tuple[list[str], list[str]] | None = None) -> int:
+                   places: tuple[list[str], list[str]] | None = None, hang_report: str | None = None) -> int:
+    global _hang_report
     if hang_seconds:
-        faulthandler.dump_traceback_later(hang_seconds, exit=True)
+        # Into a file of the runner's naming, where the runner has one: what is written there is
+        # the guard's alone, so the runner knows the guard fired from it, not from what a test said.
+        _hang_report = open(hang_report, "w", encoding="utf-8") if hang_report else None  # noqa: SIM115
+        faulthandler.dump_traceback_later(hang_seconds, exit=True,
+                                          **({"file": _hang_report} if _hang_report else {}))
     top = os.path.realpath(top)
     # `python -m unittest` runs with sys.path[0] == "" (the cwd); `python <script>`
     # puts the SCRIPT's directory there instead. Match -m so tests see the same path.
@@ -336,29 +375,53 @@ def the_run_s(where: str, engine: str, top: str) -> bool:
 
 
 def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
-                  places: tuple[list[str], list[str]] | None = None) -> tuple[str, int, str, float]:
+                  places: tuple[list[str], list[str]] | None = None, hang_seconds: float | None = None,
+                  ) -> tuple[str, int, str, float, str | None]:
+    """The file run in an interpreter of its own: its path, exit code, output, seconds, and, when
+    it hung, how (else None)."""
     started = time.perf_counter()
     try:
-        return _run_file(path, top, verbose, env, started, places)
+        return _run_file(path, top, verbose, env, started, places,
+                         FILE_HANG_SECONDS if hang_seconds is None else hang_seconds)
     finally:
         stop_engine(top, env["CAD_ENGINE_DIR"])
 
 
 def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: float,
-              places: tuple[list[str], list[str]] | None = None) -> tuple[str, int, str, float]:
+              places: tuple[list[str], list[str]] | None = None, hang_seconds: float = FILE_HANG_SECONDS,
+              ) -> tuple[str, int, str, float, str | None]:
+    descriptor, report = tempfile.mkstemp(prefix="cgt-hang-", suffix=".txt")
+    os.close(descriptor)
     argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--file",
-            "--hang-seconds", str(FILE_HANG_SECONDS)]
+            "--hang-seconds", str(hang_seconds), "--hang-report", report]
     if verbose:
         argv.append("--verbose")
     if places and any(places):
         argv += ["--places", json.dumps(places)]
     argv.append(path)
-    # Files, not pipes: a process the test started and left running would hold a pipe
-    # open, and this run would wait on it however its own interpreter ended.
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        completed = subprocess.run(argv, env=env, stdout=stdout, stderr=stderr, cwd=os.getcwd())
-        output = "".join(_read_all(stream) for stream in (stdout, stderr))
-    return path, completed.returncode, output, time.perf_counter() - started
+    hung = None
+    try:
+        # Files, not pipes: a process the test started and left running would hold a pipe
+        # open, and this run would wait on it however its own interpreter ended.
+        with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+            try:
+                code = subprocess.run(argv, env=env, stdout=stdout, stderr=stderr, cwd=os.getcwd(),
+                                      timeout=hang_seconds + FILE_BACKSTOP_SECONDS).returncode
+            except subprocess.TimeoutExpired:  # run() has killed it, and waited for it
+                code = 1
+                hung = (f"the runner killed it {hang_seconds + FILE_BACKSTOP_SECONDS:g} s after it started: "
+                        f"its own {hang_seconds:g} s guard never fired")
+            output = "".join(_read_all(stream) for stream in (stdout, stderr))
+        with open(report, "rb") as guard:
+            stacks = _read_all(guard)
+    finally:
+        os.remove(report)
+    if stacks and hung is None:
+        hung = f"its guard fired {hang_seconds:g} s after it started"
+    if hung:
+        output += (f"\n{path} hung: {hung}"
+                   + (f"; every thread's stack as it hung:\n{stacks}" if stacks else "") + "\n")
+    return path, code, output, time.perf_counter() - started, hung
 
 
 def _read_all(stream) -> str:
@@ -369,9 +432,59 @@ def _read_all(stream) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
+_SAYING = threading.Lock()  # one writer to stderr at a time: a file's output, a hang, the heartbeat
+
+
+def _say(text: str) -> None:
+    with _SAYING:
+        sys.stderr.write(text)
+        sys.stderr.flush()
+
+
+def _shown(path: str, top: str) -> str:
+    """``path`` relative to ``top`` where it is under it, else as given."""
+    try:
+        relative = os.path.relpath(os.path.abspath(path), top)
+    except ValueError:  # another drive
+        return path
+    return path if relative.startswith(os.pardir) else relative
+
+
+def _heartbeat(started: dict[str, float], lock: threading.Lock, stop: threading.Event, top: str) -> None:
+    """Until ``stop``, one ``still running:`` line naming the files running and for how long,
+    longest first: once one has run ``HEARTBEAT_SECONDS``, and at most once a ``HEARTBEAT_SECONDS``.
+    Looked at sixty times a beat, so a file that runs a little past a beat is still named."""
+    said = None  # when the last line was
+    while not stop.wait(HEARTBEAT_SECONDS / 60):
+        now = time.perf_counter()
+        if said is not None and now - said < HEARTBEAT_SECONDS:
+            continue
+        with lock:
+            running = sorted(started.items(), key=lambda entry: (entry[1], entry[0]))
+        if running and now - running[0][1] >= HEARTBEAT_SECONDS:
+            _say("still running: " + ", ".join(f"{_shown(path, top)} ({now - since:.0f}s)"
+                                               for path, since in running) + "\n")
+            said = now
+
+
+def shard(files: list[str], index: int, count: int) -> list[str]:
+    """Shard ``index`` of ``count`` (from 1) of ``files``: sorted by path, the k-th (from 0) is
+    shard ``k % count + 1``'s."""
+    return [path for k, path in enumerate(sorted(files, key=lambda path: (path.replace("\\", "/"), path)))
+            if k % count + 1 == index]
+
+
+def _shard_argument(value: str) -> tuple[int, int]:
+    index, slash, count = value.partition("/")
+    if slash and index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count):
+        return int(index), int(count)
+    raise argparse.ArgumentTypeError(f"wants I/N, a shard I of N with 1 <= I <= N (as 2/3), not {value!r}")
+
+
 def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False,
-              no_skips: bool = False) -> int:
+              no_skips: bool = False, hang_seconds: float | None = None, file_budget: float | None = None) -> int:
     top = os.path.realpath(top)
+    hang_seconds = FILE_HANG_SECONDS if hang_seconds is None else hang_seconds
     started = time.perf_counter()
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
     durations: list[tuple[str, float]] = []
@@ -400,19 +513,44 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
     door = default_engine_door(top)
     developers = door is not None and engine_answers(top, door)
     leaked: list[str] = []
-    running: set[str] = set()  # the files whose interpreters are running now
+    running: dict[str, float] = {}  # the files whose interpreters are running now, and since when
+    lock = threading.Lock()
+    # A hung file stops the run starting files: one hang is likely the next file's too, and a job
+    # that waits out every file's guard ends at its timeout having said nothing. The ones running
+    # when it is found finish under their own guards.
+    hung: dict[str, str] = {}  # the files that hung, and how
+    not_run: list[str] = []  # the files never started, because one hung
 
-    def run_one(path: str, env: dict[str, str]) -> tuple[str, int, str, float]:
-        running.add(path)
+    def run_one(path: str, env: dict[str, str]) -> tuple[str, int, str, float, str | None] | None:
+        with lock:
+            if hung:
+                return None
+            running[path] = time.perf_counter()
         try:
-            return _run_one_file(path, top, verbose, env, places=places)
+            result = _run_one_file(path, top, verbose, env, places=places, hang_seconds=hang_seconds)
+            if result[4]:
+                with lock:
+                    hung[path] = result[4]
+                    beside = len(running) - 1
+                _say(f"hung: {path}: {result[4]}; the run starts no further file"
+                     + (f" ({beside} already running will finish first)" if beside else "") + "\n")
+            return result
         finally:
-            running.discard(path)
+            with lock:
+                running.pop(path, None)
+
+    def running_now() -> str:
+        with lock:
+            return ", ".join(sorted(running)) or "none"
+
     from tests.python.support.engine_daemon import register
 
+    stop = threading.Event()
+    beating = threading.Thread(target=_heartbeat, args=(running, lock, stop, top), name="heartbeat", daemon=True)
+    beating.start()
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-            futures = []
+            futures = {}
             for index, path in enumerate(files):
                 # A state folder and a command folder of its own too: the engine's registry of
                 # documents (and Recents), the installations and the ``cadgen`` command are the
@@ -426,12 +564,16 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                        # A board is drawn as saved, no kicode fetched, but where a suite runs KiCad (test-kicad.sh).
                        "CAD_KICAD_REFILL": os.environ.get("CAD_KICAD_REFILL", "0")}
                 register(env["CAD_STATE_DIR"])
-                futures.append(pool.submit(run_one, path, env))
+                futures[pool.submit(run_one, path, env)] = path
             for future in concurrent.futures.as_completed(futures):
-                path, code, output, seconds = future.result()
+                result = future.result()
+                if result is None:
+                    not_run.append(futures[future])
+                    continue
+                path, code, output, seconds, _hung = result
                 durations.append((path, seconds))
                 if door is not None and not developers and engine_answers(top, door):
-                    beside = ", ".join(sorted(running)) or "none"
+                    beside = running_now()
                     leaked.append(f"{door}, after {path} (running beside it: {beside})")
                     _engine_python(top, "from cad.engine import api; api.stop()", CAD_ENGINE_DIR=os.path.dirname(door))
                 for where, test in _OUTSIDE.findall(output):
@@ -439,7 +581,7 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 output = _OUTSIDE.sub("", output)
                 now = registered(*places)
                 for where in gained(marks, now):
-                    beside = ", ".join(sorted(running)) or "none"
+                    beside = running_now()
                     outside.setdefault(where, f"after {path} (running beside it: {beside})")
                 marks = now
                 counts = _counts(output)
@@ -456,10 +598,12 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 # Everything but the per-module tail, which the aggregate replaces.
                 body = _TAIL.sub("", _RAN.sub("", output)).rstrip()
                 if body:
-                    sys.stderr.write(body + "\n")
+                    _say(body + "\n")
         for where in gained(marks, registered(*places)):
             outside.setdefault(where, "after the run's last file")
     finally:
+        stop.set()
+        beating.join()
         shutil.rmtree(engines, ignore_errors=True)
     elapsed = time.perf_counter() - started
     if print_weights:
@@ -499,15 +643,33 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
         sys.stderr.write(f"{skipped} test{'s' if skipped != 1 else ''} skipped in a run that takes none "
                          "(--no-skips): each says why above\n")
     ok = (not failed_modules and not unparsed and not leaked and not tests_wrote and not skipped
-          and totals["failures"] == 0 and totals["errors"] == 0)
+          and not hung and not not_run and totals["failures"] == 0 and totals["errors"] == 0)
     verdict = "OK" if ok else "FAILED"
     sys.stderr.write(verdict + (f" ({', '.join(verdict_parts)})" if verdict_parts else "") + "\n")
     if failed_modules:
         sys.stderr.write("failing modules:\n" + "".join(f"  {p}\n" for p in sorted(failed_modules)))
     if unparsed:
         sys.stderr.write("modules that produced no unittest summary:\n" + "".join(f"  {p}\n" for p in sorted(unparsed)))
+    if hung:
+        sys.stderr.write("hung (each one's stacks are with its output above):\n"
+                         + "".join(f"  {p}: {how}\n" for p, how in sorted(hung.items())))
+    over = sorted(((seconds, _shown(path, top)) for path, seconds in durations
+                   if file_budget and seconds > file_budget), reverse=True)
+    if over:
+        # Said, never failed: the verdict above stands.
+        sys.stderr.write(f"OVER BUDGET ({file_budget:g} s a test file; split what outgrows it):\n"
+                         + "".join(f"  {path}  {seconds:.0f}s\n" for seconds, path in over))
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            for seconds, path in over:
+                sys.stderr.write(f"::warning file={path.replace(os.sep, '/')},title=Test file over its time budget::"
+                                 f"{seconds:.0f} s, over the {file_budget:g} s a test file's budget: split it "
+                                 "(docs/contributing/testing.md)\n")
+    if not_run:
+        # Last, so the run's last line: a run cut short is not a short run that passed.
+        sys.stderr.write(f"RUN CUT SHORT: {len(not_run)} of the {len(files)} files given never started, because "
+                         f"a file hung; the counts above are of the {len(files) - len(not_run)} that ran\n")
     sys.stderr.flush()
-    return 0 if ok else 1
+    return 0 if ok else HUNG_EXIT if hung else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -529,10 +691,26 @@ def main(argv: list[str] | None = None) -> int:
     # The runner's own: the interpreter it starts for one file, which runs it here.
     parser.add_argument("--file", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
+        "--shard",
+        type=_shard_argument,
+        metavar="I/N",
+        help="run shard I of N (from 1) of the files given: sorted by path, the k-th (from 0) is shard k%%N+1's",
+    )
+    parser.add_argument(
         "--hang-seconds",
         type=float,
-        help="print every thread's stack and exit 1 if the run is still going after this long",
+        help=f"a file still running this long after it started is hung (default {FILE_HANG_SECONDS}): its "
+             "interpreter prints every thread's stack and exits 1, and the run starts no file after it",
     )
+    parser.add_argument(
+        "--file-budget",
+        type=float,
+        metavar="SECONDS",
+        help="name each file that took longer than this after the summary (and as a warning in a GitHub "
+             "Actions run); it never fails the run",
+    )
+    # The runner's own: where the file's interpreter writes its stacks should it hang.
+    parser.add_argument("--hang-report", help=argparse.SUPPRESS)
     # The runner's own: the developer's places its file's tests are watched for (``_Watching``).
     parser.add_argument("--places", type=json.loads, help=argparse.SUPPRESS)
     parser.add_argument("files", nargs="+", metavar="TEST_FILE")
@@ -540,8 +718,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.file:
         return run_in_process(args.files, args.top, args.verbose, args.hang_seconds,
-                              tuple(args.places) if args.places else None)
-    return run_files(args.files, args.top, max(1, args.jobs), args.verbose, args.print_weights, args.no_skips)
+                              tuple(args.places) if args.places else None, args.hang_report)
+    files = args.files
+    if args.shard:
+        index, count = args.shard
+        files = shard(files, index, count)
+        if not files:
+            # Not a collector that found nothing (run_python_unittest fails that before here): the
+            # other shards run every file given.
+            sys.stderr.write(f"shard {index}/{count}: none of the {len(args.files)} files given is this shard's; "
+                             "nothing to run (OK)\n")
+            return 0
+        sys.stderr.write(f"shard {index}/{count}: {len(files)} of the {len(args.files)} files given\n")
+    return run_files(files, args.top, max(1, args.jobs), args.verbose, args.print_weights, args.no_skips,
+                     args.hang_seconds, args.file_budget)
 
 
 if __name__ == "__main__":

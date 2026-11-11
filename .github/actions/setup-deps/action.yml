@@ -1,5 +1,9 @@
 name: Set up dependencies
-description: Install the selected root npm workspaces and optional Python/browser dependencies.
+description: Install the selected root npm workspaces and optional Python, browser and system dependencies.
+
+# Every install here is a download. A caller bounds the whole action with a step-level
+# `timeout-minutes` (a composite's own steps take none): a stalled mirror then fails in
+# minutes rather than running out the job's timeout.
 
 inputs:
   python:
@@ -14,6 +18,9 @@ inputs:
   npm:
     description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.
     default: "packages/core packages/ui apps/web apps/mcp apps/docs"
+  apt:
+    description: Space-separated apt packages a Linux job needs from the system (the display the engine's stills draw on, say). Installed only when one is missing.
+    default: ""
 
 runs:
   using: composite
@@ -39,6 +46,33 @@ runs:
         node-version: "22"
         cache: npm
         cache-dependency-path: package-lock.json
+
+    # The engine's stills are drawn by OCCT in an OpenGL context, which on a machine with no
+    # screen is made on an X server's: Xvfb, with Mesa's software GL, and the font the stills'
+    # text is set in. Nothing is fetched when the image already has them all; when it does not,
+    # apt gives up on a connection that says nothing for 30 s and tries again (an `apt-get
+    # update` once waited 39 minutes on one, to the job's timeout).
+    - name: Install system packages
+      if: inputs.apt != '' && runner.os == 'Linux'
+      shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.apt }}
+      run: |
+        missing=()
+        for package in $APT_PACKAGES; do
+          if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            missing+=("$package")
+          fi
+        done
+        if [ "${#missing[@]}" -eq 0 ]; then
+          echo "Already installed: $APT_PACKAGES"
+          exit 0
+        fi
+        echo "Installing: ${missing[*]}"
+        apt=(sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+             -o DPkg::Lock::Timeout=60)
+        "${apt[@]}" update
+        "${apt[@]}" install -y "${missing[@]}"
 
     - name: Install Python dependencies
       if: inputs.python == 'true'

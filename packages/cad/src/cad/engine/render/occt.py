@@ -217,6 +217,8 @@ class Scene:
                 self.boxes[index] = (positions.min(0).astype(float), positions.max(0).astype(float))
         self.offsets: dict[int, np.ndarray] = {}
         self.sources: dict[tuple, Any] = {}
+        # The flat colour a picture asked to stand on (a job's ``output.background``, ``#rrggbb``); None: the look's.
+        self.background: str | None = None
         self.shown: list[Any] = []
         # The instances a picture leaves out (``display.hidden``, ``display.isolated``): not
         # shown, framed, capped or shadowed.
@@ -293,7 +295,8 @@ class Scene:
         return material, color
 
     def _faces(self, index: int, group: Any, rgba: Any, look: str) -> Any:
-        key = ("faces", index, group, rgba, look)
+        # Hidden-line's faces are the backdrop's colour, so one drawn on another colour is another source.
+        key = ("faces", index, group, rgba, look, self.background if look == "hidden" else None)
         found = self.sources.get(key)
         if found is not None:
             return found
@@ -327,7 +330,7 @@ class Scene:
             aspect.SetTextureSet(texture)
             aspect.SetTextureMapOn(True)
         if look == "hidden":
-            source.SetColor(_color(BACKGROUND))
+            source.SetColor(_color(self.background or BACKGROUND))
             aspect.SetShadingModel(Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Unlit)
         elif look == "xray":
             source.SetTransparency(1 - LOOK.mode("xray").opacity)
@@ -847,8 +850,8 @@ class Scene:
 
     def backdrop(self, colour: Any = None) -> None:
         """What is behind the model, for a picture matted on nothing (``service.matte``): ``colour``
-        (an RGB triple, 0 to 1) flat, or -- None -- the look's own again: Preview's studio sweep,
-        else the look's backdrop."""
+        (an RGB triple, 0 to 1) flat, or -- None -- the picture's own again: Preview's studio sweep,
+        else the colour it asked for (``background``), else the look's backdrop."""
         from OCP.Aspect import Aspect_FillMethod, Aspect_GradientFillMethod
 
         vertical = Aspect_GradientFillMethod.Aspect_GradientFillMethod_Vertical
@@ -856,7 +859,8 @@ class Scene:
             if self.studio:
                 self._studio_backdrop()
             else:
-                self.canvas.view.SetBgGradientColors(_color(BACKGROUND), _color(BACKGROUND), vertical, False)
+                own = _color(self.background or BACKGROUND)
+                self.canvas.view.SetBgGradientColors(own, own, vertical, False)
             return
         if self.studio:
             picture = np.broadcast_to(np.rint(np.asarray(colour, float) * 255).astype(np.uint8), (2, 2, 3))

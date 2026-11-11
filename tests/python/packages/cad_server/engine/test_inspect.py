@@ -106,6 +106,16 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(structure["materials"], [{"name": "Alu_G6061_T6", "density": 2700.0, "parts": ["hinge/base"]}])
         self.assertEqual(structure["states"], [{"name": "open", "values": {"elbow": 90.0}}])
         self.assertEqual(self.facts(), 0, "a structure measures nothing")
+        # A script asks the same of the handle its model call returns, as every verb takes one: each
+        # material's density and parts, no solid transferred to it.
+        (self.folder / "ask.py").write_text(
+            "import json\nfrom cad import model\nfrom hinge import hinge\n"
+            "print(json.dumps(model.inspect(hinge(), query='structure')['summary']['materials']))\n", encoding="utf-8")
+        asked = self.run_("ask.py")
+        self.assertEqual(asked.returncode, 0, asked.stderr)
+        self.assertEqual(json.loads(asked.stdout.splitlines()[-1]), structure["materials"])
+        (self.folder / "hinge.ran").unlink(missing_ok=True)
+        self.assertEqual(self.facts(), 0)
 
         shown = self.run_("-m", "cad_server.engine", "inspect", ident)
         self.assertEqual(shown.returncode, 0, shown.stderr)
@@ -177,6 +187,23 @@ class CouplingsTest(unittest.TestCase):
         "couplings": {"drive": {"range": [-90.0, 90.0], "terms": [["ja", 0, 1.0], ["jb", 0, -2.0]]},
                       "rack": {"range": [None, None], "terms": [["ja", 0, 1.0], ["slide", 0, 0.5]]},
                       "screw": {"range": [None, None], "terms": [["lead", 0, 1.0], ["lead", 1, 0.004]]}}}
+
+    def test_a_material_of_many_occurrences_is_one_line_that_counts_the_rest(self) -> None:
+        from cad_server.engine.cli import summary_text
+
+        skins, bare = [f"robot/skin.{n}" for n in range(1, 851)], [f"robot/pin.{n}" for n in range(1, 10)]
+        summary = {"name": "robot", "id": "x", "state": {"state": "file", "path": "/m/a.xbf"},
+                   "parts": {"occurrences": 859, "distinct": 2, "root": "robot"}, "bounds": None, "volume": 0.0,
+                   "materials": [{"name": "PC", "density": 1200.0, "parts": skins, "mass": 1.5},
+                                 {"name": "Steel", "density": 7850.0, "parts": skins[:8], "mass": 0.1}],
+                   "unweighed": bare, "joints": [], "couplings": [],
+                   "states": [], "sequences": [], "animations": [], "files": []}
+        lines = summary_text(summary).splitlines()
+        at = lines.index("materials")
+        self.assertEqual(lines[at + 1:at + 4], [
+            f"  PC: 1.5 kg, {', '.join(skins[:8])} and 842 more (--json lists them)",
+            f"  Steel: 0.1 kg, {', '.join(skins[:8])}",
+            f"  no material: {', '.join(bare[:8])} and 1 more (--json lists them)"])
 
     def test_each_coupling_is_its_name_kind_joints_and_ratio_in_data_and_text(self) -> None:
         from cad.engine.api import couplings_of

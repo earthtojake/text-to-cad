@@ -131,12 +131,16 @@ cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
 part refs (an occurrence's path: `lid`, `hand/finger.2`; an assembly hides every part
-below it) the picture leaves out, `display.isolated` the parts it alone draws. A Quick
+below it) the picture leaves out, `display.isolated` the parts it alone draws. A name
+with `*`, `?` or `[` is a glob over every occurrence, matched against its label, its
+numbered segment and its path written with either, so one entry leaves out a kind of
+part wherever it is; a glob that matches nothing is refused. A Quick
 Edit packet given to `--annotation` carries the person's own, which `--display` may
 override:
 
 ```bash
 cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views
@@ -196,10 +200,19 @@ A SRC given is drawn in place of every job's input, and any other flag overrides
 every job. A job's `output` settings finish its pictures: `padding` (0 to 0.15 of
 the picture each side) and `tightFrame` frame a fitted camera (a view's own camera
 with `tightFrame` false, as the viewer writes every view, is drawn exactly),
-`transparent` draws on nothing, `renderScale` (1 to 3) supersamples -- OCCT's edge
+`transparent` draws on nothing, `background` (a `#rrggbb`) on that flat colour in place of the
+pale default -- a white or pearl part has no outline on it, so give one a dark one
+(`"output": {"background": "#2b2d31"}`) --, `renderScale` (1 to 3) supersamples -- OCCT's edge
 lines stay one pixel of the larger picture, so they read finer -- and `sizeProfile`
 sizes an output that gives no size. Every job is checked before anything renders,
 and a failure writes none of its pictures, leaving existing ones unchanged. `--json` prints each picture's report.
+
+A preset or `azimuth:elevation` is fitted to what each picture shows, so two pictures of
+different parts or poses are framed differently. For frames that must not move (a motion's
+frames, a part alone beside the whole), draw one picture with `--json`, take the camera it
+settled on from its report (`view`: `position`, `target`, `up` and, orthographic,
+`orthographicHalfHeight`), and give it to every job as its `camera` with
+`"output": {"tightFrame": false}`: it is drawn exactly, with no fit.
 
 Inspect supplied annotations before editing. A view without annotations is optional
 context: render it only when useful to the request. After an edit, run the script and
