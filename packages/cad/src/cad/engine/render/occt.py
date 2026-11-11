@@ -389,6 +389,9 @@ class Scene:
             self._rig(look == "xray")
         faces = mode != "wireframe"
         edges = not preview and mode != "shaded"
+        # ``display.edges`` ``sharp``: the lines where two faces meet at an angle, and a face's free border, alone;
+        # none where they meet smoothly (``tangent``) or where one closes on itself (``seam``).
+        sharp = display.get("edges") == "sharp"
         on_top = mode in ("xray", "wireframe")
         for index, instance in enumerate(self.structure["instances"]):
             if index in self.hidden:
@@ -411,7 +414,7 @@ class Scene:
                     self.shown.append(connected)
             if edges:
                 for line in LINES:
-                    if line not in part.edges:
+                    if line not in part.edges or (sharp and line != "feature"):
                         continue
                     connected = AIS_ConnectedInteractive()
                     connected.Connect(self._edges(p, line), trsf)

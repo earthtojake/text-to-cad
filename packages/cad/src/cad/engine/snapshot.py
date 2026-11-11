@@ -91,7 +91,11 @@ __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictur
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "edges"})
+# The lines a picture draws over its faces: every edge class the mesh names (``all``, the default), or
+# the sharp ones alone (``sharp``): no line where two faces meet smoothly (a fillet's ends, a loft's
+# rows) nor where one closes on itself (a cylinder's or a loft's seam).
+EDGES = ("all", "sharp")
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
@@ -253,7 +257,7 @@ def exploded_amount(display: dict[str, Any]) -> float:
 
 @refusing("display")
 def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, both by commas (``hidden-line,exploded=0.6``), or
+    """``--display``: a mode, ``exploded=AMOUNT``, ``edges=sharp``, by commas (``hidden-line,exploded=0.6``), or
     the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
     (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
     ``render/schematic.py``)."""
@@ -278,11 +282,14 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                 name, equals, amount = token.partition("=")
                 if name == "exploded" and "exploded" not in display:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
+                elif name == "edges" and equals and "edges" not in display:
+                    display["edges"] = amount.strip()
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "and exploded=AMOUNT moves the parts apart (one of each, by commas)",
+                                          "exploded=AMOUNT moves the parts apart, and edges=sharp draws the sharp "
+                                          "edges alone (one of each, by commas)",
                                           part="display.mode")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
@@ -297,6 +304,8 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                               part="display.mode")
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false", part="display.grid")
+    if "edges" in display and display["edges"] not in EDGES:
+        raise SnapshotRefused(f"display.edges {display['edges']!r} is not one of {', '.join(EDGES)}", part="display.edges")
     _visibility(display)
     if grid:
         display["grid"] = True

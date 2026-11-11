@@ -71,11 +71,14 @@ view it replays was seen in: no flag or packet names a theme.
 `solid` (shaded, with edge linework), `shaded` (no edges), `parts` (each part its own
 colour), `xray` (translucent surfaces, hidden edges visible), `hidden-line`
 (linework with occluded edges suppressed) and `wireframe` (edges only). It also takes
-`exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1),
-alone or after a mode (`hidden-line,exploded=0.6`), or the viewer's display object,
-inline or as a JSON file: `mode`, `grid`, `camera`
-(`projection`: `orthographic` or `perspective`; `focalLength`), `clip` and `exploded`
-(`{"enabled": true, "amount": 0.5}`). `parts` and `exploded` are refused for a
+`exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1)
+and `edges=sharp` (only the lines where faces meet at an angle: none along a loft's or a
+cylinder's seam, nor where a fillet meets its faces, which otherwise draw as lines across a
+smooth skin), alone or after a mode (`hidden-line,exploded=0.6`, `solid,edges=sharp`), or the
+viewer's display object, inline or as a JSON file: `mode`, `grid`, `camera`
+(`projection`: `orthographic` or `perspective`; `focalLength`), `clip`, `exploded`
+(`{"enabled": true, "amount": 0.5}`) and `edges` (`"all"` or `"sharp"`). With `edges=sharp`
+a round part has no outline of its own: the picture draws no silhouettes. `parts` and `exploded` are refused for a
 document of one part. Unknown keys and out-of-range values are refused.
 
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
@@ -206,6 +209,16 @@ pale default -- a white or pearl part has no outline on it, so give one a dark o
 lines stay one pixel of the larger picture, so they read finer -- and `sizeProfile`
 sizes an output that gives no size. Every job is checked before anything renders,
 and a failure writes none of its pictures, leaving existing ones unchanged. `--json` prints each picture's report.
+
+A snapshot draws the mesh the viewer draws, which is right for a review and coarse for a close-up
+of a large curved part (a faceted outline, uneven shading). For a still that needs a finer one,
+export the model as a GLB at the tolerance wanted and draw that file; the model's own mesh, and
+every other picture of it, stay as they are:
+
+```bash
+cad model export "$ID" tmp/fine.glb --tolerance 0.02 --angle 3
+cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
+```
 
 A preset or `azimuth:elevation` is fitted to what each picture shows, so two pictures of
 different parts or poses are framed differently. For frames that must not move (a motion's
