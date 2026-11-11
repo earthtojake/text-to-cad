@@ -709,11 +709,11 @@ that did not hold as written, and what a reader should take from them instead.
   sample counts on the CPU (33, 37); mass properties of a link of several parts (43, 45); and the
   review order and the planted failure in *Check each change*.
 
-- A snapshot draws the sharp edges alone when asked (`--display solid,edges=sharp`): no line down a
+- A snapshot draws the sharp edges alone when asked (`--display solid,edges=feature`): no line down a
   loft's seam (18). For a finer mesh in a close-up there was a route already, now written down: a
   GLB exported at a tolerance, drawn as that file (13).
 
-- A snapshot draws a configuration sequence at a time of it (`--motion walk --at 0.6`), and a list of
+- A snapshot draws a configuration sequence at a time of it (`--pose walk@0.6`), and a list of
   jobs its frames in one command (12). It stands under the mechanism's fixed link, as the sequence is
   written.
 

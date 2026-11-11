@@ -355,14 +355,7 @@ class SnapshotTest(unittest.TestCase):
 
         out = str(self.folder / "enveloped.png")
         for argv, said, status in ((["snapshot", str(self.folder / "missing.xbf"), out], "no document", 2),
-                                   (["snapshot", str(self.document), out, "--display", "sideways"], "sideways", 2),
-                                   # A sequence at a time: its two flags together, and no --pose beside them.
-                                   (["snapshot", str(self.document), out, "--motion", "walk"],
-                                    "--motion NAME and --at SECONDS go together", 2),
-                                   (["snapshot", str(self.document), out, "--at", "0.5"],
-                                    "--motion NAME and --at SECONDS go together", 2),
-                                   (["snapshot", str(self.document), out, "--motion", "walk", "--at", "0.5", "--pose",
-                                     "open"], "--pose and --motion each say where the mechanism stands", 2)):
+                                   (["snapshot", str(self.document), out, "--display", "sideways"], "sideways", 2)):
             with self.subTest(argv=argv):
                 code, printed, err = run(lambda: cli.main([*argv, "--json"]))
                 found = json.loads(printed)
@@ -541,8 +534,8 @@ class SnapshotTest(unittest.TestCase):
                          [("view-1.png", True, 0.0, False, False, 1.0, (240, 180)),
                           ("front.png", False, 0.15, True, True, 2.0, (160, 120))])
         self.assertEqual(pictures[0][2].display["hidden"], ["peg.1"])
-        walking = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "motion": {"name": "walk", "at": 0.6}}]})
-        self.assertEqual(walking[0][2].pose, ["walk", 0.6], "a sequence at a time, the document's to answer when drawn")
+        walking = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "jointValues": "walk@0.6"}]})
+        self.assertEqual(walking[0][2].pose, "walk@0.6", "a sequence at a time, the document's to answer when drawn")
         coloured = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "output": {"background": "#202830"}}]})
         self.assertEqual([still.background for _document, _out, still in [*coloured, *pictures]],
                          ["#202830", None, None, None])
@@ -561,10 +554,7 @@ class SnapshotTest(unittest.TestCase):
                 ({**packet, "jobs": [{**job, "output": {"renderScale": 4}}]}, r"renderScale is a number from 1 to 3"),
                 ({**packet, "jobs": [{**job, "output": {"viewLabels": True}}]}, "output has no viewLabels"),
                 ({**packet, "jobs": [{**job, "output": {"background": "grey"}}]}, "background is a colour as #rrggbb"),
-                ({**packet, "jobs": [{**job, "motion": {"name": "walk"}}]},
-                 r"jobs\[0\].motion is a configuration sequence and a time of it in seconds"),
-                ({**packet, "jobs": [{**job, "motion": {"name": "walk", "at": 0.6}, "jointValues": {"elbow": 10}}]},
-                 "gives jointValues and motion: a picture stands at one pose"),
+                ({**packet, "jobs": [{**job, "motion": {"name": "walk", "at": 0.6}}]}, r"jobs\[0\] has no motion"),
                 ({**packet, "jobs": [{**job, "output": {"background": "#202830", "transparent": True}}]},
                  "background and transparent: a picture stands on a colour or on nothing"),
                 ({**packet, "jobs": [{**job, "outputs": []}]}, "lists the pictures it writes"),

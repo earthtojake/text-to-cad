@@ -5,8 +5,7 @@ ordinary Python scripts call decorated models explicitly.
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
         model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--pose NAME|JSON | --motion NAME --at SECONDS] [--annotation FILE] [--measurements FILE] [--width N]
-        [--height N]
+        [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
@@ -156,22 +155,6 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                                                "declared files), then its build closure")
 
 
-def _pose(args: argparse.Namespace) -> Any:
-    """The pose a snapshot's flags ask for: ``--pose``'s, or ``--motion NAME --at SECONDS``'s (a sequence
-    at a time, ``snapshot.parse_motion``); one of them, and both halves of the second, else refused as the
-    snapshot refuses a flag (``SnapshotRefused``, which each caller answers as the command line's)."""
-    from cad.engine import snapshot
-
-    if args.motion is None and args.at is None:
-        return args.pose
-    if args.pose is not None:
-        raise snapshot.SnapshotRefused("--pose and --motion each say where the mechanism stands: give one", part="pose")
-    if args.motion is None or args.at is None:
-        raise snapshot.SnapshotRefused("--motion NAME and --at SECONDS go together: a sequence, and the time of it to "
-                                       "draw", part="pose")
-    return snapshot.parse_motion({"name": args.motion, "at": args.at})
-
-
 def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:
     from cad.engine import snapshot
 
@@ -191,8 +174,9 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                              "dimensions, at its output settings (padding, tightFrame, transparent, background, "
                              "renderScale, sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=sharp "
-                                          "(no line where faces meet smoothly or a face closes on itself), or "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS "
+                                          "(the edges of one class alone: feature, tangent or seam; edges=feature "
+                                          "draws no line where faces meet smoothly or a face closes on itself), or "
                                           "the display JSON object (mode, grid, camera, clip, exploded, edges, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
@@ -209,16 +193,12 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--size-profile", choices=sorted(snapshot.SIZE_PROFILES))
-    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), or joint and coupling "
+    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), a configuration "
+                                       "sequence at a time of it (walk@0.6: where the viewer's playbar shows the "
+                                       "mechanism then), or joint and coupling "
                                        "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
                                        "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
                                        "built without it (a robot where the viewer opens it)")
-    parser.add_argument("--motion", metavar="NAME",
-                        help="a configuration sequence to stand in, at --at seconds of it: the mechanism where the "
-                             "sequence has it then, as the viewer's playbar shows it (a job's: \"motion\": {\"name\", "
-                             "\"at\"}, so a list of jobs draws its frames in one command)")
-    parser.add_argument("--at", type=float, metavar="SECONDS",
-                        help="the time of --motion's sequence to draw, from 0 to its duration")
     parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation file, or the Quick Edit packet "
                                                               "(.snapshot.json) that carries it: its ink drawn over the "
                                                               "model, on the parts it was drawn on")
@@ -245,7 +225,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     try:
         # The verb as a function (``api.snapshot``), which checks the flags as ``snapshot`` does.
         report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
-                              pose=_pose(args), width=args.width, height=args.height,
+                              pose=args.pose, width=args.width, height=args.height,
                               size_profile=args.size_profile, annotation=args.annotation,
                               measurements=args.measurements).report
     except snapshot.SnapshotRefused as error:
@@ -323,7 +303,7 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
     try:
         drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
-                             pose=_pose(args), width=args.width, height=args.height,
+                             pose=args.pose, width=args.width, height=args.height,
                              size_profile=args.size_profile, annotation=args.annotation,
                              measurements=args.measurements)
     except (snapshot.SnapshotRefused, ValueError) as error:
@@ -355,7 +335,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
     started = time.perf_counter()
     try:
         drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 pose=_pose(args), width=args.width, height=args.height,
+                                 pose=args.pose, width=args.width, height=args.height,
                                  size_profile=args.size_profile, annotation=args.annotation,
                                  measurements=args.measurements)
     except snapshot.SnapshotRefused as error:

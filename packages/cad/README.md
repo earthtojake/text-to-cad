@@ -92,7 +92,7 @@ HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, S
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
-B-rep document's interference check (`cad.<type>.interference(source, poses=..., motions=..., fits=...)`: every
+B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
 pair of parts whose boxes meet answered, as built and posed, by the engine: exactly, by the kernel, wherever the
 two parts' meshes do not show air between them); a
 B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
@@ -826,9 +826,9 @@ pairs, keep a length, skew or track-angle rule, or choose what to route or in wh
 
 A B-rep document's `interference` says which of its parts share volume: `cad.model.interference`,
 `cad.xbf.interference` and `cad.step.interference`, one to one with `cad <type> interference SRC`. Every pair of
-parts whose boxes meet is answered, as built and at each stance asked:
-`poses` (mechanism states' names, or `{joint: value}`), `states` (every state), `motions` (configuration
-sequences by name, or `"all"`, each at `samples` stances). `fits` names the pairs meant to share volume, listed
+parts whose boxes meet is answered, as built and at each of `poses`: a mechanism state's name, a
+configuration sequence at a time of it (`"walk@0.6"`), or `{joint: value}`, as every command takes a pose. It
+checks the poses it is given and chooses none. `fits` names the pairs meant to share volume, listed
 apart. A pair with air between its two parts is ruled out on their meshes (the kernel's own proximity test, and
 a point of each shell classified against the other's solids, so a part swallowed whole is not missed); every
 other pair is measured exactly, on the parts' own solids. The engine measures it and keeps each answer by the
@@ -838,17 +838,18 @@ that changed is one of the two, and the same check of an unchanged document is a
 ```python
 from cad import model
 
-found = model.interference(robot(), states=True, motions="all", fits=[("bearing*", "housing")])
-for finding in found.findings:          # an `interference` each: its two occurrences in .refs, mm3 in .value
+found = model.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("bearing*", "housing")])
+for finding in found.findings:          # an `overlapping_parts` each: its two occurrences in .refs, mm3 in .value
     print(finding.human_line())
 assert found.ok, found.summary          # not ok where a pair shares volume, or could not be measured
 ```
 
 The result is a `CheckResult`: `failed` where a pair shares volume, `not_checked` (its `reason`
-`unmeasured`) where none was found but a pair could not be measured within its time (`pair_seconds`, 300 by
-default; the whole check's `seconds`, 1200) -- never a pass -- and `ok` only with every pair measured and none
-sharing. `measurements` holds the stances, the pairs counted and how each was answered (`pairs`: `apart`,
-`kept`, `measured`), every row of `interferences`, `fits` and `unmeasured`, and the measurements that took
+`unmeasured`) where none was found but a pair could not be measured (past its five minutes or the check's
+twenty, its process lost, the kernel's refusal: each row's `reason`) -- never a pass, and asked again the check
+goes on from what it measured -- and `ok` only with every pair answered and none
+sharing. A shared volume of `min_volume` or less (0.001 mm3 by default) is none. `measurements` holds the poses, the pairs counted and how each was answered (`pairs`: `apart`,
+`kept`, `measured`), every row of `overlaps`, `fits` and `unmeasured` (each `between` its two parts, with every pose it holds at), and the measurements that took
 longest (`slowest`).
 
 ## Manufacturing checks

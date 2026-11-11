@@ -370,41 +370,45 @@ pairs with air between them, which need no kernel:
 
 ```bash
 cad model interference "$ID"                                  # as built
-cad model interference "$ID" --states --motions               # and at every mechanism state, along every sequence
-cad model interference "$ID" --pose crouch --pose '{"l_knee": 90}' --motion walk --samples 24
-cad model interference "$ID" --fit 'bearing*,housing' --fit pin,base    # pairs meant to share volume
+cad model interference "$ID" --pose crouch --pose bow       # and at mechanism states
+cad model interference "$ID" --pose walk@0 --pose walk@0.6 --pose '{"l_knee": 90}'   # a sequence at times of it, joint values
+cad model interference "$ID" --fit 'bearing*' housing --fit pin base   # pairs meant to share volume
 ```
 
 ```text
-$ cad model interference "$ID" --states
-error: interference, 2 place(s). Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A,B)
-  arm/bar: shares 739 mm^3 with arm/stop (pose down)
-  arm/base: shares 125.7 mm^3 with arm/pin (as built, pose down)
-FAILED arm: 2 pairs of parts share volume (5 parts at 2 stances, the boxes of 6 pairs met: 2 with air between them, 4 measured, in 2.1 s)
+$ cad model interference "$ID" --pose down
+error: overlapping_parts, 2 place(s). Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A B)
+  arm/bar: shares 739 mm^3 with arm/stop (down)
+  arm/base: shares 125.7 mm^3 with arm/pin (as built, down)
+FAILED arm: 2 pairs of parts share volume (5 parts at 2 poses, the boxes of 6 pairs met: 2 apart, 4 measured, in 2.1 s)
 ```
 
 - **The status is the verdict**: 0 clear, 1 a pair shares volume, 3 none found but a pair could not
-  be measured, which is no pass. A pair is unmeasured when its Boolean ran past `--pair-seconds` (300),
-  when the kernel refused it, or when the whole check ran past `--seconds` (1200): give it longer, or
-  measure that pair in a check of its own. `--json` is the result whole (`measurements.interferences`,
-  `.fits`, `.unmeasured`, each row two occurrence paths).
+  be measured, which is no pass. A pair is unmeasured (`reason`) when its Boolean ran past five minutes
+  or the whole check past twenty (`over_time`), when its process was lost (`process_lost`) or when the
+  kernel refused the two (`error`): ask again, which goes on from what was measured, or measure that
+  pair in a check of its own. A pair that shares volume is an `overlapping_parts` finding, as a stress
+  study names the same fact. `--json` is the result whole (`measurements.overlaps`, `.fits`,
+  `.unmeasured`: each row `between` its two occurrence paths, with every pose it holds at).
 - **The first check of an assembly is the slow one.** Each pair's answer is kept by the two parts'
   geometries and how one stands to the other, so the next check measures only the pairs of a part that
-  changed, a check stopped by its time goes on from where it stopped when asked again, and `--states`
-  after a check as built measures the moving pairs alone. The summary says how the pairs were answered
-  (`with air between them`, `kept from earlier checks`, `measured`), and `measurements.slowest` names the
+  changed, a check stopped by its time goes on from where it stopped when asked again, and a pose
+  checked after a check as built measures the moving pairs alone. The summary says how the pairs were answered
+  (`apart` by their meshes, `kept` from an earlier check, `measured` now; `measurements.pairs`), and `measurements.slowest` names the
   pairs that took longest: two large lofted surfaces in contact over their whole area take the kernel
   minutes (a 700-part humanoid: ten minutes the first time on four cores, most of it eight such pairs).
-- **A stance is every part where the mechanism puts it.** `--pose` takes a mechanism state's name or
-  `{joint or coupling: value}`; `--states` every state; `--motion NAME` (or `--motions`) samples a
-  configuration sequence at `--samples` times, its two ends among them. What a stance does not move
-  is not measured again, so a long motion costs its moving pairs alone.
-- **A fit is named, never inferred.** `--fit A,B` takes two refs or globs; the pair's overlap is
-  listed as a fit and is no interference.
-- **What it cannot see**: a pose between two samples, a part with no solid (left out, and counted),
+- **It checks the poses it is given, and chooses none.** `--pose` repeats, and takes what a snapshot's
+  does: a mechanism state's name, a configuration sequence at a time of it (`walk@0.6`), or
+  `{joint or coupling: value}`. Which states, and which times of a sequence, is yours to say:
+  `cad model inspect "$ID"` lists the states and the sequences with their durations. What a pose does
+  not move is not measured again, so a long sequence costs its moving pairs alone.
+- **A fit is named, never inferred.** `--fit A B` takes two refs or globs; the pair's overlap is
+  listed as a fit and is no overlap to fix. A shared volume of 0.001 mm^3 or less is the rounding
+  along a face where two parts touch, and none (`--min-volume`).
+- **What it cannot see**: a pose it was not given (a time between two of a sequence), a part with no solid (left out, and counted),
   and joints that share a centre taken to the corners of their travel together, which is a `--pose`
   for each corner. Say so with the result.
-- From a script: `cad.model.interference(robot(), states=True, fits=[("pin", "base")])` returns the
+- From a script: `cad.model.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("pin", "base")])` returns the
   same result (`.ok`, `.findings`, `.measurements`). The engine measures it and keeps the result: the
   same check of an unchanged model answers at once. A check that left a pair unmeasured is not
   kept: asked again, it measures again.

@@ -373,8 +373,7 @@ class Held:
             try:
                 shown = (self.poser or posed_structure)(self.structure, still.pose)
             except ValueError as error:  # mechanism.KinematicsError: what the pose names wrong, by name
-                flag = "--motion" if isinstance(still.pose, (list, tuple)) else "--pose"
-                raise SnapshotRefused(f"{flag}: {error}", part="pose") from None
+                raise SnapshotRefused(f"--pose: {error}", part="pose") from None
             posed = shown["kinematics"]["pose"]
         refusals(still, shown, self.name)
         hidden = hidden_instances(shown, still.display, self.name)
@@ -433,7 +432,7 @@ class Held:
         untextured = {p.get("name") or p["key"]: p["untextured"] for p in self.structure["prototypes"]
                       if p.get("untextured")}
         return data, {"width": still.size[0], "height": still.size[1], **finished(still), "camera": name,
-                      "view": view_of(scene), "projection": projection,
+                      "settledCamera": view_of(scene), "projection": projection,
                       "displayMode": display.get("mode", "solid"), "preview": still.preview,
                       "parts": len(self.structure["prototypes"]), "instances": len(shown["instances"]),
                       "unmeshed": unmeshed, **({"untextured": untextured} if untextured else {}),

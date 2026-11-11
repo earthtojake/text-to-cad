@@ -255,20 +255,25 @@ class HeldTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "display.isolated is a list of part refs"):
             parse_display('{"isolated": "block"}', False)
 
-    def test_sharp_edges_alone_leaves_out_the_lines_where_faces_meet_smoothly_or_close_on_themselves(self) -> None:
-        """``display.edges`` ``sharp``: each part's feature lines are drawn and its tangent and seam lines are
-        not, so a cylinder's seam and a fillet's ends leave no line on a shaded part; the faces are as they were."""
-        self.assertEqual(parse_display("solid,edges=sharp", False), {"mode": "solid", "edges": "sharp"})
-        self.assertEqual(parse_display('{"edges": "all"}', False), {"edges": "all"})
-        with self.assertRaisesRegex(SnapshotRefused, "display.edges 'dotted' is not one of all, sharp"):
-            parse_display("edges=dotted", False)
+    def test_the_edge_classes_named_are_the_lines_drawn_and_the_others_are_left_out(self) -> None:
+        """``display.edges`` names the edge classes drawn, by the mesh's and the viewer's names for them: with
+        ``feature`` alone each part's tangent and seam lines are not drawn, so a cylinder's seam and a fillet's ends
+        leave no line on a shaded part; the faces are as they were."""
+        self.assertEqual(parse_display("solid,edges=feature", False), {"mode": "solid", "edges": {"classes": ["feature"]}})
+        self.assertEqual(parse_display('{"edges": {"classes": ["feature", "seam"]}}', False),
+                         {"edges": {"classes": ["feature", "seam"]}})
+        for given in ("edges=dotted", '{"edges": "feature"}', '{"edges": {"classes": []}}',
+                      '{"edges": {"classes": ["seam", "seam"]}}', '{"edges": {"enabled": true}}'):
+            with self.subTest(given=given), self.assertRaisesRegex(
+                    SnapshotRefused, "display.edges is .*the edge classes drawn, each once, of feature, tangent, seam"):
+                parse_display(given, False)
         every = pixels(self.draw(display={"mode": "solid"})[0])
         scene = self.held.scenes[False]
         drawn = len(scene.shown)
         smooth = sum(1 for index, instance in enumerate(scene.structure["instances"]) if index not in scene.hidden
                      for line in ("tangent", "seam") if line in scene.parts[instance["prototype"]].edges)
         self.assertGreater(smooth, 0, "the fixture has a seam or a tangent line to leave out")
-        sharp = pixels(self.draw(display={"mode": "solid", "edges": "sharp"})[0])
+        sharp = pixels(self.draw(display={"mode": "solid", "edges": {"classes": ["feature"]}})[0])
         self.assertEqual(drawn - len(scene.shown), smooth)
         differing = np.abs(sharp.astype(int) - every.astype(int)).max(-1) > 8
         self.assertTrue(0 < differing.mean() < 0.05, "lines gone, and nothing else changed")
@@ -319,20 +324,20 @@ class HeldTest(unittest.TestCase):
         self.assertLess(mismatch(pixels(again), plain), 0.001)
 
     def test_a_picture_reports_the_camera_it_settled_on_and_that_camera_draws_it_again_exactly(self) -> None:
-        """The report's ``view`` is the fitted camera as a job's view holds one: drawn exactly (no fit)
+        """The report's ``settledCamera`` is the fitted camera as a job's view holds one: drawn exactly (no fit)
         it is the same picture, and it frames a picture of fewer parts the same way, where a fit
         would have filled the frame with them."""
         for projection in ("orthographic", "perspective"):
             with self.subTest(projection=projection):
                 display = {"mode": "solid", "camera": {"projection": projection}}
                 data, report = self.draw((320, 240), display=display, camera="35:20")
-                view = report["view"]
+                view = report["settledCamera"]
                 self.assertEqual(sorted(view), sorted(["position", "target", "up"]
                                                       + (["orthographicHalfHeight"] if projection == "orthographic" else [])))
                 again, pinned = self.draw((320, 240), display=display, camera=view, exact=True)
                 self.assertLess(mismatch(pixels(again), pixels(data)), 0.001)
                 for key, value in view.items():
-                    np.testing.assert_allclose(pinned["view"][key], value, atol=1e-9)
+                    np.testing.assert_allclose(pinned["settledCamera"][key], value, atol=1e-9)
 
     def test_x_ray_is_the_colour_only_model_and_gives_the_look_back(self) -> None:
         """X-ray draws the look's colour-only model (``look.py``) on OCCT's Phong program: a part's

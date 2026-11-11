@@ -10,7 +10,7 @@ severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A 
 type.
 
 A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
-share volume: ``cad model interference <id> --states --fit pin,base``. The engine measures it, in a checks
+share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
 process (``cad._internal.interference``); this command holds no kernel and needs none.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
@@ -284,8 +284,9 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
 
 
 def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentParser:
-    """``cad <type> interference``'s parser, an ADAPTER's: ``--pose``, ``--motion`` and ``--fit`` repeat,
-    lists no signature derives flags for (``cad_server._internal.cli_from_function``)."""
+    """``cad <type> interference``'s parser, an ADAPTER's: ``--fit`` repeats and takes two values, a pair
+    no signature derives a flag for (``cad_server._internal.cli_from_function``), and ``--pose`` is read as
+    snapshot's is."""
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
     from cad_server._internal.cli_parser import parser as command_parser
 
@@ -295,29 +296,16 @@ def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentPars
                         help="the model's document id (cad run SCRIPT.py prints it)" if not entry.has_file
                         else f"the {entry.suffix} file")
     parser.add_argument("--pose", action="append", default=[], metavar="POSE",
-                        help="a stance to check beside as built: a mechanism state's name, or JSON {joint or "
-                             "coupling: value}. Repeatable")
-    parser.add_argument("--states", action="store_true", help="check at every mechanism state too")
-    parser.add_argument("--motion", action="append", default=[], metavar="NAME",
-                        help="check along a configuration sequence, at --samples stances of it. Repeatable")
-    parser.add_argument("--motions", action="store_true", help="check along every configuration sequence")
-    parser.add_argument("--samples", type=int, metavar="N",
-                        help="the stances taken of each sequence, its two ends among them (default 12)")
-    parser.add_argument("--fit", action="append", default=[], metavar="A,B",
+                        help="a pose to check at beside as built, as snapshot's --pose takes one: a mechanism "
+                             "state's name, a configuration sequence at a time of it (walk@0.6), or joint and "
+                             "coupling values as JSON ('{\"elbow\": 45}'). Repeatable: the check takes the poses "
+                             "it is given, and chooses none")
+    parser.add_argument("--fit", action="append", default=[], nargs=2, metavar=("A", "B"),
                         help="two parts meant to share volume (a press-fit pin, a bearing in its bore), each a "
-                             "ref or a glob: their overlap is listed as a fit and is no interference. Repeatable")
-    parser.add_argument("--jobs", type=int, metavar="N",
-                        help="the processes that measure (default: one a core, four at most); each holds a "
-                             "kernel")
-    parser.add_argument("--pair-seconds", type=float, metavar="S",
-                        help="how long one pair may take before it is stopped and reported unmeasured "
-                             "(default 300)")
-    parser.add_argument("--seconds", type=float, metavar="S",
-                        help="how long the whole check may take, the pairs not reached reported unmeasured "
-                             "(default 1200; the engine stops any check at CAD_ENGINE_CHECK_SECONDS, 1800 by "
-                             "default)")
+                             "ref or a glob: their overlap is listed as a fit and is no overlap to fix. Repeatable")
     parser.add_argument("--min-volume", type=float, metavar="MM3",
-                        help="a shared volume at or below this is none (default 0: any shared volume interferes)")
+                        help="a shared volume at or below this is none (default 0.001: the rounding along a face "
+                             "where two parts touch)")
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
                         help="Print the result as one JSON line on stdout instead of human lines.")
     return parser
@@ -326,7 +314,7 @@ def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentPars
 def _interference(document_type: str) -> Callable[[list[str], str], int]:
     """``cad <type> interference``: the library's interference check (``cad.<type>.interference``), asked of
     the engine, which measures it in a checks process; this command holds no kernel and needs none. Its
-    options are lists a signature derives no flags for (``--pose``, ``--motion`` and ``--fit`` repeat), so
+    ``--fit`` takes two values a time, which no signature derives a flag for, so
     its parser is an adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
     3 none found but a pair unmeasured, 2 an option refused by name."""
 
@@ -339,10 +327,16 @@ def _interference(document_type: str) -> Callable[[list[str], str], int]:
         def checked() -> Any:
             import importlib
 
+            from cad._internal.refused import ArgumentRefused
+            from cad.engine import snapshot
+
+            # A pose as the command line writes one, read as snapshot's --pose is (a name, NAME@SECONDS, or JSON).
+            try:
+                poses = [snapshot.parse_pose(pose) for pose in args.pose]
+            except snapshot.SnapshotRefused as refused:
+                raise ArgumentRefused(str(refused)) from None
             function = getattr(importlib.import_module(f"cad.{document_type}"), "interference")
-            return function(args.document, poses=args.pose, states=args.states,
-                            motions="all" if args.motions else args.motion, samples=args.samples, fits=args.fit,
-                            jobs=args.jobs, pair_seconds=args.pair_seconds, seconds=args.seconds,
+            return function(args.document, poses=poses, fits=[tuple(fit) for fit in args.fit],
                             min_volume=args.min_volume)
 
         return _verdict(checked, prog=prog, as_json=bool(getattr(args, JSON_FLAG_DEST)), source=str(args.document))

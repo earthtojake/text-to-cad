@@ -77,39 +77,43 @@ class CommandTest(unittest.TestCase):
         found = self.check()
         self.assertEqual(found.returncode, 1, found.stderr)
         lines = found.stdout.splitlines()
-        self.assertRegex(lines[0], r"^error: interference at kit/base: shares [\d.]+ mm\^3 with kit/press \(as built\)")
-        self.assertRegex(lines[-1], r"^FAILED kit: 1 pair of parts share volume \(5 parts at 1 stance, the boxes of \d+ "
+        self.assertRegex(lines[0], r"^error: overlapping_parts at kit/base: shares [\d.]+ mm\^3 with kit/press \(as built\)")
+        self.assertRegex(lines[-1], r"^FAILED kit: 1 pair of parts share volume \(5 parts at 1 pose, the boxes of \d+ "
                                     r"pairs? met: \d+ measured, in [\d.]+ s\)$")
 
         # Named a fit, it is listed apart and the kit is clear: status 0. Asked again, nothing is measured.
-        clear = self.check("--fit", "press,base", "--json")
+        clear = self.check("--fit", "press", "base", "--json")
         self.assertEqual(clear.returncode, 0, clear.stderr)
         result = json.loads(clear.stdout)
         self.assertEqual((result["status"], result["ok"], result["reason"]), ("ok", True, None))
         self.assertEqual([(row["severity"], row["code"], row["refs"]) for row in result["findings"]],
                          [("info", "fit", ["kit/base", "kit/press"])])
         measured = result["measurements"]
-        self.assertEqual((measured["interferences"], measured["unmeasured"], measured["measured_in"]), ([], [], "engine"))
-        self.assertEqual([(row["a"], row["b"], row["fit"]) for row in measured["fits"]],
-                         [("kit/base", "kit/press", "press in base")])
+        self.assertEqual((measured["overlaps"], measured["unmeasured"], measured["measured_in"]), ([], [], "engine"))
+        self.assertEqual([(row["between"], row["fit"], row["poses"]) for row in measured["fits"]],
+                         [(["kit/base", "kit/press"], ["press", "base"], ["as built"])])
+        self.assertEqual(measured["resolved"], {"poses": [], "fits": [["press", "base"]], "min_volume": 0.001})
         self.assertNotIn("reused", measured)
-        again = json.loads(self.check("--fit", "press,base", "--json").stdout)
+        again = json.loads(self.check("--fit", "press", "base", "--json").stdout)
         self.assertTrue(again["measurements"]["reused"])
         self.assertEqual(again["measurements"]["fits"], measured["fits"])
 
         # At its mechanism state the bar is in the stop: found there, and said where.
-        posed = self.check("--fit", "press,base", "--states", "--json")
+        posed = self.check("--fit", "press", "base", "--pose", "down", "--pose", '{"elbow": 30}', "--json")
         self.assertEqual(posed.returncode, 1, posed.stderr)
         result = json.loads(posed.stdout)
-        self.assertEqual((result["status"], result["measurements"]["stances"]), ("failed", ["as built", "pose down"]))
-        self.assertIn(("kit/bar", "kit/stop", ["pose down"]),
-                      [(row["a"], row["b"], row["at"]) for row in result["measurements"]["interferences"]])
-        self.assertIn(["kit/bar", "kit/stop"], [row["refs"] for row in result["findings"] if row["code"] == "interference"])
+        self.assertEqual((result["status"], result["measurements"]["poses"]),
+                         ("failed", ["as built", "down", '{"elbow":30}']))
+        self.assertIn((["kit/bar", "kit/stop"], ["down", '{"elbow":30}']),
+                      [(row["between"], row["poses"]) for row in result["measurements"]["overlaps"]])
+        self.assertIn(["kit/bar", "kit/stop"],
+                      [row["refs"] for row in result["findings"] if row["code"] == "overlapping_parts"])
 
         # What the document does not answer is refused by name, before anything is measured: status 2.
         for flags, words in ((("--pose", "up"), "pose: the document has no mechanism state 'up'"),
-                             (("--fit", "lid*,base"), "fit: 'lid*' matches no part or assembly of kit"),
-                             (("--fit", "press"), "a fit is the two parts meant to share volume, as A,B")):
+                             (("--pose", "swing@1"), "pose: the document has no configuration sequence 'swing'"),
+                             (("--fit", "lid*", "base"), "fit: 'lid*' matches no part or assembly of kit"),
+                             (("--fit", "press"), "argument --fit: expected 2 arguments")):
             refused = self.check(*flags)
             self.assertEqual(refused.returncode, 2, refused.stdout)
             self.assertIn(words, refused.stderr)
@@ -119,7 +123,7 @@ class CommandTest(unittest.TestCase):
             "import json\nfrom cad import model\nfrom kit import kit\n"
             "found = model.interference(kit(), fits=[('press', 'base')], poses=['down'])\n"
             "print(json.dumps([found.status, [finding.refs for finding in found.findings if finding.code == "
-            "'interference']]))\n", encoding="utf-8")
+            "'overlapping_parts']]))\n", encoding="utf-8")
         asked = self.run_("ask.py")
         self.assertEqual(asked.returncode, 0, asked.stderr)
         status, pairs = json.loads(asked.stdout.splitlines()[-1])

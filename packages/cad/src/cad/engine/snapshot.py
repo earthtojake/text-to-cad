@@ -94,15 +94,17 @@ from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
            "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display",
-           "parse_measurements", "parse_motion", "parse_pose",
+           "parse_measurements", "parse_pose",
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
 DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "edges"})
-# The lines a picture draws over its faces: every edge class the mesh names (``all``, the default), or
-# the sharp ones alone (``sharp``): no line where two faces meet smoothly (a fillet's ends, a loft's
-# rows) nor where one closes on itself (a cylinder's or a loft's seam).
-EDGES = ("all", "sharp")
+# The edge classes a picture draws as lines over its faces, by the names the mesh and the viewer give them
+# (``render.shapes.LINES``; the viewer's ``CAD_EDGE_CLASS_IDS``): where two faces meet at an angle or a face
+# has a free border (``feature``), where they meet smoothly (``tangent``: a fillet's ends, a loft's rows),
+# and where a face closes on itself (``seam``: a cylinder's, a loft's). All of them unless ``display.edges``
+# names which (``{"classes": [...]}``; ``edges=feature`` on the command line).
+EDGE_CLASSES = ("feature", "tangent", "seam")
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
@@ -140,7 +142,7 @@ MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
 PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
-JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "motion", "selection", "annotation", "measurements",
+JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
                       "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
 SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale", "background"})
@@ -264,7 +266,7 @@ def exploded_amount(display: dict[str, Any]) -> float:
 
 @refusing("display")
 def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, ``edges=sharp``, by commas (``hidden-line,exploded=0.6``), or
+    """``--display``: a mode, ``exploded=AMOUNT``, ``edges=CLASS``, by commas (``hidden-line,exploded=0.6``), or
     the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
     (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
     ``render/schematic.py``)."""
@@ -290,13 +292,13 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                 if name == "exploded" and "exploded" not in display:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
                 elif name == "edges" and equals and "edges" not in display:
-                    display["edges"] = amount.strip()
+                    display["edges"] = {"classes": [amount.strip()]}
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "exploded=AMOUNT moves the parts apart, and edges=sharp draws the sharp "
-                                          "edges alone (one of each, by commas)",
+                                          "exploded=AMOUNT moves the parts apart, and edges=CLASS draws the edges "
+                                          f"of one class alone ({', '.join(EDGE_CLASSES)}; one of each, by commas)",
                                           part="display.mode")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
@@ -311,8 +313,13 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                               part="display.mode")
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false", part="display.grid")
-    if "edges" in display and display["edges"] not in EDGES:
-        raise SnapshotRefused(f"display.edges {display['edges']!r} is not one of {', '.join(EDGES)}", part="display")
+    if "edges" in display:
+        edges = display["edges"]
+        classes = edges.get("classes") if isinstance(edges, dict) and set(edges) == {"classes"} else None
+        if (not isinstance(classes, list) or not classes or len(set(map(str, classes))) != len(classes)
+                or not all(name in EDGE_CLASSES for name in classes)):
+            raise SnapshotRefused('display.edges is {"classes": [...]}, the edge classes drawn, each once, of '
+                                  f"{', '.join(EDGE_CLASSES)}; not {edges!r}", part="display")
     _visibility(display)
     if grid:
         display["grid"] = True
@@ -658,30 +665,20 @@ def authored(camera: Any, annotation: dict[str, Any] | None, source: Any, docume
 
 @refusing("pose")
 def parse_pose(value: str | None) -> Any:
-    """``--pose``: a configuration's name, or ``{"<joint or coupling>": value}`` (JSON, or a JSON file of it)."""
+    """``--pose``: a configuration's name, a configuration sequence at a time of it (``walk@0.6``), or
+    ``{"<joint or coupling>": value}`` (JSON, or a JSON file of it)."""
     if value is None:
         return None
     text = value.strip()
     if not text:
-        raise SnapshotRefused("--pose names a configuration, or gives joint values as a JSON object")
+        raise SnapshotRefused("--pose names a configuration or a sequence at a time (NAME@SECONDS), or gives joint "
+                              "values as a JSON object")
     if text.startswith("{") or (text.endswith(".json") and Path(text).is_file()):
         parsed = _json_or_file(text, "--pose")
         if not isinstance(parsed, dict):
             raise SnapshotRefused("--pose is a configuration's name or a JSON object of joint values")
         return parsed
     return text
-
-
-@refusing("pose")
-def parse_motion(value: Any, where: str = "--motion") -> list[Any]:
-    """A configuration sequence at a time, as a pose (``mechanism.at``'s ``[name, seconds]``): a job's
-    ``motion`` (``{"name": "walk", "at": 0.6}``), or the flags' ``--motion NAME --at SECONDS`` given as
-    that object. The name and the time are the document's to answer, when it is posed."""
-    if (not isinstance(value, dict) or set(value) != {"name", "at"} or not isinstance(value["name"], str)
-            or not value["name"].strip() or isinstance(value["at"], bool) or not isinstance(value["at"], (int, float))):
-        raise SnapshotRefused(f"{where} is a configuration sequence and a time of it in seconds: "
-                              '{"name": "walk", "at": 0.6}')
-    return [value["name"].strip(), float(value["at"])]
 
 
 @refusing("size")
@@ -1284,10 +1281,6 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
             view.get("measurements", shared.get("measurements")))
         lit = parse_references(view.get("references", shared.get("references")), document)
         posed = pose_flag if pose is not None else view.get("jointValues")
-        if pose is None and "motion" in view:
-            if view.get("jointValues") is not None:
-                raise SnapshotRefused(f"{where} gives jointValues and motion: a picture stands at one pose")
-            posed = parse_motion(view["motion"], f"{where}.motion")
         if isinstance(posed, str):
             posed = parse_pose(posed)
         if posed is not None and document.suffix.lower() in MESHES:

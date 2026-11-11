@@ -3,18 +3,18 @@ mechanism puts them.
 
 An assembly is clear when no two of its parts share volume apart from the fits named on purpose.
 ``overlap_volume`` says so of one pair; this says it of a document: every pair of parts, at every
-stance asked -- as built, at a pose or a mechanism state, at samples of a configuration sequence. The
+pose asked -- as built, at a mechanism state, at a time of a configuration sequence, at joint values. The
 verdict is the kernel's, on the parts' own solids: a mesh only says which pairs have air between them, and
 so need no kernel (**The first pass**).
 
-**What is measured** (``measure``). Each stance is every part's placement (the document's as built,
-``mechanism.posed_instances`` posed). A pair is a candidate at a stance when the two parts' boxes
+**What is measured** (``measure``). Each pose is every part's placement (the document's as built,
+``mechanism.posed_structure`` posed). A pair is a candidate at a pose when the two parts' boxes
 meet there: each part's own tight box (``BRepBndLib.AddOptimal``, measured once a part), placed, and
 tested as boxes that turn with their parts (the separating axes of two oriented boxes), so a long
 part standing at an angle rules out what the box of its box would not. A candidate is measured once
 for each way the two parts stand to one another: the pair's key is its two parts' geometry and the
 placement of one in the other's frame, so the copies of a part, the parts of one link at every pose,
-and a stance that moves neither are one measurement.
+and a pose that moves neither are one measurement.
 
 **The first pass** (``_apart``). The kernel takes seconds over a pair, a minute over a drive beside a
 lofted skin, and most pairs whose boxes meet have air between them: a mechanism inside its cover. So each
@@ -37,15 +37,17 @@ from what it had measured.
 (``jobs``), each started by this one and fed a pair at a time, the pairs of the fewest faces first, so
 that what a check out of time leaves unmeasured is the slow few. A pair's Boolean cannot be stopped
 from inside -- a kernel call holds its interpreter until it returns -- so a pair over its time
-(``pair_seconds``) has its process killed and another started, and is reported **unmeasured**, as
+(``PAIR_SECONDS``) has its process killed and another started, and is reported **unmeasured**, as
 is a pair whose process exited under it, one the kernel refused, and every pair not reached when
-the check's own time (``seconds``) was up. An unmeasured pair has not been shown clear: the check
+the check's own time (``SECONDS``) was up. An unmeasured pair has not been shown clear: the check
 passes only with no interference and nothing unmeasured.
 
-**What is said** (the report): each pair that shares volume, by its two occurrences' paths, with
-the most it shared and the stances it did at; the named fits that do (``fits``: pairs of refs or
-globs, measured and listed apart); each pair unmeasured, with why; and what was looked at -- the
-parts, the stances, the pairs whose boxes met (``pairs.boxes_meet``), the measurements those came to
+**What is said** (the report): each pair that shares volume (``overlaps``, as a stress study names
+them: ``between`` its two occurrences' paths, ``volume_mm3`` the most it shared), with every pose it
+did at; the named fits that do (``fits``: pairs of refs or globs, measured and listed apart); each
+pair unmeasured, with why (``reason``: ``over_time``, ``process_lost`` or ``error``, the engine's words
+for a check, and ``message``); and what was looked at -- the
+parts, the poses, the pairs whose boxes met (``pairs.boxes_meet``), the measurements those came to
 (``distinct``), and of those the ones the first pass ruled out (``apart``), the ones read from what was kept
 (``kept``) and the ones the kernel made (``measured``).
 """
@@ -70,8 +72,16 @@ __all__ = ["held", "measure"]
 # A pair's placement in its partner's frame, rounded to tell two ways of standing apart: far below a
 # kernel tolerance, far above the noise of two forward kinematics of one pose.
 _PLACES = 7
-# The stances a row of the report names before it counts the rest.
-_NAMED = 4
+# How long one pair may take before its process is stopped and it is reported unmeasured, and how long a
+# whole check may before the pairs not reached are; under the engine's own limit on any check
+# (``CAD_ENGINE_CHECK_SECONDS``), so that a long check answers with what it measured and goes on from there
+# when asked again. No option of the check: a pair the kernel takes longer over is measured on its own
+# (``overlap_volume``).
+PAIR_SECONDS = 300.0
+SECONDS = 1200.0
+# Why a pair is unmeasured, by the words the engine's checks use (``cad.engine.api``): past its time, or the
+# check's; its process gone under it; the kernel's refusal of the two.
+OVER_TIME, PROCESS_LOST, ERROR = "over_time", "process_lost", "error"
 # The slowest measurements a report names.
 _SLOWEST = 5
 # The first pass (``_apart``), millimetres. A part is meshed no coarser than TOLERANCE; a mesh is trusted to
@@ -114,49 +124,33 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
     return {"measured": {"process": "interference", "resolved": resolved, "report": report}}
 
 
-# --- the stances ---------------------------------------------------------------------------------
+# --- the poses -----------------------------------------------------------------------------------
 
 
 def _matrix(column_major: Any) -> np.ndarray:
     return np.array(column_major, dtype=float).reshape(4, 4).T
 
 
-def _stances(structure: dict[str, Any], options: dict[str, Any]) -> list[tuple[str, list[np.ndarray]]]:
-    """Each stance asked, by name, as every instance's world matrix: as built first, then each pose
-    (a mechanism state's name or ``{joint: value}``; ``states``: every state), then each motion's
-    samples (``samples`` of them, its two ends among them; ``motions`` ``"all"``: every sequence)."""
+def _poses(structure: dict[str, Any], options: dict[str, Any]) -> list[tuple[str, list[np.ndarray]]]:
+    """Each pose asked, by name, as every instance's world matrix: as built first, then each of
+    ``poses`` as the mechanism poses it (``mechanism.resolve``: a mechanism state's name, a
+    configuration sequence at a time of it, ``walk@0.6``, or ``{joint or coupling: value}``), named as
+    it was given."""
     from cad.engine import mechanism
 
     found = [("as built", [_matrix(instance["matrix"]) for instance in structure["instances"]])]
-    kinematics = structure.get("kinematics")
     poses = list(options.get("poses") or [])
-    motions = options.get("motions") or []
-    if kinematics is None:
-        if poses or motions or options.get("states"):
-            raise Refused("the document has no joints: it has no pose, mechanism state or configuration sequence "
-                          "to stand at")
+    if structure.get("kinematics") is None:
+        if poses:
+            raise Refused("the document has no joints: it has no pose to check at")
         return found
-    if options.get("states"):
-        poses += [name for name in sorted(kinematics.get("configurations") or {}) if name not in poses]
     for pose in poses:
         try:
             posed = mechanism.posed_structure(structure, pose)
         except ValueError as error:  # mechanism.KinematicsError: what the pose names wrong, by name
             raise Refused(f"pose: {error}") from None
         named = pose if isinstance(pose, str) else json.dumps(pose, separators=(",", ":"))
-        found.append((f"pose {named}", [_matrix(instance["matrix"]) for instance in posed["instances"]]))
-    if motions == "all":
-        motions = sorted(kinematics.get("motions") or {})
-    samples = int(options.get("samples") or 12)
-    for name in motions:
-        try:
-            timeline = mechanism.Timeline(kinematics, name)
-        except ValueError as error:
-            raise Refused(f"motion: {error}") from None
-        for step in range(samples):
-            at = timeline.duration * step / max(samples - 1, 1)
-            matrices = mechanism.posed_instances(structure, timeline.values(at))
-            found.append((f"motion {name} at {at:.3g} s", [_matrix(matrix) for matrix in matrices]))
+        found.append((named, [_matrix(instance["matrix"]) for instance in posed["instances"]]))
     return found
 
 
@@ -482,19 +476,19 @@ class _Kept:
 def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any],
             kept: Path | None = None) -> dict[str, Any]:
     """The interference report of a document (the module's docstring): ``structure`` as the engine
-    serves it, ``shapes`` each prototype's shape, ``options`` resolved (``poses``, ``states``,
-    ``motions``, ``samples``, ``fits``, ``jobs``, ``pair_seconds``, ``seconds``, ``min_volume``).
+    serves it, ``shapes`` each prototype's shape, ``options`` resolved (``poses``, ``fits``,
+    ``min_volume``; and, a test's, ``jobs``, ``pair_seconds`` and ``seconds`` in place of the module's own).
     ``kept``: the folder measurements are kept in and read from (``_Kept``); none keeps nothing."""
     import tempfile
 
     from cad.engine import mesh
 
     started = time.monotonic()
-    seconds = float(options.get("seconds") or 0) or None
+    seconds = float(options.get("seconds") or SECONDS)
     instances = structure["instances"]
     paths = _paths(structure)
     fits = [(str(a), str(b), _named(structure, str(a)), _named(structure, str(b))) for a, b in options.get("fits") or []]
-    stances = _stances(structure, options)
+    poses = _poses(structure, options)
     store = _Kept(kept)
     boxes = [store.box(str(prototype.get("key") or ""), shape)
              for prototype, shape in zip(structure["prototypes"], shapes)]
@@ -503,12 +497,12 @@ def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any
             for instance in instances]
     named = [bool(structure["prototypes"][instance["prototype"]].get("key")) for instance in instances]
 
-    # Every candidate, at every stance, as one measurement for each way its two parts stand to one another.
+    # Every candidate, at every pose, as one measurement for each way its two parts stand to one another.
     tasks: dict[tuple, int] = {}
     orders: list[dict[str, Any]] = []
-    seen: dict[tuple[int, int], list[tuple[int, int]]] = {}  # an instance pair -> (stance, measurement)
+    seen: dict[tuple[int, int], list[tuple[int, int]]] = {}  # an instance pair -> (pose, measurement)
     candidates = 0
-    for stance, (_name, matrices) in enumerate(stances):
+    for pose, (_name, matrices) in enumerate(poses):
         centres = np.zeros((len(instances), 3))
         axes = np.tile(np.eye(3), (len(instances), 1, 1))
         halves = np.zeros((len(instances), 3))
@@ -534,10 +528,10 @@ def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any
                                # Kept only under two geometry keys: a part with none is known by its place in
                                # this document alone.
                                "key": key if named[a] and named[b] else None})
-            seen.setdefault((first, second), []).append((stance, tasks[key]))
+            seen.setdefault((first, second), []).append((pose, tasks[key]))
 
     # Each measurement: read from what was kept, else ruled out by the two surfaces, else the kernel's.
-    deadline = None if seconds is None else started + seconds
+    deadline = started + seconds
     answers: dict[int, dict[str, Any]] = {}
     surfaces: dict[int, _Surface] = {}
     asked: list[dict[str, Any]] = []
@@ -549,7 +543,7 @@ def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any
                 answers[order["n"]], known = {"volume": volume}, known + 1
                 continue
             if deadline is not None and time.monotonic() >= deadline:
-                answers[order["n"]] = {"unmeasured": "not reached before the check's time was up"}
+                answers[order["n"]] = {"unmeasured": "not reached before the check's time was up", "reason": OVER_TIME}
                 continue
             for index in (order["a"], order["b"]):
                 if index not in surfaces:
@@ -571,46 +565,48 @@ def measure(structure: dict[str, Any], shapes: list[Any], options: dict[str, Any
                 for index in sorted({order[side] for order in asked for side in ("a", "b")}):
                     (Path(folder) / f"{index}.brep").write_bytes(mesh.shape_bytes(shapes[index], read=True))
                 crew = _Crew(Path(folder), int(options.get("jobs") or _jobs()),
-                             float(options.get("pair_seconds") or 300.0), deadline, done)
+                             float(options.get("pair_seconds") or PAIR_SECONDS), deadline, done)
                 answers.update(crew.run(asked))
     finally:
         store.save()
 
+    # Each row names its two parts as a stress study's overlap does (``between``: the two occurrences' paths)
+    # and its volume in the unit its key says, and every pose it holds at, as the pose was given.
     floor = float(options.get("min_volume") or 0.0)
-    interferences, fitted, unmeasured = [], [], []
+    overlaps, fitted, unmeasured = [], [], []
     for (first, second), found in sorted(seen.items()):
-        volumes = [(answers[task].get("volume"), stance) for stance, task in found]
-        row = {"a": paths.get(first, str(first)), "b": paths.get(second, str(second))}
-        shared = [(volume, stance) for volume, stance in volumes if volume is not None and volume > floor]
+        volumes = [(answers[task].get("volume"), pose) for pose, task in found]
+        row = {"between": [paths.get(first, str(first)), paths.get(second, str(second))]}
+        shared = [(volume, pose) for volume, pose in volumes if volume is not None and volume > floor]
         if shared:
-            at = [stances[stance][0] for _volume, stance in shared]
-            entry = {**row, "volume": max(volume for volume, _stance in shared), "stances": len(at), "at": at[:_NAMED]}
-            fit = next((f"{a} in {b}" for a, b, held_a, held_b in fits
+            entry = {**row, "volume_mm3": max(volume for volume, _pose in shared),
+                     "poses": [poses[pose][0] for _volume, pose in shared]}
+            fit = next(([a, b] for a, b, held_a, held_b in fits
                         if (first in held_a and second in held_b) or (first in held_b and second in held_a)), None)
             if fit is None:
-                interferences.append(entry)
+                overlaps.append(entry)
             else:
                 fitted.append({**entry, "fit": fit})
-        missed = [(answers[task]["unmeasured"], stance) for stance, task in found if "unmeasured" in answers[task]]
+        missed = [(answers[task], pose) for pose, task in found if "unmeasured" in answers[task]]
         if missed:
-            unmeasured.append({**row, "reason": missed[0][0], "stances": len(missed),
-                               "at": [stances[stance][0] for _why, stance in missed][:_NAMED]})
-    interferences.sort(key=lambda entry: -entry["volume"])
+            unmeasured.append({**row, "reason": missed[0][0]["reason"], "message": missed[0][0]["unmeasured"],
+                               "poses": [poses[pose][0] for _answer, pose in missed]})
+    overlaps.sort(key=lambda entry: -entry["volume_mm3"])
     # The measurements that took longest, each by the first pair it answered: where a slow check's time went.
     first_of: dict[int, tuple[int, int]] = {}
     for pair, found in sorted(seen.items()):
-        for _stance, task in found:
+        for _pose, task in found:
             first_of.setdefault(task, pair)
     timed = sorted(((answers[order["n"]].get("seconds", 0.0), order["n"]) for order in asked), reverse=True)[:_SLOWEST]
-    slowest = [{"a": paths.get(first_of[task][0], ""), "b": paths.get(first_of[task][1], ""), "seconds": round(took, 2)}
-               for took, task in timed if took >= 1.0]
+    slowest = [{"between": [paths.get(first_of[task][0], ""), paths.get(first_of[task][1], "")],
+                "seconds": round(took, 2)} for took, task in timed if took >= 1.0]
     return {
         "name": str(structure.get("name") or ""),
         "parts": int(solid.sum()), "skipped": int(len(instances) - solid.sum()),
-        "stances": [name for name, _matrices in stances],
+        "poses": [name for name, _matrices in poses],
         "pairs": {"boxes_meet": candidates, "distinct": len(orders), "kept": known, "apart": ruled,
                   "measured": sum(1 for order in asked if "volume" in answers[order["n"]])},
-        "interferences": interferences, "fits": fitted, "unmeasured": unmeasured, "slowest": slowest,
+        "overlaps": overlaps, "fits": fitted, "unmeasured": unmeasured, "slowest": slowest,
         # A check that left a pair unmeasured is not kept by the engine: asked again, it measures again.
         "partial": bool(unmeasured),
         "seconds": round(time.monotonic() - started, 2),
@@ -699,7 +695,7 @@ class _Crew:
         self.guard: _Guard | None = None
 
     def run(self, orders: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
-        """Each order's answer by its number: ``{"volume"}``, or ``{"unmeasured": why}``."""
+        """Each order's answer by its number: ``{"volume"}``, or ``{"unmeasured": words, "reason": code}``."""
         waiting: queue.SimpleQueue = queue.SimpleQueue()
         for order in orders:
             waiting.put(order)
@@ -773,7 +769,7 @@ class _Crew:
                     return
                 left = None if self.deadline is None else self.deadline - time.monotonic()
                 if left is not None and left <= 0:
-                    answers[order["n"]] = {"unmeasured": "not reached before the check's time was up"}
+                    answers[order["n"]] = {"unmeasured": "not reached before the check's time was up", "reason": OVER_TIME}
                     continue
                 if held is None:
                     held = self._start()
@@ -790,7 +786,7 @@ class _Crew:
                     held = None
                     answers[order["n"]] = {"unmeasured": (f"not measured within {self.pair_seconds:g} s"
                                                           if limit >= self.pair_seconds else
-                                                          "stopped as the check's time was up")}
+                                                          "stopped as the check's time was up"), "reason": OVER_TIME}
                     continue
                 except (OSError, ValueError):
                     line = None
@@ -798,11 +794,12 @@ class _Crew:
                     self._end(process)
                     held = None
                     answers[order["n"]] = {"unmeasured": "the process measuring it exited (the system ends one "
-                                                         "when memory runs out)"}
+                                                         "when memory runs out)", "reason": PROCESS_LOST}
                     continue
                 answer = json.loads(line)
                 answers[order["n"]] = ({"volume": float(answer["volume"])} if "volume" in answer
-                                       else {"unmeasured": f"the kernel could not intersect them: {answer.get('error')}"})
+                                       else {"unmeasured": f"the kernel could not intersect them: {answer.get('error')}",
+                                             "reason": ERROR})
                 answers[order["n"]]["seconds"] = time.monotonic() - began
                 if self.done is not None:
                     self.done(order, answers[order["n"]])

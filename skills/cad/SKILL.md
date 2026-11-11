@@ -279,7 +279,7 @@ can be checked:
 | --- | --- |
 | A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad model inspect`; never by restating the constant, never by code after the call in the script |
 | A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
-| An assembly: parts added, moved or resized, a joint's travel | `cad model interference "$ID"`, with `--states` and `--motions` for a mechanism ([below](#check-scripts)): no two parts share volume, exactly; a pair it could not measure is not a pass |
+| An assembly: parts added, moved or resized, a joint's travel | `cad model interference "$ID"`, with a `--pose` for each mechanism state and for each sequence at the times that matter ([below](#check-scripts)): no two parts share volume, exactly; a pair it could not measure is not a pass |
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
@@ -289,7 +289,7 @@ can be checked:
 cad model snapshot "$ID" tmp/review.png
 cad model snapshot "$ID" tmp/top.png --camera top --display hidden-line
 cad model snapshot "$ID" tmp/open.png --pose open
-cad model snapshot "$ID" tmp/mid.png --motion cycle --at 2.5   # a configuration sequence, at a time of it
+cad model snapshot "$ID" tmp/mid.png --pose cycle@2.5   # a configuration sequence, at a time of it
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing but the PNG.
@@ -417,8 +417,8 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
   `cad model interference "$ID"` answers every pair whose boxes meet, exactly, on the parts' own solids
   (a pair with air between its parts is ruled out first, and each answer is kept, so after an edit only the
   pairs of what changed are measured):
-  as built, and with `--states`, `--pose` and `--motions` where the mechanism puts them. Name a fit
-  (`--fit pin,base`), and read what it could not measure: status 3 is not clear
+  as built, and at each `--pose` given: a mechanism state, a sequence at a time (`walk@0.6`), joint values. Name a fit
+  (`--fit pin base`), and read what it could not measure: status 3 is not clear
   ([interference](references/inspection-and-validation.md#interference)). `overlap_volume` is the same
   measure of one pair, for a check script.
 - A part meant to rest on another touches it when their `closest_points` distance is 0, as built

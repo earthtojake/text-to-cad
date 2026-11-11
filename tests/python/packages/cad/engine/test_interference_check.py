@@ -103,47 +103,49 @@ class MeasureTest(unittest.TestCase):
         cls.structure, cls.shapes = _built(cls.folder, "arm", ARM)
 
     def measure(self, **given) -> dict:
-        return _interference.measure(self.structure, self.shapes, asked.options(jobs=2, **given))
+        return _interference.measure(self.structure, self.shapes, {**asked.options(**given), "jobs": 2})
 
     @staticmethod
     def pairs(rows: list[dict]) -> dict[tuple[str, str], dict]:
-        return {tuple(sorted((row["a"].rpartition("/")[2], row["b"].rpartition("/")[2]))): row for row in rows}
+        return {tuple(sorted(path.rpartition("/")[2] for path in row["between"])): row for row in rows}
 
     def test_as_built_a_planted_plate_and_a_press_fit_are_found_and_a_near_miss_and_a_pin_in_its_bore_are_not(self) -> None:
         found = self.measure()
-        self.assertEqual((found["name"], found["parts"], found["skipped"], found["stances"]), ("arm", 9, 1, ["as built"]))
-        shared = self.pairs(found["interferences"])
+        self.assertEqual((found["name"], found["parts"], found["skipped"], found["poses"]), ("arm", 9, 1, ["as built"]))
+        shared = self.pairs(found["overlaps"])
         self.assertEqual(sorted(shared), [("base", "press"), ("skin", "through")])
         # A flat plate has vertices on its outline alone and a 2.6 mm skin almost no volume for a sampled point to
         # land in: the kernel's intersection is what finds 8 x 2.6 x 8 of it.
-        self.assertAlmostEqual(shared[("skin", "through")]["volume"], 8 * 2.6 * 8, places=6)
-        self.assertEqual(shared[("skin", "through")]["at"], ["as built"])
-        self.assertGreater(shared[("base", "press")]["volume"], 1.0)
+        self.assertAlmostEqual(shared[("skin", "through")]["volume_mm3"], 8 * 2.6 * 8, places=6)
+        self.assertEqual(shared[("skin", "through")]["poses"], ["as built"])
+        self.assertGreater(shared[("base", "press")]["volume_mm3"], 1.0)
         self.assertEqual((found["fits"], found["unmeasured"]), ([], []))
         # The boxes of the near miss and of the dowel in its bore met, and each was measured to share nothing.
         self.assertGreaterEqual(found["pairs"]["measured"], 4)
         self.assertEqual(found["pairs"]["boxes_meet"], found["pairs"]["measured"])
         # Out of time before the first pair, none is counted measured: each is unmeasured, said so.
-        late = _interference.measure(self.structure, self.shapes, {**asked.options(jobs=2), "seconds": 1e-9})
+        late = _interference.measure(self.structure, self.shapes, {**asked.options(), "jobs": 2, "seconds": 1e-9})
         self.assertEqual((late["pairs"]["measured"], len(late["unmeasured"])), (0, late["pairs"]["boxes_meet"]))
+        self.assertEqual({(row["reason"], row["message"], tuple(row["poses"])) for row in late["unmeasured"]},
+                         {("over_time", "not reached before the check's time was up", ("as built",))})
         # Such a report is partial, which the engine does not keep; one fully measured is kept.
         self.assertEqual((late["partial"], found["partial"]), (True, False))
 
     def test_air_between_two_parts_is_no_measurement_and_a_part_swallowed_whole_is_one(self) -> None:
         structure, shapes = _built(self.folder, "case", CASE)
-        found = _interference.measure(structure, shapes, asked.options(jobs=1))
+        found = _interference.measure(structure, shapes, {**asked.options(), "jobs": 1})
         # Both pairs' boxes meet. The core stands in its cover's cavity, no surface of one near the other's and
         # neither inside the other's solid: ruled out by the two meshes, the kernel never asked. The slug's surface is
         # as far from its block's, and it lies in the block's solid: the kernel's, which finds all of it.
         self.assertEqual(found["pairs"], {"boxes_meet": 2, "distinct": 2, "kept": 0, "apart": 1, "measured": 1})
-        (shared,) = found["interferences"]
-        self.assertEqual(sorted((shared["a"], shared["b"])), ["case/block", "case/slug"])
-        self.assertAlmostEqual(shared["volume"], 4 ** 3, places=6)
+        (shared,) = found["overlaps"]
+        self.assertEqual(sorted(shared["between"]), ["case/block", "case/slug"])
+        self.assertAlmostEqual(shared["volume_mm3"], 4 ** 3, places=6)
         self.assertEqual(found["unmeasured"], [])
 
     def test_a_measurement_is_kept_by_its_two_geometries_so_an_edit_measures_its_own_pairs_alone(self) -> None:
         kept = self.folder / "kept"
-        options = asked.options(jobs=2)
+        options = {**asked.options(), "jobs": 2}
         first = _interference.measure(self.structure, self.shapes, options, kept=kept)
         self.assertEqual((first["pairs"]["kept"], first["pairs"]["apart"] + first["pairs"]["measured"]),
                          (0, first["pairs"]["distinct"]))
@@ -151,13 +153,13 @@ class MeasureTest(unittest.TestCase):
         again = _interference.measure(self.structure, self.shapes, options, kept=kept)
         self.assertEqual((again["pairs"]["kept"], again["pairs"]["apart"], again["pairs"]["measured"]),
                          (first["pairs"]["distinct"], 0, 0))
-        self.assertEqual(self.pairs(again["interferences"]).keys(), self.pairs(first["interferences"]).keys())
+        self.assertEqual(self.pairs(again["overlaps"]).keys(), self.pairs(first["overlaps"]).keys())
         # One part edited is another geometry, so another key: its pairs are measured, every other read.
         edited = copy.deepcopy(self.structure)
         (skin,) = [prototype for prototype in edited["prototypes"] if prototype["name"] == "skin"]
         skin["key"] = "0" * 32
         third = _interference.measure(edited, self.shapes, options, kept=kept)
-        mine = sum(1 for row in first["interferences"] if "arm/skin" in (row["a"], row["b"]))
+        mine = sum(1 for row in first["overlaps"] if "arm/skin" in row["between"])
         self.assertGreaterEqual(third["pairs"]["apart"] + third["pairs"]["measured"], max(1, mine))
         self.assertEqual(third["pairs"]["kept"] + third["pairs"]["apart"] + third["pairs"]["measured"],
                          first["pairs"]["distinct"])
@@ -193,34 +195,35 @@ class MeasureTest(unittest.TestCase):
         self.assertIsNone(kept.poll(), "a crew that is done ends its own processes: the guard none")
 
     def test_a_named_fit_is_listed_apart_and_what_names_nothing_is_refused(self) -> None:
-        found = self.measure(fits=["press,base"])
-        self.assertEqual(sorted(self.pairs(found["interferences"])), [("skin", "through")])
+        found = self.measure(fits=[("press", "base")])
+        self.assertEqual(sorted(self.pairs(found["overlaps"])), [("skin", "through")])
         (fit,) = found["fits"]
-        self.assertEqual((fit["fit"], sorted((fit["a"], fit["b"]))), ("press in base", ["arm/base", "arm/press"]))
+        self.assertEqual((fit["fit"], sorted(fit["between"])), (["press", "base"], ["arm/base", "arm/press"]))
         self.assertEqual(sorted(self.pairs(self.measure(fits=[("pres?", "bas*")])["fits"])), [("base", "press")])
-        for given, words in (({"fits": ["lid*,base"]}, "fit: 'lid\\*' matches no part or assembly of arm"),
-                             ({"fits": ["base/face 1,press"]}, "names an element of a part"),
+        for given, words in (({"fits": [("lid*", "base")]}, "fit: 'lid\\*' matches no part or assembly of arm"),
+                             ({"fits": [("base/face 1", "press")]}, "names an element of a part"),
                              ({"poses": ["up"]}, "pose: the document has no mechanism state 'up'"),
-                             ({"motions": ["wave"]}, "motion: the document has no motion 'wave'")):
+                             ({"poses": ["wave@1"]}, "pose: the document has no configuration sequence 'wave'"),
+                             ({"poses": ["swing@9"]}, "pose: configuration sequence 'swing' runs from 0 to 2 s")):
             with self.subTest(given=given), self.assertRaisesRegex(_interference.Refused, words):
                 self.measure(**given)
 
-    def test_a_pose_and_a_motion_s_samples_are_stances_and_a_pair_is_measured_once_for_each_way_it_stands(self) -> None:
-        built = self.measure(fits=["press,base"])
-        posed = self.measure(fits=["press,base"], states=True, motions="all", samples=3)
-        self.assertEqual(posed["stances"], ["as built", "pose down", "motion swing at 0 s", "motion swing at 1 s",
-                                            "motion swing at 2 s"])
-        shared = self.pairs(posed["interferences"])
+    def test_every_pose_given_is_checked_as_the_mechanism_poses_it_and_a_pair_is_measured_once_each_way_it_stands(self) -> None:
+        built = self.measure(fits=[("press", "base")])
+        # A state by its name, a sequence at three times of it, each as it was given: the check chooses none.
+        posed = self.measure(fits=[("press", "base")], poses=["down", "swing@0", "swing@1", "swing@2"])
+        self.assertEqual(posed["poses"], ["as built", "down", "swing@0", "swing@1", "swing@2"])
+        shared = self.pairs(posed["overlaps"])
         self.assertIn(("bar", "stop"), shared)
-        down = shared[("bar", "stop")]["at"]
-        self.assertTrue({"pose down", "motion swing at 2 s"} <= set(down), down)
-        self.assertFalse({"as built", "motion swing at 0 s"} & set(down), "the bar is clear of the stop until it swings")
-        self.assertEqual(shared[("skin", "through")]["stances"], 5)
-        # Five stances, and what does not move is measured once: only the bar's pairs are measured again.
+        down = shared[("bar", "stop")]["poses"]
+        self.assertTrue({"down", "swing@2"} <= set(down), down)
+        self.assertFalse({"as built", "swing@0"} & set(down), "the bar is clear of the stop until it swings")
+        self.assertEqual(shared[("skin", "through")]["poses"], posed["poses"], "every pose it holds at, by name")
+        # Five poses, and what does not move is measured once: only the bar's pairs are measured again.
         self.assertGreater(posed["pairs"]["boxes_meet"], 4 * built["pairs"]["boxes_meet"])
         self.assertLess(posed["pairs"]["measured"], posed["pairs"]["boxes_meet"] / 2)
-        by_value = self.measure(fits=["press,base"], poses=[{"elbow": 30}])
-        self.assertEqual(self.pairs(by_value["interferences"]).keys(), shared.keys(), "the same pose, said by value")
+        by_value = self.measure(fits=[("press", "base")], poses=[{"elbow": 30}])
+        self.assertEqual(self.pairs(by_value["overlaps"]).keys(), shared.keys(), "the same pose, said by value")
 
     def test_a_pair_that_is_not_measured_is_said_and_never_passed(self) -> None:
         orders = [{"n": 0, "a": 0, "b": 1, "placed": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]},
@@ -241,19 +244,23 @@ class MeasureTest(unittest.TestCase):
 
         # One that holds its pair past the pair's time is stopped, and the next pair has a process of its own.
         stuck = crew("import sys, time\nfor line in sys.stdin: time.sleep(600)", 0.3)
-        self.assertEqual([stuck[n]["unmeasured"] for n in (0, 1)], ["not measured within 0.3 s"] * 2)
+        self.assertEqual([(stuck[n]["unmeasured"], stuck[n]["reason"]) for n in (0, 1)],
+                         [("not measured within 0.3 s", "over_time")] * 2)
         gone = crew("import sys; sys.stdin.readline()", 30.0)
         self.assertIn("the process measuring it exited", gone[0]["unmeasured"])
+        self.assertEqual(gone[0]["reason"], "process_lost")
         refused = crew("import sys, json\nfor line in sys.stdin:\n"
                        "    print(json.dumps({'n': json.loads(line)['n'], 'error': 'GeometryError: no'}), flush=True)", 30.0)
-        self.assertEqual(refused[1]["unmeasured"], "the kernel could not intersect them: GeometryError: no")
+        self.assertEqual((refused[1]["unmeasured"], refused[1]["reason"]),
+                         ("the kernel could not intersect them: GeometryError: no", "error"))
         late = crew("import sys", 30.0, time.monotonic() - 1)
-        self.assertEqual(late[0]["unmeasured"], "not reached before the check's time was up")
+        self.assertEqual((late[0]["unmeasured"], late[0]["reason"]),
+                         ("not reached before the check's time was up", "over_time"))
         # And the result says it: a finding for the pair, and a status that is no pass.
-        report = {"name": "kit", "parts": 2, "skipped": 0, "stances": ["as built"], "seconds": 0.3,
-                  "pairs": {"boxes_meet": 1, "measured": 1}, "interferences": [], "fits": [],
-                  "unmeasured": [{"a": "kit/a", "b": "kit/b", "reason": "not measured within 0.3 s", "stances": 1,
-                                  "at": ["as built"]}]}
+        report = {"name": "kit", "parts": 2, "skipped": 0, "poses": ["as built"], "seconds": 0.3,
+                  "pairs": {"boxes_meet": 1, "measured": 1}, "overlaps": [], "fits": [],
+                  "unmeasured": [{"between": ["kit/a", "kit/b"], "reason": "over_time",
+                                  "message": "not measured within 0.3 s", "poses": ["as built"]}]}
         result = asked.finish(Path("kit"), {"measured": {"report": report}, "measured_in": "engine"}, {})
         self.assertEqual((result.status, result.ok, result.reason), ("not_checked", False, "unmeasured"))
         (finding,) = result.findings
@@ -263,17 +270,24 @@ class MeasureTest(unittest.TestCase):
         self.assertTrue(result.human_lines()[-1].startswith("NOT CHECKED kit: no pair measured shares volume, but 1 "
                                                             "could not be measured"))
         # One that shares volume fails it, whatever else went unmeasured; nothing found and all measured is ok.
-        shared = {"a": "kit/a", "b": "kit/c", "volume": 12.5, "stances": 1, "at": ["as built"]}
-        failed = asked.finish(Path("kit"), {"measured": {"report": {**report, "interferences": [shared]}}}, {})
+        shared = {"between": ["kit/a", "kit/c"], "volume_mm3": 12.5,
+                  "poses": ["as built", "down", "swing@0", "swing@1", "swing@2", "swing@3"]}
+        failed = asked.finish(Path("kit"), {"measured": {"report": {**report, "overlaps": [shared]}}}, {})
         self.assertEqual((failed.status, [finding.code for finding in failed.findings]),
-                         ("failed", ["interference", "unmeasured"]))
+                         ("failed", ["overlapping_parts", "unmeasured"]))
+        self.assertIn("(as built, down, swing@0, swing@1 and 2 more)", failed.findings[0].message)
         self.assertEqual((failed.findings[0].value, failed.findings[0].unit), (12.5, "mm3"))
         clear = asked.finish(Path("kit"), {"measured": {"report": {**report, "unmeasured": [], "fits": [
-            {**shared, "fit": "a in c"}]}}}, {})
+            {**shared, "fit": ["a", "c"]}]}}}, {})
         self.assertEqual((clear.status, clear.ok, [finding.severity for finding in clear.findings]), ("ok", True, ["info"]))
         self.assertTrue(clear.summary.startswith("OK kit: no two parts share volume"))
         with self.assertRaisesRegex(ValueError, "fit: 'lid\\*' matches no part"):
             asked.finish(Path("kit"), {"refused": "fit: 'lid*' matches no part or assembly of kit"}, {})
+        # A document that does not read, or holds no B-rep, is not checked, by its reason: as a manufacturing check's.
+        unread = asked.finish(Path("kit"), {"unmeasured": {"code": "document_unreadable",
+                                                           "message": "kit holds no B-rep to measure"}}, {})
+        self.assertEqual((unread.status, unread.reason, unread.findings[0].message),
+                         ("not_checked", "document_unreadable", "kit holds no B-rep to measure"))
 
     @staticmethod
     def reader(process):
@@ -308,15 +322,16 @@ class BoxesTest(unittest.TestCase):
 
 class OptionsTest(unittest.TestCase):
     def test_what_is_asked_is_plain_data_and_what_is_no_option_is_refused_by_name(self) -> None:
-        found = asked.options(poses=['{"elbow": 30}', "down"], motions="all", fits=["pin,base", ("a*", "b")], jobs=3)
-        self.assertEqual(found, {"poses": [{"elbow": 30}, "down"], "states": False, "motions": "all",
-                                 "fits": [["pin", "base"], ["a*", "b"]], "samples": 12, "pair_seconds": 300.0,
-                                 "seconds": 1200.0, "min_volume": 0.0, "jobs": 3})
-        for given, words in (({"fits": ["pin"]}, "a fit is the two parts meant to share volume, as A,B"),
-                             ({"samples": 1}, "samples is a number of 2 or more"),
-                             ({"jobs": 0}, "jobs is a number of 1 or more"),
-                             ({"poses": ["{elbow}"]}, "is not a JSON object"),
-                             ({"motions": [3]}, "motions are configuration sequences' names"),
+        found = asked.options(poses=[{"elbow": 30}, "down", "swing@1.5"], fits=[("pin", "base"), ["a*", "b"]])
+        self.assertEqual(found, {"poses": [{"elbow": 30}, "down", "swing@1.5"],
+                                 "fits": [["pin", "base"], ["a*", "b"]], "min_volume": 1e-3})
+        # The check's limits and its processes are no option of it: the measuring's own.
+        with self.assertRaises(TypeError):
+            asked.options(seconds=5)
+        for given, words in (({"fits": [("pin",)]}, "a fit is the two parts meant to share volume"),
+                             ({"fits": ["pin,base"]}, "a fit is the two parts meant to share volume"),
+                             ({"poses": [3]}, "a pose is a mechanism state's name, a configuration sequence at a time"),
+                             ({"poses": [{}]}, "a pose's table is"),
                              ({"min_volume": -1}, "min_volume is a number of 0 or more")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, words):
                 asked.options(**given)

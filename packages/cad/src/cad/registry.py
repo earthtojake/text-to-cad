@@ -271,10 +271,11 @@ _DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): c
 
 # The interference check a B-rep type shares (``cad._internal.interference``): the engine measures, in a
 # checks process, every pair of parts whose boxes meet, on their own solids.
-_INTERFERENCE = Operation("interference", "which parts share volume: every pair measured exactly on the parts' own "
-                                          "solids, as built and at the poses, mechanism states and configuration "
-                                          "sequences asked (--pose, --states, --motion), the fits named on purpose "
-                                          "(--fit A,B) listed apart, and each pair it could not measure said",
+_INTERFERENCE = Operation("interference", "which parts share volume, as built and at each pose asked (--pose: a "
+                                          "mechanism state, a configuration sequence at a time, or joint values): a "
+                                          "pair with air between its parts ruled out on their meshes, every other "
+                                          "measured exactly on the parts' own solids, the fits named on purpose "
+                                          "(--fit A B) listed apart, and each pair it could not measure said",
                           _KERNEL, engine=True)
 
 # The stress study a B-rep type shares (``cad._internal.fea``): the kernel reads the part, netgen meshes it, CalculiX

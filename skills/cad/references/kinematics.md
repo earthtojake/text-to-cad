@@ -446,12 +446,12 @@ of jobs draws its frames in one command, each from one camera
 ([a camera that does not move](snapshot-review.md#annotations-and-quick-edit-views)):
 
 ```bash
-cad model snapshot "$ID" tmp/stride.png --motion walk --at 0.6
+cad model snapshot "$ID" tmp/stride.png --pose walk@0.6
 ```
 
 ```json
-[{"input": "<id>", "camera": "side", "motion": {"name": "walk", "at": 0.0}, "outputs": [{"path": "tmp/walk_00.png"}]},
- {"input": "<id>", "camera": "side", "motion": {"name": "walk", "at": 0.2}, "outputs": [{"path": "tmp/walk_01.png"}]}]
+[{"input": "<id>", "camera": "side", "jointValues": "walk@0.0", "outputs": [{"path": "tmp/walk_00.png"}]},
+ {"input": "<id>", "camera": "side", "jointValues": "walk@0.2", "outputs": [{"path": "tmp/walk_01.png"}]}]
 ```
 
 The frames stand under the mechanism's fixed link, as the sequence is written: a robot whose ground
@@ -459,8 +459,9 @@ is its pelvis walks in the air.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. `cad model interference "$ID" --states --motions` measures every pair of parts at
-every mechanism state and along every sequence
+mid-motion. `cad model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
+parts at each pose it is given, a state or a sequence at a time of it: give it every state, and
+each sequence at the times that matter
 ([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
 check script, pose the model there, taking its parts placed with
 `leaves(tree)` (`cad.build123d`) through `find_part`, copied from

@@ -73,12 +73,15 @@ view it replays was seen in: no flag or packet names a theme.
 colour), `xray` (translucent surfaces, hidden edges visible), `hidden-line`
 (linework with occluded edges suppressed) and `wireframe` (edges only). It also takes
 `exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1)
-and `edges=sharp` (only the lines where faces meet at an angle: none along a loft's or a
-cylinder's seam, nor where a fillet meets its faces, which otherwise draw as lines across a
-smooth skin), alone or after a mode (`hidden-line,exploded=0.6`, `solid,edges=sharp`), or the
+and `edges=CLASS` (the edges of one class alone, by the viewer's names for them: `feature`,
+where faces meet at an angle; `tangent`, where they meet smoothly; `seam`, where a face
+closes on itself. `edges=feature` draws no line along a loft's or a cylinder's seam, nor
+where a fillet meets its faces, which otherwise draw as lines across a smooth skin), alone
+or after a mode (`hidden-line,exploded=0.6`, `solid,edges=feature`), or the
 viewer's display object, inline or as a JSON file: `mode`, `grid`, `camera`
 (`projection`: `orthographic` or `perspective`; `focalLength`), `clip`, `exploded`
-(`{"enabled": true, "amount": 0.5}`) and `edges` (`"all"` or `"sharp"`). With `edges=sharp`
+(`{"enabled": true, "amount": 0.5}`) and `edges` (`{"classes": ["feature", "seam"]}`: the
+classes drawn). With `edges=feature`
 a round part has no outline of its own: the picture draws no silhouettes. `parts` and `exploded` are refused for a
 document of one part. Unknown keys and out-of-range values are refused.
 
@@ -110,14 +113,14 @@ list:
 
 `--width` and `--height` set the size in pixels instead, up to 8192.
 
-`--pose` draws a document's mechanism posed: a mechanism state's name, or joint and
-coupling values as JSON, a turn in degrees, a slide in millimetres
+`--pose` draws a document's mechanism posed: a mechanism state's name, a configuration
+sequence at a time of its clip (`walk@0.6`, the sequence's name and the seconds), or joint
+and coupling values as JSON, a turn in degrees, a slide in millimetres
 ([reviewing motion](kinematics.md#reviewing-motion)). It is how
 the picture is drawn; a file of the pose is a posed model
-([exports](exports.md#posed-files-and-parts-on-their-own)). `--motion NAME --at SECONDS`
-draws it where a configuration sequence has it at that time of its clip, in place of
-`--pose`; a job's is `"motion": {"name": "walk", "at": 0.6}`, so a list of jobs is a
-sequence's frames in one command.
+([exports](exports.md#posed-files-and-parts-on-their-own)). A job's pose is its
+`jointValues`, which takes the same three, so a list of jobs is a sequence's frames in one
+command.
 
 `--json` prints what was drawn and each stage's milliseconds as one JSON object,
 and a failure as one `{"ok": false, "error": ..., "reason": ...}` on stdout. The exit status
@@ -227,7 +230,7 @@ cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
 A preset or `azimuth:elevation` is fitted to what each picture shows, so two pictures of
 different parts or poses are framed differently. For frames that must not move (a motion's
 frames, a part alone beside the whole), draw one picture with `--json`, take the camera it
-settled on from its report (`view`: `position`, `target`, `up` and, orthographic,
+settled on from its report (`settledCamera`: `position`, `target`, `up` and, orthographic,
 `orthographicHalfHeight`), and give it to every job as its `camera` with
 `"output": {"tightFrame": false}`: it is drawn exactly, with no fit.
 

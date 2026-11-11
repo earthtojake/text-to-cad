@@ -395,9 +395,8 @@ class Scene:
         faces = mode != "wireframe"
         edges = not preview and mode != "shaded" and not (mode in ("solid", "parts")
                                                           and self.structure.get("kind") in ROBOTS)
-        # ``display.edges`` ``sharp``: the lines where two faces meet at an angle, and a face's free border, alone;
-        # none where they meet smoothly (``tangent``) or where one closes on itself (``seam``).
-        sharp = display.get("edges") == "sharp"
+        # ``display.edges``: the edge classes drawn (``snapshot.EDGE_CLASSES``); every class without it.
+        classes = (display.get("edges") or {}).get("classes") or LINES
         on_top = mode in ("xray", "wireframe")
         for index, instance in enumerate(self.structure["instances"]):
             if index in self.hidden:
@@ -420,7 +419,7 @@ class Scene:
                     self.shown.append(connected)
             if edges:
                 for line in LINES:
-                    if line not in part.edges or (sharp and line != "feature"):
+                    if line not in part.edges or line not in classes:
                         continue
                     connected = AIS_ConnectedInteractive()
                     connected.Connect(self._edges(p, line), trsf)

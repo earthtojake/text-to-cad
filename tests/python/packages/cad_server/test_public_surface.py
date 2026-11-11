@@ -58,7 +58,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
 
 # The engine snapshot's options (``cad.engine.snapshot``).
 SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "width", "height",
-                      "size_profile", "pose", "motion", "at", "annotation", "measurements", "json"})
+                      "size_profile", "pose", "annotation", "measurements", "json"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no
 # generated parser to compare against a signature, so the declaration IS the contract, and a
@@ -79,9 +79,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
-    # A B-rep type's interference check: its poses, motions and fits repeat, lists no signature derives.
-    **{f"{document_type} interference": frozenset({"document", "pose", "states", "motion", "motions", "samples", "fit",
-                                                   "jobs", "pair_seconds", "seconds", "min_volume"})
+    # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
+    **{f"{document_type} interference": frozenset({"document", "pose", "fit", "min_volume"})
        for document_type in ("model", "xbf", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "kicad_pcb snapshot": SNAPSHOT | {"window"},

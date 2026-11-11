@@ -2414,7 +2414,7 @@ def _no_state(kinematics: dict[str, Any], pose: str) -> str:
     said = f"the document has no mechanism state {pose!r}"
     if pose in sequences:
         said += (f" ({pose!r} is a configuration sequence, which plays over time: a pose is a state or joint values, "
-                 f"or the sequence at a time, --motion {pose} --at SECONDS)")
+                 f"or the sequence at a time of it, {pose}@SECONDS)")
     said += f"; its states: {states}; its sequences: {', '.join(sorted(sequences)) or 'none'}"
     if not pairs:
         return said
@@ -2453,8 +2453,9 @@ def resolve(kinematics: dict[str, Any] | None, pose: Any, *,
     """The values a pose sets every pair to, and the configuration it names: ``pose`` is
     None (as built), a configuration's name, or ``{joint label or coupling name: value}``
     (the rest as built; a coupling at ``c`` puts each of its joints at its as-built values
-    plus its ratio times ``c``), or ``[sequence, seconds]`` (a configuration sequence's name and a
-    time of its clip: where it has the mechanism then, ``at``). An unknown name or joint, a value
+    plus its ratio times ``c``), or ``NAME@SECONDS`` (``moment``: a configuration sequence's name and a
+    time of its clip, ``walk@0.6``: where it has the mechanism then, ``at``; a configuration that is
+    named so is the configuration). An unknown name or joint, a value
     out of range, a coupling's joint set alone and a coupling set with one of its joints are refused
     by name. ``own``: the values are the document's own (a motion's keys), which set a coupling's
     joints."""
@@ -2472,17 +2473,18 @@ def resolve(kinematics: dict[str, Any] | None, pose: Any, *,
     if isinstance(pose, str):
         configurations = kinematics.get("configurations") or {}
         if pose not in configurations:
+            timed = moment(pose)
+            if timed is not None:
+                return at(kinematics, *timed), None
             raise KinematicsError(_no_state(kinematics, pose))
         named, given, where = pose, configurations[pose], f"configuration {pose!r}"
     elif isinstance(pose, dict):
         given, where = pose, "the pose"
     elif pose is None:
         given, where = {}, ""
-    elif isinstance(pose, (list, tuple)):
-        return at(kinematics, pose), None
     else:
         raise KinematicsError("a pose is a configuration's name, an object of joint values, or a configuration "
-                              "sequence's name and a time of it")
+                              "sequence at a time of it (NAME@SECONDS)")
 
     def unposable(label: str) -> str | None:
         """Why the pair cannot be posed, or None."""
@@ -2596,14 +2598,23 @@ class LinkWorlds:
         return [matrix if matrix is not None else self.built[at].copy() for at, matrix in enumerate(found)]
 
 
-def at(kinematics: dict[str, Any], pose: Any) -> dict[str, tuple[float, ...]]:
-    """The pair values a configuration sequence has the mechanism at, ``pose`` its name and a time of
-    its clip in seconds (``["walk", 0.6]``): what the viewer's playbar shows there and a GLB's clip
-    holds (``Timeline``). A name no sequence has, and a time outside its clip, are refused by name."""
-    if (len(pose) != 2 or not isinstance(pose[0], str) or isinstance(pose[1], bool)
-            or not isinstance(pose[1], (int, float)) or not math.isfinite(pose[1])):
-        raise KinematicsError(f"a sequence's pose is its name and a time in seconds ([\"walk\", 0.6]), not {pose!r}")
-    name, seconds = pose[0], float(pose[1])
+def moment(pose: Any) -> tuple[str, float] | None:
+    """A pose that is a time of a configuration sequence, ``NAME@SECONDS`` (``walk@0.6``): its name and
+    its time. None for any other pose: one with no ``@``, or with no number after its last."""
+    if not isinstance(pose, str) or "@" not in pose:
+        return None
+    name, _, seconds = pose.rpartition("@")
+    try:
+        time = float(seconds)
+    except ValueError:
+        return None
+    return (name, time) if name and math.isfinite(time) else None
+
+
+def at(kinematics: dict[str, Any], name: str, seconds: float) -> dict[str, tuple[float, ...]]:
+    """The pair values the configuration sequence ``name`` has the mechanism at, ``seconds`` into its
+    clip: what the viewer's playbar shows there and a GLB's clip holds (``Timeline``). A name no
+    sequence has, and a time outside its clip, are refused by name."""
     sequences = kinematics.get("motions") or {}
     if name not in sequences:
         states = kinematics.get("configurations") or {}
@@ -2645,6 +2656,7 @@ def posed_structure(structure: dict[str, Any], pose: Any) -> dict[str, Any]:
     found["instances"] = [{**instance, "matrix": matrix} for instance, matrix in zip(structure["instances"], matrices)]
     found["kinematics"] = {**kinematics, "pose": {"values": {label: _json_value(value) for label, value in values.items()},
                                                   "configuration": named}}
-    if isinstance(pose, (list, tuple)):  # a sequence at a time (``at``): which, and when
-        found["kinematics"]["pose"]["sequence"] = {"name": pose[0], "at": float(pose[1])}
+    timed = None if named is not None else moment(pose)
+    if timed is not None:  # a sequence at a time (``at``): which, and when
+        found["kinematics"]["pose"]["sequence"] = {"name": timed[0], "at": timed[1]}
     return found
