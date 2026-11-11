@@ -937,7 +937,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
   round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
   and fused on: the flat is the cut outline (an 80 x 40 x 3 plate chamfered 0.5 mm unfolds 80 x 40, not 79 x
-  39), and a hole with a broken rim is read back from it at its cut size.
+  39), and a hole with a broken rim is read back from it at its cut size. A break's edge that is no line and
+  no arc (its end where it meets the next break at a corner of the outline: an ellipse's arc between two
+  rounds, a conic between a chamfer along a line and one along an arc) is laid as chords within `CHORD_MM`
+  of it, as an arc's are, so none is shorter than the tolerance the breaks are fused with.
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each, `BEND` empty for a flat
   plate), and raises `ValueError`
