@@ -61,31 +61,6 @@ No `cad` command draws a MuJoCo model's file. What to use in its place:
 - **The model as MuJoCo compiles and simulates it**: the person opens it in MuJoCo Studio (`cad run
   mujoco-studio --model path/to/scene.xml`).
 
-None of the checks here asks for a picture of an MJCF. If you want one anyway, render it yourself
-with MuJoCo's own renderer in a throwaway script. It is not part of `cad`: the script names the two
-packages MuJoCo's renderer needs, and on Linux it needs a display, which `xvfb-run` gives it.
-
-```python
-# tmp/render.py
-# /// script
-# dependencies = ["pyopengl", "glfw", "pillow"]
-# ///
-import mujoco
-from PIL import Image
-
-m = mujoco.MjModel.from_xml_path("sim/scene.xml")
-d = mujoco.MjData(m)
-mujoco.mj_resetDataKeyframe(m, d, m.key("home").id)
-mujoco.mj_forward(m, d)
-with mujoco.Renderer(m, 480, 640) as r:
-    r.update_scene(d)          # camera="NAME" for a camera the model defines
-    Image.fromarray(r.render()).save("tmp/home.png")
-```
-
-```bash
-xvfb-run -a cad run tmp/render.py
-```
-
 ## Display, camera and annotations
 
 A normal snapshot uses Solid mode, and every snapshot is light, whatever the viewer's theme. A
