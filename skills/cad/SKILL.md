@@ -290,6 +290,7 @@ cad model snapshot "$ID" tmp/review.png
 cad model snapshot "$ID" tmp/top.png --camera top --display hidden-line
 cad model snapshot "$ID" tmp/open.png --pose open
 cad model snapshot "$ID" tmp/mid.png --pose cycle@2.5   # a configuration sequence, at a time of it
+cad model snapshot "$ID" tmp/lit.png --preview          # lit in a studio: the picture for a person
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing but the PNG.

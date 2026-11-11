@@ -57,7 +57,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
-SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "width", "height",
+SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "preview", "camera", "width", "height",
                       "size_profile", "pose", "annotation", "measurements", "json"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no

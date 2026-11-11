@@ -715,7 +715,7 @@ cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero ST
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
-                [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
+                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
 cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
@@ -2151,14 +2151,25 @@ engine, beside the document, and the document's scene brings them as its own lig
 rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
 page put up in place of the theme's. Preview is drawn as any file's is.
 
-`cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
-browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
+`cad <type> snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
+`snapshot(preview=True)`) draws the viewer's Preview in place of a display mode, by the same raster: the
+model in its materials under the viewer's rig (`photographicStudioRig.js`: its key from the same direction
+at the same strength, shadowing the model, and the look's `studio.hdr` -- the viewer's room and softboxes --
+at full strength as the image-based light), in perspective unless the display says otherwise, in the
+viewer's studio (its backdrop sweep, its floor at the model's lowest point, the floor's shadow baked as the
+viewer bakes it), and tone-mapped as the viewer tone-maps (three's Neutral: OCCT's raster has no tone
+mapping, so the model is drawn alone on black and on white, its cover and colour read from the two, and
+what the curve changes laid over the model's pixels -- `occt.Scene._tone`; the studio, drawn in the
+viewer's finished colours, is untouched). It is not the viewer's picture pixel for pixel, and no browser
+draws it: a frame holds no light past 1, so a highlight comes out the tone a full white does; there is no
+ambient occlusion and no reflection in the floor; glass is drawn at its preview alpha; and OCCT's baked
+reflections read lighter on a polished metal. The first Preview of a document bakes its light (seconds).
 
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
 light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
-which a snapshot refuses), a drawing's white paper, a board's and a schematic's light colours --
+drawn only when asked for), a drawing's white paper, a board's and a schematic's light colours --
 whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
 and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,

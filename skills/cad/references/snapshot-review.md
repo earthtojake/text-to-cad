@@ -86,7 +86,14 @@ a round part has no outline of its own: the picture draws no silhouettes. `parts
 document of one part. Unknown keys and out-of-range values are refused.
 
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
-Snapshot draws technical OCCT images. Photographic Preview is available in the browser viewer.
+
+`--preview` draws the viewer's Preview in place of a display mode: the model lit in a studio (a
+key light, softboxes, shadows on itself), in its materials, on a floor with its shadow, in
+perspective. It is the picture for a person, and the one that shows form on a part of one colour: a
+gloss-black shell, a white fairing. Review geometry in the display modes, where edges are drawn.
+The first Preview of a document takes some seconds longer than a mode. It is drawn by the same
+renderer, not a path tracer: glass is a see-through tint, a polished metal reads lighter than the
+viewer's, and nothing is reflected in the floor. A drawing, a board and a schematic have none.
 
 `--camera` is a preset (`iso`, `front`, `back`, `left`, `right`, `top`, `bottom`),
 an `azimuth:elevation` pair in degrees (`--camera 45:30`; `0:90` looks straight down), a camera
@@ -203,7 +210,7 @@ cad model snapshot --job tmp/bracket.snapshot.json
 cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
 ```
 
-`--job` takes a packet, a job (`{input, camera, display, jointValues, outputs, ...}`)
+`--job` takes a packet, a job (`{input, camera, display, preview, jointValues, outputs, ...}`)
 or a list of jobs, as a file or JSON; a job's `outputs` are its pictures (`path`, and
 `width`, `height`, `camera` of their own; a folder `path` takes a generated name).
 A SRC given is drawn in place of every job's input, and any other flag overrides

@@ -33,7 +33,7 @@ Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
 the look the viewer's viewport resolves for the same display settings. Every picture is light: a 3D
 document on the look's flat backdrop (Preview's studio sweep only for a still asked for Preview,
-which ``cad <type> snapshot`` never asks for), the drawing's white paper, KiCad's light colours,
+``--preview``), the drawing's white paper, KiCad's light colours,
 whatever theme the person's viewer is in: a snapshot is a tool for an agent, and dark is the harder
 to read, so no request, flag or packet names a theme. The answer is PNG bytes, which this writes to
 OUT.
@@ -142,7 +142,7 @@ MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
 PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
-JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
+JOB_KEYS = frozenset({"input", "camera", "display", "preview", "jointValues", "selection", "annotation", "measurements",
                       "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
 SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale", "background"})
@@ -868,14 +868,14 @@ def _flag_text(value: Any, flag: str) -> str | None:
 
 
 def draw(source: Any, out: Path, *, display: Any = None, camera: Any = None, grid: bool = False,
-         pose: Any = None, width: int | None = None, height: int | None = None,
+         preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
          size_profile: str | None = None, annotation: Any = None, measurements: Any = None) -> dict[str, Any]:
     """A build's document (an ``export.Source``, in this process's memory) drawn into ``out``:
     a model's picture (``Model.snapshot``). Served from memory over the process's mesh
     cache, so nothing the build meshed is meshed again."""
     shown, framed, size = options(display, camera, grid, width, height, size_profile)
     path = source.path or Path(out).with_suffix(".xbf")
-    return snapshot(path, Path(out), display=shown, camera=framed,
+    return snapshot(path, Path(out), display=shown, camera=framed, preview=bool(preview),
                     size=None if width is None and height is None and size_profile is None else size, pose=pose,
                     source=source, annotation=parse_annotation(annotation), measurements=parse_measurements(measurements),
                     annotation_source=annotation)
@@ -1201,7 +1201,7 @@ def _job_size(output: dict[str, Any], settings: dict[str, Any], flags: tuple[Any
 
 @refusing("job")
 def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 pose: Any = None, width: int | None = None, height: int | None = None,
+                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, annotation: Any = None,
                  measurements: Any = None) -> list[tuple[Path, Path, Still]]:
     """Every picture a job names (``--job``: a Quick Edit packet, a job, or a list of jobs), each
@@ -1275,7 +1275,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                 if selection.get(key):
                     shown[field_name] = [*(shown.get(field_name) or []), *selection[key]]
             _visibility(shown)
-        projection = (shown.get("camera") or {}).get("projection") or "orthographic"
+        if view.get("preview") is not None and not isinstance(view["preview"], bool):
+            raise SnapshotRefused(f"{where}.preview is true or false")
+        studio = bool(preview or view.get("preview"))  # Preview's photographic look, in place of the display's mode
+        projection = (shown.get("camera") or {}).get("projection") or ("perspective" if studio else "orthographic")
         ink = ink_flag if annotation is not None else parse_annotation(view.get("annotation", shared.get("annotation")))
         dimensions = dimensions_flag if measurements is not None else parse_measurements(
             view.get("measurements", shared.get("measurements")))
@@ -1308,7 +1311,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                                                projection, tight))
             if framed == AUTHORED:
                 framed, exact, _view = authored(AUTHORED, ink, given if isinstance(given, dict) else None, document)
-            pictures.append((document, out, Still(shown, framed, exact, False, size,
+            pictures.append((document, out, Still(shown, framed, exact, studio, size,
                                                   posed, ink, dimensions, padding, tight,
                                                   bool(settings.get("transparent")), scale, lit,
                                                   settings.get("background"))))

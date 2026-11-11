@@ -439,6 +439,25 @@ class HeldTest(unittest.TestCase):
         self.assertTrue(all(now is then for now, then in zip(scene.stage, stage)) and len(scene.stage) == 2)
         self.assertLess(mismatch(second, first), 0.05, "the same look, with ink")
 
+    def test_preview_tone_maps_the_model_as_the_viewer_does_and_leaves_its_studio_as_drawn(self) -> None:
+        """three's NeutralToneMapping, which OCCT's raster has none of: the sheen a dielectric adds taken
+        off a dark colour, a middle one kept, a bright one eased under 1. Laid over the model's pixels
+        alone, so the studio's floor and backdrop (drawn in the viewer's finished colours) stay as drawn."""
+        from cad.engine.render.occt import neutral
+
+        mapped = neutral(np.array([[0.02, 0.02, 0.02], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [4.0, 4.0, 4.0]]))
+        np.testing.assert_allclose(mapped[:, 0], [6.25 * 0.02 ** 2, 0.46, 1 - 0.24 ** 2 / 0.44, 1 - 0.24 ** 2 / 3.44],
+                                   atol=1e-9)
+        found = pixels(self.draw(display={}, preview=True)[0])
+        scene = self.held.scenes[True]
+        bare = scene.canvas.frame()  # the frame as OCCT draws it, before the painter
+        model = scene._tone().any(-1)
+        self.assertTrue(0.05 < model.mean() < 0.95, "the model and its studio are both in the frame")
+        np.testing.assert_array_equal(found[~model], bare[~model])
+        self.assertTrue((found[model].astype(int) <= bare[model].astype(int) + 1).all(), "tone mapping adds no light")
+        self.assertLess(found[model].mean(), bare[model].mean() - 2)
+        np.testing.assert_array_equal(scene.canvas.frame(), bare, "the studio is put back behind the model")
+
     def test_a_new_version_s_scenes_are_new_and_draw_as_the_last_did(self) -> None:
         """A version replaced: its scenes let go of whole between pictures and made again, and
         Preview's environment lights the new scene as it lit the last (a scene collected while

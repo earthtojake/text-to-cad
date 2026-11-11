@@ -5,7 +5,7 @@ ordinary Python scripts call decorated models explicitly.
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
         model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
+        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
@@ -193,6 +193,9 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--size-profile", choices=sorted(snapshot.SIZE_PROFILES))
+    parser.add_argument("--preview", action="store_true",
+                        help="the viewer's Preview in place of a display mode: the model lit in a studio, in its "
+                             "materials, on a floor with its shadow, in perspective (a job's: \"preview\": true)")
     parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), a configuration "
                                        "sequence at a time of it (walk@0.6: where the viewer's playbar shows the "
                                        "mechanism then), or joint and coupling "
@@ -225,7 +228,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     try:
         # The verb as a function (``api.snapshot``), which checks the flags as ``snapshot`` does.
         report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
-                              pose=args.pose, width=args.width, height=args.height,
+                              preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                               size_profile=args.size_profile, annotation=args.annotation,
                               measurements=args.measurements).report
     except snapshot.SnapshotRefused as error:
@@ -271,7 +274,8 @@ def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) 
     document_type = "model" if is_id(document) else entry.id if entry is not None else None
     if document_type is None:
         return None
-    options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "pose": args.pose,
+    options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "preview": bool(args.preview),
+               "pose": args.pose,
                "width": args.width, "height": args.height, "size_profile": args.size_profile,
                "annotation": args.annotation, "measurements": args.measurements}
 
@@ -303,7 +307,7 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
     try:
         drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
-                             pose=args.pose, width=args.width, height=args.height,
+                             preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                              size_profile=args.size_profile, annotation=args.annotation,
                              measurements=args.measurements)
     except (snapshot.SnapshotRefused, ValueError) as error:
@@ -335,7 +339,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
     started = time.perf_counter()
     try:
         drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 pose=args.pose, width=args.width, height=args.height,
+                                 preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                                  size_profile=args.size_profile, annotation=args.annotation,
                                  measurements=args.measurements)
     except snapshot.SnapshotRefused as error:

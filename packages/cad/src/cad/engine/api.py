@@ -214,13 +214,13 @@ class Document:
         return _said(_exporting(self, destinations, tolerance=tolerance, angle=angle, zero=zero), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 pose: Any = None, width: int | None = None, height: int | None = None,
+                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
                  measurements: Any = None) -> Drawn:
         """``snapshot(handle, out, ...)``: the document drawn into ``out`` (a ``.png``); every option is
         the ``snapshot`` verb's, about the picture."""
         self._outside("snapshot")
-        return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid,
+        return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid, preview=preview,
                                     pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon,
                                     annotation=annotation, measurements=measurements))
 
@@ -771,7 +771,7 @@ def _outside(measures: dict[str, Any], why: str) -> None:
 
 
 def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
-             grid: bool = False, pose: Any = None, width: int | None = None,
+             grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
              measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
@@ -783,7 +783,8 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     annotation's ink was drawn in, which the packet holds. ``out`` a folder (a path ending in a
     separator, or one that is there) is given a name inside it, the source's stem and the time
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
-    was (``snapshot.write_png``).
+    was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
+    model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
     ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
     ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
@@ -801,7 +802,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
     frames, bar = progressing.sink(progress)
     try:
-        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, pose=pose,
+        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                          width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                          measurements=measurements, progress=frames)
     finally:
@@ -809,14 +810,14 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
             bar.close()
 
 
-def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, pose: Any,
+def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
         if out is not None:
             raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
-        return _job(job, source, display=display, camera=camera, grid=grid, pose=pose, width=width,
+        return _job(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose, width=width,
                     height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
@@ -824,12 +825,12 @@ def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, gri
     from cad.engine import snapshot as drawing
 
     out = drawing.picture_path(out, source)
-    return _snapshot(source, out, display=display, camera=camera, grid=grid, pose=pose,
+    return _snapshot(source, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                      width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                      measurements=measurements, progress=progress)
 
 
-def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, pose: Any,
+def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None = None) -> Drawn:
     from cad.engine import snapshot as drawing
@@ -845,7 +846,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         spec = _source(source)
         if isinstance(annotation, (str, Path)) and not str(annotation).lstrip().startswith("{"):
             annotation = str(Path(annotation).expanduser().resolve())  # read in the worker, beside its packets
-        draw = {"out": str(out), "display": display, "camera": camera, "grid": grid,
+        draw = {"out": str(out), "display": display, "camera": camera, "grid": grid, "preview": bool(preview),
                 "pose": drawing.parse_pose(pose) if isinstance(pose, str) else pose, "width": width,
                 "height": height, "size_profile": size_profile, "annotation": annotation,
                 "measurements": drawing.parse_measurements(measurements)}
@@ -863,7 +864,8 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
             with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
                 saved = Path(folder) / "document.xbf"
                 export(spec["id"], saved, progress=False)
-                found = _snapshot(saved, out, display=display, camera=camera, grid=grid, pose=pose, width=width,
+                found = _snapshot(saved, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+                                  width=width,
                                   height=height, size_profile=size_profile, daemon=False, annotation=annotation,
                                   measurements=measurements, progress=progress).report
         if "id" in spec:
@@ -873,7 +875,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
     shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
                                           board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
                                           schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
-    found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed,
+    found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed, preview=bool(preview),
                              size=None if width is None and height is None and size_profile is None else size,
                              daemon=daemon, pose=drawing.parse_pose(pose) if isinstance(pose, str) else pose,
                              annotation=drawing.parse_annotation(annotation),
@@ -900,14 +902,14 @@ def _whole(source: Any) -> None:
                           part="source")
 
 
-def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
+def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
          measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
     """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
     from cad.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
-    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, pose=pose,
+    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                                     width=width, height=height, size_profile=size_profile, annotation=annotation,
                                     measurements=measurements)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)

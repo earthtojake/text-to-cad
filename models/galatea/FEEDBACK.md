@@ -717,8 +717,13 @@ that did not hold as written, and what a reader should take from them instead.
   jobs its frames in one command (12). It stands under the mechanism's fixed link, as the sequence is
   written.
 
+- A snapshot is lit when asked (`--preview`): the viewer's Preview drawn by OCCT, with no browser --
+  its studio light, shadows on the model, its materials, a floor and its shadow, tone-mapped as the
+  viewer's. A gloss-black part has form and a white one shading (19). It is a raster, not the
+  viewer's picture pixel for pixel: no ambient occlusion, glass as a tint.
+
 **Still open**, each a decision and not a defect: a snapshot drawn with another link as its ground
-(40, 36); a lit still (19); a mesh per link and an MJCF reference for a simulator (44, 45, 48);
+(40, 36); a mesh per link and an MJCF reference for a simulator (44, 45, 48);
 what the engine counts against its memory cap, and a build's priority (21, 47); a fetched vendor
 STEP (31); and a guarded Boolean and both orders of `overlap_volume` (5, 8), which nothing
 reproduced.

@@ -77,11 +77,9 @@ PADDING = 0.04
 EDGES_WIN_OFFSET = (1.0, 1.0)
 SEE_THROUGH_OFFSET = (0.0, -4.0)
 FOCAL_LENGTH = 50.0  # the view's default camera.focalLength (viewSettings.js), on three's 35 mm film gauge
-# The studio environment's horizon grey (sRGB, as its cube map holds it), which lights the model.
-HORIZON = (0.70, 0.71, 0.73)
 # Preview's studio is the viewer's, light (viewSettings.js previewDefaults, photographicStudioRig.js),
-# drawn only in a still asked for Preview (``snapshot(preview=True)``), which ``cad <type> snapshot``
-# never asks for: the backdrop white, lifted toward white behind the middle of the frame and shaded
+# drawn only in a still asked for Preview (``snapshot(preview=True)``, ``cad <type> snapshot --preview``):
+# the backdrop white, lifted toward white behind the middle of the frame and shaded
 # toward its corners (a dark and a light colour's share) and above the horizon (studioBackdrop.js);
 BACKDROP = "#ffffff"
 BACKDROP_LIFT, BACKDROP_SHADE, BACKDROP_WALL = 0.07, (0.38, 0.1), 0.6
@@ -100,6 +98,14 @@ CONTACT_STRENGTH = (0.75, 0.5, 0.75, 0.35)
 CONTACT_BLUR = (0.012, 0.03, 0.06)
 KEY_DIRECTION = (-0.35, -1.0, 1.5)
 SHADOW_TEXELS = 160
+# Its light is the viewer's rig too (photographicStudioRig.js): the key, a light of KEY_ILLUMINANCE from
+# KEY_DIRECTION, and around the model the studio the regular modes reflect (``look.py``'s ``studio.hdr``:
+# the viewer's room and its softboxes, baked), here at the viewer's full strength. OCCT bakes the
+# environment's reflections by sampling, into a map 2 to this power a side with this many samples a texel:
+# its own 512 texels at 256 samples leave a flat metal face mottled under sources this much brighter than
+# their room.
+KEY_ILLUMINANCE = 2.4
+STUDIO_BAKE = {"PbrEnvPow2Size": 7, "PbrEnvBakingSpecNbSamples": 4096}
 
 
 def occt_scale(height: float, aspect: float) -> float:
@@ -237,6 +243,8 @@ class Scene:
         self.fonts: set[str] = set()  # the faces the words of the frame were set in (text.face_source)
         self.stage: list[Any] = []  # Preview's studio: its floor and the floor's shadow
         self.studio = False
+        self.traced = False  # Preview drawn by OCCT's path tracer, which tone-maps its own frame
+        self.behind: tuple[float, ...] | None = None  # the flat colour behind the model (``backdrop``); None: its own
         self.staged = b""  # the placements its shadow was baked for
         self.mode = None
         self.display: dict[str, Any] = {}
@@ -863,6 +871,7 @@ class Scene:
         from OCP.Aspect import Aspect_FillMethod, Aspect_GradientFillMethod
 
         vertical = Aspect_GradientFillMethod.Aspect_GradientFillMethod_Vertical
+        self.behind = None if colour is None else tuple(colour)
         if colour is None:
             if self.studio:
                 self._studio_backdrop()
@@ -1118,8 +1127,8 @@ class Scene:
 
     def _studio(self) -> None:
         """The viewer's Preview studio around the model: its floor and the floor's shadow (its
-        backdrop, ``_studio_backdrop``, goes behind once the environment that lights the model,
-        ``_studio_environment``'s and unchanged, is baked)."""
+        backdrop, ``_studio_backdrop``, goes behind once the environment that lights the model is
+        baked)."""
         self.clear_stage()
         place = self._studio_place()
         self._contact_shadow(place)  # baked from the model alone, before the floor exists
@@ -1158,12 +1167,12 @@ class Scene:
         for light in self.lights:
             viewer.DelLight(light)
         self.lights = []
-        key = V3d_DirectionalLight(gp_Dir(0.5, 0.7, -1.0), Quantity_Color(1, 0.97, 0.92, Quantity_TOC_RGB))
-        key.SetIntensity(2.5)
+        key = V3d_DirectionalLight(gp_Dir(*(-np.array(KEY_DIRECTION))), Quantity_Color(1, 1, 1, Quantity_TOC_RGB))
+        key.SetIntensity(KEY_ILLUMINANCE)
         key.SetCastShadows(True)
         key.SetHeadlight(False)
         ambient = V3d_AmbientLight(Quantity_Color(1, 1, 1, Quantity_TOC_RGB))
-        ambient.SetIntensity(float(os.environ.get("OCCT_PBR_AMB", 1.0)))
+        ambient.SetIntensity(1.0)
         viewer.AddLight(key)
         viewer.SetLightOn(key)
         viewer.AddLight(ambient)
@@ -1172,7 +1181,7 @@ class Scene:
         view.SetBackgroundColor(_color((0.93, 0.93, 0.94)))
         view.SetShadingModel(Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Pbr)
         params = view.ChangeRenderingParams()
-        params.ToneMappingMethod = Graphic3d_ToneMappingMethod.Graphic3d_ToneMappingMethod_Filmic
+        params.ToneMappingMethod = Graphic3d_ToneMappingMethod.Graphic3d_ToneMappingMethod_Filmic  # the path tracer's
         params.WhitePoint = 1.0
         # The key's shadow map shades the model only: the floor is unlit, its shadow the baked one.
         params.IsShadowEnabled = True
@@ -1202,15 +1211,22 @@ class Scene:
         else:
             from OCP.Graphic3d import Graphic3d_CubeMapPacked
 
-            cubemap = Graphic3d_CubeMapPacked(_studio_environment())
+            # OCCT takes a cube map's texels as colours, at most 1, and multiplies the whole image-based
+            # light by the ambient light: the map holds the radiance over its brightest, the ambient that.
+            from cad.engine.render.finish import cube_pixmap
+
+            pixmap, brightest = cube_pixmap()
+            ambient.SetIntensity(brightest)
+            cubemap = Graphic3d_CubeMapPacked(pixmap)
             cubemap.SetMipmapsGeneration(True)
             view.SetBackgroundCubeMap(cubemap, True, False)
             view.SetImageBasedLighting(True)
+            for name, value in STUDIO_BAKE.items():
+                setattr(params, name, value)
             view.Redraw()  # bakes the environment's lighting from the cube map
-            params.PbrEnvPow2Size = 9
-            params.PbrEnvSpecMapNbLevels = 8
             self._studio_backdrop()  # in place of the cube map, which only lights
         self.studio = True
+        self.traced = bool(path_trace)
         return time.perf_counter() - clock
 
     def path_trace(self, out: Path, samples: int) -> float:
@@ -1274,15 +1290,50 @@ class Scene:
             cover = np.clip((ratio * weight).sum(-1) / np.maximum(weight.sum(-1), 1e-9), 0, 1)[:, None]
             drawn[touched] = np.rint((ink * cover + under * (1 - cover)) * 255).astype(np.uint8)
 
+    def _tone(self) -> np.ndarray:
+        """What Preview's tone mapping adds to a frame of the view, in linear light (height, width, 3).
+        The viewer tone-maps what it draws (``neutral``); OCCT's raster does not, and the studio around
+        the model is drawn in the colours the viewer's comes out in. So the model is drawn alone twice
+        (on black, then on white, the floor and its shadow put away), each pixel's cover and colour are
+        read from the two as a picture on nothing reads them (``service.matte``), and what tone mapping
+        changes that colour by, at that cover, is what a frame gains: nothing where no model is. A
+        frame holds no light past 1, so a highlight comes out the tone a full white does."""
+        behind = self.behind
+        for structure in self.stage:
+            structure.Erase()
+        try:
+            frames = []
+            for colour in ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)):
+                self.backdrop(colour)
+                frames.append(_LINEAR[self.canvas.frame()])
+        finally:
+            for structure in self.stage:
+                structure.Display()
+            self.backdrop(behind)
+        black, white = frames
+        cover = np.clip(1.0 - (white - black).mean(-1, keepdims=True), 0.0, 1.0)
+        colour = np.clip(black / np.maximum(cover, 1e-6), 0.0, 1.0)
+        return (cover * (neutral(colour) - colour)).astype(np.float32)
+
     def painter(self) -> Any:
         """What paints over the finished frame (sRGB bytes, in place): the text marks as three lays
-        them, then Measure's marks; None when there is nothing to paint."""
-        if not (self.text_quads or self.screen_marks):
+        them, Preview's tone mapping (``_tone``, read once for the picture), then Measure's marks;
+        None when there is nothing to paint."""
+        toned = self.studio and not self.traced
+        if not (self.text_quads or self.screen_marks or toned):
             return None
+        gained: list[np.ndarray] = []
 
         def paint(frame: np.ndarray) -> None:
             if self.text_quads:
                 self._relay_text(frame)
+            if toned:
+                if not gained:
+                    gained.append(self._tone())
+                lit = gained[0].any(-1)
+                mapped = np.clip(_LINEAR[frame[lit]] + gained[0][lit], 0.0, 1.0)
+                mapped = np.where(mapped <= 0.0031308, mapped * 12.92, 1.055 * np.power(mapped, 1 / 2.4) - 0.055)
+                frame[lit] = np.rint(mapped * 255).astype(np.uint8)
             if self.screen_marks:
                 from cad.engine.render.overlay import paint_measurements
 
@@ -1293,47 +1344,24 @@ class Scene:
         return self.canvas.save(str(out), self.painter())
 
 
-_ENVIRONMENT = None
+# An sRGB byte's linear light.
+_LINEAR = (lambda c: np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4))(np.arange(256) / 255.0).astype(np.float32)
 
 
-def _studio_environment(size: int = 64) -> Any:
-    """A soft studio as a packed cube map (+X, -X, +Y, -Y, +Z, -Z), made in memory: a bright
-    sky over a grey horizon and a dark floor, with three soft boxes. OCCT reads no HDR file here."""
-    global _ENVIRONMENT
-    if _ENVIRONMENT is not None:
-        return _ENVIRONMENT
-    from OCP.Image import Image_Format, Image_PixMap
-    from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
-
-    a = (np.arange(size) + 0.5) / size * 2 - 1
-    s, t = np.meshgrid(a, a)
-    one = np.ones_like(s)
-    faces = [(one, -t, -s), (-one, -t, s), (s, one, t), (s, -one, -t), (s, -t, one), (-s, -t, -one)]
-    strips = []
-    for face in faces:
-        v = np.stack(face, -1)
-        v /= np.linalg.norm(v, axis=-1, keepdims=True)
-        z = v[..., 2]
-        sky, horizon, floor = np.array([0.92, 0.94, 0.97]), np.array(HORIZON), np.array([0.25, 0.25, 0.26])
-        w = np.clip(z, 0, 1)[..., None] ** 0.6
-        c = np.where(z[..., None] > 0, horizon * (1 - w) + sky * w,
-                     horizon * np.clip(1 + z * 4, 0, 1)[..., None] + floor * np.clip(-z * 4, 0, 1)[..., None])
-        for direction, spread, gain in (((-0.6, -0.8, 0.7), 0.30, 1.0), ((0.9, 0.6, 0.4), 0.18, 0.6), ((0, 0, 1), 0.25, 0.4)):
-            dd = np.array(direction) / np.linalg.norm(direction)
-            c = c + (np.clip((v @ dd - math.cos(spread)) / 0.02, 0, 1) * gain)[..., None]
-        strips.append(np.clip(c, 0, 1))
-    array = np.concatenate(strips, axis=1)
-    height, width = array.shape[:2]
-    pixmap = Image_PixMap()
-    pixmap.InitTrash(Image_Format.Image_Format_RGB, width, height)
-    pixmap.SetTopDown(True)
-    for y in range(height):
-        row = array[y]
-        for x in range(width):
-            r, g, b = row[x]
-            pixmap.SetPixelColor(x, y, Quantity_Color(float(r), float(g), float(b), Quantity_TOC_RGB))
-    _ENVIRONMENT = pixmap
-    return pixmap
+def neutral(colour: np.ndarray) -> np.ndarray:
+    """Linear light (..., 3) tone-mapped as the viewer's Preview tone-maps it (three's
+    ``NeutralToneMapping``, Khronos PBR Neutral, at exposure 1): the sheen every dielectric adds taken
+    off (what makes a black part black), colours kept as they are up to 0.76, and what is brighter
+    eased under 1, losing its colour as it nears it."""
+    start, desaturation = 0.8 - 0.04, 0.15
+    least = colour.min(-1, keepdims=True)
+    colour = colour - np.where(least < 0.08, least - 6.25 * least * least, 0.04)
+    peak = colour.max(-1, keepdims=True)
+    span = 1.0 - start
+    eased = 1.0 - span * span / (np.maximum(peak, start) + span - start)
+    grey = 1.0 - 1.0 / (desaturation * (peak - eased) + 1.0)
+    mapped = colour * (eased / np.maximum(peak, 1e-9)) * (1.0 - grey) + eased * grey
+    return np.where(peak < start, colour, mapped)
 
 
 # --- the CLI ---------------------------------------------------------------------------------------
