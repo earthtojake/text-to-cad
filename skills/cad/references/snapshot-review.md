@@ -113,7 +113,10 @@ list:
 coupling values as JSON, a turn in degrees, a slide in millimetres
 ([reviewing motion](kinematics.md#reviewing-motion)). It is how
 the picture is drawn; a file of the pose is a posed model
-([exports](exports.md#posed-files-and-parts-on-their-own)).
+([exports](exports.md#posed-files-and-parts-on-their-own)). `--motion NAME --at SECONDS`
+draws it where a configuration sequence has it at that time of its clip, in place of
+`--pose`; a job's is `"motion": {"name": "walk", "at": 0.6}`, so a list of jobs is a
+sequence's frames in one command.
 
 `--json` prints what was drawn and each stage's milliseconds as one JSON object,
 and a failure as one `{"ok": false, "error": ..., "reason": ...}` on stdout. The exit status

@@ -312,6 +312,22 @@ joint no coupling moves, and the mechanism states as presets. The playbar under 
 tools view and Preview alike, plays the document's configuration sequences (play, pause, scrub, loop, speed), so the page is
 where to review one.
 
+A sequence is drawn at a time of it, the mechanism where the playbar would have it then, and a list
+of jobs draws its frames in one command, each from one camera
+([a camera that does not move](snapshot-review.md#annotations-and-quick-edit-views)):
+
+```bash
+cad model snapshot "$ID" tmp/stride.png --motion walk --at 0.6
+```
+
+```json
+[{"input": "<id>", "camera": "side", "motion": {"name": "walk", "at": 0.0}, "outputs": [{"path": "tmp/walk_00.png"}]},
+ {"input": "<id>", "camera": "side", "motion": {"name": "walk", "at": 0.2}, "outputs": [{"path": "tmp/walk_01.png"}]}]
+```
+
+The frames stand under the mechanism's fixed link, as the sequence is written: a robot whose ground
+is its pelvis walks in the air.
+
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
 mid-motion. `cad model interference "$ID" --states --motions` measures every pair of parts at
