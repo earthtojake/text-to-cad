@@ -7,9 +7,10 @@ host, waits for the launch, and imports the app (``app.js``, one module of the w
 app) from the engine (``GET /app``, ``app_code``), through the call the host
 carries back or from the engine directly: so a page a host keeps -- by its URI, or
 open across an update -- runs the engine's release, and loads the next one in place
-after an update. The URI carries the engine's release and a hash of the page,
-so a host that caches resources by URI can never pair a new server with an old
-page. Any build's URI reads as the current page: a tab the host restores after an
+after an update. The URI carries the engine's release and a hash of the page
+and of the ``_meta`` served with it (its sandbox, its display preference), so a
+host that caches resources by URI can never pair a new server with an old page,
+nor keep the metadata an earlier page was served with. Any build's URI reads as the current page: a tab the host restores after an
 update gets the current app, which checks the protocol of the launch it was
 restored with.
 
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import json
 import threading
 from pathlib import Path
 
@@ -74,17 +76,23 @@ class AppPage:
     A host that mounts views inline gets the same app with ``<meta name="cad-presentation"
     content="inline">`` in its head: the page reads it before it greets the host, to offer the
     display modes that host has. A host that shows tabs gets the file's bytes, untouched.
+
+    ``meta`` is the resource ``_meta`` served with the page: it is hashed into the build with the
+    page's bytes, so changing what the page is served with changes its URI too.
     """
 
-    def __init__(self, directory: Path | None = None, *, presentation: str | None = None) -> None:
+    def __init__(self, directory: Path | None = None, *, presentation: str | None = None,
+                 meta: dict | None = None) -> None:
         self._directory = directory
         self._presentation = presentation
+        self.meta = meta
         self._lock = threading.Lock()
         self._loaded: tuple[str, str] | None = None
 
-    def presenting(self, presentation: str) -> "AppPage":
-        """This page as served to a host that presents it ``presentation`` (``"inline"``)."""
-        return AppPage(self._directory, presentation=presentation)
+    def presenting(self, presentation: str, meta: dict | None = None) -> "AppPage":
+        """This page as served to a host that presents it ``presentation`` (``"inline"``), with the
+        resource ``_meta`` ``meta``."""
+        return AppPage(self._directory, presentation=presentation, meta=meta)
 
     def _load(self) -> tuple[str, str]:
         with self._lock:
@@ -97,7 +105,10 @@ class AppPage:
                 else:
                     if self._presentation:
                         data = _told(data, self._presentation)
-                    self._loaded = (hashlib.sha256(data).hexdigest()[:16], data.decode("utf-8"))
+                    digest = hashlib.sha256(data)
+                    if self.meta is not None:
+                        digest.update(b"\0" + json.dumps(self.meta, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+                    self._loaded = (digest.hexdigest()[:16], data.decode("utf-8"))
             return self._loaded
 
     @property
@@ -106,9 +117,9 @@ class AppPage:
 
     @property
     def uri(self) -> str:
-        """``ui://cad/<release>/<build>/app.html``: the release the engine runs and a hash of the page, so a
-        host that keys what it caches by the URI (OpenAI's, by its own guidance) never pairs a page with
-        an engine of another release."""
+        """``ui://cad/<release>/<build>/app.html``: the release the engine runs and a hash of the page and
+        its ``_meta``, so a host that keys what it caches by the URI (OpenAI's, by its own guidance;
+        Claude's) never pairs a page with an engine of another release, or with stale metadata."""
         from cad_server import __version__
 
         return f"{_PREFIX}{__version__}/{self.build}{_SUFFIX}"

@@ -37,6 +37,15 @@ class ShellTest(unittest.TestCase):
         self.assertEqual(page.html(), "<!doctype html><title>CAD</title>")
         self.assertTrue(page.owns("ui://cad/0.0.1/0123456789abcdef/app.html"), "any build's shell reads as this one")
 
+    def test_the_uri_changes_with_the_meta_the_page_is_served_with(self) -> None:
+        # A host that caches the resource by URI must see a change to its _meta as a new resource.
+        page = ui.AppPage(self.page)
+        inline = page.presenting("inline", {"ui": {"preferredDisplayMode": "fullscreen", "prefersBorder": False}})
+        self.assertNotEqual(inline.uri, page.presenting("inline").uri)
+        self.assertNotEqual(inline.uri, page.presenting("inline", {"ui": {"prefersBorder": False}}).uri)
+        self.assertEqual(inline.uri, page.presenting("inline", {"ui": {"prefersBorder": False, "preferredDisplayMode": "fullscreen"}}).uri)
+        self.assertEqual(inline.html(), page.presenting("inline").html())
+
     def test_the_engine_serves_its_app_to_the_shell_through_the_card_s_call(self) -> None:
         answer = ViewerTunnel().serve(method="GET", url="http://cad.invalid/app", headers={}, body=b"")
         self.assertEqual(answer["status"], 200, answer)

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@cad/ui/cad-viewer';
 import { version } from '../package.json';
-import App from './App';
+import App, { inlineHeight } from './App';
 import { frameClipboard } from './host/clipboard';
 import type { HostContext } from './host/bridge';
 import type { Launch } from './host/server';
@@ -235,6 +235,26 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe('72px');
   expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-host-bottom-inset')).toBe('');
   // Full size keeps what was on the card: the same view, not a new one.
+  expect(viewer.mounts).toBe(1);
+});
+
+it('a card Claude opens in its side panel starts full size, and back in the chat it is a card of the width it has there', () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen', availableDisplayModes: ['inline', 'fullscreen'] });
+  const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
+    launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
+  // The panel: the page's full height, nothing told of a card's height, no Full size.
+  expect(sized(bridge.notify)).toEqual([]);
+  expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
+  // A newer card replaced it in the panel: back in the chat, at the width its frame has now.
+  const width = window.innerWidth;
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 400 });
+  try {
+    act(() => bridge.change({ displayMode: 'inline' }));
+    expect(sized(bridge.notify)).toEqual([['ui/notifications/size-changed', { height: inlineHeight(400) }]]);
+  } finally {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  }
+  expect(container.querySelector('[aria-label="Full size"]')).not.toBeNull();
   expect(viewer.mounts).toBe(1);
 });
 
