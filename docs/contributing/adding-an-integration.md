@@ -5,7 +5,7 @@ An **integration** is our support for one third-party tool, named for the tool's
 It is three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
-([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 24 to 29); the
+([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 23 to 28); the
 mechanism is the engine README's **Document types and integrations**.
 
 ## Start from the tool
@@ -16,7 +16,7 @@ best for this tool before fitting it to either. Three questions decide most of i
 
 1. **What does the tool already do, and how is it reached?** Its Python API, its command line, its own
    app. All of that stays the tool's: a script imports it, `cad run <its command>` runs it, a person
-   opens its app. We add nothing that renames or repeats it (law 30).
+   opens its app. We add nothing that renames or repeats it (law 29).
 2. **Who looks at its files?** A file cad shows, in the viewer, the CAD app and a snapshot, is a
    document type ([Adding a document type](adding-a-document-type.md)). A file the tool's own app
    shows, which cad only writes or checks, is not: it is the integration's, with at most an operation
@@ -64,7 +64,7 @@ integration's own operation: `cad.mujoco.check(path)`, and `cad mujoco check FIL
 its environment holds mujoco, else in the environment of `cad[mujoco]`, made once by the engine
 (`integration_env`). The registry entry names both: `operations=(Operation("check", ...),)` and
 `files=(".xml", ".mjcf")`. Give an integration an operation only for such a file: one that has a document
-type has its operations there (law 28). A script that imports `mujoco` gets the extra from `cad run`
+type has its operations there (law 27). A script that imports `mujoco` gets the extra from `cad run`
 through the registry entry's `modules`.
 
 How an integration gets installed on a person's computer is covered for a Python library alone: `cad
@@ -122,7 +122,7 @@ an integration.
       is not an integration; if the code is ours for a file format cad shows, it is a document type's.
 - [ ] **The purpose test**, for each helper and each command we add: say what is missing without it.
       One that renames the tool's own function or command, or does again what the tool does, is not
-      added (law 30).
+      added (law 29).
 - [ ] **The name**: the tool's own project name, lowercase, a Python name. Never a capability
       (`fea`, `pcb`, `cam`).
 - [ ] **The extra and its pins**, in `packages/cad/pyproject.toml` (`[project.optional-dependencies]`):
@@ -169,7 +169,7 @@ an integration.
       beside its Python) and never one on `PATH`, its arguments, stdio and exit code the tool's. `cad
       run <command> …` then adds the extra as `--with cad[<name>]` would and runs that module in the
       integration's environment (`cad_server.cli.run`; `cad.kicad._command` is the example). A typed
-      command wraps one only where it adds something (the library's law 30); the skill documents the
+      command wraps one only where it adds something (the library's law 29); the skill documents the
       rest as `cad run <command> …`. Test that the bare command adds the integration, in the unit suite,
       and that it runs, in the job that installs the tool.
 - [ ] **Licensing**: the tool's license allows how we call it (a library we import, a program we run)

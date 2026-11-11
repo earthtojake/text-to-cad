@@ -218,7 +218,7 @@ class Document:
                  size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
                  measurements: Any = None) -> Drawn:
         """``snapshot(handle, out, ...)``: the document drawn into ``out`` (a ``.png``); every option is
-        the ``snapshot`` verb's, about the picture (law 22)."""
+        the ``snapshot`` verb's, about the picture."""
         self._outside("snapshot")
         return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid,
                                     pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon,

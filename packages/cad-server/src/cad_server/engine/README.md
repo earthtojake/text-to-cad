@@ -121,7 +121,7 @@ def hinge():
     return mechanism_state(bd.Compound(children=[base, arm], label="hinge"), "raised", elbow=90)
 ```
 
-A posed or partial file is a function, never an option (law 22): `export` writes the document
+A posed or partial file is a function: `export` writes the document
 as its code built it. `posed(assembly, state)` (`cad.build123d`, beside `mechanism_state`) is a
 copy of the assembly, sharing its geometry, with every part where a mechanism state, or
 `{joint label or coupling name: value}`, puts it -- each link moved by its placement at those
@@ -995,7 +995,7 @@ in. Its structure says how long the parse took and which process made it
 
 ## Document types and integrations
 
-The words are the library README's (**Definitions**, laws 24 to 29); this is how they work.
+The words are the library README's (**Definitions**, laws 23 to 28); this is how they work.
 
 **The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
 `DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an
@@ -1638,7 +1638,7 @@ environment it runs in (`prefix`): the current installation's, which `cad doctor
 
 A document outlives the worker that built it, the engine's memory and the engine itself, and lives
 until a person deletes it (**Delete**; [models.py](models.py), the library's `cad.engine.serve`). What the
-engine knows of a model comes from a run alone (law 23): a run of its script pushes the model's
+engine knows of a model comes from a run alone (law 22): a run of its script pushes the model's
 code, its key and its document, and outside a run the engine reads and watches no script and runs
 nothing -- a file document's bytes, which are the disk, and the registry's records, which runs
 wrote, are no model's code. A document's state (`models.STATES`, what `cad status` lists):
@@ -2310,7 +2310,7 @@ decorator and no build flag draws one.
 
 ### Viewer exports
 
-The browser's Export action writes the displayed document as its code built it (law 22),
+The browser's Export action writes the displayed document as its code built it,
 through `export/viewer.py` and the same worker writer as `cad <type> export`. Its source is the
 displayed document and revision, nothing else (`viewer.exports.specification`: `{doc,
 revision}`); no part, no pose, and nothing of the view -- selection, visibility, Clip, Explode,
@@ -2349,7 +2349,7 @@ result without killing a worker shared with another caller.
 The xbf is the model's result; STEP, GLB, STL, 3MF and DXF are exports of a document, and an
 xbf can be one too. One writer, `export.translate(document, kind, path)`,
 writes every one, whether a decorator declares the file or `cad <type> export` asks for it: the
-same document writes the same bytes. The file holds what the code built (law 22). Every file is written beside its
+same document writes the same bytes. The file holds what the code built. Every file is written beside its
 target and moved over it, and only when its bytes change (`atomic_replace.put`): a target that
 holds them already is left as it is (`cad <type> export` says `unchanged`). In a folder that takes no
 new file (read-only), the bytes are made aside and compared, so an unchanged file passes, and a
@@ -2458,7 +2458,7 @@ changed or new one fails in one line naming the folder and its mode.
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
   error refuses the file, saying which. `export.dxf.validate_dxf_file` runs them on any DXF.
-- **No option selects a part or a state** (law 22): a file of one part is that part's own
+- **No option selects a part or a state**: a file of one part is that part's own
   model (a function returning it), and a posed file a model returning the assembly posed
   (`posed(arm(), "folded")`, `cad.build123d`). Snapshot's `--pose` is the picture's: ad
   hoc, never cached, never declared.
@@ -2493,7 +2493,7 @@ forward kinematics at eight points inside every step.
 **GLB keys.** A bake keys a track where its curve needs it: a motion's every placement on the keys
 its hardest one needs, an animation's eased channel CUBICSPLINE, three values a key. The GLB
 writes each track that is not STEP as LINEAR keys, the fewest within `KEY_MM` (0.1 mm) and
-`KEY_DEGREES` (0.1°) of the bake (`export/keys.py`), constants rather than options (law 22): a
+`KEY_DEGREES` (0.1°) of the bake (`export/keys.py`), constants rather than options: a
 tenth of a millimetre is under a pixel of a 1 m model filling a 4K screen. The bake's curve is
 sampled densely (a CUBICSPLINE step as often as keeps its Hermite within 5% of the tolerance of
 the chord between two samples, so a line that holds the samples holds the curve); from each kept

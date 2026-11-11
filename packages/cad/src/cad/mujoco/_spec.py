@@ -178,7 +178,7 @@ class _source:
                 return thing._transferred()
             return self._shape(thing.shape, thing.name)
         # A build123d shape, known by its type's module and its wrapped TopoDS, never by importing build123d
-        # here: this module imports its own extra alone (law 26), and the shape brings its library with it.
+        # here: this module imports its own extra alone (law 25), and the shape brings its library with it.
         if type(thing).__module__.split(".")[0] == "build123d" and hasattr(thing, "wrapped"):
             return self._shape(thing, thing.__dict__.get("label") or "model")
         raise TypeError(f"spec takes an MJCF, a STEP or an .xbf path, a model call's handle or a build123d shape; "
