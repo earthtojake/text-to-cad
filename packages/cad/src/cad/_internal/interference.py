@@ -2,8 +2,10 @@
 ``cad.step.interference``): which parts of a document share volume.
 
 The engine measures it, in one of its checks processes (``cad.engine.api.check``, by
-``cad.build123d._interference``, whose docstring is the mechanism): every pair of parts whose boxes meet,
-exactly, on the parts' own solids, as built and at each stance asked. This module is the caller's side, the
+``cad.build123d._interference``, whose docstring is the mechanism): every pair of parts whose boxes meet, as
+built and at each stance asked -- ruled out where the two parts' meshes show air between them, else measured
+exactly on the parts' own solids, and each answer kept by the two geometries, so the next check measures only
+what changed. This module is the caller's side, the
 standard library alone, so a command with no kernel asks it too: ``options`` makes what was asked plain data
 and refuses what is no option before anything is read, ``finish`` makes the engine's report the check's
 result (``cad.results.CheckResult``), and ``interference_for`` is each type's function.
@@ -13,7 +15,9 @@ was measured), ``failed`` (a pair does: an ``interference`` finding each, an err
 was found to, but a pair could not be measured -- an ``unmeasured`` finding each -- so the document is not
 shown clear; its ``reason`` is ``unmeasured``). A named fit that shares volume is an ``info`` finding
 (``fit``). ``measurements`` is the report whole: ``stances``, ``pairs``, and every row of
-``interferences``, ``fits`` and ``unmeasured``.
+``interferences``, ``fits`` and ``unmeasured``; ``pairs`` says how the pairs whose boxes met were answered
+(``apart`` by their meshes, ``kept`` from an earlier check, ``measured`` by the kernel now) and ``slowest`` the
+measurements that took longest.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ from cad._internal.refused import ArgumentRefused
 __all__ = ["finish", "interference_for", "options"]
 
 SAMPLES = 12
-PAIR_SECONDS = 60.0
+PAIR_SECONDS = 300.0
 SECONDS = 1200.0
 # The findings of each kind a result lists before it counts the rest (``measurements`` has every row).
 _ROWS = 40
@@ -54,7 +58,7 @@ def options(*, poses: Any = (), states: bool = False, motions: Any = (), samples
     is read as one); ``states``: every mechanism state too. ``motions``: configuration sequences by
     name, or ``"all"``; ``samples``: the stances taken of each, its two ends among them. ``fits``:
     the pairs meant to share volume, each two refs or globs (``("pin", "base")``, ``"bearing*,housing"``).
-    ``jobs``: the processes that measure (by default half the cores, four at most); ``pair_seconds``:
+    ``jobs``: the processes that measure (by default one a core, four at most); ``pair_seconds``:
     how long one pair may take before it is stopped and reported unmeasured; ``seconds``: how long the
     whole check may, the pairs not reached then unmeasured; ``min_volume``: a shared volume (mm3) at or
     below it is none."""
@@ -147,10 +151,15 @@ def finish(label: Path, checked: dict[str, Any], resolved: dict[str, Any]) -> An
            lambda row: f"shares {_volume(row['volume'])} mm^3 with {row['b']}, the fit {row['fit']} ({_at(row)})",
            lambda row: row["volume"], "mm3", "")
     pairs, stances = report["pairs"], report["stances"]
+    # How each pair whose boxes met was answered: ruled out by the two surfaces, read from an earlier check's
+    # measurements, or measured by the kernel now.
+    how = [f"{pairs[name]:,} {said}" for name, said in (("apart", "with air between them"),
+                                                         ("kept", "kept from earlier checks"),
+                                                         ("measured", "measured")) if pairs.get(name)]
     looked = (f"{report['parts']} part{'' if report['parts'] == 1 else 's'} at {len(stances)} "
               f"stance{'' if len(stances) == 1 else 's'}, the boxes of {pairs['boxes_meet']:,} "
-              f"pair{'' if pairs['boxes_meet'] == 1 else 's'} met, {pairs['measured']:,} "
-              f"measurement{'' if pairs['measured'] == 1 else 's'} in {report['seconds']:g} s"
+              f"pair{'' if pairs['boxes_meet'] == 1 else 's'} met{': ' + ', '.join(how) if how else ''}, "
+              f"in {report['seconds']:g} s"
               + (", kept from the last check of this document" if checked.get("reused") else ""))
     shared, missed = len(report["interferences"]), len(report["unmeasured"])
     if shared:
@@ -190,17 +199,20 @@ def interference_for(document_type: str) -> Any:
     interference.__module__ = f"cad.{document_type}"
     interference.__doc__ = f"""cad.{document_type}.interference: which parts of the document share volume.
 
-Every pair of parts whose boxes meet is measured exactly by the kernel on the parts' own solids, as built
-and at each stance asked, in one of the engine's checks processes. Nothing is built, meshed or written, and
-the same check of an unchanged document is answered from the result the engine keeps: one that measured
-every pair. A check that left a pair unmeasured is not kept, and measures again when asked again.
+Every pair of parts whose boxes meet is answered, as built and at each stance asked, in one of the engine's
+checks processes: a pair whose meshes show air between the two parts shares nothing, and every other is measured
+exactly by the kernel on the parts' own solids. Each answer is kept in the engine's cache by the two parts'
+geometries and how one stands to the other, so a document edited is measured again only where a part that changed
+is one of the two, and a check stopped by its time goes on from what it had measured. Nothing is built or
+written, and the same check of an unchanged document is answered at once from the result the engine keeps: one
+that answered every pair.
 
 ``poses``: mechanism states' names or ``{{joint or coupling: value}}`` tables to stand at beside as built;
 ``states``: every mechanism state; ``motions``: configuration sequences by name, or ``"all"``, each at
 ``samples`` stances (12 by default, its two ends among them). ``fits``: the pairs meant to share volume (a
 press-fit pin, a bearing in its bore), each two refs or globs (``("pin", "base")``, ``"bearing*,housing"``):
-listed apart, and no interference. ``jobs``: the processes that measure (half the cores by default, four at
-most; each holds a kernel); ``pair_seconds``: one pair's limit (60), past which it is stopped and reported
+listed apart, and no interference. ``jobs``: the processes that measure (one a core by default, four at
+most; each holds a kernel); ``pair_seconds``: one pair's limit (300), past which it is stopped and reported
 unmeasured; ``seconds``: the whole check's (1200), the pairs not reached unmeasured; ``min_volume``: a shared
 volume at or below it (mm3) is none.
 

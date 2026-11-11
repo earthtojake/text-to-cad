@@ -79,7 +79,7 @@ class CommandTest(unittest.TestCase):
         lines = found.stdout.splitlines()
         self.assertRegex(lines[0], r"^error: interference at kit/base: shares [\d.]+ mm\^3 with kit/press \(as built\)")
         self.assertRegex(lines[-1], r"^FAILED kit: 1 pair of parts share volume \(5 parts at 1 stance, the boxes of \d+ "
-                                    r"pairs? met, \d+ measurements? in [\d.]+ s\)$")
+                                    r"pairs? met: \d+ measured, in [\d.]+ s\)$")
 
         # Named a fit, it is listed apart and the kit is clear: status 0. Asked again, nothing is measured.
         clear = self.check("--fit", "press,base", "--json")

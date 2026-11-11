@@ -307,11 +307,11 @@ def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentPars
                         help="two parts meant to share volume (a press-fit pin, a bearing in its bore), each a "
                              "ref or a glob: their overlap is listed as a fit and is no interference. Repeatable")
     parser.add_argument("--jobs", type=int, metavar="N",
-                        help="the processes that measure (default: half the cores, four at most); each holds a "
+                        help="the processes that measure (default: one a core, four at most); each holds a "
                              "kernel")
     parser.add_argument("--pair-seconds", type=float, metavar="S",
                         help="how long one pair may take before it is stopped and reported unmeasured "
-                             "(default 60)")
+                             "(default 300)")
     parser.add_argument("--seconds", type=float, metavar="S",
                         help="how long the whole check may take, the pairs not reached reported unmeasured "
                              "(default 1200; the engine stops any check at CAD_ENGINE_CHECK_SECONDS, 1800 by "

@@ -1124,10 +1124,21 @@ beside a process's (`checks_runner.INTERFERENCE`) and the checks process hands t
 check's whole life -- a slot of the pool, the limits, the kept result by the document's version and the options,
 `superseded` when the model is built again. What it measures: each stance is every part's placement (as built,
 or the mechanism's forward kinematics at a pose or at a sample of a sequence); the pairs whose boxes meet there
--- each part's tight box, turned with the part -- are measured by `overlap_volume` on the parts' own solids, once
+-- each part's tight box, turned with the part -- are answered once
 for each way two parts stand to one another, so the copies of a part and the parts no stance moves cost one
-measurement. The pairs are measured in a few processes the checks process starts for the check (`--jobs`: half
-the cores, four at most, each a kernel of its own, outside the memory the engine's rule counts), because a
+answer. An answer is read from what was kept, else ruled out by the two parts' meshes, else measured. **Kept**:
+each answer is written to the cache (`<cache>/interference`) under the two parts' geometry keys and the
+placement of one in the other's frame, as it is made, with each geometry's tight box; so a model built again is
+measured only where a part that changed is one of the two, a check stopped by its time goes on from what it had
+measured, and a check that left a pair unmeasured is not kept whole (`partial`), so it is asked again. **Ruled
+out**: the kernel takes seconds over a pair and minutes over a maker's drive beside a lofted cover, and most pairs
+whose boxes meet have air between them, so the two parts are meshed (0.05 mm at most) and asked of the kernel's
+own proximity test (`BRepExtrema_ShapeProximity`: a tree of each mesh's triangles); with no triangle of one
+within the two meshes' deflections of the other's, and no shell of either inside a solid of the other, they share
+nothing. **Measured**: every other pair, by `overlap_volume` on the parts' own solids, the pairs of the fewest
+faces first. The pairs are measured in a few processes the checks process starts for the check (`--jobs`: one a
+core, four at most, each a kernel of its own, outside the memory the engine's rule counts, each ending the moment
+the checks process does), because a
 Boolean cannot be stopped from inside: a pair past its time (`--pair-seconds`) has its process killed and is
 answered **unmeasured**, as is one whose process exited, one the kernel refused and every pair not reached
 within the check's own time (`--seconds`, kept under `CAD_ENGINE_CHECK_SECONDS`). The result is a

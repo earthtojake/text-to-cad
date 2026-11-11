@@ -414,7 +414,9 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
 ```
 
 - In an assembly, nothing interferes when no two parts share volume apart from fits named on purpose.
-  `cad model interference "$ID"` measures every pair whose boxes meet, exactly, on the parts' own solids:
+  `cad model interference "$ID"` answers every pair whose boxes meet, exactly, on the parts' own solids
+  (a pair with air between its parts is ruled out first, and each answer is kept, so after an edit only the
+  pairs of what changed are measured):
   as built, and with `--states`, `--pose` and `--motions` where the mechanism puts them. Name a fit
   (`--fit pin,base`), and read what it could not measure: status 3 is not clear
   ([interference](references/inspection-and-validation.md#interference)). `overlap_volume` is the same

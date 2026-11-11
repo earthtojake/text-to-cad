@@ -1,10 +1,13 @@
 """The interference check's measuring (``cad.build123d._interference``): every pair of a document's parts
 whose boxes meet, measured exactly, as built and posed -- held to what it exists for: a plate planted through
 a thin skin is found, one 0.3 mm clear of it and a pin in its bore are not, a named fit is listed apart, and a
-pair that could not be measured is said, never passed."""
+pair that could not be measured is said, never passed. And to what makes it quick: a pair with air between its
+two parts is ruled out without the kernel, a part swallowed whole is not, and a measurement is kept by its two
+geometries, so a document edited measures again only the pairs of the part that changed."""
 
 from __future__ import annotations
 
+import copy
 import os
 import shutil
 import sys
@@ -58,6 +61,35 @@ def arm():
     return configuration_sequence(kit, "swing", sweep={"elbow": (0, 30)}, duration=2.0)
 """
 
+CASE = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/case.xbf")
+def case():
+    def part(label, shape):
+        shape.label = label
+        return shape
+
+    cover = part("cover", bd.Box(40, 40, 40) - bd.Box(36, 36, 36))          # hollow
+    core = part("core", bd.Box(10, 10, 10))                                  # in its cavity, 13 mm of air all round
+    block = part("block", bd.Pos(100, 0, 0) * bd.Box(30, 30, 30))
+    slug = part("slug", bd.Pos(100, 0, 0) * bd.Box(4, 4, 4))                 # drawn inside the solid block
+    return bd.Compound(children=[cover, core, block, slug], label="case")
+"""
+
+
+def _built(folder: Path, name: str, source: str) -> tuple[dict, list]:
+    """A model's document, built in ``folder`` and read: its structure and its prototypes' shapes."""
+    script = folder / f"{name}.py"
+    script.write_text(textwrap.dedent(source), encoding="utf-8")
+    os.utime(script, ns=(time.time_ns(), time.time_ns()))
+    report = engine_build.build(script, [name], cwd=folder)[0]
+    assert report["ok"], report.get("error")
+    loaded = document.Loaded(folder / f"XBF/{name}.xbf")
+    return loaded.structure(), [prototype.shape for prototype in loaded.prototypes]
+
 
 class MeasureTest(unittest.TestCase):
     @classmethod
@@ -68,13 +100,7 @@ class MeasureTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, ignore_errors=True)
         memo.install()
         cls.addClassCleanup(memo.clear)
-        script = cls.folder / "arm.py"
-        script.write_text(textwrap.dedent(ARM), encoding="utf-8")
-        os.utime(script, ns=(time.time_ns(), time.time_ns()))
-        report = engine_build.build(script, ["arm"], cwd=cls.folder)[0]
-        assert report["ok"], report.get("error")
-        loaded = document.Loaded(cls.folder / "XBF/arm.xbf")
-        cls.structure, cls.shapes = loaded.structure(), [prototype.shape for prototype in loaded.prototypes]
+        cls.structure, cls.shapes = _built(cls.folder, "arm", ARM)
 
     def measure(self, **given) -> dict:
         return _interference.measure(self.structure, self.shapes, asked.options(jobs=2, **given))
@@ -102,6 +128,44 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual((late["pairs"]["measured"], len(late["unmeasured"])), (0, late["pairs"]["boxes_meet"]))
         # Such a report is partial, which the engine does not keep; one fully measured is kept.
         self.assertEqual((late["partial"], found["partial"]), (True, False))
+
+    def test_air_between_two_parts_is_no_measurement_and_a_part_swallowed_whole_is_one(self) -> None:
+        structure, shapes = _built(self.folder, "case", CASE)
+        found = _interference.measure(structure, shapes, asked.options(jobs=1))
+        # Both pairs' boxes meet. The core stands in its cover's cavity, no surface of one near the other's and
+        # neither inside the other's solid: ruled out by the two meshes, the kernel never asked. The slug's surface is
+        # as far from its block's, and it lies in the block's solid: the kernel's, which finds all of it.
+        self.assertEqual(found["pairs"], {"boxes_meet": 2, "distinct": 2, "kept": 0, "apart": 1, "measured": 1})
+        (shared,) = found["interferences"]
+        self.assertEqual(sorted((shared["a"], shared["b"])), ["case/block", "case/slug"])
+        self.assertAlmostEqual(shared["volume"], 4 ** 3, places=6)
+        self.assertEqual(found["unmeasured"], [])
+
+    def test_a_measurement_is_kept_by_its_two_geometries_so_an_edit_measures_its_own_pairs_alone(self) -> None:
+        kept = self.folder / "kept"
+        options = asked.options(jobs=2)
+        first = _interference.measure(self.structure, self.shapes, options, kept=kept)
+        self.assertEqual((first["pairs"]["kept"], first["pairs"]["apart"] + first["pairs"]["measured"]),
+                         (0, first["pairs"]["distinct"]))
+        # Asked again, of this document or another holding the same parts so: every answer read, nothing measured.
+        again = _interference.measure(self.structure, self.shapes, options, kept=kept)
+        self.assertEqual((again["pairs"]["kept"], again["pairs"]["apart"], again["pairs"]["measured"]),
+                         (first["pairs"]["distinct"], 0, 0))
+        self.assertEqual(self.pairs(again["interferences"]).keys(), self.pairs(first["interferences"]).keys())
+        # One part edited is another geometry, so another key: its pairs are measured, every other read.
+        edited = copy.deepcopy(self.structure)
+        (skin,) = [prototype for prototype in edited["prototypes"] if prototype["name"] == "skin"]
+        skin["key"] = "0" * 32
+        third = _interference.measure(edited, self.shapes, options, kept=kept)
+        mine = sum(1 for row in first["interferences"] if "arm/skin" in (row["a"], row["b"]))
+        self.assertGreaterEqual(third["pairs"]["apart"] + third["pairs"]["measured"], max(1, mine))
+        self.assertEqual(third["pairs"]["kept"] + third["pairs"]["apart"] + third["pairs"]["measured"],
+                         first["pairs"]["distinct"])
+        self.assertGreater(third["pairs"]["kept"], first["pairs"]["distinct"] / 2)
+        # A check out of time measures nothing and keeps nothing new; what it had kept is still read.
+        late = _interference.measure(self.structure, self.shapes, {**options, "seconds": 1e-9}, kept=kept)
+        self.assertEqual((late["pairs"]["kept"], late["pairs"]["measured"], late["unmeasured"]),
+                         (first["pairs"]["distinct"], 0, []))
 
     def test_a_named_fit_is_listed_apart_and_what_names_nothing_is_refused(self) -> None:
         found = self.measure(fits=["press,base"])
@@ -221,7 +285,7 @@ class OptionsTest(unittest.TestCase):
     def test_what_is_asked_is_plain_data_and_what_is_no_option_is_refused_by_name(self) -> None:
         found = asked.options(poses=['{"elbow": 30}', "down"], motions="all", fits=["pin,base", ("a*", "b")], jobs=3)
         self.assertEqual(found, {"poses": [{"elbow": 30}, "down"], "states": False, "motions": "all",
-                                 "fits": [["pin", "base"], ["a*", "b"]], "samples": 12, "pair_seconds": 60.0,
+                                 "fits": [["pin", "base"], ["a*", "b"]], "samples": 12, "pair_seconds": 300.0,
                                  "seconds": 1200.0, "min_volume": 0.0, "jobs": 3})
         for given, words in (({"fits": ["pin"]}, "a fit is the two parts meant to share volume, as A,B"),
                              ({"samples": 1}, "samples is a number of 2 or more"),

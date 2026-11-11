@@ -364,9 +364,9 @@ usually a sliver a boolean left.
 ## Interference
 
 `cad model interference "$ID"` (`cad xbf interference FILE`, `cad step interference FILE`) says which
-parts of a document share volume. Every pair of parts whose boxes meet is measured exactly by the
-kernel, on the parts' own solids, never on a mesh, so a plate through a 2.6 mm skin is found and a
-part 0.3 mm from another is not:
+parts of a document share volume. The verdict is the kernel's, exact, on the parts' own solids, so a
+plate through a 2.6 mm skin is found and a part 0.3 mm from another is not. A mesh only rules out the
+pairs with air between them, which need no kernel:
 
 ```bash
 cad model interference "$ID"                                  # as built
@@ -380,14 +380,21 @@ $ cad model interference "$ID" --states
 error: interference, 2 place(s). Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A,B)
   arm/bar: shares 739 mm^3 with arm/stop (pose down)
   arm/base: shares 125.7 mm^3 with arm/pin (as built, pose down)
-FAILED arm: 2 pairs of parts share volume (5 parts at 2 stances, the boxes of 6 pairs met, 4 measurements in 2.1 s)
+FAILED arm: 2 pairs of parts share volume (5 parts at 2 stances, the boxes of 6 pairs met: 2 with air between them, 4 measured, in 2.1 s)
 ```
 
 - **The status is the verdict**: 0 clear, 1 a pair shares volume, 3 none found but a pair could not
-  be measured, which is no pass. A pair is unmeasured when its Boolean ran past `--pair-seconds` (60),
+  be measured, which is no pass. A pair is unmeasured when its Boolean ran past `--pair-seconds` (300),
   when the kernel refused it, or when the whole check ran past `--seconds` (1200): give it longer, or
   measure that pair in a check of its own. `--json` is the result whole (`measurements.interferences`,
   `.fits`, `.unmeasured`, each row two occurrence paths).
+- **The first check of an assembly is the slow one.** Each pair's answer is kept by the two parts'
+  geometries and how one stands to the other, so the next check measures only the pairs of a part that
+  changed, a check stopped by its time goes on from where it stopped when asked again, and `--states`
+  after a check as built measures the moving pairs alone. The summary says how the pairs were answered
+  (`with air between them`, `kept from earlier checks`, `measured`), and `measurements.slowest` names the
+  pairs that took longest: two large lofted surfaces in contact over their whole area take the kernel
+  minutes (a 700-part humanoid: ten minutes the first time on four cores, most of it eight such pairs).
 - **A stance is every part where the mechanism puts it.** `--pose` takes a mechanism state's name or
   `{joint or coupling: value}`; `--states` every state; `--motion NAME` (or `--motions`) samples a
   configuration sequence at `--samples` times, its two ends among them. What a stance does not move
