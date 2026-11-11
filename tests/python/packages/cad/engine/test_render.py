@@ -457,6 +457,19 @@ class HeldTest(unittest.TestCase):
         self.assertTrue((found[model].astype(int) <= bare[model].astype(int) + 1).all(), "tone mapping adds no light")
         self.assertLess(found[model].mean(), bare[model].mean() - 2)
         np.testing.assert_array_equal(scene.canvas.frame(), bare, "the studio is put back behind the model")
+        self.assertIsNone(scene._through(), "from above, the floor is behind the model")
+        # From under the floor the model is seen through it (the viewer draws its floor from both sides), and
+        # the curve changes the picture by the share of the model's light the floor lets through.
+        from cad.engine.render.occt import FLOOR_OPACITY
+
+        self.draw(display={}, preview=True, camera="bottom")
+        bare, through = scene.canvas.frame(), scene._through()
+        self.assertEqual(through.shape, (*bare.shape[:2], 1))
+        model = scene._tone().any(-1)
+        self.assertTrue(model.any())
+        self.assertLessEqual(float(through[model].max()), 1 - FLOOR_OPACITY + 0.02, "no more than the floor passes")
+        self.assertGreater(float(through[model].max()), 0.2)
+        np.testing.assert_array_equal(scene.canvas.frame(), bare, "the model and its studio are put back")
 
     def test_a_new_version_s_scenes_are_new_and_draw_as_the_last_did(self) -> None:
         """A version replaced: its scenes let go of whole between pictures and made again, and

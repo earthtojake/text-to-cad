@@ -1290,30 +1290,69 @@ class Scene:
             cover = np.clip((ratio * weight).sum(-1) / np.maximum(weight.sum(-1), 1e-9), 0, 1)[:, None]
             drawn[touched] = np.rint((ink * cover + under * (1 - cover)) * 255).astype(np.uint8)
 
-    def _tone(self) -> np.ndarray:
-        """What Preview's tone mapping adds to a frame of the view, in linear light (height, width, 3).
-        The viewer tone-maps what it draws (``neutral``); OCCT's raster does not, and the studio around
-        the model is drawn in the colours the viewer's comes out in. So the model is drawn alone twice
-        (on black, then on white, the floor and its shadow put away), each pixel's cover and colour are
-        read from the two as a picture on nothing reads them (``service.matte``), and what tone mapping
-        changes that colour by, at that cover, is what a frame gains: nothing where no model is. A
-        frame holds no light past 1, so a highlight comes out the tone a full white does."""
+    def _on_black_and_white(self) -> tuple[np.ndarray, np.ndarray]:
+        """The view drawn on black and then on white, each in linear light; its own backdrop is put
+        back behind it after."""
         behind = self.behind
-        for structure in self.stage:
-            structure.Erase()
         try:
             frames = []
             for colour in ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)):
                 self.backdrop(colour)
                 frames.append(_LINEAR[self.canvas.frame()])
         finally:
+            self.backdrop(behind)
+        return frames[0], frames[1]
+
+    def _through(self) -> np.ndarray | None:
+        """The share of the model's light the studio lets through to the camera, a pixel (height,
+        width, 1), for a camera under the floor, which sees the model through it (the viewer's floor
+        is drawn from both sides); None from anywhere else, where the floor is behind the model. The
+        studio is drawn alone on black and on white -- a plane under everything cuts the model away,
+        and no plane cuts the studio (``_structure``) -- and what of the white shows is what it lets
+        through."""
+        from OCP.Graphic3d import Graphic3d_ClipPlane
+        from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
+
+        camera = self.camera or {}
+        if not self.stage or "eye" not in camera:
+            return None
+        place = self._studio_place()
+        eye, target = camera["eye"], camera["target"]
+        # In perspective what the eye sees starts at the eye; an orthographic view looks along its
+        # direction from as far back as the scene reaches.
+        under = eye[2] < place["z"] if camera.get("projection") == "perspective" else eye[2] < target[2]
+        if not under:
+            return None
+        nothing = Graphic3d_ClipPlane(gp_Pln(gp_Pnt(0, 0, place["z"] - place["radius"]), gp_Dir(0, 0, -1)))
+        view = self.canvas.view
+        view.AddClipPlane(nothing)
+        try:
+            black, white = self._on_black_and_white()
+        finally:
+            view.RemoveClipPlane(nothing)
+        return np.clip((white - black).mean(-1, keepdims=True), 0.0, 1.0)
+
+    def _tone(self) -> np.ndarray:
+        """What Preview's tone mapping adds to a frame of the view, in linear light (height, width, 3).
+        The viewer tone-maps what it draws (``neutral``); OCCT's raster does not, and the studio around
+        the model is drawn in the colours the viewer's comes out in. So the model is drawn alone twice
+        (on black, then on white, the floor and its shadow put away), each pixel's cover and colour are
+        read from the two as a picture on nothing reads them (``service.matte``), and what tone mapping
+        changes that colour by, at that cover, is what a frame gains: nothing where no model is, and
+        under the floor the share of it the floor lets through (``_through``). A frame holds no light
+        past 1, so a highlight comes out the tone a full white does."""
+        for structure in self.stage:
+            structure.Erase()
+        try:
+            black, white = self._on_black_and_white()
+        finally:
             for structure in self.stage:
                 structure.Display()
-            self.backdrop(behind)
-        black, white = frames
         cover = np.clip(1.0 - (white - black).mean(-1, keepdims=True), 0.0, 1.0)
         colour = np.clip(black / np.maximum(cover, 1e-6), 0.0, 1.0)
-        return (cover * (neutral(colour) - colour)).astype(np.float32)
+        gained = cover * (neutral(colour) - colour)
+        through = self._through()
+        return (gained if through is None else gained * through).astype(np.float32)
 
     def painter(self) -> Any:
         """What paints over the finished frame (sRGB bytes, in place): the text marks as three lays

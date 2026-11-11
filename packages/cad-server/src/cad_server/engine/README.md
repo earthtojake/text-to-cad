@@ -2160,7 +2160,8 @@ viewer's studio (its backdrop sweep, its floor at the model's lowest point, the 
 viewer bakes it), and tone-mapped as the viewer tone-maps (three's Neutral: OCCT's raster has no tone
 mapping, so the model is drawn alone on black and on white, its cover and colour read from the two, and
 what the curve changes laid over the model's pixels -- `occt.Scene._tone`; the studio, drawn in the
-viewer's finished colours, is untouched). It is not the viewer's picture pixel for pixel, and no browser
+viewer's finished colours, is untouched, and a camera under the floor, which sees the model through it,
+takes the share of that change the floor lets through). It is not the viewer's picture pixel for pixel, and no browser
 draws it: a frame holds no light past 1, so a highlight comes out the tone a full white does; there is no
 ambient occlusion and no reflection in the floor; glass is drawn at its preview alpha; and OCCT's baked
 reflections read lighter on a polished metal. The first Preview of a document bakes its light (seconds).
