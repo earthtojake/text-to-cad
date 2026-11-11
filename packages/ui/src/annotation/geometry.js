@@ -1,5 +1,6 @@
 import { getStrokePoints } from "perfect-freehand";
 import { FILL_ANALYSIS_MAX_DIMENSION, FILL_CONNECT_GAP_PX, findFillRegion, pairNearbyBoundaryEndpoints } from "@cad/core/lib/annotation/fillRegion.js";
+import { pointInPolygon, polygonTouchesBox, polylineTouchesBox } from "@cad/core/lib/viewer/boxSelect.js";
 
 // Ink on the screen: what each Annotate tool puts down, as marks in CSS pixels from the viewport's
 // top-left — a stroke (a polyline of a width), an area (a filled polygon:
@@ -190,14 +191,7 @@ function segmentDistance(point, a, b) {
   const t = length ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length)) : 0;
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
 }
-function inside(point, polygon) {
-  let hit = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const a = polygon[i], b = polygon[j];
-    if ((a.y > point.y) !== (b.y > point.y) && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x) hit = !hit;
-  }
-  return hit;
-}
+const inside = (point, polygon) => pointInPolygon(point.x, point.y, polygon);
 
 /**
  * A point inside a closed outline on the screen, where a fill of it is seeded: its centroid, or, for
@@ -237,6 +231,18 @@ export function withGroups(ids, items) {
 /** The ink within `radius` pixels of `point`, nearest last-drawn first: what a press there takes. */
 export function annotationAt(point, inks, radius = 6) {
   return inks.filter(ink => annotationDistance(point, ink) <= radius).reverse();
+}
+
+/**
+ * The ink a box under Select takes (`@cad/core/lib/viewer/boxSelect.js`, in the inks' pixels): any it
+ * touches, even in part -- a stroke along its line at its drawn width, an area or a text mark anywhere
+ * over what it covers. In drawing order; `withGroups` adds what was drawn with it.
+ */
+export function annotationsInBox(box, inks) {
+  const radius = ink => (ink.kind === "stroke" ? ink.width / 2 : 0);
+  return inks.filter(ink => (ink.kind !== "stroke" && ink.points.length >= 3
+    ? polygonTouchesBox(box, ink.points)
+    : polylineTouchesBox(box, ink.points, { closed: ink.closed || ink.kind !== "stroke", radius: radius(ink) })));
 }
 
 /**

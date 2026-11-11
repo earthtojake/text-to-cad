@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@cad/core/common/inspectEnvironment.js";
 import { resolveCadGridSettings } from "@cad/core/common/cadInk.js";
 import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@cad/core/common/sceneSettings.js";
+import { boxFromDrag } from "@cad/core/lib/viewer/boxSelect.js";
 import { applySceneRig, sceneRigFor } from "@cad/core/lib/viewer/sceneRig.js";
 import {
   CAMERA_PROJECTION, normalizeCameraProjection, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot
@@ -47,7 +48,7 @@ import LoadingIndicator from "../status/LoadingIndicator.js";
 import AnnotationOverlay from "../tools/annotate/AnnotationOverlay.jsx";
 import { useSceneEffects } from "../tools/model-effects/useSceneEffects.js";
 import { TOUCH_HIT_PX, prefersCoarsePointer } from "../viewport/dom.js";
-import { annotationAt } from "../../../annotation/geometry.js";
+import { annotationAt, annotationsInBox } from "../../../annotation/geometry.js";
 import { annotationWorldPoints, annotationsOnScreen, mountAnnotations } from "../tools/annotate/annotation3d.js";
 import { createViewerRenderStateResolver } from "../view-settings/renderState.js";
 import { shareSettingsValue } from "../view-settings/shareSettingsValue.js";
@@ -507,6 +508,17 @@ const ShellViewport = forwardRef(function ShellViewport({
       const rect = element.getBoundingClientRect();
       const screen = annotationsOnScreen(runtime, marks, { width: rect.width, height: rect.height });
       return annotationAt({ x: clientX - rect.left, y: clientY - rect.top }, screen, pointerType === "touch" ? TOUCH_HIT_PX : undefined)[0]?.id ?? null;
+    },
+    // The annotation's marks Box select's box touches (`box`: client pixels), by their ids, in drawing
+    // order. Ink behind the eye is not there.
+    annotationsInBox(box) {
+      const runtime = runtimeRef.current, element = runtime?.renderer?.domElement;
+      const marks = annotationRef.current?.items;
+      if (!runtime || !element || !marks?.length || !box) return [];
+      const rect = element.getBoundingClientRect();
+      const screen = annotationsOnScreen(runtime, marks, { width: rect.width, height: rect.height });
+      const local = boxFromDrag({ x: box.left - rect.left, y: box.top - rect.top }, { x: box.right - rect.left, y: box.bottom - rect.top });
+      return annotationsInBox(local, screen).map(ink => ink.id);
     },
     // The camera as a snapshot job says it, and the viewport's size: a prompt's view
     // (`annotation/views.js`), including the actual projection and lens. The equivalent half-height

@@ -57,8 +57,6 @@ const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge, netE
   copperZone: `rgba(${rgb}, 0.18)`,
   // A text's, a dimension's value's and an area's box: lit, and the board still read through it.
   box: `rgba(${rgb}, 0.16)`,
-  // The box being dragged: lighter still, so the board under it reads while it is drawn.
-  draft: `rgba(${rgb}, 0.1)`,
   placementFront: "rgba(200, 52, 52, 0.9)",
   placementBack: "rgba(77, 127, 196, 0.9)",
   placementHole: "#000000",
@@ -271,16 +269,6 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
 }
 
 /**
- * The box an area is being dragged over, page millimetres, under the highlights: KiCad's window
- * selection, a translucent rectangle in a solid outline (what an area names is what lies wholly
- * inside it, as KiCad's left-to-right box takes).
- */
-function draftBox(ctx, view, box, color, fill) {
-  const [x0, y0, x1, y1] = box;
-  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1.5, fill });
-}
-
-/**
  * The overlay for one frame. `transform` maps page millimetres to CSS pixels; the context is set to
  * `pixelRatio` here. `dim`: the rest of the board steps back, washed in `colors.dim` (a net in focus;
  * an isolation hands its heavier `isolatedDim` as `dim`): the whole pane, or only `dimArea`, the board's
@@ -294,11 +282,10 @@ function draftBox(ctx, view, box, color, fill) {
  *   placement?: boolean }} frame
  *   `mirrorX`: the page x the board is mirrored about (the view from the bottom), or null.
  *   `placement`: a board's Placement display, its pads and airwires drawn here.
- *   `draft`: the page box an area is being dragged over (a drag under Select), or null.
  *   `dimArea`: the board's outline rings (page millimetres) the dim is laid on, or null for the whole pane.
  */
 export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width, height, hover = null, selection = [], dim = false,
-  mirrorX = null, colors = null, placement = false, draft = null, dimArea = null }) {
+  mirrorX = null, colors = null, placement = false, dimArea = null }) {
   if (!ctx || !index || !transform || !(transform.scale > 0)) return;
   colors = { ...BOARD_OVERLAY_COLORS, ...colors };
   const view = createView(transform, { width, height, mirrorX });
@@ -321,7 +308,6 @@ export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width,
     } else ctx.fillRect(0, 0, width, height);
   }
   pageSpace(ctx, view, pixelRatio);
-  if (draft) draftBox(ctx, view, draft, colors.selection, colors.draft);
   // What is selected is outlined (a net's copper: `colors.netEdge`), so it reads against the stepped-back board.
   for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25, edge: colors.netEdge });
   if (placement) {

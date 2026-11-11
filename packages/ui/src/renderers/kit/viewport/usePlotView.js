@@ -1,9 +1,9 @@
 /**
  * The canvas a plot is painted on — a board, a schematic's sheet (`@cad/core`'s `plot2d`): every flat
  * view's (`useFlatCanvasView.js` — a mouse's wheel or a pinch to zoom about the pointer, a trackpad's
- * two-finger scroll to pan, double-click to fit, a tap, a drag and the pointer resting over it for the tool in hand, and
+ * two-finger scroll to pan, double-click to fit, a tap and the pointer resting over it for the tool in hand, and
  * the 3D views' pans: the middle or the right button's drag, or a drag with Ctrl, Cmd or Shift; a drag
- * the tool does not take pans too), painting the plot from the rasters kept of it (`plotRasters.js`) on
+ * Select's box does not take pans too, `controls`), painting the plot from the rasters kept of it (`plotRasters.js`) on
  * the pane's surround, then what the tools draw over it (`overlay`), in the same frame, so a capture of
  * the canvas holds it too.
  *
@@ -35,13 +35,12 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {(ctx: CanvasRenderingContext2D, frame: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
- * @param {Parameters<typeof useFlatCanvasView>[0]["onDrag"]} [options.onDrag]  Select's box.
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDoubleTap"]} [options.onDoubleTap]  A double-click the tool takes (a sheet entered), else the fit.
  * @param {boolean} [options.paused]  The pane is covered (its picture shown another way meanwhile): its rasters
  *   are let go and nothing is painted, until it is uncovered; the view, the capture and the card's picture stay.
  */
 export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
-  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, paused = false }) {
+  onTap = null, onHover = null, onDoubleTap = null, paused = false }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const surroundRef = useRef(surround);
@@ -62,7 +61,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
   }, []);
   // The fit, as its first view and a double-click take it: a board's margin, clear of the tool strip.
   const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
-    fitBox: fitBoardBounds, clearStrip: true, onDrag, onDoubleTap, middlePan: true, orbitPan: true });
+    fitBox: fitBoardBounds, clearStrip: true, onDoubleTap, middlePan: true, orbitPan: true });
   const { requestPaint, paintNow, encode } = view;
 
   // One raster cache per plot, view and theme: a new revision, a new set of layers or a switch of
@@ -119,7 +118,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     return Object.assign(light, { dark });
   }, [noun]);
 
-  return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame, setView: view.setView, zoom: view.zoom,
+  return { containerRef: view.containerRef, canvasRef: view.canvasRef, controls: view.controls, dragging: view.dragging, fit: view.fit, frame: view.frame, setView: view.setView, zoom: view.zoom,
     capture, thumbnail, settle,
     transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }
