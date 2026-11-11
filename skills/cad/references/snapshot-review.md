@@ -200,7 +200,9 @@ A SRC given is drawn in place of every job's input, and any other flag overrides
 every job. A job's `output` settings finish its pictures: `padding` (0 to 0.15 of
 the picture each side) and `tightFrame` frame a fitted camera (a view's own camera
 with `tightFrame` false, as the viewer writes every view, is drawn exactly),
-`transparent` draws on nothing, `renderScale` (1 to 3) supersamples -- OCCT's edge
+`transparent` draws on nothing, `background` (a `#rrggbb`) on that flat colour in place of the
+pale default -- a white or pearl part has no outline on it, so give one a dark one
+(`"output": {"background": "#2b2d31"}`) --, `renderScale` (1 to 3) supersamples -- OCCT's edge
 lines stay one pixel of the larger picture, so they read finer -- and `sizeProfile`
 sizes an output that gives no size. Every job is checked before anything renders,
 and a failure writes none of its pictures, leaving existing ones unchanged. `--json` prints each picture's report.

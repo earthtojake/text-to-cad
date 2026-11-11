@@ -64,7 +64,7 @@ file in its words (``job_pictures``): every output of every job drawn, each job 
 own camera, display (its hidden and isolated parts among it), pose (``jointValues``) and, a
 robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
 (``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
-the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``,
+the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``, ``background``,
 ``renderScale``, ``sizeProfile``). A view's own camera with the tight frame off is drawn exactly;
 any other camera is fitted with the job's padding. Every request is checked before anything
 renders, and a failure writes none of the job's pictures, leaving every output as it was.
@@ -132,7 +132,7 @@ PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden"
 JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
                       "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
-SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale"})
+SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale", "background"})
 SELECTION_KEYS = {"hide": "hidden", "focus": "isolated"}  # a view's selection, as the display says it
 # The frame's margin each side, a share of the picture (the camera fit's), and the supersampling.
 PADDING, PADDING_RANGE = 0.04, (0.0, 0.15)
@@ -687,7 +687,8 @@ class Still:
     a job's own view; no fit), Preview, the size, the pose, the annotation and the measurements
     drawn over it, and how it is finished (a job's output settings): the fit's ``padding`` each
     side, a share of the picture, on every drawn vertex (``tight``) or the drawn parts' box, a
-    ``transparent`` backdrop, and ``scale`` times the size drawn and brought down (supersampling).
+    ``transparent`` backdrop or a flat ``background`` colour, and ``scale`` times the size drawn and
+    brought down (supersampling).
     The request OCCT draws, and what a renderer process is handed (``as_json``)."""
 
     display: dict[str, Any] = field(default_factory=dict)
@@ -703,12 +704,14 @@ class Still:
     transparent: bool = False
     scale: float = 1.0
     references: list[str] | None = None  # a board's: what its prompt named, lit (``parse_references``)
+    background: str | None = None  # the flat colour behind a 3D document (``#rrggbb``); None: the look's own
 
     def as_json(self) -> dict[str, Any]:
         return {"display": self.display, "camera": self.camera, "exact": self.exact, "preview": self.preview,
                 "size": list(self.size), "pose": self.pose, "annotation": self.annotation,
                 "measurements": self.measurements, "padding": self.padding, "tight": self.tight,
-                "transparent": self.transparent, "scale": self.scale, "references": self.references}
+                "transparent": self.transparent, "scale": self.scale, "references": self.references,
+                "background": self.background}
 
     @staticmethod
     def from_json(found: dict[str, Any]) -> "Still":
@@ -716,7 +719,7 @@ class Still:
                      bool(found.get("preview")), tuple(found.get("size") or DEFAULT_SIZE), found.get("pose"),
                      found.get("annotation"), found.get("measurements"), float(found.get("padding", PADDING)),
                      bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0),
-                     found.get("references"))
+                     found.get("references"), found.get("background"))
 
     @property
     def drawn(self) -> tuple[int, int]:
@@ -1027,7 +1030,9 @@ def job_input(job: Any) -> str | None:
 @refusing("job")
 def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     """A job's output settings (``output``), checked: ``sizeProfile``, ``padding`` (0 to 0.15 of
-    the picture each side), ``tightFrame``, ``transparent``, ``renderScale`` (1 to 3)."""
+    the picture each side), ``tightFrame``, ``transparent``, ``renderScale`` (1 to 3), and
+    ``background`` (a ``#rrggbb``: the flat colour behind a 3D document, in place of the look's own;
+    not with ``transparent``, which draws on nothing, nor for a drawing, which stands on its paper)."""
     if value is None:
         return {}
     if not isinstance(value, dict):
@@ -1045,6 +1050,13 @@ def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     for key in ("tightFrame", "transparent"):
         if key in value and not isinstance(value[key], bool):
             raise SnapshotRefused(f"{where}.{key} is true or false")
+    if "background" in value:
+        if not _color(value["background"]):
+            raise SnapshotRefused(f"{where}.background is a colour as #rrggbb, not {value['background']!r}")
+        if value.get("transparent"):
+            raise SnapshotRefused(f"{where} gives background and transparent: a picture stands on a colour or on nothing")
+        if drawing:
+            raise SnapshotRefused(f"{where} gives background, which is behind a model; a drawing stands on its paper")
     if drawing:
         framed = [key for key in ("padding", "tightFrame") if key in value]
         if framed:
@@ -1196,7 +1208,8 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                 framed, exact, _view = authored(AUTHORED, ink, given if isinstance(given, dict) else None, document)
             pictures.append((document, out, Still(shown, framed, exact, False, size,
                                                   posed, ink, dimensions, padding, tight,
-                                                  bool(settings.get("transparent")), scale, lit)))
+                                                  bool(settings.get("transparent")), scale, lit,
+                                                  settings.get("background"))))
     written = [out for _document, out, _still in pictures]
     twice = sorted({str(out) for out in written if written.count(out) > 1})
     if twice:

@@ -221,8 +221,10 @@ def matte(canvas: Any, paint: Callable[[np.ndarray], None] | None,
 
 
 def finished(still: Any) -> dict[str, Any]:
-    """How a picture was finished, for its report: on nothing, supersampled; nothing when neither."""
+    """How a picture was finished, for its report: on nothing, on a colour of its own, supersampled; nothing
+    when none of them."""
     return {**({"transparent": True} if still.transparent else {}),
+            **({"background": still.background} if still.background else {}),
             **({"renderScale": still.scale} if still.scale != 1 else {})}
 
 
@@ -380,6 +382,9 @@ class Held:
         if fresh:
             timings["sceneMs"] = round((time.perf_counter() - clock) * 1000)
         scene.canvas.width, scene.canvas.height = still.drawn  # supersampled, brought down after (``picture``)
+        if scene.background != still.background:  # the colour it stands on: this picture's, never the last one's
+            scene.background = still.background
+            scene.backdrop(None)
         # The pose moves the instances: the structure and matrices the scene places them by.
         scene.structure, scene.matrices = shown, [_matrix(instance["matrix"]) for instance in shown["instances"]]
         scene.hidden = hidden  # hidden and isolated parts: every look leaves them out

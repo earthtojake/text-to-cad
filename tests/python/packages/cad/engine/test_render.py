@@ -278,6 +278,27 @@ class HeldTest(unittest.TestCase):
         np.testing.assert_allclose(middle, (160, 120), atol=0.5)
         np.testing.assert_allclose(top, (160, 0), atol=0.5)
 
+    def test_a_picture_stands_on_the_flat_colour_it_asks_for_and_the_next_on_the_look_s_own(self) -> None:
+        """A job's ``output.background``: the backdrop is that colour, flat, to its corners; hidden-line's
+        faces, which are the backdrop's colour, take it too; and a picture that asks for none is as before."""
+        asked, colour = "#202830", np.array([0x20, 0x28, 0x30])
+        plain = pixels(self.draw(display={"mode": "solid"})[0])
+        data, report = self.draw(display={"mode": "solid"}, background=asked)
+        dark = pixels(data)
+        self.assertEqual(report["background"], asked)
+        for corner in (dark[0, 0], dark[0, -1], dark[-1, 0], dark[-1, -1]):
+            self.assertLessEqual(np.abs(corner.astype(int) - colour).max(), 1)
+        self.assertGreater(np.abs(plain[0, 0].astype(int) - colour).max(), 100, "the look's own backdrop is pale")
+        # The model is drawn as it was: only what was backdrop changed.
+        model = np.abs(plain.astype(int) - plain[0, 0].astype(int)).max(-1) > 40
+        same = np.abs(dark[model].astype(int) - plain[model].astype(int)).max(-1) <= 2
+        self.assertGreater(same.mean(), 0.75, "but for its edges, and what is seen through its glass")
+        hidden = pixels(self.draw(display={"mode": "hidden-line"}, background=asked)[0])
+        self.assertGreater((np.abs(hidden.astype(int) - colour).max(-1) <= 1).mean(), 0.9, "faces and backdrop alike")
+        again, report = self.draw(display={"mode": "solid"})
+        self.assertNotIn("background", report)
+        self.assertLess(mismatch(pixels(again), plain), 0.001)
+
     def test_a_picture_reports_the_camera_it_settled_on_and_that_camera_draws_it_again_exactly(self) -> None:
         """The report's ``view`` is the fitted camera as a job's view holds one: drawn exactly (no fit)
         it is the same picture, and it frames a picture of fewer parts the same way, where a fit
