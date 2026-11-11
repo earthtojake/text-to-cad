@@ -167,6 +167,31 @@ class MeasureTest(unittest.TestCase):
         self.assertEqual((late["pairs"]["kept"], late["pairs"]["measured"], late["unmeasured"]),
                          (first["pairs"]["distinct"], 0, []))
 
+    def test_a_measuring_process_is_ended_when_its_caller_is_gone_and_left_alone_when_the_crew_is_done(self) -> None:
+        import subprocess
+
+        def started() -> subprocess.Popen:
+            process = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE)
+            self.addCleanup(process.wait)
+            self.addCleanup(process.kill)
+            self.addCleanup(process.stdin.close)
+            return process
+
+        # The caller gone is the guard's input closed under it, with no word that the crew is done: what it was
+        # told of is ended (a process in a Boolean runs no thread of its own that could end it).
+        orphan, guard = started(), _interference._Guard()
+        guard.watch(orphan.pid)
+        guard.process.stdin.close()
+        self.assertNotEqual(orphan.wait(timeout=60), 0, "ended by its guard, not by its own end")
+        self.assertEqual(guard.process.wait(timeout=60), 0)
+        # The crew done: the guard ends, and ends nothing.
+        kept, guard = started(), _interference._Guard()
+        guard.watch(kept.pid)
+        process = guard.process
+        guard.close()
+        self.assertEqual(process.wait(timeout=60), 0)
+        self.assertIsNone(kept.poll(), "a crew that is done ends its own processes: the guard none")
+
     def test_a_named_fit_is_listed_apart_and_what_names_nothing_is_refused(self) -> None:
         found = self.measure(fits=["press,base"])
         self.assertEqual(sorted(self.pairs(found["interferences"])), [("skin", "through")])

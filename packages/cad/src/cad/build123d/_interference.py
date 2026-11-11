@@ -623,6 +623,70 @@ def _jobs() -> int:
     return max(1, min(4, os.cpu_count() or 1))
 
 
+# The guard's whole program: the standard library alone, its input read on its one thread. Each line is a
+# process to end when the input ends without ``done``: the caller is gone, and what it started is no one's.
+_GUARD = """
+import os, signal, sys
+held = []
+for line in sys.stdin:
+    line = line.strip()
+    if line == "done":
+        sys.exit(0)
+    if line.isdigit():
+        held.append(int(line))
+for pid in held:
+    try:
+        os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+    except OSError:
+        pass
+"""
+
+
+class _Guard:
+    """What ends the crew's processes when the process that started them is gone: a small process of its
+    own, told each one's id as it starts (``watch``), which ends them all when its input closes under it and
+    ends itself, ending none, when told it is done (``close``). A process in a Boolean cannot do this for
+    itself: a kernel call holds its interpreter until it returns, so no thread of it runs, and one left
+    running holds a core for minutes after the check that asked it was stopped. Where no guard starts, the
+    crew measures without one."""
+
+    def __init__(self) -> None:
+        import subprocess
+
+        from cad.engine.places import windowless
+
+        self.lock = threading.Lock()
+        try:
+            self.process: Any = subprocess.Popen([sys.executable, "-I", "-c", _GUARD], stdin=subprocess.PIPE,
+                                                 text=True, encoding="utf-8", **windowless())
+        except OSError:
+            self.process = None
+
+    def _say(self, line: str) -> None:
+        with self.lock:
+            if self.process is None:
+                return
+            try:
+                self.process.stdin.write(line + "\n")
+                self.process.stdin.flush()
+            except (OSError, ValueError):
+                self.process = None
+
+    def watch(self, pid: int) -> None:
+        self._say(str(int(pid)))
+
+    def close(self) -> None:
+        self._say("done")
+        with self.lock:
+            process, self.process = self.process, None
+        if process is not None:
+            try:
+                process.stdin.close()
+                process.wait(timeout=10)
+            except Exception:  # noqa: BLE001 - a guard that will not be waited for ends at its input's end
+                pass
+
+
 class _Crew:
     """The processes that measure the pairs (the module's docstring): ``jobs`` of them, each fed one
     order at a time, in the order given, by a thread of this process that waits for its answer no longer
@@ -632,6 +696,7 @@ class _Crew:
                  done: Any = None) -> None:
         self.folder, self.jobs, self.pair_seconds, self.deadline = folder, max(1, jobs), pair_seconds, deadline
         self.done = done
+        self.guard: _Guard | None = None
 
     def run(self, orders: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
         """Each order's answer by its number: ``{"volume"}``, or ``{"unmeasured": why}``."""
@@ -641,10 +706,15 @@ class _Crew:
         answers: dict[int, dict[str, Any]] = {}
         threads = [threading.Thread(target=self._work, args=(waiting, answers), name=f"cad-interference-{at}", daemon=True)
                    for at in range(min(self.jobs, len(orders)))]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        self.guard = _Guard()
+        try:
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        finally:
+            self.guard.close()
+            self.guard = None
         return answers
 
     def _start(self) -> tuple[Any, queue.SimpleQueue]:
@@ -673,6 +743,8 @@ class _Crew:
             lines.put(None)  # its end of file: the process is gone
 
         threading.Thread(target=read, name="cad-interference-read", daemon=True).start()
+        if self.guard is not None:
+            self.guard.watch(process.pid)
         return process, lines
 
     @staticmethod
@@ -744,7 +816,8 @@ def _serve() -> None:
     "placed"}``, the two parts by their files in the folder its argument names, the second placed in
     the first's frame) measured, and answered on what was its standard output (``{"n", "volume"}`` or
     ``{"n", "error"}``); the kernel's own prints go to its standard error. It ends at the end of its
-    input, at once, whatever it is measuring: its caller closed it, or is gone."""
+    input, once what it is measuring is done; its caller ends it sooner (``_Crew._end``), and where the
+    caller itself is gone, the crew's guard does (``_Guard``)."""
     from OCP.gp import gp_Trsf
 
     from cad.build123d._geometry import _overlap_volume
@@ -771,20 +844,8 @@ def _serve() -> None:
             return bd.Shape.cast(BRepBuilderAPI_Transform(shape, trsf, True).Shape())  # a mirrored placement: a copy
         return bd.Shape.cast(shape.Moved(TopLoc_Location(trsf)))
 
-    # Its input is read apart from the measuring, so that its end is heard while a Boolean runs: a caller
-    # that closed it, or is gone, waits for nothing, and a Boolean left running holds a core for minutes.
-    lines: queue.SimpleQueue = queue.SimpleQueue()
-
-    def read() -> None:
-        try:
-            for line in sys.stdin:
-                lines.put(line)
-        finally:
-            os._exit(0)
-
-    threading.Thread(target=read, name="cad-interference-orders", daemon=True).start()
-    while True:
-        order = json.loads(lines.get())
+    for line in sys.stdin:
+        order = json.loads(line)
         try:
             import build123d as bd
 

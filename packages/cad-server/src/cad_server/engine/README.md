@@ -1137,8 +1137,8 @@ own proximity test (`BRepExtrema_ShapeProximity`: a tree of each mesh's triangle
 within the two meshes' deflections of the other's, and no shell of either inside a solid of the other, they share
 nothing. **Measured**: every other pair, by `overlap_volume` on the parts' own solids, the pairs of the fewest
 faces first. The pairs are measured in a few processes the checks process starts for the check (`--jobs`: one a
-core, four at most, each a kernel of its own, outside the memory the engine's rule counts, each ending the moment
-the checks process does), because a
+core, four at most, each a kernel of its own, outside the memory the engine's rule counts, each ended by a small guard process
+the moment the checks process is gone), because a
 Boolean cannot be stopped from inside: a pair past its time (`--pair-seconds`) has its process killed and is
 answered **unmeasured**, as is one whose process exited, one the kernel refused and every pair not reached
 within the check's own time (`--seconds`, kept under `CAD_ENGINE_CHECK_SECONDS`). The result is a
