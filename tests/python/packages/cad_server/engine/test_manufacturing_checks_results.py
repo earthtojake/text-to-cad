@@ -21,7 +21,7 @@ from unittest import mock
 
 from tests.python.support import engine_daemon
 from tests.python.support.manufacturing_fixtures import (DECLARED, MEASURES, MODELS, SRC, Fixture, _counts,
-                                                         _plain, _today)
+                                                         _plain, _today, _until)
 
 PROCESSES = ("cnc", "sheet", "molding", "printing")
 
@@ -118,6 +118,9 @@ class KeptResultTest(unittest.TestCase):
         fixture = Fixture(self, MODELS)
         plate = fixture.ids[0]
         first = cad.model.dfm(plate, process="cnc", material="aluminum")
+        # The runner answers a check's caller and then lets the check go: asked again before it has, the same
+        # check is joined, not read from what was kept. So the first is awaited gone before the second is asked.
+        _until(self, lambda: _counts()["asked"] == 0, "the first check is let go")
         before = _counts()
         again = cad.model.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_plain(again), _plain(first))
