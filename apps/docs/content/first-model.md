@@ -59,14 +59,14 @@ cad run src/bracket.py
   view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
 ```
 
-The `id:` names the model's document. It comes from the script's path and the function's name, so it is the same on every run. The `view:` line is its page in the CAD Viewer. Your port and token will differ.
+The `id:` names the model's document. It comes from the script's path and the function's name, so it is the same on every run. The `view:` line is its page in the viewer. Your port and token will differ.
 
 > [!NOTE]
 > The first build downloads the CAD kernel, about 240 MB, and a first model waits for it. It is made once, in a cache folder, and every later build reuses it. [Installing by hand](/docs/install#what-a-model-runs-in) says what lives where.
 
 ## See it on screen
 
-Your agent shows you the model. In apps with the CAD app, the viewer opens inside the app, as a card in Claude Desktop or a tab in Codex. In the others you get the `view:` link to open in your browser. You can also run `cad viewer` yourself, which opens the CAD Viewer's home. See [the CAD Viewer](/docs/viewer).
+Your agent shows you the model. In apps with the CAD app, the viewer opens inside the app, as a card in Claude Desktop or a tab in Codex. In the others you get the `view:` link to open in your browser. You can also run `cad viewer` yourself, which opens the viewer's home. See [the viewer](/docs/viewer).
 
 ## Ask for a change
 
@@ -97,6 +97,6 @@ cad model export "$ID" STEP/bracket.step STL/bracket.stl
 ## Where to go next
 
 - [Parts and assemblies](/docs/skills/parts-and-assemblies): assemblies, configurations and what else a model can do.
-- [The CAD Viewer](/docs/viewer): what you can do on the page.
+- [The viewer](/docs/viewer): what you can do on the page.
 - [Supported agents](/docs/agents): what each app shows and how.
 - [The cad command](/docs/reference/commands): running and checking things yourself.

@@ -50,7 +50,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -138,7 +138,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -223,7 +223,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -298,7 +298,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -349,7 +349,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -410,7 +410,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -455,7 +455,7 @@
       "operations": [
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         },
@@ -505,7 +505,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         }
@@ -541,7 +541,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         }
@@ -577,7 +577,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it as the CAD Viewer does, into a PNG",
+          "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
           "engine": true
         }
@@ -617,7 +617,7 @@
         },
         {
           "name": "snapshot",
-          "summary": "draw it flat, as the CAD Viewer's board view does, into a PNG",
+          "summary": "draw it flat, as the viewer's board view does, into a PNG",
           "integration": null,
           "engine": false
         },

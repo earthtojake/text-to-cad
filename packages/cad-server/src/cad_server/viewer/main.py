@@ -97,7 +97,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
-            return _failed(options, prog, ValueError('CAD Viewer client is not built; build apps/web or install the '
+            return _failed(options, prog, ValueError('The viewer client is not built; build apps/web or install the '
                                                      'cad-server wheel'))
     from cad_server._internal.cli_errors import REASONS, Failure
 
@@ -126,7 +126,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
         try:
             open_page(answer['url'], opener=webbrowser.open)  # a file of a redirect: no token in argv
         except CannotOpen as error:
-            print(f'CAD Viewer: could not open a browser ({error}); open the URL above', file=sys.stderr)
+            print(f'cad viewer: could not open a browser ({error}); open the URL above', file=sys.stderr)
     return 0
 
 
@@ -139,5 +139,5 @@ def _failed(options, prog, error):
     failure = classify(error)
     if options['json']:
         return write(failure, prog=prog, as_json=True)
-    print(f'CAD Viewer: {failure}', file=sys.stderr)
+    print(f'cad viewer: {failure}', file=sys.stderr)
     return failure.status

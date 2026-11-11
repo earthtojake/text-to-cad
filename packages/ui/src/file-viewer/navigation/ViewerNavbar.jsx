@@ -39,11 +39,11 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
  * no room for them); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
  * where the view can show another; and the ⋯ menu of what can be done with the document: Copy path,
- * Open in (Browser, the file manager) and the host's own items (the CAD viewer's Export) — a model's
+ * Open in (Browser, the file manager) and the host's own items (the viewer's Export) — a model's
  * Copy path and file manager acting on its script. The menu and its submenus are shadcn's own width.
  *
  * Right, only what a host or a file adds, kept for the update's nudge, in this order: the file's own
- * actions (the CAD viewer's one: a dismissed alert's icon, which brings its card back); the host's own
+ * actions (the viewer's one: a dismissed alert's icon, which brings its card back); the host's own
  * actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
  * while its install is behind (`update`, the blue `UpdateButton` from `@cad/ui/update`).
  * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
@@ -128,7 +128,7 @@ function useOpenInApps(open, apps) {
  * or was); Copy link (its page, with a fresh link: every document, its source there or not); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
  * browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers,
  * the source's apps, each export's apps and Default app, a separator between groups); then the
- * host's own items (`items`: the CAD viewer's Export submenu). Each only where the host can do it,
+ * host's own items (`items`: the viewer's Export submenu). Each only where the host can do it,
  * and no ⋯ where it can do none. While the source was moved or deleted, what opens it is drawn
  * disabled with the reason: Open in itself where nothing in it can open, else each such entry.
  */

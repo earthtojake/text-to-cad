@@ -89,7 +89,7 @@ Copy this shape for new robots. It shows the ledger, ordering, a frame-only root
 ```xml
 <?xml version="1.0"?>
 <!--
-  robot: example_arm | consumers: CAD Viewer, MoveIt
+  robot: example_arm | consumers: the text-to-cad viewer, MoveIt
   units: meters, kilograms, radians | frames: +X forward, +Y left, +Z up (REP-103)
   root: base_footprint | source of dimensions: STEP/example_arm.step
   meshes: 3MF/, exported per-link in link frame, source units mm, scale 0.001

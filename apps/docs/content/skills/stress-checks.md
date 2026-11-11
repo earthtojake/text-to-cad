@@ -20,7 +20,7 @@ With no study, a solve is a setup that writes nothing. It lists the parts, the p
 cad step solve part.step
 ```
 
-Your agent matches "the mounting face" to a reference from that list; a face you picked in the CAD Viewer arrives as one already.
+Your agent matches "the mounting face" to a reference from that list; a face you picked in the viewer arrives as one already.
 
 The study is one JSON object, in fixed units: millimetres, newtons, MPa, tonnes per cubic millimetre for density and g for acceleration. Your agent restates your loads in them.
 
@@ -47,7 +47,7 @@ cad step solve part.step --study study.json --out /tmp/bracket-load --json
 | File | What it holds |
 | --- | --- |
 | `result.json` | The answer, findings and measurements |
-| `result.glb` | The deformed surface coloured by stress; opens in the CAD Viewer |
+| `result.glb` | The deformed surface coloured by stress; opens in the viewer |
 | `result.vtu` | The volume mesh and its fields, for meshio, PyVista or ParaView |
 | `stress.png`, `displacement.png` | Stills of each field with a colour bar |
 | `ccx.inp` | The CalculiX input, with `--deck` |
@@ -81,4 +81,4 @@ This is the `fea` skill ([SKILL.md](repo:skills/fea/SKILL.md)). Its references:
 - [Materials](repo:skills/fea/references/materials.md)
 - [The library's section](repo:packages/cad/README.md#stress-studies)
 
-Related pages: [parts and assemblies](/docs/skills/parts-and-assemblies), [manufacturing checks](/docs/skills/manufacturing-checks), the [CAD Viewer](/docs/viewer) (which opens `result.glb`), the [CalculiX](/docs/integrations/calculix) and [netgen](/docs/integrations/netgen) integrations, and the [GLB](/docs/document-types/glb) and [STEP](/docs/document-types/step) document types.
+Related pages: [parts and assemblies](/docs/skills/parts-and-assemblies), [manufacturing checks](/docs/skills/manufacturing-checks), the [viewer](/docs/viewer) (which opens `result.glb`), the [CalculiX](/docs/integrations/calculix) and [netgen](/docs/integrations/netgen) integrations, and the [GLB](/docs/document-types/glb) and [STEP](/docs/document-types/step) document types.

@@ -20,7 +20,7 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 z=0: a sketch, a face, wires or edges. `cad model export <id> drawing.dxf` writes the DXF.** You never
 construct a document, name an entity, or write a file from the model. It builds in the server's warm
 worker like any model, and the DXF is written from its document by build123d's own exporter, once the
-drawing checks pass. The CAD Viewer and `cad dxf snapshot` read the `.dxf` itself, so the file a
+drawing checks pass. The viewer and `cad dxf snapshot` read the `.dxf` itself, so the file a
 cutting service gets, the file the viewer draws and the file a snapshot renders are one file.
 
 ```python
@@ -311,7 +311,7 @@ overlapping or partly coincident curves, small features, kerf and the shop's rul
 cad dxf snapshot DXF/gasket.dxf tmp/gasket.png
 ```
 
-`cad dxf snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole, from above,
+`cad dxf snapshot` draws a drawing the way the viewer's drawing pane does: whole, from above,
 fitted with a margin, in the pens the file declares (an entity with no pen of its own takes the
 paper's ink), on white paper, whatever the viewer's theme. `--size-profile`, `--width` and `--height` size it; `--camera`
 takes a plan view, `--annotation` ink on the sheet and `--measurements` dimensions; every other flag

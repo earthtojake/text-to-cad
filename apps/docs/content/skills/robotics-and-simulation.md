@@ -13,7 +13,7 @@ There are two routes. If the robot is a text-to-cad model, the description is ge
 - A hand-written `.urdf` or `.srdf` with a comment block of frames, joints, units and assumptions.
 - A report of which checks ran and which did not.
 
-A URDF or SRDF opens in the [CAD Viewer](/docs/viewer). An MJCF opens in MuJoCo Studio, and the CAD Viewer shows the CAD model it came from.
+A URDF or SRDF opens in the [viewer](/docs/viewer). An MJCF opens in MuJoCo Studio, and the viewer shows the CAD model it came from.
 
 ## How it works
 
@@ -84,4 +84,4 @@ The skill is [`robot-simulation`](repo:skills/robot-simulation/SKILL.md). Its mo
 - [The MuJoCo environment](repo:skills/robot-simulation/references/mujoco-environment.md)
 - [URDF checks](repo:skills/robot-simulation/references/urdf-checks.md), [SRDF authoring](repo:skills/robot-simulation/references/srdf-authoring.md) and [MJCF checks](repo:skills/robot-simulation/references/mjcf-checks.md)
 
-Related pages: the document types [`urdf`](/docs/document-types/urdf) and [`srdf`](/docs/document-types/srdf), the [MuJoCo](/docs/integrations/mujoco) and [CoACD](/docs/integrations/coacd) integrations, [mechanisms and animation](/docs/skills/parts-and-assemblies#mechanisms-and-animation) for where a robot's joints and poses are declared, and [the CAD Viewer](/docs/viewer).
+Related pages: the document types [`urdf`](/docs/document-types/urdf) and [`srdf`](/docs/document-types/srdf), the [MuJoCo](/docs/integrations/mujoco) and [CoACD](/docs/integrations/coacd) integrations, [mechanisms and animation](/docs/skills/parts-and-assemblies#mechanisms-and-animation) for where a robot's joints and poses are declared, and [the viewer](/docs/viewer).

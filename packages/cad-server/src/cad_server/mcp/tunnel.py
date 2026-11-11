@@ -1,4 +1,4 @@
-"""The CAD Viewer's HTTP routes, served in-process for a view with no network.
+"""The viewer's HTTP routes, served in-process for a view with no network.
 
 A view sends exactly the requests the web client sends (``/api/v1/*``) as tool
 calls; this module hands each one to the viewer's own router -- one :class:`~cad_server.viewer.http_app.CadApp`, made on the first

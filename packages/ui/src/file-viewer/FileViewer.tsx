@@ -124,7 +124,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const folder = navigationPath ? null : explorerFolder;
   // The ⋯ menu: what the host can do with the document on screen -- Copy path and Reveal its file on
   // disk (a model's: the script that builds it, where its metadata names one), its page in the
-  // browser whatever it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
+  // browser whatever it is -- and the host's own items (`fileMenuItems`: the viewer's Export).
   const perform = host.fileActions?.perform;
   // Open in's apps, where the host has them: asked by the document's own name as the menu opens.
   const appsOf = host.fileActions?.apps;

@@ -20,7 +20,7 @@ It works with any agent that supports plugins or skills. See [supported agents](
 
 ## How it works
 
-Your agent follows the plugin's skills and writes a Python script that describes the model. The `cad` command builds that script on your computer, through a server that stays warm between runs so a change rebuilds only what it touched. The CAD Viewer shows the result in your browser, or inside your agent app, and updates as the model is rebuilt.
+Your agent follows the plugin's skills and writes a Python script that describes the model. The `cad` command builds that script on your computer, through a server that stays warm between runs so a change rebuilds only what it touched. The viewer shows the result in your browser, or inside your agent app, and updates as the model is rebuilt.
 
 Files such as STEP or STL are made when you ask for them, not on every run.
 
@@ -28,7 +28,7 @@ Files such as STEP or STL are made when you ask for them, not on every run.
 
 - [Install](/docs/install): one command sets up text-to-cad in every agent app on your computer.
 - [Your first model](/docs/first-model): a walk-through from a fresh install to a part on screen.
-- Skills: start with [parts and assemblies](/docs/skills/parts-and-assemblies), then see [the CAD Viewer](/docs/viewer).
+- Skills: start with [parts and assemblies](/docs/skills/parts-and-assemblies), then see [the viewer](/docs/viewer).
 - [Document types](/docs/document-types): the file kinds text-to-cad builds, shows and checks.
 - [Integrations](/docs/integrations): the tools it runs for you, such as build123d, KiCad and Blender.
 - [Architecture](/docs/architecture): how the engine, the viewer and the CAD app fit together.

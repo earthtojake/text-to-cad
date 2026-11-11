@@ -20,7 +20,7 @@ await build({
       path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
       external: true,
     }));
-    // The shared CAD viewer, reduced to what this host hands it: what it draws is its own suite's.
+    // The shared viewer, reduced to what this host hands it: what it draws is its own suite's.
     plugin.onResolve({ filter: /^@cad\/ui\/cad-viewer$|useViewerAutoReload\.js$|host\/viewerLinks\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     // The tab store the host really uses; nothing else of the shared UI renders here.
     plugin.onResolve({ filter: /^@cad\/ui\/tab-store$/ }, () => ({ path: fileURLToPath(new URL('../../../packages/ui/src/tab-store/index.ts', import.meta.url)) }));

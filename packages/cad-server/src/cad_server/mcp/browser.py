@@ -1,4 +1,4 @@
-"""The CAD Viewer's page for a text host, and the words the stdio transport and the server say of it.
+"""The viewer's page for a text host, and the words the stdio transport and the server say of it.
 
 A text host's ``cad_show`` opens the model's page in the person's browser, but never from the server: the
 server runs in the environment of whatever started it (another agent's shell, another ``BROWSER``, no

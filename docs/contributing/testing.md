@@ -188,13 +188,13 @@ decide which tests reach it. The components:
 | Job | Runs on | What it runs |
 | --- | --- | --- |
 | `static` | every change | With Python and Node alone: the version check (canonical version, derived metadata, the release's pins; on a pull request, what merging it releases, see [Shipping a release](../../CONTRIBUTING.md#shipping-a-release)), the shipping contract's tree rules, the light contracts (every policy test that reads only the repository's text, and the print3d, render and sendcutsend suites) and the API's tests |
-| `packages (Linux I/2)` | the packages, a package test | The library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's suites under Xvfb, or the files of them the change selected; the type check |
+| `packages (Linux I/2)` | the packages, a package test | The library's, the server's (the engine's and the viewer backend's included) and the shim's suites under Xvfb, or the files of them the change selected; the type check |
 | `packages (Windows I/3)` | the same | The same suites and the type check on Windows: paths, locks, subprocesses, file URLs and the daemon are platform-sensitive |
 | `routing (macOS)` | the packages, the router's unit files | The router's unit files on the third C library (its copper is held to a digest on all three) |
 | `skills` | the packages, `scripts/bundle`, the fea skill | The policy tests and skill suites that load the CAD kernel or the built runtime |
 | `js-core` | `packages/core`, the dependency checks, `apps/docs` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | `js-ui (units)`, `js-ui (browser)` | `packages/ui` | The UI's type check and units; its browser specs |
-| `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The CAD Viewer client's type check and units |
+| `js-web` | `packages/ui`, `apps/web` and what its Markdown links to | The viewer client's type check and units |
 | `js-mcp` | `packages/ui`, `apps/mcp` | The CAD app's type check, units and one-file build |
 | `docs` | `apps/docs`, `docs/install.md` and `docs/migrations` (the documentation site sets them), `scripts/brand`, the one-line installers | Lint, the Next build, which resolves every link of the documentation, icon verification, the brand marks |
 | `fea` | the packages, its suite | `test-fea.sh`, with netgen and CalculiX installed |

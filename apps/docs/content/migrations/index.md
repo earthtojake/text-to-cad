@@ -3,7 +3,7 @@ title: Migrations
 description: The hand-migration guides between text-to-cad releases, for a project or a computer set up on an earlier one.
 ---
 
-Most updates need nothing from you: a release that breaks nothing installs itself. For any other, run the install command again, or click the update button in the CAD Viewer or the CAD app, and your computer moves to the new release ([Updates](/docs/install#updates)).
+Most updates need nothing from you: a release that breaks nothing installs itself. For any other, run the install command again, or click the update button in the viewer or the CAD app, and your computer moves to the new release ([Updates](/docs/install#updates)).
 
 A release that breaks something comes with a migration guide. Each guide says what changed and what to change in a project written for the earlier release. Below 1.0, a breaking change bumps the minor version, so the guides are named for the minor versions they move between.
 

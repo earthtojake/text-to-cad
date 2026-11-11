@@ -6,7 +6,7 @@ that support the applications in `apps/docs`, `apps/web` and `apps/mcp`:
 | Directory | Identity | Responsibility |
 | --- | --- | --- |
 | [cad](cad/README.md) | Python distribution `cad`, imported as `cad` | The library: what a model imports and what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol a client speaks; the CAD kernel is its `build123d` extra |
-| [cad-server](cad-server/README.md) | Python distribution `cad-server`, imported as `cad_server` | The server: the engine's daemon, the command, the CAD Viewer's and the CAD app's servers, the installations, and the bundled runtime outputs |
+| [cad-server](cad-server/README.md) | Python distribution `cad-server`, imported as `cad_server` | The server: the engine's daemon, the command, the viewer's and the CAD app's servers, the installations, and the bundled runtime outputs |
 | [cad-mcp](cad-mcp/README.md) | Python distribution `cad-mcp`, imported as `cad_mcp` | The shim: the stdio transport an agent app starts, the standard library alone |
 | `aliases/` | Python distribution `cadgen` | The library's deprecated alias, still published at every release: a pin of `cad` at the same release, nothing of its own |
 | [core](core/README.md) | `@cad/core` | Framework-independent JS/TS geometry, rendering and explicit CAD service client |
@@ -21,7 +21,7 @@ depends on React or UI. Shared packages never import application source, and
 applications never import one another. The root npm workspace and lockfile own
 JavaScript installation; `npm run build:packages` builds core before UI.
 
-The server's wheel assembles the built CAD Viewer client and CAD app page. That build dependency does
+The server's wheel assembles the built viewer client and CAD app page. That build dependency does
 not let Python engine code reach into app source.
 Each wheel works outside this repository, so its own Markdown must also stand
 alone -- not even linking another distribution's files, which its wheel does not carry; repository

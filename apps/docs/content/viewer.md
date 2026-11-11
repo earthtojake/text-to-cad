@@ -1,9 +1,9 @@
 ---
-title: The CAD Viewer
-description: How to open the CAD Viewer, what it shows for each kind of file, how it follows rebuilds, and how to export from it and update it.
+title: The viewer
+description: How to open the viewer, what it shows for each kind of file, how it follows rebuilds, and how to export from it and update it.
 ---
 
-The CAD Viewer is where you look at what your agent builds. It runs on your computer, in your browser, and shows models, meshes, drawings, robots and boards. Your agent normally opens it.
+The viewer is where you look at what your agent builds. It runs on your computer, in your browser, and shows models, meshes, drawings, robots and boards. Your agent normally opens it.
 
 ## Opening it
 

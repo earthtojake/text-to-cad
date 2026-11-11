@@ -516,7 +516,7 @@ module to what 0.8 has, and the cad skill's kinematics reference documents the
 clip vocabulary. Delete the `.params.js`.
 
 **GIF export is deleted.** Snapshot writes PNG stills only, and a `.gif` output
-path is refused. Motion review is interactive in the CAD Viewer. For still
+path is refused. Motion review is interactive in the viewer. For still
 evidence of a configuration, render at DOF values:
 
 ```bash
@@ -699,7 +699,7 @@ counts and bounds mean the migration moved nothing. Between two v0.5 builds the
 check is sharper — `python src/plate.py --json` prints the `tree` hash, and an
 identical tree is identical geometry.
 
-**View.** The CAD Viewer is `cadgen viewer`, run from the directory to serve:
+**View.** The viewer is `cadgen viewer`, run from the directory to serve:
 
 ```bash
 cd /absolute/path/to/project && cadgen viewer
@@ -758,7 +758,7 @@ step compile           make a STEP's tree current (internal)
 step inspect           inspect selector references in a STEP
 step snapshot          render a STEP model to an image
 store                  the store: info, why <model> (gate verdict), forget <target>, gc
-viewer [list|stop]     serve the current directory in the CAD Viewer
+viewer [list|stop]     serve the current directory in the viewer
 ```
 
 Notable absences: there is no `cadgen gen`, no `cadgen export`, no `cadgen
@@ -824,7 +824,7 @@ cadgen step inspect refs STEP/bracket.step 'other#o1.2'     # error
 **What is emitted.** The toolchain accepts many spellings and prints exactly
 one: numeric, leading `#`, no file prefix. On a single-occurrence document the
 occurrence prefix is dropped from the display form (`#f45`), while an assembly
-prints the full path (`#o1.12.f19`). The CAD Viewer is the one place that emits
+prints the full path (`#o1.12.f19`). The viewer is the one place that emits
 file-prefixed refs.
 
 **Surfaces differ slightly.** `inspect refs`/`frame`/`measure`/`align` require

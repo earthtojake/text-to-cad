@@ -5,7 +5,7 @@ description: The engineering-drawing skill makes a dimensioned PDF drawing of a 
 
 An engineering drawing is the 2D sheet a shop works from: orthographic views of a part, its dimensions, hole callouts, notes and a title block. The `engineering-drawing` skill makes one as a PDF, projecting the views from the part's own geometry and measuring every dimension on that geometry. When the model changes and the script runs again, the drawing follows.
 
-The drawing documents geometry; it does not build it. It is a PDF written by a Python script, not a CAD Viewer document, and opens in any PDF reader.
+The drawing documents geometry; it does not build it. It is a PDF written by a Python script, not a viewer document, and opens in any PDF reader.
 
 ## What it makes
 

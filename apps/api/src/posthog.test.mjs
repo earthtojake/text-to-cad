@@ -174,7 +174,7 @@ test("a crash is PostHog's $exception: its type and frames, only cadgen's in the
 
 test("a page's frame in a vendor chunk (react, radix, three, lucide) is not in the app: the page's own frame is blamed", async () => {
   const { asked, store } = posthog();
-  // The frames as the CAD Viewer's build names its chunks and the page reports them (`vendor-<package>-<hash>.js`),
+  // The frames as the viewer's build names its chunks and the page reports them (`vendor-<package>-<hash>.js`),
   // one spelled with the folder a build lists them under.
   const frames = [
     { file: 'index-BBBqlHHP.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' },

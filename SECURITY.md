@@ -23,7 +23,7 @@ interpreter the script was launched with; and the packages a `cad run` names
 the network included -- by design (the door is how a sandboxed agent reaches
 the server), so the boundary is your user account, not the sandbox.
 
-**The CAD Viewer and the MCP endpoint.** The server serves the CAD Viewer and
+**The viewer and the MCP endpoint.** The server serves the viewer and
 the CAD app's MCP endpoint over HTTP on `127.0.0.1` (port 3245 unless you name
 another; when another program holds it, the next free port, which your
 installation keeps and names in `cad status`). Every route needs one of three

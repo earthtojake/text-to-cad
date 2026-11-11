@@ -241,7 +241,7 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web apps/mcp
 
-      # The bundle feeds the WHEEL, and it is the only thing that does: the CAD Viewer
+      # The bundle feeds the WHEEL, and it is the only thing that does: the viewer
       # client and the CAD app are both
       # gitignored, so the release commit carries none of them. Nothing
       # here writes to git -- the wheel is the release asset. CAD_RELEASE names the
@@ -255,7 +255,7 @@ jobs:
       - name: Validate production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
-      # The bundle built the CAD Viewer and the CAD app with a source map and a debug id for every
+      # The bundle built the viewer and the CAD app with a source map and a debug id for every
       # chunk, and left the maps out of the wheel. Each chunk a crash on either page can name, with
       # its map, gathered for PostHog and zipped for the GitHub Release (scripts/release/sourcemaps.py).
       - name: Collect the pages' source maps

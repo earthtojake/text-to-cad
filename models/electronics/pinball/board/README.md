@@ -4,7 +4,7 @@
 rules, the project libraries and their tables) are generated from the design model by `scripts/`, not committed:
 `cad run build.py`, from this folder, makes them in about eight minutes, most of it the routes' plan. It needs the
 `cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock libraries (macOS's KiCad.app, or
-`KICAD_STOCK`). Opening the board or the schematic in the CAD Viewer or in KiCad, `check_board.py` and
+`KICAD_STOCK`). Opening the board or the schematic in the viewer or in KiCad, `check_board.py` and
 `check_fit.py` all read what it writes, so run it before any of them.
 
 The playfield of the SHORT CIRCUIT pinball machine is this circuit board: its gold art is the machine's switches (the

@@ -26,7 +26,7 @@ export const EVENTS = {
 };
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
-// A page's chunk of a third-party package, as the CAD Viewer's build names them (apps/web/vite.config.mjs puts
+// A page's chunk of a third-party package, as the viewer's build names them (apps/web/vite.config.mjs puts
 // three, react, radix and lucide in chunks named `vendor-<package>`, each `vendor-<package>-<hash>.js`, named by
 // the file alone in a frame, or under `assets/`): a frame there is a library's, never the page's own.
 const VENDOR = /(?:^|\/)vendor-[^/]*$/;

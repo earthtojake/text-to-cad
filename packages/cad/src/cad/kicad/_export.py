@@ -51,7 +51,7 @@ __all__ = ["BOM_FIELDS", "EXPORTS", "FOLDERS", "PDF_LAYERS", "commands", "export
 
 #: What can be exported, in the order they are listed to a person.
 EXPORTS = ("gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf")
-#: The exports that write a folder of files (the CAD Viewer zips them); every other writes one file (a PDF two).
+#: The exports that write a folder of files (the viewer zips them); every other writes one file (a PDF two).
 FOLDERS = ("gerbers", "drill")
 #: Each PDF page's layers, by side: the copper, silkscreen and fabrication drawing over the outline.
 PDF_LAYERS = {"front": ("F.Cu", "F.Silkscreen", "F.Fab", "Edge.Cuts"),

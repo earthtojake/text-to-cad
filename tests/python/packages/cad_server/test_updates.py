@@ -80,7 +80,7 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(updates.line(found, "posix"), "text-to-cad 0.9.0 is out (this is 0.8.1); to update every agent "
                                                        "app here, run: curl -fsSL https://texttocad.dev/install.sh | sh")
         self.assertTrue(updates.line(found, "nt").endswith("run: irm https://www.texttocad.dev/install.ps1 | iex"))
-        # The same in the CAD Viewer a skill opens, which no plugin names a channel for.
+        # The same in the viewer a skill opens, which no plugin names a channel for.
         with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": ""}), \
                 mock.patch("cad_server._internal.channel._source_tree", return_value=False):
             self.assertEqual(updates.notice(), found)

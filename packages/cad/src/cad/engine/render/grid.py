@@ -1,4 +1,4 @@
-"""The CAD Viewer's measuring grid, drawn by OCCT (``occt.py``'s ``Scene.grid``).
+"""The viewer's measuring grid, drawn by OCCT (``occt.py``'s ``Scene.grid``).
 
 The viewer draws the grid as one quad on the plane z = 0 through the world origin, inked by one
 fragment shader (core's ``lib/viewer/stageGrid.js``; the snapshot page sizes it from the model at

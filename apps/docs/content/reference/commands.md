@@ -37,7 +37,7 @@ One server runs for your installation: the first run starts it, and every comman
 | Command | What it does |
 | --- | --- |
 | `cad run` | Runs a Python script as `uv run` does, with text-to-cad at your release and the integrations the script imports. This is how a model builds. |
-| `cad viewer` | Opens the [CAD Viewer](/docs/viewer). It takes files to open, `--no-open` and `--json`. |
+| `cad viewer` | Opens the [viewer](/docs/viewer). It takes files to open, `--no-open` and `--json`. |
 | `cad delete` | Deletes documents: the record, the cached document and the server's copy. Never a file of yours. `--dry-run` and `--yes` are available. |
 | `cad requirement` | Prints the exact requirement that installs this release's `cad`, for a Python program of your own. `--json` prints it as JSON. |
 

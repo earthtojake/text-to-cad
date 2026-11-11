@@ -9,7 +9,7 @@ SDF (`.sdf`) is SDFormat, the Simulation Description Format Gazebo uses for worl
 
 You meet an SDF when you bring one in, from a Gazebo project or a robot's vendor. text-to-cad does not generate SDF from a model, and no skill teaches writing one. What it does is read the file, check it and draw it, so you and your agent can review it with the same tools as a [URDF](/docs/document-types/urdf).
 
-`validate` checks conformance. Where Gazebo's `gz` command is installed, it also runs `gz sdf --check` on the file. `snapshot` draws the file as the CAD Viewer does, into a PNG.
+`validate` checks conformance. Where Gazebo's `gz` command is installed, it also runs `gz sdf --check` on the file. `snapshot` draws the file as the viewer does, into a PNG.
 
 ## Example
 

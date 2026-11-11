@@ -276,7 +276,7 @@ re-runs the body that read it:
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
   part. A STEP that names other files as its parts (an external reference, written by a
-  CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
+  CAD tool's multi-file export) is refused by name, here and in the viewer and
   `cad <type> export`: export it again from its CAD tool as one file.
 - **A read tree's parts, placed**: `leaves(tree)` (`cad.build123d`) gives each leaf
   where it stands in the file's frame, out of the tree and on the same B-rep, with its

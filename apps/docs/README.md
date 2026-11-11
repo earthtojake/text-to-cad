@@ -19,7 +19,7 @@ or consumer-owned declarations are required.
 Normal development, checks and deployment use existing static assets and do not
 start Python; regenerating an asset is an explicit operation (the hero's GLB, and the
 documentation's copy of the registry, `src/lib/docs/registry.generated.json`). The hero reads one
-static GLB with core's GLB path, the CAD Viewer's, and plays its clip with core's
+static GLB with core's GLB path, the viewer's, and plays its clip with core's
 GLB animation runtime. It needs no FileViewer host or Python backend.
 
 Install from the repository root with `npm ci` (or the docs-only workspace
@@ -114,7 +114,7 @@ page, and its contents at the right, in the site's tokens and primitives.
   when the dialog first opens (the button, `/`, or Ctrl or Command with K) and searched in the
   browser: no service, nothing sent.
 - **A live model** on a page (`docModels` in the map; `src/components/docs/model-embed.tsx`): a GLB of
-  `public/`, read and lit by core as the CAD Viewer reads any GLB, its parts in their colours, its clip
+  `public/`, read and lit by core as the viewer reads any GLB, its parts in their colours, its clip
   playing, turned by dragging. Today that is the hero's planetary gear, on the Parts and assemblies page and
   the GLB page: no new CAD file. It loads when it scrolls into view, three.js with it, plays only on
   screen in a visible tab and holds still for reduced motion. Another model is another small GLB,

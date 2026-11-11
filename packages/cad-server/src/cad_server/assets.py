@@ -1,12 +1,12 @@
 """Where cadgen's non-Python runtime assets live.
 
-cadgen serves JavaScript it does not write in Python: the CAD Viewer's built client
+cadgen serves JavaScript it does not write in Python: the viewer's built client
 (``cad viewer`` serves it) and the CAD app page (``cad-mcp`` serves it). They ship
 inside the distribution under ``cad_server/_runtime``, and can be pointed elsewhere for
 development. Nothing cadgen runs needs Node.
 
 **Every resolver here is CALL-TIME.** Nothing at import time touches the filesystem: the
-CAD Viewer's long-lived server must import light, and a page that needs an asset asks for
+viewer's long-lived server must import light, and a page that needs an asset asks for
 it at the moment it needs it, with an actionable message if it is absent.
 
 In a source checkout the Viewer resolves to ``apps/web/dist``. An installed wheel has
@@ -107,7 +107,7 @@ def _dev_viewer_dist_dir() -> Path | None:
 
 
 def viewer_dist_dir() -> Path:
-    """Directory holding the CAD Viewer's built client (``index.html`` and its assets).
+    """Directory holding the viewer's built client (``index.html`` and its assets).
 
     ``CAD_VIEWER_DIST`` names it directly (``cad viewer --dist`` is its CLI twin).
     Otherwise a checkout's built ``apps/web/dist`` wins over the packaged copy.

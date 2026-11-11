@@ -11,7 +11,7 @@ them with it:
 
 * ``refill``: KiCad's refill of a copy's zones (``cad.kicad._refill``), which ``poured.payload`` plots the
   pours from (``CAD_KICAD_REFILL=0`` turns it off: the pours as saved, and no kicode fetched to draw a board;
-  the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the CAD Viewer's board page and ``cad kicad_pcb
+  the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the viewer's board page and ``cad kicad_pcb
   snapshot`` both draw (``prepare`` keeps it before a snapshot's render process reads it).
 * ``drc``: ``cad.kicad_pcb.drc`` of the saved board, the ``CheckResult`` ``cad kicad_pcb drc --json``
   prints, as data (``drc.json``).

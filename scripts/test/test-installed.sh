@@ -164,7 +164,7 @@ import sys
 from cad_server.assets import viewer_dist_dir
 from cad_server.mcp.ui import app_dir
 for label, resolved in (
-    ("CAD Viewer client", viewer_dist_dir()),
+    ("Viewer client", viewer_dist_dir()),
     ("CAD app page", app_dir()),
 ):
     if "site-packages" not in str(resolved):

@@ -2,7 +2,7 @@
 
 **Build the board first.** The playfield board's KiCad files are generated from the design model, not committed:
 `cad run build.py` in `board/` makes them in about eight minutes (KiCad 10.99 comes with the `cad` command; KiCad's
-stock libraries from macOS's KiCad.app or `KICAD_STOCK`). Opening the board or its schematic in the CAD Viewer or in
+stock libraries from macOS's KiCad.app or `KICAD_STOCK`). Opening the board or its schematic in the viewer or in
 KiCad, and `board/check_fit.py`, need that build first; the design model (`src/`) does not.
 
 An 8 mm chrome steel ball on a 112 x 236 mm four-layer board: the playfield IS the PCB, its gold art the machine's

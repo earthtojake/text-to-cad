@@ -1,14 +1,14 @@
 ---
 title: Parts and assemblies
-description: The cad skill writes parts, assemblies, mechanisms and DXF profiles as build123d scripts, builds them live in the CAD Viewer and exports files on request.
+description: The cad skill writes parts, assemblies, mechanisms and DXF profiles as build123d scripts, builds them live in the viewer and exports files on request.
 ---
 
-The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the CAD Viewer, and writes files when you ask.
+The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the viewer, and writes files when you ask.
 
 ## What it makes
 
 - **Model scripts you own**, usually under `src/`, that you keep editing as plain text.
-- **A live model page** in the [CAD Viewer](/docs/viewer), updated on every run.
+- **A live model page** in the [viewer](/docs/viewer), updated on every run.
 - **Mechanisms** you can pose and play in the viewer.
 - **DXF profiles, gaskets and flat patterns** for laser, plasma, waterjet and routing shops.
 - **STEP, STL, 3MF, GLB and DXF files**, only on request, in folders a project normally keeps out of git.
@@ -103,7 +103,7 @@ cad model interference "$ID" --fit pin base
 
 `--fit` names a pair meant to overlap, such as a pin in a bore. Exit 0 is clear, 1 means a pair shares volume, and 3 means a pair could not be measured, which is not a pass.
 
-An explode, a reveal or a showcase is `animation()`, a set of glTF channels on parts and no part of the mechanism. The viewer's Position panel poses the joints, with your states as presets, and a playbar plays the sequences. In a GLB every configuration sequence becomes a named animation clip and every `animation()` is baked in, for Blender, three.js and the CAD Viewer to play. STEP, STL and 3MF carry placements only.
+An explode, a reveal or a showcase is `animation()`, a set of glTF channels on parts and no part of the mechanism. The viewer's Position panel poses the joints, with your states as presets, and a playbar plays the sequences. In a GLB every configuration sequence becomes a named animation clip and every `animation()` is baked in, for Blender, three.js and the viewer to play. STEP, STL and 3MF carry placements only.
 
 ## DXF profiles and flat patterns
 
@@ -123,7 +123,7 @@ def gasket():
 
 A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and uses `flat_pattern(shape, coordinate=, kerf=)`; a vendor STEP is read with `step.read` first. Kerf is added with `offset_profile` or `kerf=`, never by hand-offsetting coordinates.
 
-`cad model export "$ID" DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the CAD Viewer opens it as a read-only 2D drawing with its layers.
+`cad model export "$ID" DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
 
 For sheet work, a cut-file check reads every entity on a cut layer as a cutter would:
 
@@ -161,4 +161,4 @@ This is the `cad` skill ([SKILL.md](repo:skills/cad/SKILL.md)). Its most useful 
 - [Kinematics](repo:skills/cad/references/kinematics.md) and [animation](repo:skills/cad/references/animation.md)
 - [2D profiles and DXF](repo:skills/cad/references/2d-profiles-and-dxf.md) and [sheet metal cut files](repo:skills/cad/references/manufacturing-sheet-metal.md#cut-files-dxf)
 
-Related pages: the [CAD Viewer](/docs/viewer), [manufacturing checks](/docs/skills/manufacturing-checks), the document types [model](/docs/document-types/model), [STEP](/docs/document-types/step), [STL](/docs/document-types/stl), [3MF](/docs/document-types/threemf), [GLB](/docs/document-types/glb) and [DXF](/docs/document-types/dxf), and the [build123d](/docs/integrations/build123d) integration.
+Related pages: the [viewer](/docs/viewer), [manufacturing checks](/docs/skills/manufacturing-checks), the document types [model](/docs/document-types/model), [STEP](/docs/document-types/step), [STL](/docs/document-types/stl), [3MF](/docs/document-types/threemf), [GLB](/docs/document-types/glb) and [DXF](/docs/document-types/dxf), and the [build123d](/docs/integrations/build123d) integration.

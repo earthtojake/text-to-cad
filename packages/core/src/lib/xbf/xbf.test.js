@@ -567,7 +567,7 @@ test("a box takes what is visible in it by a click's rules: what it touches, eve
 });
 
 test("a box over a grid of plates seen from the viewer's iso view takes every plate visible in it, a sliver along its side too", async () => {
-  // Thirty-two plates in a grid, as an assembly's are laid out, seen as the CAD Viewer frames them: its
+  // Thirty-two plates in a grid, as an assembly's are laid out, seen as the viewer frames them: its
   // isometric direction, orthographic, in a viewport of 1400 x 864 CSS pixels.
   const [width, height] = [1400, 864], pitch = [54, 27];
   const instances = [];

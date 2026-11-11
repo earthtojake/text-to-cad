@@ -262,7 +262,7 @@ codex plugin marketplace add earthtojake/text-to-cad --ref latest
 codex plugin add text-to-cad@earthtojake
 ```
 
-In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
+In the Codex app the plugin also brings the viewer: **CAD** in the sidebar
 (recent models, and Open), a **CAD** tab beside each thread that the agent
 drives, and *Open with CAD* for model files.
 
@@ -326,7 +326,7 @@ grok plugin enable text-to-cad
 
 Grok Build reads its own manifest (`.grok-plugin/plugin.json`), which names CAD's
 server, before Claude's, which names none. Grok shows tool results as text, so
-asking it to show a model gives you a CAD Viewer link.
+asking it to show a model gives you a viewer link.
 
 To update, run this, then restart Grok Build:
 
@@ -396,7 +396,7 @@ name the agent and install for your user:
 
 Each skill runs text-to-cad's server through the `cad` command, which the install command
 writes (each skill's setup says so), so run it once. Without the plugin there is no CAD
-server, so the skills open models in the CAD Viewer in your browser.
+server, so the skills open models in the viewer in your browser.
 
 **To update or reinstall, run the same command again**, then restart the app.
 `add` re-fetches the package and overwrites what is already installed, so it both
@@ -425,7 +425,7 @@ CAD server checks whether a newer release is out, and when it is one of those, i
 installs it in the background at once, then, once nothing
 has run for a minute (no build, picture, export or agent's request underway), updates
 text-to-cad in every agent app on your computer as the install command does and
-restarts on the new release. A CAD Viewer page or a CAD card that is open reloads
+restarts on the new release. A viewer page or a CAD card that is open reloads
 itself into it. Should an update fail, the server stays on, or goes back to, the
 release it ran, and that release is not tried again by itself for a day; a newer one
 is tried when it comes out. With no network nothing happens, and nothing waits.
@@ -437,7 +437,7 @@ you. CAD shows its update button for it, and `cad update auto` says it is out; c
 button or run `cad update` when you are ready.
 
 To turn automatic updates off, uncheck **Automatic updates** in the menu under CAD's
-logo (in the CAD Viewer or a CAD card), or run `cad update auto off`; `cad update auto
+logo (in the viewer or a CAD card), or run `cad update auto off`; `cad update auto
 on` turns them back on, and `cad update auto` says whether they are on, when the server
 last checked and when it checks next. The setting is one for every app and release on
 your computer. `CAD_UPDATE_CHECK=0` in the server's environment turns the check off, and
@@ -461,7 +461,7 @@ An update writes the plugin folder again for the new release
 ([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
 read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
 the skills alone) get it again. Should the new release's server not start, the release
-before comes back, and its plugin and Claude Desktop's server with it; the CAD Viewer page
+before comes back, and its plugin and Claude Desktop's server with it; the viewer page
 you clicked in says the update failed, and offers it again.
 
 Your computer runs one CAD server, the current release's, whatever release each
@@ -517,7 +517,7 @@ what it serves. It does not list the releases on your computer.
 ## What a model runs in
 
 The release the install command runs is text-to-cad's server (`cad-server`): the
-`cad` command, the CAD Viewer's server and the engine every build goes through, without
+`cad` command, the viewer's server and the engine every build goes through, without
 the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
 reaches it. A model runs where the kernel is. `cad run` runs it exactly as `uv run` would -- the same
 options and the same script header -- in an environment the server makes with uv in its cache

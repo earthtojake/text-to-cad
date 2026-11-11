@@ -32,7 +32,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Telemetry: usage counts and crash reports, when it is on.</strong> text-to-cad’s
             long-running parts -- the CAD app that shows models in your agent app (the plugin’s{" "}
-            <code>cad-mcp</code> server) and the CAD viewer in your browser (<code>cad viewer</code>), and
+            <code>cad-mcp</code> server) and the viewer in your browser (<code>cad viewer</code>), and
             in earlier releases the build daemon that built models for them -- send to api.texttocad.dev,
             with what <code>cad</code> commands and model scripts counted, at most once every five
             minutes while you use them and once as each stops:
@@ -106,7 +106,7 @@ export default function PrivacyPolicyPage() {
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
-            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the CAD viewer)
+            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the viewer)
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
@@ -218,7 +218,7 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             To turn telemetry off, run <code>cad telemetry off</code>, use{" "}
-            <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
+            <strong>Telemetry</strong> in the menu of the CAD app or the viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links

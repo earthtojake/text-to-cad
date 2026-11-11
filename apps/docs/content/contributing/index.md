@@ -16,7 +16,7 @@ text-to-cad is MIT-licensed and built in the open. Here is how to take part and 
 
 - `skills/`: the agent skills and their references. The skills are the product.
 - `packages/`: the published Python distributions (`cad`, the library; `cad-server`, the server and the `cad` command; `cad-mcp`, the shim an agent app starts) and the shared JavaScript packages.
-- `apps/`: the CAD Viewer's web client (`apps/web`), the CAD app (`apps/mcp`), this documentation site (`apps/docs`) and the API behind the site (`apps/api`).
+- `apps/`: the viewer's web client (`apps/web`), the CAD app (`apps/mcp`), this documentation site (`apps/docs`) and the API behind the site (`apps/api`).
 - `models/`: example models, each built with `python model.py`.
 - `tests/`: the test suites for the skills, the packages, the viewer and repository-wide policy.
 - `docs/`: the install guide, the contributing guides and the migration guides.

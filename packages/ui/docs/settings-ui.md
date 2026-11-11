@@ -77,7 +77,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   with its separator, and an export whose file is gone is
   left out. The apps are asked for as the menu opens, never before: what needs no answer is there
   at once, the apps join it when it comes, and a failed or slow answer leaves the menu as without
-  them. Choosing one is counted as `file_open_app`, never which app. Then the host's own items, the CAD viewer's
+  them. Choosing one is counted as `file_open_app`, never which app. Then the host's own items, the viewer's
   **Export**, a submenu of the formats the document's kind writes (where the host can download,
   the web viewer's). Each only where the host can do it. A model's document, which has no file of
   its own, has the same menu on the script that builds it (its envelope's `source.path`,
@@ -1706,11 +1706,11 @@ close it and keep it seen for every view of the person's; nothing else is offere
 ## Naming the page
 
 Text a person reads in the viewer and the CAD app says "browser" (**Open in browser**, "open the
-model in your browser"), never "CAD Viewer", a name no one knows; where a sentence means the page
+model in your browser"); where a sentence means the page
 itself it says "the viewer" or "this page". That holds for every button, notice, card, menu and tool
-message an agent relays to a person, in every locale. "CAD Viewer" stays only where it is a name
-someone looks up: the `cad viewer` command, developer docs, and the skills that tell an agent which
-verb to run.
+message an agent relays to a person, in every locale. The page has no other name: developer docs
+and the skills call it the viewer too, its command is `cad viewer`, and where a reader has no
+context (a file read on its own, a package's description) it is "the text-to-cad viewer".
 
 ## Verification
 

@@ -30,7 +30,7 @@ Hosts present views in one of three ways, told apart at initialize (``host.py``)
   ``cad_show`` returned: one session may serve many chats, and no host says which.
 - *Text* (a client that renders no MCP Apps, so does not advertise the
   ``io.modelcontextprotocol/ui`` extension: Grok, Zed, Gemini CLI, Claude Code in a
-  terminal, ...). ``cad_show`` opens the model's page in the CAD Viewer
+  terminal, ...). ``cad_show`` opens the model's page in the viewer
   (``browser.py``), the one this machine runs, started if none is, in the person's
   browser -- unless a browser page reads that document already -- and answers with its URL.
   The engine never opens it: the host's stdio peer does, in the agent's own environment, from

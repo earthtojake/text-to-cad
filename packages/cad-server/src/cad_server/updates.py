@@ -8,7 +8,7 @@ It is one anonymous request: no id, no path, nothing about the person or their m
 any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
 set) or for a copy that is not told. The feed as last read is kept in the state directory
 (``versions.json``), where every process of the person's reads it. It says a release is out; the
-update moves to it when the person asks -- the update button in the CAD Viewer and the CAD app
+update moves to it when the person asks -- the update button in the viewer and the CAD app
 (``cad_server._internal.update``), ``cad update``, or the install command run again -- or, with
 automatic updates on (``cad_server/auto_updates.py``), once the device's engine is idle.
 
@@ -24,7 +24,7 @@ told of it; nor is a development install. A newer server's release is offered to
 development install: the store moved the plugin, and the device's engine is still behind it. An
 update a person asks for reads the feed whatever the copy (``checking(asked=True)``).
 
-The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update button, an icon and
+The notice is ``{latest, version}``: the viewer's and the CAD app's update button, an icon and
 nothing else, while this install is behind; a click updates (``POST /api/v1/local/update``). A text-only app
 gets one line (``line``) with its first ``cad_show`` result: the release, and the install command
 (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's), which updates text-to-cad in

@@ -2,7 +2,7 @@
 
 A page cannot ask for a path -- a browser hands over a file's bytes, never where it
 is, and an app's form draws only inside a chat turn -- so the server that runs the
-page, the CAD app's or the CAD Viewer's, asks the desktop directly. It never draws
+page, the CAD app's or the viewer's, asks the desktop directly. It never draws
 anything itself, and never runs a shell. Every file can be chosen -- none is greyed
 out -- and the server says which kinds CAD opens when one it cannot is picked.
 """

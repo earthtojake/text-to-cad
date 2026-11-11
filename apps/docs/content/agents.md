@@ -1,6 +1,6 @@
 ---
 title: Supported agents
-description: Which agent apps text-to-cad works with, what each one gets, and where the CAD Viewer appears in each.
+description: Which agent apps text-to-cad works with, what each one gets, and where the viewer appears in each.
 ---
 
 text-to-cad works with any agent that supports plugins or skills. Claude Code, Codex and Cursor are the first-class integrations: a change to the plugin or the skills is tested in each of them before it ships. Claude Desktop, Grok Build and Gemini CLI have their own set-up. Other agents get the skills alone.
@@ -29,13 +29,13 @@ How you see a model depends on what the app can draw.
 - **Claude Desktop** draws a viewer card in the conversation each time the agent shows a model, in its Chat tab and in its Code tab. A newer card retires the older ones, which keep a still of their last frame. It reads its config when it starts, so restart it after the first set-up.
 - **Codex** in its app has **CAD** in the sidebar, a **CAD** tab beside each thread that the agent drives, and *Open with CAD* for model files. The Codex terminal shows no tabs, so the agent gives you a link.
 - **Cursor** draws viewer cards inline in the chat. It also loads the plugin installed with Claude Code.
-- **Grok Build and Gemini CLI** show tool results as text, so the agent gives you a CAD Viewer link.
-- **Other agents** open models in the CAD Viewer in your browser.
+- **Grok Build and Gemini CLI** show tool results as text, so the agent gives you a viewer link.
+- **Other agents** open models in the viewer in your browser.
 
-The [CAD Viewer](/docs/viewer) is the same in a card, a tab and the browser. [Viewer and CAD app](/docs/architecture/viewer-and-cad-app) explains how the hosts differ.
+The [viewer](/docs/viewer) is the same in a card, a tab and the browser. [Viewer and CAD app](/docs/architecture/viewer-and-cad-app) explains how the hosts differ.
 
 ## The agents the skills reach
 
 For an agent without a plugin, the install command copies the skills with the Skills CLI, which needs Node. It does this for GitHub Copilot (including VS Code's agent), Windsurf, Cline, Amp, Antigravity, OpenClaw, Droid, Goose, Kilo Code, Kiro CLI, Hermes Agent, OpenCode, Roo Code, Trae and Zed, when they are installed. For any other agent, the [install page](/docs/install#other-agents) has the Skills CLI command to run yourself.
 
-Without a plugin there is no CAD server, so the skills open models in the CAD Viewer in your browser. If your agent has no plugin yet, you can [request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).
+Without a plugin there is no CAD server, so the skills open models in the viewer in your browser. If your agent has no plugin yet, you can [request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).

@@ -14,7 +14,7 @@ There is no separate text-to-cad board model. The skill edits the native files i
 - A STEP or GLB of the board and its parts, for enclosure design. A part without a 3D model is named in the result and left out. The GLB also holds copper, mask and silkscreen.
 - A pre-order review of the board, with each finding marked pass, fail, review or unverified.
 
-In the [CAD Viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection, Measure and annotations, and a schematic shows one sheet at a time with a parts, nets and hierarchy panel.
+In the [viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection, Measure and annotations, and a schematic shows one sheet at a time with a parts, nets and hierarchy panel.
 
 ## How it works
 
@@ -91,4 +91,4 @@ The skill is [`pcb`](repo:skills/pcb/SKILL.md). Its references:
 - [Checks](repo:skills/pcb/references/checks.md) and [manufacturing](repo:skills/pcb/references/manufacturing.md)
 - The pre-order reviews: [fabrication](repo:skills/pcb/references/review-fabrication.md), [electrical](repo:skills/pcb/references/review-electrical.md) and [assembly](repo:skills/pcb/references/review-assembly.md)
 
-Related pages: the document types [`kicad_pcb`](/docs/document-types/kicad_pcb) and [`kicad_sch`](/docs/document-types/kicad_sch), [the KiCad integration](/docs/integrations/kicad), [the CAD Viewer](/docs/viewer), and [parts and assemblies](/docs/skills/parts-and-assemblies) for the enclosure you fit round the board's STEP.
+Related pages: the document types [`kicad_pcb`](/docs/document-types/kicad_pcb) and [`kicad_sch`](/docs/document-types/kicad_sch), [the KiCad integration](/docs/integrations/kicad), [the viewer](/docs/viewer), and [parts and assemblies](/docs/skills/parts-and-assemblies) for the enclosure you fit round the board's STEP.

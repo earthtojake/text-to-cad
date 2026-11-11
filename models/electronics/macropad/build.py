@@ -4,7 +4,7 @@ project file and rules, every part placed, every track and via, the pours and th
     cad run build.py
 
 The KiCad files are build output (`.gitignore` keeps them out of Git): run this before opening the board or the
-schematic in the CAD Viewer or in KiCad, and before any script that reads the board (`src/`, `check_macropad.py`).
+schematic in the viewer or in KiCad, and before any script that reads the board (`src/`, `check_macropad.py`).
 It needs the `cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock libraries, which the
 generators read from macOS's KiCad.app or from `KICAD10_SYMBOL_DIR` and `KICAD10_FOOTPRINT_DIR`. Rerunning it
 over a built board is harmless: each step states the board it wants.

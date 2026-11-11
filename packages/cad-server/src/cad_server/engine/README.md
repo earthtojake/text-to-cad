@@ -150,7 +150,7 @@ The background process is implemented in `daemon.py`; warm workers remain separa
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
 structures and buffers, never live kernel objects (law 20).
-The daemon takes its HTTP application -- the CAD Viewer's and the CAD app's -- from the server's
+The daemon takes its HTTP application -- the viewer's and the CAD app's -- from the server's
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
 no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
 extra's -- OCP, build123d, bd_materials, threejs_materials, Pillow (the renderer's rasteriser) and
@@ -263,7 +263,7 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-An update moves the device to another release in one step: the update button in the CAD Viewer and
+An update moves the device to another release in one step: the update button in the viewer and
 the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad update`, or the install
 command run again (both `cad setup`), or the engine itself, when automatic updates are on (below). Each
 installs the release in a folder
@@ -2110,7 +2110,7 @@ the xbf it declares among them: no run sends a file's page anything (**Document 
 
 ## The viewer and the snapshot
 
-The CAD Viewer and its document reads share the daemon's HTTP listener. The page
+The viewer and its document reads share the daemon's HTTP listener. The page
 reads its document's kind's routes (`/api/v1/documents/<kind>/<id>/structure`, `parts/<key>`) and
 waits on `/api/v1/documents/<id>/version`; dispatch calls the engine's own reads directly, in process
 (`/api/doc/<id>...`, `serve.py`'s, which binds no listener of its own: the engine's reads are served
@@ -3021,7 +3021,7 @@ MuJoCo has no slide equality. The MJCF writes each closure as a site on each bod
 (`<name>/1`, `<name>/2`) and `connect` equalities of them: one for a ball, two for a hinge (the
 second pair of sites `export.mjcf.AXIS_SPAN` along the axis), so the point and the axis's direction
 are held and the turn is free; its range is not enforced, and said; `contact` excludes its two
-bodies where they touch at rest. The URDF leaves a closure out and says so; the CAD Viewer's
+bodies where they touch at rest. The URDF leaves a closure out and says so; the viewer's
 `<tcad:four_bar>` is never generated. A mechanism state that moves a joint of a loop is left out of
 the description's poses, and `ranges` sweeps no joint of a loop.
 
@@ -3464,7 +3464,7 @@ starts from, the n-th element of its kind a feature made, and a step per feature
 made it out of another (`f:plate.body.3;M:plate.relief`: face 3 of the box, modified
 by the relief cut). A long derivation folds to its last feature and a digest
 (`f:plate.relief~5d1e0c2f9a3b`); the worker that built it spells it out. Every name is a
-reference the CAD Viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
+reference the viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
 `refs.py`'s `ELEMENT_NAME`, which the naming in `kernel/trace.py` reads and which loads no kernel): a feature name has at most one dot, every segment
 is an identifier, and an atom ends in a number or a digest. A name holds no line or file (law 9): a line is
 what the worker serves, now.
@@ -3565,7 +3565,7 @@ never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read a
 it. A canonical ref -- what `inspect` answers --
 spells the element by its name (its ordinal only where it has none) under its part's label where
 that label names one occurrence, else under the occurrence's path from the root; in a document of
-one part, under the document's name. It is also what the CAD Viewer copies of an `.xbf`'s selection,
+one part, under the document's name. It is also what the viewer copies of an `.xbf`'s selection,
 the file's path first (`/work/XBF/kit.xbf#kit/hand/finger.2/face 7`), or a model's id first for a
 model the engine holds: the viewer's parser and speller
 of this grammar (`cadRefs` in the bundled runtime) are held to this module's, case for case, by a
@@ -4019,7 +4019,7 @@ Python runs it again, and no verb imports, runs or builds a script. An id the en
 holds (unsaved, detached) is refused with its state and the command that builds it again
 (`cad run <the script that defines it>`; **Document lifetime**).
 `--query build` returns saved-file metadata/closure or live-build metadata; `--query closure` and
-`--query geometry` select the other queries explicitly. In the CAD Viewer a model's page is
+`--query geometry` select the other queries explicitly. In the viewer a model's page is
 `/<id>`; it has no file of its own, so its ⋯ menu acts on the document and on the script that builds it
 (Export among them), and its name menu's Files lists the folder
 the explorer was last in, else the person's home folder, never the script's.

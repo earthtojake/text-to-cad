@@ -82,7 +82,7 @@ a file — never for a `compact` view (a
 picture: the home's thumbnails), never where the host asks for the view alone
 (`chrome: "bare"`, `FileViewerProps.chrome`; the default is `"page"`: the CAD app hands
 `"bare"` to its file handler alone, whose host's file tree is its navigation), and not while a renderer says its
-Preview is up (`RendererViewProps.onPreviewChange`): the CAD viewer's Preview draws its own
+Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 
 - the text-to-cad "C" logo (named Menu, with no chevron; the same 16px mark over the home),
@@ -100,7 +100,7 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   otherwise;
 - the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
   and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
-  host's own items (`fileMenuItems`: the CAD viewer's Export submenu). Each only where the
+  host's own items (`fileMenuItems`: the viewer's Export submenu). Each only where the
   host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
   model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
   or deleted, `sourceMissing`, draws what opens it disabled with its reason), and no ⋯

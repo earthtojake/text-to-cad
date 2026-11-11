@@ -21,7 +21,7 @@ click while an automatic update gets ready makes it the click's, done at once.
 
 The setting is the person's, one for every CAD app and release: the ``updates`` section of their
 settings (``cad_server/settings.py``: ``settings.json`` in the state folder), ``{"automatic": false}``
-once they turn it off (``cad update auto off``, or the app menu's Automatic updates in the CAD Viewer
+once they turn it off (``cad update auto off``, or the app menu's Automatic updates in the viewer
 and the CAD app), ``{"automatic": true}`` once they turn it on; no section is the default. An
 environment that turns the version check off (``CAD_UPDATE_CHECK=0``, CI) turns it off too, and no
 click changes that (``reason``: ``environment``). A development install is never updated by itself,

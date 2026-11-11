@@ -66,7 +66,7 @@ where those files ship, so these scripts are what produces them.
   — and a PATH that holds no test fails the run. `CAD_TEST_SHARD=I/N` runs one
   shard of each suite's files: CI splits a whole run over two jobs on Linux and
   three on Windows.
-  - `--select` picks one group: `cadgen` (the package suites, CAD Viewer backend
+  - `--select` picks one group: `cadgen` (the package suites, viewer backend
     included; CI's `packages` jobs), `viewer` (that backend alone, ~11 s), `skills` (every skill's
     suite), `all` (the default).
   - `--print-weights` prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file
@@ -128,7 +128,7 @@ where those files ship, so these scripts are what produces them.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
   every renderer draws its chrome through the one frame, `kit/shell/ViewFrame.jsx`), and every
-  string the CAD Viewer and the CAD app show read through the locale files. Run by `test-js.sh`
+  string the viewer and the CAD app show read through the locale files. Run by `test-js.sh`
   (the first two also as `npm run check:boundaries`).
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
   resolution, path narrowing, fail-closed unittest loading, the per-file
@@ -318,5 +318,5 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 bump (`release/bump-version.sh`); merging either starts `Publish Release` (PyPI,
 then the install branches); `Deploy Docs` redeploys. `main` is the one branch you
 develop on, and what releases tag; installers follow `latest`, written only by
-`Publish Release`; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
+`Publish Release`; `build-test` is the rehearsal. The viewer is a local-filesystem
 app with no hosted deployment.

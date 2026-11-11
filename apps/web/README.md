@@ -1,4 +1,4 @@
-# CAD Viewer
+# Viewer
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.

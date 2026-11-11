@@ -85,7 +85,7 @@ export const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: ro
 const libraryRows = (reply) => (Array.isArray(reply?.documents) ? reply.documents.map(libraryRow) : []);
 
 /**
- * An explicit connection to a CAD Viewer, which serves files by absolute path. Its catalog holds
+ * An explicit connection to a viewer, which serves files by absolute path. Its catalog holds
  * the files on screen, each read as it is asked for. Construction never starts requests.
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}

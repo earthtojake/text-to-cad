@@ -1,11 +1,11 @@
 ---
-title: The CAD Viewer and the CAD app
+title: The viewer and the CAD app
 description: The two ways you see a document, in your browser and inside your agent app, and how each reaches the CAD server.
 ---
 
-You look at documents in two places: the **CAD Viewer**, a page in your browser, and the **CAD app**, the same viewer drawn inside an agent app as a tab or a card. Both are views onto the one CAD server on your computer, and both draw with the same shared interface code. For how you use the viewer's tools, see the [CAD Viewer guide](/docs/viewer).
+You look at documents in two places: the **viewer**, a page in your browser, and the **CAD app**, the same viewer drawn inside an agent app as a tab or a card. Both are views onto the one CAD server on your computer, and both draw with the same shared interface code. For how you use the viewer's tools, see the [viewer's page](/docs/viewer).
 
-## The CAD Viewer
+## The viewer
 
 `cad viewer` opens the viewer:
 
@@ -23,7 +23,7 @@ When your agent rebuilds a model that a page is showing, the page picks up the e
 
 - **The backend** is the server's own HTTP application, `cad_server.viewer`, in the `cad-server` distribution. It serves the page and the document routes under `/api/v1` on the same listener as everything else. A STEP or `.xbf` is read and meshed by the server's kernel processes, never in a request's thread.
 - **The client** is a React app whose source is `apps/web`. Its production build ships inside the server's wheel, so nothing is fetched from the internet.
-- **`@cad/ui`** holds the shared viewer: the file view, the CAD renderers, the home, the controls and the design system, used by both the CAD Viewer and the CAD app.
+- **`@cad/ui`** holds the shared viewer: the file view, the CAD renderers, the home, the controls and the design system, used by both the viewer and the CAD app.
 - **`@cad/core`** holds the code without React: the geometry and rendering (on Three.js) and the client that talks to the server over HTTP.
 
 The viewer is read-only. It never changes a design or writes to your files: Export downloads a new file, and Delete on the home removes the server's record and cache of a document, not the document's file. Its tools (Select, Measure, Annotate, Quick Edit) exist to show you the design and to send feedback to your agent. A page never reads model source or starts a build.
@@ -50,7 +50,7 @@ The agent opens a view with `cad_show` (and, where the host shows tabs, `cad_ope
 | Agent app | What you see |
 | --- | --- |
 | Codex app | A **CAD** item in the sidebar, a CAD tab beside each thread, and *Open with CAD* for a model file |
-| `codex exec` and Codex's terminal interface | Text: `cad_show` opens the CAD Viewer in your browser |
+| `codex exec` and Codex's terminal interface | Text: `cad_show` opens the viewer in your browser |
 | Claude Desktop, Chat tab | Viewer cards in the chat, from the server `cad setup` adds to Claude Desktop's config |
 | Claude Desktop, Code tab | The same cards, from the same config entry |
 | Claude Code in a terminal | No cards: the skills give you a `cad viewer` link |
@@ -63,6 +63,6 @@ Claude Code's plugin carries the skills alone and starts no CAD server: in Claud
 
 - [Architecture overview](/docs/architecture) and [The engine](/docs/architecture/engine).
 - [Security and privacy](/docs/architecture/security): how the page and the card are authorised.
-- [The CAD Viewer's README](repo:apps/web/README.md): launching, ports and behaviour.
+- [The viewer's README](repo:apps/web/README.md): launching, ports and behaviour.
 - [The CAD app's README](repo:apps/mcp/README.md): presentations, the host tables and the rules.
 - [The shim's README](repo:packages/cad-mcp/README.md), [`@cad/ui`](repo:packages/ui/README.md) and [`@cad/core`](repo:packages/core/README.md).

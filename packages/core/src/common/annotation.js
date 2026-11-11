@@ -1,6 +1,6 @@
 import { createScreenSpaceLineStrip } from "./renderEdges.js";
 
-// An annotation: ink drawn over a model in the CAD Viewer's Annotate tool, in 3D. The viewer draws it live
+// An annotation: ink drawn over a model in the viewer's Annotate tool, in 3D. The viewer draws it live
 // and writes it with a prompt; a snapshot job draws it over the model it renders (`job.annotation`),
 // with this same code, so what an agent renders is what the person drew.
 //

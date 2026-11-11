@@ -155,7 +155,7 @@ def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
 
 
 # What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad viewer`` says.
-NOT_BUILT = "CAD Viewer client is not built; build apps/web or install the cad-server wheel"
+NOT_BUILT = "The viewer client is not built; build apps/web or install the cad-server wheel"
 
 
 def identity_token(dist_dir: str) -> str:
@@ -950,7 +950,7 @@ class CadApp:
         starts meshing its parts, which a page reads next. Documents are the engine's: an
         application with none under it serves none."""
         raise ApiError(404, "documents are served by the installation's engine",
-                       "open the document in the CAD Viewer: `cad viewer <file>`")
+                       "open the document in the viewer: `cad viewer <file>`")
 
     def _relay(self, request, response, route: str, query=()) -> None:
         """The engine's answer to ``route``, sent on: its error, a JSON object, gains a ``hint``

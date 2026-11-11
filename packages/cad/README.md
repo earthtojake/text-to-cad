@@ -3,9 +3,9 @@
 The library: CAD models written as Python, imported as `cad`, built by the engine (`cad.engine`) into live XCAF documents and the files those models
 declare (XBF, STEP, GLB, STL, 3MF, DXF). It is one of three distributions released together, at one
 version: the library; the server, `cad-server` (imported as `cad_server`), the computer's one
-daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD app's MCP endpoint
+daemon that builds, keeps and serves the documents, with the viewer, the CAD app's MCP endpoint
 and the command that runs them all; and the shim, `cad-mcp` (`cad_mcp`), the stdio transport
-an agent app starts. The server ships what is not Python: the CAD Viewer's client and the CAD app
+an agent app starts. The server ships what is not Python: the viewer's client and the CAD app
 page, which it serves, built from their JavaScript packages and bundled in at build time (the JS
 *source* never ships). Snapshots are drawn by OCCT (a KiCad board's flat, with Pillow), never in a
 browser. This file holds the laws of
@@ -86,7 +86,7 @@ its operations and what writes it.
 
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
-materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
+materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
@@ -123,7 +123,7 @@ technology, and its extra carries the same name.
 **DEPENDED ON BY** — the server, `cad-server`, which pins it at its own release, and through
 the server every skill that runs `cad`; the deprecated alias `cadgen`, which installs it at the same
 release.
-The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
+The viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
 ## The rest of the package's documentation
@@ -205,7 +205,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    installed; it imports nothing outside itself but its own dependencies, the standard library and
    each integration's extra, that extra only in that integration's environment (law 25; the kernel is
    the `build123d` extra's, which the engine's workers run in). The server -- what runs in the daemon
-   or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
+   or a `cad` command: the daemon, the registry, the viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
    the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library alone. The server reaches into the library, never the
@@ -1012,7 +1012,7 @@ result.ok, result.findings, result.measurements["safety_factor"], result.written
 
 With no study it is the study's setup: the document's parts, the pairs that touch within the contact
 tolerance a study bonds by (an overlapping pair a warning) and one part's faces, each with the engine's
-ref (`bracket/face 17`, the one the CAD Viewer copies) and a hint (`plane, normal -Z, largest`). With a
+ref (`bracket/face 17`, the one the viewer copies) and a hint (`plane, normal -Z, largest`). With a
 study (a JSON file, inline JSON or a dict) and `out`, a folder anywhere (made when missing), the solve,
 which writes its results there, each a standard file that stands on its own, and touches nothing else in
 the folder:
@@ -1026,7 +1026,7 @@ the folder:
 | `ccx.inp` | with `deck`, the input CalculiX solved |
 
 There is no document type for a result: the answer is the JSON, the pictures are for looking, the GLB
-opens in the CAD Viewer as any GLB does, and the VTU is for a program's own questions. An option of the
+opens in the viewer as any GLB does, and the VTU is for a program's own questions. An option of the
 other use is refused by name before anything is read. The study reads a file in its own process, as the
 engine reads one (`engine.document.load`), with no worker and no build, and resolves faces in the
 document's structure as `cad <type> inspect` does (`engine.refs`); a model is written to an `.xbf` in a

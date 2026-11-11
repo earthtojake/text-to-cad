@@ -190,7 +190,7 @@ jobs:
 
   # ---- unit and platform: the packages' suites ---------------------------------------------------
 
-  # The library's, the server's (the engine's and the CAD Viewer backend's included) and the
+  # The library's, the server's (the engine's and the viewer backend's included) and the
   # shim's suites, or the test files of them a change itself edits. Run whole they are split
   # over shards, each taking its share of every suite (CAD_TEST_SHARD); a narrowed selection is
   # one shard. The first shard also checks the types,
@@ -634,7 +634,7 @@ jobs:
           UI_BROWSER_TEST_CONCURRENCY: "1"
         run: scripts/test/test-js.sh --select ui-${{ matrix.part }}
 
-  # The CAD Viewer's client: Node only. The bundled viewer, served through the real backend,
+  # The viewer's client: Node only. The bundled viewer, served through the real backend,
   # is driven in `viewer-e2e`.
   js-web:
     name: js-web
@@ -657,7 +657,7 @@ jobs:
           playwright: "false"
           npm: packages/core packages/ui apps/web
 
-      - name: Run the CAD Viewer client tests
+      - name: Run the viewer client tests
         run: scripts/test/test-js.sh --select web
 
   # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
@@ -789,7 +789,7 @@ jobs:
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
 
-      - name: Launch the bundled CAD Viewer through the backend
+      - name: Launch the bundled viewer through the backend
         run: scripts/test/test-viewer-launch.sh
 
       - name: Exercise the bundled viewer in Chromium

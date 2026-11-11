@@ -4,7 +4,7 @@ sheets (and the project, made by KiCad), then the board: setup, place, route, zo
     cad run build.py
 
 The KiCad files are build output (`.gitignore` keeps them out of Git): run this before opening the board or the
-schematic in the CAD Viewer or in KiCad, and before any script that reads the board (`src/`, `check_orbit.py`).
+schematic in the viewer or in KiCad, and before any script that reads the board (`src/`, `check_orbit.py`).
 It needs the `cad` command (KiCad 10.99's kicad-cli and API come with it) and KiCad's stock libraries, which
 `build_libraries.py` reads from macOS's KiCad.app or from `KICAD_STOCK`. Rerunning it over a built board is
 harmless: each stage states the board it wants, and a sheet that already holds symbols is left as it is.

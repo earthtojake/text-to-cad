@@ -3,7 +3,7 @@ title: The engine
 description: How a model script becomes a document, and how the CAD server builds, keeps, exports and draws it.
 ---
 
-The engine turns a model script into a **document**, the thing you review in the CAD Viewer. This page explains what happens and why.
+The engine turns a model script into a **document**, the thing you review in the viewer. This page explains what happens and why.
 
 ## A model is a Python function
 

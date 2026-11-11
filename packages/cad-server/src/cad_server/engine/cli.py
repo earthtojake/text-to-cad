@@ -741,7 +741,7 @@ def _consent_to_rotate(args: argparse.Namespace, prog: str) -> None:
     command = retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])])
     confirm("replacing this installation's page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
             command=command,
-            preview=[f"{prog} --rotate-token replaces this installation's page token: every CAD Viewer link and browser "
+            preview=[f"{prog} --rotate-token replaces this installation's page token: every viewer link and browser "
                      "session made with the one it has now stops working, and each page needs a new link "
                      "(cad viewer prints one). This cannot be undone."])
 
@@ -1073,7 +1073,7 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
                "carries the document's motions as clips, a DXF draws a planar one, an MJCF and a URDF are its robot "
                "description",
                _export_arguments, _export),
-    "snapshot": ("draw a document or a file the viewer opens as the CAD Viewer does, into a PNG", _snapshot_arguments,
+    "snapshot": ("draw a document or a file the viewer opens as the viewer does, into a PNG", _snapshot_arguments,
                  _snapshot),
     "serve": ("serve a document over HTTP and print its URL", _serve_arguments, _serve),
     "inspect": ("what a document holds -- its state, parts, bounds, volume, materials, joints, couplings, states, "

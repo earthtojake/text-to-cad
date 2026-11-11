@@ -5,7 +5,7 @@ one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in ever
 app), or the host's home with none, under a navbar — the logo that opens the app's
 menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
-`CadViewer` (`@cad/ui/cad-viewer`) is the CAD viewer every app shows:
+`CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
 FileViewer over a CAD client, with the six CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.

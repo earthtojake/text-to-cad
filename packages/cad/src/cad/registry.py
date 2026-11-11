@@ -253,7 +253,7 @@ _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each 
                                        "--tolerance and --angle mesh a .glb, an .stl or a .3mf finer", _KERNEL,
                                        engine=True)
 _EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
-_SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL, engine=True)
+_SNAPSHOT = Operation("snapshot", "draw it as the viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
                                          "element or part is and what made it", _KERNEL, engine=True)
 _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL, engine=True)
@@ -347,7 +347,7 @@ _TYPES = (
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
         (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
                              "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
-         Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
+         Operation("snapshot", "draw it flat, as the viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("drc", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
                    "kicad")), reader=True,

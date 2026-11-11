@@ -1,13 +1,13 @@
 /**
  * What a card says where its chat carries none of its calls to CAD's server and the engine cannot be
  * reached from it either (the Claude app's Code tab, where the host refuses a card's calls and keeps
- * it off this machine's loopback): one line, by whether the launch gave the CAD Viewer's page and
+ * it off this machine's loopback): one line, by whether the launch gave the viewer's page and
  * whether it was to show a model, and the button that opens that page. The app's notice says it
  * (`Notice.tsx`'s `Unreachable`), and so does the shell (`host/shell.ts`) where the app itself cannot
  * be loaded, its words taken from the same dictionaries when it is built (`scripts/shell-words.mjs`).
  */
 
-/** The button that opens the CAD Viewer's page. */
+/** The button that opens the viewer's page. */
 export const OPEN_IN_VIEWER = 'cad.openInViewer';
 
 /** Every key the notice says. */
@@ -59,7 +59,7 @@ export function noticeHeight(notice) {
 }
 
 /**
- * The launch's page of the CAD Viewer, where the engine gave one.
+ * The launch's page of the viewer, where the engine gave one.
  * @param {{ browser?: unknown }} launch
  * @returns {string | null}
  */

@@ -15,7 +15,7 @@ Commands and model scripts reach the server through its door: named pipes in a f
 
 ## Pages and links
 
-The server serves the CAD Viewer and the CAD app's MCP endpoint over HTTP on `127.0.0.1` (port 3245 unless another program holds it). Every request needs one of three credentials made from one token:
+The server serves the viewer and the CAD app's MCP endpoint over HTTP on `127.0.0.1` (port 3245 unless another program holds it). Every request needs one of three credentials made from one token:
 
 - **The token**, kept in a file only you can read in your state folder (`engines/token`) and never put in a URL.
 - **A link**, the `?token=` every URL text-to-cad prints or opens carries: an expiry and its signature. It works until you rotate the token, and only from this computer.
@@ -56,5 +56,5 @@ The maintainers aim to acknowledge a report within 48 hours and give a fix timel
 
 ## Read more
 
-- [SECURITY.md](repo:SECURITY.md) and the CAD Viewer's [usage stats](repo:apps/web/README.md#usage-stats-telemetry).
-- [Architecture overview](/docs/architecture), [The engine](/docs/architecture/engine), [The CAD Viewer and the CAD app](/docs/architecture/viewer-and-cad-app) and [What is installed where](/docs/architecture/installation-layout).
+- [SECURITY.md](repo:SECURITY.md) and the viewer's [usage stats](repo:apps/web/README.md#usage-stats-telemetry).
+- [Architecture overview](/docs/architecture), [The engine](/docs/architecture/engine), [The viewer and the CAD app](/docs/architecture/viewer-and-cad-app) and [What is installed where](/docs/architecture/installation-layout).

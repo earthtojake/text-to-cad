@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""How alike the CAD Viewer and the OCCT prototype draw the regular display modes.
+"""How alike the viewer and the OCCT prototype draw the regular display modes.
 
 A manual measurement, never run in CI; what it writes goes under an ignored folder
 (``tmp/bench/occt-parity`` by default). Each document is drawn in every mode and camera

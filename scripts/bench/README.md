@@ -1,6 +1,6 @@
 # Benchmarks
 
-Manual commands that measure the engine and the CAD Viewer. None of them runs in CI:
+Manual commands that measure the engine and the viewer. None of them runs in CI:
 what they write goes under an ignored `tmp/` folder, never into the tree
 (`AGENTS.md`), and only their pure helpers are tested
 (`tests/python/global/test_bench_helpers.py`). Performance numbers come from one

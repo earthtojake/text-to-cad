@@ -68,7 +68,7 @@ g (9.81 m/s²) for gravity and acceleration. Restate every load in them before y
 
 ## Workflow
 
-1. **List the faces.** A study names faces by the engine's refs, the ones the CAD Viewer copies; a
+1. **List the faces.** A study names faces by the engine's refs, the ones the viewer copies; a
    face the user picked there arrives as `/work/bracket.step#bracket/face 17` and needs no lookup.
 
    ```bash
