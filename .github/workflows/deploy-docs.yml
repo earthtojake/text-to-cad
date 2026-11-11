@@ -14,6 +14,11 @@ name: Deploy Docs
 # from the branch itself, so the run uses that branch's workflow and scripts.
 
 on:
+  # TEMPORARY, removed in the next commit: a push to this branch deploys it as a preview (never
+  # production: the deploy step below takes a push for a preview whatever its inputs say).
+  push:
+    branches:
+      - claude/hopeful-galileo-h3vscy
   workflow_dispatch:
     inputs:
       ref:
@@ -38,7 +43,7 @@ permissions:
 
 concurrency:
   # A preview never waits behind, or holds up, a production deploy.
-  group: deploy-docs${{ inputs.preview && '-preview' || '' }}
+  group: deploy-docs${{ (github.event_name == 'push' || inputs.preview) && '-preview' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -78,7 +83,7 @@ jobs:
 
       - name: Deploy docs app to Vercel
         env:
-          PREVIEW: ${{ inputs.preview && 'true' || 'false' }}
+          PREVIEW: ${{ (github.event_name == 'push' || inputs.preview) && 'true' || 'false' }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_DOCS_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
@@ -89,7 +94,7 @@ jobs:
               exit 1
             fi
           done
-          if [ "$PREVIEW" = "true" ]; then
+          if [ "$PREVIEW" = "true" ] || [ "$GITHUB_EVENT_NAME" = "push" ]; then
             scripts/github-workflows/deploy-vercel-app.sh \
               --label "Docs app preview" \
               --project-id "$VERCEL_DOCS_PROJECT_ID" \
