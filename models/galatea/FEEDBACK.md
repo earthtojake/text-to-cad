@@ -679,7 +679,7 @@ that did not hold as written, and what a reader should take from them instead.
   inertia tensor of several parts at their own densities is `cad.build123d.mass_properties`. The
   look's name is still not there.
 
-**What changed after this review**, in the change that followed it:
+**What changed after this review**, in the pull request that carries this file:
 
 - `posed()` says a coupling's values again from the pose, so a posed copy keeps its states and
   sequences (1). Before, a value that stayed in range was silently another pose.
@@ -697,6 +697,10 @@ that did not hold as written, and what a reader should take from them instead.
   a material and counts the rest (4). The page of a checkout with no client built says so (38). uv
   killed mid-install is said as that (34). The KiCad test's message and the corpus's README say a
   `build.py` under `models/` is a KiCad sample's alone (49).
+- A snapshot job stands on the flat colour it asks for (`"output": {"background": "#2b2d31"}`), so a
+  pearl part has an outline without compositing (22). A GLB names each material by its look
+  (`frame_black`), the physical material's name beside it, so Blender no longer gets
+  `Alu_G7075_T6` and `Alu_G7075_T6.001` for two looks of one aluminium (29).
 - The skill's notes: the memo per body, `OCP` shapes and the import scan (2, 16, 32); the ease's
   formula, dense linear paths and the fixed link as a choice of frame (40, 41); lofts, revolved
   polylines, empty Booleans, the loose box and the volume integral (6, 9, 10, 23, 24, 27, 28); glass
@@ -704,9 +708,9 @@ that did not hold as written, and what a reader should take from them instead.
   sample counts on the CPU (33, 37); mass properties of a link of several parts (43, 45); and the
   review order and the planted failure in *Check each change*.
 
-**Still open**, each a decision and not a defect: a motion drawn at a time and a planted link in a
-snapshot (12, 40, 36); a tolerance, sharp edges alone and a background colour in a snapshot, and a
-lit still (13, 18, 19, 22); the look's name on a GLB's material (29); a mesh per link and an MJCF
-reference for a simulator (44, 45, 48); live memory and a build's priority (21, 47); a fetched
-vendor STEP (31); and a guarded Boolean and both orders of `overlap_volume` (5, 8), which nothing
+**Still open**, each a decision and not a defect: a motion drawn at a time, and a snapshot drawn
+with another link as its ground (12, 40, 36); a tolerance and sharp edges alone in a snapshot, and
+a lit still (13, 18, 19); a mesh per link and an MJCF reference for a simulator (44, 45, 48);
+what the engine counts against its memory cap, and a build's priority (21, 47); a fetched vendor
+STEP (31); and a guarded Boolean and both orders of `overlap_volume` (5, 8), which nothing
 reproduced.
