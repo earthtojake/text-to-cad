@@ -383,8 +383,8 @@ def _installation_port(host: str, remembered: int | None, token: str,
     except PortHeld as refusal:
         server = _roll(host, first, token, listen)
         return server, {"source": "rolled", "because": refusal.who if first == default else _who(default),
-                        "notice": f"{first} is held by {refusal.who}; the engine serves on {server.port} "
-                                  "and keeps it"}
+                        "notice": f"the engine serves on port {server.port} and keeps it for its links: {first} "
+                                  f"is in use by {refusal.who}"}
     if first == default:
         return server, {"source": "default"}
     return server, {"source": "rolled", "because": _who(default)}
@@ -713,6 +713,23 @@ class Daemon:
             return
         error = making.follow(lambda line: send({"log": line}))
         send({"ok": True, "base": True} if error is None else {"failed": error, "base": True})
+
+    @staticmethod
+    def integration(request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """The environment of one of the library's integrations, asked by a process that lacks it
+        (``{"op": "integration", "integration": "coacd"}``: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``): made
+        here on first need when it is not, as the ``cad`` command's integrations are
+        (``integration_env.made``), each line of its making a ``log`` frame, then ``{"ok": true, "python"}``, or
+        ``{"failed"}`` in one line."""
+        from cad_server._internal import integration_env
+
+        try:
+            python = integration_env.made(str(request.get("integration") or ""),
+                                          lambda line: send({"log": line}))
+        except integration_env.Failed as failed:
+            send({"failed": str(failed)})
+            return
+        send({"ok": True, "python": python})
 
     @staticmethod
     def environment() -> dict[str, str]:
@@ -1338,6 +1355,7 @@ class Daemon:
                      "expected": request.get("expected"), "original": request.get("original"),
                      **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
                      **({"angle": request["angle"]} if request.get("angle") is not None else {}),
+                     **({"zero": request["zero"]} if request.get("zero") is not None else {}),
                      **({"display": shown} if shown else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
@@ -1516,6 +1534,8 @@ class Daemon:
             send(self.status())
         elif op == "base":
             self.base(request, send)
+        elif op == "integration":
+            self.integration(request, send)
         elif op == "pid":
             send({"ok": True, "pid": os.getpid()})  # who answers: a client that started a daemon asks
         elif op == "stop":

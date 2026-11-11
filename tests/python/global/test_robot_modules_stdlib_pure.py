@@ -46,6 +46,9 @@ FAMILY = [
         "registry.py",
         "_internal/validation_door.py",
         "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
+        "engine/urdf_source.py",  # the URDF (and SRDF) reader: the stills' and the payload's, stdlib only
+        "engine/sdf_source.py",  # the SDF reader: the stills' and the payload's, stdlib only
+        "engine/robot_model.py",  # the one articulation the readers make
     )
 ] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py", "sdf.py")]
 
@@ -61,6 +64,12 @@ ALLOWED_CADGEN = {
     "cad.sdf._source",
     "cad.sdf._validation",
     "cad.sdf._external",
+    "cad.engine.urdf_source",  # the URDF reader, in the engine
+    "cad.engine.sdf_source",  # the SDF reader, in the engine
+    "cad.engine.robot_model",  # the articulation every reader of a robot makes
+    # MuJoCo's compile (the mujoco integration's): imported in the function that compiles, never by a
+    # read, and itself imports mujoco only inside that function.
+    "cad.mujoco._compile",
     "cad_server.cli",  # shared CLI plumbing, itself lazy
     "cad.results",  # the typed line protocol: dataclasses and pathlib only
     "cad.registry",  # the document types and integrations: stdlib only
@@ -73,6 +82,9 @@ ALLOWED_CADGEN = {
     # A B-rep type's stress study (no robot type's): its signature and options, stdlib only; the kernel, netgen
     # and CalculiX are imported in the function that studies.
     "cad._internal.fea.operation",
+    # A mechanism's joint stops (no robot type's): its signature and options, stdlib only; the kernel and the sweep
+    # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
+    "cad._internal.ranges",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,

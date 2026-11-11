@@ -422,7 +422,7 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.row(ident, "held")
         out = {kind: self.folder / f"held.{kind}" for kind in ("xbf", "step")}
 
-        # The document as built, mechanism and all: a posed file is a model of its own (law 22).
+        # The document as built, mechanism and all: a posed file is a model of its own.
         answer = self.ask({"op": "export", "source": {"id": ident}, "destinations": [str(p) for p in out.values()],
                            "cwd": str(self.folder), "env": dict(os.environ)})
         self.assertIn("done", answer, answer)

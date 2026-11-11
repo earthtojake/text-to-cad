@@ -128,6 +128,14 @@ def closest_points(a: Shape, b: Shape) -> ClosestPoints:
     Solid interiors count: contact, overlap and containment have distance
     zero. Witnesses need not be on both boundaries or unique. This is not
     penetration depth. Pass faces/shells to ask about their boundaries.
+
+    Its cost grows with both shapes' faces (OCCT's exact extrema): two
+    solids of thousands of faces each (a vendor STEP's printed parts) take
+    seconds a pair, so a hundred pairs take minutes. Compounds are measured
+    member by member, a member whose bounding box is farther than the best
+    distance so far skipped. Over many pairs, rule out first those whose
+    ``bounding_box(optimal=False)`` envelopes do not meet, and measure from a
+    point (``bd.Vertex``) where a point answers the question.
     """
     from build123d import Vector
     from OCP.BRepExtrema import BRepExtrema_DistShapeShape

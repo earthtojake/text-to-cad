@@ -24,7 +24,12 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
   block drawn unless ``title`` is false, the page's edge and frame with ``border``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
-it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
+it read changes; ``daemon=False`` (Python's alone) draws in this process. An engine that cannot make an
+OpenGL context (``NO_GL``: on Linux, a daemon started with no X display and no Xvfb of its own) fails the
+picture; where this process can draw (``drawable_here``: the kernel here and a context it can make, as
+under ``xvfb-run``), it draws the picture itself instead, saying so on stderr -- a held document's
+exported through the engine to a temporary xbf first -- and where it cannot, the engine's failure stands.
+Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
 the look the viewer's viewport resolves for the same display settings. Every picture is light: a 3D
 document on the look's flat backdrop (Preview's studio sweep only for a still asked for Preview,
@@ -86,8 +91,8 @@ from typing import Any, Callable, TypeVar
 
 from cad.engine.atomic_replace import replace_atomic, staging
 
-__all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
-           "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
+__all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
+           "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
@@ -931,39 +936,116 @@ def _occt(document: Path, out: Path, still: Still, daemon: bool, source: Any, st
             from cad.engine import api
 
             spec = api._source(str(document))
-            drawn = api._exported({"op": "export", "source": spec, "destinations": [],
-                                   "draw_still": {"out": str(out), "still": still.as_json()},
-                                   "cwd": os.getcwd()}, spec, lambda _text: None, daemon, progress)["drawn"]
+            try:
+                drawn = api._exported({"op": "export", "source": spec, "destinations": [],
+                                       "draw_still": {"out": str(out), "still": still.as_json()},
+                                       "cwd": os.getcwd()}, spec, lambda _text: None, daemon, progress)["drawn"]
+            except Exception as error:
+                if not (daemon and _here_instead(error)):
+                    raise
+                return _held_here(document, out, still, started)
             return {**drawn, "document": str(document)}  # the id it was named by, not the worker's stand-in
         if daemon and source is None:
-            from cad.engine.client import request
-
-            answer = request({"op": "draw", "path": str(document), "still": still.as_json(), "out": str(out)},
-                             on_progress=progress)
-            if answer is None:
-                raise RuntimeError("no engine daemon")
-            if "refused" in answer:
-                raise SnapshotRefused(answer["refused"], part=answer.get("part"))
-            if "failed" in answer:
-                if "type" not in answer:
-                    raise RuntimeError(answer["failed"])
-                from cad.engine import api
-
-                raise api._failed(answer)  # an EngineError: the type the render process failed with in it
-            data, report = base64.b64decode(answer["png"]), answer["report"]
-        else:
-            from cad.engine.formats import FormatError
-            from cad.engine.render.service import draw_here
-
             try:
-                data, report = draw_here(document, still, source=source)
-            except FormatError as error:
-                raise SnapshotRefused(str(error), part="source") from None
+                data, report = _drawn_by_engine(document, out, still, progress)
+            except Exception as error:
+                if not _here_instead(error):
+                    raise
+                data, report = _draw_here(document, still, None)
+        else:
+            data, report = _draw_here(document, still, source)
         # A build's document held in memory, no file of it (``draw``), is served under a name made from
         # ``out``: a path no file is at, which the report never names.
         stand_in = source is not None and getattr(source, "path", None) is None
         say("write", detail=out.name)
         return _written(document, out, data, report, started, named=None if stand_in else str(document))
+
+
+#: What an engine that has no OpenGL context to draw in fails a picture with (``render.context.Unavailable``,
+#: carried as the failure's type: ``api._failed``'s ``raised``).
+NO_GL = "cad.engine.render.context.Unavailable"
+
+
+def no_gl(error: BaseException) -> bool:
+    """Whether ``error`` is the engine's failure to make an OpenGL context to draw a picture in (``NO_GL``)."""
+    return getattr(error, "raised", None) == NO_GL
+
+
+def drawable_here() -> str | None:
+    """None when this process can draw a picture itself -- the kernel importable here and an OpenGL context
+    made (``render.context.available``: on Linux an X display, this process's ``DISPLAY``) --, else why not.
+    Asked only once the engine could not draw: it loads the kernel."""
+    import importlib.util
+
+    try:
+        if importlib.util.find_spec("OCP") is None:
+            return "this process has no CAD kernel to draw with"
+    except (ImportError, ValueError):
+        return "this process has no CAD kernel to draw with"
+    from cad.engine.render.context import available
+
+    return available()
+
+
+def _here_instead(error: BaseException) -> bool:
+    """Whether a picture the engine failed is drawn in this process instead: the engine had no OpenGL context
+    (``no_gl``) and this process can draw (``drawable_here``), said once on stderr."""
+    if not no_gl(error):
+        return False
+    why = drawable_here()
+    if why is not None:
+        return False
+    print("warning: the engine could not make an OpenGL context to draw in (on Linux: it has no X display); "
+          "this process draws the picture instead", file=sys.stderr)
+    return True
+
+
+def _drawn_by_engine(document: Path, out: Path, still: Still,
+                     progress: Callable[[dict[str, Any]], None] | None) -> tuple[bytes, dict[str, Any]]:
+    """A file's picture drawn by the daemon's render process for it: the PNG's bytes and what was drawn."""
+    from cad.engine.client import request
+
+    answer = request({"op": "draw", "path": str(document), "still": still.as_json(), "out": str(out)},
+                     on_progress=progress)
+    if answer is None:
+        raise RuntimeError("no engine daemon")
+    if "refused" in answer:
+        raise SnapshotRefused(answer["refused"], part=answer.get("part"))
+    if "failed" in answer:
+        if "type" not in answer:
+            raise RuntimeError(answer["failed"])
+        from cad.engine import api
+
+        raise api._failed(answer)  # an EngineError: the type the render process failed with in it
+    return base64.b64decode(answer["png"]), answer["report"]
+
+
+def _draw_here(document: Path, still: Still, source: Any) -> tuple[bytes, dict[str, Any]]:
+    """A picture drawn in this process (``render/service.py``): a file read here, or a build's ``source``."""
+    from cad.engine.formats import FormatError
+    from cad.engine.render.service import draw_here
+
+    try:
+        return draw_here(document, still, source=source)
+    except FormatError as error:
+        raise SnapshotRefused(str(error), part="source") from None
+
+
+def _held_here(document: Path, out: Path, still: Still, started: float) -> dict[str, Any]:
+    """A held document's picture drawn in this process: the document exported by the engine to an xbf in a
+    temporary folder (an export draws nothing), read and drawn here, and named by its id."""
+    import tempfile
+
+    from cad.engine import api
+    from cad.engine.progress import say
+
+    with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
+        saved = Path(folder) / "document.xbf"
+        api.export(os.fspath(document), saved, progress=False)
+        data, report = _draw_here(saved, still, None)
+        say("write", detail=out.name)
+        found = _written(saved, out, data, report, started, named=None)
+    return {**found, "document": os.fspath(document)}
 
 
 def _written(document: Path, out: Path, data: bytes, report: dict[str, Any], started: float, *,
@@ -1249,12 +1331,24 @@ def _draw_staged(staged: list[tuple[Path, Path, Path, Still]], daemon: bool,
     return drawn
 
 
+#: The parts the mesher's warning names before it counts the rest.
+UNMESHED_NAMED = 4
+
+
 def _warn(unmeshed: dict[str, list[int]]) -> dict[str, list[int]]:
-    """A warning for each part's faces the mesher left without triangles: the picture lacks them."""
-    for name, faces in unmeshed.items():
-        print(f"warning: {name}: the mesher left face{'s' if len(faces) > 1 else ''} "
-              f"{', '.join(map(str, faces))} without triangles, so the picture does not draw "
-              f"{'them' if len(faces) > 1 else 'it'}", file=sys.stderr)
+    """One warning for the faces the mesher left without triangles, which the picture lacks: how many, of how
+    many parts, the first ``UNMESHED_NAMED`` parts named with their faces' ordinals. A vendor's STEP leaves a
+    few on a large assembly (a screw's tip, a sliver a boolean left), so it is a line, not a line a part."""
+    if not unmeshed:
+        return unmeshed
+    count = sum(len(faces) for faces in unmeshed.values())
+    named = [f"{name} ({', '.join(map(str, faces))})" for name, faces in unmeshed.items()]
+    rest = len(named) - UNMESHED_NAMED
+    listed = "; ".join(named[:UNMESHED_NAMED]) + (f"; and {rest} more part{'s' if rest != 1 else ''}" if rest > 0
+                                                   else "")
+    print(f"warning: the mesher left {count} face{'s' if count != 1 else ''} of {len(named)} "
+          f"part{'s' if len(named) != 1 else ''} without triangles, so the picture does not draw "
+          f"{'them' if count != 1 else 'it'}: {listed}", file=sys.stderr)
     return unmeshed
 
 

@@ -129,6 +129,76 @@ class MaterialsTest(unittest.TestCase):
         self.assertIsInstance(restored.material, FinishedMaterial)
         self.assertAlmostEqual(restored.mass(), shape.mass())
 
+    def test_a_step_declaring_kilograms_per_cubic_metre_reads_its_densities_as_it_says_them(self):
+        """OCCT's STEP reader converts a density's length unit and drops its mass unit's prefix: a file
+        in kg/m^3, what most CAD tools write, arrived 1000 times too light. A STEP the engine writes says
+        grams and reads back as it was; one rewritten to say kg/m^3 reads the same density, by both the
+        document loader and the reader process's parse."""
+        import re
+
+        shape = bd.Box(10, 10, 10)
+        shape.material = metals.aluminum()  # 2700 kg/m^3
+        self.roundtrip(shape)
+        written = self.folder / "grams.step"
+        export.translate(export.Source.read(self.folder / "test.xbf"), "step", written)
+        density = lambda path: [prototype["material"]["material"]["density"]  # noqa: E731
+                                for prototype in export.Source.read(path).structure["prototypes"]]
+        self.assertEqual(density(written), [2700.0])
+        text = written.read_text(encoding="latin-1")
+        item = re.search(r"MEASURE_REPRESENTATION_ITEM\('density',[^,]*,#\d+\)", text)
+        self.assertIsNotNone(item, "the engine's STEP names a density")
+        # As Fusion 360 writes it: the value in kg/m^3, a derived unit of kilogram over metre cubed.
+        kilograms = (item.group(0).replace("'density',", "'density measure',POSITIVE_RATIO_MEASURE(")
+                     .split(",POSITIVE_RATIO_MEASURE(")[0]
+                     + ",POSITIVE_RATIO_MEASURE(2700.),#9001)")
+        units = ("#9001=DERIVED_UNIT((#9002,#9003));\n#9002=DERIVED_UNIT_ELEMENT(#9004,1.);\n"
+                 "#9003=DERIVED_UNIT_ELEMENT(#9005,-3.);\n#9004=(MASS_UNIT()NAMED_UNIT(*)SI_UNIT(.KILO.,.GRAM.));\n"
+                 "#9005=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT($,.METRE.));\n")
+        rewritten = self.folder / "kilograms.step"
+        rewritten.write_text(re.sub(r"ENDSEC;\s*END-ISO", lambda end: units + end.group(0),
+                                    text.replace(item.group(0), kilograms), count=1), encoding="latin-1")
+        self.assertEqual(density(rewritten), [2700.0])
+        header, _packed = reader._parse(str(rewritten))
+        self.assertEqual([product["material"]["material"]["density"] for product in header["products"]
+                          if product.get("material")], [2700.0])
+
+    def test_a_step_s_user_defined_attributes_are_no_materials(self):
+        """A CAD tool writes a part's parameters as user-defined attributes, which OCCT's reader takes for materials
+        named for the parameter: no material is read of one, by the document loader or the reader process's parse;
+        one naming a material is read as the material it names."""
+        import re
+
+        def written(attributes: tuple[tuple[str, str], ...]) -> Path:
+            path = self.folder / f"{attributes[-1][0].lower()}.step"
+            box = bd.Box(10, 10, 10)
+            box.label = "block"
+            bd.export_step(box, str(path))
+            text = path.read_text(encoding="latin-1")
+            definition = re.search(r"#(\d+)\s*=\s*PRODUCT_DEFINITION\s*\(", text).group(1)
+            context = re.search(r"#(\d+)\s*=\s*\(\s*GEOMETRIC_REPRESENTATION_CONTEXT", text).group(1)
+            at, rows = 9000, []
+            for name, value in attributes:  # as a CAD tool writes a parameter
+                rows += [f"#{at}=PROPERTY_DEFINITION('{name}','user defined attribute',#{definition});",
+                         f"#{at + 1}=GENERAL_PROPERTY('','{name}','user defined attribute');",
+                         f"#{at + 2}=GENERAL_PROPERTY_ASSOCIATION('user defined attribute','',#{at + 1},#{at});",
+                         f"#{at + 3}=DESCRIPTIVE_REPRESENTATION_ITEM('{name}','{value}');",
+                         f"#{at + 4}=REPRESENTATION('',(#{at + 3}),#{context});",
+                         f"#{at + 5}=PROPERTY_DEFINITION_REPRESENTATION(#{at},#{at + 4});"]
+                at += 10
+            path.write_text(re.sub(r"ENDSEC;\s*END-ISO", lambda end: "\n".join(rows) + "\n" + end.group(0), text,
+                                   count=1), encoding="latin-1")
+            return path
+
+        def materials(path: Path) -> tuple[list, list]:
+            loaded = [(prototype.get("material") or {}).get("material")
+                      for prototype in export.Source.read(path).structure["prototypes"]]
+            header, _packed = reader._parse(str(path))
+            parsed = [(product.get("material") or {}).get("material") for product in header["products"]]
+            return [found and found["name"] for found in loaded], [found and found["name"] for found in parsed]
+
+        self.assertEqual(materials(written((("QTY", ""), ("PTC_COMMON_NAME", "block.prt")))), ([None], [None]))
+        self.assertEqual(materials(written((("PTC_MATERIAL_NAME", "STEEL"),))), (["STEEL"], ["STEEL"]))
+
     def test_inherited_material_and_equal_placements_share_a_prototype(self):
         left = bd.Box(2, 3, 4)
         right = left.moved(bd.Location((10, 0, 0)))

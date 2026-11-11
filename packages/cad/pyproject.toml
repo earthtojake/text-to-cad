@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.11.7"
+version = "0.11.8"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
 readme = "README.md"
 license = "MIT"
@@ -116,6 +116,32 @@ trimesh = [
   "scipy>=1.14,<2",
   "networkx>=3.2,<4",
 ]
+# The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
+# one dependency (cad.mujoco) -- and MuJoCo Studio. `cad mujoco check` compiles a model with the core, so
+# what MuJoCo refuses is a finding in its own words. Studio's web viewer is the person's window onto a model
+# (`cad run mujoco-studio --model scene.xml`, cad.mujoco._command): a Python package with its own command line,
+# so it comes with the extra as kicad-cli comes with cad[kicad]; it serves the page from this process, so it
+# stays headless (websockets its one dependency beside the core's, no GL). Never `mujoco` itself, which from
+# 4.0 is a meta-package that adds glfw and PyOpenGL for Studio's native window (a display and a GPU an agent's
+# sandbox has neither of), nor the menagerie or the USD plugin. Bounded above: the compiler's Python API
+# (MjSpec, the warning hook) and Studio's command line moved between majors.
+mujoco = [
+  "mujoco-core>=4.0,<5",
+  "mujoco-studio>=4.0,<5",
+]
+# The coacd integration's extra: cad.mujoco.decompose makes a part of a MuJoCo function's spec collide as
+# the convex hulls CoACD cuts its mesh into (cad.coacd), imported only by the decomposer's own process
+# (cad.coacd._decomposer), since its native library carries a TBB of its own beside the kernel's. One wheel, its
+# library loaded with ctypes, numpy its one dependency, MIT; about 1.5-3.5 MB. Bounded to the 1.0 line: the hulls
+# are a function of CoACD's release (the decomposer's cache key names the line) and its ctypes entry point's
+# arguments are positional. Where an environment lacks it, the engine makes this extra's environment on first need
+# for the decomposer (cad.engine.hulls). CoACD publishes abi3 wheels for macOS arm64, Linux x86_64 and aarch64
+# (manylinux: glibc) and Windows x86_64 alone, and no sdist, so the extra installs it only there: anywhere else (an
+# Intel Mac, Windows on ARM) it installs nothing, and a musl Linux, which no marker tells apart, cannot install it;
+# there a decomposition the cache does not hold is refused, naming the extra and the platform.
+coacd = [
+  "coacd>=1.0.14,<1.1; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
 # The blender integration's extra: Blender as a Python module (bpy, the Blender Foundation's wheel, GPL: a
 # script that imports it runs it, and the library links nothing of it), which cad.blender loads a GLB into
 # for a render. Pinned exactly, as kicode is: the loader leans on what Blender's own glTF importer does
@@ -145,9 +171,10 @@ use-ignore-files = false
 # netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
 # cad_ccx: the calculix extra's, imported where a study looks for the program (`cad/calculix/_program.py`), and the
 # package jobs that check types do not install it.
+# coacd: imported only by the decomposer's own process (`cad/coacd/_decomposer.py`), and it ships no type stubs.
 # bpy, mathutils: the blender extra's, Blender's own modules (`cad/blender/_scene.py`), built for another Python than
 # the one the package jobs check types on.
-ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "bpy", "bpy.*", "mathutils"]
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd", "bpy", "bpy.*", "mathutils"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

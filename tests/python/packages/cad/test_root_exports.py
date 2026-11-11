@@ -30,7 +30,8 @@ NAMESPACES = {
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
                       "flatten_face", "flatten_faces", "union_faces", "offset_profile", "dfm", "cnc",
-                      "sheet_metal", "molding", "printing", "unfold", "materials"),
+                      "sheet_metal", "molding", "printing", "unfold", "frame", "leaves", "body", "limits", "mass",
+                      "point_mass", "free", "link", "materials"),
 }
 # The namespaces' public submodules, offered with their names and imported on first use.
 SUBMODULES = {"cad.build123d": ("materials",)}
@@ -103,13 +104,15 @@ class RootExports(unittest.TestCase):
     def test_each_namespace_is_exactly_its_declared_names(self):
         import importlib
 
-        from cad.build123d import _dfm_check, _dfm_sheet, _flatten, _geometry
-        from cad.engine import mechanism, model
+        from cad.build123d import _dfm_check, _dfm_sheet, _flatten, _geometry, _leaves
+        from cad.engine import declarations, mechanism, model
         from cad.engine.formats.kicad import board_index, geometry, summary
 
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model, "memo": model,
                    "paint": model, "gear_pair": mechanism, "rack_and_pinion_pair": mechanism,
-                   "screw_pair": mechanism, "posed": mechanism,
+                   "screw_pair": mechanism, "posed": mechanism, "frame": declarations, "leaves": _leaves,
+                   "body": declarations, "limits": declarations, "mass": declarations, "point_mass": declarations,
+                   "free": declarations, "link": declarations,
                    **{name: _geometry for name in _geometry.__all__},
                    **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)},
                    **{name: _dfm_check for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},

@@ -309,10 +309,15 @@ the timing table a performance change opens its pull request with) are
 
 ## Document Types And Integrations
 
-A new file format is a document type, a new third-party tool our code calls is an integration; the
-words and laws are `packages/cad/README.md`'s. Follow
-[Adding a document type](docs/contributing/adding-a-document-type.md) and
-[Adding an integration](docs/contributing/adding-an-integration.md), each a checklist.
+A file cad shows is a document type, and a third-party tool our code calls is an integration; a file
+cad only writes or checks is its tool's integration's, with no type (an MJCF, MuJoCo's). The words and
+laws are `packages/cad/README.md`'s. Start from
+[Adding an integration](docs/contributing/adding-an-integration.md#start-from-the-tool), which asks what
+the tool already does and what is missing, then
+[Adding a document type](docs/contributing/adding-a-document-type.md) where the tool's file is one. Each
+is a record of what the tools so far needed and a checklist for the ones like them, not a template: a
+tool that does not fit is thought through on its own terms: the change says where it departs and why,
+and the guide and the laws are amended with it where they should read differently.
 
 ## Source Boundaries
 

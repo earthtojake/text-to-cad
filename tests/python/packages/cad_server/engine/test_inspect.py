@@ -178,6 +178,22 @@ class CouplingsTest(unittest.TestCase):
                       "rack": {"range": [None, None], "terms": [["ja", 0, 1.0], ["slide", 0, 0.5]]},
                       "screw": {"range": [None, None], "terms": [["lead", 0, 1.0], ["lead", 1, 0.004]]}}}
 
+    def test_a_material_s_parts_past_a_few_are_counted_in_text_and_every_one_named_in_data(self) -> None:
+        from cad_server.engine.cli import summary_text
+
+        screws = [f"arm/screw{at}" for at in range(120)]
+        summary = {"name": "arm", "id": "x", "state": {"state": "file", "path": "/m/a.xbf"},
+                   "parts": {"occurrences": 124, "distinct": 2, "root": "arm"}, "bounds": None, "volume": 0.0,
+                   "materials": [{"name": "Steel", "density": 7850.0, "mass": 0.5, "parts": screws},
+                                 {"name": "PLA", "density": 1240.0, "mass": 0.1, "parts": ["arm/a", "arm/b"]}],
+                   "unweighed": ["arm/c", "arm/d", "arm/e", "arm/f", "arm/g"], "mass": 0.6, "joints": [],
+                   "couplings": [], "states": [], "sequences": [], "animations": [], "files": []}
+        lines = summary_text(summary).splitlines()
+        at = lines.index("materials   0.6 kg in all")
+        self.assertEqual(lines[at + 1:at + 4], ["  Steel: 0.5 kg, 120 parts: arm/screw0, arm/screw1, arm/screw2 and 117 more",
+                                                "  PLA: 0.1 kg, arm/a, arm/b",
+                                                "  no material: 5 parts: arm/c, arm/d, arm/e and 2 more"])
+
     def test_each_coupling_is_its_name_kind_joints_and_ratio_in_data_and_text(self) -> None:
         from cad.engine.api import couplings_of
         from cad_server.engine.cli import summary_text
@@ -292,6 +308,120 @@ class SummaryTextTest(unittest.TestCase):
                          ["  roll  revolute  -90 to 90 deg, as built 0", "  pitch  revolute  -90 to 90 deg, as built 30",
                           "  lead  cylindrical  free; free, as built 0 12.3"])
         self.assertEqual(lines[lines.index("states") + 1], "  rest  roll 0, pitch 0.5, lead 180 0")
+
+
+# A base bolted to an arm assembly declared to weigh 120 g, its servo case (no material) carrying a 30 g motor, and
+# a 10 g lump on the base: the description weighs the arm 120 g in all, the base its aluminium plus 10 g.
+WEIGHED = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import mass, point_mass
+from cad.engine import xbf
+
+
+@xbf("XBF/robot.xbf")
+def robot():
+    base = bd.Box(100, 60, 20, align=bd.Align.MIN)
+    base.label, base.material = "base", metals.aluminum()
+    link = bd.Pos(0, 0, 20) * bd.Box(100, 10, 10, align=bd.Align.MIN)
+    link.label, link.material = "link", metals.aluminum()
+    servo = bd.Pos(0, 20, 20) * bd.Box(40, 20, 30, align=bd.Align.MIN)
+    servo.label = "servo"
+    point_mass(servo, 30, bd.Pos(20, 30, 35), name="motor")
+    point_mass(base, 10, bd.Pos(50, 30, 10), name="lump")
+    arm = bd.Compound(children=[link, servo], label="arm")
+    mass(arm, {grams})
+    return bd.Compound(children=[base, arm], label="robot")
+"""
+
+
+class DeclaredMassTest(unittest.TestCase):
+    """``inspect``'s masses where the model declares them (``mass``, ``point_mass``): as the robot description
+    weighs them, not volume times density, and said which are declared and which computed."""
+
+    def setUp(self) -> None:
+        self.folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-inspect-mass-")))
+        self.addCleanup(shutil.rmtree, self.folder, True)
+        from unittest import mock
+
+        cache = mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(self.folder / "cache")})
+        cache.start()
+        self.addCleanup(cache.stop)
+
+    def summarised(self, grams: float) -> tuple[dict, dict, dict, Path]:
+        from cad.engine import build as engine_build
+        from cad.engine import document
+        from cad.engine.api import _summary
+
+        script = self.folder / "robot.py"
+        script.write_text(textwrap.dedent(WEIGHED.format(grams=grams)), encoding="utf-8")
+        os.utime(script, ns=(time.time_ns(), time.time_ns()))
+        report = engine_build.build(script, ["robot"], cwd=self.folder)[0]
+        self.assertTrue(report["ok"], report)
+        path = self.folder / "XBF/robot.xbf"
+        structure = document.Loaded(path).structure()
+        sizes = {"base": 100 * 60 * 20, "link": 100 * 10 * 10, "servo": 40 * 20 * 30}
+        volumes = {prototype["key"]: float(sizes[prototype["name"]]) for prototype in structure["prototypes"]}
+        summary = _summary(structure, path, lambda *_: {key: {"volume": volume} for key, volume in volumes.items()},
+                           "id")
+        return summary, structure, volumes, path
+
+    def test_a_declared_mass_and_point_masses_weigh_as_the_robot_description_weighs_them(self) -> None:
+        from cad.engine.describe import describe
+        from cad.engine.export import Source
+        from cad_server.engine.cli import summary_text
+
+        summary, structure, volumes, path = self.summarised(120)
+        density = next(prototype["material"]["material"]["density"] for prototype in structure["prototypes"]
+                       if prototype["name"] == "base")
+        base = 100 * 60 * 20 * 1e-9 * density
+        described = describe(Source.read(path).view())
+        self.assertAlmostEqual(sum(link.inertial.mass for link in described.links if link.inertial is not None),
+                               base + 0.010 + 0.120, places=9, msg="the description's total")
+        self.assertAlmostEqual(summary["mass"], base + 0.010 + 0.120, places=9, msg="inspect's agrees with it")
+        declared = summary["declared"]
+        self.assertAlmostEqual(declared["declared"], 0.130, places=9)
+        self.assertAlmostEqual(declared["computed"], base, places=9)
+        self.assertEqual(declared["masses"], [{"name": "arm", "path": "robot/arm", "grams": 120.0}])
+        self.assertEqual(declared["pointMasses"], [{"part": "robot/base", "name": "lump", "grams": 10.0},
+                                                   {"part": "robot/arm/servo", "name": "motor", "grams": 30.0}])
+        self.assertEqual(declared["scaled"], ["robot/arm/link", "robot/arm/servo"])
+        self.assertEqual(summary["unweighed"], [], "the servo's solid weighs nothing, and it carries its motor")
+        # The arm's solids weigh the 90 g its motor leaves: the servo has no density of its own while its sibling
+        # has one, so its solid carries none, and the link carries the 90 g.
+        aluminium = next(row for row in summary["materials"] if row["parts"] == ["robot/base", "robot/arm/link"])
+        self.assertAlmostEqual(aluminium["mass"], base + 0.090, places=9)
+        lines = summary_text(summary).splitlines()
+        self.assertIn(f"declared    0.13 kg of {_number(summary['mass'])} kg in all; {_number(base)} kg computed at "
+                      "the materials' densities", lines)
+        self.assertIn("  mass robot/arm: 120 g", lines)
+        self.assertIn("  point mass motor on robot/arm/servo: 30 g", lines)
+        self.assertIn("  scaled to a declared mass: robot/arm/link, robot/arm/servo", lines)
+        # A ref weighs its own parts the same way, every part measured for the scale.
+        from cad.engine import refs
+        from cad.engine.said import weighed
+
+        arm = weighed(structure, refs.resolve_structure(structure, "arm", path)[0], volumes)
+        self.assertAlmostEqual(arm["mass"], 0.120, places=9)
+        self.assertEqual(arm["declared"]["masses"], [{"name": "arm", "path": "robot/arm", "grams": 120.0}])
+        self.assertEqual(arm["declared"]["pointMasses"], [{"part": "robot/arm/servo", "name": "motor", "grams": 30.0}])
+
+    def test_a_mass_the_description_refuses_is_refused_in_its_words_and_weighs_nothing(self) -> None:
+        from cad_server.engine.cli import summary_text
+
+        summary, _structure, _volumes, _path = self.summarised(20)
+        self.assertIsNone(summary["mass"])
+        self.assertEqual(summary["declared"]["refused"], "'arm', declared to weigh 20 g, holds point masses and inner "
+                                                         "masses of 30 g, which leave its own solids nothing to weigh")
+        self.assertTrue(all(row["mass"] is None for row in summary["materials"]))
+        self.assertIn("declared    refused: 'arm', declared to weigh 20 g, holds point masses and inner masses of 30 g, "
+                      "which leave its own solids nothing to weigh", summary_text(summary).splitlines())
+
+
+def _number(value: float) -> str:
+    from cad.engine.said import number
+
+    return number(value)
 
 
 if __name__ == "__main__":
