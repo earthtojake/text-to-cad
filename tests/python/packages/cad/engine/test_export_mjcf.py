@@ -590,15 +590,18 @@ class EngineTest(_Folder):
         self.assertEqual(-1, int(model.geom_matid[paint.id]))
         np.testing.assert_allclose(model.geom_rgba[paint.id], [0.8, 0.0667, 0.0, 1.0], atol=1e-3)
 
-        # The still draws the wire red, as the viewer draws a robot's link meshes: faces alone. Its triangles'
-        # folds, lines a pixel apart along a 1.2 mm wire, hid half the red under them. Only where an OpenGL
-        # context can be made: the MJCF's paint above is checked everywhere.
+        # A still of the same robot draws the wire red, as the viewer draws a robot's link meshes: faces alone.
+        # Its triangles' folds, lines a pixel apart along a 1.2 mm wire, hid half the red under them. The still
+        # is the URDF's (cad draws no MJCF: MuJoCo Studio shows one), the same description written for ROS.
+        # Only where an OpenGL context can be made: the MJCF's paint above is checked everywhere.
+        urdf = self.folder / "description" / "wire.urdf"
+        api.export(xbf, urdf, daemon=False, progress=False)
         if not opengl.draws(context.available(), "the MJCF's paint is checked; the still needs an OpenGL context"):
             return
 
         def red(display: dict[str, str]) -> int:
             png = self.folder / f"{display['mode']}.png"
-            snapshot(out, png, daemon=False, size=(800, 600), display=display)
+            snapshot(urdf, png, daemon=False, size=(800, 600), display=display)
             pixels = np.asarray(Image.open(png).convert("RGB")).astype(int)
             return int(((pixels[..., 0] > 120) & (pixels[..., 1] < 80) & (pixels[..., 2] < 80)).sum())
 

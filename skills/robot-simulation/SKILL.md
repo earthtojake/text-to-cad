@@ -375,8 +375,8 @@ whatever it says), and a geom or joint takes attributes from the default class i
    to the compiler from the geoms where it can, else compute an `<inertial>` ([Inertials](references/inertials.md)).
 5. Ship a `<key name="home">` whose `qpos` (and `ctrl`) is the model's length.
 6. Check it ([MJCF checks](references/mjcf-checks.md)): `cad mujoco check`, its `collisions` and
-   `excludes` lines read against what was meant, then the model opened in MuJoCo Studio for the
-   person, at `home` and with each joint moved.
+   `excludes` lines read against what was meant. Open it in MuJoCo Studio for the person to
+   see, at `home` and with each joint moved.
 7. Clear every model-health warning the compile reports before tuning any physics, then tune one
    parameter at a time from a baseline, validating after every write
    ([Tuning](references/mujoco-environment.md#tuning)).
@@ -410,14 +410,14 @@ so it is for this computer or a trusted network.
 | --- | --- |
 | A CAD model's mechanism, materials, `frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` or `link()` | Run it, export again (or run its MuJoCo function again), and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
 | A MuJoCo function | Run it and read what `save` printed: every warning, and the `collisions` and `excludes` lines against the choices made (each part's kind, no exclude left between bodies now apart); then `cad mujoco check` on the `scene.xml` beside the file it saved. |
-| A scene script | Run it, then `cad mujoco check` on the scene it wrote: every model-health warning cleared or explained; its `home` key in MuJoCo Studio. |
+| A scene script | Run it, then `cad mujoco check` on the scene it wrote: every model-health warning cleared or explained. The person sees its `home` key in MuJoCo Studio. |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |
 | A mesh, its scale or its placement | A snapshot: meshes at sane scale and pose; ~1000x too large or small is a `scale` bug. |
 | An inertial | The [sanity gates](references/inertials.md#sanity-gates). |
 | Any `.srdf` | `cad srdf validate` (it cross-checks every name, chain, state and pair against the paired URDF); named states in a snapshot (`--pose group/state`). |
 | A URDF with an SRDF beside it | `cad srdf validate` on that SRDF again, and its group states against the new limits. |
-| Any MJCF | `cad mujoco check` (MuJoCo's own compiler, the model-health checks, what collides and the contact excludes; `cad[mujoco]` fetched once); the `home` key in MuJoCo Studio. |
+| Any MJCF | `cad mujoco check` (MuJoCo's own compiler, the model-health checks, what collides and the contact excludes; `cad[mujoco]` fetched once). No picture is needed; the person sees it in MuJoCo Studio. |
 | MuJoCo physics (solver, contacts, gains) | The tuning loop: one parameter changed, validated, and run in MuJoCo Studio against the baseline ([Tuning](references/mujoco-environment.md#tuning)). |
 | A MoveIt or ROS consumer | Its own load when available: RViz, robot_state_publisher's TF tree, MoveIt Setup Assistant (IK for the primary group, plan to a named state). |
 
