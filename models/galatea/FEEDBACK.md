@@ -708,9 +708,12 @@ that did not hold as written, and what a reader should take from them instead.
   sample counts on the CPU (33, 37); mass properties of a link of several parts (43, 45); and the
   review order and the planted failure in *Check each change*.
 
+- A snapshot draws the sharp edges alone when asked (`--display solid,edges=sharp`): no line down a
+  loft's seam (18). For a finer mesh in a close-up there was a route already, now written down: a
+  GLB exported at a tolerance, drawn as that file (13).
+
 **Still open**, each a decision and not a defect: a motion drawn at a time, and a snapshot drawn
-with another link as its ground (12, 40, 36); a tolerance and sharp edges alone in a snapshot, and
-a lit still (13, 18, 19); a mesh per link and an MJCF reference for a simulator (44, 45, 48);
+with another link as its ground (12, 40, 36); a lit still (19); a mesh per link and an MJCF reference for a simulator (44, 45, 48);
 what the engine counts against its memory cap, and a build's priority (21, 47); a fetched vendor
 STEP (31); and a guarded Boolean and both orders of `overlap_volume` (5, 8), which nothing
 reproduced.
