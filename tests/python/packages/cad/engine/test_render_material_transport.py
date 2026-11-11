@@ -96,7 +96,7 @@ def sample():
             scene.show({"mode": "shaded"})
         self.assertEqual(len(scene.sources), 2)
         for color in colors:
-            source = scene.sources[("faces", 0, face, tuple(color), "lit")]
+            source = scene.sources[("faces", 0, face, tuple(color), "lit", None)]
             pbr = source.Attributes().ShadingAspect().Material().PBRMaterial()
             actual = pbr.Color().GetRGB()
             for got, want in zip((actual.Red(), actual.Green(), actual.Blue(), pbr.Alpha()), color):

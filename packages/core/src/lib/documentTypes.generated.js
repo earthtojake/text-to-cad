@@ -7,6 +7,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "snapshot",
     "inspect",
     "dfm",
+    "interference",
     "solve",
     "ranges",
     "drc",
@@ -33,6 +34,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "interference",
         "solve",
         "ranges"
       ],
@@ -52,6 +54,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "interference",
         "solve",
         "ranges"
       ],
@@ -72,6 +75,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "interference",
         "solve",
         "ranges"
       ],

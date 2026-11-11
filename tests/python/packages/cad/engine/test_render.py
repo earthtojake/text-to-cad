@@ -255,6 +255,30 @@ class HeldTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "display.isolated is a list of part refs"):
             parse_display('{"isolated": "block"}', False)
 
+    def test_the_edge_classes_named_are_the_lines_drawn_and_the_others_are_left_out(self) -> None:
+        """``display.edges`` names the edge classes drawn, by the mesh's and the viewer's names for them: with
+        ``feature`` alone each part's tangent and seam lines are not drawn, so a cylinder's seam and a fillet's ends
+        leave no line on a shaded part; the faces are as they were."""
+        self.assertEqual(parse_display("solid,edges=feature", False), {"mode": "solid", "edges": {"classes": ["feature"]}})
+        self.assertEqual(parse_display('{"edges": {"classes": ["feature", "seam"]}}', False),
+                         {"edges": {"classes": ["feature", "seam"]}})
+        for given in ("edges=dotted", '{"edges": "feature"}', '{"edges": {"classes": []}}',
+                      '{"edges": {"classes": ["seam", "seam"]}}', '{"edges": {"enabled": true}}'):
+            with self.subTest(given=given), self.assertRaisesRegex(
+                    SnapshotRefused, "display.edges is .*the edge classes drawn, each once, of feature, tangent, seam"):
+                parse_display(given, False)
+        every = pixels(self.draw(display={"mode": "solid"})[0])
+        scene = self.held.scenes[False]
+        drawn = len(scene.shown)
+        smooth = sum(1 for index, instance in enumerate(scene.structure["instances"]) if index not in scene.hidden
+                     for line in ("tangent", "seam") if line in scene.parts[instance["prototype"]].edges)
+        self.assertGreater(smooth, 0, "the fixture has a seam or a tangent line to leave out")
+        sharp = pixels(self.draw(display={"mode": "solid", "edges": {"classes": ["feature"]}})[0])
+        self.assertEqual(drawn - len(scene.shown), smooth)
+        differing = np.abs(sharp.astype(int) - every.astype(int)).max(-1) > 8
+        self.assertTrue(0 < differing.mean() < 0.05, "lines gone, and nothing else changed")
+        self.assertLess(mismatch(pixels(self.draw(display={"mode": "solid"})[0]), every), 0.001, "and back again")
+
     def test_rows_differ_where_they_should(self) -> None:
         """Each row draws something of its own: the goldens cannot all be one picture."""
         solid = pixels(self.draw(**ROWS["solid"])[0])
@@ -277,6 +301,43 @@ class HeldTest(unittest.TestCase):
         middle, top = scene.project(np.array([view["target"], np.array(view["target"]) + scene.camera["up"] * 30]))
         np.testing.assert_allclose(middle, (160, 120), atol=0.5)
         np.testing.assert_allclose(top, (160, 0), atol=0.5)
+
+    def test_a_picture_stands_on_the_flat_colour_it_asks_for_and_the_next_on_the_look_s_own(self) -> None:
+        """A job's ``output.background``: the backdrop is that colour, flat, to its corners; hidden-line's
+        faces, which are the backdrop's colour, take it too; and a picture that asks for none is as before."""
+        asked, colour = "#202830", np.array([0x20, 0x28, 0x30])
+        plain = pixels(self.draw(display={"mode": "solid"})[0])
+        data, report = self.draw(display={"mode": "solid"}, background=asked)
+        dark = pixels(data)
+        self.assertEqual(report["background"], asked)
+        for corner in (dark[0, 0], dark[0, -1], dark[-1, 0], dark[-1, -1]):
+            self.assertLessEqual(np.abs(corner.astype(int) - colour).max(), 1)
+        self.assertGreater(np.abs(plain[0, 0].astype(int) - colour).max(), 100, "the look's own backdrop is pale")
+        # The model is drawn as it was: only what was backdrop changed.
+        model = np.abs(plain.astype(int) - plain[0, 0].astype(int)).max(-1) > 40
+        same = np.abs(dark[model].astype(int) - plain[model].astype(int)).max(-1) <= 2
+        self.assertGreater(same.mean(), 0.75, "but for its edges, and what is seen through its glass")
+        hidden = pixels(self.draw(display={"mode": "hidden-line"}, background=asked)[0])
+        self.assertGreater((np.abs(hidden.astype(int) - colour).max(-1) <= 1).mean(), 0.9, "faces and backdrop alike")
+        again, report = self.draw(display={"mode": "solid"})
+        self.assertNotIn("background", report)
+        self.assertLess(mismatch(pixels(again), plain), 0.001)
+
+    def test_a_picture_reports_the_camera_it_settled_on_and_that_camera_draws_it_again_exactly(self) -> None:
+        """The report's ``settledCamera`` is the fitted camera as a job's view holds one: drawn exactly (no fit)
+        it is the same picture, and it frames a picture of fewer parts the same way, where a fit
+        would have filled the frame with them."""
+        for projection in ("orthographic", "perspective"):
+            with self.subTest(projection=projection):
+                display = {"mode": "solid", "camera": {"projection": projection}}
+                data, report = self.draw((320, 240), display=display, camera="35:20")
+                view = report["settledCamera"]
+                self.assertEqual(sorted(view), sorted(["position", "target", "up"]
+                                                      + (["orthographicHalfHeight"] if projection == "orthographic" else [])))
+                again, pinned = self.draw((320, 240), display=display, camera=view, exact=True)
+                self.assertLess(mismatch(pixels(again), pixels(data)), 0.001)
+                for key, value in view.items():
+                    np.testing.assert_allclose(pinned["settledCamera"][key], value, atol=1e-9)
 
     def test_x_ray_is_the_colour_only_model_and_gives_the_look_back(self) -> None:
         """X-ray draws the look's colour-only model (``look.py``) on OCCT's Phong program: a part's
@@ -377,6 +438,38 @@ class HeldTest(unittest.TestCase):
         second = pixels(self.draw(display={}, preview=True, annotation=ANNOTATION)[0])
         self.assertTrue(all(now is then for now, then in zip(scene.stage, stage)) and len(scene.stage) == 2)
         self.assertLess(mismatch(second, first), 0.05, "the same look, with ink")
+
+    def test_preview_tone_maps_the_model_as_the_viewer_does_and_leaves_its_studio_as_drawn(self) -> None:
+        """three's NeutralToneMapping, which OCCT's raster has none of: the sheen a dielectric adds taken
+        off a dark colour, a middle one kept, a bright one eased under 1. Laid over the model's pixels
+        alone, so the studio's floor and backdrop (drawn in the viewer's finished colours) stay as drawn."""
+        from cad.engine.render.occt import neutral
+
+        mapped = neutral(np.array([[0.02, 0.02, 0.02], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [4.0, 4.0, 4.0]]))
+        np.testing.assert_allclose(mapped[:, 0], [6.25 * 0.02 ** 2, 0.46, 1 - 0.24 ** 2 / 0.44, 1 - 0.24 ** 2 / 3.44],
+                                   atol=1e-9)
+        found = pixels(self.draw(display={}, preview=True)[0])
+        scene = self.held.scenes[True]
+        bare = scene.canvas.frame()  # the frame as OCCT draws it, before the painter
+        model = scene._tone().any(-1)
+        self.assertTrue(0.05 < model.mean() < 0.95, "the model and its studio are both in the frame")
+        np.testing.assert_array_equal(found[~model], bare[~model])
+        self.assertTrue((found[model].astype(int) <= bare[model].astype(int) + 1).all(), "tone mapping adds no light")
+        self.assertLess(found[model].mean(), bare[model].mean() - 2)
+        np.testing.assert_array_equal(scene.canvas.frame(), bare, "the studio is put back behind the model")
+        self.assertIsNone(scene._through(), "from above, the floor is behind the model")
+        # From under the floor the model is seen through it (the viewer draws its floor from both sides), and
+        # the curve changes the picture by the share of the model's light the floor lets through.
+        from cad.engine.render.occt import FLOOR_OPACITY
+
+        self.draw(display={}, preview=True, camera="bottom")
+        bare, through = scene.canvas.frame(), scene._through()
+        self.assertEqual(through.shape, (*bare.shape[:2], 1))
+        model = scene._tone().any(-1)
+        self.assertTrue(model.any())
+        self.assertLessEqual(float(through[model].max()), 1 - FLOOR_OPACITY + 0.02, "no more than the floor passes")
+        self.assertGreater(float(through[model].max()), 0.2)
+        np.testing.assert_array_equal(scene.canvas.frame(), bare, "the model and its studio are put back")
 
     def test_a_new_version_s_scenes_are_new_and_draw_as_the_last_did(self) -> None:
         """A version replaced: its scenes let go of whole between pictures and made again, and

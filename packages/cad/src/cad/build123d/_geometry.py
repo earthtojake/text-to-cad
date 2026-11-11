@@ -200,8 +200,14 @@ def overlap_volume(a: Solid | Compound, b: Solid | Compound) -> float:
     belong to the caller. Inputs are never fused or modified; a failed boolean
     is an error, never a zero-volume answer.
     """
+    return _overlap_volume(a, b)
+
+
+def _overlap_volume(a, b, *, parallel: bool = False) -> float:
+    """``overlap_volume``; ``parallel`` lets the kernel run each Boolean on every core (the interference
+    check's, whose slowest pairs are measured last, with cores to spare): the same volume, sooner."""
     lefts, rights = _solids(a), _solids(b)
-    return sum((_overlap(left, right) for left in lefts for right in rights), 0.0)
+    return sum((_overlap(left, right, parallel) for left in lefts for right in rights), 0.0)
 
 
 def _solids(shape) -> list:
@@ -225,7 +231,7 @@ def _solids(shape) -> list:
     return found
 
 
-def _overlap(left, right) -> float:
+def _overlap(left, right, parallel: bool = False) -> float:
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
     from OCP.BRepBndLib import BRepBndLib
     from OCP.BRepCheck import BRepCheck_Analyzer
@@ -239,7 +245,19 @@ def _overlap(left, right) -> float:
             BRepBndLib.Add_s(shape, bounds, False)
         if boxes[0].IsOut(boxes[1]):
             return 0.0
-        boolean = BRepAlgoAPI_Common(_copy(left), _copy(right))
+        if parallel:
+            from OCP.collections import List_TopoDS_Shape
+
+            boolean = BRepAlgoAPI_Common()
+            arguments, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
+            arguments.Append(_copy(left))
+            tools.Append(_copy(right))
+            boolean.SetArguments(arguments)
+            boolean.SetTools(tools)
+            boolean.SetRunParallel(True)
+            boolean.Build()
+        else:
+            boolean = BRepAlgoAPI_Common(_copy(left), _copy(right))
         if not boolean.IsDone():
             raise GeometryError("intersection boolean did not complete")
         common = boolean.Shape()

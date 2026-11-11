@@ -153,7 +153,15 @@ ENIG, anodized, powder coat, LED lenses, ...), each a scalar look with no textur
 | --- | --- |
 | base colour, metalness, roughness, IOR, opacity, transmission, clear coat, sheen, specular, emission and its strength; iridescence in part | anisotropy (brushed metal draws plain), dispersion, a transmissive part's volume thickness (the light refracts through the real part), texture maps |
 
-A transmissive look is written opaque, so a lens or a window refracts rather than fades. A
+A material in Blender is named by the model's look (`bpy.data.materials["frame_black"]`), so a script
+restyles a look by its name wherever it is worn; the physical material it is a look of is its custom
+property (`material["cad"]["material"]`: `Alu_G7075_T6`). Two looks of one aluminium are two materials.
+
+A transmissive look is written opaque, so a lens or a window refracts rather than fades. Its
+base colour tints what passes through it, so smoked glass written as a dark colour with a partial
+transmission (`color` near black, `transmission=0.35`), which a snapshot draws as a tint, renders
+as a black surface: a third of nothing passes. Write the glass in the model as `transmission=1`
+with the tint as its colour (a mid grey for smoke), and look at it in a Cycles draft. A
 material is changed in the script only for the render's sake (a glow, a backdrop): the model
 stays the source of every look.
 
@@ -165,6 +173,12 @@ on the CPU where there is not, at minutes a frame. They disagree on translucent 
 (an LED's glow ghosts through its diffuser in EEVEE), so a draft does not prove a final where glass
 matters: draft those in Cycles at a few samples. Device setup is in
 [the scene script](references/scene-script.md#engines-and-the-gpu).
+
+EEVEE needs a graphics driver. On a machine without one (a headless Linux server or container
+with no `libEGL`), an EEVEE render prints `Couldn't open libEGL.so.1` and ends the process (exit
+134) with no Python exception to catch, and so does the compositor on its default device. There,
+draft in Cycles at 8 to 16 samples and set `scene.render.compositor_device = "CPU"`
+([no graphics driver](references/scene-script.md#no-graphics-driver)).
 
 ## Check each change
 

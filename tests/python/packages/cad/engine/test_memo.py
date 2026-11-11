@@ -615,6 +615,55 @@ class ConfigurationTest(MemoCase):
         self.assertGreater(delta["misses"], 0)
 
 
+class OwnFieldTest(MemoCase):
+    """A field a model sets on a shape is that shape's as much as its label: an operation on it is
+    keyed by it, so code edited to set one is not handed the shapes made before it."""
+
+    @staticmethod
+    def _model(stood=None, note=None):
+        import build123d as bd
+
+        drive = bd.Box(10, 10, 10) - bd.Cylinder(2, 10)
+        if stood is not None:
+            drive._stood = stood
+        if note is not None:
+            drive._note = note
+        placed = bd.Pos(30, 0, 0) * drive
+        return getattr(placed, "_stood", None)
+
+    def test_an_operation_on_a_shape_is_keyed_by_the_fields_its_model_set_on_it(self) -> None:
+        import build123d as bd
+
+        first, _, _ = _run(self._model)
+        self.assertIsNone(first)
+        stood, delta, _ = _run(self._model, bd.Location((0, 0, 1)))
+        self.assertEqual(tuple(stood.position), (0, 0, 1), "the placement carries the field the edit set")
+        self.assertEqual((delta["misses"], delta["unkeyable"]), (1, 0), "the placement alone ran again")
+        again, delta, _ = _run(self._model, bd.Location((0, 0, 1)))
+        self.assertEqual((tuple(again.position), delta["misses"]), ((0, 0, 1), 0))
+        moved, delta, _ = _run(self._model, bd.Location((0, 0, 2)))
+        self.assertEqual((tuple(moved.position), delta["misses"]), ((0, 0, 2), 1))
+        # A value that is no parameter cannot be compared: the call runs with no key, every time.
+        _, delta, _ = _run(self._model, None, object())
+        self.assertGreater(delta["unkeyable"], 0)
+
+    def test_what_build123d_and_the_engine_keep_on_a_shape_is_none_of_its_model_s(self) -> None:
+        import build123d as bd
+        from bd_materials import metals
+
+        from cad.engine import mechanism
+
+        block = bd.Box(1, 2, 3)
+        block.label, block.color, block.material = "block", bd.Color("red"), metals.aluminum()
+        assembly = bd.Compound(children=[block, bd.Pos(5, 0, 0) * bd.Cylinder(1, 2)], label="kit")
+        mechanism.mechanism_state(assembly, "open", hinge=10)
+        for shape in (block, assembly, bd.Text("a", 5), bd.CounterBoreHole(1, 2, 0.5, 3), bd.Rectangle(2, 3),
+                      bd.CenterArc((0, 0), 1, 0, 90), bd.Solid.make_box(1, 1, 1), block.faces()[0],
+                      bd.fillet(bd.Box(2, 2, 2).edges(), 0.2), bd.loft([bd.Rectangle(1, 1), bd.Pos(0, 0, 2) * bd.Circle(0.5)])):
+            with self.subTest(shape=type(shape).__name__):
+                self.assertEqual(memo._fields_key(shape, None), ())
+
+
 class MakerTest(MemoCase):
     def test_a_maker_s_run_is_counted_as_the_model_s_call(self) -> None:
         from build123d import Solid

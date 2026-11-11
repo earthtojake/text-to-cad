@@ -20,6 +20,7 @@ class _ImportingEngine:
         self.release = threading.Event()
         self.lock = threading.Lock()
         self.state: dict = {"building": None, "failed": None, "progress": 0}
+        self.then: dict | None = None
 
     def add(self, path: Path) -> str:
         assert self.release.wait(30), "the test never released the import"
@@ -29,8 +30,14 @@ class _ImportingEngine:
         return False
 
     def build_of(self, ident: str) -> dict:
+        """Where the import stands. With a frame in ``then``, the import moves to it once this
+        answer is taken: after a request has heard where it stood, whenever its thread gets there."""
         with self.lock:
-            return dict(self.state)
+            state = dict(self.state)
+            then, self.then = self.then, None
+        if then is not None:
+            self.say(then)
+        return state
 
     def say(self, frame: dict | None) -> None:
         with self.lock:
@@ -58,10 +65,11 @@ class ImportStatusTest(unittest.TestCase):
         quick = EngineDocuments(hold_seconds=0.2, retry_ms=0, server=self.engine)
         self.assertEqual(quick.response(str(self.step)), (202, {"state": "reading", "retryMs": 0, "building": reading}))
         # A request held for long comes back the moment the import moves, with the frame it moved to: it
-        # returns at all only because it does (the hold outlives the test's patience).
+        # returns at all only because it does (the hold outlives the test's patience). The import moves
+        # as the request hears where it stands, never on a clock that a slow machine can lose to.
         patient = EngineDocuments(hold_seconds=30.0, retry_ms=0, server=self.engine)
         collecting = _frame("collecting parts", 120, 628)
-        threading.Timer(0.05, self.engine.say, args=(collecting,)).start()
+        self.engine.then = collecting
         status, body = patient.response(str(self.step))
         self.assertEqual((status, body["state"], body["building"]), (202, "reading", collecting))
         # The import in: the document, where every request for it joined one serve.

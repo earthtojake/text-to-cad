@@ -715,7 +715,7 @@ cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero ST
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
-                [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
+                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
 cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
@@ -756,6 +756,12 @@ cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius
                                              trimesh integration's (at x, y, z); the general
                                              rules' verdicts (no shop's limits) and
                                              every measurement
+cad model|xbf|step interference SRC [--pose NAME|NAME@SECONDS|JSON]...
+                [--fit A B]... [--min-volume MM3] [--json]
+                                             which parts share volume: every pair whose boxes meet
+                                             answered, by the kernel wherever their meshes do not show
+                                             air between them, as built and at each pose given; a named fit
+                                             listed apart; each pair not measured said, and never passed
 cad model|xbf|step solve SRC [--occurrence PART] [--json]
                                              a stress study's setup, the kernel's: the parts, the pairs
                                              that touch and a part's faces by ref; writes nothing
@@ -1108,6 +1114,39 @@ the base's environment (`manufacturing.through_engine`, `integration_env`). So d
 engine can be reached. Either way `api.check` says so in one line on stderr, in the process that can then
 measure it: nothing keeps such a check, so it is measured again each time it is asked. What the engine measured
 `api.check` returns as `measured_in: "engine"` (`api.IN_ENGINE`; `IN_CALLER` is the caller's to say of its own).
+
+**The interference check** (`cad <type> interference`, `cad.<type>.interference`: a model's, an xbf's, a STEP's)
+is asked and answered the same way and is no manufacturing process's: the caller resolves its options
+(`cad._internal.interference.options`: the poses, the mechanism states, the configuration sequences and their
+samples, the named fits, its limits) and asks `api.check` with `process: "interference"`, which the runner takes
+beside a process's (`checks_runner.INTERFERENCE`) and the checks process hands to its own measurer
+(`registry.interference_check`, `cad.build123d._interference`, whose docstring is the mechanism). So it has a
+check's whole life -- a slot of the pool, the limits, the kept result by the document's version and the options,
+`superseded` when the model is built again. What it measures: each pose is every part's placement (as built,
+or the mechanism's forward kinematics at a pose or at a sample of a sequence); the pairs whose boxes meet there
+-- each part's tight box, turned with the part -- are answered once
+for each way two parts stand to one another, so the copies of a part and the parts no pose moves cost one
+answer. An answer is read from what was kept, else ruled out by the two parts' meshes, else measured. **Kept**:
+each answer is written to the cache (`<cache>/interference`) under the two parts' geometry keys and the
+placement of one in the other's frame, as it is made, with each geometry's tight box; so a model built again is
+measured only where a part that changed is one of the two, a check stopped by its time goes on from what it had
+measured, and a check that left a pair unmeasured is not kept whole (`partial`), so it is asked again. **Ruled
+out**: the kernel takes seconds over a pair and minutes over a maker's drive beside a lofted cover, and most pairs
+whose boxes meet have air between them, so the two parts are meshed (0.05 mm at most) and asked of the kernel's
+own proximity test (`BRepExtrema_ShapeProximity`: a tree of each mesh's triangles); with no triangle of one
+within the two meshes' deflections of the other's, and no shell of either inside a solid of the other, they share
+nothing. **Measured**: every other pair, by `overlap_volume` on the parts' own solids, the pairs of the fewest
+faces first. The pairs are measured in a few processes the checks process starts for the check (one a
+core, four at most, each a kernel of its own, outside the memory the engine's rule counts, each ended by a small guard process
+the moment the checks process is gone), because a
+Boolean cannot be stopped from inside: a pair past its time (five minutes) has its process killed and is
+answered **unmeasured** (`over_time`), as is one whose process exited (`process_lost`), one the kernel refused
+(`error`) and every pair not reached
+within the check's own time (twenty minutes, kept under `CAD_ENGINE_CHECK_SECONDS`, so a long check answers with
+what it measured and goes on from there when asked again); neither limit is an option of the check. The result is a
+`CheckResult`: `failed` with an `overlapping_parts` finding a pair, as a stress study names the same fact; `not_checked` (`unmeasured`) where none was found
+but a pair went unmeasured; `ok` only with none of either. A caller of another release or code than the checks
+processes' is not measured for (`Unanswered`): there is no measuring in the caller.
 
 The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them (held to one to the machine's
 cores, which `cad status` says), else half the machine's cores, one at least and four at most, each a kernel
@@ -2112,14 +2151,26 @@ engine, beside the document, and the document's scene brings them as its own lig
 rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
 page put up in place of the theme's. Preview is drawn as any file's is.
 
-`cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
-browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
+`cad <type> snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
+`snapshot(preview=True)`) draws the viewer's Preview in place of a display mode, by the same raster: the
+model in its materials under the viewer's rig (`photographicStudioRig.js`: its key from the same direction
+at the same strength, shadowing the model, and the look's `studio.hdr` -- the viewer's room and softboxes --
+at full strength as the image-based light), in perspective unless the display says otherwise, in the
+viewer's studio (its backdrop sweep, its floor at the model's lowest point, the floor's shadow baked as the
+viewer bakes it), and tone-mapped as the viewer tone-maps (three's Neutral: OCCT's raster has no tone
+mapping, so the model is drawn alone on black and on white, its cover and colour read from the two, and
+what the curve changes laid over the model's pixels -- `occt.Scene._tone`; the studio, drawn in the
+viewer's finished colours, is untouched, and a camera under the floor, which sees the model through it,
+takes the share of that change the floor lets through). It is not the viewer's picture pixel for pixel, and no browser
+draws it: a frame holds no light past 1, so a highlight comes out the tone a full white does; there is no
+ambient occlusion and no reflection in the floor; glass is drawn at its preview alpha; and OCCT's baked
+reflections read lighter on a polished metal. The first Preview of a document bakes its light (seconds).
 
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
 light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
-which a snapshot refuses), a drawing's white paper, a board's and a schematic's light colours --
+drawn only when asked for), a drawing's white paper, a board's and a schematic's light colours --
 whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
 and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
@@ -2894,6 +2945,12 @@ copper, 6061-T6, 304 stainless, mild steel, or the `substrate=` metal a finish i
 `custom_metal`, `custom_plastic` or `SolidMaterial` of its own (SAC305, moulding compound, alumina,
 clear epoxy, PBT-GF30), and a scalar `PbrProperties` look, no texture map. bd_materials' own textured
 finishes (`bead_blast`, `brushed`, `zinc_plate`, `tin_plate`) draw untextured as a flat roughness 1.
+
+A GLB names each material by its look (`pbr.name`: `frame_black`, `anodized_black`), not by the physical
+material the look is of: two looks of one aluminium are two materials of two names, and what reads the file
+(Blender, `cad.blender`) finds a look by the name the model gave it. The physical material's name rides
+beside it, `extras.cad.material` (`Alu_G7075_T6`), which Blender reads as the material's custom property
+(`export/glb.py`'s `_material`).
 
 ```python
 from bd_materials import metals
@@ -3744,7 +3801,10 @@ kernel work an edit elsewhere leaves untouched: roughly a thousand kernel calls 
 per part, never on a helper called many times; whole sub-assembly stages are the usual
 candidates (tom's six stages, movement's three layers: 1.3–3 s each, and twice as fast on an
 edit), while per-part markers measured under 0.1 s. Nested `@xbf` is never needed for caching:
-the operation-level memo handles every kernel call in any model, markers or not.
+the operation-level memo handles every kernel call in any model, markers or not. The one other
+case is a builder several models call with the same arguments (nine posed copies of one
+assembly): an operation's entry is keyed by the body that ran it, so two models never share one,
+and unmarked the builder runs whole in each; marked, it runs once and the rest replay it.
 
 A verifying build (`Model.build(verify=True)`) runs every
 body the memo would replay -- a model's and every `@memo` call's -- and compares each fresh

@@ -719,7 +719,7 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
     libraries than this process's is answered with no ``checked``, nothing measured."""
     from cad.engine import export
     from cad.engine.contract import measures_for, measuring, release
-    from cad.registry import manufacturing_check
+    from cad.registry import interference_check, manufacturing_check
 
     spec = request["source"]
     check = request["check"]
@@ -745,7 +745,9 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
         checked = {"unmeasured": {"code": "document_unreadable",
                                   "message": f"failed to read {read or 'the document'}: {error}"}}
     else:
-        checked = manufacturing_check().held(source, check, read)
+        # A check is its family's to measure: an interference check's (``cad._internal.interference``), else a manufacturing one's.
+        measurer = interference_check() if check.get("process") == "interference" else manufacturing_check()
+        checked = measurer.held(source, check, read)
     return {"reports": [], "files": [], "checked": {**checked, **said, "read": fresh,
                                                     **({"digest": digest} if "path" in spec else {})}}
 

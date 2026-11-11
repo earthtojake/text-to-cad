@@ -33,7 +33,7 @@ Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
 the look the viewer's viewport resolves for the same display settings. Every picture is light: a 3D
 document on the look's flat backdrop (Preview's studio sweep only for a still asked for Preview,
-which ``cad <type> snapshot`` never asks for), the drawing's white paper, KiCad's light colours,
+``--preview``), the drawing's white paper, KiCad's light colours,
 whatever theme the person's viewer is in: a snapshot is a tool for an agent, and dark is the harder
 to read, so no request, flag or packet names a theme. The answer is PNG bytes, which this writes to
 OUT.
@@ -66,10 +66,11 @@ refused by name before anything renders.
 
 ``--job PACKET`` replays a Quick Edit packet (the ``.snapshot.json`` the viewer writes) or a job
 file in its words (``job_pictures``): every output of every job drawn, each job a view with its
-own camera, display (its hidden and isolated parts among it), pose (``jointValues``) and, a
+own camera, display (its hidden and isolated parts among it), pose (``jointValues``, or ``motion``: a
+configuration sequence at a time, ``{"name", "at"}``) and, a
 robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
 (``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
-the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``,
+the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``, ``background``,
 ``renderScale``, ``sizeProfile``). A view's own camera with the tight frame off is drawn exactly;
 any other camera is fitted with the job's padding. Every request is checked before anything
 renders, and a failure writes none of the job's pictures, leaving every output as it was.
@@ -92,11 +93,18 @@ from typing import Any, Callable, TypeVar
 from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
-           "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
+           "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display",
+           "parse_measurements", "parse_pose",
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "edges"})
+# The edge classes a picture draws as lines over its faces, by the names the mesh and the viewer give them
+# (``render.shapes.LINES``; the viewer's ``CAD_EDGE_CLASS_IDS``): where two faces meet at an angle or a face
+# has a free border (``feature``), where they meet smoothly (``tangent``: a fillet's ends, a loft's rows),
+# and where a face closes on itself (``seam``: a cylinder's, a loft's). All of them unless ``display.edges``
+# names which (``{"classes": [...]}``; ``edges=feature`` on the command line).
+EDGE_CLASSES = ("feature", "tangent", "seam")
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
@@ -134,10 +142,10 @@ MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
 PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
-JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
+JOB_KEYS = frozenset({"input", "camera", "display", "preview", "jointValues", "selection", "annotation", "measurements",
                       "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
-SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale"})
+SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale", "background"})
 SELECTION_KEYS = {"hide": "hidden", "focus": "isolated"}  # a view's selection, as the display says it
 # The frame's margin each side, a share of the picture (the camera fit's), and the supersampling.
 PADDING, PADDING_RANGE = 0.04, (0.0, 0.15)
@@ -258,7 +266,7 @@ def exploded_amount(display: dict[str, Any]) -> float:
 
 @refusing("display")
 def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, both by commas (``hidden-line,exploded=0.6``), or
+    """``--display``: a mode, ``exploded=AMOUNT``, ``edges=CLASS``, by commas (``hidden-line,exploded=0.6``), or
     the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
     (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
     ``render/schematic.py``)."""
@@ -283,11 +291,14 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                 name, equals, amount = token.partition("=")
                 if name == "exploded" and "exploded" not in display:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
+                elif name == "edges" and equals and "edges" not in display:
+                    display["edges"] = {"classes": [amount.strip()]}
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "and exploded=AMOUNT moves the parts apart (one of each, by commas)",
+                                          "exploded=AMOUNT moves the parts apart, and edges=CLASS draws the edges "
+                                          f"of one class alone ({', '.join(EDGE_CLASSES)}; one of each, by commas)",
                                           part="display.mode")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
@@ -302,6 +313,13 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                               part="display.mode")
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false", part="display.grid")
+    if "edges" in display:
+        edges = display["edges"]
+        classes = edges.get("classes") if isinstance(edges, dict) and set(edges) == {"classes"} else None
+        if (not isinstance(classes, list) or not classes or len(set(map(str, classes))) != len(classes)
+                or not all(name in EDGE_CLASSES for name in classes)):
+            raise SnapshotRefused('display.edges is {"classes": [...]}, the edge classes drawn, each once, of '
+                                  f"{', '.join(EDGE_CLASSES)}; not {edges!r}", part="display")
     _visibility(display)
     if grid:
         display["grid"] = True
@@ -334,10 +352,11 @@ def packet_visibility(value: Any) -> dict[str, list[str]]:
 def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: str) -> frozenset[int]:
     """The instances a picture leaves out: those ``display.hidden``'s refs name, and, where
     ``display.isolated`` is given, every one its refs do not. A ref is a part or an assembly
-    (every part below it), in the refs grammar, or -- a robot's -- the viewer's id of a visual
-    (``link:v1``, every object it draws, or ``link:v1/object/0``, one), as a robot's view names what
-    it hid; one that names nothing, or an element, is refused by name, and so is a choice that
-    leaves nothing to draw."""
+    (every part below it), in the refs grammar, or a glob over the occurrences (``*skin*``,
+    ``*/screw``, ``chest/skin_screw.?``: ``refs.matching``; several in one string, by commas), or --
+    a robot's -- the viewer's id of a visual (``link:v1``, every object it draws, or
+    ``link:v1/object/0``, one), as a robot's view names what it hid; one that names nothing, or an
+    element, is refused by name, and so is a choice that leaves nothing to draw."""
     if not display.get("hidden") and display.get("isolated") is None:
         return frozenset()
     from cad.engine import refs
@@ -355,15 +374,33 @@ def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: s
             if ref in visuals:
                 found.update(visuals[ref])
                 continue
-            try:
-                hits = refs.resolve_structure(structure, ref)
-            except refs.RefError as error:
-                raise SnapshotRefused(f"display.{field}: {error}") from None
-            for hit in hits:
-                if hit.kind is not None:
-                    raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
-                                          "it takes parts and assemblies")
-                found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
+            if isinstance(ref, str) and refs.GLOB & set(ref) and '"' not in ref:  # a quoted label is itself
+                for pattern in (item.strip() for item in ref.split(",")):
+                    if not refs.GLOB & set(pattern):
+                        found.update(named_by(field, pattern))
+                        continue
+                    nodes = refs.glob_structure(structure, pattern)
+                    if not nodes:
+                        raise SnapshotRefused(f"display.{field}: the glob {pattern!r} matches no part or assembly "
+                                              f"of {name}")
+                    found.update(part.payload["instance"] for node in nodes for part in node.parts()
+                                 if "instance" in part.payload)
+                continue
+            found.update(named_by(field, ref))
+        return found
+
+    def named_by(field: str, ref: str) -> set[int]:
+        """The instances one ref of the grammar names: its parts, or every part of its assembly."""
+        found: set[int] = set()
+        try:
+            hits = refs.resolve_structure(structure, ref)
+        except refs.RefError as error:
+            raise SnapshotRefused(f"display.{field}: {error}") from None
+        for hit in hits:
+            if hit.kind is not None:
+                raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
+                                      "it takes parts and assemblies")
+            found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
         return found
 
     every = set(range(len(structure.get("instances") or [])))
@@ -628,12 +665,14 @@ def authored(camera: Any, annotation: dict[str, Any] | None, source: Any, docume
 
 @refusing("pose")
 def parse_pose(value: str | None) -> Any:
-    """``--pose``: a configuration's name, or ``{"<joint or coupling>": value}`` (JSON, or a JSON file of it)."""
+    """``--pose``: a configuration's name, a configuration sequence at a time of it (``walk@0.6``), or
+    ``{"<joint or coupling>": value}`` (JSON, or a JSON file of it)."""
     if value is None:
         return None
     text = value.strip()
     if not text:
-        raise SnapshotRefused("--pose names a configuration, or gives joint values as a JSON object")
+        raise SnapshotRefused("--pose names a configuration or a sequence at a time (NAME@SECONDS), or gives joint "
+                              "values as a JSON object")
     if text.startswith("{") or (text.endswith(".json") and Path(text).is_file()):
         parsed = _json_or_file(text, "--pose")
         if not isinstance(parsed, dict):
@@ -673,7 +712,8 @@ class Still:
     a job's own view; no fit), Preview, the size, the pose, the annotation and the measurements
     drawn over it, and how it is finished (a job's output settings): the fit's ``padding`` each
     side, a share of the picture, on every drawn vertex (``tight``) or the drawn parts' box, a
-    ``transparent`` backdrop, and ``scale`` times the size drawn and brought down (supersampling).
+    ``transparent`` backdrop or a flat ``background`` colour, and ``scale`` times the size drawn and
+    brought down (supersampling).
     The request OCCT draws, and what a renderer process is handed (``as_json``)."""
 
     display: dict[str, Any] = field(default_factory=dict)
@@ -689,12 +729,14 @@ class Still:
     transparent: bool = False
     scale: float = 1.0
     references: list[str] | None = None  # a board's: what its prompt named, lit (``parse_references``)
+    background: str | None = None  # the flat colour behind a 3D document (``#rrggbb``); None: the look's own
 
     def as_json(self) -> dict[str, Any]:
         return {"display": self.display, "camera": self.camera, "exact": self.exact, "preview": self.preview,
                 "size": list(self.size), "pose": self.pose, "annotation": self.annotation,
                 "measurements": self.measurements, "padding": self.padding, "tight": self.tight,
-                "transparent": self.transparent, "scale": self.scale, "references": self.references}
+                "transparent": self.transparent, "scale": self.scale, "references": self.references,
+                "background": self.background}
 
     @staticmethod
     def from_json(found: dict[str, Any]) -> "Still":
@@ -702,7 +744,7 @@ class Still:
                      bool(found.get("preview")), tuple(found.get("size") or DEFAULT_SIZE), found.get("pose"),
                      found.get("annotation"), found.get("measurements"), float(found.get("padding", PADDING)),
                      bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0),
-                     found.get("references"))
+                     found.get("references"), found.get("background"))
 
     @property
     def drawn(self) -> tuple[int, int]:
@@ -826,14 +868,14 @@ def _flag_text(value: Any, flag: str) -> str | None:
 
 
 def draw(source: Any, out: Path, *, display: Any = None, camera: Any = None, grid: bool = False,
-         pose: Any = None, width: int | None = None, height: int | None = None,
+         preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
          size_profile: str | None = None, annotation: Any = None, measurements: Any = None) -> dict[str, Any]:
     """A build's document (an ``export.Source``, in this process's memory) drawn into ``out``:
     a model's picture (``Model.snapshot``). Served from memory over the process's mesh
     cache, so nothing the build meshed is meshed again."""
     shown, framed, size = options(display, camera, grid, width, height, size_profile)
     path = source.path or Path(out).with_suffix(".xbf")
-    return snapshot(path, Path(out), display=shown, camera=framed,
+    return snapshot(path, Path(out), display=shown, camera=framed, preview=bool(preview),
                     size=None if width is None and height is None and size_profile is None else size, pose=pose,
                     source=source, annotation=parse_annotation(annotation), measurements=parse_measurements(measurements),
                     annotation_source=annotation)
@@ -1090,7 +1132,9 @@ def job_input(job: Any) -> str | None:
 @refusing("job")
 def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     """A job's output settings (``output``), checked: ``sizeProfile``, ``padding`` (0 to 0.15 of
-    the picture each side), ``tightFrame``, ``transparent``, ``renderScale`` (1 to 3)."""
+    the picture each side), ``tightFrame``, ``transparent``, ``renderScale`` (1 to 3), and
+    ``background`` (a ``#rrggbb``: the flat colour behind a 3D document, in place of the look's own;
+    not with ``transparent``, which draws on nothing, nor for a drawing, which stands on its paper)."""
     if value is None:
         return {}
     if not isinstance(value, dict):
@@ -1108,6 +1152,13 @@ def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     for key in ("tightFrame", "transparent"):
         if key in value and not isinstance(value[key], bool):
             raise SnapshotRefused(f"{where}.{key} is true or false")
+    if "background" in value:
+        if not _color(value["background"]):
+            raise SnapshotRefused(f"{where}.background is a colour as #rrggbb, not {value['background']!r}")
+        if value.get("transparent"):
+            raise SnapshotRefused(f"{where} gives background and transparent: a picture stands on a colour or on nothing")
+        if drawing:
+            raise SnapshotRefused(f"{where} gives background, which is behind a model; a drawing stands on its paper")
     if drawing:
         framed = [key for key in ("padding", "tightFrame") if key in value]
         if framed:
@@ -1150,7 +1201,7 @@ def _job_size(output: dict[str, Any], settings: dict[str, Any], flags: tuple[Any
 
 @refusing("job")
 def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 pose: Any = None, width: int | None = None, height: int | None = None,
+                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, annotation: Any = None,
                  measurements: Any = None) -> list[tuple[Path, Path, Still]]:
     """Every picture a job names (``--job``: a Quick Edit packet, a job, or a list of jobs), each
@@ -1224,7 +1275,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                 if selection.get(key):
                     shown[field_name] = [*(shown.get(field_name) or []), *selection[key]]
             _visibility(shown)
-        projection = (shown.get("camera") or {}).get("projection") or "orthographic"
+        if view.get("preview") is not None and not isinstance(view["preview"], bool):
+            raise SnapshotRefused(f"{where}.preview is true or false")
+        studio = bool(preview or view.get("preview"))  # Preview's photographic look, in place of the display's mode
+        projection = (shown.get("camera") or {}).get("projection") or ("perspective" if studio else "orthographic")
         ink = ink_flag if annotation is not None else parse_annotation(view.get("annotation", shared.get("annotation")))
         dimensions = dimensions_flag if measurements is not None else parse_measurements(
             view.get("measurements", shared.get("measurements")))
@@ -1257,9 +1311,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                                                projection, tight))
             if framed == AUTHORED:
                 framed, exact, _view = authored(AUTHORED, ink, given if isinstance(given, dict) else None, document)
-            pictures.append((document, out, Still(shown, framed, exact, False, size,
+            pictures.append((document, out, Still(shown, framed, exact, studio, size,
                                                   posed, ink, dimensions, padding, tight,
-                                                  bool(settings.get("transparent")), scale, lit)))
+                                                  bool(settings.get("transparent")), scale, lit,
+                                                  settings.get("background"))))
     written = [out for _document, out, _still in pictures]
     twice = sorted({str(out) for out in written if written.count(out) > 1})
     if twice:

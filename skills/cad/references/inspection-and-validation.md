@@ -14,6 +14,7 @@ prompt names a reference ([Check each change](../SKILL.md#check-each-change)).
 - [Which code made it](#which-code-made-it)
 - [Measurements](#measurements)
 - [Geometry diagnostics](#geometry-diagnostics)
+- [Interference](#interference)
 - [Mass properties](#mass-properties)
 
 Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` folder
@@ -114,7 +115,11 @@ def arm():
   face of the part it is.
 - `bounding_box()` is the axis-aligned envelope in the shape's current frame. It is
   world-aligned after accumulating placements as above; `bounding_box(optimal=False)`
-  is a fast conservative one for curved geometry.
+  is a fast conservative one for curved geometry: on a piece cut from a lofted face it is
+  several times too wide (a 13 mm strip read 39 to 72 mm), so rule pairs out with it and
+  never say where a part is by it. `bounding_box()` is tight, at tens of milliseconds a part.
+- A cylindrical face's `center()` is a point on its wall; its axis is
+  `face.axis_of_rotation`.
 
 ## References
 
@@ -143,7 +148,8 @@ plate/face 3                            in a document of one part, its elements 
   label are numbered among them, in component order, so a repeated part is always
   reached by its path, never by a number across the document. A label naming several
   occurrences is refused with their paths (`finger names 3 occurrences in kit.xbf:
-  hand/finger.1, hand/finger.2, hand/finger.3`).
+  hand/finger.1, hand/finger.2, hand/finger.3`), but for one that an assembly shares
+  with a part inside it: `stem` is then the assembly, and the part is `stem/stem`.
 - **An element is named by its name or its number.** Numbers are the part's own
   face, edge and vertex numbers, the ones the viewer and `cad <type> inspect` show; a
   name survives edits that a number does not. A bare element after an owner belongs
@@ -319,7 +325,8 @@ contact and containment all give 0, so it does not measure penetration.
 oriented solids, 0 for mere contact; pair bodies with a group's `solids()`, the
 group found in the model's tree by its label. Kernel failures raise.
 
-Two solids at `overlap_volume` 0 at most touch. A pair meant to overlap (a
+`cad model interference` is this measure of every pair of a document, posed too
+([interference](#interference)). Two solids at `overlap_volume` 0 at most touch. A pair meant to overlap (a
 press-fit pin, a bearing in its bore) is named as such, not inferred from where it
 sits in the tree. A part meant to sit on, bolt to or bear against another measures
 `closest_points` distance 0 against it; above 0 is a gap, and the part floats. Over
@@ -354,11 +361,74 @@ A face the mesher could not triangulate is named wherever the document is drawn:
 the snapshot warns with the part and the face, and the viewer leaves it out. It is
 usually a sliver a boolean left.
 
+## Interference
+
+`cad model interference "$ID"` (`cad xbf interference FILE`, `cad step interference FILE`) says which
+parts of a document share volume. The verdict is the kernel's, exact, on the parts' own solids, so a
+plate through a 2.6 mm skin is found and a part 0.3 mm from another is not. A mesh only rules out the
+pairs with air between them, which need no kernel:
+
+```bash
+cad model interference "$ID"                                  # as built
+cad model interference "$ID" --pose crouch --pose bow       # and at mechanism states
+cad model interference "$ID" --pose walk@0 --pose walk@0.6 --pose '{"l_knee": 90}'   # a sequence at times of it, joint values
+cad model interference "$ID" --fit 'bearing*' housing --fit pin base   # pairs meant to share volume
+```
+
+```text
+$ cad model interference "$ID" --pose down
+error: overlapping_parts, 2 place(s). Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A B)
+  arm/bar: shares 739 mm^3 with arm/stop (down)
+  arm/base: shares 125.7 mm^3 with arm/pin (as built, down)
+FAILED arm: 2 pairs of parts share volume (5 parts at 2 poses, the boxes of 6 pairs met: 2 apart, 4 measured, in 2.1 s)
+```
+
+- **The status is the verdict**: 0 clear, 1 a pair shares volume, 3 none found but a pair could not
+  be measured, which is no pass. A pair is unmeasured (`reason`) when its Boolean ran past five minutes
+  or the whole check past twenty (`over_time`), when its process was lost (`process_lost`) or when the
+  kernel refused the two (`error`): ask again, which goes on from what was measured, or measure that
+  pair in a check of its own. A pair that shares volume is an `overlapping_parts` finding, as a stress
+  study names the same fact. `--json` is the result whole (`measurements.overlaps`, `.fits`,
+  `.unmeasured`: each row `between` its two occurrence paths, with every pose it holds at).
+- **The first check of an assembly is the slow one.** Each pair's answer is kept by the two parts'
+  geometries and how one stands to the other, so the next check measures only the pairs of a part that
+  changed, a check stopped by its time goes on from where it stopped when asked again, and a pose
+  checked after a check as built measures the moving pairs alone. The summary says how the pairs were answered
+  (`apart` by their meshes, `kept` from an earlier check, `measured` now; `measurements.pairs`), and `measurements.slowest` names the
+  pairs that took longest: two large lofted surfaces in contact over their whole area take the kernel
+  minutes (a 700-part humanoid: ten minutes the first time on four cores, most of it eight such pairs).
+- **It checks the poses it is given, and chooses none.** `--pose` repeats, and takes what a snapshot's
+  does: a mechanism state's name, a configuration sequence at a time of it (`walk@0.6`), or
+  `{joint or coupling: value}`. Which states, and which times of a sequence, is yours to say:
+  `cad model inspect "$ID"` lists the states and the sequences with their durations. What a pose does
+  not move is not measured again, so a long sequence costs its moving pairs alone.
+- **A fit is named, never inferred.** `--fit A B` takes two refs or globs; the pair's overlap is
+  listed as a fit and is no overlap to fix. A shared volume of 0.001 mm^3 or less is the rounding
+  along a face where two parts touch, and none (`--min-volume`).
+- **What it cannot see**: a pose it was not given (a time between two of a sequence), a part with no solid (left out, and counted),
+  and joints that share a centre taken to the corners of their travel together, which is a `--pose`
+  for each corner. Say so with the result.
+- From a script: `cad.model.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("pin", "base")])` returns the
+  same result (`.ok`, `.findings`, `.measurements`). The engine measures it and keeps the result: the
+  same check of an unchanged model answers at once. A check that left a pair unmeasured is not
+  kept: asked again, it measures again.
+
 ## Mass properties
 
 A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cad model inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
+`cad model inspect "$ID" OWNER`. A script that needs every part's density (a link's mass summed
+from its parts, a simulator's description) asks the server, which transfers no solid:
+
+```python
+from cad import model
+
+materials = model.inspect(robot(), query="structure")["summary"]["materials"]
+# [{"name": "Alu_G6061_T6", "density": 2700.0, "parts": ["robot/hip/bracket", ...]}, ...]
+```
+
+`model.inspect(handle, "hip/bracket")` answers one part or assembly: its volume, mass, material,
+density and bounds. For explicit densities, a centre of mass or inertia:
 
 ```python
 from cad.build123d import mass_properties
@@ -369,6 +439,21 @@ properties = mass_properties([
 ])
 print(properties.volume, properties.mass, properties.center_of_mass)
 print(properties.inertia)
+```
+
+`.volume`, `mass_properties` and `overlap_volume` integrate at a fixed order, exact on
+planes, cylinders and spheres and a little off on lofted and spline solids: 0.4 % high on one
+lofted solid, so the three volumes of a correct cut (what was there, what is left, what was
+removed) need not add up, and a hole can change a volume by more than its own. A check that
+guards a Boolean by volume allows a per cent, or integrates adaptively (0.04 to 2.4 s a solid):
+
+```python
+from OCP.BRepGProp import BRepGProp
+from OCP.GProp import GProp_GProps
+
+props = GProp_GProps()
+BRepGProp.VolumePropertiesGK_s(solid.wrapped, props, 1e-6, False, False, False, False, False)
+volume = props.Mass()
 ```
 
 `mass_properties` integrates uniform density per solid and sums the bodies,

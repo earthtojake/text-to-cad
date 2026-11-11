@@ -72,15 +72,28 @@ view it replays was seen in: no flag or packet names a theme.
 `solid` (shaded, with edge linework), `shaded` (no edges), `parts` (each part its own
 colour), `xray` (translucent surfaces, hidden edges visible), `hidden-line`
 (linework with occluded edges suppressed) and `wireframe` (edges only). It also takes
-`exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1),
-alone or after a mode (`hidden-line,exploded=0.6`), or the viewer's display object,
-inline or as a JSON file: `mode`, `grid`, `camera`
-(`projection`: `orthographic` or `perspective`; `focalLength`), `clip` and `exploded`
-(`{"enabled": true, "amount": 0.5}`). `parts` and `exploded` are refused for a
+`exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1)
+and `edges=CLASS` (the edges of one class alone, by the viewer's names for them: `feature`,
+where faces meet at an angle; `tangent`, where they meet smoothly; `seam`, where a face
+closes on itself. `edges=feature` draws no line along a loft's or a cylinder's seam, nor
+where a fillet meets its faces, which otherwise draw as lines across a smooth skin), alone
+or after a mode (`hidden-line,exploded=0.6`, `solid,edges=feature`), or the
+viewer's display object, inline or as a JSON file: `mode`, `grid`, `camera`
+(`projection`: `orthographic` or `perspective`; `focalLength`), `clip`, `exploded`
+(`{"enabled": true, "amount": 0.5}`) and `edges` (`{"classes": ["feature", "seam"]}`: the
+classes drawn). With `edges=feature`
+a round part has no outline of its own: the picture draws no silhouettes. `parts` and `exploded` are refused for a
 document of one part. Unknown keys and out-of-range values are refused.
 
 `--grid` draws the measuring grid (red X and green Y axes) under the model.
-Snapshot draws technical OCCT images. Photographic Preview is available in the browser viewer.
+
+`--preview` draws the viewer's Preview in place of a display mode: the model lit in a studio (a
+key light, softboxes, shadows on itself), in its materials, on a floor with its shadow, in
+perspective. It is the picture for a person, and the one that shows form on a part of one colour: a
+gloss-black shell, a white fairing. Review geometry in the display modes, where edges are drawn.
+The first Preview of a document takes some seconds longer than a mode. It is drawn by the same
+renderer, not a path tracer: glass is a see-through tint, a polished metal reads lighter than the
+viewer's, and nothing is reflected in the floor. A drawing, a board and a schematic have none.
 
 `--camera` is a preset (`iso`, `front`, `back`, `left`, `right`, `top`, `bottom`),
 an `azimuth:elevation` pair in degrees (`--camera 45:30`; `0:90` looks straight down), a camera
@@ -107,11 +120,14 @@ list:
 
 `--width` and `--height` set the size in pixels instead, up to 8192.
 
-`--pose` draws a document's mechanism posed: a mechanism state's name, or joint and
-coupling values as JSON, a turn in degrees, a slide in millimetres
+`--pose` draws a document's mechanism posed: a mechanism state's name, a configuration
+sequence at a time of its clip (`walk@0.6`, the sequence's name and the seconds), or joint
+and coupling values as JSON, a turn in degrees, a slide in millimetres
 ([reviewing motion](kinematics.md#reviewing-motion)). It is how
 the picture is drawn; a file of the pose is a posed model
-([exports](exports.md#posed-files-and-parts-on-their-own)).
+([exports](exports.md#posed-files-and-parts-on-their-own)). A job's pose is its
+`jointValues`, which takes the same three, so a list of jobs is a sequence's frames in one
+command.
 
 `--json` prints what was drawn and each stage's milliseconds as one JSON object,
 and a failure as one `{"ok": false, "error": ..., "reason": ...}` on stdout. The exit status
@@ -132,12 +148,16 @@ cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
 part refs (an occurrence's path: `lid`, `hand/finger.2`; an assembly hides every part
-below it) the picture leaves out, `display.isolated` the parts it alone draws. A Quick
+below it) the picture leaves out, `display.isolated` the parts it alone draws. A name
+with `*`, `?` or `[` is a glob over every occurrence, matched against its label, its
+numbered segment and its path written with either, so one entry leaves out a kind of
+part wherever it is; a glob that matches nothing is refused. A Quick
 Edit packet given to `--annotation` carries the person's own, which `--display` may
 override:
 
 ```bash
 cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views
@@ -190,17 +210,36 @@ cad model snapshot --job tmp/bracket.snapshot.json
 cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
 ```
 
-`--job` takes a packet, a job (`{input, camera, display, jointValues, outputs, ...}`)
+`--job` takes a packet, a job (`{input, camera, display, preview, jointValues, outputs, ...}`)
 or a list of jobs, as a file or JSON; a job's `outputs` are its pictures (`path`, and
 `width`, `height`, `camera` of their own; a folder `path` takes a generated name).
 A SRC given is drawn in place of every job's input, and any other flag overrides
 every job. A job's `output` settings finish its pictures: `padding` (0 to 0.15 of
 the picture each side) and `tightFrame` frame a fitted camera (a view's own camera
 with `tightFrame` false, as the viewer writes every view, is drawn exactly),
-`transparent` draws on nothing, `renderScale` (1 to 3) supersamples -- OCCT's edge
+`transparent` draws on nothing, `background` (a `#rrggbb`) on that flat colour in place of the
+pale default -- a white or pearl part has no outline on it, so give one a dark one
+(`"output": {"background": "#2b2d31"}`) --, `renderScale` (1 to 3) supersamples -- OCCT's edge
 lines stay one pixel of the larger picture, so they read finer -- and `sizeProfile`
 sizes an output that gives no size. Every job is checked before anything renders,
 and a failure writes none of its pictures, leaving existing ones unchanged. `--json` prints each picture's report.
+
+A snapshot draws the mesh the viewer draws, which is right for a review and coarse for a close-up
+of a large curved part (a faceted outline, uneven shading). For a still that needs a finer one,
+export the model as a GLB at the tolerance wanted and draw that file; the model's own mesh, and
+every other picture of it, stay as they are:
+
+```bash
+cad model export "$ID" tmp/fine.glb --tolerance 0.02 --angle 3
+cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
+```
+
+A preset or `azimuth:elevation` is fitted to what each picture shows, so two pictures of
+different parts or poses are framed differently. For frames that must not move (a motion's
+frames, a part alone beside the whole), draw one picture with `--json`, take the camera it
+settled on from its report (`settledCamera`: `position`, `target`, `up` and, orthographic,
+`orthographicHalfHeight`), and give it to every job as its `camera` with
+`"output": {"tightFrame": false}`: it is drawn exactly, with no fit.
 
 Inspect supplied annotations before editing. A view without annotations is optional
 context: render it only when useful to the request. After an edit, run the script and

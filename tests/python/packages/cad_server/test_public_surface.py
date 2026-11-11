@@ -57,7 +57,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
-SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "width", "height",
+SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "preview", "camera", "width", "height",
                       "size_profile", "pose", "annotation", "measurements", "json"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no
@@ -79,6 +79,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+    # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
+    **{f"{document_type} interference": frozenset({"document", "pose", "fit", "min_volume"})
+       for document_type in ("model", "xbf", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
