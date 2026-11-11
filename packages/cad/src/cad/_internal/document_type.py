@@ -10,7 +10,8 @@ step`` is one object that is
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
   (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.solve``,
-  the stress study, ``cad._internal.fea.operation``; a board's ``.drc``, a
+  the stress study, ``cad._internal.fea.operation``, and ``.ranges``, its mechanism's joint stops,
+  ``cad._internal.ranges``; a board's ``.drc``, a
   schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
   the type implements it;
 * the vocabulary its own standard defines, where that takes no third-party objects.
@@ -96,6 +97,13 @@ class DocumentType(types.ModuleType):
             value = solve_for(entry.id)
             self.__dict__[name] = value
             return value
+        if name == "ranges" and "ranges" in entry.operation_names:
+            # The joint stops every type with a mechanism shares (``cad._internal.ranges``).
+            from cad._internal.ranges import ranges_for
+
+            value = ranges_for(entry.id)
+            self.__dict__[name] = value
+            return value
         if name.startswith("__"):
             raise AttributeError(name)
         from cad._internal.aliases import lookup
@@ -171,7 +179,8 @@ class ModelType(DocumentType):
 
 def _operation(owner: DocumentType, name: str) -> Any:
     """``owner.<name>``: the engine's operation of that name (``cad.engine.api``), for a source of this type.
-    An export of a mesh to the other mesh kinds takes no ``tolerance`` or ``angle``: only a document is meshed by it."""
+    An export of a mesh to the other mesh kinds takes no ``tolerance``, ``angle`` or ``zero``: only a document is
+    meshed or described as a robot."""
     from cad.engine import api
 
     verb = getattr(api, name)
@@ -179,7 +188,7 @@ def _operation(owner: DocumentType, name: str) -> Any:
 
     if name == "export" and not meshed:
         def operation(source: Any, *destinations: Any, **options: Any) -> Any:
-            for option in ("tolerance", "angle"):
+            for option in ("tolerance", "angle", "zero"):  # a document's alone: a mesh is meshed by none, nor described
                 if option in options:
                     raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument '{option}'")
             owner._own(source)

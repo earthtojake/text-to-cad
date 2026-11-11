@@ -1,5 +1,5 @@
-"""``cad model <operation>``: the model document type's commands (export, snapshot, inspect, dfm, interference, solve), each of a
-model's document id.
+"""``cad model <operation>``: the model document type's commands (export, snapshot, inspect, dfm, interference,
+solve, ranges), each of a model's document id.
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.model <operation> ...`` runs what the ``cad`` command does.

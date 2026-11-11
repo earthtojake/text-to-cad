@@ -1,7 +1,7 @@
 # Exports
 
-Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a model in
-another pose, a part on its own, a project's standing deliverables, or a vendor STEP
+Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a robot
+description (MJCF, URDF), a model in another pose, a part on its own, a project's standing deliverables, or a vendor STEP
 converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-profiles-and-dxf.md).
 
 ## Contents
@@ -14,6 +14,7 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 - [Formats](#formats)
 - [Print tolerance](#print-tolerance)
 - [A GLB for another renderer](#a-glb-for-another-renderer)
+- [Robot descriptions](#robot-descriptions)
 - [Other tools](#other-tools)
 
 ## A file is an action
@@ -44,14 +45,15 @@ it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
-"seconds", "written"}]}`), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
+"seconds", "written", "robot"?}]}`, `robot` a robot description's summary), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
 the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
 `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
 An export takes a document and its destinations, and nothing else but a GLB's, an STL's or a
 3MF's mesh tolerance and angle (`--tolerance`, `--angle`: [print tolerance](#print-tolerance),
-[a GLB for another renderer](#a-glb-for-another-renderer)), which a model's, an xbf's and a STEP's
-export take and a mesh's does not. What a file shows is the model's
+[a GLB for another renderer](#a-glb-for-another-renderer)) and a robot description's zero state
+([robot descriptions](#robot-descriptions)), which a model's, an xbf's and a STEP's export take
+and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
 A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
@@ -234,9 +236,64 @@ mesh): it draws small radii in more segments, where a tolerance does not reach t
 `model.export(x, path, tolerance=0.05, angle=5)` and `@glb("hero.glb", tolerance=0.05, angle=5)`, and
 an STL and a 3MF take it too. The cost is triangles: say the file's size when it is large.
 
+## Robot descriptions
+
+A mechanism exports as a robot description for a simulator or ROS, by the destination's suffix:
+
+```bash
+cad model export "$ID" sim/arm.xml description/arm.urdf
+cad model export "$ID" sim/arm.xml --zero home
+```
+
+`.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF. Each is
+one description of the model in SI units at its as-built state, and writes its meshes as binary STL
+in metres beside it (`assets/` for the MJCF, `meshes/` for the URDF). `--zero STATE` (`zero="home"`
+from Python) takes it at a mechanism state instead: every body stands as the state poses it, each
+joint's value there is its zero, and its limits and the other states count from there; the CAD
+stays as drawn. A state the model does not have is refused, naming the ones it has. What the model
+contributes:
+
+- **the mechanism** ([kinematics](kinematics.md)): each link a body, each joint with its axis and
+  its limits around the as-built value (or the zero state's), which is every joint's zero in the file;
+  couplings as the follower on its leader; mechanism states as MuJoCo keys (a URDF has no named poses);
+- **materials**: each link's mass, centre of mass and inertia, exact, from its solids at their
+  densities; a part with no material weighs nothing;
+- **`frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` and `link()`**
+  ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)): the named frames (an MJCF
+  site, a URDF frame link), the parts kept bodies of their own, each joint's drive limits, what a
+  part or an assembly weighs and the lumps its CAD leaves out, whether the base floats (an MJCF
+  `<freejoint>`; bolted by default) and each link's name.
+
+Each part collides as its own mesh (MuJoCo collides it as its convex hull; a URDF's `<collision>`
+is the same mesh). Neither file holds a chosen collision shape, contact friction, joint dynamics or
+an actuator: a URDF carries the robot's structure, inertials and limits, and what a simulator
+chooses is made in the simulator.
+
+After each file's `wrote` line the export says what it holds, on stderr: its links and how its base
+stands, its joints by kind and its mass, then its couplings, loops, frames, collisions,
+exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
+it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
+robot when there is none (an `include` of the robot, a floor, a light, a skybox),
+which is the person's to edit and never written over. An MJCF is MuJoCo's own file: `cad mujoco check
+sim/arm.xml` compiles it with MuJoCo and checks it, and no `cad` command or view draws one (the
+person opens it in MuJoCo Studio, `cad run mujoco-studio --model sim/scene.xml`). A URDF whose root link has a mass, or whose
+root link's frame is not the world's (its first part turned or moved in its placement), is rooted at
+an empty `base_link` before it, at the root's placement, as ROS's KDL wants and so it stands where
+the MJCF stands it.
+
+A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
+top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left
+out of a URDF ([Loops](kinematics.md#loops)); a ball joint in a URDF is refused by name. Never edit the written file: change the model and export again. A
+simulation's choices on the robot (collision shapes, contact friction, excluded pairs, joint
+armature, damping and dry friction, actuators) are made in a MuJoCo function, a script that makes
+the robot an `MjSpec` (`from cad.mujoco import spec`) and saves it; that, composing a MuJoCo scene
+around it, checking it, tuning it and writing the descriptions no model can (an SRDF, a
+hand-written MJCF) are the `robot-simulation` skill's.
+
 ## Other tools
 
-STL and 3MF files are in millimetres and a GLB in metres, so a URDF or SDF scales an STL
-or 3MF link mesh by `0.001` and takes a GLB as it is. A check of an export as a mesh is
+STL and 3MF files are in millimetres and a GLB in metres, so a hand-written URDF or MJCF scales an
+STL or 3MF link mesh by `0.001` and takes a GLB as it is (a generated one writes its own meshes in
+metres: [robot descriptions](#robot-descriptions)). A check of an export as a mesh is
 a snapshot of that file
 ([mesh files](snapshot-review.md#mesh-files-robots-and-drawings)).

@@ -90,8 +90,8 @@ There is no generic alignment mode that guesses which points or axes the design
 means: a check names the mating features and states the relationship in Python
 ([inspection](inspection-and-validation.md)).
 
-For example, for the enclosure's two mating faces, using `find_part` and `world_parts`
-copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
+For example, for the enclosure's two mating faces, using `find_part` copied from
+[Opening geometry](inspection-and-validation.md#opening-geometry):
 
 ```python
 import build123d as bd

@@ -21,7 +21,7 @@ screenshot the card to confirm your own work ([Check each change](../SKILL.md#ch
 `cad <type> snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the server holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
-mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.sdf`, `.srdf`) or a drawing (`.dxf`). A
+mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.srdf`) or a drawing (`.dxf`). A
 script is never a source, and SRC is a whole document, never a ref into one (`$ID#bracket`):
 `--display '{"isolated": ["bracket"]}'` draws one part alone. Nothing is written but OUT.
 
@@ -30,9 +30,10 @@ cad model snapshot "$ID" tmp/review.png
 cad model snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
 ```
 
-A face the mesher left without triangles is drawn without it and named in a
-warning, with its part. It is usually a sliver a boolean left: the picture is then
-not the whole model.
+A face the mesher left without triangles is drawn without it, and one warning
+counts them and names the first parts. In your own model it is usually a sliver a
+boolean left; in a vendor's STEP, a few faces of a large assembly (a screw's tip)
+are common. Either way the picture is not the whole model where they are.
 
 ## Views
 
@@ -241,9 +242,10 @@ still on it.
   Explode (a file of several parts) and annotations; `--pose` is refused: a
   mesh has no mechanism. A GLB is drawn at rest, its clips not played; its materials
   and base colour textures are drawn.
-- **A robot** (`.urdf`, `.sdf`, `.srdf`) is its links' visuals, each link one colour
-  of the Parts palette, where the viewer opens it. `--pose` names an SRDF group state
-  or gives joint values (degrees, metres) over that pose.
+- **A robot** (`.urdf`, `.srdf`) is its links' visuals in their colours, faces
+  alone as the viewer draws a robot (its meshes' folds only in the line modes), where the viewer
+  opens it. `--pose` names an SRDF group state, or gives joint values over that
+  pose: degrees for a turn and metres for a slide, though the file holds radians.
 - **A drawing** (`.dxf`) is drawn whole from above in its pens, as the viewer's
   drawing pane draws it, on white paper. It takes no `--display`; the size flags, a plan-view
   `--camera`, `--annotation` and `--measurements` apply, and every other flag is refused by name.

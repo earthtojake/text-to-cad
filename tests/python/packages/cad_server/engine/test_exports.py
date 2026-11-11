@@ -3,7 +3,8 @@
 for it. The STEP reads back through the engine's own reader with its names, colours,
 materials and instance tree; the meshes are parsed and counted; a posed model's STEP is the
 same bytes in every process; a build keeps a file its document did not change, writes only
-the files its flags select, and code built from text writes the files its flags name."""
+the files its flags select, and code built from text writes the files its flags name; a robot
+description's export takes its zero state and says what it holds."""
 
 from __future__ import annotations
 
@@ -400,6 +401,92 @@ class ExportTest(unittest.TestCase):
             translate(self.xbf, None, self.folder / "again.stl")
             translate(self.xbf, None, self.folder / "again.3mf")
 
+
+# A two-joint arm whose base is free, its zero taken at its home state.
+TWO = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import free, mechanism_state
+from cad.engine import xbf
+
+
+@xbf("XBF/two.xbf")
+def two():
+    plate = bd.Box(100, 60, 20)
+    plate.label = "plate"
+    upper = bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    upper.label = "upper"
+    fore = bd.Box(80, 16, 8, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    fore.label = "fore"
+    for part in (plate, upper, fore):
+        part.material = metals.aluminum()
+    bd.RevoluteJoint("shoulder", plate, axis=bd.Axis((40, 0, 20), (0, 1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("shoulder", upper, bd.Location())
+    plate.joints["shoulder"].connect_to(upper.joints["shoulder"], angle=0)
+    bd.RevoluteJoint("elbow", upper, axis=bd.Axis((120, 0, 10), (0, 1, 0)), angular_range=(-90, 90))
+    bd.RigidJoint("elbow", fore, bd.Location())
+    upper.joints["elbow"].connect_to(fore.joints["elbow"], angle=0)
+    root = free(bd.Compound(children=[plate, upper, fore], label="two"))
+    mechanism_state(root, "home", shoulder=30, elbow=45)
+    return mechanism_state(root, "up", shoulder=90)
+"""
+
+
+class RobotExportTest(unittest.TestCase):
+    """``cad <type> export`` of a robot description: ``--zero`` reaches the engine, and what the file holds is said
+    after its line, on stderr, and under ``--json`` as the row's ``robot``."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.folder = Path(tempfile.mkdtemp(prefix="engine-robot-exports-")).resolve()
+        (cls.folder / "two.py").write_text(textwrap.dedent(TWO), encoding="utf-8")
+        reports = engine_build.build(cls.folder / "two.py", ["two"], cwd=cls.folder)
+        assert reports[-1]["ok"], reports
+        cls.xbf = cls.folder / "XBF/two.xbf"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.folder, ignore_errors=True)
+
+    def run_cli(self, *argv: str) -> tuple[int, str, str]:
+        import contextlib
+        import io
+
+        from cad_server.engine import cli
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            status = cli.main(list(argv))
+        return status, out.getvalue(), err.getvalue()
+
+    def test_a_robot_export_takes_its_zero_and_says_what_it_holds(self) -> None:
+        robot = self.folder / "robot" / "two.xml"
+        status, out, err = self.run_cli("export", str(self.xbf), str(robot), "--zero", "home", "--json")
+        self.assertEqual(status, 0, err)
+        [row] = json.loads(out)["files"]
+        self.assertEqual({key: row["robot"][key] for key in ("kind", "links", "joints", "base", "zero", "poses")},
+                         {"kind": "mjcf", "links": ["plate", "upper", "fore"], "joints": {"revolute": ["shoulder", "elbow"]},
+                          "base": "free", "zero": "home", "poses": ["home", "up"]})
+        self.assertIn("wrote scene.xml beside it: a floor and a light around the robot, yours to edit (an export never "
+                      "writes over it)", row["robot"]["notes"])
+        self.assertIn('range="-0.698131701 1.57079633"', robot.read_text(encoding="utf-8"))
+        self.assertTrue((robot.parent / "scene.xml").is_file())
+        # Without --json: the file's line on stdout, then what it holds on stderr, terse; a STEP says none.
+        status, out, err = self.run_cli("export", str(self.xbf), str(self.folder / "two.urdf"), str(self.folder / "two.step"))
+        self.assertEqual(status, 0, err)
+        self.assertEqual([line.split(" ")[0] for line in out.splitlines()], ["wrote", "wrote"])
+        said = [line for line in err.splitlines() if line.startswith("  ")]
+        self.assertEqual(said, ["  robot two: 3 links (plate, upper, fore) on a free base; 2 joints: 2 revolute "
+                                "(shoulder, elbow); 0.4164 kg",
+                                "    each part collides as its mesh; states home, up not written (a URDF holds none; an "
+                                "MJCF has them as keys)"])
+        # A zero poses a robot description alone, and a state the document does not have is refused by name.
+        status, out, err = self.run_cli("export", str(self.xbf), str(self.folder / "two.stl"), "--zero", "home")
+        self.assertEqual((status, out), (2, ""))
+        self.assertIn("two.stl: a zero state poses a robot description (.xml, .urdf); export the STL without one", err)
+        status, out, err = self.run_cli("export", str(self.xbf), str(self.folder / "rest.xml"), "--zero", "rest")
+        self.assertNotEqual(status, 0)
+        self.assertIn("no mechanism state 'rest': the states are 'home', 'up'", err)
 
 class BuildFilesTest(unittest.TestCase):
     """What a build writes: what its decorators declare (law 10), and nothing else."""

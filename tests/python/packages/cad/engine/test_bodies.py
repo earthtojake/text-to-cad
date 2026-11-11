@@ -344,6 +344,15 @@ class SymbolsTest(SymbolsCase):
         self.write("assembly.py", ASSEMBLY.replace("@xbf", "\n# the top\n@xbf"))
         self.assertEqual(self.assemble(), (0, 3))
 
+    def test_a_document_type_a_body_reads_keeps_its_module_s_docstring_out_of_its_key(self) -> None:
+        reader = '"""Reads a file."""\nimport build123d as bd\nfrom cad import step, xbf\n\n\n' + (
+            '@xbf("XBF/reader.xbf")\ndef reader():\n    assert callable(step.read)\n    return bd.Box(2, 2, 2)\n')
+        self.write("reader.py", reader)
+        engine_build.build(self.folder / "reader.py", ["reader"], cwd=self.folder)
+        self.write("reader.py", reader.replace("Reads a file.", "Reads a file, and says so."))
+        report = engine_build.build(self.folder / "reader.py", ["reader"], cwd=self.folder)[-1]
+        self.assertEqual((_counts(report), report["retention"]["fallbacks"]), ((0, 1), {}))
+
     def test_a_computed_getattr_falls_back_to_its_module_s_bytes(self) -> None:
         self.probe()
         self.assertEqual(_counts(self.probe()), (0, 1))

@@ -153,6 +153,8 @@ class SidesTest(unittest.TestCase):
 EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
                                "PIL", "scipy"},
                  "kicad": {"kicode"},
+                 "mujoco": {"mujoco"},
+                 "coacd": {"coacd"},
                  "netgen": {"netgen"},
                  "calculix": {"cad_ccx"},
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"},

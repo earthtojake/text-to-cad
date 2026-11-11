@@ -83,11 +83,34 @@ polished.pbr = polished.pbr.override(roughness=0.15)
 paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], polished)
 ```
 
+Each family is a module of `bd_materials` and each material a function of it (bd_materials 0.2):
+
+- `metals`: `aluminum`, `stainless`, `mild_steel`, `alloy_steel`, `spring_steel`, `tool_steel`,
+  `titanium`, `brass`, `copper`, `bronze`, `magnesium`, `gold`, `silver`
+- `plastics`: `pla`, `petg`, `abs_`, `asa`, `nylon`, `pc`, `pp`, `pe`, `pom`, `ptfe`, `pmma`,
+  `peek`, `pps`, `tpu`, `rubber`, `phenolic`, `fr4`, `cfrp`
+- `resins`: `standard`, `tough`, `high_temp`, `flexible`, `transparent`, `castable`, `ceramic`, `esd`
+- `wood`: `hardwood`, `softwood`, `oak`, `maple`, `walnut`, `birch`, `beech`, `ash`,
+  `american_cherry`, `spruce`, `pine`, `engineered_wood`, `mdf`, `osb`
+- `glass`: `soda_lime`, `borosilicate`; `paper`: `paper`, `cardboard`, `foamboard`;
+  `textile`: `woven`, `felt`, `leather`
+
+There is no `metals.steel()`: plain steel is `mild_steel()`. A grade is a name, as
+`bd_materials.material_names()` lists them: `part.material = "alu_g6061_t6"`.
+
+A part read from a STEP or an xbf keeps the file's colours until it is given a material, which
+replaces its colour like any other part's, in the viewer and every export alike. To keep the
+file's colour, set it again after the material: `color = part.color; part.material = plastics.pe();
+part.color = color`. Faces the file paints (a cable's red and black wires) keep their colours
+either way: the viewer draws them, and the GLB, the MJCF and the URDF all carry them.
+
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
 with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
-There is no text-to-cad material class or adapter.
+There is no text-to-cad material class or adapter. A measured weight is declared beside the
+material, `mass(part, grams)` from `cad.build123d` ([kinematics](kinematics.md#declaring-for-a-simulator));
+a simulator's contact friction is a choice made for the simulation, not declared on the model.
 
 For boards, electronic parts and process finishes, which `bd_materials` lacks or draws poorly
 untextured, `cad.build123d.materials` has named looks. Each returns a fresh native

@@ -39,6 +39,9 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cad.sdf", "validate"),
+    # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
+    # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
+    "mujoco check": ("cad.mujoco", "check"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
@@ -49,6 +52,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf")},
     # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
     **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
+    # The joint stops of a document with a mechanism: the kernel's, one signature for every B-rep type.
+    **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -66,8 +71,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
     # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
-    # angle; a mesh's, to the other mesh kinds, meshes nothing.
-    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "angle", "json"})
+    # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does
+    # neither.
+    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "angle", "zero", "json"})
        for document_type in ("model", "xbf", "step")},
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},
@@ -129,10 +135,12 @@ def _verb(target: tuple[str, str]):
 
 
 def _commands() -> set[str]:
-    """Every command the dispatcher answers: each document type's operations, and the rest."""
+    """Every command the dispatcher answers: each document type's operations, each integration's on its tool's
+    own files, and the rest."""
     from cad_server.cli.document_types import OPERATIONS
+    from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
 
-    return {*cli._COMMANDS, *(f"{document_type} {operation}" for document_type, operation in OPERATIONS)}
+    return {*cli._COMMANDS, *(f"{name} {operation}" for name, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS))}
 
 
 def _adapter_surface(name: str) -> frozenset[str]:
@@ -179,13 +187,14 @@ class Manifest(unittest.TestCase):
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
                         "store", "daemon", "daemon status", "where", "install", "mcp", "export", "snapshot", "inspect",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
-                        "kicad_sch check", "pcb drc"):
+                        "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",
                        "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
                        "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
-                       "cad_server.cli.srdf_validate", "cad_server.kicad.schematic"):
+                       "cad_server.cli.srdf_validate", "cad_server.kicad.schematic", "cad_server.cli.mjcf", "cad.mjcf",
+                       "cad.engine.mjcf_source"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
                 importlib.import_module(module)

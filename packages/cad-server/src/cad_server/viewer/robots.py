@@ -49,7 +49,7 @@ def resolve_robot_path(file_ref) -> str | None:
     Raises ``ValueError`` for a ref this route will not take.
     """
     if not file_ref:
-        raise ValueError("a robot is read from the absolute path of a .urdf, .srdf or .sdf")
+        raise ValueError(f"a robot is read from the absolute path of a {', '.join(ROBOT_SUFFIXES)} file")
     candidate = absolute_path(file_ref)
     if not candidate.lower().endswith(ROBOT_SUFFIXES):
         raise ValueError(

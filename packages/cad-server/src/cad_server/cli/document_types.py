@@ -30,10 +30,14 @@ A B-rep
 type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
 the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
 DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
-CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. A KiCad
+CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` sweeps each joint of the
+document's mechanism against its parts' surfaces and says where each stops (``cad step ranges arm.step``,
+``cad model ranges <id> --step 0.5 --json``), writing nothing; it runs here when this environment holds the kernel,
+else in the installation's base, which does. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
-environment of ``cad[kicad]``.
+environment of ``cad[kicad]``. (A MuJoCo model's file is no document type: its check is the mujoco
+integration's, ``cad mujoco check``, ``cad_server.cli.integrations``.)
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -470,6 +474,49 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
                 verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=True)
 
 
+# --- the joint stops of a document with a mechanism: read, meshed and swept by the kernel ---------------------
+
+
+def _ranges(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> ranges SOURCE [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops (``cad.<type>.ranges``),
+    run here when this environment holds the kernel, else in the installation's base, which does
+    (``cad_server._internal.integration_env``), its options refused here first."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad._internal.ranges import INTEGRATION, RESOLUTION, StopsResult, options
+        from cad.results import CheckFinding, CheckResult
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                            _verb, emit, generated_parser, run_cli)
+
+        target = (f"cad.{document_type}", "ranges")
+        parser = _typed(generated_parser(target, prog=prog), document_type, "ranges", "source")
+        if integration_env.carries(INTEGRATION):
+            return run_cli(_verb(target), argv, prog=prog, parser=parser)
+        parsed = parser.parse_args(argv)
+        positional, keywords = _call_arguments(_verb(target), parsed,
+                                               explicit_keywords=_explicit_option_dests(parser, argv))
+
+        def said(line: str) -> None:
+            print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+        def swept() -> CheckResult:
+            options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", RESOLUTION),
+                    joint=tuple(keywords.get("joint") or ()))
+            python = integration_env.environment(INTEGRATION, said)
+            sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
+                       for value in positional]
+            found = integration_env.call(python, document_type, "ranges", sources, keywords)
+            return StopsResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                               findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                               summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+        return emit(swept, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
+                    verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=False)
+
+    return run
+
+
 # --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
 
 
@@ -869,6 +916,8 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _interference(_entry.id)
         elif _name == "solve" and getattr(_entry.operation(_name), "integration", None) == "calculix":
             OPERATIONS[(_entry.id, _name)] = _solve(_entry.id)
+        elif _name == "ranges":
+            OPERATIONS[(_entry.id, _name)] = _ranges(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
         else:
@@ -957,8 +1006,14 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
                       "wrong_type")
     if found is None:
+        from cad.registry import INTEGRATIONS
+
+        # A tool's own file that is no document type (a MuJoCo model's .xml): its integration's command takes it.
+        owner = next((item for item in INTEGRATIONS.values() if suffix.lower() in item.files), None)
         raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
-                      f"{' or '.join(entry.extensions)}", "wrong_type")
+                      f"{' or '.join(entry.extensions)}"
+                      + (f" (cad {owner.name} {owner.operation_names[0]} takes {' and '.join(owner.files)})"
+                         if owner is not None else ""), "wrong_type")
     if not os.path.exists(os.path.expanduser(given)):
         raise Failure(f"no such file: {source}", "not_found")
 

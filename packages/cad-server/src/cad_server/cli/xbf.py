@@ -1,4 +1,5 @@
-"""``cad xbf <operation>``: the XBF document type's commands (export, snapshot, inspect, dfm, interference, solve).
+"""``cad xbf <operation>``: the XBF document type's commands (export, snapshot, inspect, dfm, interference, solve,
+ranges).
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.xbf <operation> ...`` runs what the ``cad`` command does.

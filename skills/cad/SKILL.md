@@ -24,6 +24,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cad model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.build123d`. | [Kinematics](references/kinematics.md) |
+| **Find how far each joint can move** | `cad model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the process the request names or implies; with none, no check. | [Can it be made?](#can-it-be-made) |
@@ -154,9 +155,10 @@ is the script's folder; two explicit names in it must differ.
 - **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"` (`"#4a6fa5cc"` with
   alpha). `part.color` is build123d's: it takes no 0-255 integers (OCCT's `Color out`), which
   `paint` does. Import `metals` from `bd_materials`; assign a native material with
-  `part.material = metals.aluminum()`; boards, electronic parts and finishes (solder mask,
-  ENIG, anodized, powder coat) are `cad.build123d.materials`' named looks
-  ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
+  `part.material = metals.aluminum()` (the families and their materials are listed in
+  [colour and materials](references/build123d-modeling.md#colour-and-materials); plain steel is
+  `metals.mild_steel()`); boards, electronic parts and finishes (solder mask, ENIG, anodized,
+  powder coat) are `cad.build123d.materials`' named looks.
 - **Inputs** are `step.read`, `xbf.read` and `stl.read` in the body, and any file its
   Python opens, each tracked by its bytes. The clock, environment variables and
   randomness are not seen: a body is a function of its code and its inputs. Compose
@@ -261,7 +263,7 @@ that file's own terms (none is a ref `cad <type> inspect` resolves):
 
 | File | Reference | Means |
 | --- | --- | --- |
-| URDF, SRDF, SDF | `/work/arm/arm.urdf#upper_arm` | the link `upper_arm` |
+| URDF, SRDF | `/work/arm/arm.urdf#upper_arm` | the link `upper_arm` |
 | GLB | `/work/out/model.glb#n12` | the glTF node `nodes[12]` (0-based, the file's own index) |
 | 3MF | `/work/out/plate.3mf#o2.1` | the 2nd `<build><item>`'s 1st `<component>` (1-based); `#o3` is the 3rd build item |
 | STL | the file alone, on `File:` | one mesh: nothing in it is picked |
@@ -303,13 +305,99 @@ touched or hide what covers them, instead of drawing the whole model.
 - A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius reduced) builds a
   different design from the one asked for.
 
+### Joint stops
+
+`cad <type> ranges` (`model`, `xbf`, `step`) finds each joint's stops from the parts themselves:
+it turns or slides each joint alone from the as-built pose, the others as built, a degree or a
+millimetre at a time each way, until the parts meet.
+
+```bash
+cad model ranges "$ID"
+cad model ranges "$ID" --joint gripper
+cad step ranges arm.step --step 0.5 --json
+```
+
+- **The stop** each way is where the joint's child link meets its parent link (each with the links
+  fixed to it), whatever the other joints do. The finding also names the two parts that meet.
+- **A clash**, said beside a stop, is anything the joint moves meeting another link first in this
+  pose of the other joints: a self-collision of the pose, not the joint's range. Write the stop. A
+  clash moves with the other joints (an arm drawn folded clashes its wrist on its shoulder a few
+  degrees out; a thigh meets the torso only while the hip's other joints stand as drawn), and a
+  simulator's contacts hold it, since the two links collide there. Where the hardware's own travel
+  is narrower than the stop (a servo's position range), write that.
+- **Units and zero.** Stops are in degrees or millimetres around the as-built pose, and in the
+  joint's own values where its as-built value is not zero. Write them into the joint's
+  `angular_range` or `linear_range` in the body, rounded towards zero, and run the model again.
+  The command writes nothing.
+- **What touches.** Two surfaces within `--clearance` (0.3 mm, the least it takes) count as
+  touching, so a stop is where the parts all but touch: the joint's range. A larger clearance only
+  narrows a range, stopping each joint where its parts first come that near (`--clearance 1`:
+  within a millimetre). Every gap is measured to within 0.6 mm over the true one, never under it.
+- **Touching or near as built.** Every pair is read against the as-built pose. Parts touching (a
+  horn on its servo), or under 0.3 mm apart, meet only where their contact grows by about 15 mm^2
+  on a surface that stops the motion, or where one is pushed into the other (a part resting face to
+  face on its parent and turned into it stops where it lies), not where one slides along the other:
+  a pin in its bore, a carriage on its rail or a link a little too wide for its clevis stops
+  nothing. Parts a little farther apart (a jaw 0.5 mm from a servo's cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.1 mm
+  for a 0.5 mm gap), not where it narrows a hair. At a larger clearance the finding lists the
+  pairs within it as built, `near as built:`, with the gap as built and at each stop, and a stop
+  one of them makes says `closed to 0.2 from 0.5 mm as built`.
+- **Turning on an output.** A vendor often draws a motor or a servo as one solid, its case and its
+  output (flange, horn) together, and bolts the next link to that output: the link turns against a
+  face of the solid it is bolted to. A pair touching as built on a surface about the joint's axis is
+  read as an output and what turns on it: neither that face nor what of the solid lies within the
+  reach of their contact about the axis (a locating boss, a pin, a bolt's seat through the face)
+  stops the joint, and the finding lists the pair, `turns on: plate (link2) on motor (link1)`. The
+  case beyond that reach, and every other part, still stops it. Where a stop a few degrees out still
+  names that pair `touching as built`, the output carries something that reaches past its face (an
+  arm, a cam) and that the hardware turns with it: split the solid in the model.
+- **Overlapping as drawn.** A vendor's simplified parts are often drawn sunk into each other (a link
+  a little too wide for its clevis, a carriage drawn inside its rail). Such a pair meets only where
+  one is pushed deeper into the other than drawn, by 0.6 mm more, wherever that is: its overlap
+  shrinking, or sliding along with the joint, stops nothing, and the joint sweeps on to its real
+  stop. The finding lists each such pair, `overlapping as drawn ... by 180 mm^3, 1.0 mm deep`, and a
+  stop one makes says `deeper than drawn (overlapping 180 mm^3, 1.0 mm deep, as built)`: it lies
+  past the true stop by up to about that depth, so read it against the geometry or the datasheet.
+- **Which pair stopped it.** Each stop names the two parts that met one step past it. Read it
+  against the geometry before you adopt it (a posed snapshot at the stop). A stop that comes from a
+  pair that does not really limit the joint (a vendor's servo cover the jaw clears in the
+  hardware) is not the joint's range: write the range you read from the hardware (the datasheet's
+  travel, or a posed snapshot where the parts really meet) instead.
+- **What is tested.** Each part's own surface: the hardware's stops. What a simulator collides a
+  part as is chosen outside the model, and a sweep does not read it.
+- **One joint.** `--joint NAME` sweeps that joint alone (repeat it for several); a name the
+  model has no such joint by is refused, naming its joints.
+- **Not swept.** A turn is swept a full turn each way, a slide the document's extent: one clear
+  that far has no stop (`why`: `clear all the way round`), and a stop past a half turn (-239 deg) is
+  the parts' own, its two stops spanning a turn at most. A cylindrical
+  or spherical joint is not swept, nor is a joint of a closed loop (it moves only with its loop), and
+  its warning says so. A document with no joint fails with
+  `no_joints`.
+- **Cost.** The sweep runs on one core. Each surface is sampled to within 0.3 mm whatever the
+  clearance, so the time follows the parts' surface area and detail, not how many parts there are:
+  an arm of a few hundred small parts and six joints takes tens of seconds at the defaults on a
+  laptop, and one of a few large freeform shells (an industrial arm's covers) minutes. A larger
+  `--clearance` costs a little more; a finer `--step` costs in proportion, and `--joint` only the
+  joints it names. Answer a narrower question (do the jaws close?) with `--joint jaw` or a posed
+  snapshot. A long sweep says each joint on stderr as it starts (and once it runs long, and again
+where its first poses show the estimate low) and as it ends, with either geometry; `--verbose`
+  says each step as it starts: reading the model, sampling its surfaces, each joint.
+
+`--json` carries every number in `measurements.joints`, each joint under `joint`: `lower`, `upper`,
+`range` (the joint's own values), the `*_contact` and `*_clash` parts (each with its `gap` there in mm, and a pair within the
+clearance as built with its `near`, that gap as built; a pair drawn overlapping with its `overlap` in mm^3
+and `depth` in mm, and no `gap`), the pairs touching as built (`resting`), the
+pairs near as built (`near`: `rest`, and the gap at the `lower` and `upper` stop), the pairs drawn
+overlapping (`overlapping`: `volume` and `depth`), the pairs that turn on an output (`riding`) and, for
+a joint with no stop, `why`.
+
 ### Check scripts
 
 A check is a Python script that calls the model and measures what it returns, so it tests the model
 as it is now. Write one when the person asks for a dimension, a fit or a mass, or when the change is
 numeric and the number matters.
 
-Copy `world_parts` and `find_part` from
+Take parts with `leaves(tree)` (`cad.build123d`), and copy `find_part` from
 [Opening geometry](references/inspection-and-validation.md#opening-geometry) into the check
 first. They accumulate parent placements; raw `.leaves` do not.
 

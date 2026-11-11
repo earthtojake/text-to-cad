@@ -14,7 +14,10 @@ The flags are ``cad <type> snapshot``'s where it has them, and mean what the vie
 - Modes as the viewer's Display menu (``viewSettings.js``): solid (faces and every CAD edge),
   shaded (faces), parts (solid, each instance a colour of the workbench palette), xray (faces at
   0.22 opacity, every edge over them), hidden-line (faces in the backdrop's colour hiding the edges
-  behind them), wireframe (every edge).
+  behind them), wireframe (every edge). A robot description's link meshes (``ROBOTS``) are drawn in solid and
+  parts as the viewer draws them, faces alone: an STL's edges are its triangles' folds, which on a thin
+  curved part (a cable's wires, tessellated at the engine's 28.5 degrees) are lines a pixel apart that hide
+  its colour; the line modes draw them.
 - Camera as the snapshot page's (``renderMeshScene.js``): a preset's or ``az:el``'s direction,
   orthographic with the tight frame (every placed vertex projected, padding 0.04), or perspective
   (``display.camera.projection``, 48 degrees, the same tight fit); or a prompt view's camera
@@ -51,6 +54,8 @@ from cad.engine.render.look import LOOK
 from cad.engine.render.shapes import LINES, FaceGroup, prototype_shapes
 
 MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
+#: The robot descriptions (``formats.robot``): their link meshes draw no edges where the faces are lit.
+ROBOTS = frozenset({"urdf", "srdf", "sdf"})
 PRESETS = {
     "front": ((0, -1, 0), (0, 0, 1)), "back": ((0, 1, 0), (0, 0, 1)), "right": ((1, 0, 0), (0, 0, 1)),
     "left": ((-1, 0, 0), (0, 0, 1)), "top": ((0, 0, 1), (0, 1, 0)), "bottom": ((0, 0, -1), (0, 1, 0)),
@@ -388,7 +393,8 @@ class Scene:
         if not preview:  # Preview's look puts up its own (``preview_look``)
             self._rig(look == "xray")
         faces = mode != "wireframe"
-        edges = not preview and mode != "shaded"
+        edges = not preview and mode != "shaded" and not (mode in ("solid", "parts")
+                                                          and self.structure.get("kind") in ROBOTS)
         # ``display.edges`` ``sharp``: the lines where two faces meet at an angle, and a face's free border, alone;
         # none where they meet smoothly (``tangent``) or where one closes on itself (``seam``).
         sharp = display.get("edges") == "sharp"
