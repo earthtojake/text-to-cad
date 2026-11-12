@@ -179,9 +179,8 @@ shares one heading scale. Each section title links to its
 own anchor (`#features`), as GitHub's headings do, so following it puts
 that address in the bar. The header is bare: at the left the C mark and "text-to-cad" set as a
 title (semibold), one link home, on every size and always shown; at the right Docs (the
-documentation, the header's one link into the site), the version as its
-release tag names it (`v<VERSION>`, on a phone 400px or wider) and GitHub with its star count, the
-three at one size and weight (text-sm, medium). It has no
+documentation, the header's one link into the site) and GitHub with its star count, the two at one
+size and weight (text-sm, medium). It has no version, no
 section links, no burger, no Discord link and no theme toggle: the site follows the system's light
 or dark theme, on load and as it changes (`layout.tsx`'s theme script sets the `.dark` class).
 
@@ -192,9 +191,8 @@ agents' logos shrink with the height, so all of it still fits down to a 600-pixe
 The text is centred across it and anchored high, under a gap that grows with the screen's height
 (at most 8rem), so a tall screen's spare height gathers between the install box and the agents,
 where the gear's corner turns. In it: the TEXTTOCAD wordmark at full size (up to
-800px), the tagline, then the calls to action, the site's own outline Buttons at one neutral style (Docs, from a tablet up: on a phone
-the header's is in reach and a third button would wrap; GitHub with a divider and its
-star count, Join Discord; `src/components/hero-section.tsx`, the links and the star count from
+800px), the tagline, then the calls to action, the site's own outline Buttons at one neutral style (GitHub with a divider and its
+star count, Join Discord: the documentation is the header's Docs, never a button here; `src/components/hero-section.tsx`, the links and the star count from
 `src/lib/github.ts`, which the header shares). Then the one-line install box, which is the page's
 Install and carries its stable address, `#install` (`src/components/install-box.tsx`: the ONE-LINE
 INSTALL label, a macOS / Linux | Windows toggle over `installCommands`, the command with Copy; a

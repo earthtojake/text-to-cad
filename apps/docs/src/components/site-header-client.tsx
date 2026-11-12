@@ -13,31 +13,6 @@ import {
 import { formatGitHubStars, GITHUB_REPO_URL } from "@/lib/github";
 import { cn } from "@/lib/utils";
 
-function VersionLink({ version }: { version: string }) {
-  const normalizedVersion = version.trim();
-
-  if (!normalizedVersion) {
-    return null;
-  }
-
-  // Shown as the release is tagged: v0.7.14 for the 0.7.14 the release stamps.
-  const label = `v${normalizedVersion}`;
-
-  // Shown from 400px, beside the C mark, the name and Docs.
-  return (
-    <a
-      className="hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground min-[400px]:inline-flex"
-      href={`${GITHUB_REPO_URL}/releases`}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`Open GitHub releases for ${label}`}
-      title={`Open GitHub releases for ${label}`}
-    >
-      {label}
-    </a>
-  );
-}
-
 // The documentation, the header's one link into the site: marked while a page of it is open.
 function DocsLink() {
   const current = usePathname().startsWith("/docs");
@@ -57,11 +32,9 @@ function DocsLink() {
 
 export function SiteHeaderClient({
   githubStars,
-  version,
   wide = false,
 }: {
   githubStars: number | null;
-  version: string;
   wide?: boolean;
 }) {
   const githubLabel =
@@ -88,7 +61,6 @@ export function SiteHeaderClient({
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <DocsLink />
-          <VersionLink version={version} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

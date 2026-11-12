@@ -1,5 +1,4 @@
-import { BookOpen, Star } from "lucide-react";
-import Link from "next/link";
+import { Star } from "lucide-react";
 import { AgentCarousel } from "@/components/agent-carousel";
 import { DiscordLogo, GitHubLogo } from "@/components/brand-marks";
 import { HeroGear } from "@/components/hero-gear";
@@ -14,7 +13,7 @@ import {
 } from "@/lib/github";
 
 /** The homepage's hero, the whole first screen under the header: the TEXTTOCAD wordmark and the
- * tagline, the three calls to action (Docs, GitHub with its stars, Join Discord) and the one-line install
+ * tagline, the two calls to action (GitHub with its stars, Join Discord) and the one-line install
  * -- the page's Install, at `#install` -- centred, with the planetary gear turning in the
  * bottom-right corner behind them, then the agents it works with at the foot of the screen. */
 export async function HeroSection() {
@@ -53,14 +52,6 @@ export async function HeroSection() {
           </p>
 
           <div className="mt-[clamp(1rem,3.6svh,2rem)] flex flex-wrap items-center justify-center gap-3">
-            {/* From a tablet up: on a phone the three would wrap to a second row, and the header's
-                Docs is in reach. */}
-            <Button asChild size="lg" variant="outline" className="hidden px-4 sm:inline-flex">
-              <Link href="/docs">
-                <BookOpen />
-                Docs
-              </Link>
-            </Button>
             <Button asChild size="lg" variant="outline" className="px-4">
               <a
                 href={GITHUB_REPO_URL}
