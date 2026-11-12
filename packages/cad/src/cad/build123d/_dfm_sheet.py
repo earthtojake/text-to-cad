@@ -357,6 +357,32 @@ def _samples(face: Any, count: int) -> list[brep.Sample]:
     return found
 
 
+def _cut_below(face: Any, skins: list[tuple[np.ndarray, np.ndarray]]) -> float:
+    """The volume between ``face`` and the skins it faces (each a point on the skin's plane and its outward
+    normal): what a countersink or an edge break cut from the sheet under that skin, the prisms from the
+    face's triangulation's triangles up to the plane."""
+    from OCP.BRep import BRep_Tool
+    from OCP.TopAbs import TopAbs_REVERSED
+    from OCP.TopLoc import TopLoc_Location
+
+    brep._triangulated(face, brep.deflection_for(face))
+    location = TopLoc_Location()
+    triangulation = BRep_Tool.Triangulation_s(face.wrapped, location)
+    if triangulation is None or triangulation.NbTriangles() == 0:
+        return 0.0
+    trsf = location.Transformation()
+    nodes = np.array([brep._xyz(triangulation.Node(i).Transformed(trsf)) for i in range(1, triangulation.NbNodes() + 1)])
+    corners = np.array([triangulation.Triangle(i).Get() for i in range(1, triangulation.NbTriangles() + 1)]) - 1
+    a, b, c = nodes[corners[:, 0]], nodes[corners[:, 1]], nodes[corners[:, 2]]
+    outward = 0.5 * np.cross(b - a, c - a) * (-1.0 if face.wrapped.Orientation() == TopAbs_REVERSED else 1.0)
+    total = 0.0
+    for origin, normal in skins:
+        shadow = outward @ normal            # each triangle's area in the skin's plane, above 0 where it faces it
+        depth = ((origin - a) @ normal + (origin - b) @ normal + (origin - c) @ normal) / 3.0
+        total += float((shadow * depth)[(shadow > 0.0) & (depth > 0.0)].sum())
+    return total
+
+
 # --- wires as points ---------------------------------------------------------------------------------------
 
 
@@ -559,6 +585,7 @@ class _Analysis:
         self.sheet_fraction = 0.0
         self.block = False                        # no face a skin's width against its opposite: a bar, a block
         self._boxes: tuple[np.ndarray, np.ndarray] | None = None
+        self._sheet_volume: float | None = None
 
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
@@ -1111,15 +1138,29 @@ class _Analysis:
                                "location": self.ref(largest), "faces": [self.ref(f) for f in unjoined],
                                "xyz": _xyz((centre.X, centre.Y, centre.Z))})
 
+    def sheet_volume(self) -> float:
+        """The volume of the sheet the part is cut from, as cut and bent: the part's, and what its countersinks
+        and edge breaks took from it afterwards (the blank has that material, the flat pattern its area)."""
+        if self._sheet_volume is None:
+            cut = 0.0
+            for a in [*self.countersinks, *self.breaks]:
+                skins = self.break_skins.get(a) or {b for b in self.neighbors[a] & self.skins if abs(float(
+                    np.dot(self.surfaces[b - 1].normal, self.surfaces[a - 1].axis))) > _PARALLEL}
+                cut += _cut_below(self.faces[a - 1], [(np.array(self.surfaces[s - 1].origin),
+                                                       np.array(self.surfaces[s - 1].normal)) for s in sorted(skins)])
+            self._sheet_volume = float(self.part.shape.volume) + cut
+        return self._sheet_volume
+
     def flat_fraction(self) -> float | None:
         """The flat pattern's area, at K = 0.5 (each placed bend's strip widened to its mid-thickness arc), over
-        the part's volume over its thickness: 1 where the flat holds all of the part's material."""
+        the sheet's volume (``sheet_volume``) over its thickness: 1 where the flat holds all of the part's
+        material."""
         if self.flat is None or not self.thickness:
             return None
         t = float(self.thickness)
         neutral = float(self.flat.area) + sum(bend.span * (0.5 - bend.k) * t * (bend.w1 - bend.w0)
                                                for bend in self.bends if bend.frame is not None)
-        volume = float(self.part.shape.volume)
+        volume = self.sheet_volume()
         return neutral / (volume / t) if volume > 0 else None
 
     def _coplanar(self, a: int, b: int) -> bool:
@@ -1257,8 +1298,10 @@ class _Analysis:
             # a chamfered or rounded edge: the skin stops short of the cut, so the flat is the cut outline, the
             # skin and each break laid into its plane
             sides = set(flange.faces) | {b for a in flange.faces for b in self.partners.get(a, ())}
-            # and a countersink beside a break: the round end of a chamfered slot, read back from the flat
-            sunk = {c: self.neighbors[c] & sides for c in self.countersinks if self.neighbors[c] & set(self.breaks)}
+            # and a countersink sunk into this side (its skin's hole is the countersink's rim, the cut the hole
+            # below it) or beside a break (the round end of a chamfered slot, read back from the flat)
+            sunk = {c: self.neighbors[c] & sides for c in self.countersinks
+                    if self.neighbors[c] & (set(flange.faces) | set(self.breaks))}
             for b, skins in [*self.break_skins.items(), *sunk.items()]:
                 if skins & sides:
                     projected = self._projected(b, flange)
@@ -2078,7 +2121,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
                                          if loop.label == "outer") -
                                      sum(abs(plane.area(loop)) for loop in analysis.flat_loops if loop.label == "hole"), 3),
                     flat_overlap_mm2=_r(analysis.overlap, 3) or None,
-                    neutral_area_ratio=_r(float(part.shape.volume) / t / analysis.flat.area
+                    neutral_area_ratio=_r(analysis.sheet_volume() / t / analysis.flat.area
                                           if analysis.flat is not None and analysis.flat.area > 0 else None, 5),
                     flat_material_fraction=_r(analysis.flat_fraction(), 5),
                     flat_bend_lines=[[_r(v, 3) for v in (*_frame_points(b, np.array([b.allowance / 2] * 2),
