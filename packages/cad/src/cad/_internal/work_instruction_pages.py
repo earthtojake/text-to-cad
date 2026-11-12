@@ -41,7 +41,8 @@ from cad.work_instruction import ARROWS, UNNAMED, Source, document_type
 
 FILL = "#79a9f3"  # the parts a step installs: a light blue the black edges read over
 SURFACE = "#8250df"
-ARROW = "#1f5fd6"  # a picture guide's arrow: the fill's blue, deep enough to read over black edges
+GUIDE_LINE = "#3a3a3a"  # the thin line from a pulled-out part to where it goes
+PULL = 0.22  # how far a guide's picture pulls a step's parts back along its arrow, of the assembly's diagonal
 PICTURE_PX = (800, 600)
 GUIDE_PX = (1600, 720)  # a picture guide's picture, two to a page
 COVER_PX, PART_PX = (1600, 760), (480, 480)  # its finished assembly, and each part of what you need
@@ -166,10 +167,10 @@ def corners(box) -> list[list[float]]:
             for z in (box.min.Z, box.max.Z)]
 
 
-def _arrow_ends(shape, travel: str, preset: str, diagonal: float) -> tuple[list[float], list[float]]:
-    """Where an arrow stops, just short of the parts of ``shape``, and where it starts, back along the
-    way they travel. It aims at their middle; where that is mostly air, as in a ring, at the wall to the
-    picture's right, whose arrow crosses nothing else."""
+def _aim(shape, travel: str, preset: str) -> tuple[list[float], float]:
+    """Where a line along ``travel`` meets the parts of ``shape``, and their half-extent along it. It
+    aims at their middle; where that is mostly air, as in a ring, at the wall to the picture's right,
+    whose line crosses nothing else."""
     way = ARROWS[travel]
     box = shape.bounding_box()
     lows, highs = (box.min.X, box.min.Y, box.min.Z), (box.max.X, box.max.Y, box.max.Z)
@@ -183,9 +184,42 @@ def _arrow_ends(shape, travel: str, preset: str, diagonal: float) -> tuple[list[
         aside = [t - along * w for t, w in zip(toward, way)]
         norm = math.sqrt(sum(c * c for c in aside))
         centre = [c + a / norm * (hollow + across) / 2 for c, a in zip(centre, aside)]
-    reach = sum(abs(w) * (hi - lo) / 2 for w, lo, hi in zip(way, lows, highs)) + 0.015 * diagonal
-    tip = [c - w * reach for c, w in zip(centre, way)]
-    return tip, [t - w * 0.2 * diagonal for t, w in zip(tip, way)]
+    return centre, sum(abs(w) * (hi - lo) / 2 for w, lo, hi in zip(way, lows, highs))
+
+
+def pull(shapes, travel: str, diagonal: float) -> float:
+    """How far a guide's picture pulls a step's parts back along ``travel``: clear of where they go,
+    with a gap between, and never less than :data:`PULL` of the assembly."""
+    way = ARROWS[travel]
+    deepest = 0.0
+    for shape in shapes:
+        box = shape.bounding_box()
+        deepest = max(deepest, sum(abs(w) * (hi - lo) for w, lo, hi in
+                                   zip(way, (box.min.X, box.min.Y, box.min.Z), (box.max.X, box.max.Y, box.max.Z))))
+    return round(max(PULL * diagonal, deepest + 0.08 * diagonal), 4)
+
+
+def _guide_line(mark_id: str, shape, picture, distance: float, diagonal: float) -> list[dict]:
+    """The thin line a part pulled ``distance`` back along its step's arrow travels to its place, as
+    a kit's manual draws it: from the pulled part's leading face to where that face lands, a small
+    head there. Two strokes, in the document's frame."""
+    way = ARROWS[picture.arrow]
+    centre, half = _aim(shape, picture.arrow, picture.camera)
+    start = [c - w * (distance - half) for c, w in zip(centre, way)]
+    end = [c + w * half for c, w in zip(centre, way)]
+    view, right, _up = _axes(picture.camera)
+    side = [way[1] * view[2] - way[2] * view[1], way[2] * view[0] - way[0] * view[2],
+            way[0] * view[1] - way[1] * view[0]]
+    norm = math.sqrt(sum(c * c for c in side))
+    side = [c / norm for c in side] if norm > 1e-6 else right
+    size = 0.018 * diagonal
+    barbs = [[e - w * size + c * size * sign * 0.55 for e, w, c in zip(end, way, side)] for sign in (1, -1)]
+
+    def stroke(name: str, points: list[list[float]]) -> dict:
+        return {"id": f"{mark_id}-{name}", "kind": "stroke", "color": GUIDE_LINE, "width": 3,
+                "points": [round(c, 4) for point in points for c in point]}
+
+    return [stroke("line", [start, end]), stroke("head", [barbs[0], end, barbs[1]])]
 
 
 def _arrow_shapes(leaves, picture) -> list:
@@ -194,25 +228,6 @@ def _arrow_shapes(leaves, picture) -> list:
 
     shapes = [leaves[ref].shape() for ref in picture.tint]
     return shapes if len(shapes) <= 6 else [Compound(shapes)]
-
-
-def _arrow(mark_id: str, shape, picture, diagonal: float) -> list[dict]:
-    """An arrow as two strokes, in the document's frame: its shaft, and its head turned to face the camera."""
-    tip, tail = _arrow_ends(shape, picture.arrow, picture.camera, diagonal)
-    way = ARROWS[picture.arrow]
-    view, right, _up = _axes(picture.camera)
-    side = [way[1] * view[2] - way[2] * view[1], way[2] * view[0] - way[0] * view[2],
-            way[0] * view[1] - way[1] * view[0]]
-    norm = math.sqrt(sum(c * c for c in side))
-    side = [c / norm for c in side] if norm > 1e-6 else right
-    size = 0.035 * diagonal
-    barbs = [[t - w * size + s * size * sign * 0.6 for t, w, s in zip(tip, way, side)] for sign in (1, -1)]
-
-    def stroke(name: str, points: list[list[float]]) -> dict:
-        return {"id": f"{mark_id}-{name}", "kind": "stroke", "color": ARROW, "width": 7,
-                "points": [round(c, 4) for point in points for c in point]}
-
-    return [stroke("shaft", [tail, tip]), stroke("head", [barbs[0], tip, barbs[1]])]
 
 
 def _camera(preset: str, target: list[float], half: float, diagonal: float) -> dict:
@@ -226,18 +241,47 @@ def _camera(preset: str, target: list[float], half: float, diagonal: float) -> d
     return {"position": position, "target": target, "up": list(up), "orthographicHalfHeight": round(half, 4)}
 
 
+def _pulled(wi, picture, distance: float, path: Path) -> list[str]:
+    """A guide's step as a document of its own, at ``path``: the parts in place so far, the step's
+    pulled ``distance`` back along its arrow. Each part is labelled by its place among the leaves, so
+    the refs are plain; returns those of the pulled parts, for the tint."""
+    import re
+
+    import cad
+    from build123d import Compound, Location
+
+    way = ARROWS[picture.arrow]
+    away = Location(tuple(-w * distance for w in way))
+    children, pulled = [], []
+    for index, leaf in enumerate(wi.leaves()):
+        if leaf.ref in picture.hide:
+            continue
+        shape = leaf.shape().moved(away) if leaf.ref in picture.tint else leaf.shape().moved(Location())
+        shape.label = f"p{index}"
+        children.append(shape)
+        if leaf.ref in picture.tint:
+            pulled.append(shape.label)
+    cad.model.export(cad.model(Compound(children=children, label="step"),
+                               name=re.sub(r"\W+", "_", f"{wi.source_name}_step_{picture.step}")), path)
+    return pulled
+
+
 def picture_jobs(wi, folder: Path) -> dict[int, dict]:
     """Each step's picture as a snapshot job: {step number: job}. Its view is hidden-line, the
     parts the step installs filled (``display.tint``: flat, in front of whatever they stand
     behind, behind whatever stands in front of them), later parts hidden, the surfaces it names
-    outlined."""
+    outlined. In a guide, a step with an arrow pulls its parts back along it, as a kit's manual
+    does, each with a thin line to its place (``_pulled``, ``_guide_line``); its picture is drawn
+    from that document of its own."""
     leaves = {leaf.ref: leaf for leaf in wi.leaves()}
     centre, diagonal = _extent(wi)
     tolerance = max(diagonal * 0.002, 0.01)
     guide = wi.layout.guide
     size = GUIDE_PX if guide else PICTURE_PX
     plan = picture_plan(wi)
-    shown: dict[str, list[list[float]]] = {}  # a guide's camera -> all its pictures show, arrows too
+    owners = {ref: owner for step in wi.steps for op in step.ops for ref, owner in op.surfaces}
+    pulls: dict[int, float] = {}  # a guide's step with an arrow -> how far its parts are pulled
+    shown: dict[str, list[list[float]]] = {}  # a guide's camera -> all its pictures show, pulled parts too
     if guide:
         from build123d import Compound
 
@@ -245,8 +289,11 @@ def picture_jobs(wi, folder: Path) -> dict[int, dict]:
         for picture in plan:
             seen = shown.setdefault(picture.camera, list(whole))
             if picture.arrow:
-                seen += [end for shape in _arrow_shapes(leaves, picture)
-                         for end in _arrow_ends(shape, picture.arrow, picture.camera, diagonal)]
+                distance = pulls[picture.step] = pull([leaves[ref].shape() for ref in picture.tint],
+                                                      picture.arrow, diagonal)
+                way = ARROWS[picture.arrow]
+                box = Compound([leaves[ref].shape() for ref in picture.tint]).bounding_box()
+                seen += [[c - w * distance for c, w in zip(point, way)] for point in corners(box)]
     jobs = {}
     for picture in plan:
         target, half = centre, 0.5 * diagonal
@@ -255,19 +302,30 @@ def picture_jobs(wi, folder: Path) -> dict[int, dict]:
         elif guide:
             target, half = fit_points(shown[picture.camera], picture.camera, size[0] / size[1])
         display: dict = {"mode": "hidden-line"}
-        if picture.hide:
-            display["hidden"] = list(picture.hide)
-        if picture.tint:
-            display["tint"] = {"parts": list(picture.tint), "color": FILL}
-        job = {"input": wi.source, "camera": _camera(picture.camera, target, half, diagonal), "display": display,
+        source = wi.source
+        distance = pulls.get(picture.step)
+        if distance is not None:
+            source = str(folder / f"step-{picture.step}.xbf")
+            display["tint"] = {"parts": _pulled(wi, picture, distance, Path(source)), "color": FILL}
+        else:
+            if picture.hide:
+                display["hidden"] = list(picture.hide)
+            if picture.tint:
+                display["tint"] = {"parts": list(picture.tint), "color": FILL}
+        job = {"input": source, "camera": _camera(picture.camera, target, half, diagonal), "display": display,
                "output": {"tightFrame": False, "transparent": True},
                "outputs": [{"path": str(folder / f"step-{picture.step}.png"), "width": size[0],
                             "height": size[1]}]}
-        marks = [_outline(f"step{picture.step}-{ref}", wi.scene.face_shape(ref), SURFACE, tolerance)
-                 for ref in picture.surfaces]
-        if picture.arrow:
+        marks = []
+        for ref in picture.surfaces:
+            mark = _outline(f"step{picture.step}-{ref}", wi.scene.face_shape(ref), SURFACE, tolerance)
+            if distance is not None and owners.get(ref) in picture.tint:  # on a pulled part: where it is drawn
+                way = ARROWS[picture.arrow]
+                mark["points"] = [round(c - way[i % 3] * distance, 4) for i, c in enumerate(mark["points"])]
+            marks.append(mark)
+        if distance is not None:
             marks += [mark for index, shape in enumerate(_arrow_shapes(leaves, picture))
-                      for mark in _arrow(f"step{picture.step}-arrow{index}", shape, picture, diagonal)]
+                      for mark in _guide_line(f"step{picture.step}-line{index}", shape, picture, distance, diagonal)]
         if marks:
             job["annotation"] = {"units": "mm", "marks": marks}
         jobs[picture.step] = job

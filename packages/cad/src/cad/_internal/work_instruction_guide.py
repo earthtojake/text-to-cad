@@ -1,21 +1,26 @@
 """A picture guide: a ``simple`` work instruction, laid out for anyone to follow.
 
-The first page shows the finished assembly and what you need, a picture of each
-part with its count. Then each step is its number, one short sentence and a big
-picture of the whole assembly so far: the step's parts in blue, an arrow where
-the step gives one, parts still to come left out. There are no tables, no blanks
-to fill in and no document numbers. A value keeps its source, printed small under
+Laid out the way a kit's printed manual is. The first page shows the finished
+assembly and what you need: a picture of each part with its count, the screws and
+nuts by size, and the tools with what each one is for. The steps open with how to
+read them. Each step is its number, one short sentence, a box of what it uses (each
+part's picture and count, its screws by size) and a big picture of the whole
+assembly so far: the step's parts in blue, pulled back along the way they go in
+with a thin line to their place where the step gives an arrow, parts still to come
+left out. There are no tables, no blanks to fill in and no document numbers. A value keeps its source, printed small under
 it, and one nobody has stated says so in plain words.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from cad._internal.work_instruction_pages import (
     COVER_PX,
     FILL,
+    GUIDE_LINE,
     GUIDE_PX,
     MARGIN,
     PT,
@@ -36,6 +41,101 @@ BOX = 7.0  # the box to tick
 TILES, TILE_GAP = 4, 4.0  # what you need, to a row
 NOTICES = {"WARNING": "Warning", "CAUTION": "Careful", "NOTE": "Tip"}
 NOT_DECIDED = "not decided yet"
+BOX_FACE = "#f2f3f5"  # a step's parts box, and the key's
+CHIP = 9.0  # a screw's size, beside its picture
+STEP_TILE = 15.0  # a part's picture in a step's parts box
+SCREW_INK = "#3a3a3a"
+
+
+@dataclass(frozen=True)
+class Hardware:
+    """Screws, nuts or washers of one size, as a step's ``fasten`` names them: how many in all (``None``
+    where a step gives no count) and the tools that drive them."""
+
+    name: str
+    qty: int | None
+    tools: tuple[str, ...] = ()
+
+
+def hardware(steps) -> list[Hardware]:
+    """The hardware ``steps`` fasten, one line per name in first-used order, counts added up."""
+    found: dict[str, list] = {}
+    for step in steps:
+        for op in step.ops:
+            if op.hardware is None:
+                continue
+            name, qty = op.hardware
+            line = found.setdefault(name, [0, []])
+            line[0] = None if line[0] is None or qty is None else line[0] + qty
+            if op.tool and op.tool not in line[1]:
+                line[1].append(op.tool)
+    return [Hardware(name, qty, tuple(tools)) for name, (qty, tools) in found.items()]
+
+
+def _kind(name: str) -> str:
+    lowered = name.lower()
+    return "nut" if "nut" in lowered else "washer" if "washer" in lowered else "screw"
+
+
+def _glyph_width(name: str) -> float:
+    """How wide a hardware line's picture is: a screw's shank in proportion to its length (``M3×10``)."""
+    if _kind(name) != "screw":
+        return 3.4
+    found = re.search(r"[x×]\s*(\d+(?:\.\d+)?)", name, re.IGNORECASE)
+    return 1.8 + (min(max(float(found.group(1)) * 0.35, 3.0), 8.0) if found else 5.0)
+
+
+def _glyph(ax, name: str, x: float, y: float) -> None:
+    """A small side-on picture of a screw, nut or washer, its middle at height ``y``."""
+    from matplotlib.patches import Circle, Rectangle, RegularPolygon
+
+    kind = _kind(name)
+    if kind == "nut":
+        ax.add_patch(RegularPolygon((x + 1.7, y), 6, radius=1.7, facecolor=SCREW_INK, edgecolor="none", zorder=3))
+        ax.add_patch(Circle((x + 1.7, y), 0.7, facecolor="white", edgecolor="none", zorder=4))
+        return
+    if kind == "washer":
+        ax.add_patch(Circle((x + 1.7, y), 1.7, facecolor=SCREW_INK, edgecolor="none", zorder=3))
+        ax.add_patch(Circle((x + 1.7, y), 0.8, facecolor="white", edgecolor="none", zorder=4))
+        return
+    shank = _glyph_width(name) - 1.8
+    ax.add_patch(Rectangle((x, y - 1.4), 1.8, 2.8, facecolor=SCREW_INK, edgecolor="none", zorder=3))
+    ax.add_patch(Rectangle((x + 1.8, y - 0.65), shank, 1.3, facecolor="white", edgecolor=SCREW_INK, lw=0.5, zorder=3))
+    tick = x + 2.3
+    while tick < x + 1.8 + shank - 0.2:
+        ax.plot([tick, tick + 0.3], [y - 0.65, y + 0.65], color=SCREW_INK, lw=0.3, zorder=4)
+        tick += 0.55
+
+
+def _chip_text(line: Hardware) -> str:
+    return f"{line.name}  ×{line.qty}" if line.qty else line.name
+
+
+def _chips(flow: _Flow, lines: list[Hardware], x0: float, width: float) -> list[tuple[float, float, Hardware]]:
+    """Where each hardware line goes in rows ``width`` wide from ``x0``: (x, row, line)."""
+    placed, x, row = [], x0, 0
+    for line in lines:
+        w = _glyph_width(line.name) + 2.0 + flow.measure.width(_chip_text(line), CHIP) + 6.0
+        if x > x0 and x + w > x0 + width:
+            x, row = x0, row + 1
+        placed.append((x, row, line))
+        x += w
+    return placed
+
+
+CHIP_ROW = 6.0
+
+
+def _draw_chips(flow: _Flow, placed, top: float) -> None:
+    for x, row, line in placed:
+        y = top - row * CHIP_ROW - CHIP_ROW / 2
+
+        def draw(ax, x=x, y=y, line=line) -> None:
+            _glyph(ax, line.name, x, y)
+            ax.text(x + _glyph_width(line.name) + 2.0, y - CHIP * PT * 0.35, _chip_text(line), fontsize=CHIP,
+                    weight="bold", color="black", va="baseline", zorder=3)
+
+        flow.add(draw)
 
 
 def plain(name: str) -> str:
@@ -108,14 +208,23 @@ def _need(flow: _Flow, wi, pictures: dict) -> None:
         for offset, cell in enumerate(cells):
             _tile(flow, cell, top, MARGIN + offset * (width + TILE_GAP), width, pictures.get(f"part-{start + offset}"))
         flow.y -= height
-    hardware = [line.value for step in wi.steps for op in step.ops if op.kind == "fasten"
-                for line in op.lines if line.caption == "Hardware"]
-    also = list(dict.fromkeys([*hardware, *(record.name for record in wi.materials)]))
+    screws = hardware(wi.steps)
+    if screws:
+        _heading(flow, "Screws and nuts", CHIP_ROW)
+        placed = _chips(flow, screws, MARGIN, flow.inner)
+        height = (placed[-1][1] + 1) * CHIP_ROW
+        flow.room(height, "screws and nuts")
+        _draw_chips(flow, placed, flow.y)
+        flow.y -= height + 1.0
+    also = list(dict.fromkeys(record.name for record in wi.materials))
     if also:
         _lines(flow, [f"Also: {', '.join(also)}"], "what you need")
     tools = wi.equipment()
     if tools:
-        _lines(flow, [f"Tools: {', '.join(tools)}"], "what you need")
+        _heading(flow, "Tools", 6.0)
+        drives = {tool: [line.name for line in screws if tool in line.tools] for tool in tools}
+        _lines(flow, [f"{tool}, for {' and '.join(drives[tool])}" if drives[tool] else tool for tool in tools],
+               "tools")
 
 
 def _cover(flow: _Flow, wi, open_items: list[str], pictures: dict) -> None:
@@ -161,12 +270,13 @@ def _notice(flow: _Flow, kind: str, line) -> None:
     flow.y -= height + 1.5
 
 
-def says(step, *, surfaces: bool = True) -> list[tuple[str, str]]:
+def says(step, *, surfaces: bool = True, need: bool = True) -> list[tuple[str, str]]:
     """What a step says beyond its title, as ``(kind, text)``: what it uses, then each thing it asks
     for. A kind is ``need``, ``text``, ``small`` (a source) or ``open`` (what nobody has decided).
-    ``surfaces`` says where a picture outlines them; the page plays no outlines."""
+    ``surfaces`` says where a picture outlines them; the page plays no outlines. ``need=False``
+    leaves out what it uses, which the guide's parts box shows."""
     lines = []
-    if step.units:
+    if step.units and need:
         lines.append(("need", "You need: " + ", ".join(f"×{len(refs)} {plain(name)}"
                                                        for name, refs in _group(step.units))))
     if any(where == "title" for where, _name in step.missing):
@@ -176,6 +286,8 @@ def says(step, *, surfaces: bool = True) -> list[tuple[str, str]]:
         if op.surfaces and surfaces:
             lines.append(("need", "The purple outline shows where."))
         for line in op.lines:
+            if not need and line.caption in ("Hardware", "Tool"):  # in the parts box, and the tools on the cover
+                continue
             caption = "Check" if line.caption == "Inspect" else line.caption
             if line.value is None:
                 lines.append(("open", f"{caption}: {NOT_DECIDED}"))
@@ -194,13 +306,58 @@ def says(step, *, surfaces: bool = True) -> list[tuple[str, str]]:
 def _body(flow: _Flow, step) -> _Cell:
     """What the step says under its picture."""
     cell = _Cell(flow.measure, flow.inner)
-    for kind, text in says(step):
+    for kind, text in says(step, need=False):
         small = kind == "small"
         cell.text(text, SMALL if small else TEXT, color={"need": GREY, "small": GREY, "open": AMBER}.get(kind, "black"))
     return cell
 
 
-def _step(flow: _Flow, step, pictures: dict) -> None:
+PAD = 2.5  # inside a parts box
+CORNER = 0.34  # the most of the page's width a parts box over its picture's corner takes
+
+
+def _box_plan(flow: _Flow, step, pictures: dict, index_of: dict[str, int], width: float):
+    """A step's parts box at most ``width`` wide, laid out: each part's picture and count, then its
+    screws by size; with the box's own width and height (0 when the step uses nothing)."""
+    inner = width - 2 * PAD
+    tiles = [(pictures.get(f"part-{index_of[refs[0]]}"), len(refs)) for _name, refs in _group(step.units)]
+    per_row = max(1, min(len(tiles) or 1, int((inner + 3.0) // (STEP_TILE + 3.0))))
+    chips = _chips(flow, hardware([step]), MARGIN + PAD, inner)
+    tile_rows = -(-len(tiles) // per_row)
+    chip_rows = chips[-1][1] + 1 if chips else 0
+    if not tile_rows and not chip_rows:
+        return tiles, per_row, chips, 0.0, 0.0
+    used = per_row * (STEP_TILE + 3.0) - 3.0 if tiles else 0.0
+    for x, _row, line in chips:
+        used = max(used, x - MARGIN - PAD + _glyph_width(line.name) + 2.0
+                   + flow.measure.width(_chip_text(line), CHIP, "bold") + 1.0)
+    return tiles, per_row, chips, used + 2 * PAD, 2 * PAD + tile_rows * (STEP_TILE + 4.5) + chip_rows * CHIP_ROW
+
+
+def _parts_box(flow: _Flow, plan, top: float) -> None:
+    """What the step uses, in a grey box from ``top`` at the left margin: as a kit's manual opens
+    each step."""
+    tiles, per_row, chips, width, height = plan
+    if not height:
+        return
+    flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, width, height, lw=0, edge="none",
+                                           face=BOX_FACE, zorder=2)))
+    for index, (path, count) in enumerate(tiles):
+        row, col = divmod(index, per_row)
+        x = MARGIN + PAD + col * (STEP_TILE + 3.0)
+        y = top - PAD - row * (STEP_TILE + 4.5)
+        if path is not None:
+            pixels = read_pixels(path)
+            flow.add(lambda ax, x=x, y=y, pixels=pixels: ax.imshow(
+                pixels, extent=(x, x + STEP_TILE, y - STEP_TILE, y), interpolation="none", zorder=3))
+        flow.add(lambda ax, x=x, y=y, count=count: ax.text(
+            x + STEP_TILE, y - STEP_TILE - 0.6 - CHIP * PT, f"×{count}", fontsize=CHIP, weight="bold",
+            ha="right", va="baseline", zorder=3))
+    rows = -(-len(tiles) // per_row)
+    _draw_chips(flow, chips, top - PAD - rows * (STEP_TILE + 4.5))
+
+
+def _step(flow: _Flow, step, pictures: dict, index_of: dict[str, int]) -> None:
     title = _Cell(flow.measure, flow.inner - BADGE - BOX - 8.0)
     title.text(step.title, STEP, weight="bold")
     head = max(title.height, BADGE)
@@ -208,7 +365,14 @@ def _step(flow: _Flow, step, pictures: dict) -> None:
     height = flow.inner * GUIDE_PX[1] / GUIDE_PX[0] if path is not None else 0.0
     body = _body(flow, step)
     notes = sum(_notice_height(flow, notice) for notice in step.notices)
-    flow.room(head + 1.5 + notes + height + body.height + 5.0, f"step {step.label}")
+    # The box sits in the picture's top-left corner, where the assembly's framing leaves room; above
+    # the picture when there is none, or the box would cover too much of it.
+    box = _box_plan(flow, step, pictures, index_of, flow.inner * CORNER)
+    over = path is not None and box[4] <= 0.55 * height
+    if not over and box[4]:
+        box = _box_plan(flow, step, pictures, index_of, flow.inner)
+    above = box[4] + 1.5 if box[4] and not over else 0.0
+    flow.room(head + 1.5 + notes + above + height + body.height + 5.0, f"step {step.label}")
     top = flow.y
     radius = BADGE / 2
     x = MARGIN + radius
@@ -226,8 +390,13 @@ def _step(flow: _Flow, step, pictures: dict) -> None:
     flow.y -= head + 1.5
     for notice in step.notices:
         _notice(flow, notice.caption, notice)
+    if box[4] and not over:
+        _parts_box(flow, box, flow.y)
+        flow.y -= box[4] + 1.5
     if path is not None:
         _image(flow, path, MARGIN, flow.y, flow.inner, height)
+        if over:
+            _parts_box(flow, box, flow.y)
         flow.y -= height + 1.5
     if body.height:
         flow.cell(body, f"step {step.label}")
@@ -239,13 +408,54 @@ def layout(wi, open_items: list[str], pictures: dict) -> _Flow:
     flow = _Guide(wi, len(open_items))
     _cover(flow, wi, open_items, pictures)
     flow.new_page()
-    cell = _Cell(flow.measure, flow.inner)
-    cell.text("Blue shows what you add in each step.", TEXT, color=GREY)
-    cell.gap(2.0)
-    flow.cell(cell, "the key")
+    _key(flow, wi.pictures and any(step.arrow for step in wi.steps))
+    index_of = {ref: index for index, (_name, refs, _steps) in enumerate(parts(wi)) for ref in refs}
     for step in wi.steps:
-        _step(flow, step, pictures)
+        _step(flow, step, pictures, index_of)
     return flow
+
+
+KEY = 8.0  # a key's swatch
+
+
+def _key(flow: _Flow, lines: bool) -> None:
+    """How to read the steps, as a kit's manual opens them: blue is what the step adds, white what is
+    already in, the grey box what it uses, and (where a step pulls its parts out) the thin line to where
+    each one goes."""
+    from matplotlib.patches import FancyArrowPatch
+
+    entries = [("new", "New in this step"), ("old", "Already in"), ("box", "What the step uses")]
+    if lines:
+        entries.append(("line", "Where it goes"))
+    height = PAD * 2 + 5.0 + KEY + 1.0
+    flow.room(height + 3.0, "the key")
+    top = flow.y
+    flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, flow.inner, height, lw=0, edge="none",
+                                           face=BOX_FACE, zorder=0)))
+    flow.add(lambda ax: ax.text(MARGIN + PAD, top - PAD - TEXT * PT * 0.8, "How to read", fontsize=TEXT,
+                                weight="bold", va="baseline", zorder=3))
+    step = (flow.inner - 2 * PAD) / len(entries)
+    y = top - PAD - 5.0
+    for index, (kind, words) in enumerate(entries):
+        x = MARGIN + PAD + index * step
+
+        def draw(ax, x=x, kind=kind, words=words) -> None:
+            if kind == "new":
+                ax.add_patch(_rect(x, y - KEY, KEY, KEY, lw=0.5, edge="black", face=FILL, zorder=3))
+            elif kind == "old":
+                ax.add_patch(_rect(x, y - KEY, KEY, KEY, lw=0.5, edge="black", face="white", zorder=3))
+            elif kind == "box":
+                ax.add_patch(_rect(x, y - KEY, KEY, KEY, lw=0.5, edge=GREY, face="white", zorder=3))
+                ax.text(x + KEY - 0.6, y - KEY + 0.8, "×1", fontsize=SMALL - 1.5, weight="bold", ha="right",
+                        va="baseline", zorder=4)
+            else:
+                ax.add_patch(FancyArrowPatch((x + KEY / 2, y), (x + KEY / 2, y - KEY), arrowstyle="-|>",
+                                             mutation_scale=5, lw=0.8, color=GUIDE_LINE, zorder=3))
+            ax.text(x + KEY + 2.0, y - KEY / 2 - TEXT * PT * 0.35, words, fontsize=TEXT - 1.5, color="black",
+                    va="baseline", zorder=3)
+
+        flow.add(draw)
+    flow.y -= height + 3.0
 
 
 def _notice_height(flow: _Flow, notice) -> float:

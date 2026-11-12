@@ -1,6 +1,6 @@
 ---
 name: work-instructions
-description: Write step-by-step instructions for building one assembly, as a PDF. By default a picture guide anyone can follow, like a furniture or LEGO manual - what you need, then a big picture of each step with an arrow where the parts go - plus a page to turn the model in 3D and watch it assemble. For a shop, a work instruction with sign-offs, and torque, bonding and cure values cited to the user's process specs. Use when the user asks how to put something together, for build or assembly instructions, work instructions, a build procedure, a traveler or operation sheet.
+description: Write step-by-step instructions for building one assembly, as a PDF. By default a picture guide anyone can follow, like a furniture or LEGO manual - what you need, then a big picture of each step with its new parts pulled out and a line to where they go - plus a page to turn the model in 3D and watch it assemble. For a shop, a work instruction with sign-offs, and torque, bonding and cure values cited to the user's process specs. Use when the user asks how to put something together, for build or assembly instructions, work instructions, a build procedure, a traveler or operation sheet.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -11,7 +11,8 @@ metadata:
 Instructions for building one assembly, as one PDF. Most people want a picture
 guide: a hobbyist building their own design, a friend putting a kit together.
 It reads like a furniture manual: what you need, then one big picture and one
-short sentence a step, with the new parts in blue and an arrow where they go.
+short sentence a step, with the new parts in blue, pulled out along the way they
+go in with a thin line to their place, and a box of what the step uses.
 Beside the PDF it writes a page to open in any browser, where you turn the model
 in 3D and step through the build, parts flying in and back out, and the same
 build as a GLB.
@@ -170,13 +171,17 @@ first: a guide to react to is quicker than a list of questions.
 - **Name the parts** with `names=`, as a person would say them, so copies share
   a line with their count: "Pin ×3", not `planet_pin_1`, `planet_pin_2`.
 - **Give each step an `arrow=`** when its parts go in along an axis (`down`,
-  `up`, `left`, `right`, `forward`, `back`, along the model's own axes). Leave it out
-  when no one direction is true: a wrong arrow is worse than none.
+  `up`, `left`, `right`, `forward`, `back`, along the model's own axes): the
+  picture pulls them back along it, clear of their place, with a thin line to
+  where each one lands. Leave it out when no one direction is true: a wrong
+  arrow is worse than none, and a step without one draws its parts in place.
 - **Pick a `camera=`** that shows the work, the same for every step where you
   can, so the build stays in place from picture to picture. Each picture shows
   the whole assembly; use `frame="step"` only for a part too small to see.
-- Add what the model does not show: `tools=`, `.fasten()` for screws (they go
-  on the first page's list), and a `.caution()` or `.note()` where someone could
+- Add what the model does not show: `tools=`, `.fasten()` for screws by size
+  (`"M3×10 screw"`, with `qty=` and the `tool=` that drives them: the first page
+  lists them by size and says what each tool is for, and the step's box shows
+  them), and a `.caution()` or `.note()` where someone could
   get hurt or break something. Keep each to one sentence.
 
 The rule about values holds here too. Never invent a torque, a glue, a cure time
@@ -188,8 +193,11 @@ decided prints "not decided yet" and is listed under **Still to decide**.
 
 A `simple` instruction is a picture guide, on US Letter (or A4) portrait: the
 title, the finished assembly and **What you need** (a picture of each part
-with its count, then hardware, materials and tools), then each step's number,
-sentence, tick box, picture and anything it asks for, two to a page. It has no
+with its count, then the screws and nuts by size, materials, and the tools with
+what each one is for), then a **How to read** key and each step's number,
+sentence, tick box, picture (its parts box, each part's picture and count and
+its screws, in the picture's top-left corner) and anything it asks for, two to a
+page. It has no
 tables, sign-offs or document numbers; those it was given print small in the
 footer. With `pictures=False` it is the table below with a done column.
 

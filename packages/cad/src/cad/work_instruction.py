@@ -553,6 +553,8 @@ class _Op:
     surfaces: tuple[tuple[str, str], ...] = ()  # (face ref, the leaf occurrence it is on)
     records: tuple[str, ...] | None = None  # the floor's blanks, where not RECORDS[kind]
     equipment: bool = True  # whether it implies EQUIPMENT[kind]
+    hardware: tuple[str, int | None] | None = None  # a fasten's hardware and how many, as the user gave them
+    tool: str | None = None  # the tool a fasten's hardware is driven with (``Hex key 2``)
 
 
 class Step:
@@ -636,15 +638,17 @@ class Step:
 
     def fasten(self, hardware: str, *, qty: int | None = None, torque: Torque | Unspecified | None = None,
                locking: Material | None = None, sequence: str | Cited | None = None,
-               surfaces: Iterable[str] = ()) -> "Step":
+               surfaces: Iterable[str] = (), tool: str | None = None) -> "Step":
         """Install threaded hardware. ``torque=None`` prints NOT STATED: a threaded
         joint with no stated torque is an open item, not a default. Where the
         user says no torque exists, ``torque=Unspecified(what to do, per=...)``.
         ``surfaces`` are the faces the hardware goes into (``bracket/face 3``), marked on
         the figure: hardware the model does not carry is drawn nowhere else. A ``sequence``
         that states a value (:data:`VALUE_UNITS`) is ``Cited(text, per=...)``, or its source is
-        an open item."""
+        an open item. ``tool`` is what drives the hardware (``Hex key 2``): listed with the tools,
+        and a picture guide says what it is for."""
         hardware = _text("fasten hardware", hardware)
+        tool = _text("fasten tool", tool, required=False) if tool is not None else None
         if qty is not None and (isinstance(qty, bool) or not isinstance(qty, int) or qty < 1):
             raise ValueError(f"fasten qty must be a positive integer, got {qty!r}")
         if torque is not None and not isinstance(torque, (Torque, Unspecified)):
@@ -670,8 +674,11 @@ class Step:
             owed = _owed(text, source)
             lines.append(_Line("Sequence", text, source, cite=bool(owed)))
             missing += owed
+        if tool is not None:
+            lines.append(_Line("Tool", tool))
         return self._add(_Op("fasten", lines, missing=missing, records=records,
-                             equipment=isinstance(torque, Torque), surfaces=self._faces(surfaces)))
+                             equipment=isinstance(torque, Torque), surfaces=self._faces(surfaces),
+                             hardware=(hardware, qty), tool=tool))
 
     def _record(self, kind: str, record, cls, label: str, surfaces=()) -> "Step":
         if record is None:
@@ -1088,10 +1095,12 @@ class Instruction:
             self.materials.append(record)
 
     def equipment(self) -> list[str]:
-        """The equipment the steps imply, then the tools the user named, each once."""
+        """The equipment the steps imply, the tools their hardware is driven with, then the tools the
+        user named, each once."""
         implied = [EQUIPMENT[op.kind] for step in self.steps for op in step.ops
                    if op.kind in EQUIPMENT and op.equipment]
-        return list(dict.fromkeys(implied + self.tools))
+        driving = [op.tool for step in self.steps for op in step.ops if op.tool]
+        return list(dict.fromkeys(implied + driving + self.tools))
 
     def open_items(self) -> list[str]:
         """Everything engineering still owes: each NOT STATED value, the source of each value free text

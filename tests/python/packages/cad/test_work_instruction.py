@@ -909,7 +909,7 @@ class GuideTests(_Assembly):
         text = " ".join(t for page in self._pages(wi) for t in page)
         self.assertIn("Torque: not decided yet", text)
         self.assertIn("Step 2: torque not decided yet", text)
-        self.assertIn("Also: M3 screw, qty 4", text)
+        self.assertIn("Screws and nuts M3 screw  ×4", text, "the cover lists it by size")
         self.assertNotIn("NOT STATED", text)
         self.assertEqual(wi.open_items()[0], "step 2 (fasten): torque not stated", "the run still lists it")
 
@@ -936,10 +936,10 @@ class GuideTests(_Assembly):
         self.assertEqual(wi.step("Close in", install=["bracket"], frame="step").frame, "step")
         self.assertEqual(self.instruction().step("Load", install=["base_plate"]).frame, "step")
 
-    def test_an_arrow_is_two_strokes_stopping_short_of_the_part_along_its_way(self) -> None:
+    def test_an_arrow_pulls_the_step_s_parts_back_with_a_line_to_their_place(self) -> None:
         from tempfile import TemporaryDirectory
 
-        from cad._internal.work_instruction_pages import picture_jobs
+        from cad._internal.work_instruction_pages import GUIDE_LINE, _extent, picture_jobs, pull
 
         wi = self._guide()
         wi.step("Lay it flat", install=["base_plate"])
@@ -947,14 +947,51 @@ class GuideTests(_Assembly):
         wi.step("Pins", install=["pin"])
         with TemporaryDirectory() as folder:
             jobs = picture_jobs(wi, Path(folder))
+            self.assertTrue(Path(jobs[2]["input"]).is_file(), "the step drawn from a document of its own")
         self.assertNotIn("annotation", jobs[1])
-        marks = jobs[2]["annotation"]["marks"]
-        self.assertEqual([mark["kind"] for mark in marks], ["stroke", "stroke"])
-        shaft = marks[0]["points"]
-        self.assertGreater(shaft[2], shaft[5], "it travels down")
-        self.assertEqual(shaft[:2], shaft[3:5], "straight down")
+        self.assertEqual(jobs[1]["input"], wi.source, "a step with no arrow is the assembly's own")
+        self.assertEqual(jobs[2]["display"], {"mode": "hidden-line", "tint": {"parts": ["p1"], "color": jobs[1][
+            "display"]["tint"]["color"]}}, "only what is in so far, the pulled part filled")
+        line, head = jobs[2]["annotation"]["marks"]
+        self.assertEqual((line["color"], head["color"]), (GUIDE_LINE, GUIDE_LINE))
+        distance = pull([wi.leaves()[1].shape()], "down", _extent(wi)[1])
+        self.assertGreater(distance, 40, "clear of where it goes")
+        start, end = line["points"][:3], line["points"][3:]
+        self.assertEqual(start[:2], end[:2], "straight down")
+        self.assertAlmostEqual(end[2], 5.0, 3, msg="to where the bracket's bottom lands")
+        self.assertAlmostEqual(start[2], 5.0 + distance, 3, msg="from the pulled bracket's bottom")
         self.assertEqual(jobs[1]["camera"]["orthographicHalfHeight"], jobs[2]["camera"]["orthographicHalfHeight"],
                          "one camera for every step, so the assembly stays where it was")
+
+    def test_a_step_s_parts_box_shows_its_parts_and_screws_and_the_cover_what_each_tool_is_for(self) -> None:
+        from cad._internal.work_instruction_guide import Hardware, hardware
+
+        wi = self._guide(tools=["Mallet"])
+        wi.step("Lay the base flat", install=["base_plate"])
+        wi.step("Fit the bracket", install=["bracket"], arrow="down").fasten(
+            "M3×10 screw", qty=4, tool="Hex key 2.5").fasten("M3 nut", qty=4)
+        wi.step("Pins", install=["pin"]).fasten("M3×10 screw", qty=2, tool="Hex key 2.5")
+        self.assertEqual(hardware(wi.steps), [Hardware("M3×10 screw", 6, ("Hex key 2.5",)), Hardware("M3 nut", 4)])
+        self.assertEqual(wi.equipment(), ["Hex key 2.5", "Mallet"])
+        pages = self._pages(wi)
+        cover, steps = " ".join(pages[0]), " ".join(t for page in pages[1:] for t in page)
+        self.assertIn("Screws and nuts M3×10 screw  ×6 M3 nut  ×4", cover)
+        self.assertIn("Tools Hex key 2.5, for M3×10 screw Mallet", cover)
+        self.assertIn("2 Fit the bracket ×1 M3×10 screw  ×4 M3 nut  ×4", steps, "the step's box, its own counts")
+        for absent in ("You need", "Hardware:", "Tool:"):
+            self.assertNotIn(absent, steps, "the box says it")
+        self.assertIn("How to read New in this step Already in", steps)
+        self.assertIn("Where it goes", steps, "a step pulls its parts out")
+
+    def test_the_key_names_the_line_only_where_a_step_draws_one(self) -> None:
+        wi = self._guide()
+        wi.step("Lay the base flat", install=["base_plate"])
+        self.assertNotIn("Where it goes", " ".join(t for page in self._pages(wi) for t in page))
+
+    def test_a_tool_is_a_name(self) -> None:
+        wi = self._guide()
+        with self.assertRaisesRegex(ValueError, "fasten tool must not be blank"):
+            wi.step("Fit", install=["bracket"]).fasten("M3 screw", tool=" ")
 
     def test_an_arrow_is_a_way_the_vocabulary_names(self) -> None:
         with self.assertRaisesRegex(ValueError, "arrow"):

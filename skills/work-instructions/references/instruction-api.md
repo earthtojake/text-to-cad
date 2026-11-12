@@ -153,7 +153,8 @@ of one part one label (`pin`) or one name in `names=`. A part is
 installed by one step only. `frame="step"` (a work instruction's default) fits
 the figure to the parts the step installs with room around them;
 `frame="assembly"` (a picture guide's) fits the whole assembly. `arrow` is the
-way the parts travel into place, drawn on a picture guide's picture: `down`
+way the parts travel into place: a picture guide's picture pulls them back along
+it, clear of their place, each with a thin line to where it lands: `down`
 (−Z), `up` (+Z), `left` (−X), `right` (+X), `forward` (−Y) or `back` (+Y). A step that installs nothing (a cure, an inspection) still has a
 figure of what is installed so far, and none while nothing is.
 
@@ -203,7 +204,7 @@ Each returns the step, so they chain, and prints in the order called.
 | --- | --- | --- |
 | `instruct(text, *, per=None)` | the user's words, or a document's (cited); a value in it with no `per` is an open item | |
 | `not_stated(what)` | `what` with NOT STATED: something the step needs that nobody has stated; an open item | |
-| `fasten(hardware, *, qty=None, torque=None, locking=None, sequence=None, surfaces=())` | hardware, torque (NOT STATED when `None`; as said for an `Unspecified`), threadlocker, sequence (text, or `Cited`: a value in it is cited) | actual torque, one per fastener up to 8 |
+| `fasten(hardware, *, qty=None, torque=None, locking=None, sequence=None, surfaces=(), tool=None)` | hardware (a picture guide groups it by this name: give a size, `"M3×10 screw"`), the `tool` that drives it (listed with the tools; a guide says what it is for), torque (NOT STATED when `None`; as said for an `Unspecified`), threadlocker, sequence (text, or `Cited`: a value in it is cited) | actual torque, one per fastener up to 8 |
 | `bond(adhesive, *, surfaces=())` | adhesive, prep, mix, pot life, cure, the surfaces named | prepared at, adhesive lot, expiry, mixed at, mated at |
 | `cure(cure)` | the cycle | oven or autoclave ID, start, end, chart no. |
 | `apply(material, *, surfaces=())` | a sealant, primer or other consumable and how it goes on | |
@@ -276,7 +277,9 @@ Each figure looks from the instruction's `camera` (or the step's own) and is
 placed exactly, never fitted to what is visible. `frame="step"` centres it on
 the step's parts, so the view moves from step to step; `frame="assembly"` fits
 the whole assembly, one camera for every such figure, so a part stays in place
-across them. A picture guide's fit leaves room for its arrows.
+across them. A picture guide's fit leaves room for the parts it pulls out. A step with an
+`arrow` is drawn from a document of its own, written beside the pictures: the parts
+in so far, the step's pulled back along the arrow.
 
 ## What the run prints
 
