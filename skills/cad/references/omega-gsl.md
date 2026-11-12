@@ -55,7 +55,15 @@ return min(skin, infill);
   1.76 mm for r = 6: stand one shape on or inside the other, never flush with it, where the blend is meant
   for the corner between them.
 - A lattice that meets a skin at an edge is non-manifold there: let it run into the skin (`solid + 1` inside
-  a 2 mm skin), never stop at its surface.
+  a 2 mm skin), never stop at its surface, and join the two with a small round blend (`unionRound(skin,
+  lattice, 1)`): a sharp `min` leaves surfaces passing through each other where they cross.
+- The `lattice` package has the lattices: `lattice.solidify(tpms.gyroid([8, 8, 8]), 0, 1.0)` is a 1 mm gyroid
+  sheet, `lattice.solidify(beam.octet([8, 8, 8]), 0.8)` octet struts of 0.8 mm radius; a `wall` that is a field
+  grades it. In omega-core 0.1.1 strut lattices (`beam.*`) mesh non-manifold where struts meet, at any depth:
+  prefer a TPMS. A lattice cut by a body's outline leaves loose fragments (`cad stl dfm`: `several_solids`).
+- Two shapes that only touch, face to face, mesh as two bodies: overlap them.
+- A mesh holds no tolerance. A 6 mm bore comes out 5.989 to 6.011 mm (H7 is 6.000 to 6.012) and `thread.male`
+  an M6 at 6.015 mm over the crests: bores, threads and fits are modelled in build123d.
 - `abs(f) - t` is a wall 2t thick only where `f` is a true distance. A field that is not one (a lobed or twisted
   radius, a gyroid, a sum of fields) changes faster than distance, and its wall comes out thinner than written:
   measure it (`cad stl dfm`, below) before printing.
