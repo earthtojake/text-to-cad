@@ -35,18 +35,18 @@ from cad._internal.work_instruction_pages import (
     read_pixels,
 )
 
-TITLE, LEAD, HEAD, STEP, TEXT, SMALL = 26.0, 12.0, 14.0, 15.0, 11.0, 8.5
-GREY, FAINT, AMBER, AMBER_FACE, NOTE_FACE = "#555555", "#bbbbbb", "#9a5b00", "#fff4e0", "#eef2f8"
-BADGE = 10.0  # a step's number, its circle's diameter
+TITLE, LEAD, HEAD, STEP, TEXT, SMALL = 30.0, 12.0, 13.0, 12.0, 11.0, 8.5
+NUMBER = 30.0  # a step's number: big, bold and bare, as a flat-pack manual prints it
+GREY, FAINT, AMBER = "#555555", "#bbbbbb", "#9a5b00"
 BOX = 7.0  # the box to tick
 TILES, TILE_GAP = 4, 4.0  # what you need, to a row
 NOTICES = {"WARNING": "Warning", "CAUTION": "Careful", "NOTE": "Tip"}
 NOT_DECIDED = "not decided yet"
-BOX_FACE = "#f2f3f5"  # a step's parts box, and the key's
+OUTLINE, ROUND = 0.6, 1.6  # every box: a thin black line with round corners, white inside
 CHIP = 9.0  # a screw's size, beside its picture
 STEP_TILE = 15.0  # a part's picture in a step's parts box
 SCREW_INK = "#3a3a3a"
-INK = "#1d1d1f"  # a step's number: dark, so blue on the page means only what the step adds
+INK = "#1d1d1f"  # the footer's dots: dark, so blue on the page means only what the step adds
 DOT, DOT_GAP = 1.6, 1.4  # the footer's step dots
 
 
@@ -94,15 +94,16 @@ def _glyph(ax, name: str, x: float, y: float) -> None:
 
     kind = _kind(name)
     if kind == "nut":
-        ax.add_patch(RegularPolygon((x + 1.7, y), 6, radius=1.7, facecolor=SCREW_INK, edgecolor="none", zorder=3))
-        ax.add_patch(Circle((x + 1.7, y), 0.7, facecolor="white", edgecolor="none", zorder=4))
+        ax.add_patch(RegularPolygon((x + 1.7, y), 6, radius=1.7, facecolor="white", edgecolor=SCREW_INK, lw=0.6,
+                                    zorder=3))
+        ax.add_patch(Circle((x + 1.7, y), 0.7, facecolor="white", edgecolor=SCREW_INK, lw=0.5, zorder=4))
         return
     if kind == "washer":
-        ax.add_patch(Circle((x + 1.7, y), 1.7, facecolor=SCREW_INK, edgecolor="none", zorder=3))
-        ax.add_patch(Circle((x + 1.7, y), 0.8, facecolor="white", edgecolor="none", zorder=4))
+        ax.add_patch(Circle((x + 1.7, y), 1.7, facecolor="white", edgecolor=SCREW_INK, lw=0.6, zorder=3))
+        ax.add_patch(Circle((x + 1.7, y), 0.8, facecolor="white", edgecolor=SCREW_INK, lw=0.5, zorder=4))
         return
     shank = _glyph_width(name) - 1.8
-    ax.add_patch(Rectangle((x, y - 1.4), 1.8, 2.8, facecolor=SCREW_INK, edgecolor="none", zorder=3))
+    ax.add_patch(Rectangle((x, y - 1.4), 1.8, 2.8, facecolor="white", edgecolor=SCREW_INK, lw=0.6, zorder=3))
     ax.add_patch(Rectangle((x + 1.8, y - 0.65), shank, 1.3, facecolor="white", edgecolor=SCREW_INK, lw=0.5, zorder=3))
     tick = x + 2.3
     while tick < x + 1.8 + shank - 0.2:
@@ -111,7 +112,7 @@ def _glyph(ax, name: str, x: float, y: float) -> None:
 
 
 def _chip_text(line: Hardware) -> str:
-    return f"{line.name}  ×{line.qty}" if line.qty else line.name
+    return f"{line.qty}x  {line.name}" if line.qty else line.name
 
 
 def _chips(flow: _Flow, lines: list[Hardware], x0: float, width: float) -> list[tuple[float, float, Hardware]]:
@@ -175,6 +176,14 @@ def _image(flow: _Flow, path: Path | None, x: float, top: float, width: float, h
     flow.add(lambda ax: ax.imshow(pixels, extent=(x, x + width, top - height, top), interpolation="none", zorder=1))
 
 
+def _outline(x: float, y: float, width: float, height: float, zorder: float = 2):
+    """A box the way a flat-pack manual draws one: a thin black line, round corners, white inside."""
+    from matplotlib.patches import FancyBboxPatch
+
+    return FancyBboxPatch((x, y), width, height, boxstyle=f"round,pad=0,rounding_size={ROUND}", lw=OUTLINE,
+                          edgecolor="black", facecolor="white", zorder=zorder)
+
+
 def _heading(flow: _Flow, title: str, keep: float) -> None:
     cell = _text_cell(flow.measure, title, flow.inner, HEAD, "bold")
     flow.room(cell.height + 5.0 + keep, title)
@@ -193,7 +202,6 @@ def _lines(flow: _Flow, lines: list[str], what: str, *, color: str = "black") ->
 
 def _tile(flow: _Flow, cell: _Cell, top: float, x: float, size: float, path: Path | None) -> None:
     _image(flow, path, x, top, size, size)
-    flow.add(lambda ax: ax.add_patch(_rect(x, top - size, size, size, lw=0.4, edge=FAINT)))
     flow.add(lambda ax: cell.draw(ax, x, top - size - 1.5))
 
 
@@ -207,7 +215,7 @@ def _need(flow: _Flow, wi, pictures: dict) -> None:
         cells = []
         for name, refs, _steps in row:
             cell = _Cell(flow.measure, width)
-            cell.text(f"×{len(refs)}  {plain(name)}", TEXT, weight="bold")
+            cell.text(f"{len(refs)}x  {plain(name)}", TEXT, weight="bold")
             cells.append(cell)
         height = width + 1.5 + max(cell.height for cell in cells) + 3.0
         flow.room(height, "what you need")
@@ -222,8 +230,7 @@ def _need(flow: _Flow, wi, pictures: dict) -> None:
         height = (placed[-1][1] + 1) * CHIP_ROW + 2 * PAD
         flow.room(height, "screws and nuts")
         top = flow.y
-        flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, flow.inner, height, lw=0, edge="none",
-                                               face=BOX_FACE, zorder=0)))
+        flow.add(lambda ax: ax.add_patch(_outline(MARGIN, top - height, flow.inner, height, zorder=0)))
         _draw_chips(flow, placed, top - PAD)
         flow.y -= height + 1.0
     also = list(dict.fromkeys(record.name for record in wi.materials))
@@ -254,7 +261,7 @@ def _tool_glyph(ax, name: str, x: float, y: float) -> None:
     elif "wrench" in lowered or "spanner" in lowered:
         ax.plot([x + 0.8, x + 3.6], [y - 3.6, y + 2.2], color=SCREW_INK, lw=2.0, solid_capstyle="round", zorder=3)
         ax.add_patch(Circle((x + 3.8, y + 2.8), 1.5, facecolor=SCREW_INK, edgecolor="none", zorder=3))
-        ax.add_patch(Circle((x + 4.3, y + 3.4), 0.7, facecolor=BOX_FACE, edgecolor="none", zorder=4))
+        ax.add_patch(Circle((x + 4.3, y + 3.4), 0.7, facecolor="white", edgecolor="none", zorder=4))
     else:
         ax.add_patch(Circle((x + 2.2, y), 1.0, facecolor=SCREW_INK, edgecolor="none", zorder=3))
 
@@ -269,8 +276,7 @@ def _tools(flow: _Flow, tools: list[tuple[str, str]]) -> None:
             x = MARGIN + offset * (width + TILE_GAP)
 
             def draw(ax, x=x, top=top, name=name, use=use) -> None:
-                ax.add_patch(_rect(x, top - TOOL_ROW + 1.5, width, TOOL_ROW - 1.5, lw=0, edge="none", face=BOX_FACE,
-                                   zorder=0))
+                ax.add_patch(_outline(x, top - TOOL_ROW + 1.5, width, TOOL_ROW - 1.5, zorder=0))
                 middle = top - (TOOL_ROW - 1.5) / 2
                 _tool_glyph(ax, name, x + 2.0, middle)
                 text, small = _fit(flow.measure, name, TEXT - 1.0, width - 11.0)
@@ -286,10 +292,7 @@ def _tools(flow: _Flow, tools: list[tuple[str, str]]) -> None:
 
 
 def _cover(flow: _Flow, wi, open_items: list[str], pictures: dict) -> None:
-    flow.cell(_text_cell(flow.measure, "A S S E M B L Y   I N S T R U C T I O N S", flow.inner, SMALL, "bold"),
-              "the title")
-    flow.y -= 1.0
-    flow.cell(_text_cell(flow.measure, wi.title, flow.inner, TITLE, "bold"), "the title")
+    flow.cell(_text_cell(flow.measure, wi.title.upper(), flow.inner, TITLE, "bold"), "the title")
     flow.y -= 1.0
     if wi.scope:
         cell = _Cell(flow.measure, flow.inner)
@@ -313,21 +316,36 @@ def _cover(flow: _Flow, wi, open_items: list[str], pictures: dict) -> None:
         _lines(flow, [_plain_item(item) for item in open_items], "still to decide", color=AMBER)
 
 
+NOTICE_ROOM = 14.0  # a notice's pictogram, left of its words
+
+
+def _sign(ax, careful: bool, x: float, y: float) -> None:
+    """A notice's pictogram, its middle at (``x``, ``y``): a warning triangle, or a tip's circled i."""
+    from matplotlib.patches import Circle, RegularPolygon
+
+    if careful:
+        ax.add_patch(RegularPolygon((x, y - 0.6), 3, radius=4.2, facecolor="white", edgecolor="black", lw=1.1,
+                                    zorder=3))
+        ax.text(x, y - 2.6, "!", fontsize=TEXT, weight="bold", ha="center", va="baseline", zorder=4)
+    else:
+        ax.add_patch(Circle((x, y), 3.2, facecolor="white", edgecolor="black", lw=1.0, zorder=3))
+        ax.text(x, y - 1.4, "i", fontsize=TEXT - 1.0, weight="bold", ha="center", va="baseline", zorder=4)
+
+
 def _notice(flow: _Flow, kind: str, line) -> None:
-    cell = _Cell(flow.measure, flow.inner - 8.0)
+    cell = _Cell(flow.measure, flow.inner - NOTICE_ROOM - 4.0)
     careful = kind != "NOTE"
-    cell.text(f"{NOTICES[kind]}: {line.value}" if line.caption else line.value, TEXT,
-              color=AMBER if careful else "black")
+    cell.text(f"{NOTICES[kind]}: {line.value}" if line.caption else line.value, TEXT)
     if line.source is not None:
         cell.text(_citation(line.source), SMALL, color=GREY)
     elif line.cite:
         cell.text(f"Where this number comes from: {NOT_DECIDED}", SMALL, color=AMBER)
-    height = cell.height + 3.0
+    height = max(cell.height + 3.0, 11.0)
     flow.room(height, "a notice")
     top = flow.y
-    flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, flow.inner, height, lw=0, edge="none",
-                                           face=AMBER_FACE if careful else NOTE_FACE, zorder=0)))
-    flow.add(lambda ax: cell.draw(ax, MARGIN + 4.0, top - 1.5))
+    flow.add(lambda ax: ax.add_patch(_outline(MARGIN, top - height, flow.inner, height, zorder=0)))
+    flow.add(lambda ax: _sign(ax, careful, MARGIN + NOTICE_ROOM / 2, top - height / 2))
+    flow.add(lambda ax: cell.draw(ax, MARGIN + NOTICE_ROOM, top - (height - cell.height) / 2))
     flow.y -= height + 1.5
 
 
@@ -396,13 +414,12 @@ def _box_plan(flow: _Flow, step, pictures: dict, index_of: dict[str, int], width
 
 
 def _parts_box(flow: _Flow, plan, top: float) -> None:
-    """What the step uses, in a grey box from ``top`` at the left margin: as a kit's manual opens
-    each step."""
+    """What the step uses, in an outlined box from ``top`` at the left margin: as a flat-pack manual
+    opens each step."""
     tiles, per_row, chips, width, height = plan
     if not height:
         return
-    flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, width, height, lw=0, edge="none",
-                                           face=BOX_FACE, zorder=2)))
+    flow.add(lambda ax: ax.add_patch(_outline(MARGIN, top - height, width, height)))
     for index, (path, count) in enumerate(tiles):
         row, col = divmod(index, per_row)
         x = MARGIN + PAD + col * (STEP_TILE + 3.0)
@@ -412,16 +429,17 @@ def _parts_box(flow: _Flow, plan, top: float) -> None:
             flow.add(lambda ax, x=x, y=y, pixels=pixels: ax.imshow(
                 pixels, extent=(x, x + STEP_TILE, y - STEP_TILE, y), interpolation="none", zorder=3))
         flow.add(lambda ax, x=x, y=y, count=count: ax.text(
-            x + STEP_TILE, y - STEP_TILE - 0.6 - CHIP * PT, f"×{count}", fontsize=CHIP, weight="bold",
-            ha="right", va="baseline", zorder=3))
+            x, y - STEP_TILE - 0.6 - CHIP * PT, f"{count}x", fontsize=CHIP, weight="bold",
+            va="baseline", zorder=3))
     rows = -(-len(tiles) // per_row)
     _draw_chips(flow, chips, top - PAD - rows * (STEP_TILE + 4.5))
 
 
 def _step(flow: _Flow, step, pictures: dict, index_of: dict[str, int]) -> None:
-    title = _Cell(flow.measure, flow.inner - BADGE - BOX - 8.0)
-    title.text(step.title, STEP, weight="bold")
-    head = max(title.height, BADGE)
+    number = flow.measure.width(step.label, NUMBER, "bold")
+    title = _Cell(flow.measure, flow.inner - number - BOX - 8.0)
+    title.text(step.title, STEP)
+    head = max(title.height, NUMBER * PT * 0.95)
     path = pictures.get(step.number)
     height = flow.inner * GUIDE_PX[1] / GUIDE_PX[0] if path is not None else 0.0
     body = _body(flow, step)
@@ -435,20 +453,11 @@ def _step(flow: _Flow, step, pictures: dict, index_of: dict[str, int]) -> None:
     above = box[4] + 1.5 if box[4] and not over else 0.0
     flow.room(head + 1.5 + notes + above + height + body.height + 5.0, f"step {step.label}")
     top = flow.y
-    radius = BADGE / 2
-    x = MARGIN + radius
-
-    def badge(ax) -> None:
-        from matplotlib.patches import Circle
-
-        ax.add_patch(Circle((x, top - radius), radius, facecolor=INK, edgecolor="none", zorder=2))
-        ax.text(x, top - radius - STEP * PT * 0.36, step.label, fontsize=STEP, weight="bold", color="white",
-                ha="center", va="baseline", zorder=3)
-
-    flow.add(badge)
+    flow.add(lambda ax: ax.text(MARGIN - 0.6, top - head + 0.2, step.label, fontsize=NUMBER, weight="bold",
+                                va="baseline", zorder=3))
     flow.steps_on.setdefault(len(flow.pages) - 1, []).append(step.number)
-    flow.add(lambda ax: title.draw(ax, MARGIN + BADGE + 4.0, top - (head - title.height) / 2))
-    flow.add(lambda ax: ax.add_patch(_rect(flow.w - MARGIN - BOX, top - (head + BOX) / 2, BOX, BOX, lw=0.9, edge=GREY)))
+    flow.add(lambda ax: title.draw(ax, MARGIN + number + 3.0, top - head + title.height + 0.6))
+    flow.add(lambda ax: ax.add_patch(_rect(flow.w - MARGIN - BOX, top - head + 0.6, BOX, BOX, lw=0.6, edge=GREY)))
     flow.y -= head + 1.5
     for notice in step.notices:
         _notice(flow, notice.caption, notice)
@@ -482,7 +491,7 @@ KEY = 8.0  # a key's swatch
 
 def _key(flow: _Flow, lines: bool) -> None:
     """How to read the steps, as a kit's manual opens them: blue is what the step adds, white what is
-    already in, the grey box what it uses, and (where a step pulls its parts out) the thin line to where
+    already in, the outlined box what it uses, and (where a step pulls its parts out) the thin line to where
     each one goes."""
     from matplotlib.patches import FancyArrowPatch
 
@@ -492,8 +501,7 @@ def _key(flow: _Flow, lines: bool) -> None:
     height = PAD * 2 + 5.0 + KEY + 1.0
     flow.room(height + 3.0, "the key")
     top = flow.y
-    flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, flow.inner, height, lw=0, edge="none",
-                                           face=BOX_FACE, zorder=0)))
+    flow.add(lambda ax: ax.add_patch(_outline(MARGIN, top - height, flow.inner, height, zorder=0)))
     flow.add(lambda ax: ax.text(MARGIN + PAD, top - PAD - TEXT * PT * 0.8, "How to read", fontsize=TEXT,
                                 weight="bold", va="baseline", zorder=3))
     step = (flow.inner - 2 * PAD) / len(entries)
@@ -507,9 +515,8 @@ def _key(flow: _Flow, lines: bool) -> None:
             elif kind == "old":
                 ax.add_patch(_rect(x, y - KEY, KEY, KEY, lw=0.5, edge="black", face="white", zorder=3))
             elif kind == "box":
-                ax.add_patch(_rect(x, y - KEY, KEY, KEY, lw=0.5, edge=GREY, face="white", zorder=3))
-                ax.text(x + KEY - 0.6, y - KEY + 0.8, "×1", fontsize=SMALL - 1.5, weight="bold", ha="right",
-                        va="baseline", zorder=4)
+                ax.add_patch(_outline(x, y - KEY, KEY, KEY, zorder=3))
+                ax.text(x + 0.9, y - KEY + 0.9, "1x", fontsize=SMALL - 1.5, weight="bold", va="baseline", zorder=4)
             else:
                 ax.add_patch(FancyArrowPatch((x + KEY / 2, y), (x + KEY / 2, y - KEY), arrowstyle="-|>",
                                              mutation_scale=5, lw=0.8, color=GUIDE_LINE, zorder=3))
@@ -521,9 +528,10 @@ def _key(flow: _Flow, lines: bool) -> None:
 
 
 def _notice_height(flow: _Flow, notice) -> float:
-    cell = _Cell(flow.measure, flow.inner - 8.0)
+    cell = _Cell(flow.measure, flow.inner - NOTICE_ROOM - 4.0)
     cell.text(f"{NOTICES[notice.caption]}: {notice.value}", TEXT)
-    return cell.height + (SMALL * PT * 1.3 if notice.source is not None or notice.cite else 0.0) + 4.5
+    return max(cell.height + (SMALL * PT * 1.3 if notice.source is not None or notice.cite else 0.0) + 3.0,
+               11.0) + 1.5
 
 
 def footer(ax, flow: _Flow, page: int) -> None:

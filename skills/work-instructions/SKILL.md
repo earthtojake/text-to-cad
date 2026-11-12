@@ -194,10 +194,11 @@ decided prints "not decided yet" and is listed under **Still to decide**.
 
 A `simple` instruction is a picture guide, on US Letter (or A4) portrait, drawn
 as a furniture manual's line art (bold black outlines on white, the step's new
-parts in blue): the title, the finished assembly and **What you need** (a picture of each part
+parts in blue) and set like one: thin round-cornered outline boxes, counts as
+`2x`, a warning triangle on a careful note. It has the title in capitals, the finished assembly and **What you need** (a picture of each part
 with its count, then the screws and nuts by size, materials, and the tools with
-what each one is for), then a **How to read** key and each step's number,
-sentence, tick box, picture (its parts box, each part's picture and count and
+what each one is for), then a **How to read** key and each step's big bare
+number, sentence, tick box, picture (its parts box, each part's picture and count and
 its screws, in the picture's top-left corner) and anything it asks for, two to a
 page, with a dot per step in the footer to show how far along the build is. It has no
 tables, sign-offs or document numbers; those it was given print small in the

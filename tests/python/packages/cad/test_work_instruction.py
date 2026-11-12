@@ -909,7 +909,7 @@ class GuideTests(_Assembly):
         text = " ".join(t for page in self._pages(wi) for t in page)
         self.assertIn("Torque: not decided yet", text)
         self.assertIn("Step 2: torque not decided yet", text)
-        self.assertIn("Screws and nuts M3 screw  ×4", text, "the cover lists it by size")
+        self.assertIn("Screws and nuts 4x  M3 screw", text, "the cover lists it by size")
         self.assertNotIn("NOT STATED", text)
         self.assertEqual(wi.open_items()[0], "step 2 (fasten): torque not stated", "the run still lists it")
 
@@ -975,10 +975,10 @@ class GuideTests(_Assembly):
         self.assertEqual(wi.equipment(), ["Hex key 2.5", "Mallet"])
         pages = self._pages(wi)
         cover, steps = " ".join(pages[0]), " ".join(t for page in pages[1:] for t in page)
-        self.assertIn("Screws and nuts M3×10 screw  ×6 M3 nut  ×4", cover)
+        self.assertIn("Screws and nuts 6x  M3×10 screw 4x  M3 nut", cover)
         self.assertIn("Tools Hex key 2.5 for M3×10 screw Mallet", cover, "each tool, and what it drives")
-        self.assertIn("A S S E M B L Y   I N S T R U C T I O N S", cover)
-        self.assertIn("2 Fit the bracket ×1 M3×10 screw  ×4 M3 nut  ×4", steps, "the step's box, its own counts")
+        self.assertIn(wi.title.upper(), pages[0], "the name, big and in capitals")
+        self.assertIn("2 Fit the bracket 1x 4x  M3×10 screw 4x  M3 nut", steps, "the step's box, its own counts")
         for absent in ("You need", "Hardware:", "Tool:"):
             self.assertNotIn(absent, steps, "the box says it")
         self.assertIn("How to read New in this step Already in", steps)
