@@ -1041,6 +1041,40 @@ class GuideTests(_Assembly):
         self.assertNotIn("hidden", jobs["cover"]["display"])
         self.assertEqual(jobs["part-0"]["display"]["isolated"], ["base_plate"])
 
+    def test_a_guide_s_lines_are_inked_thick_on_white_paper_and_its_fill_kept(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        import matplotlib.image as mpimg
+        import numpy as np
+
+        from cad._internal.work_instruction_pages import FILL, ink
+        from matplotlib.colors import to_rgb
+
+        pale, blue = (0.93, 0.95, 0.97), to_rgb(FILL)
+        picture = np.ones((20, 20, 3)) * pale
+        picture[:, 10:] = blue
+        picture[:, 5] = 0.1  # a one-pixel line on a face
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "step.png"
+            mpimg.imsave(path, picture)
+            ink(path)
+            found = mpimg.imread(path)[..., :3]
+        self.assertTrue((found[:, 4:7] < 0.2).all(), "the line, three pixels wide")
+        self.assertTrue((found[:, :3] == 1.0).all(), "the face white as paper")
+        np.testing.assert_allclose(found[:, 12:, :], np.ones((20, 8, 3)) * blue, atol=0.01, err_msg="the fill as it was")
+
+    def test_a_guide_draws_its_cover_and_parts_as_line_art(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        from cad._internal.work_instruction_pages import guide_jobs
+
+        wi = self._guide()
+        wi.step("Lay it flat", install=["base_plate"])
+        with TemporaryDirectory() as folder:
+            jobs = guide_jobs(wi, Path(folder))
+        self.assertEqual(jobs["cover"]["display"], {"mode": "hidden-line"})
+        self.assertNotIn("tint", jobs["part-0"]["display"], "blue is kept for what a step adds")
+
     def test_with_no_pictures_a_simple_instruction_stays_the_table(self) -> None:
         wi = self._guide(pictures=False)
         wi.step("Lay it flat", install=["base_plate"])

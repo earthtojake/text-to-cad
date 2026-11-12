@@ -192,8 +192,9 @@ decided prints "not decided yet" and is listed under **Still to decide**.
 
 ## What the PDF contains
 
-A `simple` instruction is a picture guide, on US Letter (or A4) portrait: the
-title, the finished assembly and **What you need** (a picture of each part
+A `simple` instruction is a picture guide, on US Letter (or A4) portrait, drawn
+as a furniture manual's line art (bold black outlines on white, the step's new
+parts in blue): the title, the finished assembly and **What you need** (a picture of each part
 with its count, then the screws and nuts by size, materials, and the tools with
 what each one is for), then a **How to read** key and each step's number,
 sentence, tick box, picture (its parts box, each part's picture and count and

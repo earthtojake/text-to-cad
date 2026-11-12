@@ -42,6 +42,9 @@ from cad.work_instruction import ARROWS, UNNAMED, Source, document_type
 FILL = "#79a9f3"  # the parts a step installs: a light blue the black edges read over
 SURFACE = "#8250df"
 GUIDE_LINE = "#3a3a3a"  # the thin line from a pulled-out part to where it goes
+INK_WEIGHT = 1  # a guide's lines thickened by this many pixels either side (``ink``)
+LINE_DARK = 0.45  # how dark a pixel is to count as a line
+PAPER = 0.86  # how light a pixel is to count as the paper (a face): the step's blue fill is far darker
 PULL = 0.22  # how far a guide's picture pulls a step's parts back along its arrow, of the assembly's diagonal
 PICTURE_PX = (800, 600)
 GUIDE_PX = (1600, 720)  # a picture guide's picture, two to a page
@@ -346,12 +349,13 @@ def guide_jobs(wi, folder: Path) -> dict[str, dict]:
                 "output": {"tightFrame": False, "transparent": True},
                 "outputs": [{"path": str(folder / f"{name}.png"), "width": size[0], "height": size[1]}]}
 
-    jobs = {"cover": job("cover", [leaf.shape() for leaf in leaves.values()], {"mode": "shaded"}, wi.camera, COVER_PX)}
+    # Line art, as a furniture manual draws its parts: blue is kept for what a step adds.
+    jobs = {"cover": job("cover", [leaf.shape() for leaf in leaves.values()], {"mode": "hidden-line"}, wi.camera,
+                         COVER_PX)}
     for index, (_name, refs, _steps) in enumerate(parts(wi)):
         under = [part.ref for part in wi.scene.parts_under(wi.scene.occurrences(refs[0])[0])]
         jobs[f"part-{index}"] = job(f"part-{index}", [leaves[ref].shape() for ref in under],
-                                    {"mode": "hidden-line", "isolated": under,
-                                     "tint": {"parts": under, "color": FILL}}, wi.camera, PART_PX)
+                                    {"mode": "hidden-line", "isolated": under}, wi.camera, PART_PX)
     return jobs
 
 
@@ -362,7 +366,33 @@ def render_pictures(wi, folder: Path) -> dict[int | str, Path]:
         return {}
     extra = guide_jobs(wi, folder) if wi.layout.guide else {}
     document_type(wi.source).snapshot(job={"jobs": [*jobs.values(), *extra.values()]}, progress=False)
-    return {key: Path(job["outputs"][0]["path"]) for key, job in {**jobs, **extra}.items()}
+    found = {key: Path(job["outputs"][0]["path"]) for key, job in {**jobs, **extra}.items()}
+    if wi.layout.guide:
+        for path in found.values():
+            ink(path)
+    return found
+
+
+def ink(path: Path, weight: int = INK_WEIGHT) -> None:
+    """A guide's picture drawn as a furniture manual's line art: its lines (the engine's are one pixel,
+    the viewer's) thickened to ``weight`` pixels either side by taking each pixel's darkest neighbour,
+    which leaves a fill's colour alone and only spreads what is darker, and the faces white as paper.
+    Rewritten in place, over white."""
+    import matplotlib.image as mpimg
+    import numpy as np
+
+    pixels = np.asarray(read_pixels(path), dtype=np.float32)
+    height, width = pixels.shape[:2]
+    padded = np.pad(pixels, ((weight, weight), (weight, weight), (0, 0)), mode="edge")
+    darkest = pixels.copy()
+    for dy in range(2 * weight + 1):
+        for dx in range(2 * weight + 1):
+            if (dy - weight) ** 2 + (dx - weight) ** 2 <= weight * weight + weight:  # a round pen
+                darkest = np.minimum(darkest, padded[dy:dy + height, dx:dx + width])
+    line = darkest.mean(-1) < LINE_DARK  # only where a line reaches: a fill's edge against the paper stays
+    pixels[line] = darkest[line]
+    pixels[pixels.min(-1) > PAPER] = 1.0  # the faces the engine draws in its backdrop's pale tone: paper white
+    mpimg.imsave(str(path), np.clip(pixels, 0.0, 1.0))
 
 
 # --- layout ------------------------------------------------------------------
