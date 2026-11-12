@@ -244,7 +244,8 @@ def queryable(text: str) -> str:
     its whole-line comments. The evaluator rebuilds the model around a ``return`` of its own, and in 0.1.1 that
     rebuild fails on a whole-line comment just above the model's ``return`` and on a ``return`` just below
     ``@scene`` (``failed to assemble query: return // ...``), so a model ``gsl compile`` meshes would be refused
-    here. Neither line changes the field, and the region a check asks about is given outright."""
+    here. Neither line changes the field, and the region a check asks about is given outright. omega-core #46 fixes
+    the rebuild; this stays until the pin moves to a release that carries it."""
     import re
 
     kept = [line for line in text.splitlines()
