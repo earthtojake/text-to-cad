@@ -102,6 +102,13 @@ class SnapshotTest(unittest.TestCase):
         # The painted top face is warm (the viewer's surface grades its orange): red well above blue.
         self.assertTrue(any(r - b > 60 for r, g, b in drawn))
 
+    def test_preview_is_drawn_lit_in_its_studio_in_perspective(self) -> None:
+        gl()
+        out = self.folder / "preview.png"
+        report = snapshot(self.document, out, preview=True, size=(320, 240), daemon=False)
+        self.assertEqual((report["preview"], report["projection"], report["renderer"]), (True, "perspective", "occt"))
+        self.drawn(out, (320, 240))
+
     def test_the_cli_prints_what_it_drew_and_its_timings(self) -> None:
         gl()
         out = self.folder / "wire.png"
@@ -534,6 +541,16 @@ class SnapshotTest(unittest.TestCase):
                          [("view-1.png", True, 0.0, False, False, 1.0, (240, 180)),
                           ("front.png", False, 0.15, True, True, 2.0, (160, 120))])
         self.assertEqual(pictures[0][2].display["hidden"], ["peg.1"])
+        walking = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "jointValues": "walk@0.6"}]})
+        self.assertEqual(walking[0][2].pose, "walk@0.6", "a sequence at a time, the document's to answer when drawn")
+        studio = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "preview": True}]})
+        self.assertEqual([still.preview for _document, _out, still in [*studio, *job_pictures(packet, preview=True),
+                                                                       *pictures]],
+                         [True] * 4 + [False] * 3, "a job's own Preview, the flag's over every job, else none")
+        self.assertTrue(cli.parser_for("snapshot").parse_args([str(self.document), "out.png", "--preview"]).preview)
+        coloured = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "output": {"background": "#202830"}}]})
+        self.assertEqual([still.background for _document, _out, still in [*coloured, *pictures]],
+                         ["#202830", None, None, None])
         self.assertEqual([still.annotation for _document, _out, still in pictures], [packet["annotation"]] * 3,
                          "the packet's ink, over every view")
         # The flags override every job: SRC drawn in place of the input, and the size of every output.
@@ -548,6 +565,11 @@ class SnapshotTest(unittest.TestCase):
                 ({**packet, "jobs": [{**job, "output": {"padding": 0.5}}]}, r"padding is a number from 0 to 0.15"),
                 ({**packet, "jobs": [{**job, "output": {"renderScale": 4}}]}, r"renderScale is a number from 1 to 3"),
                 ({**packet, "jobs": [{**job, "output": {"viewLabels": True}}]}, "output has no viewLabels"),
+                ({**packet, "jobs": [{**job, "output": {"background": "grey"}}]}, "background is a colour as #rrggbb"),
+                ({**packet, "jobs": [{**job, "motion": {"name": "walk", "at": 0.6}}]}, r"jobs\[0\] has no motion"),
+                ({**packet, "jobs": [{**job, "preview": "studio"}]}, r"jobs\[0\].preview is true or false"),
+                ({**packet, "jobs": [{**job, "output": {"background": "#202830", "transparent": True}}]},
+                 "background and transparent: a picture stands on a colour or on nothing"),
                 ({**packet, "jobs": [{**job, "outputs": []}]}, "lists the pictures it writes"),
                 ({**packet, "jobs": [{**job, "outputs": [{"path": str(folder / "a.jpg")}]}]}, r"a\.jpg is not one"),
                 ({**packet, "jobs": [job, job]}, "writes .*front.png twice"),

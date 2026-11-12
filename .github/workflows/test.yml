@@ -1,20 +1,28 @@
-# One job per concern. What a change can break decides what runs:
-# scripts/github-workflows/select_checks.py maps every changed path through an explicit
-# table of the tests that read it, and each job below runs on its own flag. Skill prose
-# runs the tests that read that prose; a cadgen module runs cadgen's suites and the hosts
-# that load it; a test file runs itself. A path the table does not know runs everything,
-# and so does a manual run or a VERSION change -- a release is tested whole.
+# One job per concern, one flag per job. What a change can break decides what runs:
+# scripts/github-workflows/select_checks.py maps every changed path to its component (the
+# packages, the UI, an app, a suite), and each job below runs whole on its own flag or is
+# skipped; no step inside a job reads another flag. A path the table does not know runs everything, and so
+# does a VERSION change, a manual run or the nightly one -- a release is tested whole.
 #
-# Every run records the tree it tested (an artifact named tested-<tree>-<scope>). A push
-# whose tree its pull request already tested with the same selection runs nothing again,
-# and Publish Release ships a release commit without re-testing it when a run here tested
-# its tree in full (scripts/github-workflows/tested_tree.py). Publish Release also calls
-# this workflow with `full` when it finds no such run.
+# The tiers:
+#   static     every change, nothing installed: the version and tree checks, the light contracts,
+#              the API's tests.
+#   unit       the packages' suites on Linux (packages), the JS workspaces (js-*), docs, skills.
+#   platform   the packages' suites on Windows; the router's unit files on macOS.
+#   integration  fea, kicad, blender, packaging, viewer-e2e: each with what it drives installed.
+#   release    a full run only (and a change to the thing itself): the packages' suites on their
+#              oldest Python, and the installer rehearsals.
+#   CI         the one required check: every job above that ran passed (ci_gate.py).
 #
-# Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
-# packages/ui and apps/web, `mcp` tests apps/mcp, `api` tests apps/api, and `packaging`
-# builds what ships and runs it, the bundled viewer included. main requires Version Check, cadgen (Linux), cadgen (Windows), core-js, web,
-# skills, docs and packaging; not `mcp` or `api`.
+# main requires `CI` alone, so a job is added, renamed, split or sharded here without a
+# branch-protection change, and no job can fail without stopping the merge.
+#
+# Every run records the tree it tested (an artifact named tested-<tree>-<scope>). A push whose
+# tree its pull request already tested with the same selection runs nothing again, the nightly
+# run stands down for a tree already tested in full, and Publish Release ships a release commit
+# without re-testing it when a run here tested its tree in full
+# (scripts/github-workflows/tested_tree.py). Publish Release also calls this workflow with
+# `full` when it finds no such run.
 name: Test
 
 on:
@@ -37,20 +45,27 @@ on:
     branches:
       - main
       - build-test
+  # Nightly, on main: the release tier for whatever merged without a release. Nothing runs
+  # when a run already tested main's tree in full.
+  schedule:
+    - cron: "23 8 * * *"
 
 # github.workflow is the CALLER's name when Publish Release calls this, so its run never
-# queues behind -- or cancels -- this workflow's own runs on the same branch.
+# queues behind -- or cancels -- this workflow's own runs on the same branch. The nightly run
+# has a group of its own: in main's, a merge's push run would replace it while it waited.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'schedule' && '-nightly' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Each job's timeout is about twice its slowest recent run. A job that runs Python
-  # test files also leaves room for unittest_files.py's per-file hang guard (15 min)
-  # to fire first and name the file. A hang fails in minutes, not at GitHub's
-  # six-hour default.
+  # Timeouts. A job's is about twice its slowest observed run, and a job that runs Python test
+  # files has at least its slowest run and 11 minutes more: unittest_files.py's per-file hang
+  # guard (10 minutes, and a minute's backstop) fires first, names the file and stops the run.
+  # Every install step has a timeout of its own: a stalled mirror fails in minutes, not at the
+  # job's. (The blender and KiCad suites fetch their environments as they run, and the
+  # rehearsals are installs: those are bounded by their job.)
   #
-  # What the change can break, as flags and test paths. Every other job reads these.
+  # What the change can break, as flags and test paths. Every gated job reads these.
   changes:
     name: Changed paths
     runs-on: ubuntu-latest
@@ -60,25 +75,27 @@ jobs:
       # A push looks up the run that already tested its tree (tested_tree.py).
       actions: read
     outputs:
-      cadgen: ${{ steps.select.outputs.cadgen }}
-      cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
-      fea: ${{ steps.select.outputs.fea }}
       core_js: ${{ steps.select.outputs.core_js }}
-      web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
       web_client: ${{ steps.select.outputs.web_client }}
       web_viewer: ${{ steps.select.outputs.web_viewer }}
       mcp: ${{ steps.select.outputs.mcp }}
-      api: ${{ steps.select.outputs.api }}
-      skills: ${{ steps.select.outputs.skills }}
-      light_policy: ${{ steps.select.outputs.light_policy }}
-      light_tests: ${{ steps.select.outputs.light_tests }}
-      skills_policy: ${{ steps.select.outputs.skills_policy }}
-      skills_tests: ${{ steps.select.outputs.skills_tests }}
-      skills_runtime: ${{ steps.select.outputs.skills_runtime }}
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
+      fea: ${{ steps.select.outputs.fea }}
+      bpy: ${{ steps.select.outputs.bpy }}
+      floor: ${{ steps.select.outputs.floor }}
+      routing: ${{ steps.select.outputs.routing }}
+      installer: ${{ steps.select.outputs.installer }}
+      packages: ${{ steps.select.outputs.packages }}
+      packages_tests: ${{ steps.select.outputs.packages_tests }}
+      linux_shards: ${{ steps.select.outputs.linux_shards }}
+      windows_shards: ${{ steps.select.outputs.windows_shards }}
+      changed_tests: ${{ steps.select.outputs.changed_tests }}
+      skills: ${{ steps.select.outputs.skills }}
+      skills_policy: ${{ steps.select.outputs.skills_policy }}
+      skills_tests: ${{ steps.select.outputs.skills_tests }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -92,7 +109,7 @@ jobs:
       - name: Select what this change can break
         id: select
         env:
-          FULL: ${{ github.event_name == 'workflow_dispatch' || inputs.full }}
+          FULL: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || inputs.full }}
           # Only a push diffs against `before`; a pull request's synchronize event carries one too.
           BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -110,13 +127,16 @@ jobs:
           retention-days: 90
           overwrite: true
 
-  # Every change, selected or not: the canonical version, the derived metadata and the
-  # cadgen pins, and the tracked tree's rules -- and on a pull request, what merging it
-  # releases. A pull request that changes VERSION is a release: merging it starts Publish
-  # Release. Only a branch of this repository may carry one, and only to a version past the
-  # target branch's and the latest tag (scripts/release/check-pr-version.sh).
-  version:
-    name: Version Check
+  # ---- static: every change, nothing installed but Python and Node ------------------------------
+
+  # Selected by nothing, so it waits on nothing: the canonical version, the derived metadata and
+  # the pins; on a pull request, what merging it releases (a pull request that changes VERSION is
+  # a release, only a branch of this repository may carry one, and only to a version past the
+  # target's and the latest tag: scripts/release/check-pr-version.sh); the tracked tree's rules;
+  # the light contracts -- the policy tests and skill suites that read only the repository's
+  # text, where one that needs more fails; and the API's tests, which install nothing.
+  static:
+    name: static
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -128,7 +148,14 @@ jobs:
           # The release guard reads the target branch's history and the release tags.
           fetch-depth: 0
 
+      - name: Set up Python
+        timeout-minutes: 5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
       - name: Set up Node.js
+        timeout-minutes: 5
         uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -150,18 +177,41 @@ jobs:
       - name: Check the tracked tree
         run: scripts/github-workflows/check-builds.sh --tree-only
 
-  # The packages' suites -- the library's, the server's (the engine's and the CAD Viewer backend's
-  # included) and the shim's -- on both platforms, or the files of them a change selected (a test
-  # edited, a document a test reads).
-  cadgen-linux:
-    name: cadgen (Linux)
+      - name: Run the light contracts
+        run: |
+          # Space-separated lists of repo paths: split on purpose.
+          # shellcheck disable=SC2046
+          scripts/test/test-global.sh $(python3 scripts/github-workflows/select_checks.py --light policy)
+          # shellcheck disable=SC2046
+          scripts/test/test-python.sh --select skills $(python3 scripts/github-workflows/select_checks.py --light skills)
+
+      - name: Run the API tests
+        run: scripts/test/test-api.sh
+
+  # ---- unit and platform: the packages' suites ---------------------------------------------------
+
+  # The library's, the server's (the engine's and the CAD Viewer backend's included) and the
+  # shim's suites, or the test files of them a change itself edits. Run whole they are split
+  # over shards, each taking its share of every suite (CAD_TEST_SHARD); a narrowed selection is
+  # one shard. The first shard also checks the types,
+  # and runs the test files the change itself touches before the suite, so a break in a pull
+  # request's own test is reported in a minute or two.
+  packages-linux:
+    name: packages (Linux ${{ matrix.shard }})
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true'
+    if: needs.changes.outputs.packages == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.linux_shards) }}
     env:
       # Test files at a time: each is a kernel-loading interpreter (~450 MB).
       CAD_TEST_JOBS: "4"
+      # A test file's budget in seconds: the runner names one that takes longer (it never fails
+      # for it), and such a file is split. A shard cannot finish sooner than its slowest file.
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -170,48 +220,63 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           playwright: "false"
           npm: packages/core
-
-      # The engine's stills are drawn by OCCT in an OpenGL context, which on a machine with no
-      # screen is made on an X server's: Xvfb, with Mesa's software GL, and the font the
-      # stills' text is set in.
-      - name: Install the display the engine's stills draw on
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
+          # The display the engine's stills draw on.
+          apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
       - name: Check the packages' types (basic)
+        if: startsWith(matrix.shard, '1/')
         run: |
           for project in cad cad-server cad-mcp; do
             python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
           done
 
-      - name: Run the cadgen package suite
+      - name: Run the tests this change touches first
+        if: startsWith(matrix.shard, '1/') && needs.changes.outputs.changed_tests != ''
         env:
-          TESTS: ${{ needs.changes.outputs.cadgen_tests }}
+          TESTS: ${{ needs.changes.outputs.changed_tests }}
         run: |
           # TESTS is a space-separated list of repo paths: split on purpose.
           # shellcheck disable=SC2086
           xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" \
+            scripts/test/test-python.sh --select cadgen $TESTS
+
+      - name: Run the packages' suites
+        env:
+          TESTS: ${{ needs.changes.outputs.packages_tests }}
+          CAD_TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          # shellcheck disable=SC2086
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" \
             scripts/test/test-python.sh --select cadgen --print-weights $TESTS
 
-  # Why Windows runs at all: four of the last five user-reported bugs were Windows-only
-  # (#260, #266, #267, #269) and every one passed CI -- the coverage existed, the runner
-  # did not. The platform risk is file I/O: locks, paths, subprocesses, file URLs, the
-  # daemon, the viewer backend. That is this suite, and only this suite.
-  cadgen-windows:
-    name: cadgen (Windows)
+  # Why Windows runs at all: four of five user-reported bugs in one stretch were Windows-only
+  # (#260, #266, #267, #269) and every one passed CI -- the coverage existed, the runner did
+  # not; and in the 52 failed jobs read before this layout, 27 were this suite's, most of them
+  # a pull request's own new test (a POSIX path, a line ending, a .cmd shim). The platform risk
+  # is file I/O: locks, paths, subprocesses, file URLs, the daemon, the viewer backend. That is
+  # this suite, and only this suite. The types are checked here too: the checker reads the
+  # win32 branches only on Windows.
+  packages-windows:
+    name: packages (Windows ${{ matrix.shard }})
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true'
+    if: needs.changes.outputs.packages == 'true'
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.windows_shards) }}
     env:
       # Four, the core count. Six was measured: every file slowed by ~40% and the
       # run failed on timeouts -- the spawn-bound tail is not idle CPU to fill.
       CAD_TEST_JOBS: "4"
+      # The same files take about twice as long here as on Linux.
+      CAD_TEST_FILE_BUDGET: "240"
 
     steps:
       - name: Check out repository
@@ -220,41 +285,90 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           playwright: "false"
           npm: packages/core
 
       - name: Check the packages' types (basic)
+        if: startsWith(matrix.shard, '1/')
         run: |
           for project in cad cad-server cad-mcp; do
             python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
           done
         shell: bash
 
+      - name: Run the tests this change touches first
+        if: startsWith(matrix.shard, '1/') && needs.changes.outputs.changed_tests != ''
+        env:
+          TESTS: ${{ needs.changes.outputs.changed_tests }}
+        run: |
+          # shellcheck disable=SC2086
+          scripts/test/test-python.sh --keep-going --select cadgen $TESTS
+        shell: bash
+
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.
-      - name: Run the cadgen package suite
+      - name: Run the packages' suites
         env:
-          TESTS: ${{ needs.changes.outputs.cadgen_tests }}
+          TESTS: ${{ needs.changes.outputs.packages_tests }}
+          CAD_TEST_SHARD: ${{ matrix.shard }}
         run: |
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
 
-  # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
-  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
-  # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
-  # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
-  # Xvfb), and the command through the library's runner of one operation. Only the study's code, its suite and runner, and the modules it reads
-  # through select it (and a full run). Linux only: the stack is the same wheels everywhere, and the solves are
-  # CPU-bound. About 2 minutes: 230 tests in 76 s locally, beside netgen (~10 MB) and ccx (~8 MB).
-  fea:
-    name: fea
+  # The router's copper is the same bits on every OS, or it is not deterministic: its unit files hold one
+  # board's copper to a digest (test_kicad_routing_determinism.py). The packages jobs run them on Linux
+  # (glibc) and Windows (the MSVC runtime); this job runs them on macOS, the third C library, with every
+  # change to the packages. The library alone (numpy; no kernel, no KiCad): under a minute, most of it
+  # the runner and Python starting.
+  routing-macos:
+    name: routing (macOS)
     needs: changes
-    if: needs.changes.outputs.fea == 'true'
+    if: needs.changes.outputs.routing == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        timeout-minutes: 5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the library alone
+        timeout-minutes: 5
+        run: python -m pip install --editable ./packages/cad
+
+      - name: Run the router's unit files
+        env:
+          PYTHON_BIN: python
+        run: scripts/test/test-routing.sh
+
+  # ---- release tier: a full run, or a change to the thing itself ---------------------------------
+
+  # The library's, the server's and the shim's suites on Python 3.13, the packages' floor
+  # (test-floor.sh), in an environment made here with requirements-dev.txt: a call the floor's
+  # standard library lacks parses there and fails only when it runs (one reached the server
+  # once: argparse's suggest_on_error), so only the suites hold the floor. A third run of
+  # suites the packages jobs already run on the Python the server's installations use, for a
+  # rare kind of break: so it runs before a release ships (a VERSION change), nightly and on a
+  # manual run, not on every push. Whole, unsharded: 7 to 14 minutes.
+  packages-floor:
+    name: packages (Python 3.13 floor)
+    needs: changes
+    if: needs.changes.outputs.floor == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -263,65 +377,106 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+          apt: xvfb libgl1-mesa-dri fonts-dejavu-core
+
+      - name: Make an environment on Python 3.13, the packages' floor
+        timeout-minutes: 10
+        run: |
+          uv venv --python 3.13 "$RUNNER_TEMP/floor"
+          uv pip install --python "$RUNNER_TEMP/floor/bin/python" -r requirements-dev.txt
+
+      - name: Run the library's, the server's and the shim's suites on the floor
+        env:
+          PYTHON_BIN: ${{ runner.temp }}/floor/bin/python
+        run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-floor.sh
+
+  # The installer rehearsals: install.sh and install.ps1 on a fresh machine, the way a person
+  # runs them, against the wheel this tree builds (install-linux.yml, install-windows.yml).
+  # Before a release ships (a full run), and on a change to the installers themselves.
+  install-linux:
+    name: install (Linux)
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    uses: ./.github/workflows/install-linux.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  install-windows:
+    name: install (Windows)
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    uses: ./.github/workflows/install-windows.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  # ---- integration: each with what it drives installed -------------------------------------------
+
+  # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
+  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
+  # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
+  # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
+  # Xvfb), and the command through the library's runner of one operation. Linux only: the stack is the same
+  # wheels everywhere, and the solves are CPU-bound. About 2 minutes.
+  fea:
+    name: fea
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           playwright: "false"
           npm: packages/core
+          # A solve draws a picture of each field with the engine's stills.
+          apt: xvfb libgl1-mesa-dri fonts-dejavu-core
 
       # The netgen and calculix integrations' extras, with netgen pinned to the version the accuracy tests'
       # margins were measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the
       # floor. The calculix extra pins cad-ccx (conda-forge's CalculiX, repackaged: earthtojake/ccx), the wheel
       # PyPI has for this runner. A ccx that does not run fails here by name rather than as every solve failing.
       - name: Install the netgen and calculix integrations
+        timeout-minutes: 5
         run: |
           uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen,calculix]" \
             "netgen-mesher==6.2.2608"
           python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
 
-      # A solve draws a picture of each field with the engine's stills, OCCT in an OpenGL context: on a runner with no
-      # screen, Xvfb's, as the cadgen job draws them.
-      - name: Install the display the engine's stills draw on
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
-
       - name: Run the fea suite
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
         shell: bash
 
-  core-js:
-    name: core-js
+  # Blender as a Python module (bpy): the server, on its own Python as everywhere, runs one script that
+  # imports cad, build123d and bpy. `cad run` makes the environment of cad[blender,build123d] for it on a
+  # Python 3.13 uv manages (bpy 5.2.3: about 430 MB from PyPI for Linux, some 20 s, not cached), a worker of
+  # that Python builds its model for the engine, and cad.blender.load loads the GLBs this checkout's cad
+  # exports, plays their clips in both orders and renders a 64x64 still with Cycles on the CPU, then one
+  # with EEVEE through Mesa's software OpenGL. Nothing in it may skip here: its runner fails a run in which
+  # a test did. The suite (tests/python/packages/blender, test-blender.sh) is this job's alone. Linux only:
+  # bpy's wheel is one build per platform and no runner has a GPU. About 2 minutes.
+  blender:
+    name: blender
     needs: changes
-    if: needs.changes.outputs.core_js == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref }}
-
-      - name: Set up dependencies
-        uses: ./.github/actions/setup-deps
-        with:
-          python: "false"
-          playwright: "false"
-          npm: packages/core
-
-      - name: Run shared core tests
-        run: scripts/test/test-js.sh --select core
-
-
-  # The client is platform-agnostic JS, so Linux only, and Node only: the bundled viewer,
-  # served through the real backend, is driven in `packaging`, which builds that bundle
-  # anyway (a second bundle here cost this job one to two minutes).
-  web:
-    name: web
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.bpy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -330,60 +485,34 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
-          python: "false"
-          npm: packages/core packages/ui apps/web
-          # Only the UI's browser specs drive a browser; the client's tests are Node's.
-          ui-browser: ${{ needs.changes.outputs.web_ui }}
+          playwright: "false"
+          npm: none
+          # What bpy's Linux wheel loads from the system and does not carry: X11's client libraries, the
+          # keyboard map, and OpenGL and EGL with Mesa's software drivers (EEVEE draws through them; Cycles
+          # on the CPU needs none). And the display and font the engine's own stills take.
+          apt: >-
+            libx11-6 libxfixes3 libxi6 libxrender1 libxxf86vm1 libxkbcommon0 libsm6 libice6
+            libgl1 libegl1 libglx-mesa0 libegl-mesa0 libgl1-mesa-dri xvfb fonts-dejavu-core
 
-      - name: Run shared UI tests
-        if: needs.changes.outputs.web_ui == 'true'
-        # One browser spec at a time: each renders WebGL in software here (SwiftShader), and
-        # several at once saturate the runner's four cores until clicks time out.
-        env:
-          UI_BROWSER_TEST_CONCURRENCY: "1"
-        run: scripts/test/test-js.sh --select ui
-
-      - name: Run the CAD Viewer client tests
-        if: needs.changes.outputs.web_client == 'true'
-        run: scripts/test/test-js.sh --select web
-
-  # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
-  # build it ships as (a build that would leave anything outside index.html fails).
-  mcp:
-    name: mcp
-    needs: changes
-    if: needs.changes.outputs.mcp == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref }}
-
-      - name: Set up dependencies
-        uses: ./.github/actions/setup-deps
-        with:
-          python: "false"
-          npm: packages/core packages/ui apps/mcp
-
-      - name: Run the CAD app tests and build it
-        run: scripts/test/test-js.sh --select mcp
+      - name: Run the blender suite
+        run: scripts/test/test-blender.sh
 
   # Native KiCad boards through kicode's kicad-cli and KiPy, in the environment of cad[kicad] the server
   # makes, as on a person's computer: DRC, every export, a STEP and mesh round trip of a saved board, and a
-  # board's and a schematic's edit through the headless api-server. Only KiCad's code, its suite and its runner
-  # select it (and a full run): viewing and drawing a board need no KiCad and are the package suites'.
+  # board's and a schematic's edit through the headless api-server. It runs with every change to
+  # the packages, as fea and blender do: viewing and drawing a board need no KiCad and are the package suites'.
   # kicode is ~110 MB from PyPI for Linux (kicode-pcb and kicode-sch), some 10 s; no apt, no PPA.
   kicad:
-    name: KiCad boards
+    name: kicad
     needs: changes
     if: needs.changes.outputs.kicad == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
       - name: Check out repository
@@ -392,6 +521,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           playwright: "false"
@@ -401,89 +531,33 @@ jobs:
         # Makes the environment of cad[kicad] (the checkout's library, editable, and kicode) once, then runs.
         run: scripts/test/test-kicad.sh
 
-  # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
-  # dependencies, so Node is all it installs.
-  api:
-    name: api
-    needs: changes
-    if: needs.changes.outputs.api == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref }}
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-
-      - name: Run the API tests
-        run: scripts/test/test-api.sh
-
-  # The repository's policy gates and the skills' own suites, in two phases. The light
-  # contracts -- policy and skill tests that read only the repository's text -- run on every
-  # change, first, with nothing but Python and Node installed: one that needs more fails
-  # here, whatever else the change selected. Then, only when the change reaches them, the
-  # policy tests and skill suites that load the CAD kernel or the built runtime, after the
-  # full install. Repository properties, so Linux only.
-  # Required, and selected for every change -- so it also stands guard over the selection. If
-  # Changed paths fails, every job it gates is skipped, and GitHub counts a skipped required
-  # check as passing: this one runs then, and fails, so nothing merges untested.
+  # The policy tests and skill suites that load the CAD kernel or the built runtime (the light
+  # ones are `static`'s). Repository properties, so Linux only.
   skills:
     name: skills
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.skills == 'true') }}
+    if: needs.changes.outputs.skills == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       CAD_TEST_JOBS: "4"
+      CAD_TEST_FILE_BUDGET: "120"
 
     steps:
-      - name: Stop when the selection did not run
-        if: needs.changes.result != 'success'
-        run: |
-          echo "Changed paths did not finish, so nothing was selected and no test ran. Re-run the workflow." >&2
-          exit 1
-
       - name: Check out repository
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-
-      - name: Run the light contracts
-        env:
-          POLICY: ${{ needs.changes.outputs.light_policy }}
-          TESTS: ${{ needs.changes.outputs.light_tests }}
-        run: |
-          # Space-separated lists of repo paths: split on purpose.
-          # shellcheck disable=SC2086
-          scripts/test/test-global.sh $POLICY
-          # shellcheck disable=SC2086
-          scripts/test/test-python.sh --select skills $TESTS
-
       - name: Set up dependencies
-        if: needs.changes.outputs.skills_runtime == 'true'
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           playwright: "false"
           npm: packages/core
 
-      - name: Run the policy gates that load cadgen or its runtime
+      # Each runner takes the files the change selected; with none it would run its whole suite.
+      - name: Run the policy gates that load the packages or their runtime
         if: needs.changes.outputs.skills_policy != ''
         env:
           TESTS: ${{ needs.changes.outputs.skills_policy }}
@@ -498,6 +572,119 @@ jobs:
         run: |
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --select skills --print-weights $TESTS
+
+  # ---- unit: the JS workspaces. Platform-agnostic, so Linux only ---------------------------------
+
+  js-core:
+    name: js-core
+    needs: changes
+    if: needs.changes.outputs.core_js == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          playwright: "false"
+          npm: packages/core
+
+      - name: Run shared core tests
+        run: scripts/test/test-js.sh --select core
+
+  # The shared UI, as two jobs of about four minutes: `units` is the dependency checks, the type
+  # check, the Node tests and Vitest; `browser` is the browser specs, each of which drives a
+  # Chromium doing WebGL in software (SwiftShader). Several of those at once saturate the
+  # runner's four cores until clicks time out, so they run one at a time.
+  js-ui:
+    name: js-ui (${{ matrix.part }})
+    needs: changes
+    if: needs.changes.outputs.web_ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [units, browser]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          npm: packages/core packages/ui apps/web
+          # Only the browser specs drive npm Playwright's Chromium.
+          ui-browser: ${{ matrix.part == 'browser' }}
+
+      - name: Run shared UI tests
+        env:
+          UI_BROWSER_TEST_CONCURRENCY: "1"
+        run: scripts/test/test-js.sh --select ui-${{ matrix.part }}
+
+  # The CAD Viewer's client: Node only. The bundled viewer, served through the real backend,
+  # is driven in `viewer-e2e`.
+  js-web:
+    name: js-web
+    needs: changes
+    if: needs.changes.outputs.web_client == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          playwright: "false"
+          npm: packages/core packages/ui apps/web
+
+      - name: Run the CAD Viewer client tests
+        run: scripts/test/test-js.sh --select web
+
+  # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
+  # build it ships as (a build that would leave anything outside index.html fails).
+  js-mcp:
+    name: js-mcp
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          playwright: "false"
+          npm: packages/core packages/ui apps/mcp
+
+      - name: Run the CAD app tests and build it
+        run: scripts/test/test-js.sh --select mcp
 
   # The docs site: lint, the Next build and icon verification, and the animated brand marks.
   docs:
@@ -514,6 +701,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
           python: "false"
@@ -523,17 +711,17 @@ jobs:
       - name: Run documentation checks
         run: scripts/test/test-docs.sh
 
-  # The tree as it ships: the production bundle from clean, the published-tree contract,
-  # the wheel's package data, the CLIs as a user gets them (pip-installed, outside this
-  # repo), and -- when the change reaches it -- that bundle's viewer served through the real
-  # backend and drawn in Chromium. Properties of the tree, not of an operating system, so
-  # Linux only.
+  # ---- integration: what ships, and the viewer it serves -----------------------------------------
+
+  # The tree as it ships: the production bundle from clean, the published-tree contract, the
+  # wheels' package data, and the CLIs as a user gets them (pip-installed, outside this repo).
+  # Properties of the tree, not of an operating system, so Linux only.
   packaging:
     name: packaging
     needs: changes
     if: needs.changes.outputs.packaging == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -542,12 +730,11 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Set up dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/setup-deps
         with:
+          playwright: "false"
           npm: packages/core packages/ui apps/web apps/mcp
-          # The launch smoke test drives Python Playwright's Chromium; the browser gates
-          # drive npm Playwright's.
-          ui-browser: ${{ needs.changes.outputs.web_viewer }}
 
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
@@ -560,6 +747,7 @@ jobs:
       # wheels (the library's, the server's and the shim's) are built and inspected here rather
       # than trusted.
       - name: Check the wheels' contents
+        timeout-minutes: 10
         env:
           CAD_KEEP_WHEEL: "1"
           CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
@@ -573,14 +761,38 @@ jobs:
       - name: Run installed-mode checks against the verified wheels
         run: scripts/test/test-installed.sh --wheels "$RUNNER_TEMP/cadgen-wheel-check"
 
-      # The client the wheel ships, served by the backend from the bundle built above. After
-      # the wheel steps, so what they inspect is the tree as the bundle left it.
+  # The client the wheel ships, served by the real backend and drawn in Chromium: the launch
+  # smoke test, then the format and camera gates. The bundle is built here, not passed from
+  # `packaging`: an artifact would put this job behind that one for longer than the bundle takes.
+  viewer-e2e:
+    name: viewer-e2e
+    needs: changes
+    if: needs.changes.outputs.web_viewer == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/core packages/ui apps/web apps/mcp
+          # The launch smoke test drives Python Playwright's Chromium; the browser gates
+          # drive npm Playwright's.
+          ui-browser: "true"
+
+      - name: Bundle production outputs from clean
+        run: scripts/bundle/bundle.sh --clean
+
       - name: Launch the bundled CAD Viewer through the backend
-        if: needs.changes.outputs.web_viewer == 'true'
         run: scripts/test/test-viewer-launch.sh
 
       - name: Exercise the bundled viewer in Chromium
-        if: needs.changes.outputs.web_viewer == 'true'
         env:
           VIEWER_TEST_DIAGNOSTICS_DIR: ${{ runner.temp }}/viewer-browser
         run: scripts/test/test-viewer-browser.sh
@@ -593,3 +805,53 @@ jobs:
           path: ${{ runner.temp }}/viewer-browser
           if-no-files-found: ignore
           retention-days: 3
+
+  # ---- the gate ----------------------------------------------------------------------------------
+
+  # The one required check. It needs every job above and runs whatever became of them: a job
+  # passes by succeeding or by being skipped for its flag, and the run fails when the selection
+  # did not run (every job it gates was then skipped having tested nothing, and GitHub counts a
+  # skipped check as passing), when a job failed, or when one was cancelled or timed out --
+  # unless a newer push superseded this pull request's run (scripts/github-workflows/ci_gate.py).
+  ci:
+    name: CI
+    needs:
+      - changes
+      - static
+      - packages-linux
+      - packages-windows
+      - routing-macos
+      - packages-floor
+      - install-linux
+      - install-windows
+      - fea
+      - blender
+      - kicad
+      - skills
+      - js-core
+      - js-ui
+      - js-web
+      - js-mcp
+      - docs
+      - packaging
+      - viewer-e2e
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Every job that ran passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/github-workflows/ci_gate.py

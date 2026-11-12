@@ -5,20 +5,39 @@ implements, then its file (or, for ``model``, a model's document id) -- ``cad xb
 arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
 robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
 others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
-location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
+wrote; ``dfm``, ``interference``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a
+severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the
+type.
+
+A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
+share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
+process (``cad._internal.interference``); this command holds no kernel and needs none.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
-check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
-<id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
-environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A B-rep
+check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
+``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
+a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
+mesh's (STL, 3MF, GLB) the trimesh integration's, for printing (molding, CNC and sheet are judged on exact
+geometry: a mesh asked for one is refused with the check to run instead). A B-rep's is the engine's: asked
+from here, measured in the kernel process that holds the document. A DXF's and a mesh's run here when this
+environment holds its integration, else in the environment that does -- for build123d the installation's
+base, for trimesh the one the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``) --
+and a call refused there is the command line's mistake as it is here (exit 2). The check's exit status is
+its state (``_verdict``): 0 ok, 1 failed (an error, or with ``--strict`` a warning), 3 not checked -- nothing
+was judged, or not all of it: a source that does not read or holds no solid, a family that could not be
+measured, an engine that stopped or failed, a check that crashed -- and 2 the command line's mistake, as ever.
+A B-rep
 type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
 the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
 DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
-CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. A KiCad
+CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` sweeps each joint of the
+document's mechanism against its parts' surfaces and says where each stops (``cad step ranges arm.step``,
+``cad model ranges <id> --step 0.5 --json``), writing nothing; it runs here when this environment holds the kernel,
+else in the installation's base, which does. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
-environment of ``cad[kicad]``.
+environment of ``cad[kicad]``. (A MuJoCo model's file is no document type: its check is the mujoco
+integration's, ``cad mujoco check``, ``cad_server.cli.integrations``.)
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -39,6 +58,7 @@ import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from cad.registry import DOCUMENT_TYPES, by_extension, help_text
 
@@ -127,7 +147,7 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
     return run
 
 
-# --- a 3D type's manufacturing check: the trimesh integration's ---------------------------------------
+# --- a 3D type's manufacturing check, and a DXF's: build123d's for a B-rep and a DXF, trimesh's for a mesh ---
 
 
 def pull_value(argv: list[str]) -> list[str]:
@@ -145,33 +165,225 @@ def pull_value(argv: list[str]) -> list[str]:
     return out
 
 
+#: The exit status of a manufacturing check that did not judge what it was asked to (``_verdict``).
+NOT_CHECKED = 3
+# What a check's failure is not checked for, by the type that raised it, where it carries no ``reason`` of
+# its own (the engine's errors do, from the release that gave them one).
+_UNCHECKED = (("cad.engine.api", "Stopped", "engine_stopped"), ("cad.engine.api", "EngineError", "engine_failed"))
+
+
+def _mistake(failure: Any, *, prog: str, as_json: bool) -> int:
+    """The command line's mistake said by a manufacturing check, and its exit status (2): as every command
+    says one (``cli_errors.write``), its ``--json`` document with ``"status": "usage"`` -- so each answer of the
+    command, a result's, a check that did not run to its end and this, holds its state in the one field."""
+    import json
+
+    from cad_server._internal import cli_errors
+
+    if not as_json:
+        return cli_errors.write(failure, prog=prog, as_json=False)
+    print(json.dumps({**cli_errors.document(failure), "status": "usage"}, separators=(",", ":")), flush=True)
+    return failure.status
+
+
+def _stated(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """A manufacturing check's ``parser``, whose ``--json`` document of a command line it refuses -- an option
+    it does not take, a source of another type, a file that is not there -- says its state too (``_mistake``)."""
+    said = parser.fail  # type: ignore[attr-defined]
+
+    def fail(failure: Any, *, as_json: bool) -> None:
+        if as_json:
+            parser.exit(_mistake(failure, prog=parser.prog, as_json=True))
+        said(failure, as_json=False)
+
+    parser.fail = fail  # type: ignore[attr-defined]
+    return parser
+
+
+def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: str) -> int:
+    """A manufacturing check run and said, and its exit status, which is its state: 0 ``ok``, 1 ``failed``
+    (the part: an error finding, or with ``--strict`` a warning), 3 ``not_checked`` -- the result's own
+    (a source that does not read, a family not measured), or the check did not run to its end: the engine
+    stopped, cancelled it or lost its worker, its environment gave no answer, it crashed. Never 1 for those:
+    1 says the part fails. Under ``--json`` such a failure is the contract's document with ``"status":
+    "not_checked"`` and its ``reason`` -- the engine's own (``error.reason``) where it gives one --; without,
+    one line on stderr (``<prog>: NOT CHECKED (<reason>): <its words>``: no part failed, so nothing there says
+    FAILED, and no frame of the command's is named) and ``NOT CHECKED <source>: <reason>`` on stdout. The
+    command line's mistake (a value refused by name, a document the engine does not hold) stays exit 2, its
+    ``--json`` document's ``status`` ``usage`` (``_mistake``)."""
+    import json
+
+    from cad_server._internal import cli_errors
+    from cad_server._internal.cli_from_function import _report_crash, result_lines, result_payload
+
+    try:
+        result = invoke()
+    except Exception as error:  # noqa: BLE001 - the CLI boundary: report, do not traceback
+        _report_crash(error)
+        failure = cli_errors.classify(error)
+        if failure.status == cli_errors.USAGE:
+            return _mistake(failure, prog=prog, as_json=as_json)
+        reason = getattr(error, "reason", None)
+        if not isinstance(reason, str) or not reason:
+            reason = next((code for module, name, code in _UNCHECKED
+                           if any(kind.__module__ == module and kind.__name__ == name for kind in type(error).__mro__)),
+                          failure.reason)
+        if as_json:
+            print(json.dumps({**cli_errors.document(failure), "status": "not_checked", "reason": reason},
+                             separators=(",", ":")), flush=True)
+        else:
+            # What stopped it, in its own words; a failure of no class the command knows says its type too.
+            unknown = reason == "failed" and not type(error).__module__.startswith("cad_server.")
+            words = f"{type(error).__name__}: {failure}" if unknown else str(failure)
+            print(f"{prog}: NOT CHECKED ({reason}): {words}", file=sys.stderr, flush=True)
+            print(f"NOT CHECKED {source}: {reason}", flush=True)
+        return NOT_CHECKED
+    if as_json:
+        print(json.dumps(result_payload(result), separators=(",", ":")))
+    else:
+        for line in result_lines(result):
+            print(line)
+    return {"ok": 0, "failed": 1}.get(getattr(result, "status", ""), NOT_CHECKED)
+
+
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> dfm --process molding|printing``: the library's manufacturing check (``cad.<type>.dfm``),
-    run here when this environment holds the trimesh integration, else in the environment that holds it
-    (``cad_server._internal.integration_env``), its options refused here first, before one is made."""
+    """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
+    type's -- cnc, sheet, molding or printing for a B-rep, printing for a mesh, sheet for a DXF.
+    A B-rep's (a model, an xbf, a STEP) is asked of the engine, which measures it in the kernel process that
+    holds the document (``cad.engine.api.check``). Where the engine measures nothing (none to reach, another
+    release's), and for a DXF and a mesh, it runs here when this environment holds the type's integration
+    (build123d for a B-rep and a DXF, trimesh for a mesh), else in the environment that holds it
+    (``cad_server._internal.integration_env``), its options refused here first, before one is made. An xbf or a model given no ``--process`` is checked for the one
+    its parts declare: the options every process shares are refused here, the rest in the integration once
+    it has read the document, a refusal there said as one here (``integration_env.Refused``: exit 2). A STEP
+    keeps no process, so one given none is refused here."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad_server._internal import integration_env
 
         argv = pull_value(argv)
+        refused = _exact_only(document_type, argv)
+        if refused is not None:
+            # Molding, CNC and sheet on a mesh: refused with the reason and the check to run instead, whatever else
+            # is given -- another process's flags (``--pull``, ``--axes``) are not this mistake's to name.
+            from cad._internal.manufacturing import options
+            from cad._internal.refused import ArgumentRefused
+            from cad_server._internal import cli_errors
+
+            try:
+                options(document_type, refused, {})
+            except ArgumentRefused as error:
+                return _mistake(cli_errors.classify(error), prog=prog, as_json="--json" in argv)
         target = (f"cad.{document_type}", "dfm")
-        integration = "trimesh"
+        integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
         if integration_env.carries(integration):
-            return _checked(document_type, target, argv, prog)
+            return _checked_here(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
 
     return run
 
 
+def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentParser:
+    """``cad <type> interference``'s parser, an ADAPTER's: ``--fit`` repeats and takes two values, a pair
+    no signature derives a flag for (``cad_server._internal.cli_from_function``), and ``--pose`` is read as
+    snapshot's is."""
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    entry = DOCUMENT_TYPES[document_type]
+    parser = command_parser(prog, description=entry.operation("interference").summary)
+    parser.add_argument("document", metavar="ID" if not entry.has_file else "FILE",
+                        help="the model's document id (cad run SCRIPT.py prints it)" if not entry.has_file
+                        else f"the {entry.suffix} file")
+    parser.add_argument("--pose", action="append", default=[], metavar="POSE",
+                        help="a pose to check at beside as built, as snapshot's --pose takes one: a mechanism "
+                             "state's name, a configuration sequence at a time of it (walk@0.6), or joint and "
+                             "coupling values as JSON ('{\"elbow\": 45}'). Repeatable: the check takes the poses "
+                             "it is given, and chooses none")
+    parser.add_argument("--fit", action="append", default=[], nargs=2, metavar=("A", "B"),
+                        help="two parts meant to share volume (a press-fit pin, a bearing in its bore), each a "
+                             "ref or a glob: their overlap is listed as a fit and is no overlap to fix. Repeatable")
+    parser.add_argument("--min-volume", type=float, metavar="MM3",
+                        help="a shared volume at or below this is none (default 0.001: the rounding along a face "
+                             "where two parts touch)")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="Print the result as one JSON line on stdout instead of human lines.")
+    return parser
+
+
+def _interference(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> interference``: the library's interference check (``cad.<type>.interference``), asked of
+    the engine, which measures it in a checks process; this command holds no kernel and needs none. Its
+    ``--fit`` takes two values a time, which no signature derives a flag for, so
+    its parser is an adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
+    3 none found but a pair unmeasured, 2 an option refused by name."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+        args = _typed(_interference_parser(document_type, prog), document_type, "interference",
+                      "document").parse_args(argv)
+
+        def checked() -> Any:
+            import importlib
+
+            from cad._internal.refused import ArgumentRefused
+            from cad.engine import snapshot
+
+            # A pose as the command line writes one, read as snapshot's --pose is (a name, NAME@SECONDS, or JSON).
+            try:
+                poses = [snapshot.parse_pose(pose) for pose in args.pose]
+            except snapshot.SnapshotRefused as refused:
+                raise ArgumentRefused(str(refused)) from None
+            function = getattr(importlib.import_module(f"cad.{document_type}"), "interference")
+            return function(args.document, poses=poses, fits=[tuple(fit) for fit in args.fit],
+                            min_volume=args.min_volume)
+
+        return _verdict(checked, prog=prog, as_json=bool(getattr(args, JSON_FLAG_DEST)), source=str(args.document))
+
+    return run
+
+
+def _checked_here(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
+    """The check run in this process, which holds its integration: the library's function, called as the
+    command calls it (``_command``: its refusals name the flags), its exit status the check's (``_verdict``)."""
+    from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                        _verb, generated_parser)
+
+    parser = _stated(_present(_typed(generated_parser(target, prog=prog), document_type, target[1],
+                                     _first_parameter(target))))
+    parsed = parser.parse_args(argv)
+    function = _verb(target)
+    positional, keywords = _call_arguments(function, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+    return _verdict(lambda: function(*positional, _command=True, **keywords), prog=prog,
+                    as_json=bool(getattr(parsed, JSON_FLAG_DEST)), source=str(positional[0]))
+
+
+def _exact_only(document_type: str, argv: list[str]) -> str | None:
+    """The process ``--process`` names (its last, as argparse reads it) where it is one a mesh type is never checked
+    for (molding, CNC and sheet are judged on exact geometry), else None -- a B-rep's, a DXF's, a help asked for."""
+    from cad._internal.manufacturing import BREP_TYPES, CUT_TYPES, PROCESSES, processes_for
+
+    if document_type in (*BREP_TYPES, *CUT_TYPES) or "-h" in argv or "--help" in argv:
+        return None
+    named = None
+    for index, token in enumerate(argv):
+        if token == "--process" and index + 1 < len(argv):
+            named = argv[index + 1]
+        elif token.startswith("--process="):
+            named = token.partition("=")[2]
+    return named if named in PROCESSES and named not in processes_for(document_type) else None
+
+
 def _checked_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str],
                        prog: str) -> int:
-    from cad._internal.manufacturing import options
+    from cad._internal.manufacturing import BREP_TYPES, options, through_engine
     from cad.results import CheckFinding, CheckResult
     from cad_server._internal import integration_env
     from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
-                                                        _verb, emit, generated_parser)
+                                                        _verb, generated_parser)
 
-    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
+    parser = _stated(_typed(generated_parser(target, prog=prog), document_type, target[1], "source"))
     parsed = parser.parse_args(argv)
     positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
 
@@ -179,15 +391,27 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
         print(f"{prog}: {line}", file=sys.stderr, flush=True)
 
     def measured() -> CheckResult:
-        given = {name: value for name, value in keywords.items() if name not in ("process", "candidates")}
+        given = {name: value for name, value in keywords.items() if name not in ("process", "candidates", "strict")}
+        # No --process on a model or an xbf: the shared options are refused here, the process's in the
+        # integration, which reads the document, takes its parts' declared process and resolves the rest for it;
+        # what it refuses comes back with its reason (``integration_env.Refused``), the command line's mistake.
         options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
+        if document_type in BREP_TYPES:
+            # A B-rep's check is the engine's, measured where it holds the document. Only where it measured
+            # nothing -- none to reach, another release's -- is it this environment's to send elsewhere.
+            found = through_engine(document_type, positional[0], keywords.get("process"), given,
+                                   bool(keywords.get("candidates")), bool(keywords.get("strict")))
+            if found is not None:
+                return found
         python = integration_env.environment(integration, said)
-        found = integration_env.call(python, document_type, target[1], [str(value) for value in positional], keywords)
+        found = integration_env.call(python, document_type, target[1], [str(value) for value in positional],
+                                     {**keywords, "_command": True})
         return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
                            findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
-                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {},
+                           status=str(found.get("status") or ""), reason=found.get("reason"))
 
-    return emit(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
+    return _verdict(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), source=str(positional[0]))
 
 
 # --- a B-rep type's stress study: read by the kernel, meshed by netgen, solved by CalculiX ------------------
@@ -242,6 +466,49 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
 
     return emit(studied, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
                 verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=True)
+
+
+# --- the joint stops of a document with a mechanism: read, meshed and swept by the kernel ---------------------
+
+
+def _ranges(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> ranges SOURCE [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops (``cad.<type>.ranges``),
+    run here when this environment holds the kernel, else in the installation's base, which does
+    (``cad_server._internal.integration_env``), its options refused here first."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad._internal.ranges import INTEGRATION, RESOLUTION, StopsResult, options
+        from cad.results import CheckFinding, CheckResult
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                            _verb, emit, generated_parser, run_cli)
+
+        target = (f"cad.{document_type}", "ranges")
+        parser = _typed(generated_parser(target, prog=prog), document_type, "ranges", "source")
+        if integration_env.carries(INTEGRATION):
+            return run_cli(_verb(target), argv, prog=prog, parser=parser)
+        parsed = parser.parse_args(argv)
+        positional, keywords = _call_arguments(_verb(target), parsed,
+                                               explicit_keywords=_explicit_option_dests(parser, argv))
+
+        def said(line: str) -> None:
+            print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+        def swept() -> CheckResult:
+            options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", RESOLUTION),
+                    joint=tuple(keywords.get("joint") or ()))
+            python = integration_env.environment(INTEGRATION, said)
+            sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
+                       for value in positional]
+            found = integration_env.call(python, document_type, "ranges", sources, keywords)
+            return StopsResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                               findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                               summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+        return emit(swept, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
+                    verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=False)
+
+    return run
 
 
 # --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
@@ -453,7 +720,9 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
         parser.add_argument("--sheet", metavar="PATH",
                             help="the sheet to draw, by its path: / (the root, the default), /Power/; the same as "
                                  "--display '{\"sheet\": PATH}'")
-        parser.add_argument("--border", action="store_true", help="draw the page's edge (off by default)")
+        parser.add_argument("--border", action="store_true",
+                            help="draw KiCad's page as printed: the page's edge and the drawing sheet's frame (off by "
+                                 "default; the title block is drawn unless --display '{\"title\": false}')")
         return parser
     descriptions = {
         "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of "
@@ -509,6 +778,29 @@ def _schematic_inspect(argv: list[str], prog: str) -> int:
     return _answer(as_json, found, lines)
 
 
+def _display_object(given: str | None, prog: str, as_json: bool, shape: str, *, mode: bool = False) -> dict | int:
+    """A snapshot's ``--display`` as the object a flag of the type's folds into: its JSON, or the JSON file it
+    names, or (``mode``: a board's) a mode's name; a failure's exit status when it is none of them. Refused as
+    the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON that does not
+    read, are the command line's, said before anything renders."""
+    import json
+
+    given = (given or "").strip()
+    if mode and given and not given.startswith("{") and not given.endswith(".json"):
+        return {"mode": given}
+    if given.endswith(".json") and not Path(given).expanduser().is_file():
+        return _failed(as_json, prog, f"--display {given}: no such file", "not_found")
+    try:
+        if given.endswith(".json"):
+            given = Path(given).expanduser().read_text(encoding="utf-8")
+        display = json.loads(given) if given else {}
+    except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
+        return _failed(as_json, prog, f"--display is not JSON: {error}", "invalid_argument")
+    if not isinstance(display, dict):
+        return _failed(as_json, prog, f"--display is {shape}", "invalid_argument")
+    return display
+
+
 def _schematic_snapshot(argv: list[str], prog: str) -> int:
     """``cad kicad_sch snapshot``: the engine's verb, ``--sheet`` and ``--border`` folded into its display."""
     import json
@@ -519,22 +811,75 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
     sheet, border = args.sheet, args.border
     del args.sheet, args.border
     if sheet is not None or border:
-        given = args.display
-        # Refused as the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON
-        # that does not read, are the command line's, said before anything renders.
-        if given and given.strip().endswith(".json") and not Path(given.strip()).expanduser().is_file():
-            return _failed(bool(args.json), prog, f"--display {given.strip()}: no such file", "not_found")
-        try:
-            if given and given.strip().endswith(".json"):
-                given = Path(given.strip()).expanduser().read_text(encoding="utf-8")
-            display = json.loads(given) if given else {}
-        except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
-            return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
-        if not isinstance(display, dict):
-            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border}",
-                           "invalid_argument")
+        display = _display_object(args.display, prog, bool(args.json),
+                                  "a schematic's display object: {sheet, border, title}")
+        if isinstance(display, int):
+            return display
         display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
         args.display = json.dumps(display)
+    return answered(VERBS["snapshot"][2], args, prog)
+
+
+def _board_snapshot_parser(prog: str) -> argparse.ArgumentParser:
+    from cad_server.engine.cli import parser_for
+
+    parser = parser_for("snapshot", prog, document_type="kicad_pcb")
+    parser.add_argument("--window", metavar="X0,Y0,X1,Y1",
+                        help="draw only this box of the board, filling the picture: two opposite corners in the "
+                             "board's millimetres as KiCad shows them (y down; the box board.area(x0, y0, x1, y1) and "
+                             "#@x10y5..x20y15 name), e.g. --window 40,60,80,90 (--window=-10,5,20,30 when the first is negative). With --width alone the height follows "
+                             "the box's shape (and the width with --height alone); the same as --display "
+                             "'{\"window\": [X0, Y0, X1, Y1]}'. Takes no --camera")
+    return parser
+
+
+def window_value(text: str) -> list[float]:
+    """``--window X0,Y0,X1,Y1``: four numbers, the box in the board's millimetres; ``ValueError`` saying the form."""
+    import math
+
+    parts = [part.strip() for part in str(text).split(",")]
+    try:
+        numbers = [float(part) for part in parts] if len(parts) == 4 else None
+    except ValueError:
+        numbers = None
+    if numbers is None or not all(math.isfinite(number) for number in numbers):
+        raise ValueError(f"--window is X0,Y0,X1,Y1, four numbers in the board's millimetres (y down), e.g. "
+                         f"40,60,80,90; not {text!r}")
+    if numbers[0] == numbers[2] or numbers[1] == numbers[3]:
+        raise ValueError(f"--window {text} has no area: its corners share an x or a y")
+    return numbers
+
+
+def _board_snapshot(argv: list[str], prog: str) -> int:
+    """``cad kicad_pcb snapshot``: the engine's verb, ``--window`` folded into its display, and the picture's
+    other side, when one is given alone, following the window's shape."""
+    import json
+
+    from cad_server.engine.cli import VERBS, answered
+
+    args = _typed(_board_snapshot_parser(prog), "kicad_pcb", "snapshot", "document").parse_args(argv)
+    window = args.window
+    del args.window
+    if window is not None:
+        try:
+            box = window_value(window)
+        except ValueError as error:
+            return _failed(bool(args.json), prog, str(error), "invalid_argument")
+        if args.camera is not None:
+            return _failed(bool(args.json), prog, "--window frames the still, so it takes no --camera: give one or "
+                                                  "the other", "invalid_argument")
+        display = _display_object(args.display, prog, bool(args.json),
+                                  "a board's mode or its display object: {mode, side, layers, ..., window}", mode=True)
+        if isinstance(display, int):
+            return display
+        display["window"] = box
+        args.display = json.dumps(display)
+        across, down = abs(box[2] - box[0]), abs(box[3] - box[1])
+        if args.size_profile is None and (args.width is None) != (args.height is None):
+            if args.height is None:
+                args.height = max(16, round(args.width * down / across))
+            else:
+                args.width = max(16, round(args.height * across / down))
     return answered(VERBS["snapshot"][2], args, prog)
 
 
@@ -543,6 +888,7 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
     ("kicad_pcb", "export"): _kicad_export("kicad_pcb"),
     ("kicad_pcb", "inspect"): _board_inspect,
+    ("kicad_pcb", "snapshot"): _board_snapshot,
     ("kicad_sch", "erc"): _kicad_rules("kicad_sch", "erc"),
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
@@ -558,10 +904,14 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
         elif _name in _ENGINE_SOURCES:
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
-        elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
+        elif _name == "dfm" and getattr(_entry.operation(_name), "family", None) == "manufacturing":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
+        elif _name == "interference":
+            OPERATIONS[(_entry.id, _name)] = _interference(_entry.id)
         elif _name == "solve" and getattr(_entry.operation(_name), "integration", None) == "calculix":
             OPERATIONS[(_entry.id, _name)] = _solve(_entry.id)
+        elif _name == "ranges":
+            OPERATIONS[(_entry.id, _name)] = _ranges(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
         else:
@@ -580,6 +930,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return generated_parser((f"cad.{document_type}", operation), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
+    if (document_type, operation) == ("kicad_pcb", "snapshot"):
+        return _board_snapshot_parser(prog)
     if document_type == "kicad_sch":
         return _schematic_parser(prog, operation)
     if operation in _ENGINE_SOURCES:
@@ -588,6 +940,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return parser_for(operation, prog, document_type=document_type)
     if document_type == "urdf":
         return _urdf_parser(prog)
+    if operation == "interference":
+        return _interference_parser(document_type, prog)
     from cad_server._internal.cli_from_function import generated_parser
 
     return generated_parser((f"cad.{document_type}", operation), prog=prog)
@@ -646,8 +1000,14 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
                       "wrong_type")
     if found is None:
+        from cad.registry import INTEGRATIONS
+
+        # A tool's own file that is no document type (a MuJoCo model's .xml): its integration's command takes it.
+        owner = next((item for item in INTEGRATIONS.values() if suffix.lower() in item.files), None)
         raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
-                      f"{' or '.join(entry.extensions)}", "wrong_type")
+                      f"{' or '.join(entry.extensions)}"
+                      + (f" (cad {owner.name} {owner.operation_names[0]} takes {' and '.join(owner.files)})"
+                         if owner is not None else ""), "wrong_type")
     if not os.path.exists(os.path.expanduser(given)):
         raise Failure(f"no such file: {source}", "not_found")
 

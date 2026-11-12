@@ -383,8 +383,8 @@ def _installation_port(host: str, remembered: int | None, token: str,
     except PortHeld as refusal:
         server = _roll(host, first, token, listen)
         return server, {"source": "rolled", "because": refusal.who if first == default else _who(default),
-                        "notice": f"{first} is held by {refusal.who}; the engine serves on {server.port} "
-                                  "and keeps it"}
+                        "notice": f"the engine serves on port {server.port} and keeps it for its links: {first} "
+                                  f"is in use by {refusal.who}"}
     if first == default:
         return server, {"source": "default"}
     return server, {"source": "rolled", "because": _who(default)}
@@ -629,6 +629,24 @@ class Daemon:
         from cad_server.engine.models import Models
 
         self.models = Models(self)
+        from cad_server.engine import registry
+        from cad_server.engine.checks import Checks, Pool, pool_size
+        from cad_server.engine.checks_runner import Limits, Runner
+
+        # The manufacturing checks (``checks_runner``): their kept results, in memory and in the cache folder,
+        # and the checks processes that measure them, a check's limits said where a setting is no number.
+        size, said = pool_size()
+        limits = Limits.of_environment(self.supervisor.memory)
+        for line in (said, *limits.notes):
+            if line:
+                print(f"cad: {line}", file=sys.stderr, flush=True)
+        self.checks = Runner(
+            Checks(folder=self._checks_folder), Pool(self.supervisor, size, said),
+            lease=lambda slot: self.supervisor.lease("checks", slot, {}),
+            release=self.supervisor.release, version=self._check_version, read=self._check_document,
+            durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits)
+        # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go.
+        registry.FORGOTTEN.append(self.checks.store.deleted)
 
     def touch(self) -> None:
         self.last = time.monotonic()
@@ -662,9 +680,10 @@ class Daemon:
 
     def made_base(self) -> None:
         """The base made here (``base.Making``): each service's standby, when standbys are enabled,
-        stands in it now."""
+        stands in it now, and the checks processes of the base before it are retired (``Pool.rebased``)."""
         if self.stopping.is_set():
             return
+        self.checks.pool.rebased()
         for service in SERVICES:
             if service.standby is not None:
                 self.supervisor.stand(service.name, self.environment())
@@ -694,6 +713,23 @@ class Daemon:
             return
         error = making.follow(lambda line: send({"log": line}))
         send({"ok": True, "base": True} if error is None else {"failed": error, "base": True})
+
+    @staticmethod
+    def integration(request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """The environment of one of the library's integrations, asked by a process that lacks it
+        (``{"op": "integration", "integration": "coacd"}``: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``): made
+        here on first need when it is not, as the ``cad`` command's integrations are
+        (``integration_env.made``), each line of its making a ``log`` frame, then ``{"ok": true, "python"}``, or
+        ``{"failed"}`` in one line."""
+        from cad_server._internal import integration_env
+
+        try:
+            python = integration_env.made(str(request.get("integration") or ""),
+                                          lambda line: send({"log": line}))
+        except integration_env.Failed as failed:
+            send({"failed": str(failed)})
+            return
+        send({"ok": True, "python": python})
 
     @staticmethod
     def environment() -> dict[str, str]:
@@ -768,12 +804,18 @@ class Daemon:
         build: no document is marked failed by it (the worker's progress frame is its last
         build's, not this request's)."""
         self.models.register(worker, answer)
+        done = answer.get("done")
+        reports = done.get("reports") if isinstance(done, dict) else done
+        for root in reports if isinstance(reports, list) else []:
+            # Each document the run built: a check of it asked at a generation now gone stops at once
+            # (``checks_runner.Runner.built``); a run that changed nothing kept its generation, and stops none.
+            for report in [root, *(root.get("child_models") or {}).values()]:
+                if report.get("ok") and report.get("id"):
+                    self.checks.built(str(report["id"]))
         server = self.server
         if server is None or (verb and "failed" in answer):
             return
         outcomes: dict[str, Any] = {}
-        done = answer.get("done")
-        reports = done.get("reports") if isinstance(done, dict) else done
         for report in reports if isinstance(reports, list) else []:
             frame = report.get("progress") or {}
             failed = None if report.get("ok") else {"model": report.get("model"), "error": report.get("error"),
@@ -1005,6 +1047,74 @@ class Daemon:
                              f"took it whole; run `{self.models.command(ident)}` to build it again")
         return {"document": ident, "name": doc.structure.get("name") or ident}, doc.xbf
 
+    def _checks_folder(self) -> Any:
+        """The engine's registry, in whose cache folder the kept checks' results are written under its lock of
+        their document (``checks.Disk``), or None: no cache folder."""
+        held = self.models.cache.registry()
+        return None if held is None or held.cache is None else held
+
+    def _check_version(self, ident: str) -> str | None:
+        """Model document ``ident``'s generation, as its record has it -- one held on disk alone taken up
+        first; None for no record."""
+        self.models.adopt(ident)
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        return None if record is None else str(record["version"])
+
+    def _durable(self, ident: str, version: str | None) -> tuple[str, str] | None:
+        """Model document ``ident``'s version that outlives the engine, while its generation is ``version``: its
+        revision, its build closure's key (``models.revision``), with its id; None for a build with no key (a
+        token of its own), or another generation."""
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        if record is None or version is None or str(record["version"]) != version:
+            return None
+        from cad_server.engine.models import durable
+
+        revision = record.get("revision")
+        return (ident, revision) if durable(revision) else None
+
+    def _check_document(self, ident: str) -> tuple[dict[str, Any], bytes]:
+        """Document ``ident`` as a checks process reads it (``checks_runner.Runner``'s ``read``): a file's path,
+        or a model's whole document as xbf bytes (``{"document", "name"}``) -- the server's or the cache's, else
+        the bytes its worker's ``result`` gives (protocol 1's, which every release answers): one short request of
+        that worker, as its drain asks, so a check never runs there. A worker retired meanwhile is no refusal:
+        the document is read once more, from the server or the cache that holds it now. ``ValueError``
+        (``Models.not_held``) for a document the engine does not hold."""
+        for attempt in (1, 2):
+            source, payload = self.document(ident)
+            if "script" not in source:
+                return source, payload
+            with self.models.lock:
+                record = self.models.records.get(ident)
+            data = self.models.held_bytes(ident, str(record["version"])) if record is not None else None
+            if data is not None:
+                return {"document": ident, "name": source["function"]}, data
+            python_key = source.get("python_key")
+            key = canonical(source.get("via") or source["script"])
+            owner = self.supervisor.live("worker", key, python_key)
+            try:
+                if owner is None:
+                    raise self.models.not_held(ident)
+                worker = self.lease(key, owner.environment, None, python=owner.python, python_key=python_key)
+                try:
+                    answer = worker.request({"id": 1, "op": "result", "script": source["script"],
+                                             "name": source["function"], "whole": True}, lambda _message: None)
+                except Gone as error:
+                    raise ValueError(str(error)) from None
+                finally:
+                    self.release(worker)
+                if "failed" in answer:
+                    raise ValueError(str(answer["failed"]))
+            except ValueError:
+                if attempt == 2:
+                    raise
+                continue
+            done, returned = answer["done"], answer.get("payload", b"")
+            start = sum(int(size) for _key, size in done["shapes"])
+            return {"document": ident, "name": source["function"]}, returned[start:start + int(done.get("xbf") or 0)]
+        raise self.models.not_held(ident)
+
     def _routed(self, request: dict[str, Any]) -> tuple[str, str | None, str | None]:
         """The worker a request goes to (its key), the folder that worker starts in, and the key of the
         Python it runs: that of the caller's one a held document's worker was started in (``via``'s
@@ -1149,6 +1259,9 @@ class Daemon:
         if op == "delete":
             # ``cad delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
             deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
+            for ident in request.get("ids") or []:
+                self.checks.store.forget(f"model:{ident}")
+                self.checks.built(str(ident))  # a check of it measures a document that is gone: stopped
             send({"ok": True, "deleted": [found for found in deleted if found is not None]})
             return
         if op == "model_info":
@@ -1192,6 +1305,12 @@ class Daemon:
             send({"ok": True, "state": state, **held,
                   **({"rebuild": lost["rebuild"], "error": lost["error"]} if lost else {})})
             return
+        if op == "export" and request.get("check") is not None:
+            # A manufacturing check (``checks_runner``): no worker's, so it counts toward no drain.
+            try:
+                return self.checks.check(request, send, request.get("_gone"))
+            finally:
+                self.touch()
         payload = b""
         if op == "export" and "id" in (request.get("source") or {}):
             ident = str(request["source"]["id"])
@@ -1235,6 +1354,8 @@ class Daemon:
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
                      "expected": request.get("expected"), "original": request.get("original"),
                      **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
+                     **({"angle": request["angle"]} if request.get("angle") is not None else {}),
+                     **({"zero": request["zero"]} if request.get("zero") is not None else {}),
                      **({"display": shown} if shown else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
@@ -1266,7 +1387,9 @@ class Daemon:
             # document was written in its caller's Python, and is read in the server's.
             try:
                 self.contracted(request)
-                send(self.models.hand_over(request))
+                handed = self.models.hand_over(request)
+                self.checks.built(str(request.get("id")))  # a check of the shape it replaces stops at once
+                send(handed)
             except ValueError as error:
                 send(refused(error))
             return
@@ -1296,6 +1419,8 @@ class Daemon:
                             if ahead is not None and send in ahead[0].followers:
                                 ahead[0].followers.remove(send)
                         fresh = worker.requests == 0
+                        # Why a script that had a worker starts cold: the last one's retirement, said in the run's line.
+                        gone = self.supervisor.retirement("script", worker.label) if fresh else None
                         order = {"id": 1, "op": "build", "script": script, "functions": request.get("functions"),
                                  "cwd": request.get("cwd"), "verify": bool(request.get("verify")),
                                  "profile": bool(request.get("profile")), "run": request.get("run")}
@@ -1322,6 +1447,10 @@ class Daemon:
                                     answer["header"] = interpreter["header"]
                             else:
                                 answer["python"] = python
+                        if gone is not None:
+                            for report in answer.get("done") or []:
+                                if isinstance(report, dict):
+                                    report["cold"] = gone
                         if ahead is not None:
                             # The build it waited for, the one its own replays: began how long before it asked.
                             for report in answer.get("done") or []:
@@ -1411,6 +1540,8 @@ class Daemon:
             send(self.status())
         elif op == "base":
             self.base(request, send)
+        elif op == "integration":
+            self.integration(request, send)
         elif op == "pid":
             send({"ok": True, "pid": os.getpid()})  # who answers: a client that started a daemon asks
         elif op == "stop":
@@ -1501,6 +1632,7 @@ class Daemon:
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
                 "cache": self.models.cache.status(),
+                "checks": self.checks.status(),
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
@@ -1567,6 +1699,8 @@ class Daemon:
                     pass
             while self.working() and not self.stopping.is_set():
                 time.sleep(0.05)
+            # A check holds nothing of anyone's: none is waited for, and its callers are told to run it again.
+            self.checks.halt()
             if then is not None:
                 try:
                     then()
@@ -1578,6 +1712,11 @@ class Daemon:
         threading.Thread(target=wait, name="cad-drain", daemon=True).start()
 
     def shutdown(self) -> None:
+        from cad_server.engine import registry
+
+        self.checks.halt()  # every check answered that the engine stopped, its checks process killed
+        if self.checks.store.deleted in registry.FORGOTTEN:
+            registry.FORGOTTEN.remove(self.checks.store.deleted)
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
@@ -1638,7 +1777,42 @@ def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> int | N
     return protocol
 
 
-def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOCOL) -> None:
+def _watched(reader: Any, connection: socket.socket | None = None) -> threading.Event:
+    """Set once the client of a connection has hung up -- its end of file, which a client that sent its request
+    and reads its answer meets only by going -- read by a thread of its own on a duplicate of the connection
+    (``connection``'s socket on Windows, else the reader's descriptor), so the connection's own close never
+    meets it."""
+    gone = threading.Event()
+    try:
+        if connection is not None:
+            own: Any = connection.dup()
+            read = lambda: own.recv(1)  # noqa: E731
+            close = own.close
+        else:
+            fd = os.dup(reader.fileno())
+            read = lambda: os.read(fd, 1)  # noqa: E731
+            close = lambda: os.close(fd)  # noqa: E731
+    except (OSError, AttributeError, ValueError):
+        return gone  # no descriptor to watch: never said gone
+
+    def watch() -> None:
+        try:
+            if not read():
+                gone.set()
+        except OSError:
+            gone.set()
+        finally:
+            try:
+                close()
+            except OSError:
+                pass
+
+    threading.Thread(target=watch, name="cad-check-caller", daemon=True).start()
+    return gone
+
+
+def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOCOL,
+           connection: socket.socket | None = None) -> None:
     """One connection: its request line, and every answer line the request sends. A hold keeps the
     connection until its client goes. ``protocol``: the door protocol the client's hello spoke,
     carried for the request's handling once a later protocol number changes what it may say."""
@@ -1664,6 +1838,11 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOC
     if request.get("op") == "hold":
         daemon.hold(reader, send, request.get("host"), request.get("holder"))
         return
+    request.pop("_gone", None)
+    if request.get("op") == "export" and request.get("check") is not None:
+        # A manufacturing check's caller is watched for hanging up: a check no one waits for gives up its checks
+        # process to one someone does (``checks_runner.Runner.reap``).
+        request["_gone"] = _watched(reader, connection)
     try:
         daemon.handle(request, send)
     except ValueError as error:  # a request refused, in its words
@@ -1698,7 +1877,7 @@ def _serve_connection(daemon: Daemon, connection: socket.socket) -> None:
             protocol = _admitted(daemon, connection, stream)
             if protocol is None:
                 return
-            _serve(daemon, stream, stream, protocol)
+            _serve(daemon, stream, stream, protocol, connection)
         except (OSError, ValueError):
             pass
         finally:

@@ -19,7 +19,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
 its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
@@ -63,7 +64,11 @@ saying why. A board not there yet is made by KiCad, with its project,
 and saved. `kicad_sch.edit` does the same for a schematic ([schematic](references/schematic.md#edit-it));
 the two of one project, one inside the other, share one KiCad. Run the script with `cad run board.py`,
 which gives it the `kicad` extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a
-`kicad-cli` that `CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import
+`kicad-cli` that `CAD_KICAD_CLI` names without one is refused up front, before any server starts. That
+server listens on a local socket, which a shell sandbox that refuses sockets (an agent app's default, Codex's
+among them) does not allow: the edit then stops at once, saying so, and the script must run outside the
+sandbox (ask for the unsandboxed or escalated run); inspecting, DRC, exports and snapshots run inside it.
+KiCad's first start from a new environment can take a minute, which the edit says while it waits. Import
 KiPy's names from `kicode` (`from kicode.proto.common.types import KIID`, `from kicode.util.units import
 from_mm`), never from `kipy`: the two cannot share a process. Saving writes the file in the nightly's
 format: one from an older KiCad is upgraded, which the run says, and that older KiCad can no longer open
@@ -101,8 +106,10 @@ ERC and look at each sheet ([schematic](references/schematic.md)) before laying 
 to it after. For creation or structured edits read [native files](references/board-api.md). For parts and
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
-group at a time ([placement](references/placement.md) says in what order and where), route
-octolinear by hand (never an autorouter) with widths for each net's current, and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
+group at a time ([placement](references/placement.md) says in what order and where), route the nets
+whose path matters by hand and direct the router (`cad.kicad.route` in the edit, with the plan you
+give it; never a third-party autorouter) through the rest, octolinear, with widths for each net's
+current, and check each step with `cad kicad_pcb drc`, the copper stills and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
 footprint-local positions and rotations must be transformed into the board frame. Use a net's
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
@@ -209,8 +216,8 @@ the report then names every error they went ahead with.
 
 Show the person each model you create or change, and any model or file they ask to see. If your
 tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once: a
-model's page is the `view:` line its run prints, and a file's is the `url` that
+absolute path; its description says the rest. Otherwise give the person the page's link once, to
+open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
 `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
 download: give its path. Never screenshot the viewer to check your own work; review with
 `cad <type> snapshot`. If it fails to launch, say so.
@@ -220,7 +227,8 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 The board view supports layers, selection, Measure, annotations and Quick Edit, in 2D and in 3D.
 Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or
 graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
-drag names an area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\
+drag draws a box that takes anything it touches. A box that takes nothing names an area, a box on the layer the person works on
+(`#F.Cu@x10y5..x20y15`). The panel at the left (⌘\ or Ctrl+\
 hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
 schematic blocks their footprints record (by kind on a board that records none): a block picks every
 part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
@@ -265,13 +273,20 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"F.Cu","others":"hidden"}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/u1.png --window 108,42,132,66 --width 1600
 ```
+
+`--window X0,Y0,X1,Y1` draws only that box of the board, filling the picture: two opposite corners in
+KiCad's millimetres (y down, the box `board.area(x0, y0, x1, y1)` names), as close as a fan-out or a
+finding needs (`--window=-10,5,20,30` when the first is negative). With `--width` alone the height
+follows the box's shape. It goes with any display (`--display copper`), and takes no `--camera`.
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
 at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
-and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
+and use stroke lettering, KiCad's text markup (`~{RESET}`, `IO_{3}`, `x^{2}`) drawn as KiCad draws it on
+silkscreen, fab and copper text, fields and net names; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
 exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
 solid inferred from the 2D plot.
 
@@ -282,17 +297,22 @@ selection, Measure, annotations and Quick Edit, and its panel: one search over *
 and, for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
-junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
+junction or no-connect, as its Selection Filter ticks them, and a drag draws a box that picks anything
+it touches.
 **Parts** lists the parts by the sheet they are placed on, each with its pins, and **Nets** the nets
 with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
 `#wire:<uuid>`; [schematic](references/schematic.md) says what each names). The schematic follows the
-app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
-drawing sheet or title block is drawn. ERC findings are not drawn: run `cad kicad_sch erc`. The file
+app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. Each
+sheet is on KiCad's default drawing sheet, as its schematic editor shows it: the frame with its zone
+numbers and letters, and the title block filled from that sheet's own title block (a project's own
+`.kicad_wks` is not drawn; the default stands in). ERC findings are not drawn: run `cad kicad_sch erc`. The file
 menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
-a Quick Edit packet carries the sheet the view showed. A still is always on KiCad's light paper,
-whatever the viewer's theme:
+a Quick Edit packet carries the sheet the view showed, on the whole drawing sheet as the viewer showed it (`border`). A still is always on KiCad's light paper,
+whatever the viewer's theme, with KiCad's default title block (`"title": false` leaves it out; `border`
+adds the page's edge and frame) and text markup (`~{RESET}`, `IO_{3}`) drawn as KiCad draws it:
 
 ```bash
 cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","border":true}'
+cad kicad_sch snapshot board.kicad_sch tmp/power-plain.png --sheet /Power/ --display '{"title":false}'
 ```

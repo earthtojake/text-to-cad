@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DRAWING_SCHEMA_VERSION, prepareDrawing } from "./drawing.js";
-import { entityAt, flattenPath, snapAt } from "./entities.js";
+import { entitiesInBox, entityAt, flattenPath, snapAt } from "./entities.js";
 import { planCamera, planProjection, planTransform } from "./planView.js";
 import { modelToScreen } from "./transform.js";
 
@@ -39,6 +39,16 @@ test("a pick finds the entity whose line-work is within reach, a block's lines a
   assert.equal(entityAt(drawable, [50, 59.8], 1), "30");
   assert.equal(entityAt(drawable, [85, 84], 1), "32");
   assert.equal(entityAt(drawable, [70, 20], 1), "");
+});
+
+test("a box takes every entity whose drawing it touches, even in part, and nothing on a hidden layer", () => {
+  const drawable = drawing();
+  assert.deepEqual(entitiesInBox(drawable, [10, 5, 20, 15]), ["2F", "31"], "the line across it, and the hatch under it");
+  assert.deepEqual(entitiesInBox(drawable, [58, 49, 62, 51]), ["30"], "the arc's end");
+  assert.deepEqual(entitiesInBox(drawable, [45, 45, 55, 55]), [], "inside an arc that does not close");
+  assert.deepEqual(entitiesInBox(drawable, [84, 82, 86, 90]), ["32"]);
+  assert.deepEqual(entitiesInBox(drawable, [84, 82, 86, 90], { hiddenLayers: new Set(["CENTRE"]) }), []);
+  assert.deepEqual(entitiesInBox(null, [0, 0, 1, 1]), []);
 });
 
 test("the lines over a hatch are picked before the hatch, and inside it the hatch is", () => {

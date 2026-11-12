@@ -2,9 +2,10 @@
 ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
-    cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
+    cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
+        model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
+        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
@@ -55,7 +56,7 @@ def _source_help(document_type: str | None, generic: str) -> str:
 
 
 def _meshes(document_type: str | None) -> bool:
-    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance: nothing is meshed)."""
+    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance or angle: nothing is meshed)."""
     if document_type is None:
         return False
     from cad.registry import DOCUMENT_TYPES
@@ -73,15 +74,24 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
         export.add_argument("--json", action="store_true", help="print what was written as JSON")
         return
     export.add_argument("destinations", nargs="+", metavar="DST",
-                        help=".xbf (from a STEP), .step, .glb, .stl, .3mf or .dxf (of a planar document): the "
-                             "document as its code built it")
-    from cad.engine.export import MIN_TOLERANCE
+                        help=".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml "
+                             "(MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ "
+                             "beside it): the document as its code built it")
+    from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
-                        help=f"mesh an .stl or a .3mf to within this absolute tolerance, in mm (at least "
+                        help=f"mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least "
                              f"{MIN_TOLERANCE:g}), where it is finer than the viewer's quarter per cent of a part: "
-                             "for a print whose fits are finer")
-    export.add_argument("--json", action="store_true", help="print what was written as JSON")
+                             "for a print whose fits are finer, or a picture whose curves are")
+    export.add_argument("--angle", type=float, metavar="DEG",
+                        help=f"mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees ("
+                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments")
+    export.add_argument("--zero", metavar="STATE",
+                        help="take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each "
+                             "joint's value there its zero, its limits and the other states around it (as built "
+                             "without it)")
+    export.add_argument("--json", action="store_true",
+                        help="print what was written as JSON, a robot description's with what it holds (robot)")
 
 
 def _serve_arguments(serve: argparse.ArgumentParser) -> None:
@@ -161,15 +171,19 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                         help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
                              "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
                              "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
-                             "dimensions, at its output settings (padding, tightFrame, transparent, renderScale, "
-                             "sizeProfile); the other flags override every job")
+                             "dimensions, at its output settings (padding, tightFrame, transparent, background, "
+                             "renderScale, sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
-                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
-                                          "the display JSON object (mode, grid, camera, clip, exploded, "
+                                          "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS "
+                                          "(the edges of one class alone: feature, tangent or seam; edges=feature "
+                                          "draws no line where faces meet smoothly or a face closes on itself), or "
+                                          "the display JSON object (mode, grid, camera, clip, exploded, edges, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
-                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks}; "
-                                          "a KiCad schematic {sheet, border}. Every snapshot is drawn light")
+                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
+                                          "window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; "
+                                          "a KiCad schematic {sheet, border, title} (title: KiCad's title block, on unless "
+                                          "false; border: the page's edge and frame). Every snapshot is drawn light")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
     parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
                                          "a camera JSON object (its position, target and orthographicHalfHeight in "
@@ -179,7 +193,12 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--size-profile", choices=sorted(snapshot.SIZE_PROFILES))
-    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), or joint and coupling "
+    parser.add_argument("--preview", action="store_true",
+                        help="the viewer's Preview in place of a display mode: the model lit in a studio, in its "
+                             "materials, on a floor with its shadow, in perspective (a job's: \"preview\": true)")
+    parser.add_argument("--pose", help="a configuration's name (a robot's SRDF group state), a configuration "
+                                       "sequence at a time of it (walk@0.6: where the viewer's playbar shows the "
+                                       "mechanism then), or joint and coupling "
                                        "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
                                        "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
                                        "built without it (a robot where the viewer opens it)")
@@ -209,7 +228,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     try:
         # The verb as a function (``api.snapshot``), which checks the flags as ``snapshot`` does.
         report = api.snapshot(Path(args.document), args.out, display=args.display, camera=args.camera, grid=args.grid,
-                              pose=args.pose, width=args.width, height=args.height,
+                              preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                               size_profile=args.size_profile, annotation=args.annotation,
                               measurements=args.measurements).report
     except snapshot.SnapshotRefused as error:
@@ -217,7 +236,10 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     except ConnectionError:
         raise  # the engine not reached: its one line, as every verb says it (``answered``)
     except Exception as error:  # noqa: BLE001 - a failed render is the command's answer
-        raise Failed(f"{type(error).__name__}: {error}") from None
+        drawn = _drawn_elsewhere(error, args, prog)
+        if drawn is None:
+            raise Failed(f"{type(error).__name__}: {error}") from None
+        report = drawn["report"]
     if args.json:
         print(json.dumps(report))
     else:
@@ -227,6 +249,57 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     return 0
 
 
+def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) -> dict[str, Any] | None:
+    """A picture the engine could not draw for want of an OpenGL context (``snapshot.no_gl``: on Linux, a daemon
+    with no X display), drawn instead by the installation's base -- the environment that holds the kernel --
+    run from this process, so on this process's display (``xvfb-run cad urdf snapshot ...``): the same snapshot,
+    which there, the engine failing it again, is drawn by that process itself (``snapshot.drawable_here``). None
+    where it is no such failure, where this process carries the kernel (the library drew here already, or could
+    not), or where it has no display to lend (Linux with no ``DISPLAY``): the engine's failure stands. What it
+    drew, as ``api.Drawn``'s fields (``path``, ``width``, ``height``, ``report``); its own failure is said as
+    the command's (``Failed``)."""
+    from cad.engine import snapshot
+
+    if not snapshot.no_gl(error) or not _lends_display():
+        return None
+    from cad_server._internal import integration_env
+
+    if integration_env.carries("build123d"):
+        return None
+    from cad.engine.ids import is_id
+    from cad.registry import type_of
+
+    document = str(args.document) if is_id(str(args.document)) else str(Path(args.document).expanduser().resolve())
+    entry = None if is_id(document) else type_of(document)
+    document_type = "model" if is_id(document) else entry.id if entry is not None else None
+    if document_type is None:
+        return None
+    options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "preview": bool(args.preview),
+               "pose": args.pose,
+               "width": args.width, "height": args.height, "size_profile": args.size_profile,
+               "annotation": args.annotation, "measurements": args.measurements}
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    said("the engine could not make an OpenGL context to draw in; drawing the picture with this command's display")
+    try:
+        python = integration_env.environment("build123d", said)
+        # Run in this folder, with this environment: its relative paths and its DISPLAY are the base's process's.
+        return integration_env.call(python, document_type, "snapshot", [document, str(args.out)],
+                                    {name: value for name, value in options.items() if value not in (None, False)})
+    except integration_env.Failed as failed:
+        raise Failed(str(failed)) from None
+
+
+def _lends_display() -> bool:
+    """Whether this process has a display a process it starts draws on: on Linux an X display (``DISPLAY``);
+    elsewhere the session's own, always."""
+    from cad.engine.render.context import platform
+
+    return platform() != "linux" or bool(os.environ.get("DISPLAY"))
+
+
 def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
     """``cad model snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
     memory of the worker holding it (``api.snapshot``); nothing is built."""
@@ -234,13 +307,16 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
     try:
         drawn = api.snapshot(args.document, args.out, display=args.display, camera=args.camera, grid=args.grid,
-                             pose=args.pose, width=args.width, height=args.height,
+                             preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                              size_profile=args.size_profile, annotation=args.annotation,
                              measurements=args.measurements)
     except (snapshot.SnapshotRefused, ValueError) as error:
         raise _refusal(error) from None
     except api.EngineError as error:
-        raise Failed(str(error)) from None
+        found = _drawn_elsewhere(error, args, prog)
+        if found is None:
+            raise Failed(str(error)) from None
+        drawn = api.Drawn(Path(found["path"]), found["width"], found["height"], found["report"])
     told_state(args.document, "drawing")
     if args.json:
         print(json.dumps(drawn.report))
@@ -263,7 +339,7 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
     started = time.perf_counter()
     try:
         drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 pose=args.pose, width=args.width, height=args.height,
+                                 preview=args.preview, pose=args.pose, width=args.width, height=args.height,
                                  size_profile=args.size_profile, annotation=args.annotation,
                                  measurements=args.measurements)
     except snapshot.SnapshotRefused as error:
@@ -297,7 +373,7 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
 def parser_for(verb: str, prog: str | None = None, *, document_type: str | None = None) -> argparse.ArgumentParser:
     """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...): for
     ``document_type``, its source said as that type's (a model's id, or a file of its kind), and a mesh's
-    export without ``--tolerance``."""
+    export without ``--tolerance`` or ``--angle``."""
     help_text, arguments, _runner = VERBS[verb]
     if document_type is not None and verb in ("export", "snapshot", "inspect"):
         from cad.registry import DOCUMENT_TYPES
@@ -413,6 +489,7 @@ def _export(args: argparse.Namespace, prog: str) -> int:
 
     try:
         written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
+                             angle=getattr(args, "angle", None), zero=getattr(args, "zero", None),
                              log=lambda text: print(text, file=sys.stderr))
     except (ExportRefused, ValueError) as error:
         raise _refusal(error) from None
@@ -422,7 +499,8 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     if args.json:
         print(json.dumps({"ok": True, "source": str(key(args.source)),
                           "files": [{"path": str(row.path), "kind": row.kind, "bytes": row.bytes, "seconds": row.seconds,
-                                     "written": row.written} for row in written]}))
+                                     "written": row.written, **({"robot": row.robot} if row.robot else {})}
+                                    for row in written]}))
         return 0
     _said.written(written, args.destinations)
     return 0
@@ -510,9 +588,23 @@ def _joint_value(value: Any) -> str:
     return "0" if text in ("-0", "") else text
 
 
+#: The most parts a line of the summary names before it counts the rest (``--json`` names every one).
+_PARTS_SHOWN = 4
+
+
+def _parts(paths: list[str]) -> str:
+    """Parts named on a summary's line: each, up to ``_PARTS_SHOWN``; past it, how many, the first few and how
+    many more -- a vendor STEP's hundreds of screws would bury the screen."""
+    if len(paths) <= _PARTS_SHOWN:
+        return ", ".join(paths)
+    shown = _PARTS_SHOWN - 1
+    return f"{len(paths)} parts: {', '.join(paths[:shown])} and {len(paths) - shown} more"
+
+
 def summary_text(summary: dict[str, Any]) -> str:
     """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
-    holds, its lists one item per line under it; a fact it has none of says so. A structure
+    holds, its lists one item per line under it; a fact it has none of says so. A line naming parts
+    names a few and counts the rest (``_parts``; the JSON names every one). A structure
     (``--query structure``) has no measured line: no bounds, volume or masses."""
     import time
 
@@ -542,22 +634,40 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append("bounds      none: no geometry")
         lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
         if summary.get("inverted"):  # a solid inside out: its faces point inward, its volume below zero
-            lines.append(f"inside out  {', '.join(summary['inverted'])}: a solid whose faces point inward")
+            lines.append(f"inside out  {_parts(summary['inverted'])}: a solid whose faces point inward")
     if summary["materials"]:
         mass = summary.get("mass")
         lines.append("materials" + (f"   {_said.number(mass)} kg in all" if mass is not None else ""))
         for row in summary["materials"]:
             if not measured:
-                lines.append(f"  {row['name']}: {', '.join(row['parts'])}")
+                lines.append(f"  {row['name']}: {_parts(row['parts'])}")
                 continue
             weight = f"{_said.number(row['mass'])} kg" if row["mass"] is not None else "no density"
-            lines.append(f"  {row['name']}: {weight}, {', '.join(row['parts'])}")
+            lines.append(f"  {row['name']}: {weight}, {_parts(row['parts'])}")
         assigned = {part for row in summary["materials"] for part in row["parts"]}
         missing = [part for part in summary["unweighed"] if part not in assigned]
         if missing:
-            lines.append(f"  no material: {', '.join(missing)}")
+            lines.append(f"  no material: {_parts(missing)}")
     else:
         lines.append("materials   none set")
+    declared = summary.get("declared")
+    if declared:  # what the model declares a part or an assembly to weigh, as the robot description weighs it
+        if declared.get("refused"):
+            lines.append(f"declared    refused: {declared['refused']}")
+        elif declared.get("mass") is not None:
+            lines.append(f"declared    {_said.number(declared['declared'])} kg of {_said.number(declared['mass'])} kg "
+                         f"in all; {_said.number(declared['computed'])} kg computed at the materials' densities")
+        for row in declared.get("masses") or []:
+            lines.append(f"  mass {row['path'] or row['name']}: {_said.number(row['grams'])} g")
+        for row in declared.get("pointMasses") or []:
+            lines.append(f"  point mass {row['name']} on {row['part']}: {_said.number(row['grams'])} g")
+        if declared.get("scaled"):
+            lines.append(f"  scaled to a declared mass: {_parts(declared['scaled'])}")
+    if summary.get("untextured"):  # texture maps on a mesh with no UVs: drawn as the scalar look
+        from cad.engine.document import untextured_maps
+
+        lines.append("textures    not drawn yet: these parts wear their material's scalar look")
+        lines.extend(f"  {row['part']}: {untextured_maps(row['materials'])}" for row in summary["untextured"])
 
     def listed(title: str, rows: list[str]) -> None:
         if not rows:
@@ -893,12 +1003,22 @@ def status_text(answer: dict[str, Any]) -> str:
     if answer.get("waiting"):
         waiting = answer["waiting"]
         lines.append(f"  waiting  {waiting} build{'' if waiting == 1 else 's'}, first come first served")
+    checks = answer.get("checks") or {}
+    for row in checks.get("running") or []:
+        # A manufacturing check under way: what, of which document, where, for how long, and whether anyone waits.
+        named = Path(str(row["file"])).name if row.get("file") else str(row.get("document"))
+        where = "waiting for its process" if row.get("waiting") else f"in {row.get('where')}"
+        lines.append(f"  check    {row.get('process') or 'its declared process'} of {named} {where} · "
+                     f"{_span(row.get('seconds'))}" + ("" if row.get("attached", True) else " · its caller gone"))
+    if checks.get("pool", {}).get("note"):
+        lines.append(f"  checks   {checks['pool']['note']}")
     retired = answer.get("retired") or []
     if retired:
         now = time.time()
         # A worker's retirement names its script; a render process's its document's renderer.
         lines.append("retired: " + " · ".join(
-            (f"{Path(str(row['script'])).name}" if "script" in row else f"{Path(str(row.get('document'))).name}'s renderer")
+            (f"{Path(str(row['script'])).name}" if "script" in row else "the checks process" if "process" in row
+             else f"{Path(str(row.get('document'))).name}'s renderer")
             + f" ({row['reason']}) {_span(now - row['at'])} ago" for row in retired))
     serving = answer.get("serving")
     if serving:
@@ -949,8 +1069,10 @@ def status_text(answer: dict[str, Any]) -> str:
 
 # Each verb: its help, the function adding its arguments to a parser, and the function running it.
 VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, str], int]]] = {
-    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF or xbf files, by suffix; a GLB carries the "
-               "document's motions as clips, a DXF draws a planar one", _export_arguments, _export),
+    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF or URDF files, by suffix; a GLB "
+               "carries the document's motions as clips, a DXF draws a planar one, an MJCF and a URDF are its robot "
+               "description",
+               _export_arguments, _export),
     "snapshot": ("draw a document or a file the viewer opens as the CAD Viewer does, into a PNG", _snapshot_arguments,
                  _snapshot),
     "serve": ("serve a document over HTTP and print its URL", _serve_arguments, _serve),

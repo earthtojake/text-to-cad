@@ -128,7 +128,7 @@ class BaseTest(unittest.TestCase):
     def test_the_engine_makes_its_base_on_first_need_and_a_follower_hears_its_lines(self) -> None:
         # The engine that finds no base makes it when asked (``Making``), outside the sandbox an agent's command
         # runs in: whoever asks for it follows the making from its first line. That a kernel process's start asks
-        # for it, and the engine's own start does not, is test_daemon's.
+        # for it, and the engine's own start does not, is test_daemon_server's.
         fake, making = Fake(), base.Making()
         heard: list[str] = []
         with self.made(fake), mock.patch.object(base.Installation, "here", return_value=self.installation), \

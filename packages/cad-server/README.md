@@ -9,7 +9,9 @@ Models are written against the library, `cad`, which the server imports without
 its CAD kernel: the kernel lives in the environments the server makes, on first need, for models and
 its own kernel processes, `cad[build123d]` at the server's own release. `cad run` runs a program as
 `uv run` does, with cad pinned at the server's release and the integrations its imports use; a tool's
-own command an integration declares (`cad run kicad-cli …`) gets that integration and runs headless.
+own command an integration declares (`cad run kicad-cli …`) gets that integration and runs headless; a
+script that imports `bpy` gets the blender integration, its environment made on Python 3.13, the one
+Blender is built for.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 
@@ -91,7 +93,7 @@ library's registry names it (`cad.registry`): `cad model export <id>`, `cad xbf 
 the engine holds, by its document id, with no file; every other type takes a file of its own. `export`,
 `snapshot` and `inspect` are the engine's verbs, shared by every type that has them (`snapshot` draws every
 file the viewer opens, a DXF or a robot among them); every other operation is named for what it does --
-`dfm`, `solve`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
+`dfm`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
 `--json`); `cad <type>
 --help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
 type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A KiCad board's
@@ -113,11 +115,28 @@ meshed by the `netgen` integration and solved by the `calculix` integration's cc
 process where its environment holds the kernel, netgen and ccx, else in the environment of
 `cad[build123d,calculix,netgen]` the engine makes once. `cad run ccx ARGS` runs the same ccx on a deck of the
 person's own.
-A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
-molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
-support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
-in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the
-engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`). `cad serve`,
+`cad model|xbf|step ranges SRC [--step S] [--clearance MM] [--joint NAME]` sweeps each joint of the
+document's mechanism alone against its parts and says where each stops and which parts meet, writing nothing (the
+library's `cad.<type>.ranges`), run in this process where its environment holds the kernel, else in the
+installation's base.
+A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf
+dfm SRC --process cnc|sheet|molding|printing`, and `cad dxf dfm FILE --process sheet` of a cut file) is
+the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
+STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
+`trimesh` integration, and judged against general rules, each cited (no shop's limits), every measurement
+and every rule's outcome under `--json`. A B-rep's (a model, a STEP, an xbf) is the engine's: measured in one
+of its checks processes -- a file read once, a model from the bytes the engine holds, never in the model's worker
+-- and kept by the document's version, beside the engine's cache, so the same check of an unchanged
+document measures nothing, after a restart too. Where the
+engine measures nothing (none to reach, another release's), and for a mesh and a DXF, it runs in this process where
+its environment holds the type's integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
+run` makes a program's: `_internal/integration_env.py`).
+An MJCF, a MuJoCo model's file, is no document type: cad writes one (an export's `.xml`) and never shows
+one. `cad mujoco check MODEL.xml [--strict]` is the `mujoco` integration's operation on it (`cad
+<integration> <operation> FILE`, `cli/integrations.py`): MuJoCo's own compiler, what it refuses or warns
+of, the model-health checks, what the model collides as and its contact excludes, run in this process where
+its environment holds mujoco, else in the environment of `cad[mujoco]` the engine makes once; `cad run
+mujoco-studio --model MODEL.xml` shows the person the model in MuJoCo Studio. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the
 integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's
@@ -149,6 +168,9 @@ doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`
 `cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
+
+**Since 0.11.8** `cad <type> inspect`'s text names at most four parts on a line of materials, then the first
+three and how many more; its `--json` still names every part, so a program reads that.
 
 The plugin every agent app gets is one folder, `plugin` in the state folder, which the server writes
 from its own copy of the plugin (`_runtime/plugin`: each host's manifest, its config for the CAD app's

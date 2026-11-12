@@ -123,7 +123,27 @@ class OpenInRoutesTest(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.opener.reset_mock()
                 self.assertEqual(self.post(payload), (204, None))
-                self.opener.assert_called_once_with(*expected)
+                self.opener.assert_called_once_with(*expected, app_id=payload["app"])
+
+    def test_a_glb_the_build_wrote_opens_in_blender_by_its_id(self) -> None:
+        # The opener is told the app's id: Blender is started with its import script, not on the file.
+        glb = Path(self.fixture.root) / "bracket.glb"
+        glb.write_bytes(b"glTF")
+        self.model["files"].append(str(glb))
+        [target] = [item for item in self.get(MODEL)[1]["targets"] if item["target"] == "export:glb"]
+        self.assertEqual((target["kind"], target["apps"]), ("glb", [entry("blender")]))
+        self.assertEqual(self.post({"id": MODEL, "target": "export:glb", "app": "blender"}), (204, None))
+        self.opener.assert_called_once_with(str(glb), FOUND["blender"], app_id="blender")
+
+    def test_solidworks_is_offered_for_a_step_alone_and_opens_it(self) -> None:
+        # SolidWorks imports a STEP a person saves as a part: text-to-cad writes no SLDPRT.
+        self.found["solidworks"] = "C:/Program Files/SOLIDWORKS Corp/SOLIDWORKS/SLDWORKS.exe"
+        targets = {item["target"]: item["apps"] for item in self.get(MODEL)[1]["targets"]}
+        self.assertEqual(targets["export:step"], [entry("solidworks"), entry("freecad"), entry("bambu")])
+        self.assertNotIn(entry("solidworks"), targets["export:stl"])
+        self.assertEqual(self.post({"id": MODEL, "target": "export:step", "app": "solidworks"}), (204, None))
+        self.opener.assert_called_once_with(str(self.step), self.found["solidworks"], app_id="solidworks")
+        self.assertEqual(self.post({"id": MODEL, "target": "export:stl", "app": "solidworks"})[0], 400)
 
     def kicad_file(self, name: str, stamp: int) -> str:
         """A KiCad file of the format ``stamp``, as a document: its id."""
@@ -155,7 +175,7 @@ class OpenInRoutesTest(unittest.TestCase):
         self.assertIn("KiCad", answer["hint"])
         self.opener.assert_not_called()
         self.assertEqual(self.post({"id": ident, "target": "source", "app": "kicad-nightly"}), (204, None))
-        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(ident)), NIGHTLY)
+        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(ident)), NIGHTLY, app_id="kicad-nightly")
         # A refused KiCad is not among what an app not offered is told to name instead, nor is the default.
         status, answer = self.post({"id": ident, "target": "source", "app": "vscode"})
         self.assertEqual(status, 400)
@@ -168,7 +188,7 @@ class OpenInRoutesTest(unittest.TestCase):
         self.assertEqual(self.listed(current)["apps"], [{"id": "kicad", "name": "KiCad 9.0.6"},
                                                         {"id": "kicad-nightly", "name": "KiCad 10.99 nightly"}])
         self.assertEqual(self.post({"id": current, "target": "source", "app": "kicad"}), (204, None))
-        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(current)), STABLE)
+        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(current)), STABLE, app_id="kicad")
         self.opener.reset_mock()
         newer = self.kicad_file("newer.kicad_sch", 20261108)  # past both, the nightly built two days before it
         self.assertEqual(self.listed(newer)["apps"], [{"id": "kicad", "name": "KiCad 9.0.6", "refuses": "newer"},
@@ -238,7 +258,7 @@ class OpenInRoutesTest(unittest.TestCase):
         body = json.dumps({"id": MODEL, "target": "export:step", "app": "bambu"}).encode()
         reply = tunnel.serve(method="POST", url="http://cad.invalid/api/v1/local/open", headers=WRITE, body=body)
         self.assertEqual(reply["status"], 204)
-        self.opener.assert_called_once_with(str(self.step), FOUND["bambu"])
+        self.opener.assert_called_once_with(str(self.step), FOUND["bambu"], app_id="bambu")
 
 
 class OpenInCredentialsTest(unittest.TestCase):

@@ -152,7 +152,7 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   expect(pane.querySelector('[data-schematic-row="part:R1"]')).toBeNull();
   // Its Export is KiCad's: the PDF, the SVGs, the netlist and the BOM.
   expect(exportChoices({ file: '/models/divider.kicad_sch', planar: false }).map(choice => choice.format)).toEqual(['pdf', 'svg', 'netlist', 'bom']);
-  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: true });
   view.dispose();
 });
 
@@ -260,17 +260,65 @@ it('a press picks what is under it and reveals its row; a net from the Nets ligh
   view.dispose();
 });
 
-it("Select's filter is KiCad's boxes, each its name alone; without Pins a press on a pin inside its body takes the symbol", async () => {
+it("a plain drag under Select draws the shared box, taking what it touches whichever way it is drawn; Shift at its release adds; a Shift drag pans", async () => {
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const controller = await controllerOf(view);
+  await zoomIn(pane);
+  const canvas = canvasOf(pane);
+  const drag = (from: [number, number], to: [number, number], init: Record<string, unknown> = {}, release: Record<string, unknown> = {}) => {
+    fireEvent.pointerDown(canvas, { ...point(from), ...init });
+    fireEvent.pointerMove(canvas, { ...point([(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]), ...init });
+    fireEvent.pointerMove(canvas, { ...point(to), ...init });
+    fireEvent.pointerUp(canvas, { ...point(to), ...init, ...release });
+  };
+  // A sliver drawn right to left across the MID wire's middle: the wire it touches.
+  drag([124.5, 65.5], [123.5, 64]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#wire:5c4e0000-0000-4000-8000-0000000000a1']));
+  // Shift at the release adds the MID label's text it touches.
+  drag([115.6, 63.8], [114.8, 63], {}, { shiftKey: true });
+  await waitFor(() => expect(selected(controller)).toEqual(['#wire:5c4e0000-0000-4000-8000-0000000000a1', '#label:5c4e0000-0000-4000-8000-0000000000a2']));
+  // Over empty paper it takes nothing, in place of it all.
+  drag([20, 20], [30, 30]);
+  await waitFor(() => expect(selected(controller)).toEqual([]));
+  // The same sliver left to right takes the same wire: the box takes what it touches, whichever way it is drawn.
+  drag([123.5, 64], [124.5, 65.5]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#wire:5c4e0000-0000-4000-8000-0000000000a1']));
+  // One round the whole sheet takes R1 and the wire.
+  drag([0, 0], [400, 300]);
+  await waitFor(() => expect(selected(controller)).toEqual(expect.arrayContaining(['#R1', '#wire:5c4e0000-0000-4000-8000-0000000000a1'])));
+  // A drag with Shift held from its press pans, and draws no box.
+  const before = { ...frames.at(-1)! };
+  drag([20, 20], [30, 30], { shiftKey: true });
+  expect(pane.querySelector('[data-box-select]')).toBeNull();
+  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(before.offsetX));
+  view.dispose();
+});
+
+it("Select's filter is KiCad's boxes in one row's submenu, each its name alone; without Pins a press on a pin inside its body takes the symbol", async () => {
   const user = userEvent.setup();
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
   const controller = await controllerOf(view);
-  await user.click(within(pane).getByRole('button', { name: 'Selection filter: everything' }));
-  const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="Selection filter"]'); expect(found).not.toBeNull(); return found!; });
-  const boxes = within(menu).getAllByRole('menuitemcheckbox');
-  expect(boxes.map(box => box.textContent)).toEqual(['All items', 'Symbols', 'Pins', 'Wires', 'Labels', 'Sheets', 'Other items']);
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Pins' }));
+  await user.click(within(pane).getByRole('button', { name: 'Filter: everything' }));
+  // One row, Filter, its summary at its right; its submenu All, a rule, then the kinds in one column, no Locked items.
+  const row = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-select-filter-row]'); expect(found).not.toBeNull(); return found!; });
+  expect(row.getAttribute('aria-label')).toBe('Filter: All');
+  await user.click(row);
+  const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-slot=dropdown-menu-sub-content][aria-label="Filter"]'); expect(found).not.toBeNull(); return found!; });
+  expect([...menu.querySelectorAll('[data-select-filter], [role=separator]')].map(item => item.getAttribute('data-select-filter') ?? 'rule'))
+    .toEqual(['all', 'rule', 'symbols', 'pins', 'wires', 'labels', 'sheets', 'other']);
+  expect([within(menu).getAllByRole('menuitemcheckbox')[0].textContent, menu.querySelectorAll('[data-select-filter] svg:not(.lucide-check):not(.lucide-minus)').length]).toEqual(['All', 0]);
+  const badge = () => within(pane).getByRole('button', { name: 'Select' }).querySelector('[data-tool-icon-badge]')?.getAttribute('data-tool-icon-badge') ?? '';
+  expect(badge()).toBe('');
+  // jsdom has no geometry for a submenu's pointer grace area: the keyboard ticks, the same handler.
+  within(menu).getByRole('menuitemcheckbox', { name: 'Pins' }).focus();
+  await user.keyboard('{Enter}');
+  expect(row.getAttribute('aria-label')).toBe('Filter: 5 of 6');
+  // Select's button wears the funnel while some kinds are unticked.
+  expect(badge()).toBe('filter');
   await user.keyboard('{Escape}');
   await zoomIn(pane);
   tap(pane, [101.6, 57.1]);
@@ -282,7 +330,7 @@ it('in the dark theme the sheet is drawn dark, and the view a snapshot replays n
   const view = await open({ colorScheme: 'dark' });
   await onSheet(view.pane, '/');
   await waitFor(() => expect(drawn.includes('dark')).toBe(true));
-  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: true });
   view.dispose();
 });
 
@@ -304,7 +352,7 @@ it("a note on a pick hands over the view and its sheet, and no references: light
   // `cad kicad_sch snapshot --job` refuses a packet's references (a schematic's still lights none), as the prompt-files
   // route does any but a board's: a packet that named the pick would answer 400 and the note would not go.
   const request = promptFiles.create.mock.calls[0][0] as any;
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: false } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: true } })]);
   expect(request).not.toHaveProperty('references');
   view.dispose();
 });

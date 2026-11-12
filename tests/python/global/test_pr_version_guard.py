@@ -1,6 +1,6 @@
 """A pull request releases when it changes VERSION; the guard decides when it may.
 
-Run on the pull request's merge commit, as Version Check runs it: the first parent is the
+Run on the pull request's merge commit, as test.yml's static job runs it: the first parent is the
 target branch as it is now, so a release the branch inherited is not one it makes.
 """
 
@@ -191,7 +191,7 @@ VERSIONS = ("0.0.1", "0.9.9", "0.10.4", "0.10.5", "0.11.0", "0.11.12", "1.0.0", 
 
 
 class TheGuardKeepsTheUpdatersRuleTests(unittest.TestCase):
-    """Version Check's copy of the rule (release-tags.sh: the release scripts import nothing of the
+    """The version check's copy of the rule (release-tags.sh: the release scripts import nothing of the
     packages, and its job installs no Python) answers as the automatic updater's
     (cad_server.auto_updates.takes): a release refused a migration guide is exactly one a device takes
     by itself."""

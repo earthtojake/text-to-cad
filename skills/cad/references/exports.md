@@ -1,7 +1,7 @@
 # Exports
 
-Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a model in
-another pose, a part on its own, a project's standing deliverables, or a vendor STEP
+Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a robot
+description (MJCF, URDF), a model in another pose, a part on its own, a project's standing deliverables, or a vendor STEP
 converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-profiles-and-dxf.md).
 
 ## Contents
@@ -13,6 +13,8 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 - [The xbf is Save As](#the-xbf-is-save-as)
 - [Formats](#formats)
 - [Print tolerance](#print-tolerance)
+- [A GLB for another renderer](#a-glb-for-another-renderer)
+- [Robot descriptions](#robot-descriptions)
 - [Other tools](#other-tools)
 
 ## A file is an action
@@ -43,13 +45,15 @@ it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
-"seconds", "written"}]}`), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
+"seconds", "written", "robot"?}]}`, `robot` a robot description's summary), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
 the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
 `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
-An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
-mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's
-export take and a mesh's does not. What a file shows is the model's
+An export takes a document and its destinations, and nothing else but a GLB's, an STL's or a
+3MF's mesh tolerance and angle (`--tolerance`, `--angle`: [print tolerance](#print-tolerance),
+[a GLB for another renderer](#a-glb-for-another-renderer)) and a robot description's zero state
+([robot descriptions](#robot-descriptions)), which a model's, an xbf's and a STEP's export take
+and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
 A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
@@ -160,23 +164,33 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   face, edge and vertex, so a STEP read back keeps them. It drops the rest of a
   material's look and physical fields, a face's material (the face keeps its colour),
   and the mechanism: a STEP is placements only.
-- **GLB**: glTF 2.0, Y up, in metres. One mesh per part, a node per placement named by
-  its occurrence, a PBR material per look (with the glTF extensions for IOR,
+- **GLB**: glTF 2.0, Y up, in metres. One mesh per part and the assembly's tree as nodes: a
+  node per sub-assembly with its components under it, each placed in its parent's frame and
+  named by its path below the root (`arm/head/pin_1`), so Blender and any glTF reader show the
+  sub-assemblies, a PBR material per look (with the glTF extensions for IOR,
   transmission, clear coat, anisotropy and emission where a material has them), each of
   the model's configuration sequences as an animation of its name
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
-  ([animation](animation.md)). A GLB exported from the model, by its id, by
+  ([animation](animation.md)); a sub-assembly that moves as one is keyed on its own node. A GLB exported from the model, by its id, by
   `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
-  animations, byte for byte the same file.
+  animations, byte for byte the same file. A program that reads it walks the tree for a part's
+  place: a part's `matrix` is in its sub-assembly's frame (an earlier release placed every part in
+  the world, under the root), its name and its place in the world as they were. A clip's
+  `extras.cad` holds its `duration` and its `kind`, `"motion"` or `"animation"` (an earlier
+  release's `extras.cadgen`, the duration alone), and `asset.generator` is `cad`. A transmissive material (`transmission` above zero) is
+  written opaque at alpha 1, so another renderer refracts the part and does not also fade it; to fade
+  one too, give its PBR `opacity` below 1 (a translucent `part.color` is not read as a fade).
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
-  and materials through the materials extension.
+  and materials through the materials extension. A 3MF draws no transmission, so a transmissive
+  material's colour is written at its preview alpha (`transmission=1` gives `0.3`), or at its PBR
+  `opacity` below 1, whatever `part.color`'s alpha; the 3MF of the model and the 3MF of its GLB agree.
 - **STL**: binary, every placed triangle, in millimetres.
 - **xbf**: of a model, or of a STEP (converting a vendor file).
 - **DXF**: of a planar document only (a 2D drawing); a solid is refused.
 
 Mesh exports and the viewer draw the same meshes, made at one tolerance
 (a chord deviation of 0.25% of the mean side of each part's bounding box, and
-28.5 degrees), unless an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
+28.5 degrees), unless a GLB, an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
 face the mesher leaves without triangles is left out, so a mesh export has a hole there; a
 snapshot names such faces in a warning, and they are usually slivers a boolean left. Repair
 the face in the model.
@@ -199,17 +213,87 @@ at the finer of the tolerance and its own, for that file alone, so a small part 
 coarser; the viewer, snapshots and every other export keep the viewer's mesh. The tolerance
 holds on every face, an imported STEP's faces whose edges carry a looser tolerance too (those
 cost the most triangles). The file says
-what it was meshed to (the STL's header, the 3MF's description). It is
-for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
-one), and a GLB is the viewer's mesh. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
+what it was meshed to (the STL's header, the 3MF's description, the GLB's `asset.extras.cad`). A STEP
+has no mesh and takes no tolerance (send a STEP when the person's slicer or shop takes one), and a
+mesh file's triangles are its own, so a conversion takes none. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
 three times the segments round a curve and ten times the triangles of a doubly curved face (a
 600-part robot arm at 0.01 mm was 30% more triangles than the viewer's mesh), so stay at or
 above 0.001 (the floor) and say the file's size when it is large. If the export
 names faces left without triangles, try a slightly different tolerance or repair the face.
 
+## A GLB for another renderer
+
+A GLB is the viewer's mesh unless the export says otherwise, and in a path tracer or at a close
+camera the viewer's mesh shows its facets. Give a GLB for rendering a finer one, in the same two
+options, either alone:
+
+```bash
+cad model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
+```
+
+`--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's, so a file is never coarser than its
+mesh): it draws small radii in more segments, where a tolerance does not reach them. The same is
+`model.export(x, path, tolerance=0.05, angle=5)` and `@glb("hero.glb", tolerance=0.05, angle=5)`, and
+an STL and a 3MF take it too. The cost is triangles: say the file's size when it is large.
+
+## Robot descriptions
+
+A mechanism exports as a robot description for a simulator or ROS, by the destination's suffix:
+
+```bash
+cad model export "$ID" sim/arm.xml description/arm.urdf
+cad model export "$ID" sim/arm.xml --zero home
+```
+
+`.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF. Each is
+one description of the model in SI units at its as-built state, and writes its meshes as binary STL
+in metres beside it (`assets/` for the MJCF, `meshes/` for the URDF). `--zero STATE` (`zero="home"`
+from Python) takes it at a mechanism state instead: every body stands as the state poses it, each
+joint's value there is its zero, and its limits and the other states count from there; the CAD
+stays as drawn. A state the model does not have is refused, naming the ones it has. What the model
+contributes:
+
+- **the mechanism** ([kinematics](kinematics.md)): each link a body, each joint with its axis and
+  its limits around the as-built value (or the zero state's), which is every joint's zero in the file;
+  couplings as the follower on its leader; mechanism states as MuJoCo keys (a URDF has no named poses);
+- **materials**: each link's mass, centre of mass and inertia, exact, from its solids at their
+  densities; a part with no material weighs nothing;
+- **`frame()`, `body()`, `limits()`, `mass()`, `point_mass()`, `free()` and `link()`**
+  ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)): the named frames (an MJCF
+  site, a URDF frame link), the parts kept bodies of their own, each joint's drive limits, what a
+  part or an assembly weighs and the lumps its CAD leaves out, whether the base floats (an MJCF
+  `<freejoint>`; bolted by default) and each link's name.
+
+Each part collides as its own mesh (MuJoCo collides it as its convex hull; a URDF's `<collision>`
+is the same mesh). Neither file holds a chosen collision shape, contact friction, joint dynamics or
+an actuator: a URDF carries the robot's structure, inertials and limits, and what a simulator
+chooses is made in the simulator.
+
+After each file's `wrote` line the export says what it holds, on stderr: its links and how its base
+stands, its joints by kind and its mass, then its couplings, loops, frames, collisions,
+exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
+it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
+robot when there is none (an `include` of the robot, a floor, a light, a skybox),
+which is the person's to edit and never written over. An MJCF is MuJoCo's own file: `cad mujoco check
+sim/arm.xml` compiles it with MuJoCo and checks it, and no `cad` command or view draws one (the
+person opens it in MuJoCo Studio, `cad run mujoco-studio --model sim/scene.xml`). A URDF whose root link has a mass, or whose
+root link's frame is not the world's (its first part turned or moved in its placement), is rooted at
+an empty `base_link` before it, at the root's placement, as ROS's KDL wants and so it stands where
+the MJCF stands it.
+
+A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
+top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left
+out of a URDF ([Loops](kinematics.md#loops)); a ball joint in a URDF is refused by name. Never edit the written file: change the model and export again. A
+simulation's choices on the robot (collision shapes, contact friction, excluded pairs, joint
+armature, damping and dry friction, actuators) are made in a MuJoCo function, a script that makes
+the robot an `MjSpec` (`from cad.mujoco import spec`) and saves it; that, composing a MuJoCo scene
+around it, checking it, tuning it and writing the descriptions no model can (an SRDF, a
+hand-written MJCF) are the `robot-simulation` skill's.
+
 ## Other tools
 
-STL and 3MF files are in millimetres and a GLB in metres, so a URDF or SDF scales an STL
-or 3MF link mesh by `0.001` and takes a GLB as it is. A check of an export as a mesh is
+STL and 3MF files are in millimetres and a GLB in metres, so a hand-written URDF or MJCF scales an
+STL or 3MF link mesh by `0.001` and takes a GLB as it is (a generated one writes its own meshes in
+metres: [robot descriptions](#robot-descriptions)). A check of an export as a mesh is
 a snapshot of that file
 ([mesh files](snapshot-review.md#mesh-files-robots-and-drawings)).

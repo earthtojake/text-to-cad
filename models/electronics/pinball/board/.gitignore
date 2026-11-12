@@ -1,0 +1,28 @@
+# The board's fabrication outputs and everything scripts write on the way.
+/fab/
+/STEP/
+/GLB/
+/DXF/
+/tmp/
+__pycache__/
+# The 3D models scripts/part_models.py writes for the footprints that name them (${KIPRJMOD}/pinball.3dshapes).
+/pinball.3dshapes/
+# KiCad's local settings beside a board it opened.
+*.kicad_prl
+fp-info-cache
+# The KiCad project build.py writes (cad run build.py): build output, made again from scripts/ and the design model.
+/pinball.kicad_pcb
+/pinball.kicad_pro
+/pinball.kicad_dru
+/pinball.kicad_sch
+/power.kicad_sch
+/mcu.kicad_sch
+/inputs.kicad_sch
+/lighting.kicad_sch
+/flippers.kicad_sch
+/audio.kicad_sch
+/pinball.kicad_sym
+/power.kicad_sym
+/pinball.pretty/
+/fp-lib-table
+/sym-lib-table

@@ -163,6 +163,54 @@ class BoardJobReplayTest(unittest.TestCase):
                 display_options(given)
 
 
+class BoardWindowTest(unittest.TestCase):
+    """A display's ``window`` (``cad kicad_pcb snapshot --window``) frames that box of the board, in KiCad's
+    millimetres (y down), filling the picture; from below, mirrored with the board."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        isolate(cls.addClassCleanup)
+        cls.folder = tempfile.TemporaryDirectory(prefix="pcb-window-")
+        cls.addClassCleanup(cls.folder.cleanup)
+        cls.root = Path(cls.folder.name)
+        cls.board = write_board(cls.root)
+
+    def drawn(self, name: str, display: dict) -> Image.Image:
+        from cad.engine.api import snapshot
+
+        out = self.root / f"{name}.png"
+        snapshot(self.board, out, display=display, width=400, height=160, daemon=False)
+        return Image.open(out).convert("RGB")
+
+    def test_the_window_fills_the_picture_and_is_mirrored_from_below(self) -> None:
+        # [3, 13, 13, 17]: 10 x 4 mm in 400 x 160, 40 px a millimetre; the VBUS track (1 mm, y = 15) runs right
+        # from J1's pad at x = 5, so x = 12 mm is track and x = 4 mm (left of the pad's 4.15) is not. Row 65 is
+        # y = 14.625, on the track off its net name's letters.
+        copper = (200, 52, 52)
+        top = self.drawn("top", {"window": [13, 17, 3, 13]})  # any two opposite corners
+        self.assertTrue(near(top.getpixel((360, 65)), copper, 40), f"the track at x 12: {top.getpixel((360, 65))}")
+        self.assertFalse(near(top.getpixel((40, 65)), copper, 60), f"no copper at x 4: {top.getpixel((40, 65))}")
+        self.assertFalse(near(top.getpixel((360, 10)), copper, 60), f"no copper at y 13.25: {top.getpixel((360, 10))}")
+        below = self.drawn("below", {"mode": "copper", "side": "bottom", "window": [3, 13, 13, 17]})
+        self.assertTrue(near(below.getpixel((40, 65)), copper, 40), f"mirrored, the track at the left: {below.getpixel((40, 65))}")
+        self.assertFalse(near(below.getpixel((360, 65)), copper, 60), f"and x 4 at the right: {below.getpixel((360, 65))}")
+
+    def test_a_window_is_four_numbers_with_an_area_on_the_board_and_takes_no_camera(self) -> None:
+        from cad.engine.api import snapshot
+        from cad.engine.render.board import display_options
+        from cad.engine.snapshot import SnapshotRefused
+
+        self.assertEqual([3, 13, 13, 17], display_options({"window": [13, 13, 3, 17]})["window"])
+        for wrong, words in (([1, 2, 3], "is \\[x0, y0, x1, y1\\]"), (["1", 2, 3, 4], "is \\[x0, y0, x1, y1\\]"),
+                             ([1, 2, 1, 5], "has no area")):
+            with self.subTest(window=wrong), self.assertRaisesRegex(SnapshotRefused, words):
+                display_options({"window": wrong})
+        with self.assertRaisesRegex(SnapshotRefused, "misses the board, which spans"):
+            snapshot(self.board, self.root / "off.png", display={"window": [500, 500, 600, 600]}, daemon=False)
+        with self.assertRaisesRegex(SnapshotRefused, "takes no camera"):
+            snapshot(self.board, self.root / "both.png", display={"window": [3, 13, 13, 17]}, camera=PLAN, daemon=False)
+
+
 class BoardDisplayTest(unittest.TestCase):
     """The Display a snapshot reads, as the viewer's `plot2d/boardDisplay.js` reads it."""
 

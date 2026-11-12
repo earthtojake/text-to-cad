@@ -35,7 +35,13 @@ built tree. The pairs make a mechanism in ISO 10303-105's terms, the kinematics 
   it is written as: ``gear_pair(assembly, name, **joints)`` (revolute joints),
   ``rack_and_pinion_pair(...)`` (a revolute joint and prismatic ones, or a prismatic joint and
   revolute ones) or ``screw_pair(assembly, name, joint=pitch)`` (one cylindrical joint, its
-  value the turn); a joint of another kind is refused at document time (``_fits``). Its joints
+  value the turn); a joint of another kind is refused at document time (``_fits``). A rack and
+  pinion's first-named joint may be a **virtual pinion**: a ``RevoluteJoint`` on the part that carries
+  it and connected to nothing, a reference axis where the CAD draws no pinion (two slides coupled to
+  each other, a parallel gripper's fingers). It is a revolute pair from its carrier's link to a link of
+  no part (AP242's ``KINEMATIC_LINK`` needs no shape), named by its label, at the value its joint holds
+  (0 unless posed), so the document keeps the coupler AP242 has for it; a robot description has no
+  link for it (``describe``). Its joints
   move together, each by its ratio, and only through it. Its value ``c`` is the
   displacement that puts each joint at its as-built value plus its ratio times ``c`` (a pair of
   several values takes a ratio per value), so ``c = 0`` is as built and a coupling never moves
@@ -55,7 +61,14 @@ built tree. The pairs make a mechanism in ISO 10303-105's terms, the kinematics 
 A link's frame is its first member occurrence's placement as built (the ground's, the
 world's when it has none). A pair the built tree contradicts -- its two joints on one rigid
 link, or its rigid joint's frame not one motion of the pair from its moving joint's -- is
-refused at document time, by name. A loop's pairs are kept and not posed (no solver), and a
+refused at document time, by name. So is a child ``connect_to`` turned about its joint's own axis at its
+zero though it was built where it stands: where a ``RigidJoint`` stood at its joint's origin with its Z on
+the joint's axis before the connection (the first, where a joint is connected again), the child at the
+pair's zero must be where it was built, turned by no more than 1e-9 radian times the model's size in
+millimetres (``watch`` records each connection, ``_turned_at_zero`` checks it); a RigidJoint elsewhere, or
+one whose Z the connection turns onto the axis, is a placement, which ``connect_to`` makes as build123d's
+joints do (a wheel built at the origin, put on its axle). A loop's pairs are kept
+and not posed (no solver; a robot description closes them, ``describe``), and a
 non-linear relation (a function coupling, a cam) is no part of the mechanism: a configuration
 sequence says it.
 
@@ -332,8 +345,9 @@ def mechanism_state(assembly: Any, name: str, **values: Any) -> Any:
     """A named state of ``assembly``'s mechanism, AP242's ``mechanism_state_representation``: a
     value for each joint it names, by the joint's label -- a number, or for a joint of several
     values a sequence of them (a cylindrical joint's angle and position, a ball joint's three
-    angles). A joint it does not name stays as built. Kept in the document beside the as-built
-    state, offered by the viewer as a preset and by ``--pose NAME``. A label names the joint in
+    angles). A joint it does not name stays as built, so a state that names none is the as-built pose
+    under a name of its own (a robot description's key, a ``--zero``). Kept in the document beside the
+    as-built state, offered by the viewer as a preset and by ``--pose NAME``. A label names the joint in
     each placement of a sub-assembly placed several times. Returns ``assembly``."""
     import build123d as bd
 
@@ -348,8 +362,6 @@ def mechanism_state(assembly: Any, name: str, **values: Any) -> Any:
             raise TypeError(f"mechanism state {name!r}: joint {label!r} takes a number, or a sequence of numbers "
                             f"for a joint of several values, not {value!r}")
         checked[label] = found
-    if not checked:
-        raise ValueError(f"mechanism state {name!r} sets no joint")
     held = dict(assembly.__dict__.get(CONFIGURATIONS) or {})
     held[name] = checked
     assembly.__dict__[CONFIGURATIONS] = held
@@ -417,8 +429,15 @@ def rack_and_pinion_pair(assembly: Any, name: str, **joints: Any) -> Any:
     joint of the other kind, each moving by its ratio (degrees or millimetres per unit of the
     coupling's value) and only through it; written as AP242's ``rack_and_pinion_pair`` couplers,
     from the first-named joint to each other one. Its value, range and naming are a gear pair's
-    (``gear_pair``). A joint of the wrong kind is refused when the document is made. Returns
-    ``assembly``."""
+    (``gear_pair``). A joint of the wrong kind is refused when the document is made.
+
+    The pinion may hold no part: a ``RevoluteJoint`` on the part that carries it, connected to
+    nothing, is a **virtual pinion** -- a reference axis where the CAD draws no gear, so two slides
+    couple to each other through it (``rack_and_pinion_pair(gripper, "grip", pinion=1, left=0.15,
+    right=0.15)``, its ratios the pitch circle's millimetres per degree). The document keeps it as a
+    revolute pair to a link of no part; a robot description writes the racks coupled to the first of
+    them and no pinion. Give it a range at least as wide as the racks' (build123d's default is 0 to
+    360): it bounds the coupling. Returns ``assembly``."""
     return _coupling(RACK_KIND, assembly, name, joints)
 
 
@@ -447,7 +466,9 @@ def configuration_sequence(assembly: Any, name: str, waypoints_or_fn: Any = None
 
     ``ease`` is ``cubic`` (each step eased in and out, resting at every waypoint: AP242's
     ``synchronous_interpolation_type``) or ``linear`` (constant speed:
-    ``linear_interpolation_type``). A sequence is a finite clip; a player repeats it. Kept in the
+    ``linear_interpolation_type``): a fraction ``s`` of the way in time from a waypoint's value
+    ``a`` to the next one's ``b``, ``a + (3 s**2 - 2 s**3) (b - a)`` and ``a + s (b - a)``, each
+    pair value on its own (``_interpolated``). A sequence is a finite clip; a player repeats it. Kept in the
     document beside the mechanism states, as a definition; a GLB export bakes it into a clip of
     the same name. Returns ``assembly``."""
     import build123d as bd
@@ -541,7 +562,8 @@ def posed(assembly: Any, state: Any) -> Any:
     ``assembly`` is what the model call returned, its document's handle, or a shape. Inside a body
     (``return posed(arm(), "folded")``: a posed file is this) the result is a copy of the shape that
     shares its geometry and keeps the joints, couplings, mechanism states and configuration
-    sequences, the asked values its as-built state. From a plain script (a check) the handle's
+    sequences, the asked values its as-built state; a value a state or a sequence gives a coupling
+    is said again from that state (``_rebase``), so each names the pose it named. From a plain script (a check) the handle's
     document is posed where the engine holds its mechanism (``posed_structure``), and the answer is
     the tree ``.shape`` is, at that pose: placed parts, no joints. A shape a plain script read
     through ``.shape`` has no joints left to pose, and is refused with what to pass instead."""
@@ -627,6 +649,7 @@ def posed(assembly: Any, state: Any) -> Any:
             changed.add(path)
     # The joints say the values they now stand at, as ``connect_to`` would have left them.
     naming = {path: "/".join(_occurrence(tree, path)[1]) for _obj, path in objects}
+    _rebase(objects, naming, kinematics, values)
     for obj, path in objects:
         for joint in (obj.__dict__.get("joints") or {}).values():
             kind = _joint_kind(joint)
@@ -641,6 +664,58 @@ def posed(assembly: Any, state: Any) -> Any:
             else:
                 joint.angle, joint.position = value
     return made
+
+
+def _rebase(objects: list, naming: dict, kinematics: dict[str, Any], values: dict[str, tuple[float, ...]]) -> None:
+    """A posed copy's mechanism states and configuration sequences, saying the poses they said: a
+    coupling's value is its joints' displacement from as built, and the copy is built at the pose,
+    so each value a state or a sequence gives a coupling is less the coupling's value at the pose
+    (a joint's own value is where the joint stands, and stays). A key naming a coupling in several
+    placements is written once per coupling, by the name each is kept by: the pose may have moved
+    them apart."""
+    built = {label: _as_tuple(value) for label, value in kinematics["asBuilt"].items()}
+    moved = {}
+    for kept, coupling in (kinematics.get("couplings") or {}).items():
+        label, index, ratio = next(term for term in coupling["terms"] if term[2])
+        moved[kept] = (values[label][index] - built[label][index]) / ratio
+    if not any(abs(by) > 1e-12 for by in moved.values()):
+        return
+    held = [(path, own, own if own in moved else f"{naming[path]}:{own}")
+            for obj, path in objects for own in obj.__dict__.get(COUPLINGS) or {}]
+
+    for obj, path in objects:
+        names: dict[str, list[str]] = {}
+        for holder, own, kept in held:
+            if holder[:len(path)] == path and kept in moved:
+                for key in {own, kept}:
+                    names.setdefault(key, []).append(kept)
+
+        def rebased(given: Any, names: dict = names) -> Any:
+            if not isinstance(given, dict) or not any(key in names for key in given):
+                return given
+            found: dict[str, Any] = {}
+            for key, value in given.items():
+                numbers = _number_values(value) if key in names else None
+                if numbers is None or len(numbers) != 1:
+                    found[key] = value
+                    continue
+                for kept in names[key]:
+                    found[kept if len(names[key]) > 1 else key] = (numbers[0] - moved[kept],)
+            return found
+
+        state = obj.__dict__
+        if state.get(CONFIGURATIONS):
+            state[CONFIGURATIONS] = {name: rebased(given) for name, given in state[CONFIGURATIONS].items()}
+        if state.get(MOTIONS):
+            motions = {}
+            for name, spec in state[MOTIONS].items():
+                if spec[0] == "function":
+                    _kind, function, duration, ease = spec
+                    motions[name] = ("function", lambda t, f=function, r=rebased: r(f(t)), duration, ease)
+                else:
+                    _kind, rows, ease = spec
+                    motions[name] = ("keys", [(t, state_name, rebased(given)) for t, state_name, given in rows], ease)
+            state[MOTIONS] = motions
 
 
 # Set on the tree a plain script's ``.shape`` brings out of the engine (``api.Document.shape``): the
@@ -866,6 +941,118 @@ def _by_label(jointed: list, used: set[int], tree: Any, warnings: list[str]) -> 
     return found
 
 
+# Set on the joint whose part a ``connect_to`` moved (``watch``): that part's placement before the move and
+# where the pair's zero puts it, each a 4x4 in the space its ``location`` is in, and how far apart the two
+# joints' origins stood before it (mm).
+CONNECTED = "_cad_connected"
+
+
+def watch() -> bool:
+    """Record what every ``connect_to`` does (``CONNECTED``), once per process: installed with the kernel's
+    patches (``memo.install``), before a model's body runs, so the harvest can tell whether a child stands
+    where it was built at its joint's zero (``_turned_at_zero``). Returns installed-now. Recording never
+    changes what ``connect_to`` does, and a record it cannot make is skipped."""
+    from build123d.topology.shape_core import Joint
+
+    current = Joint.__dict__["_connect_to"]
+    if getattr(current, "__cad_connected__", False):
+        return False
+
+    def _connect_to(self: Any, other: Any, **kwargs: Any) -> Any:
+        stood = getattr(getattr(other, "parent", None), "location", None)
+        before = None if stood is None else _numpy(stood)
+        found = current(self, other, **kwargs)
+        if before is not None:
+            try:
+                _record(self, other, before)
+            except Exception:  # noqa: BLE001 - a record is a check's input, never the model's behaviour
+                pass
+        return found
+
+    _connect_to.__cad_connected__ = True
+    _connect_to.__wrapped__ = current
+    Joint._connect_to = _connect_to
+    return True
+
+
+def unwatch() -> bool:
+    """Undo ``watch``. Returns uninstalled-now."""
+    from build123d.topology.shape_core import Joint
+
+    current = Joint.__dict__["_connect_to"]
+    if not getattr(current, "__cad_connected__", False):
+        return False
+    Joint._connect_to = current.__wrapped__
+    return True
+
+
+def _record(stays: Any, moved: Any, before: np.ndarray) -> None:
+    """What ``stays.connect_to(moved)`` did to ``moved``'s part, kept on ``moved`` (``CONNECTED``): where the
+    part stood (``before``), where the pair's zero puts it -- the two joints' frames coinciding
+    (``_local_frames``), the motion ``M(0)`` -- how far apart the joints' origins stood before, and the Z
+    (the joint's axis) of the moved part's frame before and of the frame it is put on. A joint connected
+    again to the same place (another value) keeps its first record: where its part was built."""
+    kinds = (_joint_kind(stays), _joint_kind(moved))
+    if None in kinds or "rigid" not in kinds or kinds == ("rigid", "rigid"):
+        return
+    placed = _numpy(stays.parent.location)
+    if kinds[1] == "rigid":  # the moving joint's part stays; the RigidJoint's moves onto it
+        item_1, item_2, _held = _local_frames(str(kinds[0]), stays, moved)
+        zero = placed @ item_1 @ np.linalg.inv(item_2)
+        source, target = before @ item_2, placed @ item_1
+    else:  # the RigidJoint's part stays; the moving joint's moves
+        item_1, item_2, _held = _local_frames(str(kinds[1]), moved, stays)
+        zero = placed @ item_2 @ np.linalg.inv(item_1)
+        source, target = before @ item_1, placed @ item_2
+    first = moved.__dict__.get(CONNECTED)
+    if first is not None and np.allclose(first[1], zero, rtol=0, atol=1e-9):
+        return
+    moved.__dict__[CONNECTED] = (before, zero, float(np.linalg.norm(target[:3, 3] - source[:3, 3])),
+                                 source[:3, 2].copy(), target[:3, 2].copy())
+
+
+def _turned_at_zero(label: str, kind: str, record: tuple, sphere: tuple[np.ndarray, float] | None, moved: str,
+                    holder: str, raw: str, scale: float) -> None:
+    """Refuses a pair whose ``connect_to`` turned its child about the joint's own axis at its zero, by name
+    (``watch``'s record): the child built where it stands, its RigidJoint at the joint's origin with its Z on
+    the joint's axis, and only the two frames' reference directions apart (a Plane of an axis takes its X
+    from its Z, which a turned part or an axis direction's rounding changes), so angle 0 is not as built.
+    Turned by more than 1e-9 radian times the model's size in millimetres (at least 1), it is refused, with
+    the turn and how far its parts move. For a slide the same: its child spun about the slide's axis. A
+    RigidJoint elsewhere, or one whose Z is not the joint's axis, is a placement -- ``connect_to`` puts the
+    child on the joint, as build123d's joints do (a wheel built at the origin onto its axle, a carriage moved
+    to its slide) -- and nothing is checked."""
+    before, zero, apart, source_z, target_z = record
+    if apart > 1e-6 * max(1.0, scale):
+        return
+    if float(np.linalg.norm(np.cross(source_z, target_z))) > 1e-6 or float(np.dot(source_z, target_z)) < 0:
+        return
+    moved_by = zero @ np.linalg.inv(before)
+    rotation = moved_by[:3, :3]
+    spin = np.array([rotation[2, 1] - rotation[1, 2], rotation[0, 2] - rotation[2, 0], rotation[1, 0] - rotation[0, 1]])
+    angle = math.atan2(float(np.linalg.norm(spin)) / 2, (float(np.trace(rotation)) - 1) / 2)
+    if angle <= 1e-9 * max(1.0, scale):
+        return
+    far = ""
+    if sphere is not None:
+        centre, radius = sphere
+        then = before @ np.append(centre, 1.0)
+        far = f", moving its parts up to {float(np.linalg.norm((moved_by @ then - then)[:3])) + angle * radius:.3g} mm"
+    if kind == "prismatic":
+        frame = f"{holder}.location * bd.Location({holder}.joints[{raw!r}].relative_axis.position)"
+    elif kind == "cylindrical":
+        frame = (f"{holder}.location * bd.Location(bd.Plane(origin=j.relative_axis.position, x_dir=j.angle_reference, "
+                 f"z_dir=j.relative_axis.direction)) with j = {holder}.joints[{raw!r}]")
+    else:
+        frame = f"{holder}.joints[{raw!r}].location"
+    raise KinematicsError(
+        f"joint {label!r} turns {moved} by {math.degrees(angle):.6g} deg at its zero{far}: its RigidJoint stood at "
+        f"the joint's origin on its axis, so {moved} was built where it stands, but the two frames' reference "
+        "directions differ and connect_to turned it about the axis onto the joint's (a Plane of an axis takes its "
+        f"X from its Z, which a turned part or an axis direction's rounding changes). Build the RigidJoint at the frame the joint places it at, {frame}, and "
+        "snap an axis direction read from geometry (a component within 1e-9 of 0 is 0)")
+
+
 def _enclose(parent: dict, find: Callable[[tuple[int, ...]], tuple[int, ...]], moving_pairs: list) -> None:
     """A class of joint-holding parts no pair moves, standing below a part of another class in
     the tree, moves with that class: a sub-assembly mounted on a joint carries every part of
@@ -935,6 +1122,8 @@ def harvest(result: Any, tree: Any, root_path: tuple[int, ...]) -> Mechanism | N
             continue
         seen.add(key)
         pairings.append((path, joint, moved, other))
+    # The joints whose part a connect_to moved: each one's record (``watch``) is checked below.
+    connected = {id(other) for _path, _joint, _moved, other in pairings}
     warnings: list[str] = []
     pairings.extend(_by_label(jointed, {id(joint) for row in pairings for joint in (row[1], row[3])}, tree, warnings))
 
@@ -1041,6 +1230,14 @@ def harvest(result: Any, tree: Any, root_path: tuple[int, ...]) -> Mechanism | N
             links.append(Link("", sorted(members)))
     for link in links:
         link.name = _occurrence(tree, link.members[0])[1][-1] if link.members else tree.root.name
+    # Each virtual pinion (``_virtual``) a link of no part, after the parts' links, on the link of the part
+    # holding its joint (the deepest holding it, else the ground).
+    virtual = _virtual(coupled, jointed, {id(joint) for row in pairings for joint in (row[1], row[3])}, name_of)
+    carriers = []
+    for _joint, holder in virtual:
+        carriers.append(next((link_of[holder[:depth]] for depth in range(len(holder), -1, -1)
+                              if holder[:depth] in link_of), 0))
+        links.append(Link("", []))
     worlds = {path: _numpy(_occurrence(tree, path)[0]) for path in parent}
     frames = [worlds[link.members[0]] if link.members else np.eye(4) for link in links]
     scale = max([1.0] + [float(np.abs(matrix[:3, 3]).max()) for matrix in worlds.values()])
@@ -1057,12 +1254,12 @@ def harvest(result: Any, tree: Any, root_path: tuple[int, ...]) -> Mechanism | N
 
     # The pairs, named by their moving joints' labels; a label two share takes its part's path.
     counts: dict[str, int] = {}
-    for moving, *_rest in moving_pairs:
+    for moving in [row[0] for row in moving_pairs] + [joint for joint, _holder in virtual]:
         counts[moving.label] = counts.get(moving.label, 0) + 1
     pairs: list[Pair] = []
     as_built: dict[str, tuple[float, ...]] = {}
     joint_labels: list[tuple[str, tuple[int, ...]]] = []
-    for moving, held_by, rigid, rigid_by, _moves in moving_pairs:
+    for moving, held_by, rigid, rigid_by, moves in moving_pairs:
         kind = _joint_kind(moving)
         assert kind is not None and kind != "rigid"
         first, second = link_of[held_by], link_of[rigid_by]
@@ -1090,6 +1287,12 @@ def harvest(result: Any, tree: Any, root_path: tuple[int, ...]) -> Mechanism | N
                 f"the {kind} joint's are not one {kind} motion apart within its range (a part moved after "
                 "connect_to, or connected after the compound holding it was made, or a rigid joint off the "
                 "joint's axis)")
+        # Connected by connect_to, the child at the pair's zero stands where it was built (``_turned_at_zero``).
+        mover = rigid if rigid_by == moves else moving
+        record = mover.__dict__.get(CONNECTED) if id(mover) in connected else None
+        if record is not None:
+            _turned_at_zero(label, kind, record, sphere(moves) if moves in by_path else None, name_of(moves),
+                            name_of(held_by).rsplit("/", 1)[-1], moving.label, scale)
         as_built[label] = value
         pairs.append(pair)
         joint_labels.append((moving.label, held_by))
@@ -1109,6 +1312,25 @@ def harvest(result: Any, tree: Any, root_path: tuple[int, ...]) -> Mechanism | N
                             f"farther than the part's own size{beside}: an Axis is in world coordinates, so a local "
                             "one lands near the origin and connect_to moves the other part there; give the world "
                             "axis, axis.located(part.location)")
+    # Each virtual pinion: a revolute pair from its carrier's link to its own, which no part's frame places,
+    # so its frames are the joint's axis on each side at the value its joint holds (0 unless posed).
+    for at, ((joint, holder), carrier) in enumerate(zip(virtual, carriers), len(links) - len(virtual)):
+        label = joint.label if counts[joint.label] == 1 else f"{name_of(holder)}:{joint.label}"
+        while any(pair.label == label for pair in pairs):
+            label += "'"
+        links[at].name = label
+        held = getattr(joint, "_angle", None)
+        value = (0.0 if held is None else float(held),)
+        limits = _limits("revolute", joint)
+        if not _within(value[0], limits[0]):
+            raise KinematicsError(f"pinion {label!r} holds no part and stands at {value[0]:g} deg, outside its range "
+                                  f"[{_bound(limits[0][0], '-')}, {_bound(limits[0][1], '')}]")
+        axis = _numpy(_occurrence(tree, holder)[0]) @ _numpy(joint.relative_axis.location)
+        pairs.append(Pair(label, "revolute", (carrier, at),
+                          (_ax2(np.linalg.inv(frames[carrier]) @ axis), _ax2(axis @ pair_motion("revolute", value))),
+                          limits))
+        as_built[label] = value
+        joint_labels.append((joint.label, holder))
 
     couplings, controls = _couplings(coupled, pairs, joint_labels, name_of, warnings, as_built)
     found = Mechanism(tree.root.name, links, 0, pairs, as_built, {}, warnings, couplings=couplings)
@@ -1116,6 +1338,26 @@ def harvest(result: Any, tree: Any, root_path: tuple[int, ...]) -> Mechanism | N
     if motioned:
         functions = any(spec[0] == "function" for _path, _obj, held in motioned for spec in held.values())
         found.motions = _motions(motioned, found, joint_labels, controls, name_of, _size(result) if functions else 1.0)
+    return found
+
+
+def _virtual(coupled: list, jointed: list, paired: set[int], name_of: Callable) -> list[tuple[Any, tuple[int, ...]]]:
+    """The virtual pinions: each ``RevoluteJoint`` no pairing joined (it holds no part: a reference axis on
+    the part that carries it) that a ``rack_and_pinion_pair`` names first, by its label or its qualified
+    one, below that coupling's assembly; each joint at each placement once, as ``(joint, holder path)``."""
+    found: list[tuple[Any, tuple[int, ...]]] = []
+    seen: set[tuple[int, tuple[int, ...]]] = set()
+    for path, _obj, held in coupled:
+        for _name, (kind, ratios) in held.items():
+            if kind != RACK_KIND or not ratios:
+                continue
+            first = next(iter(ratios))
+            for holder, joint in jointed:
+                if (holder[:len(path)] == path and id(joint) not in paired and _joint_kind(joint) == "revolute"
+                        and first in (joint.label, f"{name_of(holder)}:{joint.label}")
+                        and (id(joint), holder) not in seen):
+                    seen.add((id(joint), holder))
+                    found.append((joint, holder))
     return found
 
 
@@ -1587,8 +1829,8 @@ def _configurations(configured: list, mechanism: Mechanism, joint_labels: list, 
     state, the joint, the value and the range (a value on a bound is within it): left out, the
     state would be another design than the one the model declares. Anything else a value cannot
     be taken for (``_converted``) is left out, and warned -- a coupling's value outside its range
-    among them: a posed copy (``posed``) is built at its pose, which moves each coupling's zero,
-    so a value the original's state gives a coupling stands for another pose in the copy."""
+    among them. (A posed copy is built at its pose, which moves each coupling's zero: ``posed``
+    says its states' values again from there, ``_rebase``, so they are the poses they were.)"""
     merged: dict[str, dict[str, tuple[float, ...]]] = {}
     for path, _obj, held in sorted(configured, key=lambda item: -len(item[0])):
         for name, values in held.items():
@@ -2171,7 +2413,8 @@ def _no_state(kinematics: dict[str, Any], pose: str) -> str:
     pairs = _block_pairs(kinematics)
     said = f"the document has no mechanism state {pose!r}"
     if pose in sequences:
-        said += f" ({pose!r} is a configuration sequence, which plays over time: a pose is a state or joint values)"
+        said += (f" ({pose!r} is a configuration sequence, which plays over time: a pose is a state or joint values, "
+                 f"or the sequence at a time of it, {pose}@SECONDS)")
     said += f"; its states: {states}; its sequences: {', '.join(sorted(sequences)) or 'none'}"
     if not pairs:
         return said
@@ -2210,9 +2453,12 @@ def resolve(kinematics: dict[str, Any] | None, pose: Any, *,
     """The values a pose sets every pair to, and the configuration it names: ``pose`` is
     None (as built), a configuration's name, or ``{joint label or coupling name: value}``
     (the rest as built; a coupling at ``c`` puts each of its joints at its as-built values
-    plus its ratio times ``c``). An unknown name or joint, a value out of range, a coupling's
-    joint set alone and a coupling set with one of its joints are refused by name. ``own``: the
-    values are the document's own (a motion's keys), which set a coupling's joints."""
+    plus its ratio times ``c``), or ``NAME@SECONDS`` (``moment``: a configuration sequence's name and a
+    time of its clip, ``walk@0.6``: where it has the mechanism then, ``at``; a configuration that is
+    named so is the configuration). An unknown name or joint, a value
+    out of range, a coupling's joint set alone and a coupling set with one of its joints are refused
+    by name. ``own``: the values are the document's own (a motion's keys), which set a coupling's
+    joints."""
     if kinematics is None:
         if pose is None:
             return {}, None
@@ -2227,6 +2473,9 @@ def resolve(kinematics: dict[str, Any] | None, pose: Any, *,
     if isinstance(pose, str):
         configurations = kinematics.get("configurations") or {}
         if pose not in configurations:
+            timed = moment(pose)
+            if timed is not None:
+                return at(kinematics, *timed), None
             raise KinematicsError(_no_state(kinematics, pose))
         named, given, where = pose, configurations[pose], f"configuration {pose!r}"
     elif isinstance(pose, dict):
@@ -2234,7 +2483,8 @@ def resolve(kinematics: dict[str, Any] | None, pose: Any, *,
     elif pose is None:
         given, where = {}, ""
     else:
-        raise KinematicsError("a pose is a configuration's name or an object of joint values")
+        raise KinematicsError("a pose is a configuration's name, an object of joint values, or a configuration "
+                              "sequence at a time of it (NAME@SECONDS)")
 
     def unposable(label: str) -> str | None:
         """Why the pair cannot be posed, or None."""
@@ -2348,6 +2598,36 @@ class LinkWorlds:
         return [matrix if matrix is not None else self.built[at].copy() for at, matrix in enumerate(found)]
 
 
+def moment(pose: Any) -> tuple[str, float] | None:
+    """A pose that is a time of a configuration sequence, ``NAME@SECONDS`` (``walk@0.6``): its name and
+    its time. None for any other pose: one with no ``@``, or with no number after its last."""
+    if not isinstance(pose, str) or "@" not in pose:
+        return None
+    name, _, seconds = pose.rpartition("@")
+    try:
+        time = float(seconds)
+    except ValueError:
+        return None
+    return (name, time) if name and math.isfinite(time) else None
+
+
+def at(kinematics: dict[str, Any], name: str, seconds: float) -> dict[str, tuple[float, ...]]:
+    """The pair values the configuration sequence ``name`` has the mechanism at, ``seconds`` into its
+    clip: what the viewer's playbar shows there and a GLB's clip holds (``Timeline``). A name no
+    sequence has, and a time outside its clip, are refused by name."""
+    sequences = kinematics.get("motions") or {}
+    if name not in sequences:
+        states = kinematics.get("configurations") or {}
+        raise KinematicsError(f"the document has no configuration sequence {name!r}"
+                              + (f" ({name!r} is a mechanism state: pose it by its name alone)" if name in states else "")
+                              + f"; its sequences: {', '.join(sorted(sequences)) or 'none'}")
+    timeline = Timeline(kinematics, name)
+    if not 0.0 <= seconds <= timeline.duration:
+        raise KinematicsError(f"configuration sequence {name!r} runs from 0 to {timeline.duration:g} s: {seconds:g} s is "
+                              "outside it")
+    return timeline.values(seconds)
+
+
 def posed_instances(structure: dict[str, Any], values: dict[str, tuple[float, ...]]) -> list[list[float]]:
     """Every instance's world matrix (column-major) with the mechanism at ``values``."""
     kinematics = structure["kinematics"]
@@ -2376,4 +2656,7 @@ def posed_structure(structure: dict[str, Any], pose: Any) -> dict[str, Any]:
     found["instances"] = [{**instance, "matrix": matrix} for instance, matrix in zip(structure["instances"], matrices)]
     found["kinematics"] = {**kinematics, "pose": {"values": {label: _json_value(value) for label, value in values.items()},
                                                   "configuration": named}}
+    timed = None if named is not None else moment(pose)
+    if timed is not None:  # a sequence at a time (``at``): which, and when
+        found["kinematics"]["pose"]["sequence"] = {"name": timed[0], "at": timed[1]}
     return found

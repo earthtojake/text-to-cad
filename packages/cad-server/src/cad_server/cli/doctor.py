@@ -754,29 +754,53 @@ def _kernel(check: bool) -> dict:
 
 
 def _integrations() -> list[tuple[str, str]]:
-    """Each integration whose operations run in an environment of their own (``cad[<integration>]``, made on
-    first need: ``cad_server._internal.integration_env``) -- this installation's own where it carries it, else
-    that environment, made or where it will be -- read, never made: what a manufacturing check (trimesh) or a
-    KiCad command (kicad) runs in. The CAD kernel's is the kernel line's."""
+    """Each integration that has an environment of its own (``cad[<integration>]``, made on first need:
+    ``cad_server._internal.integration_env``) -- this installation's own where it carries it, else that
+    environment, made or where it will be -- read, never made: what a manufacturing check (trimesh) or a KiCad
+    command (kicad) runs in, or a ``cad run`` of a program that imports an integration with no command of its
+    own and nothing else of cad's (blender's bpy); what first needs it is the registry's to say (``_need``). One
+    whose tool has no build for this platform says so, and one whose Python is gone (a Python uv managed,
+    uninstalled) that it is made again. The CAD kernel's is the kernel line's."""
     try:
         from cad.registry import INTEGRATIONS
-        from cad_server._internal import integration_env
+        from cad_server._internal import base, extras, integration_env
 
         lines = []
         for name, integration in INTEGRATIONS.items():
             if name == "build123d" or not integration.extra:
+                continue
+            try:
+                extras.supported((name,), base.Installation.here().arch)
+            except base.Refused as refused:  # its tool has no build for this platform: said, nothing to make
+                lines.append((INFO, f"{name} not made: {refused}"))
                 continue
             state, folder, release = integration_env.found(name)
             if state == "carried":
                 lines.append((OK, f"{name} this installation carries it (cad[{integration.extra}])"))
             elif state == "made":
                 lines.append((OK, f"{name} cad[{integration.extra}] {release} in {_home(folder)}"))
+            elif base.marked(Path(folder)) is not None:
+                lines.append((INFO, f"{name} cad[{integration.extra}] {release} in {_home(folder)} has lost its "
+                                    f"Python: made again on first need, {_need(name, integration)}"))
             else:
                 lines.append((INFO, f"{name} cad[{integration.extra}] {release}, made on first need in "
-                                    f"{_home(folder)}: the first command that needs it"))
+                                    f"{_home(folder)}: {_need(name, integration)}"))
         return lines
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return [(WARNING, f"extras unknown ({type(error).__name__}: {error})")]
+
+
+def _need(name: str, integration) -> str:
+    """What first needs an integration's environment, as the registry says: a command, for one a document
+    type's operation runs in or that declares commands of its tool's (``kicad-cli``); else a ``cad run`` of a
+    program that imports it."""
+    from cad.registry import DOCUMENT_TYPES
+
+    if integration.commands or any(operation.integration == name for entry in DOCUMENT_TYPES.values()
+                                   for operation in entry.operations):
+        return "the first command that needs it"
+    imports = " or ".join(integration.modules) or name
+    return f"the first `cad run` of a program that imports {imports} and no other integration"
 
 
 if __name__ == "__main__":

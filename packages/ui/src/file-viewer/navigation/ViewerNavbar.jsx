@@ -14,6 +14,7 @@ import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { useViewerMobile } from "../responsive.js";
 
 import { AppMenu } from "./AppMenu.jsx";
+import { OpenInMark } from "./appMarks.jsx";
 import { openInMenu } from "./entry-menu.js";
 import { FolderExplorer } from "./FolderExplorer.jsx";
 import { ModelList } from "./ModelList.jsx";
@@ -159,7 +160,7 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
           {openIn.map((item, index) => {
             const key = `${item.action}:${item.target ?? ""}:${item.app ?? ""}`;
             const choose = () => perform(item.action, item.action === "app" ? { target: item.target, app: item.app } : undefined);
-            const row = <DropdownMenuItem data-open-in={item.action} data-open-in-app={item.app} disabled={!item.enabled} onSelect={choose}>{item.label}</DropdownMenuItem>;
+            const row = <DropdownMenuItem data-open-in={item.action} data-open-in-app={item.app} disabled={!item.enabled} onSelect={choose}><OpenInMark action={item.action} app={item.app} className="size-3.5" />{item.label}</DropdownMenuItem>;
             return <Fragment key={key}>
               {index && openIn[index - 1].group !== item.group ? <DropdownMenuSeparator /> : null}
               {item.enabled ? row : <WhyDisabled reason={item.reason}>{row}</WhyDisabled>}

@@ -105,11 +105,19 @@ async function open(t, file, { panel = true } = {}) {
     toolNames: () => tools.getByRole('button').evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]'))
       .map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
     filter: () => tools.locator('[data-select-filter-trigger]').getAttribute('aria-label'),
-    // Select's mode chosen from its chevron's menu ("all", "links" or "position"), which puts the menu away.
+    // Select's Filter ticked to `mode` ("all": Links and Position; "links" or "position" alone) from its chevron's
+    // menu, its one row, Filter, opening the boxes beside it; ticking leaves it up, and Escape puts it away.
     async filterTo(mode) {
       await tools.locator('[data-select-filter-trigger]').click();
-      const menu = page.locator('[role=menu][aria-label="Selection filter"]');
-      await menu.locator(`[data-select-filter="${mode}"]`).click();
+      const menu = page.locator('[role=menu][aria-label="Filter"]').first();
+      await page.locator('[data-select-filter-row]').click();
+      for (const id of ['links', 'position']) {
+        const box = page.locator(`[data-select-filter="${id}"]`);
+        const want = mode === 'all' || mode === id;
+        if ((await box.getAttribute('aria-checked')) !== String(want)) await box.click();
+        await page.locator(`[data-select-filter="${id}"][aria-checked="${want}"]`).waitFor();
+      }
+      await page.keyboard.press('Escape');
       await menu.waitFor({ state: 'detached' });
     },
     handles: async () => Object.fromEntries((await page.evaluate(() => window.__cadJointHandles())).map(handle => [handle.id, handle])),
@@ -250,7 +258,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   assert.deepEqual(await robot.toolNames(), SELECT_IN_HAND);
   assert.equal(await robot.tool('Position').count(), 0, 'Position is no tool of its own');
   await robot.openPosition();
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
   assert.equal(await robot.tool('Explode').count(), 0, 'a robot is posed, never exploded');
   // Projection, Display and Preview are the view's controls, at the strip's end after its rule, for a robot as for any 3D file.
   assert.deepEqual(await robot.viewControls(), ['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
@@ -441,7 +449,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   await robot.jointField('shoulder').click();
   await robot.settle();
   assert.deepEqual([await robot.toolNames(), await robot.filter(), await page.evaluate(() => window.__cadJointHandles().length)],
-    [SELECT_IN_HAND, 'Selection filter: Links', 0]);
+    [SELECT_IN_HAND, 'Filter: Links', 0]);
   assert.equal(await robot.jointField('shoulder').inputValue(), '-40°');
   await robot.openPosition();
   const declaredHandles = JSON.parse(PAYLOADS['arm.srdf']).articulation.handles.map(handle => handle.id).sort();
@@ -471,7 +479,7 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await page.mouse.click(...onScreen(spots.lift).map((value, index) => value + (index ? 14 : 14)));
   await robot.settle();
   await robot.pressed([]);
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
   // Links is the sidebar's, whatever Select picks: on screen picking Position, and picking links.
   assert.equal(await robot.linksPanel().isVisible(), true);
   await robot.pickLinks();
@@ -525,7 +533,7 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   // what Select picks; a second press puts it away.
   await robot.openDisplay();
   assert.deepEqual([await robot.sidebar(), await robot.stack()], [['Links', 'Position controls'], []]);
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
   await robot.displayButton().click();
   await robot.displayPanel().waitFor({ state: 'detached' });
 
@@ -672,7 +680,7 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   // The tool is never saved, nor what it picks: the reloaded file opens in Select picking links and
   // knobs, Display shut, no section open.
   await robot.openSection('Links');
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: everything']);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: everything']);
   await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
   assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
   await robot.openSection('Position');

@@ -1,5 +1,5 @@
 """Binary STL: every placed triangle, in millimetres, its normal from its corners. The header is
-the document's name, and the export's own tolerance after it when it gave one."""
+the document's name, and the export's own tolerance and angle after it when it gave either."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from cad.engine.export import within
 from cad.engine.export.mesh import meshes, placed_points
 
 __all__ = ["header", "write"]
@@ -16,10 +17,11 @@ __all__ = ["header", "write"]
 _RECORD = np.dtype([("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribute", "<u2")])
 
 
-def header(name: str, tolerance: float | None) -> bytes:
-    """The 80 bytes before the triangles: the name, cut to leave room for the tolerance it was
-    meshed to within when the export gave one."""
-    said = f" (meshed within {tolerance:g} mm)".encode("ascii") if tolerance is not None else b""
+def header(name: str, tolerance: float | None, angle: float | None = None) -> bytes:
+    """The 80 bytes before the triangles: the name, cut to leave room for the tolerance and the angle
+    it was meshed to within when the export gave either."""
+    meshed = within(tolerance, angle)
+    said = f" (meshed within {meshed})".encode("ascii") if meshed else b""
     return (name.encode("ascii", "replace")[:80 - len(said)] + said).ljust(80, b" ")
 
 
@@ -27,7 +29,7 @@ def write(view: Any, path: Path) -> None:
     held = meshes(view)
     total = sum(held[placed.prototype].triangles for placed in view.placements)
     with open(path, "wb") as handle:
-        handle.write(header(view.name, view.tolerance))
+        handle.write(header(view.name, view.tolerance, view.angle))
         handle.write(struct.pack("<I", total))
         for placed in view.placements:
             mesh = held[placed.prototype]

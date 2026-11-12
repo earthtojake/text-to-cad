@@ -18,9 +18,10 @@ material in every look.
   the look's power, as is every fill (Parts); a part with one is its colour as authored, its
   metallic, roughness, IOR, emission (colour times strength) and alpha. What OCCT's raster has no
   term for is approximated: a clear coat is drawn as the base's roughness eased toward the coat's
-  (``COAT_ROUGHNESS``), anisotropy is dropped, and transmission becomes opacity
-  (``1 - TRANSMISSION_OPACITY * transmission``) over the base colour tinted by the transmission
-  colour. OCCT's roughness is ``0.01 + 0.99 n`` of the normalized ``n`` it is given, so it is
+  (``COAT_ROUGHNESS``), anisotropy is dropped, and transmission is drawn as what draws none draws it:
+  the part at its preview alpha, once (``formats/gltf.py``'s ``drawn_alpha``: ``preview_alpha`` of its PBR ``opacity``,
+  ``max(0.15, 1 - 0.7 transmission)`` unless that fades it below 1), over the base colour tinted by
+  the transmission colour -- as the viewer's looks without transmission and a 3MF draw it. OCCT's roughness is ``0.01 + 0.99 n`` of the normalized ``n`` it is given, so it is
   given ``(r - 0.01) / 0.99`` for three's ``r``.
 - **X-ray** is not drawn by this: it is the look's colour-only model (``look.py``) on OCCT's Phong
   program, its rig ``put_up_colour_only``'s and its faces' material ``occt.py``'s.
@@ -37,8 +38,6 @@ import numpy as np
 from cad.engine.render.look import LOOK
 
 CUBE_SIZE = 256
-# A transmissive material's opacity: fully transmissive glass is its reflections alone.
-TRANSMISSION_OPACITY = 1.0
 # A clear coat over a rougher base: the base's roughness moved this far toward the coat's.
 COAT_ROUGHNESS = 0.5
 
@@ -118,7 +117,8 @@ def cube_faces(image: np.ndarray, size: int = CUBE_SIZE) -> np.ndarray:
 
 
 @lru_cache(maxsize=1)
-def _cube_pixmap() -> tuple[Any, float]:
+def cube_pixmap() -> tuple[Any, float]:
+    """The environment as the packed cube map OCCT lights by, and the radiance its 1 stands for."""
     from OCP.Image import Image_Format, Image_PixMap
     from OCP.Quantity import Quantity_Color, Quantity_TOC_RGB
 
@@ -148,7 +148,7 @@ def put_up(view: Any, viewer: Any, backdrop: Any) -> list[Any]:
     from OCP.V3d import V3d_AmbientLight, V3d_DirectionalLight
     from OCP.gp import gp_Dir
 
-    pixmap, brightest = _cube_pixmap()
+    pixmap, brightest = cube_pixmap()
     white = Quantity_Color(1, 1, 1, Quantity_TOC_RGB)
     ambient = V3d_AmbientLight(white)
     ambient.SetIntensity(LOOK.environment.intensity * brightest)
@@ -211,15 +211,15 @@ def linear(value: Any) -> tuple[float, float, float]:
 def finish(rgba: Any, material: dict[str, Any] | None) -> dict[str, Any]:
     """What a face is drawn as: ``rgba`` its colour (linear, as the structure holds it, or a
     ``#rrggbb`` fill), ``material`` the structure's material for it, or None. Base colour, alpha,
-    metallic, roughness, IOR and emission, every approximation applied."""
+    metallic, roughness, IOR and emission, every approximation applied: its scalar look, its texture
+    maps left out (the mesh has no UVs; the structure names them, ``untextured``), as the viewer's
+    scene (``xbfLookParameters``) and a GLB (``export/glb.py``) leave them out."""
     colour = linear(rgba if rgba is not None else LOOK.fill)
     alpha = float(rgba[3]) if isinstance(rgba, (tuple, list)) and len(rgba) > 3 else 1.0
     if material is None:
         return {"color": tuple(value ** LOOK.colour_power for value in colour), "alpha": alpha,
                 "metallic": LOOK.plain.metallic, "roughness": LOOK.plain.roughness, "ior": LOOK.plain.ior,
                 "emission": (0.0, 0.0, 0.0)}
-    if material["pbr"].get("textures"):
-        raise ValueError("OCCT snapshots of native material texture maps require UV mapping; use a scalar PBR look")
     material = material["pbr"]["values"]
     roughness = float(material.get("roughness") if material.get("roughness") is not None else 0.5)
     coat = float(material.get("clearcoat") or 0.0)
@@ -228,9 +228,14 @@ def finish(rgba: Any, material: dict[str, Any] | None) -> dict[str, Any]:
         roughness += (target - roughness) * COAT_ROUGHNESS * coat
     transmission = float(material.get("transmission") or 0.0)
     if transmission > 0:
+        from cad.engine.formats.gltf import drawn_alpha
+
         tint = material.get("attenuationColor") or (1.0, 1.0, 1.0)
         colour = tuple(c * float(t) for c, t in zip(colour, tint))
-        alpha *= 1 - TRANSMISSION_OPACITY * transmission
+        # Drawn with no transmission, so at its preview, once: its PBR fade where it has one, else the
+        # alpha build123d's setter infers from the transmission. Its colour's alpha is that inference
+        # already, or a value that cannot be told from one, so it is not applied again (``drawn_alpha``).
+        alpha = drawn_alpha(alpha, material)
     strength = float(material.get("emissiveIntensity") if material.get("emissiveIntensity") is not None else 1.0)
     emission = tuple(float(value) * strength for value in (material.get("emissive") or (0.0, 0.0, 0.0)))
     return {"color": colour, "alpha": alpha, "metallic": float(material.get("metalness") or 0.0),

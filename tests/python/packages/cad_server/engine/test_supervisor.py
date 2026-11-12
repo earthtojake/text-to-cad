@@ -116,6 +116,20 @@ class SchedulingTest(unittest.TestCase):
         await_(lambda: supervisor.standby("worker") is not None, "the standby")
         return supervisor.standby("worker")
 
+    def test_a_process_retired_for_a_reason_goes_now_when_idle_and_as_its_lease_ends_when_busy(self) -> None:
+        supervisor = self.supervisor(4)
+        idle, busy = self.used(supervisor, "render", "a")[0], supervisor.lease("render", "b", {})
+        busy.state = {}
+        supervisor.retire(idle, "base")
+        supervisor.retire(busy, "base")
+        self.assertIn(("stop", "a"), self.said)
+        self.assertNotIn(("stop", "b"), self.said, "a lease holds it")
+        supervisor.release(busy)
+        self.assertIn(("stop", "b"), self.said)
+        self.assertEqual(supervisor.processes("render"), [])
+        supervisor.retire(idle, "base")  # no longer held: left alone
+        self.assertEqual(self.said.count(("stop", "a")), 1)
+
     def test_a_service_that_does_not_count_is_never_held_by_the_cap_nor_costs_a_counted_process(self) -> None:
         supervisor = self.supervisor(1)
         busy = supervisor.lease("worker", "a.py", {})

@@ -52,7 +52,7 @@ uvx --no-config --managed-python --python 3.14 --from cad-mcp==0.10.0 cad-mcp
 ```
 
 The server's key stays `cad`. The installer rewrites the Claude Desktop entry it wrote
-([the whole entry](../install.md#claude-desktop-chat-tab)).
+([the whole entry](../install.md#claude-desktop)).
 
 **5. The state and cache folders moved**, named `cad` now:
 

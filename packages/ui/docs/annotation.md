@@ -66,6 +66,9 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
   The drawing tools have no Select of their own:
   the viewer's Select picks ink (`RendererShell.jsx`, through the viewport's
   `annotationAt`), Shift adding to the pick, and Delete and Escape act on it (here too).
+  A box under Select (a 3D view's Box select, a flat view's Select) takes ink the same way
+  (`annotationsInBox`: the marks it touches, even in part; the shell's for
+  any renderer that adopts Box select, `boxTake.js`'s `takeFlatBox` for a flat view's).
   The camera stays the person's between strokes: the wheel zooms, a right or
   middle drag orbits, and while Space is held the pointer is the view's.
 - `mountAnnotations(runtime).update(items, selected, hovered)` haloes the ink Select

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box } from "lucide-react";
 import { cn } from "@cad/ui/utils";
-import { entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
+import { entitiesInBox, entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera, planProjection } from "@cad/core/lib/drawing2d/planView.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
@@ -17,6 +17,8 @@ import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js"
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { sceneCopyText, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import { useFlatBoxSelect } from "../kit/tools/select/useBoxSelectGesture.js";
+import { takeFlatBox } from "../kit/tools/select/boxTake.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
@@ -36,8 +38,10 @@ import { useI18n } from "@cad/ui/i18n";
  * inventing from it.
  *
  * What it has is what a person needs to talk about a drawing (`tools.js`): Select, which picks its
- * entities (by handle: `drawingReferences.js`) and is the view's hand — a drag pans, the wheel or a
- * pinch zooms, a double-click fits; Annotate, which draws on the sheet; and Measure, between points
+ * entities (by handle: `drawingReferences.js`) — a click the entity under it, a plain drag a box (every
+ * viewer's, `kit/tools/select/useBoxSelectGesture.js`'s `useFlatBoxSelect`; `entitiesInBox`) taking the
+ * entities it touches, with the ink and the measurements — while a right, middle,
+ * Ctrl, Cmd or Shift drag pans, the wheel or a pinch zooms, a double-click fits; Annotate, which draws on the sheet; and Measure, between points
  * snapped to its ends, centres and lines, in the unit the drawing declares (bare drawing units when
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
  * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
@@ -243,13 +247,27 @@ function DxfSurface({ view, data }) {
       const at = atPoint(point, pointerType);
       return at && drawingRef.current ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
     };
-    return { tap, hover, entityUnder };
+    // Select's box: the entities not on a hidden layer that it touches, even in part, with the ink and the
+    // measurements it takes (`takeFlatBox`; Shift at its release adds).
+    const box = (drawnBox) => {
+      const drawable = drawingRef.current;
+      if (toolRef.current !== DXF_TOOL.SELECT || !drawable) return;
+      const a = atPoint({ x: drawnBox.local.left, y: drawnBox.local.top }, "mouse")?.model, b = atPoint({ x: drawnBox.local.right, y: drawnBox.local.bottom }, "mouse")?.model;
+      if (!a || !b) return;
+      const bounds = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+      const session = annotationRef.current;
+      takeFlatBox(drawnBox, { annotation: session, inks: session.items.length ? annotationSurface.onScreen(session.items) : [],
+        measure: measured(() => {}), selection: selectionRef.current,
+        picked: entitiesInBox(drawable, bounds, { hiddenLayers: hiddenRef.current }).map(drawingReferenceId) });
+    };
+    return { tap, hover, entityUnder, box };
   }, [annotationSurface, requestPaint]);
 
   const drawingView = useDrawingView({
     drawing, restored, colorScheme, onViewMoved: rememberView, hiddenLayers, overlay, onTap: handlers.tap, onHover: handlers.hover
   });
   viewRef.current = drawingView;
+  useFlatBoxSelect(drawingView, { enabled: toolMode === DXF_TOOL.SELECT && Boolean(drawing), onBox: handlers.box });
   paintRef.current = drawingView.requestPaint;
   const { canvasRef, capture, containerRef, dragging, fit, thumbnail } = drawingView;
   // Ink put down, picked or let go: the same view, painted again.

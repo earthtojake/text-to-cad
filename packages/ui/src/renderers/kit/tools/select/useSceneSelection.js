@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { boxedSelection } from "./boxTake.js";
 
 const EMPTY = Object.freeze([]);
 
@@ -47,8 +48,13 @@ export function useSceneSelection({ scene, requestRender }) {
   }, [paint]);
   const select = useCallback((id, { multiSelect = false } = {}) => setChosen(current => nextSelection(current, String(id || ""), multiSelect)), []);
   const clear = useCallback(() => setChosen(current => (current.length ? EMPTY : current)), []);
+  // A box's picks (`boxTake.js`): added with Shift, else in place of what was picked.
+  const take = useCallback((ids, { additive = false } = {}) => setChosen(current => {
+    const next = boxedSelection(current, ids.map(String), additive);
+    return next.length ? next : current.length ? EMPTY : current;
+  }), []);
   // A viewport pick: the part under the pointer, and nothing clears.
   const pick = useCallback((hit, { multiSelect = false } = {}) => (hit ? select(hit.id, { multiSelect }) : clear()), [select, clear]);
   const hoverHit = useCallback((hit) => { hover(hit?.id || ""); setPointed(String(hit?.id || "")); }, [hover]);
-  return { selected, active: selected.length > 0, select, clear, pick, hover, hoverHit, pointed };
+  return { selected, active: selected.length > 0, select, clear, take, pick, hover, hoverHit, pointed };
 }

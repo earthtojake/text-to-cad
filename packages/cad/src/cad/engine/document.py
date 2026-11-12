@@ -23,7 +23,11 @@ base colour the part's colour too so a reader of colours alone agrees; on each p
 the element names the memo's history gave them (``kernel.trace``), so a face's name
 survives into the file and into a STEP; and on each part the key of its geometry
 (``KEY_GUID``), which a reader caches the part's tessellation by only once the part it
-read makes that key again (``Loaded``). Saved with the
+read makes that key again (``Loaded``); and on a part that declares them, its
+named frames, its body, its joints' drive limits, the masses it is
+declared part of, its point masses, the nodes declared free above it and
+the link names declared above it (``declarations``:
+``DECLARATIONS_GUID``), what a robot description is made of beside the material. Saved with the
 BinXCAF driver as ``.xbf``, atomically, and only when its bytes changed -- every
 sub-shape's ``Checked`` flag written cleared (``unchecked``), so a cold build and a
 warm one of the same sources write the same bytes.
@@ -74,6 +78,9 @@ CLOSURE_GUID = "2f6c9d1e-8a43-4b7e-b5d0-7e1a3c9f4b62"
 # The build's animations, a build record on its main label after the closure (``animations.record``):
 # the compiled tracks a GLB of the document bakes; every other reader ignores them.
 ANIMATIONS_GUID = "196117b9-7763-467d-8c37-7f838602e8a5"
+# What a part declares for a robot description (``declarations``), on its label: its named frames and
+# the rest (``DECLARED``), as ``declarations_key`` writes them; none on a part that declares nothing.
+DECLARATIONS_GUID = "8d3b6f2a-4c71-4e9b-a5d8-1f0c7e2b9a64"
 _XCAF_LOCK = threading.RLock()
 # The last document ``to_xcaf`` made and its tree; per path, the tree last saved there.
 _MADE: list = []
@@ -100,6 +107,11 @@ class Part:
     origin: Any = None  # the result's object it was first seen as
     material: Any = None
     face_materials: dict[int, Any] = field(default_factory=dict)
+    # What it declares for a robot description (``declarations``): its named frames, each 16 floats,
+    # column-major, millimetres, in its own frame.
+    frames: dict[str, tuple[float, ...]] = field(default_factory=dict)
+    # And the rest of it, as JSON holds it (``DECLARED``): its body, its joints' drives, its masses.
+    declared: dict[str, Any] = field(default_factory=dict)
 
 
 # The base colour of a part with a material and no colour: the exports' default grey.
@@ -189,7 +201,9 @@ def _material(value: Any) -> Any:
 
 
 def material_color(material: Any) -> tuple:
-    """The native PBR base colour as the document's linear RGBA."""
+    """The native PBR base colour as the document's linear RGBA, its alpha the look's PBR ``opacity`` (1
+    where it has none). A transmissive look's too: its alpha is what a GLB writes (``export/glb.py``'s
+    ``_alpha``), and what draws no transmission previews it (``formats/gltf.py``'s ``drawn_alpha``)."""
     from cad.engine.colors import srgb_to_linear
 
     values = material.pbr.values
@@ -271,12 +285,23 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
     parts: list[Part] = []
 
     def visit(obj: Any, topods: Any, inherited: tuple | None, inherited_material: Any,
-              path: str) -> tuple[Part | Assembly, tuple, tuple | None]:
+              path: str, inherited_masses: tuple[tuple[int, float], ...] = (),
+              inherited_nodes: tuple[tuple[int, str, Any], ...] = (),
+              inherited_drives: dict[str, tuple[int, Any]] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
         own_material = _material(state.get("_material"))
         material = own_material or inherited_material
+        # Each mass declared at or above the node, as (how many levels above it, grams): the outermost first.
+        own_mass = state.get(declarations.MASS)
+        masses = inherited_masses + (((0, _grams(own_mass, path)),) if own_mass is not None else ())
+        # And each ``free`` and ``link`` declared at or above it, as (levels above it, key, value), the outermost first.
+        nodes = inherited_nodes + _nodes(state, path)
+        # And each joint's drive limits declared at or above it, by the joint's label: (levels above it, bounds), the
+        # nearest declaration of a label the one kept (``declarations.limits`` keeps them on the node holding the joint).
+        drives = {**(inherited_drives or {}), **{label: (0, bounds) for label, bounds in
+                                                 (state.get(declarations.DRIVES) or {}).items()}}
         children = state.get("_NodeMixin__children") or ()
         label = state.get("label") or ""
         held = _children(topods) if children and int(topods.ShapeType()) == int(TopAbs_COMPOUND) else []
@@ -287,7 +312,10 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             for at, (child, child_topods) in enumerate(zip(children, held), 1):
                 child_label = child.__dict__.get("label") or ""
                 prototype, signature, child_color = visit(child, child_topods.Located(_identity()), color, material,
-                                                          path + "/" + (child_label or f"{own}.{at}"))
+                                                          path + "/" + (child_label or f"{own}.{at}"),
+                                                          tuple((up + 1, grams) for up, grams in masses),
+                                                          tuple((up + 1, key, value) for up, key, value in nodes),
+                                                          {label: (up + 1, bounds) for label, (up, bounds) in drives.items()})
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -312,21 +340,24 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             face_color = material_color(given)
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
+        frames = _frames(state.get(declarations.FRAMES), path)
+        declared = _declared(state, path, masses, nodes, drives)
         signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
-                     tuple((o, material_key(m)) for o, m in sorted(face_materials.items())))
+                     tuple((o, material_key(m)) for o, m in sorted(face_materials.items())),
+                     declarations_key(frames, declared))
         found = prototypes.get(signature)
         if found is None:
             meshes = mesh_faces(topods)
             if meshes:
                 raise ValueError(_mesh_refused(path, meshes))
             found = Part(topods, label or f"part{len(parts) + 1}", color, dict(painted), origin=obj,
-                         material=material, face_materials=face_materials)
+                         material=material, face_materials=face_materials, frames=frames, declared=declared)
             prototypes[signature] = found
             order.append(found)
             parts.append(found)
         return found, signature, color
 
-    from cad.engine import mechanism
+    from cad.engine import declarations, mechanism
 
     wrapped = result.wrapped
     root_name = result.__dict__.get("label") or name
@@ -372,7 +403,8 @@ def merge(tree: Tree) -> None:
         names = part.names or {}
         signature = (part.key, *(tuple(names.get(kind) or ()) for kind in ("faces", "edges", "vertices")),
                      part.color, tuple(sorted(part.face_colors.items())), material_key(part.material),
-                     tuple((o, material_key(m)) for o, m in sorted(part.face_materials.items())))
+                     tuple((o, material_key(m)) for o, m in sorted(part.face_materials.items())),
+                     declarations_key(part.frames, part.declared))
         found = first.setdefault(signature, part)
         if found is not part:
             replaced[id(part)] = found
@@ -651,7 +683,8 @@ def _records(tree: Tree) -> list[_Record]:
             material = material_key(prototype.material)
             base = prototype.color or DEFAULT_COLOR
             found.append(_Record(
-                ("part", apart, prototype.name, prototype.color, material, painted, given, prototype.key),
+                ("part", apart, prototype.name, prototype.color, material, painted, given, prototype.key,
+                 declarations_key(prototype.frames, prototype.declared)),
                 shape=prototype.shape, names=prototype.names,
                 colours=((prototype.color,) if prototype.color is not None else ())
                 + tuple(rgba for _, rgba in painted),
@@ -765,6 +798,7 @@ class _Converter:
         self.materials = kept.materials
         self.patching = patching
         self.key_guid = Standard_GUID(KEY_GUID)
+        self.declarations_guid = Standard_GUID(DECLARATIONS_GUID)
 
     def label(self, at: int) -> Any:
         return self.shapes.Label().FindChild(at + 1, False)
@@ -796,6 +830,9 @@ class _Converter:
             materials.set(label, prototype.material, prototype.color or DEFAULT_COLOR)
         if prototype.key:
             TDataStd_AsciiString.Set_s(label, self.key_guid, TCollection_AsciiString(prototype.key))
+        declared = declarations_key(prototype.frames, prototype.declared)
+        if declared is not None:
+            TDataStd_AsciiString.Set_s(label, self.declarations_guid, TCollection_AsciiString(declared))
         faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
         face_names = (prototype.names or {}).get("faces") or []
@@ -1342,6 +1379,8 @@ class Prototype:
     material: Any = None
     face_materials: dict[int, Any] = field(default_factory=dict)
     vertex_names: dict[int, str] = field(default_factory=dict)
+    frames: dict[str, tuple[float, ...]] = field(default_factory=dict)  # what it declares (``declarations``)
+    declared: dict[str, Any] = field(default_factory=dict)  # and the rest of it (``DECLARED``)
 
 
 @dataclass
@@ -1499,7 +1538,7 @@ class Loaded:
             "path": str(self.path),
             "version": f"{self.version[0]}-{self.version[1]}",
             "units": "mm",
-            "prototypes": [{
+            "prototypes": [_with_untextured({
                 "index": p.index, "key": p.key, "name": p.name, "color": p.color,
                 "faceNames": {str(k): v for k, v in sorted(p.face_names.items())},
                 "edgeNames": {str(k): v for k, v in sorted(p.edge_names.items())},
@@ -1507,7 +1546,9 @@ class Loaded:
                 "faceColors": {str(k): v for k, v in sorted(p.face_colors.items())},
                 "material": material_json(p.material),
                 "faceMaterials": {str(k): material_json(v) for k, v in sorted(p.face_materials.items())},
-            } for p in self.prototypes],
+                "frames": {name: list(values) for name, values in sorted(p.frames.items())},
+                **p.declared,
+            }) for p in self.prototypes],
             "instances": [{"prototype": i.prototype, "path": "/".join(i.path), "matrix": i.matrix, "color": i.color}
                           for i in self.instances],
             "tree": self.tree,
@@ -1586,13 +1627,16 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
         material = part.material
         face_materials = {ordinal: given
                           for ordinal, given in part.face_materials.items() if 1 <= ordinal <= faces.Extent()}
-        return {"index": index, "key": part.key, "name": part.name or f"part{index + 1}", "color": read(part.color),
+        return _with_untextured({
+                "index": index, "key": part.key, "name": part.name or f"part{index + 1}", "color": read(part.color),
                 "faceNames": {str(k): v for k, v in sorted(face_names.items())},
                 "edgeNames": {str(k): v for k, v in sorted(edge_names.items())},
                 "vertexNames": {str(k): v for k, v in sorted(vertex_names.items())},
                 "faceColors": {str(k): v for k, v in sorted(face_colors.items())},
                 "material": material_json(material),
-                "faceMaterials": {str(k): material_json(v) for k, v in sorted(face_materials.items())}}
+                "faceMaterials": {str(k): material_json(v) for k, v in sorted(face_materials.items())},
+                "frames": {name: list(values) for name, values in sorted(part.frames.items())},
+                **part.declared})
 
     paths: list[tuple[int, ...]] = []
 
@@ -1686,12 +1730,131 @@ def _read(path: Path) -> Any:
             refuse_external_files(reader, path)
             if not reader.Transfer(doc):
                 raise ValueError(f"cannot read {path}")
+            correct_step_densities(doc, path)
+            forget_step_attributes(doc, path)
             from cad.engine.step_style import read_visual_styles
 
             read_visual_styles(reader, doc)
         else:
             raise ValueError(f"not a document the engine reads: {path.name}")
     return doc
+
+
+def correct_step_densities(doc: Any, path: Any) -> int:
+    """A read STEP's material densities as the file says them, where OCCT's reader dropped the mass
+    unit's prefix: returns how many it corrected.
+
+    The XCAF document holds a density in g/cm^3 (``_Materials`` writes it so, and ``_label_material``
+    reads it so). OCCT's STEP reader converts a density's length unit but not the prefix of its mass
+    unit: a file declaring kg/m^3 (``SI_UNIT(.KILO.,.GRAM.)`` over ``SI_UNIT($,.METRE.)``, what Fusion
+    360 and most CAD tools write) arrives 1000 times too small -- steel's 7850 kg/m^3 as 0.00785 g/cm^3
+    -- while a STEP the engine wrote (grams over centimetres) reads back right. So each density the
+    file declares is read here with its unit, what OCCT should have made of it and what it does make
+    of it are worked out, and a material whose density is the second and not the first is set to the
+    first. A file whose densities OCCT read right (a later OCCT, a file in grams) is left as it is.
+    The file's text is scanned once, for its density measures and the units they name alone."""
+    import re
+
+    from OCP.TCollection import TCollection_HAsciiString
+    from OCP.TDF import TDF_ChildIterator
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
+
+    text = Path(path).read_bytes().decode("latin-1")
+    measures = re.findall(r"MEASURE_REPRESENTATION_ITEM\s*\(\s*'density[^']*'\s*,\s*(?:[A-Z_]+\s*\(\s*)?"
+                          r"([-+0-9.Ee]+)\s*\)?\s*,\s*#(\d+)\s*\)", text, re.IGNORECASE)
+    if not measures:
+        return 0
+    entities: dict[str, str] = {}
+
+    def entity(number: str) -> str:
+        if number not in entities:
+            found = re.search(rf"#{number}\s*=\s*([^;]*);", text)
+            entities[number] = found.group(1) if found else ""
+        return entities[number]
+
+    prefixes = {"EXA": 1e18, "PETA": 1e15, "TERA": 1e12, "GIGA": 1e9, "MEGA": 1e6, "KILO": 1e3, "HECTO": 1e2,
+                "DECA": 1e1, "DECI": 1e-1, "CENTI": 1e-2, "MILLI": 1e-3, "MICRO": 1e-6, "NANO": 1e-9}
+    expected: list[tuple[float, float]] = []  # (what OCCT should give, what it gives dropping the mass prefix)
+    for raw, unit in measures:
+        mass = length = None
+        for element in re.findall(r"#(\d+)", entity(unit)):  # DERIVED_UNIT((#element, ...))
+            part = re.match(r"\s*DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*([-+0-9.Ee]+)\s*\)", entity(element))
+            si = re.search(r"SI_UNIT\s*\(\s*(?:\.([A-Z]+)\.|\$)\s*,\s*\.([A-Z]+)\.\s*\)", entity(part.group(1))) \
+                if part else None
+            if not si:
+                continue
+            factor, exponent = prefixes.get(si.group(1) or "", 1.0), float(part.group(2))
+            if si.group(2) == "GRAM" and exponent == 1:
+                mass = factor  # grams per the file's unit of mass
+            elif si.group(2) == "METRE" and exponent == -3:
+                length = factor * 100.0  # centimetres per the file's unit of length
+        if mass is None or length is None or mass == 1.0:
+            continue
+        right = float(raw) * mass / length ** 3
+        expected.append((right, right / mass))
+    if not expected:
+        return 0
+    corrected = 0
+    tool = XCAFDoc_DocumentTool.MaterialTool_s(doc.Main())
+    children = TDF_ChildIterator(tool.Label())
+    while children.More():
+        material = XCAFDoc_Material()
+        if children.Value().FindAttribute(XCAFDoc_Material.GetID_s(), material):
+            density = material.GetDensity()
+            close = lambda a, b: abs(a - b) <= 1e-9 * max(abs(a), abs(b), 1e-300)  # noqa: E731
+            if density > 0 and not any(close(density, right) for right, _ in expected):
+                fixed = next((right for right, dropped in expected if close(density, dropped)), None)
+                if fixed is not None:
+                    # On the label: ``FindAttribute`` fills a copy, and setting the copy changes nothing.
+                    XCAFDoc_Material.Set_s(children.Value(), material.GetName() or TCollection_HAsciiString(""),
+                                           material.GetDescription() or TCollection_HAsciiString(""), fixed,
+                                           material.GetDensName() or TCollection_HAsciiString(""),
+                                           material.GetDensValType() or TCollection_HAsciiString(""))
+                    corrected += 1
+        children.Next()
+    return corrected
+
+
+def forget_step_attributes(doc: Any, path: Any) -> int:
+    """A read STEP's user-defined attributes that OCCT's reader took for materials, made no material: returns how
+    many it forgot or named.
+
+    A CAD tool writes a part's parameters as user-defined attributes (``GENERAL_PROPERTY('', 'QTY', 'user defined
+    attribute')`` and a ``DESCRIPTIVE_REPRESENTATION_ITEM`` holding its value): a sheet-metal default, a quantity, the
+    file the part came from. OCCT's reader reads a property's descriptive item as a material's name and description,
+    so each arrived a material named for the parameter (``QTY``, ``PTC_COMMON_NAME``) with no density, and every part
+    carrying one was listed under it. Such a material -- its name an attribute's, no density -- is made nameless
+    here, which ``_label_material`` reads as none; one whose attribute names a material (``PTC_MATERIAL_NAME``) and
+    holds a value is named for that value instead. A material the file declares (a density, a material
+    designation) is left as it is."""
+    import re
+
+    from OCP.TCollection import TCollection_HAsciiString
+    from OCP.TDF import TDF_ChildIterator
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
+
+    data = Path(path).read_bytes()
+    if b"user defined attribute" not in data:
+        return 0
+    attributes = set(re.findall(r"GENERAL_PROPERTY\s*\(\s*'[^']*'\s*,\s*'([^']*)'\s*,\s*'user defined attribute'",
+                                data.decode("latin-1"), re.IGNORECASE))
+    forgotten = 0
+    tool = XCAFDoc_DocumentTool.MaterialTool_s(doc.Main())
+    children = TDF_ChildIterator(tool.Label())
+    while children.More():
+        material = XCAFDoc_Material()
+        if children.Value().FindAttribute(XCAFDoc_Material.GetID_s(), material):
+            name = material.GetName().ToCString() if material.GetName() is not None else ""
+            value = material.GetDescription().ToCString() if material.GetDescription() is not None else ""
+            if name in attributes and not material.GetDensity() > 0:
+                named = value if "MATERIAL" in name.upper() and value.strip() else ""
+                # On the label: ``FindAttribute`` fills a copy, and setting the copy changes nothing.
+                XCAFDoc_Material.Set_s(children.Value(), TCollection_HAsciiString(named),
+                                       TCollection_HAsciiString(named), 0.0, TCollection_HAsciiString(""),
+                                       TCollection_HAsciiString(""))
+                forgotten += 1
+        children.Next()
+    return forgotten
 
 
 def refuse_external_files(reader: Any, path: Any) -> None:
@@ -1858,7 +2021,83 @@ def material_json(material: Any) -> dict[str, Any] | None:
             value = {"min": None if math.isnan(value.min) else value.min,
                      "max": None if math.isnan(value.max) else value.max}
         physics[field.name] = value
-    return {"type": type(material.material).__name__, "material": physics, "pbr": material.pbr.to_dict()}
+    found = {"type": type(material.material).__name__, "material": physics, "pbr": material.pbr.to_dict()}
+    process = process_json(getattr(material, "process", None))
+    if process is not None:  # absent, not null, without one: a material's content key is unchanged
+        found["process"] = process
+    return found
+
+
+def process_json(process: Any) -> dict[str, Any] | None:
+    """A part's declared manufacturing process (``bd_materials.processes.AppliedProcess``): the
+    route as its enum's value, and the per-part fields the dataclass holds."""
+    from dataclasses import fields
+    from bd_materials.processes import AppliedProcess, Process
+
+    if process is None:
+        return None
+    if isinstance(process, Process):  # the deprecated bare route, assigned after construction
+        process = AppliedProcess(process)
+    found: dict[str, Any] = {}
+    for field in fields(process):
+        value = getattr(process, field.name)
+        found[field.name] = value.value if isinstance(value, Process) else list(value) if isinstance(value, tuple) else value
+    return found
+
+
+def process_from_json(value: dict[str, Any] | None) -> Any:
+    """The ``AppliedProcess`` ``process_json`` wrote, or None; only that dataclass and its enum."""
+    from bd_materials.processes import AppliedProcess, Process
+
+    if value is None:
+        return None
+    given = dict(value)
+    route = Process(given.pop("process"))
+    return AppliedProcess(route, **{key: tuple(item) if isinstance(item, list) else item for key, item in given.items()})
+
+
+# A material's texture maps and their transforms: what no renderer draws yet (a part's mesh has no
+# UVs), so each draws the scalar look in their place. The document keeps them whole.
+TEXTURE_FIELDS = ("textures", "textureRepeat", "textureRotation", "normalizeUvs")
+
+
+def scalar_pbr(pbr: dict[str, Any]) -> dict[str, Any]:
+    """A structure material's ``pbr`` (``PbrProperties.to_dict``) without its texture maps and
+    their transforms: the scalar look the viewer's scene, a still and a GLB draw."""
+    return {key: value for key, value in pbr.items() if key not in TEXTURE_FIELDS}
+
+
+def untextured(material: dict[str, Any] | None, face_materials: dict[str, Any]) -> dict[str, list[str]]:
+    """The texture maps a part's materials carry (``material_json``), its own and its faces',
+    by material name: what is left out where it is drawn or exported (``TEXTURE_FIELDS``)."""
+    found: dict[str, set[str]] = {}
+    for given in (material, *face_materials.values()):
+        maps = ((given or {}).get("pbr") or {}).get("textures") or {}
+        if maps:
+            found.setdefault(str(given["material"].get("name") or given["pbr"].get("name") or "material"),
+                             set()).update(maps)
+    return {name: sorted(maps) for name, maps in sorted(found.items())}
+
+
+def untextured_maps(materials: dict[str, list[str]]) -> str:
+    """A part's texture maps left out (``untextured``) in words: ``ash's color and normal maps``."""
+    rows = []
+    for name, maps in materials.items():
+        listed = maps[0] if len(maps) == 1 else f"{', '.join(maps[:-1])} and {maps[-1]}"
+        rows.append(f"{name}'s {listed} map{'s' if len(maps) > 1 else ''}")
+    return "; ".join(rows)
+
+
+def untextured_said(part: str, materials: dict[str, list[str]], verb: str = "drawn") -> str:
+    """The warning for a part's texture maps left out (``untextured``), ``verb`` what was not done."""
+    return (f"{part}: {untextured_maps(materials)} not {verb}: textures are not drawn yet, so the part "
+            "wears its material's scalar look")
+
+
+def _with_untextured(entry: dict[str, Any]) -> dict[str, Any]:
+    """A structure prototype with its texture maps left out (``untextured``) where it has any."""
+    found = untextured(entry["material"], entry["faceMaterials"])
+    return {**entry, "untextured": found} if found else entry
 
 
 def material_key(material: Any) -> str | None:
@@ -1892,7 +2131,121 @@ def material_from_json(value: dict[str, Any] | None) -> Any:
     fields = {key: Range(math.nan if item["min"] is None else item["min"],
                          math.nan if item["max"] is None else item["max"]) if isinstance(item, dict) else item
               for key, item in value["material"].items()}
-    return FinishedMaterial(cls(**fields), pbr=pbr_from_json(value["pbr"]))
+    found = FinishedMaterial(cls(**fields), pbr=pbr_from_json(value["pbr"]))
+    # Provenance beside the resolved look, as the ``pbr`` setter keeps it: the look is ``pbr``'s.
+    found.process = process_from_json(value.get("process"))
+    return found
+
+
+def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
+    """A part's named frames (``declarations.frame``), each as 16 floats, column-major, millimetres,
+    in the part's own frame."""
+    if not value:
+        return {}
+    from cad.engine.mechanism import _numpy
+
+    found = {}
+    for name, location in sorted(value.items()):
+        if not isinstance(name, str) or not hasattr(location, "wrapped"):
+            raise ValueError(f"{path}: frame {name!r} is no build123d Location")
+        found[name] = tuple(float(item) for item in _numpy(location).T.reshape(-1))
+    return found
+
+
+#: What a part declares beside its frames, by the key the structure and the label hold it under: its body's
+#: name ("" for the part's own), its joints' drive limits (``{label: {"effort"?, "velocity"?, "up"?}}``, the
+#: keys declared, and ``up``, how many levels above the part the node holding the joint is, where an assembly
+#: holds it), the masses declared on it or above it (``[[levels above the part, grams], ...]``, the outermost
+#: first: 0 is the part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm,
+#: "inertia"?}}``), the nodes declared free at or above it (``[levels above the part, ...]``, the outermost
+#: first) and the link names declared at or above it (``[[levels above the part, name], ...]``, the outermost
+#: first).
+DECLARED = ("body", "drives", "mass", "pointMasses", "free", "link")
+
+
+def _nodes(state: dict[str, Any], path: str) -> tuple[tuple[int, str, Any], ...]:
+    """A node's own ``free`` and ``link`` declarations (``declarations.free``, ``declarations.link``), checked,
+    as (0, key, value)."""
+    from cad.engine import declarations
+
+    found: list[tuple[int, str, Any]] = []
+    if state.get(declarations.FREE) is not None:
+        if state[declarations.FREE] is not True:
+            raise ValueError(f"{path}: free is declared True, not {state[declarations.FREE]!r}")
+        found.append((0, "free", True))
+    name = state.get(declarations.LINK)
+    if name is not None:
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{path}: a link's name is a non-empty string, not {name!r}")
+        found.append((0, "link", name))
+    return tuple(found)
+
+
+def _grams(value: Any, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{path}: a mass is a positive number of grams, not {value!r}")
+    return float(value)
+
+
+def _declared(state: dict[str, Any], path: str, masses: tuple[tuple[int, float], ...] = (),
+              nodes: tuple[tuple[int, str, Any], ...] = (),
+              drives: dict[str, tuple[int, Any]] | None = None) -> dict[str, Any]:
+    """A part's ``DECLARED`` (``declarations.body``, ``limits``, ``mass``, ``point_mass``, ``free``, ``link``)
+    as JSON holds them: a key only where it declares one.
+    ``drives`` are the joints' limits declared at or above the part (``{label: (levels above it, bounds)}``),
+    the part's own where None."""
+    from cad.engine import declarations
+    from cad.engine.mechanism import _numpy
+
+    found: dict[str, Any] = {}
+    body = state.get(declarations.BODY)
+    if body is not None:
+        if not isinstance(body, str):
+            raise ValueError(f"{path}: a body's name is a string, not {body!r}")
+        found["body"] = body
+    if drives is None:
+        drives = {label: (0, bounds) for label, bounds in (state.get(declarations.DRIVES) or {}).items()}
+    if drives:
+        # A node's limits, ``up`` levels above the part, say how far up (a part's own say nothing more).
+        found["drives"] = {str(label): {**{key: float(bounds[key]) for key in declarations.DRIVE if key in bounds},
+                                        **({"up": int(up)} if up else {})}
+                           for label, (up, bounds) in sorted(drives.items())}
+    if masses:
+        found["mass"] = [[up, grams] for up, grams in masses]
+    points = state.get(declarations.POINTS)
+    if points:
+        held: dict[str, Any] = {}
+        for name, (grams, at, inertia) in sorted(points.items()):
+            if not hasattr(at, "wrapped"):
+                raise ValueError(f"{path}: point mass {name!r} is at no build123d Location")
+            held[str(name)] = {"grams": _grams(grams, path), "at": [float(item) for item in _numpy(at).T.reshape(-1)],
+                               **({"inertia": [float(item) for item in inertia]} if inertia is not None else {})}
+        found["pointMasses"] = held
+    floating = [up for up, key, _value in nodes if key == "free"]
+    if floating:
+        found["free"] = floating
+    named = [[up, value] for up, key, value in nodes if key == "link"]
+    if named:
+        found["link"] = named
+    return found
+
+
+def declarations_key(frames: dict[str, Any], declared: dict[str, Any] | None = None) -> str | None:
+    """What a part declares for a robot description as its label holds it (``DECLARATIONS_GUID``): JSON,
+    ASCII alone, keys sorted; None for a part that declares nothing."""
+    if not frames and not declared:
+        return None
+    return json.dumps({"frames": {name: list(values) for name, values in frames.items()},
+                       **(declared or {})}, sort_keys=True, separators=(",", ":"), allow_nan=False, ensure_ascii=True)
+
+
+def declarations_from(text: str | None) -> tuple[dict[str, tuple[float, ...]], dict[str, Any]]:
+    """``declarations_key`` read back: the frames and the rest (``DECLARED``)."""
+    if not text:
+        return {}, {}
+    value = json.loads(text)
+    return ({name: tuple(float(item) for item in values) for name, values in (value.get("frames") or {}).items()},
+            {key: value[key] for key in DECLARED if key in value})
 
 
 def _label_material(label: Any) -> Any:
@@ -2017,9 +2370,10 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
         if held_materials:
             part_material = _held_materials(faces, held_materials, part_material, face_materials)
     name = step_name(_label_name(label)) if loaded.step else _label_name(label)
+    frames, declared = declarations_from(_label_text(label, DECLARATIONS_GUID))
     return Prototype(index, local, name or f"part{index + 1}", part_color, found_key,
                      face_names, edge_names, face_colors, entry, part_material, face_materials,
-                     vertex_names=vertex_names)
+                     vertex_names=vertex_names, frames=frames, declared=declared)
 
 
 

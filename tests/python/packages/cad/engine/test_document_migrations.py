@@ -205,9 +205,15 @@ class DocumentMigrationsTest(unittest.TestCase):
         length = struct.unpack_from("<I", data, 12)[0]
         gltf = json.loads(data[20:20 + length])
         looks = gltf["materials"]
-        for alpha in (.8, .4, .6, .2, 119 / 255):
+        # Every look is transmissive here: a part's or a paint's alpha reached the migrated material's PBR opacity,
+        # its fade; a placement's own colour keeps its RGB at alpha 1 (``export/glb.py``, ``_alpha``).
+        for alpha in (.8, .6, .2):
             self.assertTrue(any(abs(m["pbrMetallicRoughness"]["baseColorFactor"][3] - alpha) < .0011
                                 for m in looks), alpha)
+        for instance in loaded.instances:
+            if instance.color is not None:
+                self.assertTrue(any(abs(m["pbrMetallicRoughness"]["baseColorFactor"][0] - instance.color[0]) < .0011
+                                    and m["pbrMetallicRoughness"]["baseColorFactor"][3] == 1.0 for m in looks), instance.color)
         for look in looks:
             extensions = look["extensions"]
             self.assertAlmostEqual(extensions["KHR_materials_transmission"]["transmissionFactor"], .5)

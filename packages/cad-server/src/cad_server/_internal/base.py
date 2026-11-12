@@ -57,7 +57,8 @@ from typing import Any, Callable
 from cad.engine import places
 
 __all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "Environment", "Installation", "MARKER", "Making", "Recipe",
-           "Refused", "SCHEMA", "complete", "ensure", "failure", "find_uv", "halt", "interpreter", "kernel", "make", "where"]
+           "Refused", "SCHEMA", "complete", "ensure", "failure", "find_uv", "halt", "interpreter", "kernel", "make",
+           "marked", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -251,14 +252,22 @@ def where(installation: Installation | None = None) -> Path:
 
 
 def complete(env: Path) -> dict[str, Any] | None:
-    """The marker of the base at ``env`` when it is complete -- written last, of its key, and its Python
-    there -- else None."""
+    """The marker of the base at ``env`` when it is complete -- written last, of its key (``marked``), and its
+    Python there -- else None."""
+    marker = marked(env)
+    return marker if marker is not None and interpreter(env).exists() else None
+
+
+def marked(env: Path) -> dict[str, Any] | None:
+    """The marker of the environment at ``env`` when one was made there -- written last, of this schema and
+    its key -- whether or not its Python is there still, else None. One whose Python is gone (a Python uv
+    managed, uninstalled or its cache wiped) is dead: made again where it is needed, and collected as any
+    other where it is not (``extras._collect``, ``leftovers.package_environments``)."""
     try:
         marker = json.loads((env / MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if (isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("key") == env.name
-            and interpreter(env).exists()):
+    if isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("key") == env.name:
         return marker
     return None
 
@@ -570,7 +579,7 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
         else:
             step = venv
         if result.returncode != 0:
-            raise Refused(failure(step, result.stderr or result.stdout, recipe))
+            raise Refused(failure(step, result.stderr or result.stdout, recipe, result.returncode))
         written = finish(steps, time.monotonic() - started)
         from cad._internal.atomic_replace import write_bytes_atomic
 
@@ -752,13 +761,31 @@ def _last(said: str) -> str:
     return lines[-1] if lines else "uv said nothing"
 
 
-def failure(step: list[str], said: str, recipe: Recipe) -> str:
-    """Why uv could not make an environment (``recipe``'s), in one line of cadgen's: a file the system
-    denies it (a sandbox's); the network it needs once; a Python it cannot use; a release no index it
-    reads has; else uv's own words."""
+def _stopped(code: int | None) -> str | None:
+    """The signal that ended uv, by name (``SIGKILL``), where one did (a negative exit status); else None."""
+    if code is None or code >= 0:
+        return None
+    import signal
+
+    try:
+        return signal.Signals(-code).name
+    except ValueError:
+        return f"signal {-code}"
+
+
+def failure(step: list[str], said: str, recipe: Recipe, code: int | None = None) -> str:
+    """Why uv could not make an environment (``recipe``'s), in one line of cadgen's: a signal that ended
+    it (``code``, its exit status: it gave no reason, and the last line it printed is none); a file the
+    system denies it (a sandbox's); the network it needs once; a Python it cannot use; a release no index
+    it reads has; else uv's own words."""
     explained = _explained(said)
     words = explained or _last(said)
     what = recipe.what
+    stopped = _stopped(code)
+    if stopped is not None:
+        why = ", as the system does to a process when memory runs out" if stopped == "SIGKILL" else ""
+        return (f"uv was stopped by {stopped} while it made {what}{why}: run this again "
+                f"(the last uv said: {_last(said)})")
     if DENIED.search(said) and not explained:
         return (f"the system denies uv what {what} needs ({_last(said)}); a sandbox that forbids it does: run this "
                 "once outside it, or with its permission")

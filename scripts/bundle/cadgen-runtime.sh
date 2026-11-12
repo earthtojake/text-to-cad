@@ -52,6 +52,7 @@ PLUGIN_FILES=(
   .codex-plugin/plugin.json
   .codex-plugin/logo.png
   .cursor-plugin/plugin.json
+  .grok-plugin/plugin.json
   gemini-extension.json
   plugin.json
   mcp.json

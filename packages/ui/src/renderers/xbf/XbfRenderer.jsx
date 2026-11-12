@@ -3,7 +3,7 @@ import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
 import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
 import { fetchXbfPartGroups } from "@cad/core/lib/xbf/xbfDocument.js";
-import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
+import { XBF_PICK_PIXELS, parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import { readFileView } from "../kit/shell/fileView.js";
@@ -17,10 +17,10 @@ import { useMotionExclusion } from "../kit/tools/model-effects/motionExclusion.j
 import { useMeasureSession } from "../kit/tools/measure/useMeasureSession.js";
 import { MeasurementsBar } from "../kit/tools/measure/measurementChips.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
-import MeasureFilterMenu, { MEASURE_MODES } from "../kit/tools/measure/MeasureFilterMenu.jsx";
+import MeasureFilterMenu, { measureBadge } from "../kit/tools/measure/MeasureFilterMenu.jsx";
 import { MEASURE_FILTER_DEFAULT } from "../kit/tools/measure/measureFilter.js";
 import JointHandleOverlay from "../kit/tools/pose/JointHandleOverlay.jsx";
-import { pickModeOf, selects } from "../kit/tools/select/selectFilter.js";
+import { selects } from "../kit/tools/select/selectFilter.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
 import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
@@ -29,12 +29,12 @@ import { createClickActivation } from "./clickActivation.js";
 import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
-import { MeasureIcon, SelectIcon, SelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from "./XbfSelectionModes.jsx";
+import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
 import { viewportMenuEntries } from "./xbfMenuItems.js";
-import { xbfModelMenu, xbfPartMenu, xbfTopologyMenu } from "./xbfMenus.js";
-import { NO_CONNECTED_SELECTION, nextSelectionIds, selectGeometryMode, treeShape } from "./xbfSelectionFilter.js";
+import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from "./xbfMenus.js";
+import { nextSelectionIds, tangentChain, withTangentChains, xbfGeometryPicks } from "./xbfSelectionFilter.js";
 import { isXbfAssemblyId, presentXbfTree, xbfAssemblyIds, xbfCoveringIds, xbfPickFrontier } from "./xbfTree.js";
 import { XBF_DECLINED_LIVE_COMMANDS, XBF_TOOL, XBF_TOOL_MODES } from "./tools.js";
 import { xbfLookSubject } from "./xbfLookAt.js";
@@ -51,12 +51,13 @@ const MENU_CONTROLS = Object.freeze({
   onHideOther: "menu_hide_others", onHideAll: "menu_show_all", onHide: "menu_hide", onReveal: "menu_reveal",
   onExpandSelected: "menu_expand", onCollapseSelected: "menu_collapse", onExpandAll: "menu_expand_all", onCollapseAll: "menu_collapse_all",
   onZoomFit: "menu_zoom_fit", onZoomSelection: "menu_zoom_selection",
+  onSelectTangentFaces: "menu_select_tangent_faces", onSelectTangentEdges: "menu_select_tangent_edges",
 });
 
 // An engine document in the viewer, exactly as a STEP is: the same tools in the same order
 // (Select with its filter, Pencil, Shapes, Measure, Explode, Clip), the same selection (Parts, Faces and
 // Edges as the filter ticks them, a collapsed assembly picked as a unit, a part's faces and edges
-// once it is open, Group faces and Group edges), the same view's panel (Model tree, Position), the
+// once it is open, a face's or an edge's tangent chain from the view's menu), the same view's panel (Model tree, Position), the
 // same menus, the same Quick Edit chips; and, for a document with motions, the playbar under the
 // model, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
@@ -144,15 +145,16 @@ function XbfSurface({ view, data }) {
   const requestFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
   const requestRender = useCallback(() => shellRef.current?.requestRender?.(), []);
 
-  // ---- Select's menu: All as the file opens, or one kind alone ---------------------------------
+  // ---- Select's Filter: every box ticked as the file opens, or any of them ----------------------
   const [selectFilter, setSelectFilter] = useState(XBF_SELECT_DEFAULT);
-  // Measure's menu, a STEP's (`kit/tools/measure/measureFilter.js`): All as the file opens, or
-  // Vertices, Edges or Faces alone: what a press takes whole (`XbfMeasure.jsx`).
+  // Select's two tools (`SELECT_TOOLS`): a click picks under either; under Box select a drag from empty space draws a box.
+  const [selectTool, setSelectTool] = useState("select");
+  // Measure's Filter, a STEP's (`kit/tools/measure/measureFilter.js`): Vertices, Edges and Faces, all ticked as
+  // the file opens, any of them, or none (the free point): what a press takes whole (`XbfMeasure.jsx`).
   const [measureFilter, setMeasureFilter] = useState(MEASURE_FILTER_DEFAULT);
-  const [connected, setConnected] = useState(NO_CONNECTED_SELECTION);
-  const geometryFilter = useMemo(() => (assembly ? selectFilter : selectFilter.filter(id => id !== "parts")), [assembly, selectFilter]);
-  const mode = selectGeometryMode(geometryFilter);
-  const shape = treeShape(mode);
+  // What the filter's geometry picks (`xbfGeometryPicks`): the mode, the tree's shape and a pick's booleans.
+  const geometry = useMemo(() => xbfGeometryPicks(selectFilter, { assembly }), [selectFilter, assembly]);
+  const { mode, shape } = geometry;
 
   // ---- the model tree's state, the host's: what is open, hidden, isolated, selected ------------
   // What is open, and who opened what the person did not (`xbfExpansion.js`): a pick's reveal, an isolation.
@@ -462,14 +464,13 @@ function XbfSurface({ view, data }) {
     }
     return open;
   }, [shape, openIds, frontier]);
-  const pickOptions = useMemo(() => ({
-    faces: geometryFilter.includes("faces"), edges: geometryFilter.includes("edges"),
-    parts: assembly && geometryFilter.includes("parts"), elements: openElements
-  }), [geometryFilter, assembly, openElements]);
+  const pickOptions = useMemo(() => ({ ...geometry.options, elements: openElements }), [geometry, openElements]);
   const viewportRef = useRef(null);
   // What the last press was made with (`XbfPick`): a finger's press reaches an edge from further off, as a STEP's.
   const pointerTypeRef = useRef("");
   // A press's pick and a resting pointer's (an edge is taken from further away on a press), as one hit.
+  // With no geometry ticked (Position alone, or no box at all) the model offers nothing: the pointer
+  // lights nothing and the tip names nothing, and a click lets the selection go, as one on empty space does.
   const picker = useMemo(() => (scene ? {
     pick(ray) {
       const camera = viewportRef.current?.runtimeRef.current?.camera;
@@ -495,23 +496,29 @@ function XbfSurface({ view, data }) {
   // What Annotate's ink touches at a point of the view, as a STEP's said it (`RendererShell`'s
   // `inkTouches`): the part under it, with the face or the edge there as its reference, as copying
   // that face or edge writes it -- whatever Select's filter picks, and whichever parts are open.
-  const inkTouches = useCallback((clientX, clientY) => {
+  // The model's visible geometry under a point of the view, whatever Select's filter picks: a face, an
+  // edge, else the part (hidden, dimmed and clipped geometry is not there). `pixels`: how near an edge
+  // is taken, in place of a press's reach.
+  const modelAt = useCallback((clientX, clientY, pixels = null) => {
     const viewport = viewportRef.current;
     const runtime = viewport?.runtimeRef.current;
     const rect = viewport?.hostRef.current?.getBoundingClientRect?.();
-    if (!scene || !runtime?.camera || !rect?.width) return [];
+    if (!scene || !runtime?.camera || !rect?.width) return null;
     const raycaster = new runtime.THREE.Raycaster();
     raycaster.setFromCamera(new runtime.THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, 1 - ((clientY - rect.top) / rect.height) * 2), runtime.camera);
-    const hit = scene.pickElement(raycaster.ray, { camera: runtime.camera, width: rect.width, height: rect.height },
-      { faces: true, edges: true, parts: true, elements: null });
+    return scene.pickElement(raycaster.ray, { camera: runtime.camera, width: rect.width, height: rect.height },
+      { faces: true, edges: true, parts: true, elements: null, pixels });
+  }, [scene]);
+  const inkTouches = useCallback((clientX, clientY) => {
+    const hit = modelAt(clientX, clientY);
     const instance = parseXbfElementId(hit?.id)?.instance;
     if (instance == null) return [];
     const part = `i${instance}`;
     const ref = hit.kind ? xbfCopyText({ scene, tree, resource: shellRef.current?.frame.resource, ids: [hit.id] }).split("\n")[0] : "";
     return [ref ? { part, ref } : { part }];
-  }, [scene, tree]);
+  }, [scene, tree, modelAt]);
 
-  // Group faces and Group edges: the engine's groups of a part, asked for once per part.
+  // Select tangent faces and Select tangent edges (the view's menu): the engine's groups of a part, asked for once per part.
   const groupsRef = useRef(new Map());
   const groupsOf = useCallback((key) => {
     if (!source) return Promise.resolve(null);
@@ -521,33 +528,48 @@ function XbfSurface({ view, data }) {
     groupsRef.current.set(key, asked);
     return asked;
   }, [source, engineFetch]);
-  const grownIds = useCallback(async (hit) => {
-    const option = hit.kind === "face" ? "tangentFaces" : "edgeChain";
-    if (!connected[option]) return [hit.id];
-    const groups = await groupsOf(hit.key);
-    const table = groups?.[hit.kind === "face" ? "faces" : "edges"];
-    const group = table?.[String(hit.ordinal)];
-    if (group == null) return [hit.id];
-    return Object.entries(table).filter(([, value]) => value === group).map(([ordinal]) => `i${hit.instance}/${hit.kind}/${ordinal}`);
-  }, [connected, groupsOf]);
+  // Select tangent faces or edges: the tangent chains (`tangentChain`) of the faces or edges `ids` names (the
+  // one pressed, and those selected) added to the selection, an action of the view's menu; a click or a box
+  // never grows on its own.
+  const selectTangent = useCallback(async (kind, ids) => {
+    const elements = ids.map(id => scene?.describeElement(id)).filter(element => element?.kind === kind);
+    const chains = await Promise.all(elements.map(async element => tangentChain(element, await groupsOf(element.key))));
+    if (chains.length) setChosen(now => withTangentChains(now, chains));
+  }, [scene, groupsOf]);
 
   // The selection as the last activation found it: what a double-click whose first click picked puts back.
   const lastPick = useRef(null);
-  const handlePick = useCallback(async (found, modifiers) => {
+  const handlePick = useCallback((found, modifiers) => {
     const hit = found?.press || null;
     const multiSelect = Boolean(modifiers?.multiSelect);
     lastPick.current = { before: selectedRef.current };
     if (shellRef.current?.toolMode !== XBF_TOOL.SELECT) ensureSelect();
     if (!hit) { if (!multiSelect) { setChosen(EMPTY); measureRef.current.select([]); } return; }
     if (!multiSelect) measureRef.current.select([]);
-    if (hit.kind) {
-      const ids = await grownIds(hit);
-      setChosen(now => pickElements(now, ids, multiSelect));
-      return;
-    }
+    if (hit.kind) { setChosen(now => pickElements(now, [hit.id], multiSelect)); return; }
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
-  }, [ensureSelect, grownIds, nodeOf, selectableIds]);
+  }, [ensureSelect, nodeOf, selectableIds]);
+  // Box select: what the box takes of the model, by a click's rules (`pickBox`, `pickOptions`): what
+  // shows in it, touching it even in part. Under
+  // All the faces and edges of the parts that are open and every other part as the node a click
+  // takes. With them the measurements whose dimension it
+  // touches, while Select picks measurements (`measureSelectHandlers`' `box`); the shell has taken
+  // the annotation's ink (`RendererShell`'s `boxSelect`). Shift adds; otherwise it replaces each.
+  const measureSelectRef = useRef(null);
+  const handleBoxSelect = useCallback((box) => {
+    measureSelectRef.current?.box(box);
+    const camera = viewportRef.current?.runtimeRef.current?.camera;
+    const rect = viewportRef.current?.hostRef.current?.getBoundingClientRect?.();
+    const found = scene && camera && rect?.width && mode !== "none" ? scene.pickBox(box, { camera, width: rect.width, height: rect.height }, pickOptions) : [];
+    const nodes = new Set();
+    for (const hit of found) {
+      const node = hit.kind ? "" : nodeOf(hit);
+      if (node && (!selectableIds || selectableIds.has(node))) nodes.add(node);
+    }
+    const taken = [...nodes, ...found.filter(hit => hit.kind).map(hit => hit.id)];
+    setChosen(now => (box.additive ? (taken.length ? [...new Set([...now, ...taken])] : now) : taken.length ? [...new Set(taken)] : EMPTY));
+  }, [scene, mode, pickOptions, nodeOf, selectableIds]);
   // What a press would pick, which the frame names in its hover tip: the face or edge, else the node a press reaches.
   const [pointed, setPointed] = useState("");
   const handleHover = useCallback((found) => {
@@ -655,10 +677,12 @@ function XbfSurface({ view, data }) {
     onExpandAll: menu => setExpansion(now => openAllRows(now, menu.collapsedExpandableTreeNodeIds)),
     onCollapseAll: menu => setExpansion(now => shutRows(now, menu.expandedExpandableTreeNodeIds)),
     onZoomFit: () => shellRef.current?.frame.viewerRef.current?.resetZoom?.(),
-    onZoomSelection: zoomToSelection
+    onZoomSelection: zoomToSelection,
+    onSelectTangentFaces: menu => selectTangent("face", menu.tangentFaceIds),
+    onSelectTangentEdges: menu => selectTangent("edge", menu.tangentEdgeIds)
   }).map(([name, action]) => [name, (menu) => { usage.used(MENU_CONTROLS[name]); ensureSelect(); return action(menu); }])),
   [copy, exitSingleIsolate, isolate, exitIsolate, hideOthers, showAll, hideNodes, selectedNodeIds, revealNodes, toggleExpanded,
-    zoomToSelection, ensureSelect, usage]);
+    zoomToSelection, selectTangent, ensureSelect, usage]);
   const contextMenuItems = selectActive ? (press) => {
     const hit = pickAtClient(press.clientX, press.clientY);
     let menu = null;
@@ -670,33 +694,36 @@ function XbfSurface({ view, data }) {
     }
     menu ||= xbfModelMenu({ tree, assembly, expandedIds, hiddenCount: hiddenIds.length, zoomSelectionAvailable, shape,
       copyText: assembly ? "" : singleChip([tree.roots[0]?.selectionId].filter(Boolean)) });
-    return viewportMenuEntries(menu, { actions: partMenuActions, t });
+    // Select tangent faces or edges where it applies: the face or edge pressed, and those of its kind selected.
+    return viewportMenuEntries({ ...menu, ...xbfTangentSources({ pressed: hit?.kind ? hit.id : "", selectedElementIds }) },
+      { actions: partMenuActions, t });
   } : null;
 
   // ---- the strip --------------------------------------------------------------------------------
   const bounds = scene ? boundsInUnits(sceneFramingBounds(scene), scene.units) : null;
   const effects = useModelTools({ view: viewSettings, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle });
-  const selectModeMenu = useMemo(() => <SelectModeMenu value={selectFilter} assembly={assembly} posable={posable} disabled={shell.idle}
+  const selectModeMenu = useMemo(() => <SelectMenu value={selectFilter} assembly={assembly} posable={posable} disabled={shell.idle}
     onChange={value => { setSelectFilter(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }}
-    connected={connected} onConnectedChange={(id, checked) => setConnected(now => ({ ...now, [id]: checked }))} />,
-  [selectFilter, assembly, posable, shell.idle, connected]);
+    tool={selectTool} onToolChange={value => { setSelectTool(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }} />,
+  [selectFilter, selectTool, assembly, posable, shell.idle]);
   // Measure's chevron, a STEP's: a choice takes Measure up, as Select's takes Select up.
   const measureFilterMenu = useMemo(() => <MeasureFilterMenu value={measureFilter} disabled={shell.idle}
     onChange={value => { setMeasureFilter(value); shellRef.current?.selectTool(XBF_TOOL.MEASURE); }} />,
   [measureFilter, shell.idle]);
   const strip = [
-    // Each button badged with what its tool picks alone (its chevron's menu), none for All.
-    shell.tools.own({ id: XBF_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, menu: selectModeMenu,
-      icon: <SelectIcon mode={pickModeOf(selectFilter, xbfSelectModes({ assembly, posable })).id} className="size-3.5" aria-hidden="true" /> }),
+    // Each button badged with what its tool's Filter ticks (its chevron's menu): none for All, one kind's glyph, else a funnel.
+    shell.tools.own({ id: XBF_TOOL.SELECT, label: t(selectTool === "box" ? "select.boxSelect" : "tool.select"), shortcut: TOOL_SHORTCUTS.select, menu: selectModeMenu,
+      icon: <SelectIcon tool={selectTool} mode={xbfSelectBadge(selectFilter, { assembly, posable })} className="size-3.5" aria-hidden="true" /> }),
     ...shell.tools.drawing.map(tool => ({ ...tool, disabled: shell.idle })),
     shell.tools.own({ id: XBF_TOOL.MEASURE, label: t("tool.measure"), shortcut: TOOL_SHORTCUTS.measure, menu: measureFilterMenu,
-      icon: <MeasureIcon mode={pickModeOf(measureFilter, MEASURE_MODES).id} className="size-3.5" aria-hidden="true" />,
+      icon: <MeasureIcon mode={measureBadge(measureFilter)} className="size-3.5" aria-hidden="true" />,
       onSelect: () => { if (shell.toolMode !== XBF_TOOL.MEASURE) shell.selectTool(XBF_TOOL.MEASURE); } }),
     ...effects.tools
   ];
   // Under Select a press on a measurement picks it before any part under it, while Select picks measurements.
   const runtimeOf = () => viewportRef.current?.runtimeRef.current;
   const measureSelect = measureSelectHandlers(measure, runtimeOf, clearSelection, { picks: selects(selectFilter, "measurement") });
+  measureSelectRef.current = measureSelect;
 
   // Position's knobs: Select's, while its filter ticks Position, with nothing exploded and no motion owning the pose.
   const knobsShown = selectActive && posable && selects(selectFilter, "position") && !explodeApplied && !motionOwns;
@@ -743,6 +770,10 @@ function XbfSurface({ view, data }) {
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
+    boxSelect={{ enabled: picking && selectTool === "box", onBox: handleBoxSelect,
+      // Off the model as it is drawn -- not on a surface, nor on an edge's line (`XBF_PICK_PIXELS.edgeDrawn`,
+      // not a click's reach) -- nor on a measurement: a press just beside a part, where a box round it starts, draws the box.
+      mayStart: event => !modelAt(event.clientX, event.clientY, XBF_PICK_PIXELS.edgeDrawn) && !measureSelect.under(event) }}
     inkTouches={inkTouches} contextMenuItems={contextMenuItems} doubleClickFits={false}
     zoomToSelection={{ run: zoomToSelection, available: zoomSelectionAvailable }}
     viewportOverlay={viewport => {

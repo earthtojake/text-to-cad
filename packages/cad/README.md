@@ -53,13 +53,18 @@ These words mean one thing each, in the code, the commands and every document.
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
-  `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
+  `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
+  shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
+  MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
+  MuJoCo Studio shows it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `netgen`, `calculix`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
-  kind: in-process, separate process, or both.
+  kind: in-process, separate process, or both. An integration has operations of its own only on a file of its
+  tool's that is no document type (`cad mujoco check robot.xml`, `cad.mujoco.check`): a closed set too,
+  `check` today, answering findings as a type's check does.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -70,7 +75,9 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
+  `solve` (a B-rep type's stress study), `ranges` (a mechanism's joint stops,
+  found from its geometry), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -81,11 +88,17 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
-document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
-and solved by CalculiX's ccx, its results a folder of standard files); engineering drawings (`@eng_drawing`);
-and work instructions (`@work_instruction`).
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
+document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
+exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
+B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
+pair of parts whose boxes meet answered, as built and posed, by the engine: exactly, by the kernel, wherever the
+two parts' meshes do not show air between them); a
+B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
+CalculiX's ccx, its results a folder of standard files); a mechanism's joint stops found from its geometry
+(`cad.<type>.ranges(source)`, each joint swept against its parts); engineering drawings (`@eng_drawing`); and work
+instructions (`@work_instruction`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -125,8 +138,18 @@ the two disagree, the engine's README is right.
 
 ## The design laws
 
-These are LAWS, not conventions: a change that violates them is wrong even when it works.
-Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
+These laws say how the package is built today and why, and a change to what exists follows them. They
+are not a template for what comes next: each was written from the document types and the tools the
+package had at the time. So when adding a feature, a document type, an integration or a command, read
+them with a grain of salt and think from first principles about what is best for that tool: what it
+already does, who looks at its files, and what is missing without us. Where that leads away from a law,
+do not force the fit. Say which law and why in the change, and where the law itself should read
+differently, change its text in the same change (an MJCF came to have no document type that way, and
+law 27 gained its second form). What stays wrong is departing from a law without saying so. And
+whatever is added is added for a purpose: nothing wraps a tool only to rename or repeat what the tool
+already does (law 29).
+
+Each of the 30 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
 (the distributions alike).
@@ -166,7 +189,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
    beside it each environment a program's run made (`cad run`: the library pinned with the integrations
    its imports use, and the packages it names), regenerable as well, those of the release before the
-   current kept as the way back (the engine's **Running a model**). The code stays the only source of truth: a document is what its
+   current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
+   folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
+   imports bpy: `homes/blender`), empty but for what the tool itself writes there. The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
@@ -179,11 +204,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    a worker: the model API, the kernel side of the engine, the document model and the protocol a
    client speaks -- imports nothing of the server's or the shim's, so a model runs where only it is
    installed; it imports nothing outside itself but its own dependencies, the standard library and
-   each integration's extra, that extra only in that integration's environment (law 26; the kernel is
+   each integration's extra, that extra only in that integration's environment (law 25; the kernel is
    the `build123d` extra's, which the engine's workers run in). The server -- what runs in the daemon
    or a `cad` command: the daemon, the registry, the CAD Viewer's and the CAD app's servers, every
    verb, the environment makers, telemetry -- imports the library's kernel-free modules, and never
-   the kernel or an integration's code (law 29). The shim (`cad_mcp`), the stdio transport
+   the kernel or an integration's code (law 28). The shim (`cad_mcp`), the stdio transport
    an agent app starts, is the standard library alone. The server reaches into the library, never the
    other way: its telemetry is an observer the engine calls with plain facts (`engine.api.observers`),
    which the server's commands append.
@@ -194,7 +219,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    materials per part and per painted face, element names on face, edge and vertex labels, and
    an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
    of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
-   schematic, a robot description, a mesh -- is its file, read by its type (law 25).
+   schematic, a robot description, a mesh -- is its file, read by its type (law 24).
 5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
    runs is keyed by its inputs, and so is every question it asks of what they made: a validity
    check, a volume, a distance. A hit hands back the objects the first run made, or the answer it
@@ -359,9 +384,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
     from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
     person's click.
-    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s) is fetched once, the
-    first time a command needs it, from uv's cache and the network, and works offline after that; a
-    first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
+    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
+    `cad[coacd]`'s, for a MuJoCo function's `decompose`) is fetched once, the first time a command needs
+    it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
+    reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
     snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing or a
     work instruction, a crash; a model's own process, where only the library is installed, counts nothing -- is kept
@@ -413,7 +439,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -421,16 +447,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
     URL.
 
-22. **A verb's option is about the picture or the path, never the model.** *Every document.* `export` takes a
-    document and destinations: what the file holds, its parts and their placement, colours and
-    motion, is what the code built, so no option selects a part or a state; its one option, an
-    STL's or a 3MF's mesh tolerance, is how finely the file's triangles follow that, not what it holds. `snapshot`'s
-    options describe the picture (the camera, the display, the size, the state the mechanism
-    is drawn in); `serve`'s and `status`'s the process. Anything that changes what a document
-    is, is a function in the model's code: a part's own model, or a model returning the
-    assembly in a state (`cad.build123d.posed`).
-
-23. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge of a
+22. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge of a
     model comes from a run an agent or a person starts (`python model.py`, `cad run model.py`),
     which pushes the model's code, its key and its document to the engine. The engine never reads a
     script to learn what a model is, never watches one, never infers a document from a path on
@@ -451,11 +468,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     since its run.
 
 
-24. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
+23. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
     integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
-    process kind and, for an external program, its probe (the program, the oldest version our code supports, the
+    process kind, the operations it has on a file of its tool's own that is no document type, with the
+    suffixes they take (`mujoco`: `check` on `.xml` and `.mjcf`), and, for an external program, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -466,7 +484,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     otherwise -- the HTTP API's document kinds and the analytics schemas say `3mf` -- the entry names that
     spelling (`wire`); nothing else does.
 
-25. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
+24. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
     has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
     with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
     objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
@@ -474,7 +492,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
     neutral about producers: it imports no third-party library.
 
-26. **An integration is named for its tool and holds only our code for it.** *The package.* `cad.<integration>` (code in
+25. **An integration is named for its tool and holds only our code for it.** *The package.* `cad.<integration>` (code in
     `cad/<integration>/`) holds the helpers WE define that take that tool's objects and the producers it
     registers for the types they make; it re-exports nothing of the tool (`import build123d as bd` stays
     build123d's), and imports only its own extra's dependencies. Every extra, every `cad.<name>` namespace
@@ -484,29 +502,41 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
 
-27. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
+26. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
     persistent script's output; the registry's producers -- each a type, a matcher, the code that writes
     it and its integration -- decide which makes the file of the returned value. A matcher reads the
     value's type names and modules, never importing a library to ask. Exactly one producer per return
     type per document type; a return none takes fails loudly, naming the types the document is made of and
     the integration that would add more.
 
-28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
+27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> <file>` for a
+    tool's own file.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two
+    parts share volume, `solve` a B-rep type's stress study, `ranges` a
+    mechanism's joint stops, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
+    A document type is a file cad shows, so a file cad writes or checks and never shows has no type's
+    command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
+    <file>`, one to one with `cad.<integration>.<operation>` (`cad mujoco check robot.xml`: a MuJoCo
+    model, which MuJoCo Studio shows). The noun is still the file, named by the tool that owns its format.
+    A name is a type's or an integration's, never both; an operation lives in one place, so a file that
+    has a document type has its operations there and its integration has none for it (no `cad kicad drc`
+    beside `cad kicad_pcb drc`); and an integration is never a way to name the means of a type's
+    operation (`cad stl dfm` is trimesh's and nobody says so). An integration's operations are a closed
+    set too (`check`, answering findings as a type's check does).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
-    --help` groups the commands by type. The commands that are no document's -- setup, update,
+    --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
     uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
     top-level.
 
-29. **An integration runs where its extra is installed.** *The package.* An integration's code runs
+28. **An integration runs where its extra is installed.** *The package.* An integration's code runs
     in the command's own process when that environment holds the integration's extra, else in that
     integration's environment -- `cad[<integration>]` at the installation's release, made once per
     installation on first need, as `cad run` makes a program's -- run as a subprocess, the library's
@@ -516,18 +546,31 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     add, or to run the script with `cad run`. A command line an integration's extra installs
     (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
     and the integration's `_command` module runs the environment's own command there, headless in
-    private homes, never one on PATH.
+    private homes, never one on PATH. A tool built for one Python alone (blender's bpy, CPython 3.13) is
+    an integration like any other, its extra installing it only there: the registry names that Python, the
+    platforms it has builds for and the folders its settings are read from, an environment with it is
+    made on that Python with the library pinned in it, and a run's settings folders are private. That is
+    why the library's floor is Python 3.13 while the server's installations run on a newer one.
 
-30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
-    <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
+29. **cad wraps a tool only where it adds something.** *The package.* Nothing is a superficial wrapper:
+    a helper in the library and a typed command alike are added because something is missing without
+    them, and each can say what. `cad <type> <operation>` (and an integration's own `cad <integration>
+    <operation>`) runs a tool for a reason the tool's own line lacks: one result shape (law 27's
     findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
-    output path), or parity with the viewer (the same check, the same export). Everything else of the
-    tool is its own command line, run through `cad run` (`cad run kicad-cli pcb render …`), which the
-    skill documents with the tool's own flags at the pinned version; no typed command is added to
-    rename one.
+    output path), parity with the viewer (the same check, the same export), or a fact the tool does not
+    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile).
+    A helper of an integration's (`cad.<integration>.<name>`) takes the tool's objects for a reason of
+    the same kind: it ties them to our documents (a part found by its label path), does what the tool
+    leaves undone (a spec saved with its files, so the folder travels), or reports what it does not.
+    Everything else of the tool is the tool's own, used as it is: its Python API in the script that
+    imports it (law 25: nothing of it is re-exported), and its command line run through `cad run` (`cad
+    run kicad-cli pcb render …`, `cad run mujoco-studio …`), which the skill documents with the tool's
+    own flags at the pinned version. No helper and no typed command is added to rename one, and none to
+    do again what the tool does: where the tool has it, cad has none (no still of a MuJoCo model, which
+    MuJoCo Studio shows).
 
-31. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
-    A producer is the engine's (law 27): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
+30. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
+    A producer is the engine's (law 26): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
     `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
     and the file is written again from the model whenever it runs. An edit is a native file's own: the file
     is the source, and `with <type>.edit(path) as document:` opens it in its tool, in the caller's process,
@@ -603,7 +646,7 @@ src/cad/
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
-                         #   B-rep type's solve: model's, xbf's and step's)
+                         #   B-rep type's solve and ranges: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -618,38 +661,63 @@ src/cad/
                          #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
                          #   a board or a schematic through its headless api-server and KiPy
                          #   (_session), DRC (_check), its exports (_export), a schematic's ERC
-                         #   and exports (_schematic)
-  trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
-                         #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
-                         #   printing (overhangs, walls, support), orientations (ranked) -- each
-                         #   taking a trimesh.Trimesh and answering its report as data (_molding,
-                         #   _printing), and the dfm every 3D type runs with them (_check)
+                         #   and exports (_schematic), and route, copper for the connections a
+                         #   plan names, inside an edit (_route; its search, _routing: numpy)
+  trimesh/               # the trimesh integration: a mesh's 3D printing measurements -- printing
+                         #   (overhangs, walls, trapped volumes, support), orientations (ranked) -- each
+                         #   taking a trimesh.Trimesh and answering its report as data (_printing), the
+                         #   mesh read and cleaned (_mesh), and the check every mesh type runs (_check)
+  mujoco/                # the mujoco integration, MuJoCo's headless core and Studio (mujoco-core, mujoco-studio): a
+                         #   document as a mujoco.MjSpec (_spec), a part's collision chosen on it
+                         #   (_parts), the spec saved as a folder that travels (_save), and check, its
+                         #   one operation on a MuJoCo model's file, which is no document type: the
+                         #   model compiled by MuJoCo's own compiler, what it refuses and warns as
+                         #   findings (_compile), the model-health checks (_health), what collides as
+                         #   what and the contact excludes as data (_report, _check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
-                         #   and the producers it registers (_producers)
+                         #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
+                         #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
+                         #   _dfm_check, the entry), the interference check's measuring
+                         #   (_interference), named material looks (materials: solder mask, ENIG,
+                         #   anodized, ..., each a native bd_materials FinishedMaterial), and the
+                         #   producers it registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
+  coacd/                 # the coacd integration, CoACD's convex decomposition: the process of its own
+                         #   that cuts a part's mesh into convex hulls for cad.mujoco.decompose
+                         #   (_decomposer), which the engine starts and keeps the hulls of (engine/hulls.py)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
+  blender/               # the blender integration, bpy: a GLB loaded into Blender's scene for a
+                         #   render, every node's object found by its place in the file, each node
+                         #   a clip moves put back where the file places it, and one clip played at
+                         #   a time (load, Model, Clip: _scene)
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
-  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
-                         #   validate) and a KiCad export return, typed
+  results.py             # the operations' shared result types: what a check (dfm, interference, solve,
+                         #   drc, erc, validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
   work_instruction.py    # @work_instruction: the steps that build one assembly, one PDF;
                          #   its pages and figures in _internal/work_instruction_pages.py,
                          #   a simple one's picture guide in _internal/work_instruction_guide.py
                          #   and its 3D page in _internal/work_instruction_player.py
-  _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
-                         #   signature and options, the trimesh integration's measuring imported
-                         #   when it runs (manufacturing), the runner of one operation the server's
+  _internal/             # DocumentType (document_type), a B-rep type's interference check: its
+                         #   options and its result (interference), a 3D type's manufacturing check: its
+                         #   signature and options, its integration's measuring imported when it
+                         #   runs (manufacturing), each process's options, rules and findings
+                         #   (dfm/, its README the mechanism), the numpy geometry the checks measure
+                         #   with (meshops_printing, a mesh's, shared by both integrations;
+                         #   molding_geometry; sheet_plane), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
+                         #   the joint stops a type with a mechanism runs (ranges: its signature
+                         #   and options, stdlib only; the sweep is engine/ranges.py),
                          #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the
                          #   runner `cad run` starts a program by (program: the program's
@@ -682,7 +750,8 @@ kicad_pcb drc`) and the fabrication, assembly and 3D exports (`cad.kicad_pcb.exp
 `cad kicad_pcb export --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`), the `kicad`
 integration's, run by kicode's `kicad-cli` (`cad[kicad]`; a person's own KiCad is never run). A script
 run with `cad run` that calls them gets the extra; the command runs them in the extra's environment. An
-exported STEP enters the ordinary foreign-file path.
+exported STEP enters the ordinary foreign-file path. A board's GLB holds its copper, mask and silkscreen
+as well as the board and its parts, each KiCad's own mesh; its STEP the board and its parts alone.
 
 A `.kicad_sch` is source too, read the same way. `cad.kicad_sch.read` reads the whole
 hierarchy from its project's root sheet (whichever of its sheets it is given): its sheets, symbols and
@@ -691,8 +760,12 @@ resolves them -- the names `kicad-cli sch export netlist` gives, which are the b
 references in the board's grammar where they mean the same (`#U3`, `#U3.7`, `#net:VBUS`) and its own
 (`#sheet:/Power/`, `#wire:<uuid>`). Its plot payload (`engine/formats/kicad/schematic_plot.py`) is the
 board's shape, every sheet a page, drawn from the symbols' own drawings the file embeds, its text in
-the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
-kicad_sch erc`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
+the same stroke font with KiCad's text markup, each page on KiCad's default drawing sheet as the viewer
+shows it; `cad kicad_sch snapshot --sheet /Power/` draws one page with its title block. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
+kicad_sch erc`; beside KiCad's findings the check lists, from the reader, each pin joined some other way besides
+and each wire end that lies on a wire's span with no junction, which KiCad joins and its ERC passes:
+`pin_on_wire_span`, `wire_end_on_wire_span`, warnings whose `items` name the pin or wire and the wire; a pin
+whose one connection is a wire's span is KiCad's own straight run through a pin, not one) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
 pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
 
 A board or a schematic is changed in place through KiCad's IPC API by an edit of it, a `with` block:
@@ -707,53 +780,230 @@ One KiCad serves a project: the board's and the schematic's edits of one
 project, one inside the other, share it, each saved at its own block's end. A schematic's symbol libraries
 are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
-made is removed. Exports and checks of the edited file are explicit calls after the block.
+made is removed. Exports and checks of the edited file are explicit calls after the block. A board's save is
+checked for the nets KiCad moved: KiCad gives copper the net of a pad it overlaps on any layer, as it loads
+and commits, so each track, via, copper shape and zone saved on another net than the block gave it (else the
+file had) is a warning on stderr naming it (`#via:<uuid>`), both nets and the pad it overlaps, and is on the
+board after the block, `board.net_changes` (`cad.kicad._drift`).
+
+Inside a board's edit, `cad.kicad.route(board, plan)` writes copper for the connections a plan names, in its
+order: each a net or a pair of pads, with the copper layers it may use (required; there is no default plan),
+its width and clearance (the net's netclass's by default, never under the board's rules), its via limit (for
+the whole entry) and via cost (in mm of track; the search settles for a path within 1.2 times the cheapest, so
+the trade is about that, not exact). A plan is a list, in order. The plan is checked whole before anything is
+routed; a mistake in it is a `ValueError` naming what to give, and so is a board it cannot route by: an outline
+that does not close, a pad drawn with a primitive it cannot read or whose padstack layers share no point, a
+TrueType copper text with no outline saved, a net KiCad pairs by name with another (a differential pair, which
+it does not route), a region past its memory even at the least margin (route the plan in parts). A region whose
+margin round the plan's pads would not fit the router's memory (600 MB for its fields and its largest search)
+is narrowed to fit first, and said.
+
+It reads the open board (`get_as_string`) and KiCad's rules for it: each net's netclass, the board's minimums,
+the solder-mask clearances, and the custom rules. Each clearance a custom rule names is kept everywhere (the
+largest of each); a track width, via diameter, hole size, annular width or via count of a rule with no condition
+and no layer is kept as DRC holds it (an entry's width outside it is refused naming the rule, the via the router
+places is taken up to its least and refused past its most, and a net's via count, its vias on the board counted,
+lowers each entry's via limit); a `disallow` or an `assertion` is refused by name; every other constraint that can
+bear on new copper, and every size of a rule with a condition or a layer, is a warning naming the rule and the
+fix, for DRC to judge after; a `.kicad_dru` its KiCad cannot read, or cannot give over the API, refuses the
+board. It routes round everything on the board: pads (a padstack's every layer; a route ends where every layer
+has copper), tracks, vias, holes, keep-outs (their arcs to the true arc), the edge, and every copper graphic,
+text (by KiCad's stroke metrics, a TrueType one by the outline KiCad saves), text box, table, barcode and
+dimension; new copper keeps out of other nets' solder-mask openings (DRC's `solder_mask_bridge`), and new
+untented vias whose openings the clearance cannot hold are refused. It searches each connection on a grid whose
+free nodes are worked out from the exact shapes (a move between two free nodes is clear along its whole
+length), pulls each path tight in continuous geometry, checks every segment and via once more, exactly, and
+writes the tracks and vias in one commit: nothing on the board is moved or deleted, nothing else is written,
+and the block's save writes the file; a block that raises saves nothing, so a dry run is a route and a raise.
+Octolinear and deterministic: the same board and plan give the same copper, in another process and on another
+OS: between the board's text and every decision there is only IEEE-754 arithmetic (its angles are its own, not
+the C library's), and the tests hold one board's routed copper to a digest on Linux, macOS and Windows.
+
+The answer, a `Routed`, holds every connection's outcome and the plan entry it came from (`Connection.entry`),
+with `.ok`, `.failed`, `.warnings` and `.human_lines()`: one it cannot route is answered by name with what walls
+it in and what to do (with no via left, the layers it reaches and the via limit as the cause), on stderr too,
+and the rest go on; each warning is on stderr (`route: warning: ...`) before routing. A copper pour is neither
+an obstacle nor a connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the
+block refills the pours round the new copper. It runs in the script's process. It does not route differential
+pairs, keep a length, skew or track-angle rule, or choose what to route or in what order.
+
+## The interference check
+
+A B-rep document's `interference` says which of its parts share volume: `cad.model.interference`,
+`cad.xbf.interference` and `cad.step.interference`, one to one with `cad <type> interference SRC`. Every pair of
+parts whose boxes meet is answered, as built and at each of `poses`: a mechanism state's name, a
+configuration sequence at a time of it (`"walk@0.6"`), or `{joint: value}`, as every command takes a pose. It
+checks the poses it is given and chooses none. `fits` names the pairs meant to share volume, listed
+apart. A pair with air between its two parts is ruled out on their meshes (the kernel's own proximity test, and
+a point of each shell classified against the other's solids, so a part swallowed whole is not missed); every
+other pair is measured exactly, on the parts' own solids. The engine measures it and keeps each answer by the
+two parts' geometries and how one stands to the other: a document edited is measured again only where a part
+that changed is one of the two, and the same check of an unchanged document is answered at once.
+
+```python
+from cad import model
+
+found = model.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("bearing*", "housing")])
+for finding in found.findings:          # an `overlapping_parts` each: its two occurrences in .refs, mm3 in .value
+    print(finding.human_line())
+assert found.ok, found.summary          # not ok where a pair shares volume, or could not be measured
+```
+
+The result is a `CheckResult`: `failed` where a pair shares volume, `not_checked` (its `reason`
+`unmeasured`) where none was found but a pair could not be measured (past its five minutes or the check's
+twenty, its process lost, the kernel's refusal: each row's `reason`) -- never a pass, and asked again the check
+goes on from what it measured -- and `ok` only with every pair answered and none
+sharing. A shared volume of `min_volume` or less (0.001 mm3 by default) is none. `measurements` holds the poses, the pairs counted and how each was answered (`pairs`: `apart`,
+`kept`, `measured`), every row of `overlaps`, `fits` and `unmeasured` (each `between` its two parts, with every pose it holds at), and the measurements that took
+longest (`slowest`).
 
 ## Manufacturing checks
 
-A 3D document's `dfm` measures it for a manufacturing process, with the `trimesh` integration
-(`cad[trimesh]`): `cad.model.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and
-`cad.glb.dfm`, one to one with `cad <type> dfm --process molding|printing`. The source is a file of
-the type or, for `model`, a document the engine holds (its id, or the handle a model's call returns), so a
-check script measures the model it builds:
+A 3D document's `dfm` says whether a part can be made by a process, and what to change where it cannot:
+`cad.model.dfm`, `cad.step.dfm`, `cad.xbf.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one
+with `cad <type> dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `printing`
+alone, its default: CNC, sheet and molding are judged on exact geometry, and a mesh asked for one is refused
+with the check to run instead, the STEP's or the model's), and a DXF's, `cad dxf dfm FILE`, as a sheet's cut file
+(its one process, `sheet`, the default). The source is a file of the type or, for `model`, a model's document the engine
+holds (its id, or the handle its call returns), so a check script measures the model it builds:
 
 ```python
-from cad import model, stl
-from part import part                  # a model
+from cad import model, step
+from cad.build123d import dfm
+from part import part                                          # a model
 
-result = model.dfm(part(), process="molding", pull="-z")    # draft, undercuts, projected area
-stl.dfm("part.stl", process="printing", angle_limit=40)  # overhangs, walls, support
-stl.dfm("part.stl", process="molding", candidates=True)  # the pulls ranked: x, y, z, principal axes
-result.ok, result.findings, result.measurements["draft"]["min_wall_draft"]
+model.dfm(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
+step.dfm("bracket.step", process="sheet", material="5052", bend_radius=1.6)
+step.dfm("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
+step.dfm("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
+found = dfm(shape, process="cnc", tools=[3, 6])                # a live build123d shape, the same result
+if found.status != "ok":                                       # "ok", "failed" or "not_checked"
+    for finding in found.findings:                             # a rule's verdict: its figure, limit and refs
+        print(finding.code, finding.location, finding.value, finding.limit, finding.unit, finding.refs)
 ```
 
-The figures are facts, never verdicts: nothing compares them against a resin's, a printer's or a tool's
-limit. The answer is a `cad.results.CheckResult`: `measurements` every family measured, its findings
-what they show -- warnings (`zero_draft_walls`, `undercut_candidates`, `overhangs`, `units_suspect`,
-`not_watertight`, `several_bodies`, `coarse_curved_face`), each at the place it was measured (`x, y, z`
-in millimetres), and errors for what could not be measured (`measurement_failed`, `mesh_unreadable`,
-`not_finite`, `invalid_target`), which alone fail it. Each option belongs to a process: molding's
-`pull` (`z`, `-y`, `x,y,z`; default `z`), `wall_limit` (45 degrees) and `zero_tol` (0.05); printing's
-`angle_limit` (45) and `samples` (2000); `units` (`mm`, `cm`, `m`, `in`, `ft`) an STL's alone, the
-other types declaring their own; `candidates` either's. An option of the other process is refused by
-name. A mesh is measured as the viewer reads it: an STL as it is, a 3MF's or a GLB's objects placed in
-millimetres, Z up, and a model, a STEP or an xbf as the engine tessellates it.
+**Three states.** A check answers one of three (`CheckResult.status`; the command's exit status):
 
-Measured as a mesh, a curved face's draft is read from its facets, which are chords: the report says how
-far its facets disagree (`spread_deg`) and when to export finer. The trimesh integration's functions
-measure a mesh a program already holds, answering the same report as data:
-`cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
-`cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` (any file trimesh reads, an `.obj`
-or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
-`cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
-(`cad[trimesh]`), and a check without it says so in one line.
+| `status` | exit | what it says |
+| --- | --- | --- |
+| `ok` | 0 | every part was measured and no finding is an error: the part can be made. Warnings are recommendations: it is made, at a cost or a risk |
+| `failed` | 1 | a finding is an error: the part cannot be made by this process as drawn. With `--strict` (`strict=True`), a warning fails it too |
+| `not_checked` | 3 | the check did not judge what it was asked to, so it is no verdict and never a pass: a source that does not read or holds nothing to measure (`document_unreadable`, `document_empty`, `not_solid`, a mesh's `mesh_unreadable` or `mesh_empty`, a cut file's `no_cut_geometry`, a file that is not there: `invalid_target`), a family that could not be measured (`measurement_failed`), faces the kernel failed to intersect rays with (`rays_unintersected`), a rule whose features carry no figure that should have been measured (`rule_partly_judged`), rules that judged nothing (`rules_none_evaluated`), a report with a figure that is no finite number (`not_finite`). `reason` is the code of the finding that says so |
+
+`ok` is true for `ok` alone. An error found wins over what was not checked: the part fails whatever else
+was not judged, and the line says both. Read the state from `status` (or the exit), never from a finding's
+severity: a `not_checked` result carries an `error` finding too, the one whose code is its `reason`, which
+says why nothing was judged. The command exits 3 too for a check that did not run to its end --
+the engine stopped it (its document changed under every try of it, it went past its time or its memory), lost its process
+or stopped itself, its environment gave no answer, it crashed -- where `--json` is the failure's document with `"status": "not_checked"` and a
+`reason`, and one line on stderr says `NOT CHECKED (<reason>)` and why; a library call raises those. A check its
+caller measures (a mesh's, a cut file's, a file's with no engine to reach) runs in a process of its own held to
+the same limits (`CAD_ENGINE_CHECK_SECONDS`, `CAD_ENGINE_CHECK_RSS_MB`): past one its result is `not_checked`,
+`over_time` or `over_memory`. Exit 2 stays the command line's mistake (`"status": "usage"` in its `--json`
+document): an option refused by name, a file of another type or not there, a document the engine does not hold.
+
+- **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
+  points, counterbores, threads), pockets and slots, internal corners against tool radius and depth, sharp
+  internal edges no tool makes, walls and gaps, tool access per setup direction and the setups it needs,
+  undercuts, voids, stock; turned parts' axis, diameters, bores, grooves and live-tooling features.
+- **Sheet metal** (`--thickness`, `--k-factor`, `--bend-radius`, `--kerf`, `--sheet-size`): constant
+  thickness, bends, flanges, reliefs, hems, holes and their distances to edges, holes and bends (in each
+  convention), notches, tabs and webs, measured on the part unfolded with its K-factor
+  (`cad.build123d.unfold`); a DXF's contours, overlaps, crossings, annotation and small features.
+- **Injection molding** (`--pull`, `--cavities`): per-face draft, undercuts and the side action, lifter or
+  collapsible core each needs, wall thickness and thick sections, ribs, bosses, internal corners, projected
+  area and a clamp-force estimate, the parting, the mold envelope; `--candidates` ranks the pulls.
+- **3D printing** (`--technology fdm|sls|sla|mjf|pbf`, `--build-volume`, `--layer-height`, `--nozzle`):
+  walls supported and not, gaps, holes, pins, embossed and engraved detail, overhangs, bridges and
+  cantilevers, clearances between parts, trapped volumes and their escape holes, build-volume fit, bed
+  contact and warping, stair-stepping, support; `--candidates` ranks orientations.
+
+**Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
+`build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
+(`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
+holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
+millimetres.
+The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
+one table of rules: general practice from published design guides, each rule citing its guide as the
+evidence, and text-to-cad's own floors where no guide states a limit, each labelled as its own -- no rule
+is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
+compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
+`--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is one finding for
+each feature that fails it, coded by its id, at the feature's most specific ref (a corner's edge, not one of
+its two faces), with the verdict as data -- `rule`, `value`, `limit`, `unit`, `op` (`min` or `max`),
+`source` (the guide's publisher and title, or `text-to-cad` for a floor of its own) and `refs` (every ref the feature names, `location` first) --
+and a hint saying what to change; an error is a limit the part breaks, a warning a recommendation. The
+command says a rule once -- its hint, its source and how many places -- then a short line a place, and its
+last line leads with the state and the counts, which are the findings': `FAILED part.step: 4 error(s), 2
+warning(s); cnc ...; failed: cnc.internal_corner_sharp x4`. Every rule's outcome, its source and every
+failure (with the index of its item in its family) are `measurements["rules"]`, and a figure not measured is
+never a pass: a rule that could not judge some of its features says which (`rule_partly_judged`, its `refs`) and the
+check is not checked. What does not apply is no gap: a figure that cannot exist of a feature (a lone rib's
+gap to a neighbour) is named in the feature's `not_applicable`, and what a source does not hold (a mesh's
+holes, pins and details; a cut file's bends, reliefs, hems and thickness) is said once as a fact
+(`families_not_measured`), its rules not evaluated.
+
+**Every part, as it stands.** An assembly's every part is judged, and a part used several times is judged
+each way it stands: the occurrences turned alike are measured once and counted
+(`measurements["bodies"][i]`: `occurrences`, `paths`, `placements_mm`), and one turned another way is
+measured as it stands, at its own refs -- a bracket that prints clean on its back and needs support on its
+side is said at the occurrence on its side. `measurements["document"]` totals every occurrence
+(`occurrence_count`, `solid_count`, `volume_mm3`), and so does each process: a print measures every
+occurrence where it stands on the plate, and the others' totals count a part once for each time it occurs.
+Several parts are said (`several_bodies`); one part of several solids says so in every process
+(`several_solids`), and solids that share volume fail every process (`not_sound`).
+`--material` picks a material's limits, and without it the material the parts declare is read
+(`part.material = metals.aluminum()`, when every part agrees: `material_declared`); without `--process`, an
+xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,
+`plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
+`bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
+`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's, and a DXF's where it
+declares none or the wrong ones (the other types declare their own, and take no such option); an option of another process, a value of another kind
+(`axes=3.7`, `turning="no"`) and a value no machine has (an end mill over 100 mm, an FDM layer taller than
+its nozzle) are refused by name, never coerced -- by the flag on the command line (`--tools`), by the
+parameter in Python (`tools`), where a list of numbers is given as one (`tools=[3, 6]`, `stock=(100, 60,
+25)`) and a material by its name (`"Aluminium 6061"`). Every family, its JSON, every rule with its source and
+what each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
+
+The trimesh integration's functions measure a mesh a program already holds, answering its report as data:
+`cad.trimesh.printing(mesh)` and `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
+`cad run` that imports `trimesh` or `cad.trimesh` gets that integration and one that imports `build123d`
+gets the other; one that calls `cad.<type>.dfm` gets the type's -- `cad.stl.dfm`, `cad.threemf.dfm` and
+`cad.glb.dfm` trimesh, `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm` and `cad.dxf.dfm` build123d -- found by
+`cad run`'s scan of its source, with nothing in its header; a name the scan cannot see (imported by name at
+run time) the run says it lacks, in one line.
+
+**Since 0.11.7** a check judges; before, it measured, and a part passed whatever its figures were. What a
+script or a prompt written for an earlier release meets now:
+
+- **The exit and `status`.** 0 `ok`, 1 `failed`, 3 `not_checked`, 2 the command line's mistake. Exit 1 used to
+  say "could not be measured or read", which is 3 now, and a part that breaks a rule's feasibility limit, a
+  warning and a pass before, fails. `--json` gains `status` and `reason`, and every check's result carries
+  them (`drc`, `erc`, `validate` and `solve` too: `ok` or `failed`); `strict` is new.
+- **Findings.** A rule's verdict is data (`rule`, `value`, `limit`, `unit`, `op`, `source`, `refs`): read
+  those, never the message. On exact geometry a finding's `location` is a ref (`plate/face 7`) where it was
+  `x, y, z`, and the parts' facts are `measurements["document"]` and `measurements["bodies"]` where they were
+  `measurements["mesh"]`; a mesh's are as they were.
+- **What fails a part** is every finding of severity `error`, whatever its code: a rule whose `severity` is
+  `error` (`measurements["rules"]["outcomes"]`; [the manufacturing checks](src/cad/_internal/dfm/README.md#since-0117)
+  lists them as of this release), a process's own error (`sheet.not_sheet`), and the part's soundness:
+  `not_watertight`, a warning before, is an error on a mesh and on exact geometry alike, as `not_sound` is.
+- **Gone.** A mesh's molding check: `cad stl|threemf|glb dfm --process molding` is refused (exit 2), and
+  `cad.trimesh.molding` and `cad.trimesh.pulls` are not there -- molding is judged on exact geometry,
+  `cad.build123d.molding(shape)` or `cad.step.dfm(path, process="molding")`. With it went the findings
+  `coarse_curved_face`, `mesh_folds` and `probe_resolution`; `sealed_voids` is `internal_void`, one finding for
+  each void. Printing's `--candidates` answers the orientations alone, best first: run the check once without
+  it for the part's own figures.
+- **`units`** is an STL's and a DXF's (`--units`; a DXF that declares none is `not_checked` without it,
+  `units_not_set`). `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm`, `cad.threemf.dfm` and `cad.glb.dfm` take
+  none, where they took `mm` alone.
 
 ## Stress studies
 
 A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
 parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`,
 `cad xbf solve` and `cad step solve` (a mesh has no faces a study can hold or load by, so the mesh types
-have none). It is a check (law 28): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
+have none). It is a check (law 27): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
 findings carry a severity, a code and a location, with two uses of one signature:
 
 ```python
@@ -803,6 +1053,70 @@ one thread, in a private folder with homes of its own, so it reads and writes no
 and the result names the CalculiX version that ran; `cad run ccx ARGS` runs the same program on a deck of
 a person's own (`cad.calculix._command`). The operation is the calculix integration's, which names the
 kernel and netgen `alongside`, so the `cad` command runs a study where all three are: its own process
-when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
+when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 28); a
 script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
 without one says so in one line.
+
+## Joint stops
+
+A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad.model.ranges`,
+`cad.xbf.ranges` and `cad.step.ranges`, one to one with `cad model|xbf|step ranges`. It is a check (law
+28): a `CheckResult` whose finding per joint (`joint_stops`, at the joint) says where it stops each way and
+which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
+calling process, as a study reads one (a model exported by the engine to an `.xbf` in a temporary folder
+first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
+(`engine.ranges`: surfaces sampled to a fixed resolution and measured gap by gap, the other joints as
+built): its stop is where its child link meets its parent link, and a clash with any other link before it is
+said beside; a larger clearance only narrows a range. Every part is tested against every other on its own
+surface: where a simulator stops a joint, with the collision shapes a MuJoCo function chose, is a question
+for the simulator on its file. It writes nothing and changes nothing: a model is code, and its ranges are
+written in it (law 22). Its options describe the sweep: `step` (degrees or
+millimetres), `clearance` (millimetres, 0.3 by default and at the least: the surfaces' sampling) and `joint`
+(the joints to sweep, every one a person moves by default; a name the document has no such joint by is
+refused, naming its joints). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
+process when its environment holds it, else the installation's base (law 28).
+
+## Since 0.11.8
+
+What 0.11.8 adds:
+
+- **A model declares what is true of the machine for a robot description.** `cad.build123d`'s `body`,
+  `frame`, `free`, `limits` (a drive's `effort` and `velocity`), `link`, `mass` and `point_mass` are kept
+  in the xbf beside the materials. Each is a fact of the machine; how a simulator collides a part, which
+  pairs never collide, contact friction and a joint's dynamics are a simulation's choices, made in a MuJoCo
+  function.
+- **A document exports as a robot description.** `cad model export ID robot.xml` (MJCF) and `robot.urdf`
+  write its links, exact inertials, visual meshes and colours, each part's mesh as its collision (MuJoCo
+  collides a mesh as its convex hull), sites, drive force bounds, couplings, closed loops (MJCF) and states
+  as keys, with a `scene.xml` beside an MJCF; `--zero STATE` counts every joint from a state. Its summary
+  says how the parts collide, and that a MuJoCo function is where to choose otherwise.
+- **A MuJoCo function makes the simulation's choices** (`cad.mujoco`, `cad[mujoco]`): `spec` makes a
+  document a `mujoco.MjSpec`; `parts` lists its parts' label paths; `collisions`, `fit` (a box, sphere, cylinder or capsule fitted to the part's
+  exact solid) and `decompose` (CoACD's convex hulls of its mesh, `cad[coacd]`) find and replace a part's
+  collision by its label path; everything else is MuJoCo's own API; `save` writes the spec as a folder that
+  travels.
+- **`cad.mujoco.check` checks a MuJoCo model's file** (`cad mujoco check robot.xml`): MuJoCo's own compile,
+  the model-health checks, what the model collides as and its contact excludes, as a check's result. An
+  MJCF is no document type: cad writes one and asks MuJoCo about one, and MuJoCo Studio shows it (`cad run
+  mujoco-studio --model robot.xml`). `check` is the first operation of an integration's own (law 27).
+- **`ranges` finds each joint's stops** from the parts' surfaces (**Joint stops**).
+
+What a model, a script or a check written for 0.11.7 meets now:
+
+- **A child turned about its joint's axis at its zero fails the run.** Where a child was built where it
+  stands -- its `RigidJoint` at the joint's origin, its Z on the joint's axis, its X another way (as a
+  `bd.Plane` of the axis on a turned part gives) -- and `connect_to` turned it about that axis at the joint's
+  zero, 0.11.7 built it turned. The run now fails, naming the joint, the turn and the frame to build the
+  `RigidJoint` at: a revolute's own frame, `hinge.location`, or a slide's position in its rail's
+  orientation. A `RigidJoint` whose Z is not the axis, or that stands elsewhere, places the child on the
+  joint as before.
+- **A read STEP's densities are the file's.** OCCT read a density declared in kg/m^3 (what most CAD tools
+  write) 1000 times too small; it is now read as declared, so masses from such a file are 1000 times
+  larger than 0.11.7 said. A STEP this library wrote (g/cm^3) reads as before.
+- **A read STEP's user-defined attributes are no materials.** A part parameter a CAD tool writes (`QTY`,
+  a sheet-metal default) was read as a material named for it, with no density; it is now none, and an
+  attribute that names a material (`PTC_MATERIAL_NAME`) names the part's material.
+- **`cad.urdf.validate` warns `zero_effort` and `zero_velocity`** for a joint limit of 0 that is not a
+  mimic's. With `strict`, a URDF that passed in 0.11.7 can fail: give the drive's limits.
+- **A snapshot's untriangulated faces are one warning**, naming the first parts and counting the faces,
+  where 0.11.7 said a line a part.
