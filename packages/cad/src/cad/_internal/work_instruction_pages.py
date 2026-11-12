@@ -300,7 +300,7 @@ def picture_jobs(wi, folder: Path) -> dict[int, dict]:
         if picture.frame == "step" and picture.focus:
             target, half = _fit_step(leaves, picture, diagonal)
         elif guide:
-            target, half = fit_points(shown[picture.camera], picture.camera, size[0] / size[1])
+            target, half = fit_points(shown[picture.camera], picture.camera, size[0] / size[1], room=1.04)
         display: dict = {"mode": "hidden-line"}
         source = wi.source
         distance = pulls.get(picture.step)

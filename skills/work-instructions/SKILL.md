@@ -198,7 +198,7 @@ with its count, then the screws and nuts by size, materials, and the tools with
 what each one is for), then a **How to read** key and each step's number,
 sentence, tick box, picture (its parts box, each part's picture and count and
 its screws, in the picture's top-left corner) and anything it asks for, two to a
-page. It has no
+page, with a dot per step in the footer to show how far along the build is. It has no
 tables, sign-offs or document numbers; those it was given print small in the
 footer. With `pictures=False` it is the table below with a done column.
 

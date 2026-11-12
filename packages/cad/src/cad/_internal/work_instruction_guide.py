@@ -26,6 +26,7 @@ from cad._internal.work_instruction_pages import (
     PT,
     _citation,
     _Cell,
+    _fit,
     _Flow,
     _group,
     _rect,
@@ -45,6 +46,8 @@ BOX_FACE = "#f2f3f5"  # a step's parts box, and the key's
 CHIP = 9.0  # a screw's size, beside its picture
 STEP_TILE = 15.0  # a part's picture in a step's parts box
 SCREW_INK = "#3a3a3a"
+INK = "#1d1d1f"  # a step's number: dark, so blue on the page means only what the step adds
+DOT, DOT_GAP = 1.6, 1.4  # the footer's step dots
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,10 @@ def _plain_item(item: str) -> str:
 
 
 class _Guide(_Flow):
+    def __init__(self, wi, open_count: int) -> None:
+        self.steps_on: dict[int, list[int]] = {}  # page index -> the steps that start on it
+        super().__init__(wi, open_count)
+
     @property
     def body_top(self) -> float:
         return self.h - MARGIN
@@ -211,23 +218,77 @@ def _need(flow: _Flow, wi, pictures: dict) -> None:
     screws = hardware(wi.steps)
     if screws:
         _heading(flow, "Screws and nuts", CHIP_ROW)
-        placed = _chips(flow, screws, MARGIN, flow.inner)
-        height = (placed[-1][1] + 1) * CHIP_ROW
+        placed = _chips(flow, screws, MARGIN + PAD, flow.inner - 2 * PAD)
+        height = (placed[-1][1] + 1) * CHIP_ROW + 2 * PAD
         flow.room(height, "screws and nuts")
-        _draw_chips(flow, placed, flow.y)
+        top = flow.y
+        flow.add(lambda ax: ax.add_patch(_rect(MARGIN, top - height, flow.inner, height, lw=0, edge="none",
+                                               face=BOX_FACE, zorder=0)))
+        _draw_chips(flow, placed, top - PAD)
         flow.y -= height + 1.0
     also = list(dict.fromkeys(record.name for record in wi.materials))
     if also:
         _lines(flow, [f"Also: {', '.join(also)}"], "what you need")
     tools = wi.equipment()
     if tools:
-        _heading(flow, "Tools", 6.0)
+        _heading(flow, "Tools", TOOL_ROW)
         drives = {tool: [line.name for line in screws if tool in line.tools] for tool in tools}
-        _lines(flow, [f"{tool}, for {' and '.join(drives[tool])}" if drives[tool] else tool for tool in tools],
-               "tools")
+        _tools(flow, [(tool, f"for {' and '.join(drives[tool])}" if drives[tool] else "") for tool in tools])
+
+
+TOOL_ROW, TOOLS_PER_ROW = 13.0, 3
+
+
+def _tool_glyph(ax, name: str, x: float, y: float) -> None:
+    """A tool drawn small, by what its name says it is: a hex key's L, a screwdriver, a wrench."""
+    from matplotlib.patches import Circle, FancyBboxPatch
+
+    lowered = name.lower()
+    if "hex" in lowered or "allen" in lowered:
+        ax.plot([x + 1.0, x + 1.0, x + 4.0], [y + 4.0, y - 3.5, y - 3.5], color=SCREW_INK, lw=2.6,
+                solid_capstyle="round", solid_joinstyle="round", zorder=3)
+    elif "screwdriver" in lowered:
+        ax.add_patch(FancyBboxPatch((x + 0.4, y + 0.6), 2.4, 3.6, boxstyle="round,pad=0.3", facecolor=SCREW_INK,
+                                    edgecolor="none", zorder=3))
+        ax.plot([x + 1.6, x + 1.6], [y + 0.6, y - 4.0], color=SCREW_INK, lw=1.2, zorder=3)
+    elif "wrench" in lowered or "spanner" in lowered:
+        ax.plot([x + 0.8, x + 3.6], [y - 3.6, y + 2.2], color=SCREW_INK, lw=2.0, solid_capstyle="round", zorder=3)
+        ax.add_patch(Circle((x + 3.8, y + 2.8), 1.5, facecolor=SCREW_INK, edgecolor="none", zorder=3))
+        ax.add_patch(Circle((x + 4.3, y + 3.4), 0.7, facecolor=BOX_FACE, edgecolor="none", zorder=4))
+    else:
+        ax.add_patch(Circle((x + 2.2, y), 1.0, facecolor=SCREW_INK, edgecolor="none", zorder=3))
+
+
+def _tools(flow: _Flow, tools: list[tuple[str, str]]) -> None:
+    """The tools as a kit's manual shows them: a small drawing, the tool's name, what it is for."""
+    width = (flow.inner - (TOOLS_PER_ROW - 1) * TILE_GAP) / TOOLS_PER_ROW
+    for start in range(0, len(tools), TOOLS_PER_ROW):
+        flow.room(TOOL_ROW, "tools")
+        top = flow.y
+        for offset, (name, use) in enumerate(tools[start:start + TOOLS_PER_ROW]):
+            x = MARGIN + offset * (width + TILE_GAP)
+
+            def draw(ax, x=x, top=top, name=name, use=use) -> None:
+                ax.add_patch(_rect(x, top - TOOL_ROW + 1.5, width, TOOL_ROW - 1.5, lw=0, edge="none", face=BOX_FACE,
+                                   zorder=0))
+                middle = top - (TOOL_ROW - 1.5) / 2
+                _tool_glyph(ax, name, x + 2.0, middle)
+                text, small = _fit(flow.measure, name, TEXT - 1.0, width - 11.0)
+                ax.text(x + 9.0, middle + (0.6 if use else -small * PT * 0.35), text, fontsize=small, weight="bold",
+                        va="baseline", zorder=3)
+                if use:
+                    words, size = _fit(flow.measure, use, SMALL, width - 11.0)
+                    ax.text(x + 9.0, middle - SMALL * PT * 1.2, words, fontsize=size, color=GREY, va="baseline",
+                            zorder=3)
+
+            flow.add(draw)
+        flow.y -= TOOL_ROW
 
 
 def _cover(flow: _Flow, wi, open_items: list[str], pictures: dict) -> None:
+    flow.cell(_text_cell(flow.measure, "A S S E M B L Y   I N S T R U C T I O N S", flow.inner, SMALL, "bold"),
+              "the title")
+    flow.y -= 1.0
     flow.cell(_text_cell(flow.measure, wi.title, flow.inner, TITLE, "bold"), "the title")
     flow.y -= 1.0
     if wi.scope:
@@ -380,11 +441,12 @@ def _step(flow: _Flow, step, pictures: dict, index_of: dict[str, int]) -> None:
     def badge(ax) -> None:
         from matplotlib.patches import Circle
 
-        ax.add_patch(Circle((x, top - radius), radius, facecolor=FILL, edgecolor="none", zorder=2))
-        ax.text(x, top - radius - STEP * PT * 0.36, step.label, fontsize=STEP, weight="bold", color="black",
+        ax.add_patch(Circle((x, top - radius), radius, facecolor=INK, edgecolor="none", zorder=2))
+        ax.text(x, top - radius - STEP * PT * 0.36, step.label, fontsize=STEP, weight="bold", color="white",
                 ha="center", va="baseline", zorder=3)
 
     flow.add(badge)
+    flow.steps_on.setdefault(len(flow.pages) - 1, []).append(step.number)
     flow.add(lambda ax: title.draw(ax, MARGIN + BADGE + 4.0, top - (head - title.height) / 2))
     flow.add(lambda ax: ax.add_patch(_rect(flow.w - MARGIN - BOX, top - (head + BOX) / 2, BOX, BOX, lw=0.9, edge=GREY)))
     flow.y -= head + 1.5
@@ -472,3 +534,12 @@ def footer(ax, flow: _Flow, page: int) -> None:
         right = f"Draft  ·  {right}"
     ax.text(MARGIN, MARGIN - 2.0, left, fontsize=SMALL, color=GREY, va="baseline")
     ax.text(flow.w - MARGIN, MARGIN - 2.0, right, fontsize=SMALL, color=GREY, va="baseline", ha="right")
+    here = getattr(flow, "steps_on", {}).get(page - 1)
+    if here:  # a dot per step, this page's dark: how far through the build you are
+        from matplotlib.patches import Circle
+
+        count = len(wi.steps)
+        x0 = flow.w / 2 - (count * DOT + (count - 1) * DOT_GAP) / 2 + DOT / 2
+        for index, step in enumerate(wi.steps):
+            ax.add_patch(Circle((x0 + index * (DOT + DOT_GAP), MARGIN - 1.2), DOT / 2, edgecolor="none", zorder=3,
+                                facecolor=INK if step.number in here else FAINT))

@@ -976,12 +976,35 @@ class GuideTests(_Assembly):
         pages = self._pages(wi)
         cover, steps = " ".join(pages[0]), " ".join(t for page in pages[1:] for t in page)
         self.assertIn("Screws and nuts M3×10 screw  ×6 M3 nut  ×4", cover)
-        self.assertIn("Tools Hex key 2.5, for M3×10 screw Mallet", cover)
+        self.assertIn("Tools Hex key 2.5 for M3×10 screw Mallet", cover, "each tool, and what it drives")
+        self.assertIn("A S S E M B L Y   I N S T R U C T I O N S", cover)
         self.assertIn("2 Fit the bracket ×1 M3×10 screw  ×4 M3 nut  ×4", steps, "the step's box, its own counts")
         for absent in ("You need", "Hardware:", "Tool:"):
             self.assertNotIn(absent, steps, "the box says it")
         self.assertIn("How to read New in this step Already in", steps)
         self.assertIn("Where it goes", steps, "a step pulls its parts out")
+
+    def test_a_step_page_marks_its_steps_among_all_of_them(self) -> None:
+        from cad._internal.work_instruction_guide import INK, footer, layout
+
+        wi = self._guide()
+        wi.step("Lay the base flat", install=["base_plate"])
+        wi.step("Fit the bracket", install=["bracket"])
+        wi.step("Pins", install=["pin"])
+        flow = layout(wi, wi.open_items(), {})
+        colours = []
+
+        class Dots(_Page):
+            def add_patch(self, patch) -> None:
+                colours.append(patch.get_facecolor())
+
+        footer(Dots(), flow, 1)
+        self.assertEqual(colours, [], "the cover has no dots")
+        footer(Dots(), flow, 2)
+        from matplotlib.colors import to_rgba
+
+        self.assertEqual([colour == to_rgba(INK) for colour in colours], [True, True, True],
+                         "one dot a step, this page's dark")
 
     def test_the_key_names_the_line_only_where_a_step_draws_one(self) -> None:
         wi = self._guide()
