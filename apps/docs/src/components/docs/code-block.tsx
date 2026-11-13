@@ -13,7 +13,7 @@ const ALIASES: Record<string, string> = { sh: "bash", shell: "bash", zsh: "bash"
 let highlighter: Promise<Highlighter> | undefined;
 const shiki = () => (highlighter ??= createHighlighter({ themes: ["github-light", "github-dark"], langs: LANGUAGES }));
 
-export async function CodeBlock({ language = "", code = "" }: { language?: string; code?: string }) {
+export async function CodeBlock({ language = "", code = "", copy = true }: { language?: string; code?: string; copy?: boolean }) {
   const name = ALIASES[language] ?? language;
   const html = (await shiki()).codeToHtml(code, {
     lang: LANGUAGES.includes(name) ? name : "text",
@@ -23,11 +23,13 @@ export async function CodeBlock({ language = "", code = "" }: { language?: strin
   return (
     <div className="docs-code group/code">
       <div dangerouslySetInnerHTML={{ __html: html }} />
-      <CopyButton
-        text={code}
-        label="Copy code"
-        className="absolute top-1.5 right-1.5 size-7 bg-background/70 text-muted-foreground backdrop-blur-sm hover:text-foreground md:opacity-0 md:group-hover/code:opacity-100 md:focus-visible:opacity-100"
-      />
+      {copy ? (
+        <CopyButton
+          text={code}
+          label="Copy code"
+          className="absolute top-1.5 right-1.5 size-7 bg-background/70 text-muted-foreground backdrop-blur-sm hover:text-foreground md:opacity-0 md:group-hover/code:opacity-100 md:focus-visible:opacity-100"
+        />
+      ) : null}
     </div>
   );
 }

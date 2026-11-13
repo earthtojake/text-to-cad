@@ -9,7 +9,10 @@ export type DocSource =
   // A page written for the site: `apps/docs/content/<file>`.
   | { kind: "content"; file: string }
   // A file of the repository, by its path from the repository's root.
-  | { kind: "repo"; file: string };
+  | { kind: "repo"; file: string }
+  // A page made as the site builds from a generated file of the repository's (`reference/`): the
+  // command line's help or the library's docstrings, by its path from the repository's root.
+  | { kind: "generated"; page: "cli" | "library"; file: string };
 
 export type DocPage = {
   /** The path under /docs: "" is /docs itself, "render" is /docs/render. */
@@ -49,6 +52,11 @@ const index = (slug: string, label = "Overview"): DocPage => ({
   label,
 });
 const repo = (slug: string, file: string, label?: string): DocPage => ({ slug, source: { kind: "repo", file }, label });
+const generated = (slug: string, page: "cli" | "library", label: string): DocPage => ({
+  slug,
+  source: { kind: "generated", page, file: `apps/docs/src/lib/docs/${page}-reference.generated.json` },
+  label,
+});
 // A skill's page: /docs/<skill>, written in `content/skills/<skill>.md`, its title the skill's name.
 const skill = (name: string): DocPage => ({ slug: name, source: { kind: "content", file: `skills/${name}.md` } });
 
@@ -71,8 +79,10 @@ export const docSections: DocSection[] = [
     pages: ["cad", "pcb", "fea", "engineering-drawing", "render", "print3d", "sendcutsend", "robot-simulation"].map(skill),
   },
   {
+    // Generated from the command line's and the library's own descriptions of themselves
+    // (src/lib/docs/reference/): every command and every public name, nothing written by hand.
     title: "Reference",
-    pages: [content("reference/commands")],
+    pages: [generated("reference/cli", "cli", "The cad command"), generated("reference/library", "library", "The cad library")],
   },
   {
     title: "Migrations",

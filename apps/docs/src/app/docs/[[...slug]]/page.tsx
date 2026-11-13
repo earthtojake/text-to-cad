@@ -1,10 +1,11 @@
 import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Markdown } from "@/components/docs/markdown";
 import { ModelEmbed } from "@/components/docs/model-embed";
 import { DocsToc } from "@/components/docs/toc";
-import { docModels, docPages, sectionOf } from "@/lib/docs/nav";
+import { docModels, docPages, findPage, sectionOf } from "@/lib/docs/nav";
 import { loadDoc, neighbours } from "@/lib/docs/source";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -20,7 +21,10 @@ export function generateStaticParams(): Params[] {
 }
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
-  const doc = loadDoc(slugOf(await params));
+  const slug = slugOf(await params);
+  // A path that is no page (the dev server renders one on request) is a 404, not a thrown error.
+  if (!findPage(slug)) notFound();
+  const doc = loadDoc(slug);
   const title = doc.page.slug ? doc.title : "Documentation";
   return {
     title,
@@ -32,6 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 
 export default async function DocsPage({ params }: { params: Promise<Params> }) {
   const slug = slugOf(await params);
+  if (!findPage(slug)) notFound();
   const doc = loadDoc(slug);
   const section = sectionOf(slug);
   const { previous, next } = neighbours(slug);

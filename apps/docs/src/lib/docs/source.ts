@@ -18,6 +18,8 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { siteConfig } from "@/lib/site";
 import { docHref, docPages, docSections, findPage, type DocPage } from "./nav";
+import { cli, cliPage } from "./reference/cli";
+import { libraryIds, libraryPage } from "./reference/library";
 
 // The app builds from its own folder (`apps/docs`), in a checkout of the whole repository.
 // Every read happens as the site builds (each route is static), so nothing here is traced into a
@@ -28,6 +30,18 @@ const inRepo = (repoPath: string) => path.join(/*turbopackIgnore: true*/ REPO_RO
 const parser = unified().use(remarkParse).use(remarkGfm);
 
 export type DocHeading = { depth: number; id: string; text: string };
+
+// A generated page's heading may end with its own id and its kind, `{#cad.step.export kind=function}`:
+// the id is the heading's, the kind a badge beside it (and, in the page's Markdown, a word after it).
+const HEADING_ATTRIBUTES = /[ \t]+\{#([^\s}]+)(?:[ \t]+kind=([a-z]+))?\}[ \t]*$/;
+
+// The Markdown of a generated page (nav.ts), made from its file as the site builds.
+function generatedMarkdown(page: "cli" | "library") {
+  if (page === "cli") return cliPage(libraryIds());
+  const version = fs.readFileSync(inRepo("VERSION"), "utf8").trim();
+  const operations = [...cli.documentTypes, ...cli.integrations].flatMap((group) => group.operations);
+  return libraryPage(version, new Set([...cli.commands, ...operations].map((cmd) => cmd.command)));
+}
 
 export type LoadedDoc = {
   page: DocPage;
@@ -73,10 +87,13 @@ export function loadDoc(slug: string): LoadedDoc {
   if (!page) throw new DocsError(`/docs/${slug} is no page of the documentation (src/lib/docs/nav.ts)`);
 
   const sourcePath =
-    page.source.kind === "repo" ? page.source.file : path.posix.join("apps/docs/content", page.source.file);
+    page.source.kind === "content" ? path.posix.join("apps/docs/content", page.source.file) : page.source.file;
   const file = inRepo(sourcePath);
   if (!fs.existsSync(file)) throw new DocsError(`${docHref(slug)}: its file is missing, ${sourcePath}`);
-  const { data, body: withTitle } = frontMatter(fs.readFileSync(file, "utf8"));
+  const { data, body: withTitle } =
+    page.source.kind === "generated"
+      ? (({ title, description, markdown }) => ({ data: { title, description }, body: markdown }))(generatedMarkdown(page.source.page))
+      : frontMatter(fs.readFileSync(file, "utf8"));
 
   // A repository file says its title as its first heading; a page of the site's, in its front matter.
   const tree = parser.parse(withTitle) as Root;
@@ -95,10 +112,23 @@ export function loadDoc(slug: string): LoadedDoc {
   const headings: DocHeading[] = [];
   for (const node of tree.children) {
     if (node.type !== "heading") continue;
+    let given: RegExpExecArray | null = null;
+    if (page.source.kind === "generated" && node.position) {
+      const raw = withTitle.slice(node.position.start.offset, node.position.end.offset);
+      given = HEADING_ATTRIBUTES.exec(raw);
+      const clean = given ? parser.parse(raw.slice(0, given.index)).children[0] : undefined;
+      if (clean?.type === "heading") node.children = clean.children;
+    }
     const text = toString(node);
-    const id = slugger.slug(text);
-    node.data = { ...node.data, hProperties: { id } };
+    const id = given ? given[1] : slugger.slug(text);
+    node.data = { ...node.data, hProperties: given?.[2] ? { id, dataKind: given[2] } : { id } };
     headings.push({ depth: node.depth, id, text });
+  }
+  if (page.source.kind === "generated") {
+    const lines = new RegExp(`^(#{1,6} .*?)${HEADING_ATTRIBUTES.source}`, "gm");
+    body = body
+      .replace(lines, (_, heading: string, _id: string, kind?: string) => (kind ? `${heading} (${kind})` : heading))
+      .replace(/^(```\w*) nocopy$/gm, "$1");
   }
 
   const doc: LoadedDoc = {
@@ -205,6 +235,9 @@ export function neighbours(slug: string) {
 export type SearchRecord = { href: string; page: string; section: string; heading: string; text: string };
 
 const SEARCH_TEXT_LIMIT = 1600;
+// A generated reference page is cut at each command and each name too (its fourth level), and a
+// record there keeps less of its text: the name is what is searched for.
+const SEARCH_NAME_LIMIT = 400;
 
 // A block's text with its parts apart: a list's items and a table's cells, each a word on.
 const BLOCKS = new Set(["list", "listItem", "table", "tableRow", "blockquote"]);
@@ -220,14 +253,17 @@ export function searchRecords(): SearchRecord[] {
     section.pages.flatMap((page) => {
       const doc = loadDoc(page.slug);
       const records: SearchRecord[] = [];
+      const deepest = page.source.kind === "generated" ? 4 : 3;
       let current: SearchRecord = { href: doc.href, page: doc.title, section: section.title, heading: "", text: doc.description };
+      let limit = SEARCH_TEXT_LIMIT;
       const close = () => {
-        current.text = current.text.replace(/\s+/g, " ").trim().slice(0, SEARCH_TEXT_LIMIT);
+        current.text = current.text.replace(/\s+/g, " ").trim().slice(0, limit);
         records.push(current);
       };
       for (const node of doc.tree.children) {
-        if (node.type === "heading" && node.depth <= 3) {
+        if (node.type === "heading" && node.depth <= deepest) {
           close();
+          limit = node.depth === 4 ? SEARCH_NAME_LIMIT : SEARCH_TEXT_LIMIT;
           const id = (node.data?.hProperties as { id?: string } | undefined)?.id;
           current = { href: `${doc.href}#${id}`, page: doc.title, section: section.title, heading: toString(node), text: "" };
         } else {

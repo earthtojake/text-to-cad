@@ -29,6 +29,7 @@ Files such as STEP or STL are made when you ask for them, not on every run.
 - [Install](/docs/install): one command sets up text-to-cad in every agent app on your computer.
 - [Your first model](/docs/first-model): a walk-through from a fresh install to a part on screen.
 - Skills: start with [cad](/docs/cad), then see [the viewer](/docs/viewer).
-- [The cad command](/docs/reference/commands): the command line, for running things yourself.
+- [The cad command](/docs/reference/cli): the command line, for running things yourself.
+- [The cad library](/docs/reference/library): the Python library a model is written with.
 
 text-to-cad is MIT-licensed and built in the open. To take part, see [contributing](/docs/contributing).

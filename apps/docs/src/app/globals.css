@@ -195,15 +195,23 @@
 }
 .docs-prose > :first-child { @apply mt-6; }
 .docs-prose :is(p, ul, ol, blockquote, .docs-table, .docs-code, .docs-callout) { @apply my-4; }
-.docs-prose :is(h2, h3, h4) { @apply scroll-mt-20 font-semibold tracking-tight text-foreground; }
+.docs-prose :is(h2, h3, h4, h5, h6) { @apply scroll-mt-20 font-semibold tracking-tight text-foreground; }
 .docs-prose h2 { @apply mt-10 mb-3 border-t border-border pt-6 text-heading leading-8; }
 .docs-prose h3 { @apply mt-8 mb-2 text-lg leading-7; }
 .docs-prose h4 { @apply mt-6 mb-2 text-base; }
+.docs-prose :is(h5, h6) { @apply mt-5 mb-2 text-[15px]; }
+/* A generated reference's name: its heading's code unboxed, and its kind (function, class) a badge. */
+.docs-prose.docs-reference :is(h2, h3, h4, h5, h6) > code { @apply bg-transparent px-0 text-[0.95em]; }
+/* A table's mark that links a command (the ✓ of a type's operation) is not underlined. */
+.docs-prose.docs-reference td a[href^="#"]:not(:has(code)) { @apply no-underline; }
+.docs-prose .docs-kind {
+  @apply ml-2 inline-block rounded-md border border-border px-1.5 py-px align-middle font-sans text-label font-medium tracking-normal text-muted-foreground;
+}
 .docs-prose .docs-anchor {
   @apply ml-2 inline-flex rounded-sm align-middle text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100;
 }
 .docs-prose .docs-anchor svg { @apply size-[0.7em]; }
-.docs-prose :is(h2, h3, h4):hover .docs-anchor { @apply opacity-100; }
+.docs-prose :is(h2, h3, h4, h5, h6):hover .docs-anchor { @apply opacity-100; }
 .docs-prose a:not(.docs-anchor) {
   @apply font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground;
 }

@@ -69,8 +69,8 @@ scripts/         # loading-icon export and verification; the install scripts' co
 
 ## The documentation
 
-`/docs` is the documentation: installing, the skills (a page per skill, named after it), the `cad`
-command, the migration guides and contributing. It is this
+`/docs` is the documentation: installing, the skills (a page per skill, named after it), the
+reference (the `cad` command and the `cad` library), the migration guides and contributing. It is this
 app's own shell, no docs framework: the sections at the left (a drawer on a phone or a tablet), the
 page, and its contents at the right, in the site's tokens and primitives.
 
@@ -96,6 +96,18 @@ page, and its contents at the right, in the site's tokens and primitives.
   library's registry (`cad.registry`): `src/lib/docs/registry.generated.json` is that table
   (`python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`), held to it by
   `tests/python/packages/cad/test_registry.py`, and `src/lib/docs/registry.ts` reads it.
+- **The Reference is generated.** `/docs/reference/cli` (the `cad` command) and
+  `/docs/reference/library` (the `cad` library) are made as the site builds from two generated files
+  of their own, a page `source` of kind `generated` in the map: `src/lib/docs/cli-reference.generated.json`,
+  the command line's parser (`python -m cad_server._internal.cli_reference --docs >` it), and
+  `src/lib/docs/library-reference.generated.json`, the library's public names and docstrings
+  (`python -m cad._internal.reference --docs >` it), each held to its source by its test
+  (`test_cli_reference.py`, `test_library_reference.py`). `src/lib/docs/reference/` turns them into
+  Markdown (every command with its usage, arguments and options; every name with its signature and
+  docstring, a heading id its dotted path, `#cad.step.export`), so the contents, the `.md` page, the
+  search and `/llms.txt` read them as any page. Nothing on them is written by hand but each page's
+  introduction and the command line's groups (`GROUPS` in `reference/cli.ts`; a command none names is
+  listed under Other). `/docs/reference/commands`, the earlier page, redirects to the command's.
 - **Markdown, not MDX** (`src/lib/docs/source.ts`, `src/components/docs/markdown.tsx`): a repository
   file says `<state>` and `{...}` as text. A page of `content/` has a front matter of `title` and
   `description` and no `#` heading; it links another page as `/docs/<page>`, a file of the repository

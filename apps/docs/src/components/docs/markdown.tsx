@@ -60,7 +60,9 @@ function prepare(doc: LoadedDoc, node: Root | RootContent) {
 const textOf = (node: HastContent): string =>
   node.type === "text" ? node.value : "children" in node ? node.children.map(textOf).join("") : "";
 
-// Fenced code leaves the tree as one element the highlighter takes: its language and its text.
+// Fenced code leaves the tree as one element the highlighter takes: its language and its text. A
+// fence marked `nocopy` (```python nocopy: a generated reference's signature or usage, read rather
+// than run) has no Copy.
 function liftCode(node: HastRoot | Element) {
   node.children = node.children.map((child) => {
     if (child.type !== "element") return child;
@@ -68,20 +70,24 @@ function liftCode(node: HastRoot | Element) {
     if (code?.type === "element") {
       const classes = (code.properties.className as string[] | undefined) ?? [];
       const language = classes.find((name) => name.startsWith("language-"))?.slice("language-".length) ?? "";
-      return { type: "element", tagName: "docs-code", properties: { language, code: textOf(code).replace(/\n$/, "") }, children: [] };
+      const meta = (code.data as { meta?: string } | undefined)?.meta ?? "";
+      const copy = !/(^|\s)nocopy(\s|$)/.test(meta);
+      return { type: "element", tagName: "docs-code", properties: { language, code: textOf(code).replace(/\n$/, ""), copy }, children: [] };
     }
     liftCode(child);
     return child;
   }) as HastRoot["children"];
 }
 
-type HeadingProps = { id?: string; children?: ReactNode };
+// A generated reference page's heading carries its kind (`function`, `class`, ...): a badge after it.
+type HeadingProps = { id?: string; children?: ReactNode; "data-kind"?: string };
 
-function Heading({ level, id, children }: { level: 2 | 3 | 4; id?: string; children?: ReactNode }) {
+function Heading({ level, id, kind, children }: { level: 2 | 3 | 4 | 5 | 6; id?: string; kind?: string; children?: ReactNode }) {
   const Tag = `h${level}` as const;
   return (
     <Tag id={id} className="group/heading">
       {children}
+      {kind ? <span className="docs-kind">{kind}</span> : null}
       {id ? (
         <a href={`#${id}`} className="docs-anchor" aria-label="Link to this section">
           <LinkIcon aria-hidden="true" />
@@ -106,7 +112,7 @@ export function Markdown({ doc }: { doc: LoadedDoc }) {
   const hast = toHast.runSync(tree) as HastRoot;
   liftCode(hast);
   return (
-    <div className="docs-prose">
+    <div className={doc.page.source.kind === "generated" ? "docs-prose docs-reference" : "docs-prose"}>
       {toJsxRuntime(hast, {
         Fragment,
         jsx,
@@ -114,10 +120,12 @@ export function Markdown({ doc }: { doc: LoadedDoc }) {
         components: {
           a: Anchor,
           // A page's own title is its h1; a stray one in the text sits a level down.
-          h1: ({ id, children }: HeadingProps) => <Heading level={2} id={id}>{children}</Heading>,
-          h2: ({ id, children }: HeadingProps) => <Heading level={2} id={id}>{children}</Heading>,
-          h3: ({ id, children }: HeadingProps) => <Heading level={3} id={id}>{children}</Heading>,
-          h4: ({ id, children }: HeadingProps) => <Heading level={4} id={id}>{children}</Heading>,
+          h1: ({ id, children, "data-kind": kind }: HeadingProps) => <Heading level={2} id={id} kind={kind}>{children}</Heading>,
+          h2: ({ id, children, "data-kind": kind }: HeadingProps) => <Heading level={2} id={id} kind={kind}>{children}</Heading>,
+          h3: ({ id, children, "data-kind": kind }: HeadingProps) => <Heading level={3} id={id} kind={kind}>{children}</Heading>,
+          h4: ({ id, children, "data-kind": kind }: HeadingProps) => <Heading level={4} id={id} kind={kind}>{children}</Heading>,
+          h5: ({ id, children, "data-kind": kind }: HeadingProps) => <Heading level={5} id={id} kind={kind}>{children}</Heading>,
+          h6: ({ id, children, "data-kind": kind }: HeadingProps) => <Heading level={6} id={id} kind={kind}>{children}</Heading>,
           table: ({ children }: HeadingProps) => (
             <div className="docs-table">
               <table>{children}</table>

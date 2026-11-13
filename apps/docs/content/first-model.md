@@ -99,4 +99,4 @@ cad model export "$ID" STEP/bracket.step STL/bracket.stl
 - [cad](/docs/cad): assemblies, configurations and what else a model can do.
 - [The viewer](/docs/viewer): what you can do on the page.
 - [Supported agents](/docs/agents): what each app shows and how.
-- [The cad command](/docs/reference/commands): running and checking things yourself.
+- [The cad command](/docs/reference/cli): running and checking things yourself.
