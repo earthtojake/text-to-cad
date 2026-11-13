@@ -21,6 +21,8 @@ text-to-cad is MIT-licensed and built in the open. Here is how to take part and 
 - `tests/`: the test suites for the skills, the packages, the viewer and repository-wide policy.
 - `docs/`: the install guide, the contributing guides and the migration guides.
 
+How the pieces fit together is written for contributors in the repository: [AGENTS.md](repo:AGENTS.md) maps the tree and its rules, the [engine README](repo:packages/cad-server/src/cad_server/engine/README.md) covers the server's daemon, its workers, documents and exports, each package's README holds its own laws (start with [the library's](repo:packages/cad/README.md)), and [SECURITY.md](repo:SECURITY.md) draws the trust boundary.
+
 ## Setting up a checkout
 
 Branch from `main` and open pull requests against `main`. External contributors fork the repository first. In outline:

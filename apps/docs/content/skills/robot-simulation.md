@@ -1,5 +1,5 @@
 ---
-title: Robotics and simulation
+title: robot-simulation
 description: The robot-simulation skill generates or writes URDF, SRDF and MuJoCo MJCF robot descriptions, then checks them and shows them.
 ---
 
@@ -84,4 +84,4 @@ The skill is [`robot-simulation`](repo:skills/robot-simulation/SKILL.md). Its mo
 - [The MuJoCo environment](repo:skills/robot-simulation/references/mujoco-environment.md)
 - [URDF checks](repo:skills/robot-simulation/references/urdf-checks.md), [SRDF authoring](repo:skills/robot-simulation/references/srdf-authoring.md) and [MJCF checks](repo:skills/robot-simulation/references/mjcf-checks.md)
 
-Related pages: the document types [`urdf`](/docs/document-types/urdf) and [`srdf`](/docs/document-types/srdf), the [MuJoCo](/docs/integrations/mujoco) and [CoACD](/docs/integrations/coacd) integrations, [mechanisms and animation](/docs/skills/parts-and-assemblies#mechanisms-and-animation) for where a robot's joints and poses are declared, and [the viewer](/docs/viewer).
+Related pages: [mechanisms and animation](/docs/cad#mechanisms-and-animation) for where a robot's joints and poses are declared, and [the viewer](/docs/viewer).

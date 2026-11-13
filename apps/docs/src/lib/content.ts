@@ -84,9 +84,9 @@ export const contributing = {
 
 // What text-to-cad does, the README's Features, item for item and word for word: each one's name,
 // the page that documents it (a path in the repository; every skill's folder is one of them), what it
-// does, the file its picture on the homepage shows (`FeatureArt`, components/feature-art.tsx), and its
-// page in the documentation's Skills, one a feature, which its tile on the homepage links (the README
-// links the skill itself).
+// does, the file its picture on the homepage shows (`FeatureArt`, components/feature-art.tsx), and the
+// page of the documentation's Skills, one a skill and named after it, that its tile on the homepage
+// links (the README links the skill itself).
 export const featuresIntro = "The text-to-cad plugin gives your agent local workflows to generate 3D models as STEP, GLB, STL or 3MF files, check them for manufacturing, draw them, and connect to 3D printing, sheet metal and CNC services. It works with any agent that supports plugins or skills.";
 export const features = [
   {
@@ -95,7 +95,7 @@ export const features = [
     path: "skills/cad/SKILL.md",
     summary: "Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, and as [DXF profiles and flat patterns](skills/cad/references/2d-profiles-and-dxf.md) for laser and waterjet cutting, with joints and animations for mechanisms, and shown live in the viewer.",
     file: "bracket.py",
-    page: "/docs/skills/parts-and-assemblies",
+    page: "/docs/cad",
   },
   {
     id: "boards",
@@ -103,7 +103,7 @@ export const features = [
     path: "skills/pcb/SKILL.md",
     summary: "KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.",
     file: "sensor.kicad_pcb",
-    page: "/docs/skills/circuit-boards",
+    page: "/docs/pcb",
   },
   {
     id: "checks",
@@ -111,7 +111,7 @@ export const features = [
     path: "skills/cad/SKILL.md#can-it-be-made",
     summary: "Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.",
     file: "housing.step",
-    page: "/docs/skills/manufacturing-checks",
+    page: "/docs/cad#manufacturing-checks",
   },
   {
     id: "stress",
@@ -119,7 +119,7 @@ export const features = [
     path: "skills/fea/SKILL.md",
     summary: "Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.",
     file: "bracket.step",
-    page: "/docs/skills/stress-checks",
+    page: "/docs/fea",
   },
   {
     id: "drawings",
@@ -127,7 +127,7 @@ export const features = [
     path: "skills/engineering-drawing/SKILL.md",
     summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
     file: "bracket.pdf",
-    page: "/docs/skills/engineering-drawings",
+    page: "/docs/engineering-drawing",
   },
   {
     id: "renders",
@@ -135,7 +135,7 @@ export const features = [
     path: "skills/render/SKILL.md",
     summary: "Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.",
     file: "hero.png, turntable.mp4",
-    page: "/docs/skills/renders",
+    page: "/docs/render",
   },
   {
     id: "fabrication",
@@ -143,7 +143,7 @@ export const features = [
     path: "skills/sendcutsend/SKILL.md",
     summary: "[Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.",
     file: "bracket_flat.dxf, housing.gcode.3mf",
-    page: "/docs/skills/fabrication-services",
+    page: "/docs/sendcutsend",
   },
   {
     id: "robots",
@@ -151,6 +151,6 @@ export const features = [
     path: "skills/robot-simulation/SKILL.md",
     summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.",
     file: "arm.urdf",
-    page: "/docs/skills/robotics-and-simulation",
+    page: "/docs/robot-simulation",
   },
 ];

@@ -1,5 +1,5 @@
 ---
-title: Circuit boards
+title: pcb
 description: The pcb skill designs, checks and reviews native KiCad schematics and boards, and exports the fabrication files a manufacturer asks for.
 ---
 
@@ -91,4 +91,4 @@ The skill is [`pcb`](repo:skills/pcb/SKILL.md). Its references:
 - [Checks](repo:skills/pcb/references/checks.md) and [manufacturing](repo:skills/pcb/references/manufacturing.md)
 - The pre-order reviews: [fabrication](repo:skills/pcb/references/review-fabrication.md), [electrical](repo:skills/pcb/references/review-electrical.md) and [assembly](repo:skills/pcb/references/review-assembly.md)
 
-Related pages: the document types [`kicad_pcb`](/docs/document-types/kicad_pcb) and [`kicad_sch`](/docs/document-types/kicad_sch), [the KiCad integration](/docs/integrations/kicad), [the viewer](/docs/viewer), and [parts and assemblies](/docs/skills/parts-and-assemblies) for the enclosure you fit round the board's STEP.
+Related pages: [the viewer](/docs/viewer), and [cad](/docs/cad) for the enclosure you fit round the board's STEP.

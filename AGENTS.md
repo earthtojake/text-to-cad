@@ -145,7 +145,7 @@ which points both at the checkout.
   is `@cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `apps/docs/` ([README](apps/docs/README.md)): the site, texttocad.dev: the homepage and the
   documentation under `/docs`, which shows the install and migration guides of `docs/` as they are
-  and its own pages (`apps/docs/content/`: the skills, the document types, the integrations).
+  and its own pages (`apps/docs/content/`: a page per skill, the `cad` command, contributing).
 - `apps/api/` ([README](apps/api/README.md)): `api.texttocad.dev`, its own Vercel project:
   the version feed (read from PyPI) and the CAD app's consented analytics.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and

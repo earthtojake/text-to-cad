@@ -1,6 +1,6 @@
 ---
-title: Parts and assemblies
-description: The cad skill writes parts, assemblies, mechanisms and DXF profiles as build123d scripts, builds them live in the viewer and exports files on request.
+title: cad
+description: The cad skill writes parts, assemblies, mechanisms and DXF profiles as build123d scripts, builds them live in the viewer, exports files on request and checks whether a part can be machined, cut and bent, molded or 3D printed.
 ---
 
 The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the viewer, and writes files when you ask.
@@ -131,7 +131,66 @@ For sheet work, a cut-file check reads every entity on a cut layer as a cutter w
 cad dxf dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.2
 ```
 
-It reports open contours, curves cut twice, crossing contours, pieces that fall out of a hole, and holes, webs and gaps small against the thickness. A file with no units is `NOT CHECKED` until `--units mm` states them. A folded STEP or model is unfolded with a K-factor; without the shop's `--k-factor` one is read from a chart, and the flat is not a production blank. The verdicts are those of the [manufacturing checks](/docs/skills/manufacturing-checks).
+It reports open contours, curves cut twice, crossing contours, pieces that fall out of a hole, and holes, webs and gaps small against the thickness. A file with no units is `NOT CHECKED` until `--units mm` states them. A folded STEP or model is unfolded with a K-factor; without the shop's `--k-factor` one is read from a chart, and the flat is not a production blank. The verdicts are those of the [manufacturing checks](/docs/cad#manufacturing-checks).
+
+## Manufacturing checks
+
+The `dfm` check (design for manufacture) measures a part against the rules of one fabrication process and says whether it can be made that way as drawn. You get a verdict and, for each problem, the feature, the number, the limit and what to change.
+
+The rules are general practice from published design guides, plus text-to-cad's own floors where no guide states a limit. They are not any shop's.
+
+### What it checks
+
+| Process | What is measured |
+| --- | --- |
+| CNC milling and turning | Holes, pockets, internal corners against tool radius, walls, tool access, setups, undercuts |
+| Sheet cutting and bending | Bends, flanges, reliefs, holes and their distances to edges and bends, on the unfolded part |
+| Injection molding | Draft, undercuts, wall thickness, ribs, bosses, projected area, clamp force |
+| 3D printing | Walls, overhangs, bridges, clearances, trapped volume, build-volume fit |
+
+It checks a model by its id, or a file: `cad step dfm`, `cad xbf dfm`, `cad stl dfm`, `cad threemf dfm` and `cad glb dfm`. A mesh is checked for printing only. A cut file is checked with `cad dxf dfm` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
+
+### How the check runs
+
+The check runs when your request names a process, or asks whether a part can be made by one. A named process is a requirement, so your agent builds its limits in from the first line, such as draft along the pull or radii in pocket corners. A material alone names no process, but "2 mm steel" means sheet.
+
+The material in the model carries the process (`metals.aluminum(process=machined())`), and the shop's flags go in the docstring, so every edit runs the same check:
+
+```python
+"""A motor mount, CNC milled from 6061 on 3 axes.
+
+Check: cad model dfm "$ID" --tools 3,6,10
+"""
+```
+
+The check runs after every change, on the part's own id:
+
+| Process | Example |
+| --- | --- |
+| CNC | `cad model dfm "$ID" --process cnc --material aluminum --tools 3,6,10` |
+| Sheet | `cad model dfm "$ID" --process sheet --material aluminum --bend-radius 2 --k-factor 0.42` |
+| Molding | `cad model dfm "$ID" --process molding --pull y --material pc --cavities 4` |
+| Printing | `cad model dfm "$ID" --process printing --technology sla --build-volume 145x145x185` |
+
+The last line of the output leads with one of three states, and the exit status matches:
+
+| State | Exit | Meaning |
+| --- | --- | --- |
+| `OK` | 0 | Everything was measured and no finding is an error. Warnings may remain |
+| `FAILED` | 1 | A finding is an error: the process cannot make the part as drawn |
+| `NOT CHECKED` | 3 | Something was not judged, such as an open shell. It is never a pass |
+
+Exit 2 means the command itself was refused, and `--strict` fails on a warning too. `--json` holds every measurement and every rule with its outcome.
+
+Each finding carries a rule id, the measured `value`, the `limit`, the `source` of the rule and the face or edge refs involved. Your agent resolves a ref with `cad model inspect`, edits the code that made it, and repeats the check until no error remains. A feature you specified is never dropped or shrunk to clear a finding: your agent says so instead. `--candidates` ranks molding pulls or print orientations but judges nothing, so the chosen one is checked again.
+
+### What the check leaves out
+
+- It is not a shop's limits and not an approval. A shop's own numbers go in as options (`--tools`, `--thickness`, `--bend-radius`, `--build-volume` and others), and a specification you supply overrides the rules.
+- A rule with no figure for your material or technology is `not_evaluated`, which is not a pass. A mesh cannot be checked for holes, pins or fine detail.
+- Left to you: holder collisions, fixturing and tolerances for CNC; bend order, tooling access and grain for sheet; gates, weld lines, cooling and shrinkage for molding; lattices and tolerance stack-ups for printing.
+- It does not say whether a part holds under load. That is a stress check, the [fea](/docs/fea) skill.
+- Slicing and printing are the [print3d](/docs/print3d) skill, and checking cut parts for SendCutSend is the [sendcutsend](/docs/sendcutsend) skill.
 
 ## Ask for it
 
@@ -139,6 +198,10 @@ It reports open contours, curves cut twice, crossing contours, pieces that fall 
 - "Add a hinge to the lid of the enclosure, 0 to 110 degrees, and name two poses, shut and open."
 - "Make a 4 second explode animation of the hinged box and export it as a GLB."
 - "Make the flat pattern of this plate as a DXF for a laser. It is 3 mm 5052 aluminium and I want 0.15 mm kerf compensation."
+- "Can this bracket be CNC milled from 6061 on a 3-axis mill? My shop has 3, 6 and 10 mm end mills."
+- "Check the cover for injection molding in ABS, pulling along Z, with 4 cavities."
+- "Will this housing print in resin on a 145 by 145 by 185 mm printer?"
+- "I want this tab in 2 mm steel, laser cut and bent. Does it work, and what should I change?"
 
 ## Limits
 
@@ -148,17 +211,19 @@ It reports open contours, curves cut twice, crossing contours, pieces that fall 
 - A snapshot shows arrangement and appearance, not measurements.
 - A linkage that closes a loop (a four-bar, a slider-crank) is kept but not posed: there is no solver.
 - `ranges` does not sweep a cylindrical or spherical joint, and interference checks only the poses it is given.
-- This is kinematics, not dynamics. Simulating a robot is [robotics and simulation](/docs/skills/robotics-and-simulation).
+- This is kinematics, not dynamics. Simulating a robot is the [robot-simulation](/docs/robot-simulation) skill.
 - `flat_pattern` lays out a flat plate, not a folded part.
-- The drawing checks show a well-formed cut layout, not that a shop can cut it ([SendCutSend](/docs/skills/fabrication-services#sendcutsend)).
+- The drawing checks show a well-formed cut layout, not that a shop can cut it (the [sendcutsend](/docs/sendcutsend) skill).
 
 ## The skill
 
-This is the `cad` skill ([SKILL.md](repo:skills/cad/SKILL.md)). Its most useful references:
+This is the `cad` skill ([SKILL.md](repo:skills/cad/SKILL.md)); the manufacturing checks are its ["Can it be made?"](repo:skills/cad/SKILL.md#can-it-be-made) section. Its most useful references:
 
 - [Models](repo:skills/cad/references/model-contract.md) and [build123d patterns](repo:skills/cad/references/build123d-modeling.md)
 - [Exports](repo:skills/cad/references/exports.md) and [inspection](repo:skills/cad/references/inspection-and-validation.md)
 - [Kinematics](repo:skills/cad/references/kinematics.md) and [animation](repo:skills/cad/references/animation.md)
 - [2D profiles and DXF](repo:skills/cad/references/2d-profiles-and-dxf.md) and [sheet metal cut files](repo:skills/cad/references/manufacturing-sheet-metal.md#cut-files-dxf)
+- The manufacturing checks, one per process: [CNC machining](repo:skills/cad/references/manufacturing-cnc.md), [sheet metal](repo:skills/cad/references/manufacturing-sheet-metal.md), [injection molding](repo:skills/cad/references/manufacturing-injection-molding.md) and [3D printing](repo:skills/cad/references/manufacturing-printing.md)
+- [Reading a review](repo:skills/cad/references/manufacturing-review.md), and [every rule](repo:packages/cad/src/cad/_internal/dfm/README.md)
 
-Related pages: the [viewer](/docs/viewer), [manufacturing checks](/docs/skills/manufacturing-checks), the document types [model](/docs/document-types/model), [STEP](/docs/document-types/step), [STL](/docs/document-types/stl), [3MF](/docs/document-types/threemf), [GLB](/docs/document-types/glb) and [DXF](/docs/document-types/dxf), and the [build123d](/docs/integrations/build123d) integration.
+Related pages: the [viewer](/docs/viewer).

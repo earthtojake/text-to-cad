@@ -17,7 +17,6 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { siteConfig } from "@/lib/site";
-import { generatedHeadings } from "./generated";
 import { docHref, docPages, docSections, findPage, type DocPage } from "./nav";
 
 // The app builds from its own folder (`apps/docs`), in a checkout of the whole repository.
@@ -40,7 +39,7 @@ export type LoadedDoc = {
   /** The page's Markdown, without its front matter and its title. */
   body: string;
   tree: Root;
-  /** Every heading of the page, the generated sections' after the written ones. */
+  /** Every heading of the page. */
   headings: DocHeading[];
 };
 
@@ -101,7 +100,6 @@ export function loadDoc(slug: string): LoadedDoc {
     node.data = { ...node.data, hProperties: { id } };
     headings.push({ depth: node.depth, id, text });
   }
-  for (const heading of generatedHeadings(slug)) headings.push(heading);
 
   const doc: LoadedDoc = {
     page,

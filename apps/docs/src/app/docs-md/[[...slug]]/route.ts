@@ -1,6 +1,5 @@
 // /docs/<page>.md (next.config.ts rewrites it here): a page as Markdown, for an agent, with its links
-// made absolute and the sections the site adds from the registry. /docs.md is /docs itself.
-import { generatedMarkdown } from "@/lib/docs/generated";
+// made absolute. /docs.md is /docs itself.
 import { docPages } from "@/lib/docs/nav";
 import { docMarkdown } from "@/lib/docs/source";
 
@@ -15,7 +14,7 @@ export function generateStaticParams(): Params[] {
 
 export async function GET(_request: Request, { params }: { params: Promise<Params> }) {
   const slug = ((await params).slug ?? []).join("/");
-  return new Response(docMarkdown(slug, generatedMarkdown(slug)), {
+  return new Response(docMarkdown(slug), {
     headers: { "content-type": "text/markdown; charset=utf-8" },
   });
 }

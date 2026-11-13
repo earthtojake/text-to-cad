@@ -69,9 +69,8 @@ scripts/         # loading-icon export and verification; the install scripts' co
 
 ## The documentation
 
-`/docs` is the documentation: installing, the skills (a page per feature of the README), every
-document type and integration, the architecture, the `cad` command, the migration guides and
-contributing. It is this
+`/docs` is the documentation: installing, the skills (a page per skill, named after it), the `cad`
+command, the migration guides and contributing. It is this
 app's own shell, no docs framework: the sections at the left (a drawer on a phone or a tablet), the
 page, and its contents at the right, in the site's tokens and primitives.
 
@@ -80,24 +79,23 @@ page, and its contents at the right, in the site's tokens and primitives.
   search all read the map.
 - **One copy of everything.** A page is either a file of the repository's (`docs/install.md`,
   `docs/migrations/*.md`), set as it is, its relative links resolved to the
-  site's pages or to GitHub; or a page written for the site, `content/<page>.md`: the Skills pages, the
-  architecture and each type's and integration's introduction, which say for a person what the skills
-  say to an agent and the package READMEs to a contributor, and link them. The site never keeps a
-  second copy of a repository file.
-- **Skills, a page a feature.** The Skills section has one page for each feature of the README
-  (`features` in `src/lib/content.ts`; each tile on the homepage links its page): what the skill
-  behind it is, what it makes, how it works and where it stops. They are about the skills, not
-  how-to guides, and `tests/python/global/test_docs_site_pages.py` holds the pages to the features.
+  site's pages or to GitHub; or a page written for the site, `content/<page>.md`: the Skills pages,
+  which say for a person what the skills say to an agent, and link them. What a contributor reads
+  (`AGENTS.md`, `CONTRIBUTING.md`, the package READMEs, `SECURITY.md`) the Contributing page links on
+  GitHub. The site never keeps a second copy of a repository file.
+- **Skills, a page a skill.** The Skills section has one page for each skill of `skills/`, named
+  after it (`/docs/cad`, written in `content/skills/cad.md`): what the skill is, what it makes, how
+  it works and where it stops. They are about the skills, not how-to guides. Each tile on the
+  homepage (`features` in `src/lib/content.ts`) links its skill's page, or a section of it (the
+  manufacturing checks are the `cad` skill's), and `tests/python/global/test_docs_site_pages.py`
+  holds the pages to the skills and the tiles to the pages.
 - **The contributing guides are not set.** `docs/contributing/*.md` (writing a skill, adding a
   document type or an integration, testing) are written for whoever changes the repository, an agent
   as often as a person: the Contributing page links them on GitHub.
-- **The registry's pages.** The document types and the integrations are the library's registry
-  (`cad.registry`): `src/lib/docs/registry.generated.json` is that table
+- **The registry's copy.** The document types, their operations and the integrations are the
+  library's registry (`cad.registry`): `src/lib/docs/registry.generated.json` is that table
   (`python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`), held to it by
-  `tests/python/packages/cad/test_registry.py`. Each type and integration gets a page from it, its
-  facts, operations and what writes it under an introduction in `content/`; a new entry in the
-  registry needs its introduction, or the build fails (and
-  `tests/python/global/test_docs_site_pages.py`, on every change).
+  `tests/python/packages/cad/test_registry.py`, and `src/lib/docs/registry.ts` reads it.
 - **Markdown, not MDX** (`src/lib/docs/source.ts`, `src/components/docs/markdown.tsx`): a repository
   file says `<state>` and `{...}` as text. A page of `content/` has a front matter of `title` and
   `description` and no `#` heading; it links another page as `/docs/<page>`, a file of the repository
@@ -115,12 +113,11 @@ page, and its contents at the right, in the site's tokens and primitives.
   browser: no service, nothing sent.
 - **A live model** on a page (`docModels` in the map; `src/components/docs/model-embed.tsx`): a GLB of
   `public/`, read and lit by core as the viewer reads any GLB, its parts in their colours, its clip
-  playing, turned by dragging. Today that is the hero's planetary gear, on the Parts and assemblies page and
-  the GLB page: no new CAD file. It loads when it scrolls into view, three.js with it, plays only on
+  playing, turned by dragging. Today that is the hero's planetary gear, on the `cad` page: no new CAD file. It loads when it scrolls into view, three.js with it, plays only on
   screen in a visible tab and holds still for reduced motion. Another model is another small GLB,
   committed as the hero's is (a plain file, listed in `test_no_cad_assets_tracked.py` with a size cap).
 - **For agents**, every page is also Markdown at `/docs/<page>.md` (`/docs.md` for `/docs`), its links
-  absolute and the registry's sections included, and `/llms.txt` lists them all.
+  absolute, and `/llms.txt` lists them all.
 
 To add a page: write `content/<section>/<page>.md`, add it to the map, and run `npm run check`.
 To show another file of the repository: add it to the map with `repo(...)`; its first `#` heading is

@@ -203,7 +203,7 @@ export function DocsSearch({ className, shortcut = false }: { className?: string
                   ? "Loading..."
                   : query.trim()
                     ? `Nothing found for "${query.trim()}".`
-                    : "Search the guides, the document types, the integrations and the reference."}
+                    : "Search the guides, the skills and the reference."}
             </p>
           )}
         </Dialog.Content>

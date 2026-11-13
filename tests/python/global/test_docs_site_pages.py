@@ -5,12 +5,11 @@ The site (`apps/docs`, texttocad.dev/docs) sets the repository's guides as they 
 path that is no page, an anchor that is no heading. That build runs when the site or `docs/` changes.
 What it reads from the rest of the tree is checked here, on every change: a page's link to a file
 of the repository (`repo:<path>`), so a renamed skill or reference fails where it is renamed rather
-than at the next build of the site; and the page each document type and integration needs.
+than at the next build of the site; and the Skills pages, one a skill, named after it.
 """
 
 from __future__ import annotations
 
-import json
 import re
 import unittest
 
@@ -19,7 +18,6 @@ from tests.python.support.paths import REPO_ROOT
 DOCS_APP = REPO_ROOT / "apps" / "docs"
 CONTENT = DOCS_APP / "content"
 MAP = DOCS_APP / "src" / "lib" / "docs" / "nav.ts"
-REGISTRY = DOCS_APP / "src" / "lib" / "docs" / "registry.generated.json"
 
 REPO_LINK = re.compile(r"\]\(repo:([^)#\s]+)(?:#[^)\s]*)?\)")
 
@@ -39,22 +37,20 @@ class TheDocsSiteNamesFilesThatExist(unittest.TestCase):
         self.assertTrue(files, "no repository files found in the documentation's map")
         self.assertEqual([path for path in files if not (REPO_ROOT / path).is_file()], [])
 
-    def test_every_feature_links_a_skills_page_that_exists(self) -> None:
-        # The homepage's tiles link the documentation's Skills, a page a feature (`page` in the site's copy).
-        copy = (DOCS_APP / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
-        pages = re.findall(r'page: "/docs/(skills/[^"#]+)"', copy)
-        self.assertEqual(len(pages), len(re.findall(r'^    id: "', copy, re.M)), "a feature with no page")
-        self.assertEqual([page for page in pages if not (CONTENT / f"{page}.md").is_file()], [])
+    def test_every_skill_has_its_page(self) -> None:
+        # The Skills section is a page a skill, `content/skills/<skill>.md` at /docs/<skill>.
+        skills = sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md"))
+        self.assertTrue(skills, "no skills found")
         written = sorted(path.stem for path in (CONTENT / "skills").glob("*.md"))
-        self.assertEqual(sorted(page.split("/")[1] for page in pages), written, "a Skills page no feature links")
+        self.assertEqual(written, skills, "a skill with no page, or a page with no skill")
 
-    def test_every_document_type_and_integration_has_its_page(self) -> None:
-        # The map takes both lists from the registry; each entry's page opens with text written for it.
-        registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
-        wanted = [f"document-types/{entry['id']}.md" for entry in registry["documentTypes"]]
-        wanted += [f"integrations/{entry['name']}.md" for entry in registry["integrations"]]
-        self.assertEqual([path for path in wanted if not (CONTENT / path).is_file()], [])
-
+    def test_every_feature_links_a_skills_page_that_exists(self) -> None:
+        # The homepage's tiles link the documentation's Skills (`page` in the site's copy), at a
+        # section of a page where the feature is one (manufacturing checks are the cad skill's).
+        copy = (DOCS_APP / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        pages = re.findall(r'page: "/docs/([^"#]+)(?:#[^"]*)?"', copy)
+        self.assertEqual(len(pages), len(re.findall(r'^    id: "', copy, re.M)), "a feature with no page")
+        self.assertEqual([page for page in pages if not (CONTENT / "skills" / f"{page}.md").is_file()], [])
 
 if __name__ == "__main__":
     unittest.main()

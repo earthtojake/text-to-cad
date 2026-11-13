@@ -194,7 +194,7 @@
   @apply text-[15px] leading-7 text-foreground/90;
 }
 .docs-prose > :first-child { @apply mt-6; }
-.docs-prose :is(p, ul, ol, blockquote, .docs-table, .docs-code, .docs-callout, .docs-facts) { @apply my-4; }
+.docs-prose :is(p, ul, ol, blockquote, .docs-table, .docs-code, .docs-callout) { @apply my-4; }
 .docs-prose :is(h2, h3, h4) { @apply scroll-mt-20 font-semibold tracking-tight text-foreground; }
 .docs-prose h2 { @apply mt-10 mb-3 border-t border-border pt-6 text-heading leading-8; }
 .docs-prose h3 { @apply mt-8 mb-2 text-lg leading-7; }
@@ -248,10 +248,3 @@
 }
 .docs-callout:is([data-callout="warning"], [data-callout="caution"])::before { @apply text-destructive; }
 .docs-callout > :is(p, ul, ol) { @apply my-1; }
-
-/* A type's or an integration's facts (`RegistrySections`): a name and its value a row. */
-.docs-facts { @apply overflow-hidden rounded-xl border border-border text-sm leading-6; }
-.docs-facts > div { @apply grid gap-x-4 gap-y-0.5 border-b border-border px-3 py-2 sm:grid-cols-[9rem_minmax(0,1fr)]; }
-.docs-facts > div:last-child { @apply border-b-0; }
-.docs-facts dt { @apply font-medium text-foreground; }
-.docs-facts dd { @apply min-w-0 text-foreground/90; }

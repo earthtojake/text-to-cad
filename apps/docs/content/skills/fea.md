@@ -1,5 +1,5 @@
 ---
-title: Stress checks
+title: fea
 description: The fea skill checks whether a part or a bonded assembly holds under load, solved with CalculiX, with stress, safety factor and deflection drawn on the part.
 ---
 
@@ -81,4 +81,4 @@ This is the `fea` skill ([SKILL.md](repo:skills/fea/SKILL.md)). Its references:
 - [Materials](repo:skills/fea/references/materials.md)
 - [The library's section](repo:packages/cad/README.md#stress-studies)
 
-Related pages: [parts and assemblies](/docs/skills/parts-and-assemblies), [manufacturing checks](/docs/skills/manufacturing-checks), the [viewer](/docs/viewer) (which opens `result.glb`), the [CalculiX](/docs/integrations/calculix) and [netgen](/docs/integrations/netgen) integrations, and the [GLB](/docs/document-types/glb) and [STEP](/docs/document-types/step) document types.
+Related pages: [cad](/docs/cad), its [manufacturing checks](/docs/cad#manufacturing-checks), and the [viewer](/docs/viewer) (which opens `result.glb`).

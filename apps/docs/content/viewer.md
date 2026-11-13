@@ -27,7 +27,7 @@ Each kind of file gets its own tools. Every 3D view ends its tool strip with Pro
 - **Robots (URDF, SRDF, SDF)**: the links, and a Position tab to pose the joints.
 - **Boards (KiCad)**: a board in 2D or 3D, and a schematic you can enter sheet by sheet. You do not need KiCad installed to view one.
 
-Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it. See [document types](/docs/document-types) for each format.
+Preview is a full-page mode that draws the model rendered and plays its animations from a bar under it.
 
 On a STEP or a robot, pick something, draw or measure, and Quick Edit appears at the top right. Write a note, use Copy Prompt and paste it into your agent: the prompt names the file and what you picked.
 
@@ -55,4 +55,4 @@ When a newer text-to-cad release is out and has not installed itself, an update 
 
 ## The CAD app
 
-Agent apps that can draw an interface show the same viewer inside the app: cards in Claude Desktop and Cursor, tabs in the Codex app. It has the same navbar, tools and view cube as the browser page, but no Export, because it has no downloads. Use the browser page or `cad` for files. See [supported agents](/docs/agents) for what each app shows, and [the viewer and the CAD app](/docs/architecture/viewer-and-cad-app) for how it works.
+Agent apps that can draw an interface show the same viewer inside the app: cards in Claude Desktop and Cursor, tabs in the Codex app. It has the same navbar, tools and view cube as the browser page, but no Export, because it has no downloads. Use the browser page or `cad` for files. See [supported agents](/docs/agents) for what each app shows.

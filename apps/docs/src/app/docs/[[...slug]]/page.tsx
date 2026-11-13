@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Markdown } from "@/components/docs/markdown";
 import { ModelEmbed } from "@/components/docs/model-embed";
-import { RegistrySections } from "@/components/docs/registry-sections";
 import { DocsToc } from "@/components/docs/toc";
 import { docModels, docPages, sectionOf } from "@/lib/docs/nav";
 import { loadDoc, neighbours } from "@/lib/docs/source";
@@ -56,7 +55,6 @@ export default async function DocsPage({ params }: { params: Promise<Params> }) 
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">{doc.title}</h1>
           {docModels[slug] ? <ModelEmbed {...docModels[slug]} /> : null}
           <Markdown doc={doc} />
-          <RegistrySections slug={slug} />
 
           <footer className="mt-12 space-y-6 border-t border-border pt-6">
             <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">

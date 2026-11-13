@@ -72,8 +72,7 @@ where a command or a program first needs it.
       ([testing](testing.md#ci)).
 - [ ] **Docs to touch**: the library README's **Definitions** (the list of ids) and its shape of the
       package, the engine README's **CLI**, the server README's **Commands**, the skill that teaches
-      the type, the type's page on the docs site (its introduction,
-      `apps/docs/content/document-types/<id>.md`; the registry gives the page its facts), the README
+      the type, the README
       and the docs site's homepage (`apps/docs/src/lib/content.ts`) if they list formats, and `AGENTS.md` only if a repo-level rule changed.
 
 ## Designing its viewer

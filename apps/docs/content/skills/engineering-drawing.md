@@ -1,5 +1,5 @@
 ---
-title: Engineering drawings
+title: engineering-drawing
 description: The engineering-drawing skill makes a dimensioned PDF drawing of a part, with views, hidden lines, hole callouts and a title block projected from the model.
 ---
 
@@ -72,7 +72,7 @@ A script asked for something it cannot draw correctly raises an error and writes
 - Tolerances come only from `tol=`, `fit=` and `general_tolerance=` written from your requirements. A dimension without one is nominal. Your agent does not invent values, so tell it what you need.
 - Views are orthographic projections with hidden lines from the kernel. There are no section views, detail views or auxiliary views yet.
 - The sheet keeps callouts clear of the views it knows about and reports annotation that prints over other annotation. It does not check annotation against line work, so the PDF has to be read by eye.
-- It is not for DXF cut layouts or flat patterns. For those, see [DXF profiles and flat patterns](/docs/skills/parts-and-assemblies#dxf-profiles-and-flat-patterns).
+- It is not for DXF cut layouts or flat patterns. For those, see [DXF profiles and flat patterns](/docs/cad#dxf-profiles-and-flat-patterns).
 - There is no `eng_drawing` command. The Python script is the interface.
 
 ## The skill
@@ -81,4 +81,4 @@ The skill is [`engineering-drawing`](repo:skills/engineering-drawing/SKILL.md). 
 
 - [The sheet API](repo:skills/engineering-drawing/references/sheet-api.md): every `Sheet` and `View` argument
 
-Related pages: [parts and assemblies](/docs/skills/parts-and-assemblies) for the models a drawing documents, [manufacturing checks](/docs/skills/manufacturing-checks) for checking a part before it goes to a shop, [SendCutSend](/docs/skills/fabrication-services#sendcutsend) for pre-upload checks of cut and bent parts, [the `step` document type](/docs/document-types/step) for drawing a vendor STEP file, and [the build123d integration](/docs/integrations/build123d).
+Related pages: [cad](/docs/cad) for the models a drawing documents, its [manufacturing checks](/docs/cad#manufacturing-checks) for checking a part before it goes to a shop, and [sendcutsend](/docs/sendcutsend) for pre-upload checks of cut and bent parts.

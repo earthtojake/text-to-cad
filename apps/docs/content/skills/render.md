@@ -1,5 +1,5 @@
 ---
-title: Renders
+title: render
 description: The render skill makes photoreal stills, turntables and films of a model with Blender, drafted in EEVEE and finished in Cycles, with no Blender app needed.
 ---
 
@@ -67,4 +67,4 @@ The skill is [`render`](repo:skills/render/SKILL.md). Its references:
 - [The scene script](repo:skills/render/references/scene-script.md): framing, lights, GPU setup
 - [Shots](repo:skills/render/references/shots.md): turntables, films, motion blur, glow, a `.blend`
 
-Related pages: [the Blender integration](/docs/integrations/blender), [the GLB document type](/docs/document-types/glb), [mechanisms and animation](/docs/skills/parts-and-assemblies#mechanisms-and-animation) for the motions a film can play, and [the viewer](/docs/viewer) for looking at a model without a render.
+Related pages: [mechanisms and animation](/docs/cad#mechanisms-and-animation) for the motions a film can play, and [the viewer](/docs/viewer) for looking at a model without a render.

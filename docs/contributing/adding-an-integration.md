@@ -182,8 +182,6 @@ an integration.
       that installs it, and says so by name where it skips.
 - [ ] **Skill notes**: the skill that uses it says what the tool is and when it is fetched, after its
       setup block (the setup block itself is the shared text every skill carries word for word).
-- [ ] **Its page on the docs site**: regenerate the site's copy of the registry (`python -m
+- [ ] **The docs site's copy of the registry**: regenerate it (`python -m
       cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`,
-      which `tests/python/packages/cad/test_registry.py` holds to the table) and write the page's
-      introduction, `apps/docs/content/integrations/<name>.md`: what the tool is, what we add, how it
-      reaches a person's computer. The registry gives the page its facts.
+      which `tests/python/packages/cad/test_registry.py` holds to the table).
