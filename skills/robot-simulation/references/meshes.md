@@ -51,6 +51,19 @@ When a description references exported mesh assets, record in its ledger:
 - One convention per robot: do not mix mm and m assets in the same file without a ledger entry per exception.
 - A robot rendering ~1000× too large or too small in the viewer is a scale bug; fix the scale, not the joint origins.
 
+## GLB visuals
+
+When the consumer accepts a GLB, export one self-contained GLB per link with `cad model export <id>
+link.glb` and keep it unrotated in the link frame: glTF is Y-up while URDF is Z-up, so the link or
+joint frame carries the orientation. An MJCF is not one of those consumers: MuJoCo reads STL, OBJ
+and MSH, so export the link as STL there.
+
+The [Honu glTF Asset Profile and Workflow](https://github.com/HonuRobotics/gltf-robotics) documents
+these conventions for simulator and visualization consumers and ships `gltf-check`. It is an
+optional external check: `cad urdf validate`, `cad mujoco check` and the CAD Viewer remain this
+repository's checks, and a clean `gltf-check` does not establish frame, scale or inertial
+correctness.
+
 ## Reference Forms
 
 In URDF:
