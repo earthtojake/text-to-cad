@@ -24,6 +24,13 @@
 //
 // Every stochastic choice (ray directions, march offsets) moves with the sample index, so the
 // frame's accumulation converges them with everything else.
+//
+// A STILL VIEW'S LIGHT. One sample of either effect is grain, and a moving view is one sample a
+// frame. So a picture's first sample carries none of it (`weightAt`): a moving view is drawn exactly
+// as it is without the lab, by the frame's own passes, at the frame's own cost. Once the view
+// rests, each later sample carries a growing share (over `fade` samples) and the shares are scaled
+// so the converged picture holds all of it: the light fades in as the picture converges, already
+// averaged over the samples behind it.
 
 const TONE_GLSL = /* glsl */ `
 vec3 toLinear(vec3 c) {
@@ -569,6 +576,10 @@ export function studioFrameLabSettings() {
     ssrSteps: Math.max(2, Math.round(number(given.ssrSteps, 16))),
     // Whether a ray's light is read from the picture so far (further bounces) or from each sample alone.
     history: given.history !== false,
+    // Whether a picture's first sample is left without the lab's light, and over how many of the
+    // samples after it that light fades in (`gate: false`: every sample carries it, the first too).
+    gate: given.gate !== false,
+    fade: Math.max(1, Math.round(number(given.fade, 8))),
     // A still's sample count, in place of the caller's (1: what a moving view shows each frame).
     samples: given.samples == null ? null : Math.max(1, Math.round(number(given.samples, 32))),
     debug: Object.hasOwn(DEBUG_VIEWS, given.debug) ? given.debug : null,
@@ -749,8 +760,28 @@ export function createStudioFrameLab(THREE, lab, shared) {
     }
   }
 
+  // The share of the lab's light each sample of a picture of `total` carries, gated and faded in
+  // (the file's header): 0 for the first, rising to one constant, their mean over the picture 1.
+  const shares = new Map();
+  function sharesOf(total) {
+    let found = shares.get(total);
+    if (!found) {
+      const ramp = Array.from({ length: total }, (_, index) => Math.min(1, index / lab.fade));
+      const sum = ramp.reduce((a, b) => a + b, 0);
+      found = ramp.map((value) => (sum > 0 ? value * total / sum : 0));
+      shares.set(total, found);
+    }
+    return found;
+  }
+
   return {
     compositePass,
+    /** How much of the lab's light sample `index` of a picture of `total` samples carries. */
+    weightAt(index, total) {
+      if (!lab.gate || lab.debug) return 1;
+      const count = Math.max(1, Math.round(total));
+      return index < count ? sharesOf(count)[index] : 0;
+    },
     resize(width, height, halfWidth, halfHeight) {
       geometryTarget.setSize(width, height);
       for (const target of reflectionTargets) target.setSize(width, height);
@@ -794,7 +825,7 @@ export function createStudioFrameLab(THREE, lab, shared) {
       }
     },
     /** The bounce and the reflection of this sample, after its occlusion. */
-    drawEffects(renderer, scene, camera, index, { occlusion, modelRadius, center, width, height }) {
+    drawEffects(renderer, scene, camera, index, { occlusion, modelRadius, center, width, height, weight = 1 }) {
       if (lab.log && index === 0) {
         console.warn(`[studioFrameLab] model radius ${modelRadius}, centre ${[center.x, center.y, center.z]}, camera ${
           camera.position.toArray()} fov ${camera.fov} zoom ${camera.zoom}, ${width}x${height}`);
@@ -816,8 +847,8 @@ export function createStudioFrameLab(THREE, lab, shared) {
         pass(reflectPass, reflectionTargets[0]);
         smooth(renderer, reflectSmoothPass, reflectionTargets, width, height);
       }
-      compositePass.uniforms.uBounceStrength.value = lab.ssgi;
-      compositePass.uniforms.uReflectionStrength.value = lab.ssr;
+      compositePass.uniforms.uBounceStrength.value = lab.ssgi * weight;
+      compositePass.uniforms.uReflectionStrength.value = lab.ssr * weight;
       compositePass.uniforms.uDebug.value = lab.debug ? DEBUG_VIEWS[lab.debug] : 0;
     },
     /** GPU memory of its targets, in bytes, for a drawing buffer of `pixels` and its half-resolution `half`. */

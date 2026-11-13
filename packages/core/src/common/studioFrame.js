@@ -471,7 +471,7 @@ export function createStudioFrame(THREE, {
 
   // Draw the scene for sample `index`: its camera a fraction of a pixel away for every sample
   // but the first, and left exactly as it was.
-  function drawScene(renderer, scene, camera, index) {
+  function drawScene(renderer, scene, camera, index, labWeight = 0) {
     const [jitterX, jitterY] = studioFrameJitter(index);
     const savedView = camera.view ? { ...camera.view } : null;
     if (index > 0) camera.setViewOffset(state.width, state.height, jitterX, jitterY, state.width, state.height);
@@ -481,7 +481,7 @@ export function createStudioFrame(THREE, {
       renderer.render(scene, camera);
       projection.copy(camera.projectionMatrix);
       projectionInverse.copy(camera.projectionMatrixInverse);
-      lab?.drawGeometry(renderer, scene, camera);
+      if (labWeight > 0) lab.drawGeometry(renderer, scene, camera);
     } finally {
       if (index > 0) {
         if (savedView?.enabled) {
@@ -568,19 +568,25 @@ export function createStudioFrame(THREE, {
       onSample?.(index, renderer, {
         castersChanged: !still && Boolean(shadowMap?.enabled && (shadowMap.autoUpdate || shadowMap.needsUpdate))
       });
+      // PROTOTYPE: how much of the lab's light this sample carries. None for a picture's first
+      // sample, so a moving view is drawn exactly as it is without the lab, at the same cost.
+      const labWeight = lab ? lab.weightAt(index, settings.samples) : 0;
       try {
         renderer.autoClear = true;
-        drawScene(renderer, scene, camera, index);
+        drawScene(renderer, scene, camera, index, labWeight);
       } finally {
         afterSample?.(index);
       }
       try {
         renderer.autoClear = false;
         if (settings.strength > 0) drawOcclusion(renderer, camera, index);
-        lab?.drawEffects(renderer, scene, camera, index, {
-          occlusion: settings, modelRadius: settings.modelRadius, center: probes[0], width: state.width, height: state.height
-        });
-        const composite = lab ? lab.compositePass : compositePass;
+        if (labWeight > 0) {
+          lab.drawEffects(renderer, scene, camera, index, {
+            occlusion: settings, modelRadius: settings.modelRadius, center: probes[0], width: state.width, height: state.height,
+            weight: labWeight
+          });
+        }
+        const composite = labWeight > 0 ? lab.compositePass : compositePass;
         composite.uniforms.uStrength.value = settings.strength;
         composite.uniforms.uPower.value = settings.power;
         composite.mesh.material.blendAlpha = 1 / (index + 1);
