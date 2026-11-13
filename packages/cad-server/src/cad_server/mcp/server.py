@@ -245,6 +245,25 @@ def _stamped(launch: dict[str, Any], updater: bool = True) -> dict[str, Any]:
     return launch
 
 
+# The tools 0.11.10 removed, each answered by name with the `cad` command that does its work now: a session
+# opened before the update still lists them, and its agent reads this, not a bare "unknown tool". Never
+# listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). The commands carry no
+# pin: such a session's skill names none, and an unpinned command runs the default channel's release,
+# this one. Goes at the next minor release.
+_REMOVED_TOOLS = {
+    "cad_export": "The cad_export tool was removed in text-to-cad 0.11.10. Export with the cad command instead: "
+                  "`cad model export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
+                  "for a CAD file (type: step, xbf, stl, glb or threemf); read the cad skill again for the details.",
+    "cad_snapshot": "The cad_snapshot tool was removed in text-to-cad 0.11.10. Draw a PNG with the cad command instead: "
+                    "`cad model snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
+                    "for a CAD file, or `cad model snapshot --job <packet>` for a Quick Edit packet; read the cad skill "
+                    "again for the details.",
+    "cad_inspect": "The cad_inspect tool was removed in text-to-cad 0.11.10. Inspect with the cad command instead: "
+                   "`cad model inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
+                   "CAD file (type: step, xbf or glb); read the cad skill again for the details.",
+}
+
+
 def _text(text: str, structured: dict[str, Any] | None = None, *, error: bool = False) -> dict[str, Any]:
     result: dict[str, Any] = {"content": [{"type": "text", "text": text}]}
     if structured is not None:
@@ -657,6 +676,9 @@ class Server:
         # Shared HTTP calls enforce their own route and consent authorization.
         listed = any(tool["name"] == name for tool in self.tools())
         handler = getattr(self, f"_tool_{name}", None) if listed else None
+        if handler is None and isinstance(name, str) and name in _REMOVED_TOOLS:
+            self._refused(name, "bad_request")  # the caller's stale list: as a name cadgen has no tool by
+            return _text(_REMOVED_TOOLS[name], error=True)
         if handler is None:
             self._refused(name, "no_view")  # a tool of cadgen's this host was not listed: a view it does not show
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")

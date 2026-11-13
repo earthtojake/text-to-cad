@@ -400,6 +400,28 @@ class TabServerTest(_Session):
         launch = self.launch("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}}, {"openai/resource": {"path": self.bracket}})
         self.assertEqual((launch["surface"], "browser" in launch, "engine" in launch, len(asked)), ("file", False, False, before))
 
+    def test_a_tool_0_11_10_removed_answers_with_its_command_and_is_never_listed(self) -> None:
+        # A session opened before the update still holds them: its agent is told the command, not "unknown tool".
+        listed = [tool["name"] for tool in self.server.tools()]
+        context = RequestContext(1, {"threadId": "t"})
+        with mock.patch.object(self.server.analytics, "called") as counted:
+            for name, command in (("cad_export", "`cad model export <id> <file>...`"),
+                                  ("cad_snapshot", "`cad model snapshot <id> <out.png>`"),
+                                  ("cad_inspect", "`cad model inspect <id> [ref]`")):
+                with self.subTest(name=name):
+                    self.assertNotIn(name, listed)
+                    answered = self.server.handle("tools/call", {"name": name, "arguments": {"source": "x"}}, context)
+                    self.assertTrue(answered["isError"])
+                    [text] = answered["content"]
+                    self.assertIn("removed in text-to-cad 0.11.10", text["text"])
+                    self.assertIn(command, text["text"])
+                    self.assertIn("cad skill", text["text"])
+        # Counted as the caller's call naming no tool of cadgen's, never as the system's failure.
+        self.assertEqual({call.args for call in counted.call_args_list}, {("cad_unknown", False, "bad_request")})
+        with self.assertRaisesRegex(RpcError, "unknown tool 'cad_render'") as refused:
+            self.server.handle("tools/call", {"name": "cad_render", "arguments": {}}, context)
+        self.assertEqual(refused.exception.code, -32602)
+
     def test_the_hosts_file_view_shows_the_file_it_opened_and_nothing_the_agent_shows(self) -> None:
         self.call("cad_sync", {"view": "f1", "surface": "file", "model": self.bracket})
         # The agent reads it by its id...
