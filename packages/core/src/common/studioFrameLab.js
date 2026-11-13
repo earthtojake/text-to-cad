@@ -144,6 +144,42 @@ vec3 radianceAt(vec2 uv) {
 vec3 envAt(vec3 viewDirection, float lod) {
   return textureLod(uEnv, uEnvFromView * viewDirection, lod).rgb * uEnvScale;
 }
+// The split-sum scale and bias of F0 (Karis's fit, three's DFGApprox of old).
+vec2 environmentBrdf(float dotNV, float roughness) {
+  const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+  const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+  vec4 r = roughness * c0 + c1;
+  float a004 = min(r.x * r.x, exp2(-9.28 * dotNV)) * r.x + r.y;
+  return vec2(-1.04, 1.04) * a004 + r.zw;
+}
+// The environment's specular light off a surface toward view, as the material draws it (three's
+// getIBLRadiance along the mirror direction, weighed by the split sum of the surface's F0).
+vec3 environmentSpecular(vec3 normal, vec3 view, float roughness, vec4 surface, float blur) {
+  float r4 = roughness * roughness * roughness * roughness;
+  vec3 mirror = normalize(mix(reflect(-view, normal), normal, r4));
+  vec2 scaleBias = environmentBrdf(clamp(dot(normal, view), 0.0, 1.0), roughness);
+  vec3 f0 = mix(vec3(0.04), surface.rgb, clamp(surface.a, 0.0, 1.0));
+  // blur: the roughness of whatever gathers this light, which blurs the environment once more.
+  float r = clamp(sqrt(roughness * roughness + blur * blur), 0.0, 1.0);
+  return (f0 * scaleBias.x + scaleBias.y) * envAt(mirror, uEnvMaxLod * r * (2.0 - r));
+}
+// The radiance the visible point at uv (view-space point, its shading normal and roughness in
+// shading) sends along toward. What the camera sees of it holds its environment reflection as
+// the CAMERA mirrors it; a glossy surface sends another part of the environment another way. So
+// that reflection is taken out and the one aimed along toward put in (unoccluded but for the
+// ambient occlusion: a second bounce is not traced), blurred as the gatherer's own lobe of
+// roughness blur would blur it, which a handful of rays cannot; the rest (diffuse light, the
+// key's highlight) is taken to leave the same in every direction.
+vec3 radianceToward(vec2 uv, vec3 point, vec4 shading, vec3 toward, float blur) {
+  vec3 normal = normalize(shading.xyz);
+  float roughness = clamp(shading.w, 0.0, 1.0);
+  vec4 surface = textureLod(uSurface, uv, 0.0);
+  vec3 camera = uOrthographic > 0.5 ? vec3(0.0, 0.0, 1.0) : normalize(-point);
+  float occlusion = occlusionAt(uv, -point.z);
+  vec3 drawn = environmentSpecular(normal, camera, roughness, surface, 0.0);
+  vec3 aimed = min(environmentSpecular(normal, toward, roughness, surface, blur), vec3(4.0));
+  return max(radianceAt(uv) - occlusion * drawn, 0.0) + occlusion * aimed;
+}
 
 float ign(vec2 pixel) {
   return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
@@ -274,10 +310,12 @@ void main() {
     vec3 hit = trace(origin, direction, uReach, fract(noise1(gl_FragCoord.xy) + float(ray) * 0.6180339887));
     if (hit.z <= 0.0) continue;
     // Only the front of a visible surface is known: one met from behind sends light nobody drew.
-    if (dot(textureLod(uNormal, hit.xy, 0.0).xyz, direction) >= 0.0) continue;
+    vec4 met = textureLod(uNormal, hit.xy, 0.0);
+    if (dot(met.xyz, direction) >= 0.0) continue;
+    vec3 light = radianceToward(hit.xy, origin + direction * hit.z, met, -direction, 1.0);
     float taken = radiusPixels < 2.0 ? 0.0 : clamp((radius - hit.z) / falloffRange, 0.0, 1.0);
     float fade = 1.0 - smoothstep(0.7, 1.0, hit.z / uReach);
-    sum += fade * (radianceAt(hit.xy) - (1.0 - taken) * own * envAt(direction, 0.84 * uEnvMaxLod));
+    sum += fade * (light - (1.0 - taken) * own * envAt(direction, 0.84 * uEnvMaxLod));
   }
   gl_FragColor = vec4(sum / float(RAYS), -center.z);
 }
@@ -348,14 +386,6 @@ vec3 visibleNormal(vec3 Ve, float alpha, vec2 u) {
   vec3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
   return normalize(vec3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z)));
 }
-// The split-sum scale and bias of F0 (Karis's fit, three's DFGApprox of old).
-vec2 environmentBrdf(float dotNV, float roughness) {
-  const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
-  const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
-  vec4 r = roughness * c0 + c1;
-  float a004 = min(r.x * r.x, exp2(-9.28 * dotNV)) * r.x + r.y;
-  return vec2(-1.04, 1.04) * a004 + r.zw;
-}
 void main() {
   float depth = depthAt(vUv);
   gl_FragColor = vec4(0.0);
@@ -380,21 +410,18 @@ void main() {
   vec3 halfVec = normalize(tangent * local.x + bitangent * local.y + normal * local.z);
   vec3 direction = reflect(-viewVec, halfVec);
   if (dot(direction, normal) <= 0.02) return;
-  // The environment the material drew along its mirror direction (three's getIBLRadiance).
-  float r4 = roughness * roughness * roughness * roughness;
-  vec3 mirror = normalize(mix(reflect(-viewVec, normal), normal, r4));
-  vec3 environment = envAt(mirror, uEnvMaxLod * roughness * (2.0 - roughness));
-  float dotNV = clamp(dot(normal, viewVec), 0.0, 1.0);
-  vec2 scaleBias = environmentBrdf(dotNV, roughness);
-  vec3 f0 = mix(vec3(0.04), surface.rgb, clamp(surface.a, 0.0, 1.0));
-  vec3 brdf = f0 * scaleBias.x + scaleBias.y;
+  // The environment the material drew along its mirror direction, and the weight it drew it by.
+  vec2 scaleBias = environmentBrdf(clamp(dot(normal, viewVec), 0.0, 1.0), roughness);
+  vec3 brdf = mix(vec3(0.04), surface.rgb, clamp(surface.a, 0.0, 1.0)) * scaleBias.x + scaleBias.y;
+  vec3 drawn = environmentSpecular(normal, viewVec, roughness, surface, 0.0);
   #ifdef LAB_DEBUG_ENV
     // The environment's specular light as this pass takes the material to have drawn it.
-    gl_FragColor.rgb = brdf * environment;
+    gl_FragColor.rgb = drawn;
     return;
   #endif
   float pixel = pixelSize(center.z);
-  vec3 hit = trace(center + normal * pixel * 1.5, direction, uReach, noise1(gl_FragCoord.xy));
+  vec3 origin = center + normal * pixel * 1.5;
+  vec3 hit = trace(origin, direction, uReach, noise1(gl_FragCoord.xy));
   #ifdef LAB_DEBUG_HITS
     // What each ray met: its radiance; magenta for nothing, yellow for the back of a surface.
     gl_FragColor.rgb = hit.z <= 0.0 ? vec3(1.0, 0.0, 1.0)
@@ -402,12 +429,14 @@ void main() {
     return;
   #endif
   if (hit.z <= 0.0) return;
-  if (dot(textureLod(uNormal, hit.xy, 0.0).xyz, direction) >= 0.0) return;
+  vec4 met = textureLod(uNormal, hit.xy, 0.0);
+  if (dot(met.xyz, direction) >= 0.0) return;
+  vec3 light = radianceToward(hit.xy, origin + direction * hit.z, met, -direction, roughness);
   // Toward the screen's edge and the ray's reach the reflection gives way to the environment.
   vec2 border = min(hit.xy, 1.0 - hit.xy);
   float weight = smoothstep(0.0, 0.04, min(border.x, border.y)) * (1.0 - smoothstep(0.8, 1.0, hit.z / uReach));
   float own = occlusionAt(vUv, -center.z);
-  gl_FragColor = vec4(weight * brdf * (radianceAt(hit.xy) - own * environment), -center.z);
+  gl_FragColor = vec4(weight * (brdf * light - own * drawn), -center.z);
 }
 `;
 
