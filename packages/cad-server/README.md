@@ -136,7 +136,10 @@ one. `cad mujoco check MODEL.xml [--strict]` is the `mujoco` integration's opera
 <integration> <operation> FILE`, `cli/integrations.py`): MuJoCo's own compiler, what it refuses or warns
 of, the model-health checks, what the model collides as and its contact excludes, run in this process where
 its environment holds mujoco, else in the environment of `cad[mujoco]` the engine makes once; `cad run
-mujoco-studio --model MODEL.xml` shows the person the model in MuJoCo Studio. `cad serve`,
+mujoco-studio --model MODEL.xml` shows the person the model in MuJoCo Studio. A GSL model, omega's (`.gsl`), is no
+document type either: `cad omega check MODEL.gsl [--mesh MESH.stl] [--strict]` meshes it with omega-core's `gsl` (or
+takes the mesh given) and judges the mesh against the field, since `gsl` exits 0 on one it got wrong, in the
+environment of `cad[omega]` where this one lacks it; `cad run gsl ...` is `gsl` as it is. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the
 integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's

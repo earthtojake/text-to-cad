@@ -443,6 +443,25 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),
+    "omega": Integration(
+        "omega", "omega-core's gsl, the compiler and mesher of GSL, Gradient Control Laboratories' language for implicit "
+                 "(signed-distance) models, and its client for the field's queries: `cad run gsl compile -t stl "
+                 "part.gsl` meshes a model as gsl does, and `cad omega check part.gsl` judges the mesh against the "
+                 "field, since gsl exits 0 on one it got wrong",
+        extra="omega", process="separate",
+        # gsl is the omega-core wheel's (the extra's), or the one CAD_GSL names; one on PATH is never run.
+        probe=Probe("gsl", "0.1.1", "gsl comes with cad's omega integration, cad[omega] (the omega-core wheel, macOS "
+                                    "and Linux), which the cad command installs on first need (a script run with cad "
+                                    "run: name cad[omega] in its header); or set CAD_GSL to a gsl of omega-core 0.1.1 "
+                                    "or newer", "CAD_GSL"),
+        operations=(Operation("check", "mesh a GSL model with gsl and check the mesh against the field: it compiles, "
+                                       "it is closed and manifold, it points outward, it stops short of the @scene "
+                                       "box, and its volume is the field's", "omega"),),
+        files=(".gsl",),
+        modules=("omega_core",), distributions=("omega-core",), identity=("omega-core",), commands=("gsl",),
+        # omega-core publishes wheels for macOS (arm64, x86-64) and Linux with glibc (x86-64, arm64) alone.
+        platforms=("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64"),
+        holds="omega's gsl compiler and mesher", download_mb=13),
     "blender": Integration(
         "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad "
                    "exports into Blender's scene, every part where the file places it and each clip playable alone "

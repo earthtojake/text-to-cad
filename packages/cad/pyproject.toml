@@ -142,6 +142,16 @@ mujoco = [
 coacd = [
   "coacd>=1.0.14,<1.1; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'win32' and platform_machine == 'AMD64')",
 ]
+# The omega integration's extra: omega-core, Gradient Control Laboratories' GSL toolchain as a wheel -- omega's own
+# gsl program for one platform (Go, with a statically linked render library: Fidget, Manifold, OpenVDB) and a
+# client for its field queries, the standard library alone (omega_core). cad runs gsl and asks the client; `cad run
+# gsl ...` is gsl as it is (cad.omega._command). Pinned exactly: a pre-1.0 toolchain whose meshing defaults moved
+# between 0.1.0 and 0.1.1, and cad.omega.check was measured against this one. MIT, linking MPL-2.0 (Fidget),
+# Apache-2.0 (OpenVDB, oneTBB) and BSD code; the wheel carries every licence text. Wheels for macOS (arm64,
+# x86_64) and Linux with glibc 2.28 (x86_64, aarch64) alone, and no sdist, so the extra installs it only there.
+omega = [
+  "omega-core==0.1.1; sys_platform == 'darwin' or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64'))",
+]
 # The blender integration's extra: Blender as a Python module (bpy, the Blender Foundation's wheel, GPL: a
 # script that imports it runs it, and the library links nothing of it), which cad.blender loads a GLB into
 # for a render. Pinned exactly, as kicode is: the loader leans on what Blender's own glTF importer does
@@ -174,7 +184,9 @@ use-ignore-files = false
 # coacd: imported only by the decomposer's own process (`cad/coacd/_decomposer.py`), and it ships no type stubs.
 # bpy, mathutils: the blender extra's, Blender's own modules (`cad/blender/_scene.py`), built for another Python than
 # the one the package jobs check types on.
-ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd", "bpy", "bpy.*", "mathutils"]
+# omega_core: the omega extra's (`cad/omega/_check.py`), which the package jobs that check types on Windows do not
+# install (omega-core has no Windows wheel).
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd", "bpy", "bpy.*", "mathutils", "omega_core"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

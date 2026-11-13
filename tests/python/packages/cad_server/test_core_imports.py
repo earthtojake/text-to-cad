@@ -158,6 +158,7 @@ EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_mate
                  "netgen": {"netgen"},
                  "calculix": {"cad_ccx"},
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
+                 "omega": {"omega_core"},
                  "blender": {"bpy", "mathutils"}}  # mathutils is Blender's own, in bpy's wheel
 # A platform an integration is built for (``cad.registry.PLATFORMS``' words), as its extra's marker says it.
 MARKED = {"macOS arm64": "(sys_platform == 'darwin' and platform_machine == 'arm64')",

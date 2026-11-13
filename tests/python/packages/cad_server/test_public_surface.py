@@ -42,6 +42,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
     # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
     "mujoco check": ("cad.mujoco", "check"),
+    # The omega integration's check of a GSL model's mesh against its field: a .gsl is no document type.
+    "omega check": ("cad.omega", "check"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
