@@ -567,8 +567,8 @@ once which to update for the other's fixes.
 
 ## Windows 11: Smart App Control
 
-The CAD kernel behind the `cad`, `engineering-drawing` and `robot-simulation`
-skills is `OCP`, OpenCascade's Python binding, and its wheel ships an unsigned
+The CAD kernel behind the `cad`, `engineering-drawing`, `work-instructions` and
+`robot-simulation` skills is `OCP`, OpenCascade's Python binding, and its wheel ships an unsigned
 native module. Windows 11's Smart App Control blocks unsigned native code, so
 on a machine where it is on (the default on a fresh install) every `cad`
 command and `import build123d` fails with

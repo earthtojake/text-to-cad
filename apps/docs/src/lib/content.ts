@@ -117,7 +117,7 @@ export const features = [
     id: "drawings",
     name: "Engineering drawings",
     path: "skills/engineering-drawing/SKILL.md",
-    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
+    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block, and [build instructions](skills/work-instructions/SKILL.md) for an assembly, with a picture of each step.",
     file: "bracket.pdf",
   },
   {

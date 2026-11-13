@@ -279,6 +279,37 @@ class HeldTest(unittest.TestCase):
         self.assertTrue(0 < differing.mean() < 0.05, "lines gone, and nothing else changed")
         self.assertLess(mismatch(pixels(self.draw(display={"mode": "solid"})[0]), every), 0.001, "and back again")
 
+    def test_a_tint_fills_its_parts_in_its_colour_where_they_show(self) -> None:
+        # Hidden-line draws a tinted part's faces flat, in exactly the colour given, wherever the part
+        # is in front; everything else is the picture without the tint. A tint is checked by name.
+        view = {"position": [140, -110, 90], "target": [40, 0, 0], "up": [0, 0, 1], "orthographicHalfHeight": 45}
+        red = np.array([255, 0, 0])
+
+        def drawn_with(display: dict) -> np.ndarray:
+            return pixels(self.draw(display=display, camera=view, exact=True)[0]).astype(int)
+
+        plain = drawn_with({"mode": "hidden-line"})
+        tinted = drawn_with({"mode": "hidden-line", "tint": {"parts": ["block"], "color": "#ff0000"}})
+        # The block's outline: the tint itself, on the block drawn alone (a face's shade can be the backdrop's).
+        block = np.abs(drawn_with({"mode": "hidden-line", "isolated": ["block"],
+                                   "tint": {"parts": ["block"], "color": "#ff0000"}}) - red).max(-1) <= 2
+        others = drawn_with({"mode": "hidden-line", "hidden": ["block"]})
+        only_block = block & (np.abs(others - others[2, 2]).max(-1) <= 24)
+        filled = np.abs(tinted - red).max(-1) <= 2
+        self.assertGreater(filled.sum(), 1000)
+        self.assertGreater((filled & only_block).sum(), 0.8 * only_block.sum(), "the block, where it alone stands")
+        self.assertEqual(int((filled & ~(np.abs(tinted - plain).max(-1) > 0)).sum()), 0, "and nothing else")
+        self.assertLess((np.abs(tinted - plain).max(-1) > 24)[~only_block].mean(), 0.02, "the rest as it was")
+        for display, refusal in (({"tint": {"parts": ["block"]}}, "display.tint is {parts, color}"),
+                                 ({"tint": {"parts": [], "color": "#ff0000"}}, "display.tint.parts is a list"),
+                                 ({"tint": {"parts": ["block"], "color": "red"}}, "display.tint.color is #rrggbb"),
+                                 ({"mode": "wireframe", "tint": {"parts": ["block"], "color": "#ff0000"}},
+                                  "wireframe draws none")):
+            with self.subTest(display=display), self.assertRaisesRegex(SnapshotRefused, refusal):
+                parse_display(json.dumps(display), False)
+        with self.assertRaisesRegex(SnapshotRefused, "display.tint.parts: .*nope"):
+            drawn_with({"mode": "hidden-line", "tint": {"parts": ["nope"], "color": "#ff0000"}})
+
     def test_rows_differ_where_they_should(self) -> None:
         """Each row draws something of its own: the goldens cannot all be one picture."""
         solid = pixels(self.draw(**ROWS["solid"])[0])

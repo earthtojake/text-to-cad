@@ -97,7 +97,8 @@ pair of parts whose boxes meet answered, as built and posed, by the engine: exac
 two parts' meshes do not show air between them); a
 B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen and solved by
 CalculiX's ccx, its results a folder of standard files); a mechanism's joint stops found from its geometry
-(`cad.<type>.ranges(source)`, each joint swept against its parts); and engineering drawings (`@eng_drawing`).
+(`cad.<type>.ranges(source)`, each joint swept against its parts); engineering drawings (`@eng_drawing`); and work
+instructions (`@work_instruction`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -388,8 +389,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
     reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
-    snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
-    crash; a model's own process, where only the library is installed, counts nothing -- is kept
+    snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing or a
+    work instruction, a crash; a model's own process, where only the library is installed, counts nothing -- is kept
     in a small file beside the settings (`analytics.spool`), which the CAD app's
     and the viewer's background sends take, and a command that finds it has waited more than a
     window, with no other process sending, starts a sender detached that sends it and exits
@@ -703,6 +704,10 @@ src/cad/
                          #   drc, erc, validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
+  work_instruction.py    # @work_instruction: the steps that build one assembly, one PDF;
+                         #   its pages and figures in _internal/work_instruction_pages.py,
+                         #   a simple one's picture guide in _internal/work_instruction_guide.py
+                         #   and its 3D page in _internal/work_instruction_player.py
   _internal/             # DocumentType (document_type), a B-rep type's interference check: its
                          #   options and its result (interference), a 3D type's manufacturing check: its
                          #   signature and options, its integration's measuring imported when it

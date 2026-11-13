@@ -77,8 +77,8 @@ export default function PrivacyPolicyPage() {
                 message, your code or the path; for a snapshot request text-to-cad turned down, which part of
                 the request it turned down (such as the display mode, the clip, the camera or the size), as a
                 name from a fixed list -- never the value given;
-                how many times assemblies, mesh exports, posed joints, animations, engineering drawings
-                and Quick Edit were used; and how many of the CAD engine’s build workers started,
+                how many times assemblies, mesh exports, posed joints, animations, engineering drawings,
+                work instructions and Quick Edit were used; and how many of the CAD engine’s build workers started,
                 crashed or were retired (and, from earlier releases, how many builds were turned away for
                 want of memory);
               </li>

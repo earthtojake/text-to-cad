@@ -44,8 +44,8 @@ MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engi
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
                       "cad.engine.render.service", "cad.engine.snapshot", "cad.build123d", "cad.registry",
                       "cad.step", "cad.xbf",
-                      "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
-                      "cad.srdf")
+                      "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.work_instruction", "cad.urdf",
+                      "cad.sdf", "cad.srdf")
 
 
 def module_name(source: Path, path: Path) -> str:
@@ -167,8 +167,9 @@ MARKED = {"macOS arm64": "(sys_platform == 'darwin' and platform_machine == 'arm
 REQUIRED = {"numpy"}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.
 INFRASTRUCTURE = {"engine", "_internal"}
-# Its top-level modules: the registry, the shared result types, and @eng_drawing (open: a future pdf type).
-MODULES = {"registry", "results", "eng_drawing"}
+# Its top-level modules: the registry, the shared result types, and @eng_drawing and @work_instruction (open:
+# a future pdf type).
+MODULES = {"registry", "results", "eng_drawing", "work_instruction"}
 
 
 def third_party(path: Path, name: str) -> set[str]:

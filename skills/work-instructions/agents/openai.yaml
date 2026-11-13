@@ -1,0 +1,4 @@
+interface:
+  display_name: "Work Instructions"
+  short_description: "Write cited, step-by-step assembly work instructions as a PDF."
+  default_prompt: "Use $work-instructions to write the work instructions a technician follows to build this assembly, with every torque, bonding and cure value cited to the process specs I supply."

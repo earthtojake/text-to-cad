@@ -198,6 +198,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/docs/**",), select(flags=["docs", "core_js"])),
     Rule(("skills/**",), NOTHING),  # prose and scripts the light contracts and light suites read
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
+    # The work-instructions template is run by the library's own test of the module it drives.
+    Rule(("skills/work-instructions/**",), select(packages=[f"{PACKAGES_SUITE}/cad/test_work_instruction.py"])),
     # The installer rehearsals (install-linux.yml, install-windows.yml, which test.yml calls): the
     # workflows and the installers. The server's commands they run are rehearsed with every
     # release, a full run.

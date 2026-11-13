@@ -482,6 +482,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(suite=suite):
                 self.assertEqual(jobs_for(a_test_in(f"{PACKAGES}/{suite}")), jobs_on(flag))
 
+        # The work-instructions template is run by the library's test of the module it drives.
+        self.assertEqual(route("skills/work-instructions/references/instruction-api.md")["packages_tests"],
+                         f"{PACKAGES}/cad/test_work_instruction.py")
+
     def test_a_deleted_test_file_has_nothing_left_to_run(self):
         self.assertEqual(jobs_for(f"{PACKAGES}/cad_server/test_gone_for_good.py"), set())
 

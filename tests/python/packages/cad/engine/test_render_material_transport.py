@@ -90,7 +90,7 @@ def sample():
         scene.parts, scene.prototypes, scene.sources = [parts], [prototype], {}
         colors = ([.2, .3, .4, .6], [.7, .1, .2, .9])
         scene.structure = {"instances": [{"prototype": 0, "color": color} for color in colors]}
-        scene.canvas, scene.hidden, scene.shown, scene.timings = mock.Mock(), set(), [], {}
+        scene.canvas, scene.hidden, scene.tinted, scene.shown, scene.timings = mock.Mock(), set(), frozenset(), [], {}
         scene.placement, scene._rig, scene._clip = lambda _index: np.eye(4), mock.Mock(), mock.Mock()
         with mock.patch("OCP.AIS.AIS_ConnectedInteractive"):
             scene.show({"mode": "shaded"})
