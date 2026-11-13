@@ -490,20 +490,26 @@ def _homes(names: tuple[str, ...], environ: dict[str, str]) -> dict[str, str]:
     return found
 
 
+def description() -> str:
+    """What ``cad run --help`` says after its usage line: the command has no parser of its own (uv judges its
+    options), so this is its help."""
+    from cad.registry import INTEGRATIONS
+
+    lines = "".join(f" A script that imports {integration.modules[0]} gets the {name} integration, on Python "
+                    f"{integration.python}, the one its tool is built for."
+                    for name, integration in INTEGRATIONS.items() if integration.python and integration.modules)
+    return ("Run a program as `uv run` does, with cad pinned at this device's release: a "
+            "script's `# /// script` header names its own packages, and cad's integrations "
+            "are worked out from its imports (a header naming `cad[...]` decides them); a "
+            "command an integration declares (`kicad-cli`) gets that integration and runs "
+            f"headless.{lines} The environment is made once, by the device's engine, and "
+            "used again. uv run's options are taken as uv takes them.")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
-        from cad.registry import INTEGRATIONS
-
-        lines = "".join(f" A script that imports {integration.modules[0]} gets the {name} integration, on Python "
-                        f"{integration.python}, the one its tool is built for."
-                        for name, integration in INTEGRATIONS.items() if integration.python and integration.modules)
-        sys.stdout.write(USAGE + "\nRun a program as `uv run` does, with cad pinned at this device's release: a "
-                                 "script's `# /// script` header names its own packages, and cad's integrations "
-                                 "are worked out from its imports (a header naming `cad[...]` decides them); a "
-                                 "command an integration declares (`kicad-cli`) gets that integration and runs "
-                                 f"headless.{lines} The environment is made once, by the device's engine, and "
-                                 "used again. uv run's options are taken as uv takes them.\n")
+        sys.stdout.write(USAGE + "\n" + description() + "\n")
         return 0
     from cad_server._internal import base, extras
 

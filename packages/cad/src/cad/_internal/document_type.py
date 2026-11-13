@@ -200,6 +200,15 @@ def _operation(owner: DocumentType, name: str) -> Any:
 
     operation.__name__ = operation.__qualname__ = name
     operation.__module__ = owner.__name__
+    # Its signature is the verb's, as ``help()`` and the library's reference say it: a mesh's export without
+    # the options it refuses.
+    import inspect
+
+    signature = inspect.signature(verb)
+    if name == "export" and not meshed:
+        signature = signature.replace(parameters=[parameter for parameter in signature.parameters.values()
+                                                  if parameter.name not in ("tolerance", "angle", "zero")])
+    operation.__signature__ = signature  # type: ignore[attr-defined]
     operation.__doc__ = f"cad.{owner.entry.id}.{name}: {owner.entry.operation(name).summary}.\n\n{verb.__doc__ or ''}"
     return operation
 

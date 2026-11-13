@@ -113,16 +113,17 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "plugin": frozenset({"refresh", "json"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
     "requirement": frozenset({"integrations", "json"}),
+    # The server set up and reported, or its leftovers pruned.
+    "doctor": frozenset({"prune", "all_versions", "no_server", "check", "json", "yes"}),
+    # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
+    # line) is not a function signature to mirror.
+    "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
 }
 
-# Commands that own their parser outright and mirror no function.
+# Commands that own their command line outright and mirror no function.
 UNCLASSIFIED = {
-    "doctor",
     # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
-    # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
-    # one port, the --json announce line) is not a function signature to mirror.
-    "viewer",
 }
 
 HEAVY = ("OCP", "build123d", "ezdxf", "shapely")

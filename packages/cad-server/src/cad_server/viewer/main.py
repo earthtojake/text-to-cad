@@ -69,10 +69,12 @@ def _files_opened(parsed):
             raise Failure(refused[1], refused[0])
 
 
-def parse_args(argv=None, *, prog=DEFAULT_PROG):
+def build_parser(prog=DEFAULT_PROG):
+    """The parser of ``cad viewer``: its options, as the command reads them (``parse_args`` adds the check of
+    its FILEs)."""
     from cad_server._internal.cli_parser import parser as command_parser
 
-    parser = command_parser(prog=prog, description=__doc__, checks=[_files_opened])
+    parser = command_parser(prog=prog, description=__doc__)
     parser.add_argument('files', nargs='*', metavar='FILE',
                         help='a CAD file to open (or a document id the engine holds): its page is /<id>')
     parser.add_argument('--host', default=None, help='Pin the engine bind address; default loopback.')
@@ -81,6 +83,12 @@ def parse_args(argv=None, *, prog=DEFAULT_PROG):
     parser.add_argument('--no-open', action='store_true', help='Print the URL without opening a browser.')
     parser.add_argument('--dist', default='', help='Built viewer client directory.')
     parser.add_argument('--api-only', action='store_true', help='Announce the engine for a Vite frontend, without its client build.')
+    return parser
+
+
+def parse_args(argv=None, *, prog=DEFAULT_PROG):
+    parser = build_parser(prog)
+    parser.checks.append(_files_opened)
     options = vars(parser.parse_args(argv))
     if options['port'] is not None and not 0 <= options['port'] <= 65535:
         parser.error('--port must be between 0 and 65535')

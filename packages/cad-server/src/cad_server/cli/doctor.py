@@ -553,7 +553,8 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
     return lines
 
 
-def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
+def build_parser(prog: str = "cad doctor"):
+    """The parser of ``cad doctor``: its options, exactly as the command parses them."""
     from cad_server._internal.cli_parser import parser as command_parser
 
     parser = command_parser(
@@ -598,6 +599,11 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     from cad_server._internal.consent import add_yes
 
     add_yes(parser, "with --prune, remove what it lists")
+    return parser
+
+
+def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
+    parser = build_parser(prog)
     args = parser.parse_args(argv)
     if args.all_versions and not args.prune:
         parser.error("--all-versions goes with --prune")

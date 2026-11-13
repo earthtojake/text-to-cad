@@ -201,6 +201,12 @@ RULES: tuple[Rule, ...] = (
     # The site's copy of the registry, held to the library's by the registry's own test.
     Rule(("apps/docs/src/lib/docs/registry.generated.json",),
          select(packages=[f"{PACKAGES_SUITE}/cad/test_registry.py"])),
+    # Its references, the command's read off its parsers and the library's off its declarations, each held to
+    # its generator by its own test (the code they describe is a package's, which runs the packages' suites).
+    Rule(("apps/docs/src/lib/docs/cli-reference.generated.json",),
+         select(packages=[f"{PACKAGES_SUITE}/cad_server/test_cli_reference.py"])),
+    Rule(("apps/docs/src/lib/docs/library-reference.generated.json",),
+         select(packages=[f"{PACKAGES_SUITE}/cad/test_library_reference.py"])),
     # The install guide and the migration guides are pages of the documentation site, which its
     # build sets as they are and whose links and anchors it resolves (apps/docs/src/lib/docs/nav.ts).
     Rule(("docs/install.md", "docs/migrations/**"), select(flags=["docs"])),

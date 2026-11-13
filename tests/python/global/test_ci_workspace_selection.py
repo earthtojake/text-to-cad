@@ -530,8 +530,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             # registry's test.
             "docs/install.md": jobs_on("docs"),
             "docs/migrations/migrating-0.8-to-0.10.md": jobs_on("docs"),
-            "apps/docs/content/skills/renders.md": jobs_on("docs"),
+            "apps/docs/content/skills/render.md": jobs_on("docs"),
             "apps/docs/src/lib/docs/registry.generated.json": jobs_on("docs", "core_js", "packages"),
+            "apps/docs/src/lib/docs/cli-reference.generated.json": jobs_on("docs", "core_js", "packages"),
+            "apps/docs/src/lib/docs/library-reference.generated.json": jobs_on("docs", "core_js", "packages"),
             "tests/browser/viewer-e2e.mjs": jobs_on("web_viewer"),
             # The installer rehearsals: the installers, their folder and the workflows; a release.
             "scripts/install/install.sh": jobs_on("installer", "docs", "packages"),
@@ -553,6 +555,11 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # A fixture one language writes and another asserts is current runs that one test beside its own jobs.
         robot = route("packages/ui/src/renderers/robot/__fixtures__/anything.json")
         self.assertEqual(robot["packages_tests"], f"{PACKAGES}/cad_server/test_robot_payload.py")
+        # The site's copies of the references run the tests that hold each to its generator.
+        for copy, test in (("cli-reference", "cad_server/test_cli_reference.py"),
+                           ("library-reference", "cad/test_library_reference.py")):
+            self.assertEqual(route(f"apps/docs/src/lib/docs/{copy}.generated.json")["packages_tests"],
+                             f"{PACKAGES}/{test}")
         # The floor is the release tier's alone: no change to the packages selects it.
         self.assertFalse(jobs_on("floor") & packages)
 

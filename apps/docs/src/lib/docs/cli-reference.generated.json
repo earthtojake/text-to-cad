@@ -1,0 +1,4114 @@
+{
+ "usage": "cad <document_type> <operation> FILE [args...] | cad <integration> <operation> FILE [args...] | cad <command> [args...]",
+ "documentTypes": [
+  {
+   "name": "model",
+   "summary": "model",
+   "usage": "cad model <operation> ID [options]",
+   "operations": [
+    {
+     "command": "cad model export",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "usage": "cad model export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 0
+      },
+      {
+       "name": "DST",
+       "help": 1,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--tolerance"
+       ],
+       "metavar": "MM",
+       "help": 2
+      },
+      {
+       "flags": [
+        "--angle"
+       ],
+       "metavar": "DEG",
+       "help": 3
+      },
+      {
+       "flags": [
+        "--zero"
+       ],
+       "metavar": "STATE",
+       "help": 4
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 5
+      }
+     ]
+    },
+    {
+     "command": "cad model snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad model snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 6,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad model inspect",
+     "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
+     "usage": "cad model inspect [--query {summary,structure,closure,geometry,build}] [--json] document [ref]",
+     "arguments": [
+      {
+       "name": "document",
+       "help": 0
+      },
+      {
+       "name": "ref",
+       "help": 17,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--query"
+       ],
+       "metavar": "{summary,structure,closure,geometry,build}",
+       "help": 18,
+       "choices": [
+        "summary",
+        "structure",
+        "closure",
+        "geometry",
+        "build"
+       ]
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 19
+      }
+     ]
+    },
+    {
+     "command": "cad model dfm",
+     "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
+     "usage": "cad model dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--axes AXES] [--turning] [--tools TOOLS] [--stock STOCK] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--pull PULL] [--wall-limit WALL_LIMIT] [--zero-tol TOL] [--cavities CAVITIES] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit ANGLE_LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--candidates] [--strict] [--json] SOURCE",
+     "description": 20,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 21
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{cnc,sheet,molding,printing}",
+       "help": 22,
+       "choices": [
+        "cnc",
+        "sheet",
+        "molding",
+        "printing"
+       ]
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--axes"
+       ],
+       "metavar": "AXES",
+       "help": 24
+      },
+      {
+       "flags": [
+        "--turning"
+       ],
+       "help": 25
+      },
+      {
+       "flags": [
+        "--tools"
+       ],
+       "metavar": "TOOLS",
+       "help": 26
+      },
+      {
+       "flags": [
+        "--stock"
+       ],
+       "metavar": "STOCK",
+       "help": 27
+      },
+      {
+       "flags": [
+        "--thickness"
+       ],
+       "metavar": "THICKNESS",
+       "help": 28
+      },
+      {
+       "flags": [
+        "--k-factor"
+       ],
+       "metavar": "FACTOR",
+       "help": 29
+      },
+      {
+       "flags": [
+        "--bend-radius"
+       ],
+       "metavar": "RADIUS",
+       "help": 30
+      },
+      {
+       "flags": [
+        "--kerf"
+       ],
+       "metavar": "KERF",
+       "help": 31
+      },
+      {
+       "flags": [
+        "--sheet-size"
+       ],
+       "metavar": "SIZE",
+       "help": 32
+      },
+      {
+       "flags": [
+        "--pull"
+       ],
+       "metavar": "PULL",
+       "help": 33
+      },
+      {
+       "flags": [
+        "--wall-limit"
+       ],
+       "metavar": "WALL_LIMIT",
+       "help": 34
+      },
+      {
+       "flags": [
+        "--zero-tol"
+       ],
+       "metavar": "TOL",
+       "help": 35
+      },
+      {
+       "flags": [
+        "--cavities"
+       ],
+       "metavar": "CAVITIES",
+       "help": 36
+      },
+      {
+       "flags": [
+        "--technology"
+       ],
+       "metavar": "{fdm,sls,sla,mjf,pbf}",
+       "help": 37,
+       "choices": [
+        "fdm",
+        "sls",
+        "sla",
+        "mjf",
+        "pbf"
+       ]
+      },
+      {
+       "flags": [
+        "--build-volume"
+       ],
+       "metavar": "VOLUME",
+       "help": 38
+      },
+      {
+       "flags": [
+        "--angle-limit"
+       ],
+       "metavar": "ANGLE_LIMIT",
+       "help": 39
+      },
+      {
+       "flags": [
+        "--samples"
+       ],
+       "metavar": "SAMPLES",
+       "help": 40
+      },
+      {
+       "flags": [
+        "--layer-height"
+       ],
+       "metavar": "HEIGHT",
+       "help": 41
+      },
+      {
+       "flags": [
+        "--nozzle"
+       ],
+       "metavar": "NOZZLE",
+       "help": 42
+      },
+      {
+       "flags": [
+        "--candidates"
+       ],
+       "help": 43
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad model interference",
+     "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
+     "usage": "cad model interference [--pose POSE] [--fit A B A B] [--min-volume MM3] [--json] ID",
+     "arguments": [
+      {
+       "name": "ID",
+       "help": 46
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 47,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--fit"
+       ],
+       "metavar": "A B A B",
+       "help": 48,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--min-volume"
+       ],
+       "metavar": "MM3",
+       "help": 49
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad model solve",
+     "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
+     "usage": "cad model solve [--study STUDY] [--out OUT] [--occurrence OCCURRENCE] [--deck] [--verbose] [--json] SOURCE",
+     "description": 50,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 51
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--study"
+       ],
+       "metavar": "STUDY",
+       "help": 52
+      },
+      {
+       "flags": [
+        "--out"
+       ],
+       "metavar": "OUT",
+       "help": 53
+      },
+      {
+       "flags": [
+        "--occurrence"
+       ],
+       "metavar": "OCCURRENCE",
+       "help": 54
+      },
+      {
+       "flags": [
+        "--deck"
+       ],
+       "help": 55
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 56
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad model ranges",
+     "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
+     "usage": "cad model ranges [--step STEP] [--clearance CLEARANCE] [--joint JOINT] [--verbose] [--json] SOURCE",
+     "description": 57,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 58
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--step"
+       ],
+       "metavar": "STEP",
+       "help": 59,
+       "default": 1.0
+      },
+      {
+       "flags": [
+        "--clearance"
+       ],
+       "metavar": "CLEARANCE",
+       "help": 60,
+       "default": 0.3
+      },
+      {
+       "flags": [
+        "--joint"
+       ],
+       "metavar": "JOINT",
+       "help": 61,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 62
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "xbf",
+   "summary": "XBF",
+   "usage": "cad xbf <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad xbf export",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "usage": "cad xbf export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 63
+      },
+      {
+       "name": "DST",
+       "help": 1,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--tolerance"
+       ],
+       "metavar": "MM",
+       "help": 2
+      },
+      {
+       "flags": [
+        "--angle"
+       ],
+       "metavar": "DEG",
+       "help": 3
+      },
+      {
+       "flags": [
+        "--zero"
+       ],
+       "metavar": "STATE",
+       "help": 4
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 5
+      }
+     ]
+    },
+    {
+     "command": "cad xbf snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad xbf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 64,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad xbf inspect",
+     "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
+     "usage": "cad xbf inspect [--query {summary,structure,closure,geometry,build}] [--json] document [ref]",
+     "arguments": [
+      {
+       "name": "document",
+       "help": 63
+      },
+      {
+       "name": "ref",
+       "help": 17,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--query"
+       ],
+       "metavar": "{summary,structure,closure,geometry,build}",
+       "help": 18,
+       "choices": [
+        "summary",
+        "structure",
+        "closure",
+        "geometry",
+        "build"
+       ]
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 19
+      }
+     ]
+    },
+    {
+     "command": "cad xbf dfm",
+     "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
+     "usage": "cad xbf dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--axes AXES] [--turning] [--tools TOOLS] [--stock STOCK] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--pull PULL] [--wall-limit WALL_LIMIT] [--zero-tol TOL] [--cavities CAVITIES] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit ANGLE_LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--candidates] [--strict] [--json] SOURCE",
+     "description": 20,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 65
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{cnc,sheet,molding,printing}",
+       "help": 22,
+       "choices": [
+        "cnc",
+        "sheet",
+        "molding",
+        "printing"
+       ]
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--axes"
+       ],
+       "metavar": "AXES",
+       "help": 24
+      },
+      {
+       "flags": [
+        "--turning"
+       ],
+       "help": 25
+      },
+      {
+       "flags": [
+        "--tools"
+       ],
+       "metavar": "TOOLS",
+       "help": 26
+      },
+      {
+       "flags": [
+        "--stock"
+       ],
+       "metavar": "STOCK",
+       "help": 27
+      },
+      {
+       "flags": [
+        "--thickness"
+       ],
+       "metavar": "THICKNESS",
+       "help": 28
+      },
+      {
+       "flags": [
+        "--k-factor"
+       ],
+       "metavar": "FACTOR",
+       "help": 29
+      },
+      {
+       "flags": [
+        "--bend-radius"
+       ],
+       "metavar": "RADIUS",
+       "help": 30
+      },
+      {
+       "flags": [
+        "--kerf"
+       ],
+       "metavar": "KERF",
+       "help": 31
+      },
+      {
+       "flags": [
+        "--sheet-size"
+       ],
+       "metavar": "SIZE",
+       "help": 32
+      },
+      {
+       "flags": [
+        "--pull"
+       ],
+       "metavar": "PULL",
+       "help": 33
+      },
+      {
+       "flags": [
+        "--wall-limit"
+       ],
+       "metavar": "WALL_LIMIT",
+       "help": 34
+      },
+      {
+       "flags": [
+        "--zero-tol"
+       ],
+       "metavar": "TOL",
+       "help": 35
+      },
+      {
+       "flags": [
+        "--cavities"
+       ],
+       "metavar": "CAVITIES",
+       "help": 36
+      },
+      {
+       "flags": [
+        "--technology"
+       ],
+       "metavar": "{fdm,sls,sla,mjf,pbf}",
+       "help": 37,
+       "choices": [
+        "fdm",
+        "sls",
+        "sla",
+        "mjf",
+        "pbf"
+       ]
+      },
+      {
+       "flags": [
+        "--build-volume"
+       ],
+       "metavar": "VOLUME",
+       "help": 38
+      },
+      {
+       "flags": [
+        "--angle-limit"
+       ],
+       "metavar": "ANGLE_LIMIT",
+       "help": 39
+      },
+      {
+       "flags": [
+        "--samples"
+       ],
+       "metavar": "SAMPLES",
+       "help": 40
+      },
+      {
+       "flags": [
+        "--layer-height"
+       ],
+       "metavar": "HEIGHT",
+       "help": 41
+      },
+      {
+       "flags": [
+        "--nozzle"
+       ],
+       "metavar": "NOZZLE",
+       "help": 42
+      },
+      {
+       "flags": [
+        "--candidates"
+       ],
+       "help": 43
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad xbf interference",
+     "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
+     "usage": "cad xbf interference [--pose POSE] [--fit A B A B] [--min-volume MM3] [--json] FILE",
+     "arguments": [
+      {
+       "name": "FILE",
+       "help": 63
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 47,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--fit"
+       ],
+       "metavar": "A B A B",
+       "help": 48,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--min-volume"
+       ],
+       "metavar": "MM3",
+       "help": 49
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad xbf solve",
+     "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
+     "usage": "cad xbf solve [--study STUDY] [--out OUT] [--occurrence OCCURRENCE] [--deck] [--verbose] [--json] SOURCE",
+     "description": 50,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 51
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--study"
+       ],
+       "metavar": "STUDY",
+       "help": 52
+      },
+      {
+       "flags": [
+        "--out"
+       ],
+       "metavar": "OUT",
+       "help": 53
+      },
+      {
+       "flags": [
+        "--occurrence"
+       ],
+       "metavar": "OCCURRENCE",
+       "help": 54
+      },
+      {
+       "flags": [
+        "--deck"
+       ],
+       "help": 55
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 56
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad xbf ranges",
+     "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
+     "usage": "cad xbf ranges [--step STEP] [--clearance CLEARANCE] [--joint JOINT] [--verbose] [--json] SOURCE",
+     "description": 57,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 58
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--step"
+       ],
+       "metavar": "STEP",
+       "help": 59,
+       "default": 1.0
+      },
+      {
+       "flags": [
+        "--clearance"
+       ],
+       "metavar": "CLEARANCE",
+       "help": 60,
+       "default": 0.3
+      },
+      {
+       "flags": [
+        "--joint"
+       ],
+       "metavar": "JOINT",
+       "help": 61,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 62
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "step",
+   "summary": "STEP",
+   "usage": "cad step <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad step export",
+     "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+     "usage": "cad step export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 66
+      },
+      {
+       "name": "DST",
+       "help": 1,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--tolerance"
+       ],
+       "metavar": "MM",
+       "help": 2
+      },
+      {
+       "flags": [
+        "--angle"
+       ],
+       "metavar": "DEG",
+       "help": 3
+      },
+      {
+       "flags": [
+        "--zero"
+       ],
+       "metavar": "STATE",
+       "help": 4
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 5
+      }
+     ]
+    },
+    {
+     "command": "cad step snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad step snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 67,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad step inspect",
+     "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
+     "usage": "cad step inspect [--query {summary,structure,closure,geometry,build}] [--json] document [ref]",
+     "arguments": [
+      {
+       "name": "document",
+       "help": 66
+      },
+      {
+       "name": "ref",
+       "help": 17,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--query"
+       ],
+       "metavar": "{summary,structure,closure,geometry,build}",
+       "help": 18,
+       "choices": [
+        "summary",
+        "structure",
+        "closure",
+        "geometry",
+        "build"
+       ]
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 19
+      }
+     ]
+    },
+    {
+     "command": "cad step dfm",
+     "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
+     "usage": "cad step dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--axes AXES] [--turning] [--tools TOOLS] [--stock STOCK] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--pull PULL] [--wall-limit WALL_LIMIT] [--zero-tol TOL] [--cavities CAVITIES] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit ANGLE_LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--candidates] [--strict] [--json] SOURCE",
+     "description": 20,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 68
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{cnc,sheet,molding,printing}",
+       "help": 69,
+       "choices": [
+        "cnc",
+        "sheet",
+        "molding",
+        "printing"
+       ]
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--axes"
+       ],
+       "metavar": "AXES",
+       "help": 24
+      },
+      {
+       "flags": [
+        "--turning"
+       ],
+       "help": 25
+      },
+      {
+       "flags": [
+        "--tools"
+       ],
+       "metavar": "TOOLS",
+       "help": 26
+      },
+      {
+       "flags": [
+        "--stock"
+       ],
+       "metavar": "STOCK",
+       "help": 27
+      },
+      {
+       "flags": [
+        "--thickness"
+       ],
+       "metavar": "THICKNESS",
+       "help": 28
+      },
+      {
+       "flags": [
+        "--k-factor"
+       ],
+       "metavar": "FACTOR",
+       "help": 29
+      },
+      {
+       "flags": [
+        "--bend-radius"
+       ],
+       "metavar": "RADIUS",
+       "help": 30
+      },
+      {
+       "flags": [
+        "--kerf"
+       ],
+       "metavar": "KERF",
+       "help": 31
+      },
+      {
+       "flags": [
+        "--sheet-size"
+       ],
+       "metavar": "SIZE",
+       "help": 32
+      },
+      {
+       "flags": [
+        "--pull"
+       ],
+       "metavar": "PULL",
+       "help": 33
+      },
+      {
+       "flags": [
+        "--wall-limit"
+       ],
+       "metavar": "WALL_LIMIT",
+       "help": 34
+      },
+      {
+       "flags": [
+        "--zero-tol"
+       ],
+       "metavar": "TOL",
+       "help": 35
+      },
+      {
+       "flags": [
+        "--cavities"
+       ],
+       "metavar": "CAVITIES",
+       "help": 36
+      },
+      {
+       "flags": [
+        "--technology"
+       ],
+       "metavar": "{fdm,sls,sla,mjf,pbf}",
+       "help": 37,
+       "choices": [
+        "fdm",
+        "sls",
+        "sla",
+        "mjf",
+        "pbf"
+       ]
+      },
+      {
+       "flags": [
+        "--build-volume"
+       ],
+       "metavar": "VOLUME",
+       "help": 38
+      },
+      {
+       "flags": [
+        "--angle-limit"
+       ],
+       "metavar": "ANGLE_LIMIT",
+       "help": 39
+      },
+      {
+       "flags": [
+        "--samples"
+       ],
+       "metavar": "SAMPLES",
+       "help": 40
+      },
+      {
+       "flags": [
+        "--layer-height"
+       ],
+       "metavar": "HEIGHT",
+       "help": 41
+      },
+      {
+       "flags": [
+        "--nozzle"
+       ],
+       "metavar": "NOZZLE",
+       "help": 42
+      },
+      {
+       "flags": [
+        "--candidates"
+       ],
+       "help": 43
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad step interference",
+     "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
+     "usage": "cad step interference [--pose POSE] [--fit A B A B] [--min-volume MM3] [--json] FILE",
+     "arguments": [
+      {
+       "name": "FILE",
+       "help": 70
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 47,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--fit"
+       ],
+       "metavar": "A B A B",
+       "help": 48,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--min-volume"
+       ],
+       "metavar": "MM3",
+       "help": 49
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad step solve",
+     "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
+     "usage": "cad step solve [--study STUDY] [--out OUT] [--occurrence OCCURRENCE] [--deck] [--verbose] [--json] SOURCE",
+     "description": 50,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 51
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--study"
+       ],
+       "metavar": "STUDY",
+       "help": 52
+      },
+      {
+       "flags": [
+        "--out"
+       ],
+       "metavar": "OUT",
+       "help": 53
+      },
+      {
+       "flags": [
+        "--occurrence"
+       ],
+       "metavar": "OCCURRENCE",
+       "help": 54
+      },
+      {
+       "flags": [
+        "--deck"
+       ],
+       "help": 55
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 56
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    },
+    {
+     "command": "cad step ranges",
+     "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
+     "usage": "cad step ranges [--step STEP] [--clearance CLEARANCE] [--joint JOINT] [--verbose] [--json] SOURCE",
+     "description": 57,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 58
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--step"
+       ],
+       "metavar": "STEP",
+       "help": 59,
+       "default": 1.0
+      },
+      {
+       "flags": [
+        "--clearance"
+       ],
+       "metavar": "CLEARANCE",
+       "help": 60,
+       "default": 0.3
+      },
+      {
+       "flags": [
+        "--joint"
+       ],
+       "metavar": "JOINT",
+       "help": 61,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 62
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "stl",
+   "summary": "STL",
+   "usage": "cad stl <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad stl export",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "usage": "cad stl export [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 71
+      },
+      {
+       "name": "DST",
+       "help": 72,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 73
+      }
+     ]
+    },
+    {
+     "command": "cad stl snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad stl snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 74,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad stl dfm",
+     "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
+     "usage": "cad stl dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--units {mm,cm,m,in,ft}] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--candidates] [--strict] [--json] SOURCE",
+     "description": 75,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 76
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{cnc,sheet,molding,printing}",
+       "help": 77,
+       "choices": [
+        "cnc",
+        "sheet",
+        "molding",
+        "printing"
+       ],
+       "default": "printing"
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--units"
+       ],
+       "metavar": "{mm,cm,m,in,ft}",
+       "help": 78,
+       "choices": [
+        "mm",
+        "cm",
+        "m",
+        "in",
+        "ft"
+       ]
+      },
+      {
+       "flags": [
+        "--technology"
+       ],
+       "metavar": "{fdm,sls,sla,mjf,pbf}",
+       "help": 37,
+       "choices": [
+        "fdm",
+        "sls",
+        "sla",
+        "mjf",
+        "pbf"
+       ]
+      },
+      {
+       "flags": [
+        "--build-volume"
+       ],
+       "metavar": "VOLUME",
+       "help": 38
+      },
+      {
+       "flags": [
+        "--angle-limit"
+       ],
+       "metavar": "LIMIT",
+       "help": 39
+      },
+      {
+       "flags": [
+        "--samples"
+       ],
+       "metavar": "SAMPLES",
+       "help": 40
+      },
+      {
+       "flags": [
+        "--layer-height"
+       ],
+       "metavar": "HEIGHT",
+       "help": 41
+      },
+      {
+       "flags": [
+        "--nozzle"
+       ],
+       "metavar": "NOZZLE",
+       "help": 42
+      },
+      {
+       "flags": [
+        "--candidates"
+       ],
+       "help": 79
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "glb",
+   "summary": "GLB",
+   "usage": "cad glb <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad glb export",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "usage": "cad glb export [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 80
+      },
+      {
+       "name": "DST",
+       "help": 72,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 73
+      }
+     ]
+    },
+    {
+     "command": "cad glb snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad glb snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 81,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad glb inspect",
+     "summary": "its nodes, meshes and animations",
+     "usage": "cad glb inspect [--query {summary,structure,closure,geometry,build}] [--json] document [ref]",
+     "arguments": [
+      {
+       "name": "document",
+       "help": 80
+      },
+      {
+       "name": "ref",
+       "help": 17,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--query"
+       ],
+       "metavar": "{summary,structure,closure,geometry,build}",
+       "help": 18,
+       "choices": [
+        "summary",
+        "structure",
+        "closure",
+        "geometry",
+        "build"
+       ]
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 19
+      }
+     ]
+    },
+    {
+     "command": "cad glb dfm",
+     "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
+     "usage": "cad glb dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--candidates] [--strict] [--json] SOURCE",
+     "description": 75,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 82
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{cnc,sheet,molding,printing}",
+       "help": 77,
+       "choices": [
+        "cnc",
+        "sheet",
+        "molding",
+        "printing"
+       ],
+       "default": "printing"
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--technology"
+       ],
+       "metavar": "{fdm,sls,sla,mjf,pbf}",
+       "help": 37,
+       "choices": [
+        "fdm",
+        "sls",
+        "sla",
+        "mjf",
+        "pbf"
+       ]
+      },
+      {
+       "flags": [
+        "--build-volume"
+       ],
+       "metavar": "VOLUME",
+       "help": 38
+      },
+      {
+       "flags": [
+        "--angle-limit"
+       ],
+       "metavar": "LIMIT",
+       "help": 39
+      },
+      {
+       "flags": [
+        "--samples"
+       ],
+       "metavar": "SAMPLES",
+       "help": 40
+      },
+      {
+       "flags": [
+        "--layer-height"
+       ],
+       "metavar": "HEIGHT",
+       "help": 41
+      },
+      {
+       "flags": [
+        "--nozzle"
+       ],
+       "metavar": "NOZZLE",
+       "help": 42
+      },
+      {
+       "flags": [
+        "--candidates"
+       ],
+       "help": 79
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "threemf",
+   "summary": "3MF",
+   "usage": "cad threemf <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad threemf export",
+     "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+     "usage": "cad threemf export [--json] SRC DST [DST ...]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 83
+      },
+      {
+       "name": "DST",
+       "help": 72,
+       "repeatable": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 73
+      }
+     ]
+    },
+    {
+     "command": "cad threemf snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad threemf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 84,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad threemf dfm",
+     "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
+     "usage": "cad threemf dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--candidates] [--strict] [--json] SOURCE",
+     "description": 75,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 85
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{cnc,sheet,molding,printing}",
+       "help": 77,
+       "choices": [
+        "cnc",
+        "sheet",
+        "molding",
+        "printing"
+       ],
+       "default": "printing"
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--technology"
+       ],
+       "metavar": "{fdm,sls,sla,mjf,pbf}",
+       "help": 37,
+       "choices": [
+        "fdm",
+        "sls",
+        "sla",
+        "mjf",
+        "pbf"
+       ]
+      },
+      {
+       "flags": [
+        "--build-volume"
+       ],
+       "metavar": "VOLUME",
+       "help": 38
+      },
+      {
+       "flags": [
+        "--angle-limit"
+       ],
+       "metavar": "LIMIT",
+       "help": 39
+      },
+      {
+       "flags": [
+        "--samples"
+       ],
+       "metavar": "SAMPLES",
+       "help": 40
+      },
+      {
+       "flags": [
+        "--layer-height"
+       ],
+       "metavar": "HEIGHT",
+       "help": 41
+      },
+      {
+       "flags": [
+        "--nozzle"
+       ],
+       "metavar": "NOZZLE",
+       "help": 42
+      },
+      {
+       "flags": [
+        "--candidates"
+       ],
+       "help": 79
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "dxf",
+   "summary": "DXF",
+   "usage": "cad dxf <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad dxf snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad dxf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 86,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad dxf dfm",
+     "summary": "check it as a sheet's cut file (--process sheet): closed contours, nothing cut twice, features against the kerf and the thickness, the sheet's size",
+     "usage": "cad dxf dfm [--process {sheet}] [--material MATERIAL] [--units {mm,cm,m,in,ft}] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--strict] [--json] SOURCE",
+     "description": 87,
+     "arguments": [
+      {
+       "name": "SOURCE",
+       "help": 88
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--process"
+       ],
+       "metavar": "{sheet}",
+       "help": 89,
+       "choices": [
+        "sheet"
+       ],
+       "default": "sheet"
+      },
+      {
+       "flags": [
+        "--material"
+       ],
+       "metavar": "MATERIAL",
+       "help": 23
+      },
+      {
+       "flags": [
+        "--units"
+       ],
+       "metavar": "{mm,cm,m,in,ft}",
+       "help": 78,
+       "choices": [
+        "mm",
+        "cm",
+        "m",
+        "in",
+        "ft"
+       ]
+      },
+      {
+       "flags": [
+        "--thickness"
+       ],
+       "metavar": "THICKNESS",
+       "help": 28
+      },
+      {
+       "flags": [
+        "--k-factor"
+       ],
+       "metavar": "FACTOR",
+       "help": 29
+      },
+      {
+       "flags": [
+        "--bend-radius"
+       ],
+       "metavar": "RADIUS",
+       "help": 30
+      },
+      {
+       "flags": [
+        "--kerf"
+       ],
+       "metavar": "KERF",
+       "help": 31
+      },
+      {
+       "flags": [
+        "--sheet-size"
+       ],
+       "metavar": "SIZE",
+       "help": 32
+      },
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 44
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "urdf",
+   "summary": "URDF",
+   "usage": "cad urdf <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad urdf snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad urdf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 90,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad urdf validate",
+     "summary": "check it for conformance: structure, joints, inertials, mesh references",
+     "usage": "cad urdf validate [--strict] [--packages NAME=PATH] [--verbose] [--json] PATH",
+     "description": 91,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 92
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 93
+      },
+      {
+       "flags": [
+        "--packages"
+       ],
+       "metavar": "NAME=PATH",
+       "help": 94,
+       "repeatable": true
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 95
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "srdf",
+   "summary": "SRDF",
+   "usage": "cad srdf <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad srdf snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad srdf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 96,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad srdf validate",
+     "summary": "check it against its URDF: every name, chain, state and disabled pair",
+     "usage": "cad srdf validate [--strict] [--urdf URDF] [--verbose] [--json] PATH",
+     "description": 97,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 98
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 99
+      },
+      {
+       "flags": [
+        "--urdf"
+       ],
+       "metavar": "URDF",
+       "help": 100
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 101
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "sdf",
+   "summary": "SDF",
+   "usage": "cad sdf <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad sdf snapshot",
+     "summary": "draw it as the viewer does, into a PNG",
+     "usage": "cad sdf snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 102,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      }
+     ]
+    },
+    {
+     "command": "cad sdf validate",
+     "summary": "check it for conformance, and with gz sdf --check where it is installed",
+     "usage": "cad sdf validate [--strict] [--gz-check {auto,required,never}] [--gz-remote] [--verbose] [--json] PATH",
+     "description": 103,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 104
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 99
+      },
+      {
+       "flags": [
+        "--gz-check"
+       ],
+       "metavar": "{auto,required,never}",
+       "help": 105,
+       "choices": [
+        "auto",
+        "required",
+        "never"
+       ],
+       "default": "auto"
+      },
+      {
+       "flags": [
+        "--gz-remote"
+       ],
+       "help": 106
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 101
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "kicad_pcb",
+   "summary": "KiCad PCB",
+   "usage": "cad kicad_pcb <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad kicad_pcb export",
+     "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
+     "usage": "cad kicad_pcb export --to {gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf} --out DIR [--json] BOARD",
+     "description": 107,
+     "arguments": [
+      {
+       "name": "BOARD",
+       "help": 108
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--to"
+       ],
+       "metavar": "{gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf}",
+       "help": 109,
+       "choices": [
+        "gerbers",
+        "drill",
+        "pos",
+        "bom",
+        "step",
+        "glb",
+        "odb",
+        "ipc2581",
+        "pdf",
+        "dxf"
+       ],
+       "required": true
+      },
+      {
+       "flags": [
+        "-o",
+        "--out"
+       ],
+       "metavar": "DIR",
+       "help": 110,
+       "required": true
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 111
+      }
+     ]
+    },
+    {
+     "command": "cad kicad_pcb snapshot",
+     "summary": "draw it flat, as the viewer's board view does, into a PNG",
+     "usage": "cad kicad_pcb snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 112,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      },
+      {
+       "flags": [
+        "--window"
+       ],
+       "metavar": "X0,Y0,X1,Y1",
+       "help": 113
+      }
+     ]
+    },
+    {
+     "command": "cad kicad_pcb inspect",
+     "summary": "what the board holds: its format, thickness, size, layers, parts and nets",
+     "usage": "cad kicad_pcb inspect [--json] BOARD",
+     "description": 114,
+     "arguments": [
+      {
+       "name": "BOARD",
+       "help": 108
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 111
+      }
+     ]
+    },
+    {
+     "command": "cad kicad_pcb drc",
+     "summary": "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
+     "usage": "cad kicad_pcb drc [--json] BOARD",
+     "description": 115,
+     "arguments": [
+      {
+       "name": "BOARD",
+       "help": 116
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "kicad_sch",
+   "summary": "KiCad schematic",
+   "usage": "cad kicad_sch <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad kicad_sch export",
+     "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
+     "usage": "cad kicad_sch export --to {pdf,svg,netlist,bom} --out DIR [--json] SCHEMATIC",
+     "description": 117,
+     "arguments": [
+      {
+       "name": "SCHEMATIC",
+       "help": 118
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--to"
+       ],
+       "metavar": "{pdf,svg,netlist,bom}",
+       "help": 119,
+       "choices": [
+        "pdf",
+        "svg",
+        "netlist",
+        "bom"
+       ],
+       "required": true
+      },
+      {
+       "flags": [
+        "-o",
+        "--out"
+       ],
+       "metavar": "DIR",
+       "help": 110,
+       "required": true
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 111
+      }
+     ]
+    },
+    {
+     "command": "cad kicad_sch snapshot",
+     "summary": "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG",
+     "usage": "cad kicad_sch snapshot SRC OUT.png [options] | --job PACKET [SRC] [options]",
+     "description": 120,
+     "arguments": [
+      {
+       "name": "SRC",
+       "help": 121,
+       "optional": true
+      },
+      {
+       "name": "OUT.png",
+       "help": 7,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--job"
+       ],
+       "metavar": "PACKET",
+       "help": 8
+      },
+      {
+       "flags": [
+        "--display"
+       ],
+       "metavar": "DISPLAY",
+       "help": 9
+      },
+      {
+       "flags": [
+        "--grid"
+       ],
+       "help": 10
+      },
+      {
+       "flags": [
+        "--camera"
+       ],
+       "metavar": "CAMERA",
+       "help": 11
+      },
+      {
+       "flags": [
+        "--width"
+       ],
+       "metavar": "WIDTH"
+      },
+      {
+       "flags": [
+        "--height"
+       ],
+       "metavar": "HEIGHT"
+      },
+      {
+       "flags": [
+        "--size-profile"
+       ],
+       "metavar": "{assembly,assembly-large,contact-sheet,diagnostic,labeled,presentation,presentation-large,simple,simple-square}",
+       "choices": [
+        "assembly",
+        "assembly-large",
+        "contact-sheet",
+        "diagnostic",
+        "labeled",
+        "presentation",
+        "presentation-large",
+        "simple",
+        "simple-square"
+       ]
+      },
+      {
+       "flags": [
+        "--preview"
+       ],
+       "help": 12
+      },
+      {
+       "flags": [
+        "--pose"
+       ],
+       "metavar": "POSE",
+       "help": 13
+      },
+      {
+       "flags": [
+        "--annotation"
+       ],
+       "metavar": "FILE",
+       "help": 14
+      },
+      {
+       "flags": [
+        "--measurements"
+       ],
+       "metavar": "FILE",
+       "help": 15
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 16
+      },
+      {
+       "flags": [
+        "--sheet"
+       ],
+       "metavar": "PATH",
+       "help": 122
+      },
+      {
+       "flags": [
+        "--border"
+       ],
+       "help": 123
+      }
+     ]
+    },
+    {
+     "command": "cad kicad_sch inspect",
+     "summary": "what the schematic holds: its sheets, parts and nets; with a ref, what that names",
+     "usage": "cad kicad_sch inspect [--json] SCHEMATIC [REF]",
+     "description": 124,
+     "arguments": [
+      {
+       "name": "SCHEMATIC",
+       "help": 118
+      },
+      {
+       "name": "REF",
+       "help": 125,
+       "optional": true
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 111
+      }
+     ]
+    },
+    {
+     "command": "cad kicad_sch erc",
+     "summary": "KiCad's electrical rules check: errors fail it, warnings are said",
+     "usage": "cad kicad_sch erc [--json] SCHEMATIC",
+     "description": 126,
+     "arguments": [
+      {
+       "name": "SCHEMATIC",
+       "help": 127
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "integrations": [
+  {
+   "name": "mujoco",
+   "summary": "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no renderer) and MuJoCo Studio's web viewer: cad.mujoco makes a document a mujoco.MjSpec, chooses a part's collision on it and saves it; `cad mujoco check robot.xml` compiles a MuJoCo model with the core, so what MuJoCo refuses is a finding with MuJoCo's own words; and `cad run mujoco-studio --model scene.xml` serves the model in Studio for the person to open in a browser",
+   "usage": "cad mujoco <operation> FILE [options]",
+   "operations": [
+    {
+     "command": "cad mujoco check",
+     "summary": "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo refuses or warns of, the model-health checks, what collides as what, and the contact excludes",
+     "usage": "cad mujoco check [--strict] [--verbose] [--json] PATH",
+     "description": 128,
+     "arguments": [
+      {
+       "name": "PATH",
+       "help": 129
+      }
+     ],
+     "options": [
+      {
+       "flags": [
+        "--strict"
+       ],
+       "help": 99
+      },
+      {
+       "flags": [
+        "--verbose"
+       ],
+       "help": 101
+      },
+      {
+       "flags": [
+        "--json"
+       ],
+       "help": 45
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "commands": [
+  {
+   "command": "cad delete",
+   "summary": "delete documents: record, cached document, the engine's copy",
+   "usage": "cad delete [--dry-run] [--yes] [--json] DOC [DOC ...]",
+   "description": 130,
+   "arguments": [
+    {
+     "name": "DOC",
+     "help": 131,
+     "repeatable": true
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--dry-run"
+     ],
+     "help": 132
+    },
+    {
+     "flags": [
+      "-y",
+      "--yes"
+     ],
+     "help": 133
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 134
+    }
+   ]
+  },
+  {
+   "command": "cad doctor",
+   "summary": "set the server up and report it (--check: report only)",
+   "usage": "cad doctor [--prune] [--all-versions] [--no-server] [--check] [--json] [--yes]",
+   "description": 135,
+   "options": [
+    {
+     "flags": [
+      "--prune"
+     ],
+     "help": 136
+    },
+    {
+     "flags": [
+      "--all-versions"
+     ],
+     "help": 137
+    },
+    {
+     "flags": [
+      "--no-server"
+     ],
+     "help": 138
+    },
+    {
+     "flags": [
+      "--check"
+     ],
+     "help": 139
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 140
+    },
+    {
+     "flags": [
+      "-y",
+      "--yes"
+     ],
+     "help": 141
+    }
+   ]
+  },
+  {
+   "command": "cad plugin",
+   "summary": "write the agent apps' plugin folder and print its path",
+   "usage": "cad plugin [--refresh] [--json]",
+   "description": 142,
+   "options": [
+    {
+     "flags": [
+      "--refresh"
+     ],
+     "help": 143
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 144
+    }
+   ]
+  },
+  {
+   "command": "cad requirement",
+   "summary": "print the exact cad requirement for a Python of a program's own",
+   "usage": "cad requirement [--json] [INTEGRATION ...]",
+   "description": 145,
+   "arguments": [
+    {
+     "name": "INTEGRATION",
+     "help": 146,
+     "optional": true,
+     "repeatable": true
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 147
+    }
+   ]
+  },
+  {
+   "command": "cad run",
+   "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
+   "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
+   "description": 148
+  },
+  {
+   "command": "cad serve",
+   "summary": "serve a document over HTTP and print its URL",
+   "usage": "cad serve [--port PORT] document",
+   "arguments": [
+    {
+     "name": "document",
+     "help": 149
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--port"
+     ],
+     "metavar": "PORT",
+     "default": 0
+    }
+   ]
+  },
+  {
+   "command": "cad server",
+   "summary": "run the engine server in this process",
+   "usage": "cad server [--port PORT] [--rotate-token] [--yes]",
+   "options": [
+    {
+     "flags": [
+      "--port"
+     ],
+     "metavar": "PORT",
+     "help": 150
+    },
+    {
+     "flags": [
+      "--rotate-token"
+     ],
+     "help": 151
+    },
+    {
+     "flags": [
+      "-y",
+      "--yes"
+     ],
+     "help": 152
+    }
+   ]
+  },
+  {
+   "command": "cad setup",
+   "summary": "set up text-to-cad in every agent app here, as this release",
+   "usage": "cad setup [--dry-run] [--only APP[,APP...]] [--no-telemetry] [--json]",
+   "description": 153,
+   "epilog": "The install command runs this with the newest release: curl -fsSL https://texttocad.dev/install.sh | sh (on Windows: irm https://www.texttocad.dev/install.ps1 | iex).",
+   "options": [
+    {
+     "flags": [
+      "--dry-run"
+     ],
+     "help": 154
+    },
+    {
+     "flags": [
+      "--only"
+     ],
+     "metavar": "APP[,APP...]",
+     "help": 155,
+     "repeatable": true
+    },
+    {
+     "flags": [
+      "--no-telemetry"
+     ],
+     "help": 156
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 157
+    }
+   ]
+  },
+  {
+   "command": "cad status",
+   "summary": "show the engine server's workers and what it serves",
+   "usage": "cad status [--json]",
+   "description": 158,
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 159
+    }
+   ]
+  },
+  {
+   "command": "cad stop",
+   "summary": "stop the engine server",
+   "usage": "cad stop [--json]",
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 160
+    }
+   ]
+  },
+  {
+   "command": "cad telemetry",
+   "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
+   "usage": "cad telemetry [{status,on,off}]",
+   "description": 161,
+   "arguments": [
+    {
+     "name": "{status,on,off}",
+     "choices": [
+      "status",
+      "on",
+      "off"
+     ],
+     "optional": true
+    }
+   ]
+  },
+  {
+   "command": "cad uninstall",
+   "summary": "take text-to-cad out of every agent app here",
+   "usage": "cad uninstall [--dry-run] [--only APP[,APP...]] [--purge] [--yes] [--json]",
+   "description": 162,
+   "options": [
+    {
+     "flags": [
+      "--dry-run"
+     ],
+     "help": 154
+    },
+    {
+     "flags": [
+      "--only"
+     ],
+     "metavar": "APP[,APP...]",
+     "help": 155,
+     "repeatable": true
+    },
+    {
+     "flags": [
+      "--purge"
+     ],
+     "help": 163
+    },
+    {
+     "flags": [
+      "-y",
+      "--yes"
+     ],
+     "help": 164
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 157
+    }
+   ]
+  },
+  {
+   "command": "cad update",
+   "summary": "install the newest release and set it up in every agent app here",
+   "usage": "cad update [--dry-run] [--only APP[,APP...]] [--no-telemetry] [--json]",
+   "description": 165,
+   "epilog": "The install command does the same: curl -fsSL https://texttocad.dev/install.sh | sh (on Windows: irm https://www.texttocad.dev/install.ps1 | iex).",
+   "options": [
+    {
+     "flags": [
+      "--dry-run"
+     ],
+     "help": 154
+    },
+    {
+     "flags": [
+      "--only"
+     ],
+     "metavar": "APP[,APP...]",
+     "help": 155,
+     "repeatable": true
+    },
+    {
+     "flags": [
+      "--no-telemetry"
+     ],
+     "help": 156
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 157
+    }
+   ]
+  },
+  {
+   "command": "cad update auto",
+   "summary": "show or change automatic updates: status, on, off",
+   "usage": "cad update auto [{status,on,off}]",
+   "description": 166,
+   "arguments": [
+    {
+     "name": "{status,on,off}",
+     "choices": [
+      "status",
+      "on",
+      "off"
+     ],
+     "optional": true
+    }
+   ]
+  },
+  {
+   "command": "cad viewer",
+   "summary": "open a viewer page on the installation engine",
+   "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
+   "description": 167,
+   "arguments": [
+    {
+     "name": "FILE",
+     "help": 168,
+     "optional": true,
+     "repeatable": true
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--host"
+     ],
+     "metavar": "HOST",
+     "help": 169
+    },
+    {
+     "flags": [
+      "--port"
+     ],
+     "metavar": "PORT",
+     "help": 170
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 171
+    },
+    {
+     "flags": [
+      "--no-open"
+     ],
+     "help": 172
+    },
+    {
+     "flags": [
+      "--dist"
+     ],
+     "metavar": "DIST",
+     "help": 173
+    },
+    {
+     "flags": [
+      "--api-only"
+     ],
+     "help": 174
+    }
+   ]
+  }
+ ],
+ "texts": [
+  "a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, never built",
+  ".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml (MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document as its code built it",
+  "mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least 0.001), where it is finer than the viewer's quarter per cent of a part: for a print whose fits are finer, or a picture whose curves are",
+  "mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees (1 to 28.5, the viewer's own): small radii drawn in more segments",
+  "take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each joint's value there its zero, its limits and the other states around it (as built without it)",
+  "print what was written as JSON, a robot description's with what it holds (robot)",
+  "a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, never built; with --job, drawn in place of every job's input",
+  "the .png to write, or a folder (one that is there, or a path ending in a separator) to write <SRC's stem>_<UTC time>.png into",
+  "a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- its camera, display, hidden and isolated parts, pose -- with the packet's ink and dimensions, at its output settings (padding, tightFrame, transparent, background, renderScale, sizeProfile); the other flags override every job",
+  "a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT (the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS (the edges of one class alone: feature, tangent or seam; edges=feature draws no line where faces meet smoothly or a face closes on itself), or the display JSON object (mode, grid, camera, clip, exploded, edges, hidden, isolated: part refs the picture leaves out, or alone draws), or a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; a KiCad schematic {sheet, border, title} (title: KiCad's title block, on unless false; border: the page's edge and frame). Every snapshot is drawn light",
+  "draw the measuring grid",
+  "a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, a camera JSON object (its position, target and orthographicHalfHeight in the viewer's scene coordinates, as a Quick Edit packet carries them: a document's or a GLB's mm, a robot's m, a 3MF's unit), or authored: the view --annotation's ink was drawn in, from its Quick Edit packet, exactly",
+  "the viewer's Preview in place of a display mode: the model lit in a studio, in its materials, on a floor with its shadow, in perspective (a job's: \"preview\": true)",
+  "a configuration's name (a robot's SRDF group state), a configuration sequence at a time of it (walk@0.6: where the viewer's playbar shows the mechanism then), or joint and coupling values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in the file's unit: a document's mm, a robot's m): the mechanism posed there; as built without it (a robot where the viewer opens it)",
+  "the viewer's annotation file, or the Quick Edit packet (.snapshot.json) that carries it: its ink drawn over the model, on the parts it was drawn on",
+  "Measure's dimensions (a JSON list of {start, end, label, color}; the points in the viewer's scene coordinates, as --camera's lengths), drawn over the model",
+  "print what was drawn and its timings as JSON",
+  "[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs): OWNER a part's or an assembly's label, or its occurrence path (hand/finger.2); ELEMENT an element name (f:..., e:..., v:...) or face N (edge, vertex). An element answers what the kernel measures of it, placed where its occurrence stands, and what made it; a part or an assembly its volume, mass and world bounds, a part its placement. Without it: what the document holds (its state, parts, bounds, volume, materials, joints, couplings, states, sequences, animations and declared files), then its build closure",
+  "inspect a summary and the closure (the default without REF); the structure: the summary without its bounds, volume and masses, so nothing is measured, and the closure; the closure alone; geometry (requires REF); or build metadata. Never builds a model or meshes a part; a part's volume and box are measured once by the engine and kept for its geometry",
+  "without REF, the summary (or the structure) and the closure as one JSON object (a REF's answer is JSON)",
+  "Check a part for a manufacturing process: CNC machining, sheet metal, injection molding or 3D printing. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.",
+  "a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call returns.",
+  "cnc, sheet, molding or printing; default, for a STEP, an xbf or a model, the process the parts declare (part.material = metals.aluminum(process=machined()): machined is cnc, molded molding, fdm, sls, mjf, slm and vat printing with technology fdm, sls, mjf, pbf and sla), when every part agrees.",
+  "the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits; default the material the part declares (part.material = metals.aluminum()), when every part agrees.",
+  "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
+  "cnc: the part is turned on a lathe (its axis found), not milled.",
+  "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a corner is held to the smallest tool that can exist (0.05 mm across, text-to-cad's own floor) and to how deep a tool of its size reaches; a radius of 1.25 mm or more (a 2.5 mm end mill's) is recommended.",
+  "cnc: the stock's size in mm (100x60x25); default the part's box.",
+  "sheet: the stock's thickness in mm; default measured.",
+  "sheet: the neutral axis's place in the thickness, for the flat pattern (the shop's bend table's); default a K-factor chart's, by the material and each bend's radius.",
+  "sheet: the shop's inside bend radius in mm, compared with the part's.",
+  "sheet: the cutting kerf in mm, for small features.",
+  "sheet: the shop's largest sheet in mm (1219x2438); default a standard 5 x 10 ft sheet (3048x1524), assumed.",
+  "molding: the pull direction, an axis (z, -y) or x,y,z components; default z.",
+  "molding: faces at or above this many degrees from the pull are not walls; default 45.",
+  "molding: draft under this many degrees is zero draft; default 0.05.",
+  "molding: cavities in the mold, for the clamp force; default 1.",
+  "printing: fdm, sls, sla, mjf or pbf (metal powder bed); default fdm.",
+  "printing: the printer's build volume in mm (256x256x256); default a typical machine of the technology's, assumed.",
+  "printing: down-facing faces under this many degrees from horizontal need support; default the technology's.",
+  "printing: rays cast for the wall-thickness field on a mesh; default 2000.",
+  "printing: the layer height in mm, for stair-stepping; default the technology's.",
+  "printing: fdm's nozzle diameter in mm; default 0.4.",
+  "rank the candidates instead: molding the pulls (x, y, z and the part's principal axes), printing the orientations.",
+  "a warning fails the check too (exit 1): a gate that takes no recommendation broken.",
+  "Print the result as one JSON line on stdout instead of human lines.",
+  "the model's document id (cad run SCRIPT.py prints it)",
+  "a pose to check at beside as built, as snapshot's --pose takes one: a mechanism state's name, a configuration sequence at a time of it (walk@0.6), or joint and coupling values as JSON ('{\"elbow\": 45}'). Repeatable: the check takes the poses it is given, and chooses none",
+  "two parts meant to share volume (a press-fit pin, a bearing in its bore), each a ref or a glob: their overlap is listed as a fit and is no overlap to fix. Repeatable",
+  "a shared volume at or below this is none (default 0.001: the rounding along a face where two parts touch)",
+  "A linear static stress study of a part or an assembly bonded where its parts touch.",
+  "the part or the assembly: a .step or .xbf, or a model's document id the engine holds (cad model solve), or the handle its call returns.",
+  "the study: a JSON file path, inline JSON, or (a library caller) a dict: the fixed faces, the loads (forces, pressures, gravity, acceleration), a material where the model has none, an assembly's parts and connections and the checks to judge. Without it, the setup.",
+  "the folder a solve writes its results into, made when missing; a study's alone.",
+  "the part whose faces the setup lists, by its name or ref, where the document holds several.",
+  "also write ccx.inp, the input CalculiX solved (the finer solve's when there were two); a study's alone.",
+  "say every progress line and the timings on stderr. Without it a long solve still says how far it has got about every 10 s.",
+  "Each joint's stops, found from the geometry: where its parts first meet another part.",
+  "the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or the handle its call returns.",
+  "the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.",
+  "how near two parts' surfaces come before they count as touching, in millimetres; default 0.3, the least (where they all but touch): a larger one stops each joint where its parts first come that near.",
+  "sweep this joint alone (repeat it for several); default every joint a person moves. A name the document has no such joint by is refused, naming its joints.",
+  "say on stderr each step as it starts (reading the document, sampling its surfaces, each joint) and each joint's stops as it ends (a joint or a sampling that takes long is said either way).",
+  "the .xbf file",
+  "the .xbf file; with --job, drawn in place of every job's input",
+  "the .xbf file to check.",
+  "the .step or .stp file",
+  "the .step or .stp file; with --job, drawn in place of every job's input",
+  "the .step or .stp file to check.",
+  "cnc, sheet, molding or printing; default, for a STEP, an xbf or a model, none: a STEP keeps no process.",
+  "the .step file",
+  "the .stl file",
+  "the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries",
+  "print what was written as JSON",
+  "the .stl file; with --job, drawn in place of every job's input",
+  "Check a mesh for 3D printing. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.",
+  "the .stl file to check.",
+  "printing, the one process a mesh is checked for (the default); cnc, sheet and molding are judged on exact geometry: check the part's STEP or model for them.",
+  "the file's length units (mm, cm, m, in, ft): an STL's (default mm), or a DXF's (default the ones it declares; needed where it declares none, as an R12 file).",
+  "rank the candidates instead: printing the orientations.",
+  "the .glb file",
+  "the .glb file; with --job, drawn in place of every job's input",
+  "the .glb file to check.",
+  "the .3mf file",
+  "the .3mf file; with --job, drawn in place of every job's input",
+  "the .3mf file to check.",
+  "the .dxf file; with --job, drawn in place of every job's input",
+  "Check a sheet's cut file (a DXF) for laser, waterjet or router cutting: the sheet process. Exit 0: OK. Exit 1: FAILED, a finding is an error (with --strict, a warning too). Exit 3: NOT CHECKED, something was not judged: never a pass. Exit 2: the command line's mistake.",
+  "the .dxf cut file to check.",
+  "sheet, the one process a DXF is checked for (the default).",
+  "the .urdf file; with --job, drawn in place of every job's input",
+  "Check one URDF robot description for conformance.",
+  "The .urdf file to validate.",
+  "Treat warnings as blocking.",
+  "Resolve package://NAME/... mesh URIs against PATH. Repeatable.",
+  "Narrate the target on stderr.",
+  "the .srdf file; with --job, drawn in place of every job's input",
+  "Check one SRDF against its paired URDF.",
+  "the .srdf file to check.",
+  "treat warnings as blocking.",
+  "the URDF to check it against; found from its robot name and folder without it.",
+  "narrate the target on stderr.",
+  "the .sdf file; with --job, drawn in place of every job's input",
+  "Check one SDFormat world or model for conformance.",
+  "the .sdf file to check.",
+  "run `gz sdf --check` as external validation — auto (when the tool is installed), required (fail without it), or never.",
+  "let `gz sdf --check` resolve the document's remote <uri> references (http, https, fuel). Off by default: gz does not run on a document that names one, so validating a file never fetches from a host the file names.",
+  "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless, into a folder.",
+  "the .kicad_pcb (its .kicad_pro beside it)",
+  "what to write: gerbers and drill (a folder of files), pos (placement CSV), bom (the schematic's parts CSV), step and glb (3D), odb (ODB++ zip), ipc2581, pdf (a front and a back fabrication drawing) or dxf (the outline and holes)",
+  "the folder to write into, made when missing",
+  "print the answer as one JSON line on stdout",
+  "the .kicad_pcb file; with --job, drawn in place of every job's input",
+  "draw only this box of the board, filling the picture: two opposite corners in the board's millimetres as KiCad shows them (y down; the box board.area(x0, y0, x1, y1) and #@x10y5..x20y15 name), e.g. --window 40,60,80,90 (--window=-10,5,20,30 when the first is negative). With --width alone the height follows the box's shape (and the width with --height alone); the same as --display '{\"window\": [X0, Y0, X1, Y1]}'. Takes no --camera",
+  "What a saved KiCad board holds: its format, thickness, size, layers, parts and nets.",
+  "Check the KiCad board BOARD with KiCad's design rule check.",
+  "the .kicad_pcb to check (its .kicad_pro beside it carries the rules).",
+  "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of every sheet, an svg per sheet, the netlist (the board imports it) or a BOM.",
+  "the .kicad_sch (any sheet of its project: the whole hierarchy is read)",
+  "what to write: pdf, svg, netlist, bom",
+  "draw a document or a file the viewer opens as the viewer does, into a PNG",
+  "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a model's, which cad run SCRIPT.py prints: drawn from what the engine holds); with --job, drawn in place of every job's input",
+  "the sheet to draw, by its path: / (the root, the default), /Power/; the same as --display '{\"sheet\": PATH}'",
+  "draw KiCad's page as printed: the page's edge and the drawing sheet's frame (off by default; the title block is drawn unless --display '{\"title\": false}')",
+  "What a saved KiCad schematic holds: its sheets, parts and nets, read from its project's root; with REF, what that reference names (#U3, #U3.7, #net:VBUS, #sheet:/Power/, #wire:<uuid>).",
+  "a reference to resolve: #U3, #U3.7, #net:GND",
+  "Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.",
+  "the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).",
+  "Compile one MuJoCo model with MuJoCo and check it.",
+  "the .xml or .mjcf file to check.",
+  "delete documents: each one's record and its document in the engine's cache, and what the engine holds of it; never a file of yours",
+  "a document's id, a model's script (every document recorded of it), or a CAD file a page opened; your own files -- a script, its declared files, an opened file -- are never touched",
+  "say which documents would be deleted, and how many, and delete nothing",
+  "delete them without asking; where nobody can be asked (an agent, a pipe, --json) the command does nothing without it",
+  "what was deleted (or would be) as JSON",
+  "Set the server up -- register this installation where none is current, write the cad command, start the engine -- and report what this device runs: the current installation, the releases on disk, the CAD kernel environment (made on first need, never here) and the integrations', the engine and each agent app's plugin. --check reports alone, changing nothing: what a bug report wants. Exit 1 when the CAD kernel is installed and does not load.",
+  "Remove the record of every registered installation whose interpreter is gone, every release folder but the current release's and the one before's, the per-version launchers earlier builds published beside the cad command, engine records of an older format, the bytecode folders of installations no longer registered, cache folders with no record, environments of models' packages and cadgen 0.7's store and state files (none written or used in the last 7 days), and exit: listed, with how many of each, and asked first.",
+  "With --prune: remove cadgen 0.7's store and state files too, however recently they were written (without it they go once nothing has written them for 7 days). Only once no cadgen 0.7 is installed in any agent app.",
+  "Do everything but start the engine: say only whether one runs.",
+  "Report alone, read-only: register nothing, write nothing (not the cad command, not a setting) and start nothing; say what cad doctor would write. What a bug report wants.",
+  "the report as one JSON document: each check's name, status (ok, info, warning, failed) and detail; with --prune, what it removed",
+  "with --prune, remove what it lists without asking; where nobody can be asked (an agent, a pipe, --json) the command does nothing without it",
+  "Write text-to-cad's plugin folder, which every agent app here is pointed at, from this installation (when it is the current one), and print its path.",
+  "also, when the folder changed, bring the copies apps keep of it to it (an app's copy of the plugin, Claude Desktop's server, the skills the Skills CLI copied)",
+  "print what was done as JSON",
+  "Print the exact requirement that installs this device's cad, for a program run with a Python of its own: cad's integrations named (build123d, kicad, trimesh, mujoco, coacd, netgen, calculix, blender), pinned at this device's release. Nothing is installed.",
+  "one of cad's integrations (an extra), or a comma-separated list of them",
+  "the requirement, its indexes and find-links, as JSON",
+  "Run a program as `uv run` does, with cad pinned at this device's release: a script's `# /// script` header names its own packages, and cad's integrations are worked out from its imports (a header naming `cad[...]` decides them); a command an integration declares (`kicad-cli`) gets that integration and runs headless. A script that imports bpy gets the blender integration, on Python 3.13, the one its tool is built for. The environment is made once, by the device's engine, and used again. uv run's options are taken as uv takes them.",
+  "an .xbf, a STEP, or a document id",
+  "the HTTP port the engine takes, refused when another process holds it (else CAD_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes any free port",
+  "replace this installation's page token first: every link shared before stops working; asked first",
+  "with --rotate-token, replace the token without asking; where nobody can be asked (an agent, a pipe, --json) the command does nothing without it",
+  "Set up text-to-cad in every agent app on this machine as this release, or bring it up to date there: its release folder, each app's own command, Claude Desktop's config, second copies removed, and the engine switched to this release. `cad update` runs the newest release's; `cad uninstall` takes it out.",
+  "print the plan and stop: nothing is changed",
+  "only these apps: claude, claude-desktop, codex, cursor, grok, gemini; and the agents the skills go to through the Skills CLI: github-copilot, windsurf, cline, amp, antigravity, antigravity-cli, openclaw, droid, goose, kilo, kiro-cli, hermes-agent, opencode, roo, trae, zed",
+  "turn telemetry off, as `cad telemetry off` does",
+  "print the plan and what was done as JSON on stdout (progress goes to stderr)",
+  "the engine server's workers, what each is building, and its served documents",
+  "the server's answer as JSON",
+  "what was stopped as JSON",
+  "Show or change the usage stats and crash reports text-to-cad sends from CAD's apps (the CAD app in an agent app, and the viewer) and its build daemon. By default, once a cad command has said so: a random install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the viewer's tools and settings are used (never a value or a name), files shown by format, builds and snapshots, how they ended and how long they took, and where text-to-cad's own code failed (never a message). `off` sends nothing. Never file names, paths, contents or prompts.",
+  "Take text-to-cad out of every agent app on this machine: what earlier `cad setup` runs did (their receipt), newest first, or with no receipt every copy of text-to-cad found; the cad command when it is text-to-cad's own; this installation's engine stopped.",
+  "remove text-to-cad's state and cache folders too",
+  "take it out as planned without asking; where nobody can be asked (an agent, a pipe, --json) the command does nothing without it",
+  "Install the newest release of text-to-cad and set it up in every agent app on this machine, as the update button does: its release folder, each app's own command, and the engine switched to it. With the version feed out of reach, this release's setup.",
+  "Show or change automatic updates. While they are on (by default), the engine reads the version feed once an hour and, when a newer release that breaks nothing is out (a patch release below 1.0, a patch or minor release from 1.0), installs it in the background and switches to it once nothing has run for a minute, as the update button does; one that may break something waits for you. `off` leaves every update to you: the update button, `cad update` or the install command.",
+  "Ensure this installation's engine and open its viewer page: the home, or each file named. The page is the engine's one page, whose explorer opens where it was last, else your home folder. Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine holds) is registered and printed as its page, ``/<id>``.",
+  "a CAD file to open (or a document id the engine holds): its page is /<id>",
+  "Pin the engine bind address; default loopback.",
+  "Pin this installation’s engine HTTP port.",
+  "Print launch information without opening a browser.",
+  "Print the URL without opening a browser.",
+  "Built viewer client directory.",
+  "Announce the engine for a Vite frontend, without its client build."
+ ]
+}
