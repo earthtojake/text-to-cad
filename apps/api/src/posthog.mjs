@@ -85,7 +85,7 @@ export function propertiesOf(row, country) {
   // tracking counts an issue's sessions by. A process's id is a UUIDv4, not the v7 PostHog's sessions table
   // wants, so it sits out that table's aggregations; nothing else reads it.
   const properties = { distinct_id: row.install_id, session: row.session_id, $session_id: row.session_id, $geoip_disable: true };
-  const fields = row.event === 'exception' ? ['where', 'tool', 'count'] : FIELDS[row.event];
+  const fields = row.event === 'exception' ? ['where', 'tool', 'cause', 'count'] : FIELDS[row.event];
   for (const key of [...CONTEXT, ...fields]) if (row[key] !== null && row[key] !== undefined) properties[key] = row[key];
   if (row.event === 'exception') properties.$exception_list = exceptionOf(row);
   if (country) properties.country = country;

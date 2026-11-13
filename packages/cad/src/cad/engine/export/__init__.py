@@ -37,6 +37,15 @@ Every file is written to a temporary file beside its target and moved over it; a
 when its bytes change, and an MJCF, a URDF and each of their meshes alike (each writer stages
 them itself).
 
+**Refused before anything is written.** ``translate`` is ``prepare`` then ``Prepared.land``: ``prepare``
+checks a destination against the document -- its kind, its options, its source -- and, for a kind that
+can refuse only once it has drawn the file (a DXF's 3D document, an edge off the plane, a bad layer
+name or a failed drawing check; a GLB's motion that does not settle; a robot description that does
+not describe), draws it then (``Kind.render``), holding its bytes, writing nothing; ``land`` writes it.
+An export of several destinations prepares every one before it lands any (``worker._export``), so a
+refusal leaves no file behind. What fails after that -- the disk, the kernel's STEP writer -- fails
+once some files are written, and says which (``ExportIncomplete``).
+
 What a writer must say about a file it writes -- a robot writer's renamed link or joint -- it says with
 ``note(text)``: a line ``translate`` hands its ``told`` (the build's and the export's log), or, written
 outside a translation, an ``ExportWarning``. A robot writer says what the file holds too, with
@@ -52,6 +61,7 @@ Importing this package imports no kernel: a kind's writer loads on its first use
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import importlib
 import threading
@@ -61,13 +71,34 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
 
-__all__ = ["KINDS", "MAX_ANGLE", "MIN_ANGLE", "MIN_TOLERANCE", "ROBOTS", "TOLERANT", "ExportRefused", "ExportWarning",
-           "Kind", "Source", "View", "angle_of", "described", "kind_of", "note", "refused", "tolerance_of", "translate",
-           "within", "zero_of"]
+__all__ = ["KINDS", "MAX_ANGLE", "MIN_ANGLE", "MIN_TOLERANCE", "ROBOTS", "TOLERANT", "ExportIncomplete",
+           "ExportRefused", "ExportWarning", "Kind", "Prepared", "Source", "View", "angle_of", "described", "kind_of",
+           "note", "prepare", "refused", "tolerance_of", "translate", "within", "zero_of"]
 
 
 class ExportRefused(ValueError):
     """An export the engine will not write, said by name before anything is written."""
+
+
+class ExportIncomplete(RuntimeError):
+    """An export that failed once it had written some of its destinations: which it wrote, which
+    failed, and why (its ``__cause__``). No refusal: what it wrote stays, and it says so."""
+
+    def __init__(self, written: list[str], failed: str, rest: list[str], error: BaseException) -> None:
+        def named(names: list[str]) -> str:
+            listed = " and ".join(names) if len(names) < 3 else f"{', '.join(names[:-1])} and {names[-1]}"
+            return f"{listed} {'was' if len(names) == 1 else 'were'}"
+
+        super().__init__(f"{failed}: {error} ({named(written)} written before it"
+                         + (f"; {named(rest)} not" if rest else "") + ")")
+        self.written, self.failed, self.rest = list(written), failed, list(rest)
+
+    def failed_type(self) -> dict[str, str]:
+        """The type it is told by (``frames.failed_type``'s ``{"type"}``): its cause's, a write that
+        failed (an ``OSError``, the kernel's); its own where its cause is a refusal, which this is not."""
+        cause = self.__cause__
+        kind = type(self if cause is None or isinstance(cause, ValueError) else cause)
+        return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}"}
 
 
 class ExportWarning(UserWarning):
@@ -103,13 +134,17 @@ def described(summary: dict[str, Any]) -> None:
 @dataclass(frozen=True)
 class Kind:
     """One file kind: its name, the suffixes its files end in (the first is its own), the
-    writer (``module:function``, loaded on first use: ``write(view, path)``), and whether
-    the kind is written atomically here (an xbf saves itself atomically)."""
+    writer (``module:function``, loaded on first use: ``write(view, path)``), whether
+    the kind is written atomically here (an xbf saves itself atomically), and, for a kind that
+    can refuse a document only once it has drawn its file, the drawing (``render``,
+    ``module:function``: ``render(view)``, every check made and the file's bytes held, nothing
+    written, answering what writes them at a path)."""
 
     name: str
     suffixes: tuple[str, ...]
     writer: str
     atomic: bool = True
+    render: str | None = None
 
     @property
     def suffix(self) -> str:
@@ -119,19 +154,28 @@ class Kind:
         module, _sep, function = self.writer.partition(":")
         getattr(importlib.import_module(module), function)(view, path)
 
+    def rendered(self, view: "View") -> Callable[[Path], None] | None:
+        """The kind's drawing of ``view`` (``render``), or None for a kind that draws as it writes."""
+        if self.render is None:
+            return None
+        module, _sep, function = self.render.partition(":")
+        return getattr(importlib.import_module(module), function)(view)
+
 
 KINDS: dict[str, Kind] = {
     "xbf": Kind("xbf", (".xbf",), "cad.engine.export.tree:write_xbf", atomic=False),
     "step": Kind("step", (".step", ".stp"), "cad.engine.export.step:write"),
-    "glb": Kind("glb", (".glb",), "cad.engine.export.glb:write"),
+    "glb": Kind("glb", (".glb",), "cad.engine.export.glb:write", render="cad.engine.export.glb:rendered"),
     "stl": Kind("stl", (".stl",), "cad.engine.export.stl:write"),
     "threemf": Kind("threemf", (".3mf",), "cad.engine.export.threemf:write"),
     # A drawing replaces its file itself, and only when its bytes change.
-    "dxf": Kind("dxf", (".dxf",), "cad.engine.export.dxf:write", atomic=False),
+    "dxf": Kind("dxf", (".dxf",), "cad.engine.export.dxf:write", atomic=False, render="cad.engine.export.dxf:rendered"),
     # A MuJoCo model and its mesh folder, staged and moved into place by its writer.
-    "mjcf": Kind("mjcf", (".xml", ".mjcf"), "cad.engine.export.mjcf:write", atomic=False),
+    "mjcf": Kind("mjcf", (".xml", ".mjcf"), "cad.engine.export.mjcf:write", atomic=False,
+                 render="cad.engine.export.mjcf:rendered_view"),
     # A ROS robot and its mesh folder, staged likewise.
-    "urdf": Kind("urdf", (".urdf",), "cad.engine.export.urdf:write", atomic=False),
+    "urdf": Kind("urdf", (".urdf",), "cad.engine.export.urdf:write", atomic=False,
+                 render="cad.engine.export.urdf:rendered_view"),
 }
 # What a source file is read as: a document, or a mesh file's triangles.
 SOURCES = (".xbf", ".step", ".stp")
@@ -599,17 +643,73 @@ def _instances(node: dict[str, Any]) -> list[int]:
 # --- the one call ------------------------------------------------------------------------------
 
 
-def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
-              told: Callable[[str], None] | None = None, angle: float | None = None, zero: str | None = None,
-              summary: Callable[[dict[str, Any]], None] | None = None) -> int:
-    """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
-    as ``kind`` (from the suffix when None), a GLB, an STL or a 3MF meshed to within ``tolerance`` (mm)
-    and ``angle`` (degrees) when either is given (``told`` hears each part it left faces of without
-    triangles), a robot description taken at the mechanism state ``zero`` when one is given (``summary``
-    hears what it holds, with the notes it was written with: ``described``); returns the file's size. The
-    translation lands only where the file does not hold its bytes already (``put``): a file written
-    again the same is left as it is. Every declared file is written this way too, after the build or
-    the take-up that made its document (``build``)."""
+@contextlib.contextmanager
+def _hearing(heard: list[str], summaries: list[dict[str, Any]]) -> Any:
+    """What a writer says (``note``, ``described``) heard into ``heard`` and ``summaries`` meanwhile."""
+    token, summarized = _NOTES.set(heard), _SUMMARY.set(summaries)
+    try:
+        yield
+    finally:
+        _NOTES.reset(token)
+        _SUMMARY.reset(summarized)
+
+
+@dataclass
+class Prepared:
+    """One destination of an export, checked against its document and drawn where its kind draws
+    before it writes (``Kind.render``), nothing written yet (``prepare``); ``land`` writes it."""
+
+    path: Path
+    kind: str
+    view: View
+    tolerance: float | None
+    angle: float | None
+    drawn: Callable[[Path], None] | None
+    heard: list[str]
+    summaries: list[dict[str, Any]]
+
+    def land(self, told: Callable[[str], None] | None = None,
+             summary: Callable[[dict[str, Any]], None] | None = None) -> int:
+        """The file written (``translate``'s), and what was said of it handed on; its size."""
+        path, kind, view = self.path, self.kind, self.view
+        path.parent.mkdir(parents=True, exist_ok=True)
+        spec = KINDS[kind]
+        write = self.drawn or (lambda target: spec.write(view, target))
+        with _hearing(self.heard, self.summaries):
+            if not spec.atomic:
+                write(path)
+                size = path.stat().st_size
+            else:
+                _written, size = put(path, write)
+        if summary is not None:
+            for found in self.summaries:
+                summary({**found, "notes": list(self.heard)})
+        for text in self.heard:
+            if told is not None:
+                told(f"{path.name}: {text}")
+            else:
+                import warnings
+
+                warnings.warn(f"{path.name}: {text}", ExportWarning, stacklevel=3)
+        if told is not None:
+            for name, faces in (view.unmeshed or {}).items():
+                told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "
+                     f"meshing to within {within(self.tolerance, self.angle)}")
+            if kind in LOOKS:  # a file of looks writes each part's scalar look, its texture maps left out
+                from cad.engine.document import untextured_said
+
+                for index in view.used():
+                    prototype = view.prototypes[index]
+                    if prototype.get("untextured"):
+                        told(f"{path.name}: " + untextured_said(prototype.get("name") or prototype["key"],
+                                                                prototype["untextured"], "written"))
+        return size
+
+
+def prepare(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
+            angle: float | None = None, zero: str | None = None) -> Prepared:
+    """``translate``'s first half: ``path`` checked as a destination of ``document`` -- refused by name
+    as ``translate`` refuses it -- and drawn where its kind draws before it writes, nothing written."""
     path = Path(path)
     kind = kind or kind_of(path)
     if kind not in KINDS:
@@ -638,42 +738,22 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     view = source.view()
     view.tolerance, view.angle = tolerance, angle
     view.zero = zero
-    path.parent.mkdir(parents=True, exist_ok=True)
-    spec = KINDS[kind]
     heard: list[str] = []
     summaries: list[dict[str, Any]] = []
-    token, summarized = _NOTES.set(heard), _SUMMARY.set(summaries)
-    try:
-        if not spec.atomic:
-            spec.write(view, path)
-            size = path.stat().st_size
-        else:
-            _written, size = put(path, lambda temporary: spec.write(view, temporary))
-    finally:
-        _NOTES.reset(token)
-        _SUMMARY.reset(summarized)
-    if summary is not None:
-        for found in summaries:
-            summary({**found, "notes": list(heard)})
-    for text in heard:
-        if told is not None:
-            told(f"{path.name}: {text}")
-        else:
-            import warnings
-
-            warnings.warn(f"{path.name}: {text}", ExportWarning, stacklevel=2)
-    if told is not None:
-        for name, faces in (view.unmeshed or {}).items():
-            told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "
-                 f"meshing to within {within(tolerance, angle)}")
-        if kind in LOOKS:  # a file of looks writes each part's scalar look, its texture maps left out
-            from cad.engine.document import untextured_said
-
-            for index in view.used():
-                prototype = view.prototypes[index]
-                if prototype.get("untextured"):
-                    told(f"{path.name}: " + untextured_said(prototype.get("name") or prototype["key"],
-                                                            prototype["untextured"], "written"))
-    return size
+    with _hearing(heard, summaries):
+        drawn = KINDS[kind].rendered(view)
+    return Prepared(path, kind, view, tolerance, angle, drawn, heard, summaries)
 
 
+def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
+              told: Callable[[str], None] | None = None, angle: float | None = None, zero: str | None = None,
+              summary: Callable[[dict[str, Any]], None] | None = None) -> int:
+    """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
+    as ``kind`` (from the suffix when None), a GLB, an STL or a 3MF meshed to within ``tolerance`` (mm)
+    and ``angle`` (degrees) when either is given (``told`` hears each part it left faces of without
+    triangles), a robot description taken at the mechanism state ``zero`` when one is given (``summary``
+    hears what it holds, with the notes it was written with: ``described``); returns the file's size. The
+    translation lands only where the file does not hold its bytes already (``put``): a file written
+    again the same is left as it is. Every declared file is written this way too, after the build or
+    the take-up that made its document (``build``). ``prepare`` then ``Prepared.land``."""
+    return prepare(document, kind, path, tolerance, angle, zero).land(told, summary)

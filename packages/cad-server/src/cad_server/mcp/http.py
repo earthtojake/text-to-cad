@@ -56,31 +56,25 @@ class Sessions:
 
     def _expire(self):
         for ident, session in list(self.sessions.items()):
-            if (not session.active and not session.server.operations.keeps_alive()
-                    and (session.released or time.monotonic() - session.touched > IDLE
-                         and session.server.operations.idle_seconds() > IDLE)):
+            if not session.active and (session.released or time.monotonic() - session.touched > IDLE):
                 del self.sessions[ident]
                 session.close()
 
     def release(self, holder):
         """The hold ``holder`` names gone (``EngineApp.hold_ended``): its stdio server exited, or was
         killed before it could end its sessions itself (``DELETE``). Each session it opened ends now,
-        or once its running operations finish."""
+        or once the request in it finishes."""
         with self.lock:
             for session in self.sessions.values():
                 if session.holder == holder:
                     session.released = True
             self._expire()
 
-    def active(self):
-        with self.lock:
-            return any(s.server.operations.keeps_alive() for s in self.sessions.values())
-
     def working(self):
-        """Whether an agent's tool call is in flight in any session, or an operation it started runs:
-        what an update's drain waits for. A page's own calls (``PAGE_TOOLS``) are not."""
+        """Whether an agent's tool call is in flight in any session: what an update's drain waits for. A
+        page's own calls (``PAGE_TOOLS``) are not."""
         with self.lock:
-            return any(s.calls or s.server.operations.keeps_alive() for s in self.sessions.values())
+            return any(s.calls for s in self.sessions.values())
 
     def listing(self):
         with self.lock:
@@ -151,8 +145,6 @@ class Sessions:
             if request.raw_method == 'DELETE':
                 if not session:
                     return response.send_json(400, {'error': 'Mcp-Session-Id required'})
-                if session.server.operations.keeps_alive():
-                    return response.send_json(409, {'error': 'Wait for running operations or cancel queued work before closing this session'})
                 with self.lock:
                     self.sessions.pop(ident, None)
                 session.close()
