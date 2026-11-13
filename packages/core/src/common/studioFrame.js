@@ -27,6 +27,8 @@
 // accumulation only ever refines what is on screen. A moving view therefore pays for one draw
 // and the small passes a frame, and the samples only while it rests.
 
+import { createStudioFrameLab, studioFrameLabSettings } from "./studioFrameLab.js";
+
 const PASS_VERTEX = /* glsl */ `
 varying vec2 vUv;
 void main() {
@@ -396,6 +398,13 @@ export function createStudioFrame(THREE, {
     uAccumulation: { value: accumulation.texture }
   });
 
+  // PROTOTYPE: screen-space bounce light and reflections (studioFrameLab.js), only when the page
+  // asks for them (`globalThis.__studioFrameLab`); without it nothing below differs.
+  const labSettings = studioFrameLabSettings();
+  const lab = labSettings ? createStudioFrameLab(THREE, labSettings, {
+    depthTexture, sceneTarget, accumulation, occlusionTargets, projection, projectionInverse, passCamera, fullScreenPass, passTarget
+  }) : null;
+
   const state = { index: 0, width: 0, height: 0, disposed: false };
   const size = new THREE.Vector2();
   // The view the picture's samples are of (its first's), and points of the model the camera's
@@ -451,6 +460,7 @@ export function createStudioFrame(THREE, {
     accumulation.setSize(width, height);
     occlusionPass.uniforms.uSize.value.set(width, height);
     compositePass.uniforms.uOcclusionSize.value.set(halfWidth, halfHeight);
+    lab?.resize(width, height, halfWidth, halfHeight);
     return true;
   }
 
@@ -471,6 +481,7 @@ export function createStudioFrame(THREE, {
       renderer.render(scene, camera);
       projection.copy(camera.projectionMatrix);
       projectionInverse.copy(camera.projectionMatrixInverse);
+      lab?.drawGeometry(renderer, scene, camera);
     } finally {
       if (index > 0) {
         if (savedView?.enabled) {
@@ -566,10 +577,14 @@ export function createStudioFrame(THREE, {
       try {
         renderer.autoClear = false;
         if (settings.strength > 0) drawOcclusion(renderer, camera, index);
-        compositePass.uniforms.uStrength.value = settings.strength;
-        compositePass.uniforms.uPower.value = settings.power;
-        compositePass.mesh.material.blendAlpha = 1 / (index + 1);
-        pass(renderer, compositePass, accumulation);
+        lab?.drawEffects(renderer, scene, camera, index, {
+          occlusion: settings, modelRadius: settings.modelRadius, center: probes[0], width: state.width, height: state.height
+        });
+        const composite = lab ? lab.compositePass : compositePass;
+        composite.uniforms.uStrength.value = settings.strength;
+        composite.uniforms.uPower.value = settings.power;
+        composite.mesh.material.blendAlpha = 1 / (index + 1);
+        pass(renderer, composite, accumulation);
         if (present) output(renderer, target);
       } finally {
         renderer.autoClear = autoClear;
@@ -583,7 +598,8 @@ export function createStudioFrame(THREE, {
      * A snapshot's frame.
      */
     renderStill(renderer, scene, camera, { samples: count = settings.samples } = {}) {
-      const total = Math.max(1, Math.round(count));
+      // PROTOTYPE: the lab may ask for another count (1 shows a moving view's frame).
+      const total = Math.max(1, Math.round(labSettings?.samples ?? count));
       const previous = settings.samples;
       const shadowMap = renderer.shadowMap;
       const autoUpdate = shadowMap?.autoUpdate;
@@ -607,7 +623,8 @@ export function createStudioFrame(THREE, {
       const half = occlusionTargets[0].width * occlusionTargets[0].height;
       // Colour and depth-stencil, multisampled and resolved; two half-resolution and one full
       // half-float target.
-      return pixels * 8 * (multisample + (sceneTarget.samples > 0 ? 1 : 0)) + half * 8 * 2 + pixels * 8;
+      return pixels * 8 * (multisample + (sceneTarget.samples > 0 ? 1 : 0)) + half * 8 * 2 + pixels * 8
+        + (lab ? lab.memoryBytes(pixels, half) : 0);
     },
     dispose() {
       if (state.disposed) return;
@@ -616,6 +633,7 @@ export function createStudioFrame(THREE, {
       sceneTarget.dispose();
       accumulation.dispose();
       for (const target of occlusionTargets) target.dispose();
+      lab?.dispose();
       for (const fullScreen of [occlusionPass, smoothPass, compositePass, outputPass]) {
         fullScreen.mesh.geometry.dispose();
         fullScreen.mesh.material.dispose();
