@@ -7,6 +7,7 @@ GLB to 3MF and back; a mesh is never made B-rep; and a conversion loads no CAD k
 
 from __future__ import annotations
 
+import builtins
 import json
 import os
 import shutil
@@ -16,9 +17,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
-from functools import partial
 from pathlib import Path
-from unittest import mock
 
 import numpy as np
 
@@ -257,6 +256,18 @@ class WhatIsRefused(MeshExportTestCase):
                                                                      str(self.folder / "cube.step")]}, lambda _text: None)
         self.assertFalse((self.folder / "cube.3mf").exists())
 
+    def test_a_write_that_fails_after_others_says_what_was_written_and_is_no_refusal(self) -> None:
+        cube = stl(self.folder / "cube.stl")
+        (self.folder / "blocker").write_bytes(b"")  # a file where a destination's folder would be
+        with self.assertRaises(api.EngineError) as caught:
+            api.export(cube, self.folder / "cube.glb", self.folder / "blocker" / "cube.3mf", self.folder / "cube2.glb",
+                       daemon=False)
+        self.assertNotIsInstance(caught.exception, ValueError, "a refusal says nothing was written")
+        self.assertRegex(str(caught.exception), r"^cube\.3mf: .*\(cube\.glb was written before it; cube2\.glb was not\)$")
+        self.assertTrue(issubclass(getattr(builtins, caught.exception.raised), OSError), caught.exception.raised)
+        self.assertTrue((self.folder / "cube.glb").is_file())
+        self.assertFalse((self.folder / "cube2.glb").exists())
+
     def test_an_accessor_reads_only_the_bytes_its_buffer_view_holds(self) -> None:
         # A POSITION accessor whose bufferView stride or count would reach past the file's own
         # buffer is refused, rather than reading whatever bytes follow it in memory.
@@ -327,31 +338,6 @@ class ItStaysOffTheKernel(unittest.TestCase):
         self.assertEqual(len([line for line in done.stdout.splitlines() if line.startswith("wrote ")]), 6)
         self.assertEqual(sorted(path.name for path in folder.iterdir()),
                          ["a.3mf", "a.glb", "b.3mf", "b.stl", "c.glb", "c.stl", "cube.stl", "kit.3mf", "parts.glb"])
-
-
-class TheAgentOperation(MeshExportTestCase):
-    def test_cad_export_takes_a_mesh_source_under_the_same_rules(self) -> None:
-        from cad_server.jobs import TERMINAL
-        from cad_server.mcp.operations import DESCRIPTIONS, Operations
-
-        self.assertIn("A mesh source (.glb/.stl/.3mf) exports to the other two mesh kinds only", DESCRIPTIONS["cad_export"])
-        cube = stl(self.folder / "cube.stl")
-        jobs = Operations()
-
-        def finish(answer: dict) -> dict:
-            with jobs.changed:
-                self.assertTrue(jobs.changed.wait_for(lambda: jobs.jobs[answer["id"]]["state"] in TERMINAL, timeout=60))
-            return jobs.get(answer["id"])
-
-        with mock.patch("cad.engine.api.export", partial(api.export, daemon=False)):
-            done = finish(jobs.call("cad_export", {"requestId": "mesh-export-request-1", "source": str(cube),
-                                                   "destinations": [str(self.folder / "cube.3mf")]}))
-            refused = finish(jobs.call("cad_export", {"requestId": "mesh-export-request-2", "source": str(cube),
-                                                      "destinations": [str(self.folder / "cube.step")]}))
-        self.assertEqual(done["state"], "succeeded", done)
-        self.assertEqual(done["result"]["files"][0]["path"], str(self.folder / "cube.3mf"))
-        self.assertEqual(refused["state"], "failed")
-        self.assertIn("no STEP export is made from one", json.dumps(refused))
 
 
 if __name__ == "__main__":

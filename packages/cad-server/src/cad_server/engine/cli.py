@@ -76,16 +76,19 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml "
                              "(MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ "
-                             "beside it): the document as its code built it")
+                             "beside it): the document as its code built it. Every one is checked, a DXF's drawing "
+                             "too, before any is written: a refused export writes none")
     from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
                         help=f"mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least "
                              f"{MIN_TOLERANCE:g}), where it is finer than the viewer's quarter per cent of a part: "
-                             "for a print whose fits are finer, or a picture whose curves are")
+                             "for a print whose fits are finer, or a picture whose curves are. Every destination is "
+                             "then a .glb, an .stl or a .3mf: export a .step or any other file in a command of its own")
     export.add_argument("--angle", type=float, metavar="DEG",
                         help=f"mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees ("
-                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments")
+                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments. "
+                             "Every destination is then a .glb, an .stl or a .3mf")
     export.add_argument("--zero", metavar="STATE",
                         help="take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each "
                              "joint's value there its zero, its limits and the other states around it (as built "

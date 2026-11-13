@@ -166,8 +166,10 @@ meshing and reading pools, the render processes -- runs in an environment that h
 model**): the base, or the Python a script was run with, for that script's worker. If Python cannot
 start those processes (on Windows, a loader refusing `_multiprocessing.pyd`), or the environment they
 run in cannot be made, the request fails with
-`serve.KernelProcessesUnavailable`, which carries the loader's (or the environment's) words. The
-engine has no fallback and remembers nothing, so the next request tries again.
+`serve.KernelProcessesUnavailable`, which carries the loader's (or the environment's) words and a word
+for which failure it was (`cause`). The engine has no fallback. A refused pool is tried again by the next
+request; a failed making of the environment is remembered until something could change it (**Running a
+model**).
 
 Every document has one id (law 6), a lower-case UUID string (the library's `cad.engine.ids`), by one formula
 (`derived_id`: uuid5 of a scope's canonical path, `::` and a name): a model's scope is its script
@@ -636,8 +638,18 @@ engine a host's CAD app started runs outside any sandbox, where an agent's comma
 cache folder: a `cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`,
 its key naming the installation's base) and follows its making, each line said as it comes; it makes the
 base itself only when no engine of its installation answers. A base that cannot be made fails the
-request that needed it in one line (`serve.KernelProcessesUnavailable`), and nothing remembers the
-failure: the next asker makes it again.
+request that needed it in one line (`serve.KernelProcessesUnavailable`) that says what to do next. The
+engine remembers the failure in memory alone (`base.Making.remembered`): every kernel process asked for
+after it is told it at once, as the earlier failure, rather than making the base again (uv run anew, every
+call waiting on it). A failure that can clear by itself -- the network, uv killed, a file it could not
+write or remove, a download its install failed for, a release or requirements uv cannot resolve (its cache
+of an index lags a release by minutes) (`base.PASSING`) -- is made again on the first need five
+minutes after it (`RETRY_SECONDS`); any other -- a denial, a Python uv cannot use, a base whose Python does
+not run, no uv -- until something that could change it does: a
+`cad run` that asks the engine for the base (`{"op": "base"}` always makes it again; the failure names
+`cad run -c "import build123d"` for it), a base another process made, or the engine's restart (an update's
+switch among them). Its crash is reported once per making that failed, with its cause, however many calls it
+answers (`base.Making.claim`, `mcp.server._first_report`).
 
 ## Layout
 
@@ -1483,8 +1495,9 @@ a child that cannot measure itself is never retired for memory.
 The meshing pool starts with the first page, view or inspection, never with a build. A build
 serves its document, so the daemon's server starts with the first `python model.py`; its meshing
 pool waits. Every process starts on the first mesh a page asks for, or on `Server.warm`: sent by
-`cad viewer` at launch (`CAD_VIEWER_WARM=0` skips it), called when an app launches a view and
-when a build's `view:` link lands. An inspection's measurements, picked elements and poses start
+`cad viewer` at launch (`CAD_VIEWER_WARM=0` skips it), called when an app launches a view the kernel
+reads (a model, an xbf, a STEP, a robot: never a mesh the page parses itself, a DXF or a KiCad file, whose
+view must not wait for, or fail on, a pool it never uses) and when a build's `view:` link lands. An inspection's measurements, picked elements and poses start
 only the processes their jobs need (`Mesher.processes`, `warm=False`; a
 document's measurements take two at most while no page has warmed the pool, **Mesh**). With no page
 and no inspection, the daemon's only children are the worker and the standby. Measured (before the
@@ -1516,6 +1529,21 @@ stderr characters in the local error, including startup diagnostics before a cli
 logs, after the line saying where its build was. This tail is held only in memory and reset for
 each request; a build whose log showed the model's stderr as it came says the error without it, as
 its log said it already. Telemetry still reports the worker's exit status alone, never its stderr.
+
+Telemetry counts each model build the daemon answers, where it answers it (`Daemon._counted`,
+`_internal/engine_telemetry.answered`), never in the model's own process, where only the library is: one
+line kept in the spool after the answer is sent, never on the network, for the person who asked it -- the
+environment its request carries (`DO_NOT_TRACK`, `CAD_TELEMETRY`), then the settings, as a command's count
+decides. Every build it answered is in the row's `count`; it `failed` only for a reason the system or the
+machine caused (`analytics.SYSTEM_FAILURES`: a mistake in our code, no kernel process, a file it could not
+write, the memory), never for a script that raised or a fillet the kernel refused; a worker that died under it
+is `crashed`, with its exit status; the workers it started, lost and retired are its `health`. A kernel
+environment whose making failed is reported once per failed making, whichever meets it first, a build or a CAD
+tool's call (`base.Making.claim`). A build's features (an assembly, declared meshes, a drawing) are usage, and
+not counted. The daemon hands the spool to a sender once it has waited a window (`tend`), so the builds of a
+person who only ever runs `python model.py` are sent too. A Python caller that imports the server sees its own
+`Model.build()` and counts it no second time; a build in the caller's own process (`daemon=False`) is
+counted nowhere.
 
 A worker runs each request in that request's folder (its script's, or the caller's), so a model's
 relative reads resolve as they would under `python SCRIPT`, and stands in the temporary folder
@@ -2078,10 +2106,9 @@ with `daemon=False` (`render.service.draw_here_each`). A measurement's are `insp
 measuring a volume per part, in the process that asks (`api._summary`). `cad <type> export`, `cad
 snapshot` and `cad <type> inspect` draw them as `python model.py` draws a build's: the one bar, on a
 terminal, nothing piped (`api.export(progress=)`, `api.snapshot(progress=)` and
-`api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). An MCP
-operation (`cad_export`, `cad_snapshot`, `cad_inspect`) keeps the latest as its status's `progress`
-and the stage's words as its `stage`, and a status asked `afterSequence` wakes with each; a
-viewer export's job hears its worker's the same way. An export's or a snapshot's frames are the
+`api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). A viewer
+export's job (`cad_server.jobs`) keeps its worker's latest as its status's `progress` and the stage's
+words as its `stage`, and a status asked `after` wakes with each. An export's or a snapshot's frames are the
 request's, never its document's build: no page is woken by them (`Daemon.progressed`).
 
 **The page's route.** `GET /api/v1/documents/<id>/version?after=V&progress=N&wait=S` answers
@@ -2416,7 +2443,15 @@ changed or new one fails in one line naming the folder and its mode.
   document. A loaded `xbf/8` converted in memory is the exception: export to a different XBF
   path serializes the complete upgraded XCAF document atomically; the source path is refused
   (**Document compatibility**). Several destinations read the document
-  once, and every destination is checked before any is written; an export
+  once, and every destination is checked before any is written (`export.prepare`, then
+  `Prepared.land`, `worker._export`): a kind that can refuse only once it has drawn its file -- a DXF
+  (a 3D document, an edge off the plane, a layer name, the drawing checks), a GLB (a motion that does
+  not settle), an MJCF or a URDF (a description that does not describe) -- is drawn then, its bytes
+  held and written after, never drawn twice. So a refused export (exit 2) writes no file of its
+  destinations, nor their folder. A failure only writing can meet (the disk, OCCT's STEP writer) fails
+  once some are written: the earlier files stay, and the error says which were written and which not
+  (`export.ExportIncomplete`, told by its cause's type), an export that failed (exit 1), never a
+  refusal. An export
   runs in the worker that built the document while the file is as it left it, else in the
   daemon's documents worker, which reads it.
 - **A mesh file is a source of the other mesh kinds**: `cad stl export part.stl part.3mf`, any

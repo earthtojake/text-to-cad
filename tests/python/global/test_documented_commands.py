@@ -145,6 +145,40 @@ class DocumentedCommands(unittest.TestCase):
                     self.fail(f"{source}: `cad {' '.join(argv)}` -> {exc}")
 
 
+class DocumentedExportOptions(unittest.TestCase):
+    """A documented export's options are ones the engine takes for its destinations.
+
+    `--tolerance` and `--angle` mesh a GLB, an STL or a 3MF, and `--zero` poses a robot description;
+    the engine refuses the whole export when any destination is of another kind (`export.tolerance_of`,
+    `angle_of`, `zero_of`). An agent copies a documented form verbatim, so one that mixes a STEP with a
+    tolerance teaches a refusal (the likeliest cause of the rise in refused command exports from 0.10.3).
+    """
+
+    def _export_forms(self) -> list[tuple[Path, list[str], argparse.Namespace]]:
+        forms = []
+        for source, argv, elided in _documented_forms():
+            split = _split_command(argv)
+            if split is None or elided or not split[0].endswith(" export") or split[0].startswith("kicad"):
+                continue
+            forms.append((source, argv, cli.build_parser_for(split[0]).parse_args(split[1])))
+        return forms
+
+    def test_every_documented_export_option_suits_its_destinations(self):
+        from cad.engine.export import ExportRefused, angle_of, tolerance_of, zero_of
+
+        optioned = [form for form in self._export_forms()
+                    if any(getattr(form[2], option, None) is not None for option in ("tolerance", "angle", "zero"))]
+        self.assertGreater(len(optioned), 2, "the sweep found no documented export with an option")
+        for source, argv, args in optioned:
+            with self.subTest(source=str(source), form=" ".join(argv)):
+                try:
+                    tolerance_of(args.tolerance, args.destinations)
+                    angle_of(args.angle, args.destinations)
+                    zero_of(args.zero, args.destinations)
+                except ExportRefused as refused:
+                    self.fail(f"{source}: `cad {' '.join(argv)}` is refused: {refused}")
+
+
 class DocumentedSnapshotOutputPaths(unittest.TestCase):
     """OUT means what it says, and every documented form relies on that.
 

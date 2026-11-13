@@ -96,7 +96,7 @@ from cad.engine.description import Description, DescriptionError, Geometry, Iner
 from cad.engine.export import ExportRefused, note
 from cad.engine.export.mjcf import SNAP, _Names, _number, _numbers, _stem, _stl, material_name, place
 
-__all__ = ["UNBOUNDED", "rendered", "rooted", "write", "write_description"]
+__all__ = ["UNBOUNDED", "rendered", "rendered_view", "rooted", "write", "write_description"]
 
 #: A bound the description leaves open, written where URDF wants one: SDFormat's word for no limit.
 UNBOUNDED = 1e16
@@ -105,23 +105,34 @@ UNBOUNDED = 1e16
 def write(view: Any, path: Path) -> None:
     """The export ``Kind``'s writer: ``view``'s document described (at its ``zero``, where it has one) and
     written to ``path``; what it holds said (``export.described``)."""
+    rendered_view(view)(path)
+
+
+def rendered_view(view: Any) -> Any:
+    """The export ``Kind``'s drawing (``render``): ``view``'s document described and rendered, a description
+    that does not describe refused here, before any file of the export is written; what writes it at a path."""
     from cad.engine.describe import describe
     from cad.engine.export import described
 
     description = describe(view, zero=getattr(view, "zero", None))
     for text in description.warnings:
         note(text)
-    write_description(description, path)
-    described(description.summary("urdf"))
+    made = rendered(description, "meshes")
+
+    def land(path: Path) -> None:
+        write_description(description, path, made=made)
+        described(description.summary("urdf"))
+
+    return land
 
 
 def write_description(description: Description, path: Any, *, meshes: str = "meshes",
-                      package: str | None = None) -> list[Path]:
+                      package: str | None = None, made: tuple[str, dict[str, bytes]] | None = None) -> list[Path]:
     """Write ``description`` as a URDF at ``path`` and its meshes in ``<path.parent>/<meshes>``, each
     named ``package://<package>/<meshes>/...`` where ``package`` is given; the files it holds, the URDF
-    first."""
+    first. ``made``: its ``rendered`` text and files, where the caller rendered it already."""
     path = Path(path)
-    text, files = rendered(description, meshes, package)
+    text, files = made or rendered(description, meshes, package)
     return place(path, text, files, meshes)
 
 

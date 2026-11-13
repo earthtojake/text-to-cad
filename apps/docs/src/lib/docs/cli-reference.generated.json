@@ -3936,9 +3936,9 @@
  ],
  "texts": [
   "a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, never built",
-  ".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml (MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document as its code built it",
-  "mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least 0.001), where it is finer than the viewer's quarter per cent of a part: for a print whose fits are finer, or a picture whose curves are",
-  "mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees (1 to 28.5, the viewer's own): small radii drawn in more segments",
+  ".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml (MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document as its code built it. Every one is checked, a DXF's drawing too, before any is written: a refused export writes none",
+  "mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least 0.001), where it is finer than the viewer's quarter per cent of a part: for a print whose fits are finer, or a picture whose curves are. Every destination is then a .glb, an .stl or a .3mf: export a .step or any other file in a command of its own",
+  "mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees (1 to 28.5, the viewer's own): small radii drawn in more segments. Every destination is then a .glb, an .stl or a .3mf",
   "take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each joint's value there its zero, its limits and the other states around it (as built without it)",
   "print what was written as JSON, a robot description's with what it holds (robot)",
   "a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, never built; with --job, drawn in place of every job's input",

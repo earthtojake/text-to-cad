@@ -58,7 +58,7 @@ import numpy as np
 from cad.engine.export.mesh import groups, meshes, placed_points, shaded
 from cad.engine.export.motion import Target, quaternion
 
-__all__ = ["write"]
+__all__ = ["rendered", "write"]
 
 # The glTF 2.0 container (the spec's constants): its magic, version and chunk types.
 MAGIC = 0x46546C67
@@ -72,6 +72,12 @@ SCALE = (0.001, 0.001, 0.001)
 
 
 def write(view: Any, path: Path) -> None:
+    rendered(view)(path)
+
+
+def rendered(view: Any) -> Any:
+    """The view's GLB made, nothing written (``Kind.render``: a motion that does not settle is refused
+    here, before any file of the export is written): what writes it at a path."""
     held = {index: shaded(mesh) for index, mesh in meshes(view).items()}
     blob = bytearray()
     views: list[dict] = []
@@ -177,12 +183,16 @@ def write(view: Any, path: Path) -> None:
     text += b" " * (-len(text) % 4)
     while len(blob) % 4:
         blob.append(0)
-    with open(path, "wb") as handle:
-        handle.write(struct.pack("<III", MAGIC, VERSION, 12 + 8 + len(text) + 8 + len(blob)))
-        handle.write(struct.pack("<II", len(text), JSON_CHUNK))
-        handle.write(text)
-        handle.write(struct.pack("<II", len(blob), BIN_CHUNK))
-        handle.write(bytes(blob))
+
+    def land(path: Path) -> None:
+        with open(path, "wb") as handle:
+            handle.write(struct.pack("<III", MAGIC, VERSION, 12 + 8 + len(text) + 8 + len(blob)))
+            handle.write(struct.pack("<II", len(text), JSON_CHUNK))
+            handle.write(text)
+            handle.write(struct.pack("<II", len(blob), BIN_CHUNK))
+            handle.write(bytes(blob))
+
+    return land
 
 
 def _material(rgba: tuple, given: dict[str, Any] | None, thickness: float) -> dict[str, Any]:

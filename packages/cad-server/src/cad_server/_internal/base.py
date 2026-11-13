@@ -34,6 +34,10 @@ exists (``Making.made``), never before.
   ``Making``), and what needs it waits on its making. An engine a host's CAD app starts runs outside any
   sandbox, so an agent's sandboxed ``cad run``, which cannot write the cache folder, asks it over its door
   (``ensure``'s ``engine``) and follows its making; with no engine to ask, the command makes it itself.
+- **A failed making is remembered** by the engine, in memory alone (``Making.remembered``): its kernel
+  processes are told the failure at once rather than making the base again on every request, until a
+  failure that can clear by itself has waited (``PASSING``, ``RETRY_SECONDS``), a ``cad run`` asks for the
+  base (``RETRY``), a base made elsewhere is found, or the engine restarts.
 """
 
 from __future__ import annotations
@@ -56,9 +60,9 @@ from typing import Any, Callable
 
 from cad.engine import places
 
-__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "Environment", "Installation", "MARKER", "Making", "Recipe",
-           "Refused", "SCHEMA", "complete", "ensure", "failure", "find_uv", "halt", "interpreter", "kernel", "make",
-           "marked", "where"]
+__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
+           "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "complete", "ensure",
+           "failure", "find_uv", "halt", "interpreter", "kernel", "make", "marked", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -106,7 +110,24 @@ UV_SETTINGS = frozenset({
 
 
 class Refused(Exception):
-    """Why the base cannot be made: one line."""
+    """Why the base cannot be made: one line, and ``cause``, a word of ours chosen where the failure is
+    classified (``cad_server.analytics.KERNEL_CAUSES``), never read from the line."""
+
+    def __init__(self, message: str = "", cause: str = "other") -> None:
+        super().__init__(message)
+        self.cause = cause
+
+
+# The causes of a failed making that can clear by themselves -- the network, a process the system killed, a file
+# another process held or space a full disk freed, a download uv's install failed for, a release uv's index
+# does not list yet (its cache of an index lags a release by minutes) -- which the engine tries again on the
+# first need ``RETRY_SECONDS`` after the failure. Any other cause stays until something that could change it
+# happens (``Making.remembered``).
+PASSING = frozenset({"network", "killed", "files", "install", "resolve"})
+RETRY_SECONDS = 300.0
+# The command that makes the base again at once, each step said as it comes: ``cad run`` asks the engine's
+# making over its door (``_by_the_engine``), which always makes it (``Making.follow``).
+RETRY = 'cad run -c "import build123d"'
 
 
 # --- the installation ------------------------------------------------------------------------------
@@ -326,12 +347,17 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     (``cad.engine.places.KERNEL``): the base's Python, its folder, its import path and whether it is this
     installation's own; None when it is not made and ``make`` is false. With ``make``, one not made is made
     now, on first need, by the engine's one making (``MAKING``: its state in ``status``, every asker waiting
-    on the same making). ``Refused`` when it cannot be."""
+    on the same making), unless that making failed and the failure is remembered (``Making.remembered``).
+    ``Refused`` when it cannot be, saying what the person can do next, with the failure's cause."""
     found = ensure(make=False)
     if found is None and make:
+        earlier = MAKING.remembered()
+        if earlier is not None:
+            raise Refused(earlier.said(), earlier.cause)
         error = MAKING.follow(lambda _line: None)
         if error is not None:
-            raise Refused(error)
+            cause = MAKING.cause or "other"
+            raise Refused(f"{error}. {_next(cause, RETRY_SECONDS)}", cause)
         found = ensure(told=lambda _line: None)  # made now: its marker read, nothing resolved
     if found is None:
         return None
@@ -339,20 +365,57 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
             "own": found.own}
 
 
+def _span(seconds: float) -> str:
+    """A wait in words: ``40 s``, ``5 min``."""
+    return f"{max(1, round(seconds))} s" if seconds < 90 else f"{max(2, round(seconds / 60))} min"
+
+
+def _next(cause: str, left: float | None) -> str:
+    """What the person can do next about a failed making of the base, the engine's (``kernel``): the engine
+    tries again by itself ``left`` seconds from now for a failure that can clear by itself (``PASSING``), and
+    never until asked for one that cannot; ``RETRY`` tries at once."""
+    if cause in PASSING and left is not None:
+        return f"The engine tries again on a request {_span(left)} from now; `{RETRY}` tries now, saying each step."
+    return f"The engine does not try again until it restarts; `{RETRY}` tries again, saying each step."
+
+
+@dataclass(frozen=True)
+class Remembered:
+    """A failed making of the base the engine remembers (``Making.remembered``): what it said, its cause, how
+    long ago it failed, and how long until the engine tries again by itself (None: not until asked)."""
+
+    error: str
+    cause: str
+    since: float
+    left: float | None
+
+    def said(self) -> str:
+        """The failure as a later request is told it: the earlier one, and what the person can do next."""
+        return f"{self.error} (its try {_span(self.since)} ago; nothing made since). {_next(self.cause, self.left)}"
+
+
 class Making:
     """The installation's base made in this process's background, on first need, for whoever needs it
     (``follow``: a kernel process's start, ``kernel``; a client's ``cad run`` over the engine's door). One
     making at a time, under the base's own lock as every maker's; its lines go to the engine's log and are
     kept for whoever follows it and for ``status``; ``made`` is told when it is made (the engine stands its
-    standby then). Nothing remembers a failure: the next follower makes it again."""
+    standby then). A failed making is remembered, in this process alone (``remembered``): a kernel process's
+    start is told it at once rather than making it again, until a failure that can clear by itself has waited
+    ``RETRY_SECONDS``, a making asked over the door (``follow``: ``cad run``, ``RETRY``) makes it again, or a
+    base made by another process is found; an engine that restarts remembers nothing. ``clock`` is a test's
+    seam."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self.changed = threading.Condition()
         self.state: str | None = None  # None: nothing made here; "making", "made" or "failed"
         self.lines: list[str] = []
         self.error: str | None = None
         self.since: float | None = None
         self.made: Callable[[], None] | None = None
+        self.clock = clock
+        self.cause: str | None = None  # the failed making's (``Refused.cause``)
+        self.failed: float | None = None  # when it failed, on ``clock``
+        self.reported = False  # whether telemetry was told this failure (``claim``)
 
     def key(self) -> str | None:
         """The name of this installation's base folder (``where``), which a client names the base it
@@ -380,24 +443,53 @@ class Making:
             self.changed.notify_all()
 
     def _make(self) -> None:
+        cause = None
         try:
             ensure(told=self._said)
             state, error = "made", None
         except Refused as refused:
-            state, error = "failed", str(refused)
-        except Exception as failure:  # noqa: BLE001 - said, and the next asker tries again
-            state, error = "failed", f"{type(failure).__name__}: {failure}"
+            state, error, cause = "failed", str(refused), refused.cause
+        except Exception as failure:  # noqa: BLE001 - said, and remembered as the cause no word names
+            state, error, cause = "failed", f"{type(failure).__name__}: {failure}", "other"
         if error is not None:
             print(f"cad: {error}", file=sys.stderr, flush=True)
         with self.changed:
-            self.state, self.error = state, error
+            self.state, self.error, self.cause, self.reported = state, error, cause, False
+            self.failed = self.clock() if state == "failed" else None
             self.changed.notify_all()
         if state == "made" and self.made is not None:
             self.made()
 
+    def remembered(self) -> Remembered | None:
+        """The failure of the last making, when a kernel process's start is to be told it rather than make the
+        base again: None when the last making did not fail, or a failure that can clear by itself (``PASSING``)
+        has waited ``RETRY_SECONDS``, or the base is there now (made by another process). Never makes or
+        waits."""
+        with self.changed:
+            if self.state != "failed" or self.failed is None or self.error is None:
+                return None
+            since, error, cause = max(0.0, self.clock() - self.failed), self.error, self.cause or "other"
+        left = RETRY_SECONDS - since if cause in PASSING else None
+        if left is not None and left <= 0:
+            return None
+        installation = Installation.here()
+        if installation.kernel or complete(where(installation)) is not None:
+            return None
+        return Remembered(error, cause, since, left)
+
+    def claim(self) -> bool:
+        """Whether the failure of the last making is to be reported to telemetry now: True once per making that
+        failed, to the first that claims it, however many requests are told it."""
+        with self.changed:
+            if self.state != "failed" or self.reported:
+                return False
+            self.reported = True
+            return True
+
     def follow(self, told: Callable[[str], None]) -> str | None:
-        """The base made, by the making under way here or one started now: each of its lines said to
-        ``told``, from its first, as it comes. None once the base is made, else why not, in one line."""
+        """The base made, by the making under way here or one started now -- a failure remembered or not: the
+        door's ``base`` asks this, so ``cad run`` makes it again -- each of its lines said to ``told``, from its
+        first, as it comes. None once the base is made, else why not, in one line."""
         if not self.start():
             return None  # made already, or this installation's own environment
         said = 0
@@ -444,7 +536,7 @@ def find_uv() -> str:
     from cad_server.updates import command
 
     raise Refused("the server makes its CAD kernel environment with uv, and finds none: it depends on the uv "
-                  f"package, which carries it; install {SERVER} again: run `{command()}`")
+                  f"package, which carries it; install {SERVER} again: run `{command()}`", "uv")
 
 
 @dataclass(frozen=True)
@@ -549,7 +641,7 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
             env.parent.mkdir(parents=True, exist_ok=True)
             held.enter_context(exclusive(env.parent / f"{env.name}.lock", waiting=waiting))
         except OSError as error:
-            raise Refused(_cannot(f"the folder {env.parent}", error, recipe.what)) from None
+            raise Refused(_cannot(f"the folder {env.parent}", error, recipe.what), _file_cause(error)) from None
         found = done(env)
         if found is not None:
             return found  # made meanwhile, by the process this one waited for
@@ -579,14 +671,14 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
         else:
             step = venv
         if result.returncode != 0:
-            raise Refused(failure(step, result.stderr or result.stdout, recipe, result.returncode))
+            raise Refused(*_failure(step, result.stderr or result.stdout, recipe, result.returncode))
         written = finish(steps, time.monotonic() - started)
         from cad._internal.atomic_replace import write_bytes_atomic
 
         try:
             write_bytes_atomic(env / marker, (json.dumps(written, indent=1) + "\n").encode("utf-8"))
         except OSError as error:
-            raise Refused(_cannot(str(env / marker), error, recipe.what)) from None
+            raise Refused(_cannot(str(env / marker), error, recipe.what), _file_cause(error)) from None
     return written
 
 
@@ -622,11 +714,11 @@ def _probe(env: Path) -> tuple[list[str], str]:
                               text=True, encoding="utf-8", errors="replace", timeout=120)
         found = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else None
     except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as error:
-        raise Refused(f"{WHAT} made at {env} does not run: {error}") from None
+        raise Refused(f"{WHAT} made at {env} does not run: {error}", "probe") from None
     if (not isinstance(found, list) or len(found) != 2 or not isinstance(found[0], list)
             or not all(isinstance(item, str) for item in found[0]) or not isinstance(found[1], str)):
         said = (done.stderr or done.stdout).strip().splitlines()
-        raise Refused(f"{WHAT} made at {env} does not run: {said[-1] if said else 'it said nothing'}")
+        raise Refused(f"{WHAT} made at {env} does not run: {said[-1] if said else 'it said nothing'}", "probe")
     return found[0], found[1]
 
 
@@ -644,6 +736,11 @@ def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
         return (f"the system denies {SERVER} {what} ({error.strerror or error}); a sandbox that forbids it does: "
                 "run this once outside it, or with its permission")
     return f"cannot write {what}: {error.strerror or error}"
+
+
+def _file_cause(error: OSError) -> str:
+    """The cause of a file of the environment that cannot be written (``_cannot``): a denial, else ``files``."""
+    return "denied" if isinstance(error, PermissionError) else "files"
 
 
 # The uv commands this process runs now (``_uv``): an engine that stops takes them with it (``halt``), so
@@ -669,7 +766,7 @@ def _uv(step: list[str], folder: Path, settings: tuple[tuple[str, str], ...] | N
                                    stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                                    env=None if settings is None else uv_environment(settings))
     except OSError as error:
-        raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}") from None
+        raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}", "uv") from None
     with _RUNNING_LOCK:
         _RUNNING.add(process)
     try:
@@ -714,8 +811,9 @@ def _remove(env: Path, what: str = WHAT) -> None:
         except OSError as error:
             if delay is None or getattr(error, "winerror", None) not in (5, 32):
                 if isinstance(error, PermissionError) and getattr(error, "winerror", None) is None:
-                    raise Refused(_cannot(f"{what} at {env}", error, what)) from None
-                raise Refused(f"cannot remove {what} at {env} to make it again: {error.strerror or error}") from None
+                    raise Refused(_cannot(f"{what} at {env}", error, what), "denied") from None
+                raise Refused(f"cannot remove {what} at {env} to make it again: {error.strerror or error}",
+                              "files") from None
             time.sleep(delay)
 
 
@@ -774,10 +872,17 @@ def _stopped(code: int | None) -> str | None:
 
 
 def failure(step: list[str], said: str, recipe: Recipe, code: int | None = None) -> str:
-    """Why uv could not make an environment (``recipe``'s), in one line of cadgen's: a signal that ended
-    it (``code``, its exit status: it gave no reason, and the last line it printed is none); a file the
-    system denies it (a sandbox's); the network it needs once; a Python it cannot use; a release no index
-    it reads has; else uv's own words."""
+    """Why uv could not make an environment (``recipe``'s), in one line of cadgen's (``_failure``)."""
+    return _failure(step, said, recipe, code)[0]
+
+
+def _failure(step: list[str], said: str, recipe: Recipe, code: int | None = None) -> tuple[str, str]:
+    """Why uv could not make an environment (``recipe``'s), in one line of cadgen's that says what to do, and
+    its cause (``Refused.cause``): a signal that ended it (``code``, its exit status: it gave no reason, and the
+    last line it printed is none: ``killed``); a file the system denies it (a sandbox's: ``denied``); the
+    network it needs once (``network``); a Python it cannot use (``python``); a release no index it reads has,
+    or requirements it cannot resolve (``resolve``); else uv's own words (``resolve`` where its resolver
+    explained them, else ``install``)."""
     explained = _explained(said)
     words = explained or _last(said)
     what = recipe.what
@@ -785,22 +890,31 @@ def failure(step: list[str], said: str, recipe: Recipe, code: int | None = None)
     if stopped is not None:
         why = ", as the system does to a process when memory runs out" if stopped == "SIGKILL" else ""
         return (f"uv was stopped by {stopped} while it made {what}{why}: run this again "
-                f"(the last uv said: {_last(said)})")
+                f"(the last uv said: {_last(said)})"), "killed"
     if DENIED.search(said) and not explained:
         return (f"the system denies uv what {what} needs ({_last(said)}); a sandbox that forbids it does: run this "
-                "once outside it, or with its permission")
+                "once outside it, or with its permission"), "denied"
     if NETWORK.search(said):
         missing = uncached(said)
         if missing:  # what the cache lacks, by name: the network is needed once, for it
             return (f"{what} needs the network once, for {', '.join(missing)}, which uv's cache does not hold: "
-                    f"{_last(said)}")
-        return f"{what} needs the network once: {_last(said)}"
+                    f"{_last(said)}"), "network"
+        return f"{what} needs the network once: {_last(said)}", "network"
     if step[1] == "venv":
-        return f"uv cannot make {what} on {recipe.python}: {words}"
+        again = ""
+        if what == WHAT:  # the installation's own Python: a release installed again brings it back
+            from cad_server._internal.launch import SERVER as server
+            from cad_server.updates import command
+
+            again = f"; that Python must run here: install {server} again: run `{command()}`"
+        return f"uv cannot make {what} on {recipe.python}: {words}{again}", "python"
     release = recipe.release
     if recipe.source is None and any(f"no version of {name}=={release}" in explained
                                      for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER)):
-        return f"release {release} is on no package index uv reads: {explained}"
+        return (f"release {release} is on no package index uv reads: {explained}; one of the indexes uv's settings "
+                "name (UV_INDEX_URL, UV_DEFAULT_INDEX) must hold it"), "resolve"
     if recipe.unsatisfiable and explained and "unsatisfiable" in explained:
-        return f"{recipe.unsatisfiable}: {explained}"
-    return f"uv could not make {what}: {words}"
+        return f"{recipe.unsatisfiable}: {explained}", "resolve"
+    tried = "from its cache" if "--offline" in step else "from its cache, then from the network"
+    return (f"uv could not make {what}, {tried}: {words} (the last of what uv said; the rest is kept nowhere)",
+            "resolve" if explained else "install")

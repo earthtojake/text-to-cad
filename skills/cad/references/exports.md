@@ -47,7 +47,11 @@ moved over it, so a failed export leaves the old file whole. `--json` prints wha
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
 "seconds", "written", "robot"?}]}`, `robot` a robot description's summary), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
 the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
-`usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
+`usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed. Every
+destination is checked, a DXF's drawing and its checks included, before any is written, so a refused
+export writes none of its files. One that fails only once it writes (a full disk, a folder it cannot
+make) keeps the files it wrote before and names them in its error (`a.stl: ... (a.step was written
+before it; a.glb was not)`).
 
 An export takes a document and its destinations, and nothing else but a GLB's, an STL's or a
 3MF's mesh tolerance and angle (`--tolerance`, `--angle`: [print tolerance](#print-tolerance),
@@ -214,7 +218,9 @@ coarser; the viewer, snapshots and every other export keep the viewer's mesh. Th
 holds on every face, an imported STEP's faces whose edges carry a looser tolerance too (those
 cost the most triangles). The file says
 what it was meshed to (the STL's header, the 3MF's description, the GLB's `asset.extras.cad`). A STEP
-has no mesh and takes no tolerance (send a STEP when the person's slicer or shop takes one), and a
+has no mesh and takes no tolerance (send a STEP when the person's slicer or shop takes one): an
+export with `--tolerance` or `--angle` that names a STEP, an xbf or a DXF beside its meshes is
+refused whole, before anything is written, so write those in an export of their own. A
 mesh file's triangles are its own, so a conversion takes none. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
 three times the segments round a curve and ten times the triangles of a doubly curved face (a
 600-part robot arm at 0.01 mm was 30% more triangles than the viewer's mesh), so stay at or

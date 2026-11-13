@@ -1,6 +1,7 @@
 """cadgen's telemetry: usage counts and crash reports from the processes that do CAD's work --
-``cad-mcp`` (the CAD app in an agent app), ``cad viewer`` (the browser viewer), and every ``cadgen``
-command and model script, whose builds, exports and snapshots the engine runs: how many people use
+``cad-mcp`` (the CAD app in an agent app), ``cad viewer`` (the browser viewer), every ``cadgen``
+command, whose exports and snapshots the engine runs, and the engine's daemon, which counts the model builds
+it answers (a model's own process counts nothing): how many people use
 CAD, how often, what they make, how it goes and where cadgen's own code fails -- counts, times,
 metadata and crash signatures, never what anything says. A ``cadgen`` command sends nothing itself:
 it keeps what it counted (a build, a snapshot, a drawing, a crash) beside the settings, and says, once,
@@ -11,8 +12,8 @@ exits, each batch under an id of its own and stamped with the time it was made:
 
 - who, by random ids only: an install id made on this machine, an id for the sending process, and one
   for the batch, so a batch sent again is never counted twice;
-- what runs: which process (``app``, ``viewer``, or ``cli``: what ``cadgen`` commands and model scripts
-  counted, a batch of its own from whichever process sends it), the version the installation runs as
+- what runs: which process (``app``, ``viewer``, or ``cli``: what ``cadgen`` commands and the daemon's
+  model builds counted, a batch of its own from whichever process sends it), the version the installation runs as
   (``installation_version``: a release's, or a development install's ``<version>-dev.<time>``), where it was
   installed from (its channel, ``cad_server/_internal/channel.py``: a plugin directory, the Cursor
   Marketplace, GitHub, a development install, or ``unknown``), the operating system and processor,
@@ -28,10 +29,11 @@ exits, each batch under an id of its own and stamped with the time it was made:
 - ``files`` (the apps): how many distinct models (kind ``model``) and files of each format (``xbf``,
   ``step``, ``stl``, ...) a CAD view showed for the first time that day -- told apart here, by path
   (a model by its id), and sent as a number;
-- ``build`` (the engine's verbs): model builds (kind ``model``) and exports (the destination format),
-  by who asked (``VIAS``),
-  how each ended (``OUTCOMES``: failed, lost its worker, or stopped by whoever asked), how many took their
-  xbf whole without building, and how long they took;
+- ``build`` (the engine's verbs, and the daemon's builds): model builds (kind ``model``) and exports (the
+  destination format), by who asked (``VIAS``),
+  how each ended (``OUTCOMES``: failed, lost its worker, or stopped by whoever asked; a model build failed only
+  for the system's reasons, ``SYSTEM_FAILURES``), how many took their xbf whole without building, and how long
+  they took;
 - ``build_failure`` (the engine's verbs): how many of those failed for each reason (``BUILD_FAILURES``),
   one word decided where the build failed (``build_failure``), from what the error is and whose code
   raised it -- the model's, the CAD kernel's under it, cadgen's, the machine's (no kernel process the
@@ -48,7 +50,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
   played an animation, engineering drawings were made, and CAD views' Quick Edits were sent
   (``FEATURES``);
-- ``health`` (the engine's daemon, told by the verb it answered): warm workers started, crashed and
+- ``health`` (the engine's daemon, counted with the build it answered): warm workers started, crashed and
   retired (``refusals``, builds refused for want of memory, is always 0: nothing is refused);
 - ``control`` (the apps, told by their pages): how many times a person used each of a CAD view's controls
   (``CONTROLS``: a tool, a tool's mode or setting, a Display or Preview setting, a menu item, a button), and
@@ -59,19 +61,21 @@ exits, each batch under an id of its own and stamped with the time it was made:
   window -- where (``WHERE``), the error's type, whether the process went on, and its innermost frames
   in code that may be named: each a file inside our packages (``cad/<path>``, ``cad_server/<path>``), the standard library or one of our
   dependencies (a page's: its script asset), a function and a line, the person's own code a bare
-  ``<user>``; a build worker that died, its exit status. Never the error's message. Each process
-  reports its own (``report``, ``collect_crashes``); a command's and a worker's are kept with its counts,
+  ``<user>``; a build worker that died, its exit status; the engine's kernel processes unavailable, which
+  failure it was (``KERNEL_CAUSES``), once per failure however many calls it answers. Never the error's
+  message. Each process reports its own (``report``, ``collect_crashes``); a command's and a worker's are kept with its counts,
   and a page's go to the server that served it -- never one in none of the page's scripts, which a script
   the browser runs in the page threw (an extension's: ``crashOf`` in @cad/core).
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
-force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``python model.py``, a
-``cad <type> export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
-them (``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
+force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``cad <type> export`` or
+``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of them, and each model build the
+daemon answers (a ``python model.py``, a ``Model.build()``) by the daemon, under its asker's environment
+(``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
 the process ``cli`` with no app named (``Recorder._spooled``): never in the CAD app's or the viewer's
 batch, whose client and presentation say who looked, not who built. With nothing taking it for a
-window, a command starts a sender that sends it and exits (``cad_server._internal.telemetry_send``).
+window, a command or the daemon starts a sender that sends it and exits (``cad_server._internal.telemetry_send``).
 
 Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
 typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
@@ -165,13 +169,15 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 10: a CAD tool's call the engine could start no kernel process for (``tool_failure``'s ``no_kernel``), and
+# why, on its crash (``exception``'s ``cause``);
 # 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
 # 8: live models have their own kind (``model``), distinct from files, including exported/opened xbfs;
 # 7: the controls a person used in a CAD view (``control``), and room for one event each (``MAX_EVENTS``); 6: the
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 9
+SCHEMA = 10
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install. Neither schema 4, 5 nor 6 raised it
@@ -182,7 +188,10 @@ SCHEMA = 9
 # (``view``, ``feature``'s Quick Edit) told apart by control, under the same install and process ids.
 # Nor schema 8: the same builds, views and snapshots told apart as models or files; no new field or identity.
 # Nor schema 9: a refused snapshot told apart by which part of its request was refused -- a word of ours, as its
-# reason is, never the value given.
+# reason is, never the value given. Nor schema 10: one more word of ours for why a counted call failed, and a
+# word of ours on a crash already sent (the engine's kernel processes unavailable) saying which failure it was;
+# nor the daemon counting model builds again (``build`` of kind ``model``, ``health``, a build's ``exception``):
+# what 0.8 sent of them, under this disclosure, from the model's own process, with fewer failures than before.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -353,15 +362,17 @@ OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # no file (``no_file``) or a file CAD does not open (``not_cad``); no view, one that is gone or shows no model, or
 # a call to a tool of cadgen's its host was not listed -- a tab's or a view's, where the host shows none
 # (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read, or a
-# call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s), or an operation (``cad_export``,
-# ``cad_snapshot``, ``cad_inspect``) the engine refused by name (``bad_request`` too). The view's: it
+# call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s). The view's: it
 # did not answer in time (``timeout``), answered with an error or without
 # an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the viewer
-# did not start (``no_viewer``). cadgen's: anything else it raised (``bug``, reported as an ``exception`` too).
-# ``other``: a failure that named none of these -- an operation's render or read that failed, the engine not reached
-# (``cad_server.mcp.operations.failure_reason``).
+# did not start (``no_viewer``), or the engine could start no kernel process for the call -- no kernel environment,
+# a pool the system refused (``no_kernel``, schema 10's; earlier schemas counted it as ``other``; its crash, with its
+# ``cause``, is sent once per failure, ``cad_server.mcp.server``). cadgen's: anything else it raised (``bug``,
+# reported as an ``exception`` too). ``other``: a failure that named none of these, which no tool names now (releases
+# before the agent operations were removed sent it for an operation's render or read that failed, or the engine not
+# reached; the receiver reads it still), and a reason outside this vocabulary (``Recorder.called``).
 FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view", "wrong_view", "bad_request",
-                      "timeout", "view_error", "too_large", "no_viewer", "bug", "other"})
+                      "timeout", "view_error", "too_large", "no_viewer", "no_kernel", "bug", "other"})
 # Why a build failed (``build_failure``), decided where it failed, never read from its message. The model's: its
 # own code raised (``model_error``), or the CAD kernel or library it called refused what it asked (``kernel_error``:
 # a fillet or a boolean that failed); cadgen refused what the model declared or returned, or what a command was
@@ -372,10 +383,25 @@ FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view
 # kernel process the engine could start to build in (``no_kernel``: no kernel environment, a worker that never
 # started; ``FAILED_TYPES``).
 # cadgen's: the kernel failed under cadgen's own code, writing or meshing what the model made (``export_error``),
-# or a mistake in cadgen's code (``bug``, reported as an ``exception`` too). ``other``: none of these.
+# a mistake in cadgen's code (``bug``, reported as an ``exception`` too), or the CAD server running is of a release
+# before an option the library asked of it (``outdated``, schema 10's, ``cad.engine.api.Outdated``, told by its
+# class; earlier schemas counted it as ``export_error``). ``other``: none of these.
 BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_error", "arguments",
                             "missing_module", "missing_file", "io_error", "timeout", "memory", "no_kernel",
-                            "export_error", "bug", "other"})
+                            "export_error", "outdated", "bug", "other"})
+# The failures of a model build that are the CAD system's or the machine's, never the person's: the only ones the
+# daemon counts as a build's ``failed``, with a ``build_failure`` row (``engine_telemetry.answered``). Telemetry tracks
+# CAD failing, not a script that raises or asks the kernel for a fillet it refuses: a build that fails for any other
+# reason counts in ``count`` alone -- no ``failed``, no reason, no ``exception``. By whose code or what state made
+# each: cadgen's mistake (``bug``), no kernel process it could start (``no_kernel``), what it writes failing under
+# it (``export_error``), releases out of step (``outdated``), and the machine's memory and files (``memory``,
+# ``io_error``). Not the model's code or the kernel refusing it (``model_error``, ``kernel_error``), cadgen refusing
+# what it was given (``refused``, ``arguments``), a script that does not compile or imports or reads what is not
+# there (``script_error``, ``missing_module``, ``missing_file``); nor ``timeout``: the engine sets a build no
+# deadline, so a ``TimeoutError`` is a wait the script's code made; nor ``other``: an error that names no type, which
+# a build's report has only when its body's error shows none; nor ``child_failed`` (0.8's, a model a model called
+# failing), which no release sends now. A worker that dies under a build is the system's too, counted as ``crashed``.
+SYSTEM_FAILURES = frozenset({"bug", "no_kernel", "export_error", "outdated", "memory", "io_error"})
 # Why a snapshot failed (``engine_telemetry``), decided as it failed: its request was refused (``bad_request``), a
 # file it names is not there (``no_file``), its input could not be read or built (``input_error``), the headless
 # browser did not start (``browser``, earlier releases'), out of time (``timeout``) or memory (``memory``), no OpenGL
@@ -389,7 +415,19 @@ SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser
 # build) is no reason of its.
 FAILED_TYPES = {"cad.engine.render.context.Unavailable": "no_gl",
                 "cad.engine.serve.KernelProcessesUnavailable": "no_kernel",
-                "cad_server.engine.supervisor.Gone": "no_kernel"}
+                "cad_server.engine.supervisor.Gone": "no_kernel",
+                "cad.engine.api.Outdated": "outdated"}
+# Why the engine could start no kernel process (``KernelProcessesUnavailable``'s ``cause``, schema 10's, on its
+# ``exception``), a word chosen where the failure was classified, never read from its message: the system refused
+# the process pool (``pool``, ``cad.engine.serve._process_pool``), or the kernel environment could not be made
+# (``cad_server._internal.base``): uv could not reach the network (``network``), the system denied a file -- a
+# sandbox's (``denied``) --, uv was killed (``killed``), uv could not make the environment on the installation's
+# Python (``python``), could not resolve the release or its requirements (``resolve``) or install them (``install``),
+# a file or folder of it could not be removed or written (``files``), no uv, or one that would not run (``uv``), the
+# made environment's Python did not run (``probe``); ``other``: none of these.
+KERNEL_CAUSES = frozenset({"pool", "network", "denied", "killed", "python", "resolve", "install", "files", "uv",
+                           "probe", "other"})
+KERNEL_UNAVAILABLE = "cad.engine.serve.KernelProcessesUnavailable"
 # Which part of a snapshot's request a refusal (``bad_request``) named (``cad.engine.snapshot.SnapshotRefused.part``,
 # where the library refused it): its source, its picture's path (``out``), the display -- its mode, Explode, Clip, the
 # grid, what it hides and isolates -- the camera, the pose, the size, the annotation, the measurements, a board's
@@ -687,17 +725,20 @@ def _told(kept: dict[str, Any]) -> float | None:
     return None
 
 
-def _in_ci() -> bool:
-    """Whether this runs in CI (``CI`` set, as the update check reads it): nobody there is told anything."""
-    return str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF)
+def _in_ci(env: Any = None) -> bool:
+    """Whether this runs in CI (``CI`` set, as the update check reads it), in this process's environment or one
+    handed in: nobody there is told anything."""
+    env = os.environ if env is None else env
+    return str(env.get("CI") or "").strip().lower() not in ("", *_OFF)
 
 
-def _here() -> bool:
-    """Whether the default can hold in this process: never in CI or from a development install, where
-    nobody is told (``notify``) -- a person told elsewhere is, here, a machine or a developer at work."""
+def _here(env: Any = None) -> bool:
+    """Whether the default can hold in this process, or for the environment handed in: never in CI or from a
+    development install, where nobody is told (``notify``) -- a person told elsewhere is, here, a machine or a
+    developer at work."""
     from cad_server._internal.channel import DEV, channel
 
-    return not _in_ci() and channel() != DEV
+    return not _in_ci(env) and channel() != DEV
 
 
 def _decide(kept: dict[str, Any], forced: bool | None, here: bool = True) -> tuple[bool, str | None]:
@@ -759,8 +800,10 @@ def _can_keep(path: Path) -> bool:
     return True
 
 
-def status(*, path: Path | None = None, probe: bool = True, keep: bool = True) -> dict[str, Any]:
-    """``{sharing, reason, id}``: whether counts are sent, why, and under which install id.
+def status(*, path: Path | None = None, probe: bool = True, keep: bool = True,
+           env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """``{sharing, reason, id}``: whether counts are sent, why, and under which install id: by this process's
+    environment, or by ``env``, the one of the person a count is for (the daemon's builds: its asker's).
 
     ``reason`` is ``environment``, ``choice``, ``default`` (the person was told and chose nothing),
     ``untold`` (nothing is sent: nobody has been told yet, or not here -- ``_here``) or
@@ -771,11 +814,11 @@ def status(*, path: Path | None = None, probe: bool = True, keep: bool = True) -
     either way sends nothing.
     """
     path = path or settings_path()
-    forced = _environment()
+    forced = _environment(env)
     kept = _read(path)
     if kept is None:  # there, but unreadable now: neither sent under nor said
         return {"sharing": False, "reason": "environment", "id": None} if forced is False else dict(UNAVAILABLE)
-    here = _here()
+    here = _here(env)
     sharing, reason = _decide(kept, forced, here)
     if reason is None:  # a telling that could not be kept would be said again on every command
         return {"sharing": False, "reason": "untold" if not probe or _can_keep(path) else "unavailable", "id": None}
@@ -1035,6 +1078,9 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     found = {"where": where, "type": _type_of(error), "handled": bool(handled), "frames": frames}
     if tool is not None and _TOOL.fullmatch(str(tool)):
         found["tool"] = tool
+    cause = getattr(error, "cause", None)
+    if found["type"] == KERNEL_UNAVAILABLE and isinstance(cause, str) and cause in KERNEL_CAUSES:
+        found["cause"] = cause  # a word of ours: which failure it was
     return found
 
 
@@ -1128,7 +1174,8 @@ _KERNEL = frozenset({"OCP", "build123d"})
 def told_failure(found: Mapping[str, Any]) -> str:
     """``build_failure`` of an error told as facts (``told_signature``'s, with ``engine``: the engine's own code
     raised it, and ``refused``: the engine refused the request by name), never from what it said: a refusal
-    (``refused``); one its type names (``FAILED_TYPES``: the engine could start no kernel process); cadgen's mistake
+    (``refused``); one its type names (``FAILED_TYPES``: the engine could start no kernel process, the server is
+    older than the library); cadgen's mistake
     (``bug``); one its class says (``_BUILD_ERRORS``, by a built-in's name); else
     the engine's (``export_error``: writing what the model made) or, for the model's own error, the class's
     module -- cadgen's (``refused``), the kernel's or a library's (``kernel_error``), anyone else's
@@ -1243,7 +1290,10 @@ def died(status: Any) -> dict[str, Any]:
 def valid_signature(found: Any) -> bool:
     """Whether a crash another process made -- a page's, a worker's, a command's -- is one this module
     would have made: checked before it is noted, as the receiver checks it again."""
-    if not isinstance(found, dict) or not set(found) <= {"where", "type", "handled", "frames", "tool", "status"}:
+    if not isinstance(found, dict) or not set(found) <= {"where", "type", "handled", "frames", "tool", "status",
+                                                         "cause"}:
+        return False
+    if "cause" in found and not (found.get("type") == KERNEL_UNAVAILABLE and found["cause"] in KERNEL_CAUSES):
         return False
     frames = found.get("frames")
     if (found.get("where") not in WHERE or not isinstance(found.get("handled"), bool) or not isinstance(frames, list)
@@ -1315,20 +1365,21 @@ def hand_over(counts: dict[str, Any]) -> bool:
         return False
 
 
-def spool(counts: dict[str, Any], *, path: Path | None = None) -> bool:
+def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str, str] | None = None) -> bool:
     """Keep a command's counts for the next process that sends (``Recorder.take``, by way of its flush): its
-    crashes and drawings (``hand_over``) and what the engine's verbs count
+    crashes and drawings (``hand_over``) and what the engine's verbs count, and the builds the daemon answers
     (``cad_server._internal.engine_telemetry``). One line, under the
     answer in force (``_answer``) and stamped with when it was kept (``at``: how long the spool has waited,
-    ``cad_server._internal.telemetry_send``), and only while sharing is on: a sender takes a line only under that
-    same answer, and a no deletes them all (``choose``). Past ``SPOOL_BYTES`` nothing more is kept. Never
-    raises."""
+    ``cad_server._internal.telemetry_send``), and only while sharing is on -- by this process's environment, or
+    ``env``, the asker's (``status``): a sender takes a line only under that
+    same answer, and a no deletes them all (``choose``). Past ``SPOOL_BYTES`` nothing more is kept. A local
+    write under the state folder's one lock, safe from any thread. Never raises."""
     try:
         if not isinstance(counts, dict) or not any(counts.get(name) for name in ("builds", "snapshots", "features",
                                                                                   "crashes", "health")):
             return False  # nothing counted, nothing to keep
         path = path or settings_path()
-        if not status(path=path, probe=False)["sharing"]:
+        if not status(path=path, probe=False, env=env)["sharing"]:
             return False
         return _keep(path, SPOOL, {"answer": list(_answer(_read(path) or {})), "at": round(time.time(), 3),
                                    "counts": counts})
@@ -1495,7 +1546,7 @@ class Recorder:
         self._off = False  # a no this process could not keep: nothing more is sent from it
         self._timer: threading.Event | None = None
         self._describe()
-        # What ``cadgen`` commands and model scripts counted (``spool``) goes as a batch of its own, the process
+        # What ``cadgen`` commands and the daemon's builds counted (``spool``) goes as a batch of its own, the process
         # ``cli`` with no client or presentation, whichever process sends it: a ``cli`` recorder takes it into its
         # own tally (``_drain``); any other holds a ``cli`` recorder for it, sent, told a choice and closed with this
         # one, never on a timer of its own.

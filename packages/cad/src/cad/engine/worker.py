@@ -489,22 +489,39 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     if request.get("expected") and "document" not in source_spec:
         from cad.engine.export.viewer import check
         check(source, request["expected"])  # a held document's revision is the daemon's to check
-    files = []
-    for index, destination in enumerate(request["destinations"]):
-        from cad.engine.progress import say
+    from cad.engine.progress import say
 
+    destinations = [Path(destination) for destination in request["destinations"]]
+    # Every destination checked, and drawn where its kind can refuse only once drawn (a DXF, a GLB, a
+    # robot description), before any is written: a refusal leaves no file of the export behind. Its
+    # time is its row's; its frames are its write's, below, so the count only goes up.
+    prepared: list[tuple[Any, float]] = []
+    for target in destinations:
         clock = time.perf_counter()
-        target = Path(destination)
+        if request.get("original"):
+            prepared.append((None, 0.0))
+            continue
+        prepared.append((export.prepare(source, None, target, tolerance, angle, zero), time.perf_counter() - clock))
+    files = []
+    for index, (target, (ready, drew)) in enumerate(zip(destinations, prepared)):
+        clock = time.perf_counter()
         # Each destination written, counted of them all (``progress.py``: an export's ``write``).
-        say("write", detail=target.name, count=[index, len(request["destinations"])])
+        say("write", detail=target.name, count=[index, len(destinations)])
         before = _stat(target)
         robot: list[dict[str, Any]] = []
-        if request.get("original"):
-            from cad.engine.export.viewer import original
-            size = original(source, target, request["expected"])
-        else:
-            size = export.translate(source, None, target, tolerance, log, angle, zero, robot.append)
-        seconds = time.perf_counter() - clock
+        try:
+            if ready is None:
+                from cad.engine.export.viewer import original
+                size = original(source, target, request["expected"])
+            else:
+                size = ready.land(log, robot.append)
+        except Exception as error:
+            if not index:
+                raise
+            # Some are written: said, never a refusal (which says nothing was).
+            raise export.ExportIncomplete([row.name for row in destinations[:index]], target.name,
+                                          [row.name for row in destinations[index + 1:]], error) from error
+        seconds = drew + time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
         files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
                       "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
@@ -789,6 +806,7 @@ def main() -> int:
             frames.write(protocol, message, payload)
 
     from cad.engine.build import BuildError, build, made_by
+    from cad.engine.export import ExportIncomplete
     from cad.engine.profiling import quiet
     from cad.engine.progress import Progress, building
 
@@ -914,6 +932,8 @@ def main() -> int:
             except (BuildError, ValueError, OSError) as error:
                 # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
                 send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
+            except ExportIncomplete as error:  # an export that wrote some files: what failed, by its cause's type
+                send({"id": ident, "failed": str(error), **error.failed_type()})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})

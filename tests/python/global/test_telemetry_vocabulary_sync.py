@@ -4,7 +4,8 @@ The page names what a person used (`@cad/ui`'s `usage/controls.js`), cadgen note
 knows (`cad_server/analytics.py`: `CONTROLS`), and the receiver refuses any other (`apps/api/src/events.mjs`:
 `CONTROLS`). A name one of them lacks is a count lost without a word: the page's never noted, or a whole
 batch refused. The kinds a file is counted as are its document type's (the library's registry,
-`cad.registry`, kernel-free), as the schemas spell them. Read from source, so this needs nothing installed.
+`cad.registry`, kernel-free), as the schemas spell them; the causes a crash of no kernel process names are
+cadgen's and the receiver's alike. Read from source, so this needs nothing installed.
 """
 
 from __future__ import annotations
@@ -65,6 +66,31 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         self.assertIn("xbf", formats)
         schema = ast.literal_eval(assignments["SCHEMA"])
         self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_8")
+
+
+class TheKernelCausesAreOneVocabulary(unittest.TestCase):
+    def test_cadgen_and_the_receiver_name_the_same_causes(self) -> None:
+        # Which failure left the engine no kernel process: a word the receiver does not read refuses the batch.
+        cadgen = names(CADGEN, "KERNEL_CAUSES = frozenset({", "})")
+        receiver = names(RECEIVER, "const KERNEL_CAUSES = new Set([", "]);")
+        self.assertGreater(len(cadgen), 5)
+        self.assertEqual(sorted(cadgen), sorted(receiver))
+
+
+class TheBuildFailuresAreOneVocabulary(unittest.TestCase):
+    def test_every_reason_cadgen_sends_is_one_its_schema_reads(self) -> None:
+        # Why a build failed: a reason the receiver's current schema does not read refuses the batch. The receiver
+        # reads more (``child_failed``, which earlier releases sent); the system's reasons are cadgen's own words.
+        cadgen = set(names(CADGEN, "BUILD_FAILURES = frozenset({", "})"))
+        system = set(names(CADGEN, "SYSTEM_FAILURES = frozenset({", "})"))
+        receiver = set(names(RECEIVER, "const BUILD_FAILURES = new Set([", "]);")
+                       + names(RECEIVER, "const BUILD_FAILURES_9 = new Set([", "]);")
+                       + names(RECEIVER, "const BUILD_FAILURES_10 = new Set([", "]);"))
+        self.assertGreater(len(cadgen), 10)
+        self.assertLessEqual(cadgen, receiver)
+        self.assertLess(system, cadgen)
+        schemas = RECEIVER.read_text(encoding="utf-8").split("const SCHEMAS = new Map([", 1)[1]
+        self.assertIn("buildFailures: BUILD_FAILURES_10", schemas.split("[10, {", 1)[1].split("}],", 1)[0])
 
 
 if __name__ == "__main__":

@@ -34,11 +34,11 @@ src/cad_server/
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
                          #   (robots), Quick Edit's packets (prompt_files)
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
-                         #   engine sessions (http), tools and launches (server), the agent
-                         #   operations (operations), how a host presents CAD (host), open
-                         #   views (views), sidebar views shared in memory (sidebar), the
-                         #   viewer routes in-process (tunnel), the page (ui), and the CAD
-                         #   Viewer link for a host that renders no MCP Apps (browser)
+                         #   engine sessions (http), tools and launches (server), how a host
+                         #   presents CAD (host), open views (views), sidebar views shared in
+                         #   memory (sidebar), the viewer routes in-process (tunnel), the page
+                         #   (ui), and the viewer link for a host that renders no MCP Apps
+                         #   (browser)
   robot_payload.py       # a robot description resolved for the viewer's page: its
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
@@ -46,8 +46,7 @@ src/cad_server/
   kicad/                 # a KiCad schematic's electrical rules check and exports (`cad kicad_sch
                          #   erc|export`: schematic), by the kicad integration's kicad-cli, headless
                          #   in private homes
-  jobs.py                # the agent operations' and the viewer exports' admission, progress,
-                         #   waiting and cancellation
+  jobs.py                # the viewer exports' admission, progress, waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the state directory
