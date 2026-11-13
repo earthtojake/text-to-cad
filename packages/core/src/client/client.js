@@ -391,6 +391,20 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         throw new Error(detail?.error || 'Could not open this file.');
       }
     },
+    // A machine watched (`/api/v1/machines`, `cad_server/machines`): its controller's live position,
+    // read by the engine off the network. `watchMachine` starts (or joins) the watch of an address
+    // and answers its state; `machine` is its state once its version is past `after`, waited on up to
+    // `wait` seconds; `unwatchMachine` stops it.
+    watchMachine(address, { signal } = {}) {
+      return request(`${API}/machines`, { method: 'POST', headers: JSON_POST, body: { address }, signal, operation: 'machine' });
+    },
+    machine(id, { after = -1, wait = 20, signal } = {}) {
+      return request(`${API}/machines/${encodeURIComponent(id)}`, { params: { after, wait }, signal, timeoutMs: (wait + 10) * 1000, operation: 'machine' });
+    },
+    async unwatchMachine(id) {
+      const response = await fetchImpl(cadApiUrl(`${API}/machines/${encodeURIComponent(id)}`, { origin }), { method: 'DELETE', headers: { 'x-cad-viewer': '1' } });
+      if (!response.ok && response.status !== 404) throw new Error('Could not stop watching this machine.');
+    },
     // The person's settings (`/api/v1/settings`): whether usage stats are shared, and the language.
     consent(share) {
       return (share === undefined ? readSettings() : changeSettings({ telemetry: { share } }, 'consent'))
