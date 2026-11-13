@@ -17,10 +17,10 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 ## A drawing is a model
 
 **A drawing is a `@model` function that takes no parameters and returns build123d 2D geometry on
-z=0: a sketch, a face, wires or edges. `cad model export <id> drawing.dxf` writes the DXF.** You never
+z=0: a sketch, a face, wires or edges. `cad +0.11.10@claude model export <id> drawing.dxf` writes the DXF.** You never
 construct a document, name an entity, or write a file from the model. It builds in the server's warm
 worker like any model, and the DXF is written from its document by build123d's own exporter, once the
-drawing checks pass. The CAD Viewer and `cad dxf snapshot` read the `.dxf` itself, so the file a
+drawing checks pass. The CAD Viewer and `cad +0.11.10@claude dxf snapshot` read the `.dxf` itself, so the file a
 cutting service gets, the file the viewer draws and the file a snapshot renders are one file.
 
 ```python
@@ -67,14 +67,14 @@ if __name__ == "__main__":
 ## Build it and export the DXF
 
 ```bash
-cad run src/gasket.py                   # prints id: and view:
-cad model export "$ID" DXF/gasket.dxf     # ID: the id: line it printed; runs the drawing checks
+cad +0.11.10@claude run src/gasket.py                   # prints id: and view:
+cad +0.11.10@claude model export "$ID" DXF/gasket.dxf     # ID: the id: line it printed; runs the drawing checks
 ```
 
 Running the script is the only way to build a drawing, and exporting it the only way to write its
-DXF. `cad run <drawing>.py` writes nothing; it prints each model's report (`built
+DXF. `cad +0.11.10@claude run <drawing>.py` writes nothing; it prints each model's report (`built
 src/gasket.py::gasket cold in 2.29s: ...`), its `id:` and its page, and exits 1 when a body raises.
-Run each drawing script directly; do not sweep directories. `cad model export` exits 2 when it refuses
+Run each drawing script directly; do not sweep directories. `cad +0.11.10@claude model export` exits 2 when it refuses
 the drawing (3D, off the plane, a layer name, a failed drawing check), naming which, and writes none
 of the export's files, the STEP or the STL beside the DXF included. An existing `.dxf` needs
 neither: hand it straight to a snapshot or the viewer.
@@ -108,7 +108,7 @@ part's geometry helpers rather than duplicating its formulas.
 
 One model per file is the recommendation, and a drawing gets its own script, in the same directory
 as the geometry it derives from. A file MAY declare several models (two drawings, or a drawing
-beside a part's `@model`): `cad run <file>.py` builds every one its `__main__` block calls, each with
+beside a part's `@model`): `cad +0.11.10@claude run <file>.py` builds every one its `__main__` block calls, each with
 its own id. A drawing composes models, never the reverse.
 
 ### 1. Drafted from scratch
@@ -187,7 +187,7 @@ nothing.
 ### 3. Flat pattern of an imported STEP
 
 For a vendor `.step`/`.stp` with no Python source. Read it with `step.read`, or convert
-it once (`cad step export vendor_panel.step vendor_panel.xbf`) and read the xbf with `xbf.read`, which
+it once (`cad +0.11.10@claude step export vendor_panel.step vendor_panel.xbf`) and read the xbf with `xbf.read`, which
 is faster. Like every file a run reads, it is an input: replacing it re-runs the drawing. Which planar
 faces define the cut profile is a judgment about the part.
 
@@ -259,15 +259,15 @@ Faces laid side by side are not an unfolded blank: a blank for bending needs the
   `CIRCLE`, kerf included. A profile that comes out as hundreds of short `LINE`s fell back to the
   sampled path: check the union's inputs rather than accept it.
 - **Why did it (not) rebuild?** The run's report says how each body went (`run` or `replayed`);
-  `cad model inspect <id>` prints what the drawing was built from.
+  `cad +0.11.10@claude model inspect <id>` prints what the drawing was built from.
 
 ## Check a drawing
 
 | The change | Check it with |
 | --- | --- |
-| Any drawing | `cad model export`: the drawing checks run on the document it is about to write |
+| Any drawing | `cad +0.11.10@claude model export`: the drawing checks run on the document it is about to write |
 | A dimension the person gave | A targeted `ezdxf` read of the exported `.dxf` (below): extents, a circle's radius, counts by layer |
-| Layout, layers, marking | `cad dxf snapshot` of the exported file ([below](#see-a-drawing)) |
+| Layout, layers, marking | `cad +0.11.10@claude dxf snapshot` of the exported file ([below](#see-a-drawing)) |
 | A file from elsewhere | `validate_dxf_file` (below), then the same reads |
 
 Every DXF export runs the drawing checks, and an error refuses the file, naming the check
@@ -309,10 +309,10 @@ overlapping or partly coincident curves, small features, kerf and the shop's rul
 ## See a drawing
 
 ```bash
-cad dxf snapshot DXF/gasket.dxf tmp/gasket.png
+cad +0.11.10@claude dxf snapshot DXF/gasket.dxf tmp/gasket.png
 ```
 
-`cad dxf snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole, from above,
+`cad +0.11.10@claude dxf snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole, from above,
 fitted with a margin, in the pens the file declares (an entity with no pen of its own takes the
 paper's ink), on white paper, whatever the viewer's theme. `--size-profile`, `--width` and `--height` size it; `--camera`
 takes a plan view, `--annotation` ink on the sheet and `--measurements` dimensions; every other flag
@@ -325,8 +325,8 @@ inline JSON to a file first) whose views are plan-view `camera` windows (`{"posi
 with their ink and dimensions on it, before editing:
 
 ```bash
-cad dxf snapshot --job tmp/panel.snapshot.json            # every view, into the paths its jobs name
-cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
+cad +0.11.10@claude dxf snapshot --job tmp/panel.snapshot.json            # every view, into the paths its jobs name
+cad +0.11.10@claude dxf snapshot DXF/panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
 ```
 
 A drawing script's model has a page, but it shows a flat face in the 3D viewer, with no pens, layers

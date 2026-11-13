@@ -42,14 +42,14 @@ Protolabs Network's guides; a molder's own figures move them):
   takes a side action or a lifter (a warning, a cost) and one nothing frees is an error: avoid it, or
   plan the action with the person.
 - The resin and the process on the part: `part.material = plastics.abs_(process=molded())`
-  (`bd_materials.processes`); `cad model dfm "$ID" --pull z` then needs no `--process` or `--material`.
+  (`bd_materials.processes`); `cad +0.11.10@claude model dfm "$ID" --pull z` then needs no `--process` or `--material`.
 
 ## Check it
 
 ```bash
-cad step dfm cover.step --process molding --pull z --material abs
-cad model dfm "$ID" --process molding --pull y --material pc --cavities 4
-cad step dfm cover.step --process molding --candidates
+cad +0.11.10@claude step dfm cover.step --process molding --pull z --material abs
+cad +0.11.10@claude model dfm "$ID" --process molding --pull y --material pc --cavities 4
+cad +0.11.10@claude step dfm cover.step --process molding --candidates
 ```
 
 Molding is judged on exact geometry alone: a mesh (STL, 3MF, GLB) is refused -- check the STEP or the

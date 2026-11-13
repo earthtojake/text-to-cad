@@ -25,22 +25,22 @@ prepares the file, the browser saves it. No code changes, nothing rebuilds, and 
 destination is written from the document the server holds, by its suffix:
 
 ```bash
-cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad +0.11.10@claude model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
-`$ID` is the `id:` line the model's run printed: `cad model` takes a model by its id, and
+`$ID` is the `id:` line the model's run printed: `cad +0.11.10@claude model` takes a model by its id, and
 every other type takes a file of its own. The output folders are generated on
 request and gitignored by default ([version control](project-layout.md#version-control)). The source can also be a file the
 server reads as a document, an `.xbf` or a `.step`, by its own type:
 
 ```bash
-cad step export vendor/motor.step vendor/motor.xbf
-cad xbf export share/arm.xbf GLB/arm.glb
+cad +0.11.10@claude step export vendor/motor.step vendor/motor.xbf
+cad +0.11.10@claude xbf export share/arm.xbf GLB/arm.glb
 ```
 
 A mesh file converts to another mesh format: an `.stl`, `.glb` or `.3mf` exports to
 either of the other two, keeping what the target format can hold, with no kernel loaded
-(`cad stl export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
+(`cad +0.11.10@claude stl export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
 it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
@@ -60,7 +60,7 @@ An export takes a document and its destinations, and nothing else but a GLB's, a
 and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
-A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
+A written file is a detached copy, whether `cad +0.11.10@claude <type> export`, `exports.py` or a file
 decorator (`@step`, `@glb`, ...) wrote it: nothing ties it to the model, nothing reruns
 it, and a viewer page of it follows the file's bytes on disk, never the model. It
 changes only when it is written again. Give the person its path; open it only when they
@@ -74,7 +74,7 @@ files ([projects built around exported files](../SKILL.md#projects-built-around-
 | | Model page | File page |
 | --- | --- | --- |
 | When | The default. | The person asks to iterate on the exported file, or the project revolves around its files: an `exports.py`, a consumer reading them (a robot description, a slicer, a drawing pipeline), a 0.7-era layout. |
-| Each run | The page updates; nothing is written. | The file is written too (a file decorator, `exports.py` or `cad <type> export`) and the page re-reads it, a STEP parsed again. |
+| Each run | The page updates; nothing is written. | The file is written too (a file decorator, `exports.py` or `cad +0.11.10@claude <type> export`) and the page re-reads it, a STEP parsed again. |
 | A picked ref | `made_by` names the function, file and line. | `made_by` is null, a file names no model: a Quick Edit has no way back into the code. |
 | A failed run | The page says so. | The file keeps its last write and the page says nothing. |
 
@@ -107,11 +107,11 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/exports.py
+cad +0.11.10@claude run src/exports.py
 ```
 
 Write `exports.py` only when the person wants files kept current; a one-off file is a
-`cad <type> export`. Nothing else in the project writes files.
+`cad +0.11.10@claude <type> export`. Nothing else in the project writes files.
 
 ## Posed files and parts on their own
 
@@ -132,8 +132,8 @@ def arm_folded():
 ```
 
 ```bash
-cad run src/arm_poses.py                          # prints arm_folded's id
-cad model export "$FOLDED_ID" STEP/arm_folded.step
+cad +0.11.10@claude run src/arm_poses.py                          # prints arm_folded's id
+cad +0.11.10@claude model export "$FOLDED_ID" STEP/arm_folded.step
 ```
 
 `posed(assembly, state)` places the assembly's parts at a state the assembly names
@@ -151,12 +151,12 @@ the model's animations, which only a GLB exported from it reads. Export one only
 - to compose it in another project, where `xbf.read` reads it as an input.
 
 A server restart needs none: the server keeps each model document it built in its own
-cache, so after a restart the document's id opens in the viewer, answers `cad <type> inspect`,
+cache, so after a restart the document's id opens in the viewer, answers `cad +0.11.10@claude <type> inspect`,
 exports and snapshots without a rebuild. It is the last built state: the server never
 checks the code against it and nothing reruns, so after an edit run the script to build it
 again.
 
-A vendor STEP converted once (`cad step export vendor/motor.step vendor/motor.xbf`) is
+A vendor STEP converted once (`cad +0.11.10@claude step export vendor/motor.step vendor/motor.xbf`) is
 read by `xbf.read` many times faster than `step.read` parses the STEP, with the same
 geometry, names, colours and materials. Keep the xbf beside the STEP, and read the xbf
 ([inputs](model-contract.md#inputs)).
@@ -208,7 +208,7 @@ faces, give it an absolute tolerance in millimetres, about a tenth of the smalle
 the part is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints):
 
 ```bash
-cad model export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+cad +0.11.10@claude model export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
 ```
 
 The same is `model.export(x, path, tolerance=0.02)` in an `exports.py` and
@@ -234,7 +234,7 @@ camera the viewer's mesh shows its facets. Give a GLB for rendering a finer one,
 options, either alone:
 
 ```bash
-cad model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
+cad +0.11.10@claude model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
 ```
 
 `--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's, so a file is never coarser than its
@@ -247,8 +247,8 @@ an STL and a 3MF take it too. The cost is triangles: say the file's size when it
 A mechanism exports as a robot description for a simulator or ROS, by the destination's suffix:
 
 ```bash
-cad model export "$ID" sim/arm.xml description/arm.urdf
-cad model export "$ID" sim/arm.xml --zero home
+cad +0.11.10@claude model export "$ID" sim/arm.xml description/arm.urdf
+cad +0.11.10@claude model export "$ID" sim/arm.xml --zero home
 ```
 
 `.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF. Each is
@@ -280,14 +280,14 @@ stands, its joints by kind and its mass, then its couplings, loops, frames, coll
 exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
 it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
 robot when there is none (an `include` of the robot, a floor, a light, a skybox),
-which is the person's to edit and never written over. An MJCF is MuJoCo's own file: `cad mujoco check
+which is the person's to edit and never written over. An MJCF is MuJoCo's own file: `cad +0.11.10@claude mujoco check
 sim/arm.xml` compiles it with MuJoCo and checks it, and no `cad` command or view draws one (the
-person opens it in MuJoCo Studio, `cad run mujoco-studio --model sim/scene.xml`). A URDF whose root link has a mass, or whose
+person opens it in MuJoCo Studio, `cad +0.11.10@claude run mujoco-studio --model sim/scene.xml`). A URDF whose root link has a mass, or whose
 root link's frame is not the world's (its first part turned or moved in its placement), is rooted at
 an empty `base_link` before it, at the root's placement, as ROS's KDL wants and so it stands where
 the MJCF stands it.
 
-A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
+A STEP has no mechanism: exported this way (`cad +0.11.10@claude step export vendor/arm.step sim/arm.xml`), each
 top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left
 out of a URDF ([Loops](kinematics.md#loops)); a ball joint in a URDF is refused by name. Never edit the written file: change the model and export again. A
 simulation's choices on the robot (collision shapes, contact friction, excluded pairs, joint

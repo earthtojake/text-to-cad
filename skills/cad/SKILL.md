@@ -4,6 +4,7 @@ description: Creates and edits parametric CAD parts, assemblies and 2D profiles 
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
+  version: "0.11.10"
 ---
 
 # CAD modeling and inspection
@@ -17,14 +18,14 @@ the page the person has open updates. Files are exports, made when asked.
 | --- | --- | --- |
 | **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)); a part the request says how to make is designed for that process from the first line ([Design for the process](#design-for-the-process)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
-| **Export STEP, STL, 3MF, GLB or xbf** | `cad model export <id> <file>`. | [Exports](references/exports.md) |
-| **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
+| **Export STEP, STL, 3MF, GLB or xbf** | `cad +0.11.10@claude model export <id> <file>`. | [Exports](references/exports.md) |
+| **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad +0.11.10@claude model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `step.read`, `xbf.read` or `stl.read` in the body. | [Inputs](references/model-contract.md#inputs) |
-| **Resolve a reference from a prompt** | `cad model inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
+| **Resolve a reference from a prompt** | `cad +0.11.10@claude model inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
-| **See a model, a view or a pose** | `cad model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
+| **See a model, a view or a pose** | `cad +0.11.10@claude model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.build123d`. | [Kinematics](references/kinematics.md) |
-| **Find how far each joint can move** | `cad model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
+| **Find how far each joint can move** | `cad +0.11.10@claude model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the process the request names or implies; with none, no check. | [Can it be made?](#can-it-be-made) |
@@ -32,28 +33,44 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Every command in this skill starts `cad +0.11.10@claude`: it runs text-to-cad 0.11.10, the release this skill was
+written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
+PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
+
+If `cad` is missing, or says it does not know `+0.11.10@claude` (an older text-to-cad), install this release,
+outside the sandbox or with its permission, then run the command again:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
+curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.10
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
-person any next step `cad setup` prints.
+On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.10`.
+It installs 0.11.10 and the `cad` command and changes nothing else.
 
-One server runs for the installation: the first run starts it, every run and every
-command goes through it, and it serves the viewer. `cad status` lists its workers
-and the documents it holds; `cad stop` stops it.
+When a command fails, its exit code says why:
+
+- 3: it could not install or switch to 0.11.10 from this shell. Do what it says, outside
+  the sandbox or with its permission, then run the command again.
+- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again;
+  if it still names the same release, this app's copy of the text-to-cad plugin is out of date: run
+  cad update (with no pin), or, where the copy came from an app's plugin store, update it there; then start
+  a new chat.
+- 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
+  `~/.local/bin/cad` (`%USERPROFILE%\.local\bin\cad.exe` on Windows) instead.
+
+`cad +0.11.10@claude doctor --check` explains any other failure, changing nothing; `cad +0.11.10@claude doctor` repairs what
+it reports. Tell the person any next step it prints.
+
+One server runs for this release: the first run starts it, every run and every
+command goes through it, and it serves the viewer. `cad +0.11.10@claude status` lists its workers
+and the documents it holds; `cad +0.11.10@claude stop` stops it.
 A build cut off by the shell's time limit keeps running in the server; run the same
-command again and it waits for that build and replays it (`cad status` shows it).
+command again and it waits for that build and replays it (`cad +0.11.10@claude status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
 background.
 
-Build every model with `cad run`, exactly like `uv run`: the same options and the same script
-header, with nothing to set up. cad is pinned to this computer's release and its integrations come
+Build every model with `cad +0.11.10@claude run`, exactly like `uv run`: the same options and the same script
+header, with nothing to set up. cad is pinned to this skill's release and its integrations come
 from the script's imports (`import build123d` is the build123d integration), so a header names only
 the script's own packages, never a version of cad:
 
@@ -111,7 +128,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/bracket.py
+cad +0.11.10@claude run src/bracket.py
 ```
 
 ```text
@@ -163,15 +180,15 @@ is the script's folder; two explicit names in it must differ.
   Python opens, each tracked by its bytes. The clock, environment variables and
   randomness are not seen: a body is a function of its code and its inputs. Compose
   project models by calling them, never by reading a file the project exported.
-- **References** to faces, edges and parts come from `cad model inspect <id> [ref]`, and the
+- **References** to faces, edges and parts come from `cad +0.11.10@claude model inspect <id> [ref]`, and the
   body picks the same element with build123d's selectors; verify with a snapshot when in
   doubt ([references](references/inspection-and-validation.md#references)).
 - **A shape with no function** (a notebook cell, a REPL) is handed over:
   `model(shape, name="plate")` returns the same handle, and no command builds it again.
 - **The server never reruns code.** A restart reopens every document from the server's
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
-  saved), the page, `cad model inspect <id>` and `cad_show` print the command that brings it
-  back (`cad run src/bracket.py`). Run it.
+  saved), the page, `cad +0.11.10@claude model inspect <id>` and `cad_show` print the command that brings it
+  back (`cad +0.11.10@claude run src/bracket.py`). Run it.
 - Model units are millimetres, +Z up.
 - An image without a scale sets no fit dimension, and a drawing's units, projection and
   revision decide how its numbers read. A missing or conflicting dimension that changes
@@ -185,7 +202,7 @@ written, so a change made after it is in the file only once it is written again.
 when the person asks for it:
 
 ```bash
-cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad +0.11.10@claude model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 A project with standing deliverables gets an `exports.py` that imports its models and
@@ -202,15 +219,15 @@ only those files: a STEP, an xbf or a DXF among them refuses the whole export, n
 Write the other files in an export of their own:
 
 ```bash
-cad model export "$ID" STEP/bracket.step GLB/bracket.glb
-cad model export "$ID" STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
+cad +0.11.10@claude model export "$ID" STEP/bracket.step GLB/bracket.glb
+cad +0.11.10@claude model export "$ID" STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
 ```
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `xbf.read`. A restart needs none: the
 server's own cache reopens every document it built, as last built. A vendor STEP is
 converted to an xbf once
-(`cad step export vendor/motor.step vendor/motor.xbf`) and read with `xbf.read`, many
+(`cad +0.11.10@claude step export vendor/motor.step vendor/motor.xbf`) and read with `xbf.read`, many
 times faster than parsing the STEP.
 
 ## Projects built around exported files
@@ -220,9 +237,9 @@ iterate on the exported file itself or the project already does: an `exports.py`
 that reads the files (a robot description, a slicer, a drawing pipeline), or a 0.7-era
 layout, whose runs wrote files. The loop is three steps. The script writes the file on each
 run, by a file decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to
-the script), or `exports.py` or `cad <type> export` follows the run. Show the file's page, not
+the script), or `exports.py` or `cad +0.11.10@claude <type> export` follows the run. Show the file's page, not
 the model's: it follows the file on disk, updating when a run rewrites the file.
-Verification reads the file: `cad <type> snapshot` or `cad <type> inspect` with its path, or
+Verification reads the file: `cad +0.11.10@claude <type> snapshot` or `cad +0.11.10@claude <type> inspect` with its path, or
 `step.read` in a check. The costs keep the default the default: each iteration pays the
 file's translation and the page's re-read, a STEP parsed again; a file names no model, so a
 ref picked on its page has no `made_by` and a Quick Edit from it no way back into the code;
@@ -236,10 +253,10 @@ in a document by the server's own names: the document (a model's id, or a file's
 absolute path), `#`, a part or an assembly by the labels on its way from the root
 (`hand/finger.2` is the second component labelled `finger` in `hand`), then, after a
 slash, one element by its name (`f:`, `e:`, `v:`) or its number (`face 7`). The CAD
-viewer copies them. When a prompt names one, resolve it with `cad <type> inspect`:
+viewer copies them. When a prompt names one, resolve it with `cad +0.11.10@claude <type> inspect`:
 
 ```bash
-cad model inspect "$ID" "bracket/face 7"
+cad +0.11.10@claude model inspect "$ID" "bracket/face 7"
 ```
 
 It answers in JSON what the ref names, placed where its occurrence stands: an element's
@@ -258,7 +275,7 @@ snapshot packet as inline JSON or a `.snapshot.json` path. Save inline JSON to a
 drew their ink in, ink included:
 
 ```bash
-cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad +0.11.10@claude model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 Inspect supplied annotations before editing. Without annotations, the captured view is
@@ -267,7 +284,7 @@ draw it again to check the change
 ([annotations and Quick Edit views](references/snapshot-review.md#annotations-and-quick-edit-views)).
 
 A reference into a file that is not a document names what the viewer picked in it, in
-that file's own terms (none is a ref `cad <type> inspect` resolves):
+that file's own terms (none is a ref `cad +0.11.10@claude <type> inspect` resolves):
 
 | File | Reference | Means |
 | --- | --- | --- |
@@ -285,20 +302,20 @@ can be checked:
 
 | The change | Check it with |
 | --- | --- |
-| A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad model inspect`; never by restating the constant, never by code after the call in the script |
+| A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad +0.11.10@claude model inspect`; never by restating the constant, never by code after the call in the script |
 | A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
-| An assembly: parts added, moved or resized, a joint's travel | `cad model interference "$ID"`, with a `--pose` for each mechanism state and for each sequence at the times that matter ([below](#check-scripts)): no two parts share volume, exactly; a pair it could not measure is not a pass |
+| An assembly: parts added, moved or resized, a joint's travel | `cad +0.11.10@claude model interference "$ID"`, with a `--pose` for each mechanism state and for each sequence at the times that matter ([below](#check-scripts)): no two parts share volume, exactly; a pair it could not measure is not a pass |
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
-| A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
-| A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
-| Any change to the geometry of a part whose process the request names or implies | Its process's check, with the same flags as before: the script's `Check:` line (`cad model dfm "$ID" ...`, [Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
+| A reference the prompt names | `cad +0.11.10@claude model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
+| A 2D profile or DXF | `cad +0.11.10@claude model export` (it runs the drawing checks), then an `ezdxf` read and `cad +0.11.10@claude dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
+| Any change to the geometry of a part whose process the request names or implies | Its process's check, with the same flags as before: the script's `Check:` line (`cad +0.11.10@claude model dfm "$ID" ...`, [Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
 
 ```bash
-cad model snapshot "$ID" tmp/review.png
-cad model snapshot "$ID" tmp/top.png --camera top --display hidden-line
-cad model snapshot "$ID" tmp/open.png --pose open
-cad model snapshot "$ID" tmp/mid.png --pose cycle@2.5   # a configuration sequence, at a time of it
-cad model snapshot "$ID" tmp/lit.png --preview          # lit in a studio: the picture for a person
+cad +0.11.10@claude model snapshot "$ID" tmp/review.png
+cad +0.11.10@claude model snapshot "$ID" tmp/top.png --camera top --display hidden-line
+cad +0.11.10@claude model snapshot "$ID" tmp/open.png --pose open
+cad +0.11.10@claude model snapshot "$ID" tmp/mid.png --pose cycle@2.5   # a configuration sequence, at a time of it
+cad +0.11.10@claude model snapshot "$ID" tmp/lit.png --preview          # lit in a studio: the picture for a person
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing but the PNG.
@@ -316,14 +333,14 @@ touched or hide what covers them, instead of drawing the whole model.
 
 ### Joint stops
 
-`cad <type> ranges` (`model`, `xbf`, `step`) finds each joint's stops from the parts themselves:
+`cad +0.11.10@claude <type> ranges` (`model`, `xbf`, `step`) finds each joint's stops from the parts themselves:
 it turns or slides each joint alone from the as-built pose, the others as built, a degree or a
 millimetre at a time each way, until the parts meet.
 
 ```bash
-cad model ranges "$ID"
-cad model ranges "$ID" --joint gripper
-cad step ranges arm.step --step 0.5 --json
+cad +0.11.10@claude model ranges "$ID"
+cad +0.11.10@claude model ranges "$ID" --joint gripper
+cad +0.11.10@claude step ranges arm.step --step 0.5 --json
 ```
 
 - **The stop** each way is where the joint's child link meets its parent link (each with the links
@@ -423,7 +440,7 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
 ```
 
 - In an assembly, nothing interferes when no two parts share volume apart from fits named on purpose.
-  `cad model interference "$ID"` answers every pair whose boxes meet, exactly, on the parts' own solids
+  `cad +0.11.10@claude model interference "$ID"` answers every pair whose boxes meet, exactly, on the parts' own solids
   (a pair with air between its parts is ruled out first, and each answer is kept, so after an edit only the
   pairs of what changed are measured):
   as built, and at each `--pose` given: a mechanism state, a sequence at a time (`walk@0.6`), joint values. Name a fit
@@ -438,7 +455,7 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
   has almost no volume for a point to land in, so a plate through it scores nothing.
 - Report what a check cannot see beside what it passed: the poses it did not take, the pairs it could
   not measure, the path between two poses it checked only at its ends.
-- `cad model inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
+- `cad +0.11.10@claude model inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
   the root name `inspect "$ID"` prints): each part's volume times its material's density, and the
   parts that have no material.
 
@@ -455,17 +472,17 @@ one the same way:
 | Process | Reference | Check with |
 | --- | --- | --- |
 | CNC milling and turning | [CNC machining](references/manufacturing-cnc.md) | `--process cnc --material M`, with `--axes`, `--turning`, `--tools` |
-| Sheet cutting and bending | [Sheet metal](references/manufacturing-sheet-metal.md) | `--process sheet --material M --thickness T`, with `--bend-radius`, `--k-factor`; a cut file `cad dxf dfm` |
+| Sheet cutting and bending | [Sheet metal](references/manufacturing-sheet-metal.md) | `--process sheet --material M --thickness T`, with `--bend-radius`, `--k-factor`; a cut file `cad +0.11.10@claude dxf dfm` |
 | Injection molding | [Injection molding](references/manufacturing-injection-molding.md) | `--process molding --pull z --material M`, with `--cavities` |
 | 3D printing: FDM, SLS, SLA/DLP, MJF, metal PBF | [3D printing](references/manufacturing-printing.md) | `--process printing --technology T`, with `--material`, `--build-volume`, `--layer-height` |
 
 ```bash
-cad model dfm "$ID" --process cnc --material aluminum --tools 3,6,10
+cad +0.11.10@claude model dfm "$ID" --process cnc --material aluminum --tools 3,6,10
 ```
 
-`cad model dfm` checks a model's document by its id; `cad step dfm` (and `xbf`, `stl`, `threemf`,
+`cad +0.11.10@claude model dfm` checks a model's document by its id; `cad +0.11.10@claude step dfm` (and `xbf`, `stl`, `threemf`,
 `glb`) a file. A mesh is checked for printing only: CNC, sheet and molding need the STEP or the model. A STEP
-needs `--process`, a model or an xbf takes the one its parts declare, and `cad dxf dfm` checks a cut
+needs `--process`, a model or an xbf takes the one its parts declare, and `cad +0.11.10@claude dxf dfm` checks a cut
 file as sheet. A SendCutSend order is the sendcutsend skill's; slicing a print, the print3d skill's.
 
 ### Design for the process
@@ -479,14 +496,14 @@ none (6061 is machined, cast or bent); a thickness with a metal ("2 mm steel") i
    drafted along the pull, a bend's inside radius, a pocket's corner radii, walls at the material's
    minimum), so the first check passes or nearly.
 2. **Record the process in the model**: each part's material with its process (`part.material =
-   metals.aluminum(process=machined())`), so `cad model dfm "$ID"` alone checks it for what it says it
+   metals.aluminum(process=machined())`), so `cad +0.11.10@claude model dfm "$ID"` alone checks it for what it says it
    is, and the shop's flags in the module docstring, so every edit and the next session run the same
    check:
 
    ```python
    """A motor mount, CNC milled from 6061 on 3 axes.
 
-   Check: cad model dfm "$ID" --tools 3,6,10
+   Check: cad +0.11.10@claude model dfm "$ID" --tools 3,6,10
    """
    ```
 
@@ -536,7 +553,7 @@ they supply overrides every rule.
   (the feature at `refs[0]`, moved from `value` past `limit`).
 - An assembly's every part is judged, and a part used several times each way it stands: a finding names the
   occurrence it is at, and the totals count every occurrence.
-- Resolve a finding's ref with `cad model inspect "$ID" '<ref>'` or `cad step inspect part.step '<ref>'`.
+- Resolve a finding's ref with `cad +0.11.10@claude model inspect "$ID" '<ref>'` or `cad +0.11.10@claude step inspect part.step '<ref>'`.
 - `--candidates` ranks pulls or orientations and judges nothing: check again with the one chosen.
 - **A redesign** gets the same check with the same flags on the new revision: compare
   `measurements.rules.failed` before and after, matching failures by position (`xyz`), since face
@@ -557,9 +574,9 @@ Show the person each model you create or change, and any model or file they ask 
 tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
 absolute path; its description says the rest. Otherwise give the person the page's link once, to
 open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
+`cad +0.11.10@claude viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
 download: give its path. Never screenshot the viewer to check your own work; review with
-`cad <type> snapshot`. If it fails to launch, say so.
+`cad +0.11.10@claude <type> snapshot`. If it fails to launch, say so.
 
 Exact selection and measurement need a model's document, an `.xbf` or a STEP; mesh viewers
 measure approximately, on triangles.

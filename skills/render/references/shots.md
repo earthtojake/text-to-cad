@@ -27,7 +27,7 @@ scene.render.filepath = str(HERE / ("hero.png" if final else "hero-draft.png"))
 bpy.ops.render.render(write_still=True)
 ```
 
-`cad run render.py` draws the draft; `cad run render.py --final` the final, once the draft is
+`cad +0.11.10@claude run render.py` draws the draft; `cad +0.11.10@claude run render.py --final` the final, once the draft is
 right. Where glass, a lens, a diffuser or a glow matters, draft in Cycles at 32 to 64 samples too:
 EEVEE draws those differently.
 

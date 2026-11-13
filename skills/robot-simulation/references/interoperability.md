@@ -23,14 +23,14 @@ Do not place geometry, inertials, joint origins, link poses, mesh references, ph
 A CAD model with a mechanism is described once (links with their frames, exact inertials, visual
 meshes, each part's mesh as its collision, and named frames; joints with axes and limits around the as-built zero;
 couplings; mechanism states as named poses; all in SI units) and written by the destination's
-suffix: `cad model export <id> robot.xml` (MJCF) or `robot.urdf`. Each
+suffix: `cad +0.11.10@claude model export <id> robot.xml` (MJCF) or `robot.urdf`. Each
 writes its meshes as binary STL in metres beside the file: in `assets/` for an MJCF (its
 `meshdir`), in `meshes/` for a URDF, named by relative path. An export lists the meshes it wrote
 there (`.robot.xml.meshes`), and the next export of that file removes those it no longer names (parts
 renamed or gone), never a file it did not write nor one another robot's list names. The two files of one
 model name every link and joint alike, so a controller, an SRDF and a policy read the same names in
 each (URDF names keep `[A-Za-z0-9_]`, every other character `_`). MJCF and URDF keep links
-and joints apart, so a link and a joint may share a name, which the URDF export says (`cad urdf
+and joints apart, so a link and a joint may share a name, which the URDF export says (`cad +0.11.10@claude urdf
 validate` warns `joint_link_name_collision`: some tools name the two together); name the link apart
 with `link(shape, name)` (a finger's joint `finger_left`, its link `finger_left_link`). A name already
 held in its kind is given `_2` and the export says so. What each drops is what its format cannot say:
@@ -47,7 +47,7 @@ held in its kind is given `_2` and the export says so. What each drops is what i
 | Named frames | sites | an empty link on a fixed joint `<frame>_joint`, as a ROS `tool0` |
 | A link with no material | no `<inertial>`: MuJoCo weighs its geoms | no `<inertial>` (the validator warns of a moving one) |
 | A part with painted faces (a STEP's or xbf's face colours, `paint()`) | a visual geom per colour, as the viewer draws it, each `mass="0"` on a mesh with `inertia="shell"` | a `<visual>` per colour |
-| Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad urdf validate` warns of |
+| Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad +0.11.10@claude urdf validate` warns of |
 | A part kept a body (`body()`) | a child body with no joint | a link on a fixed joint |
 | Contact exclusions | `<contact><exclude>` for every jointed pair touching at rest | not written (an SRDF's `disable_collisions` for MoveIt) |
 | A simulation's choices: collision shapes, contact friction, excluded pairs, joint armature, damping and dry friction, actuators | not in the plain export: a MuJoCo function sets them on the robot's spec and saves its file | not written: no primitive or hull `<collision>`, no `<dynamics>`; the simulator that reads the URDF makes them |
@@ -76,7 +76,7 @@ Renamed links or joints, changed limits, or restructured chains invalidate the S
 
 A robot with a CAD model here gets its MJCF generated from the model ([above](#one-description-two-writers)), and its scene composed in code ([mujoco-environment.md](mujoco-environment.md)). For a robot that has only a hand-written URDF: MuJoCo loads a URDF directly (`MjModel.from_xml_path("robot.urdf")`, with a `<mujoco><compiler .../></mujoco>` extension element inside `<robot>` for its compiler settings), and its `compile` sample saves what it loaded as MJCF. That is the usual start for a robot that has a URDF; text-to-cad ships no converter in either direction. Keep the URDF the source of the structure and record it (path and revision) in the MJCF's ledger comment. Never re-author the same robot independently in MJCF: the two drift apart where no validator looks.
 
-A converted MJCF is a draft. Fix, then check with `cad mujoco check` ([mjcf-checks.md](mjcf-checks.md)):
+A converted MJCF is a draft. Fix, then check with `cad +0.11.10@claude mujoco check` ([mjcf-checks.md](mjcf-checks.md)):
 
 - **angle units**: the saved file may say `angle="degree"` or nothing (degrees); set `<compiler angle="radian"/>` and confirm every `range`, `ref` and `euler` is radians;
 - **mesh scale**: a URDF's `scale` becomes the `<mesh scale>`; a millimetre STL without it is 1000x too large ([meshes.md](meshes.md));
@@ -88,7 +88,7 @@ The joint names carry over; keep them, so the URDF, the SRDF and the MJCF name o
 
 ## CAD Viewer
 
-CAD Viewer can review `.urdf` and `.srdf` files visually and help catch gross placement or resource issues. It does not open an MJCF: that is MuJoCo's own file, which the person opens in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`). It cannot prove simulator dynamics, inertial validity, joint-axis semantics, or planning correctness.
+CAD Viewer can review `.urdf` and `.srdf` files visually and help catch gross placement or resource issues. It does not open an MJCF: that is MuJoCo's own file, which the person opens in MuJoCo Studio (`cad +0.11.10@claude run mujoco-studio --model scene.xml`). It cannot prove simulator dynamics, inertial validity, joint-axis semantics, or planning correctness.
 
 After creating or modifying a file, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 

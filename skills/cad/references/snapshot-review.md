@@ -18,7 +18,7 @@ screenshot the card to confirm your own work ([Check each change](../SKILL.md#ch
 - [Targeted additions](#targeted-additions)
 - [Diagnostic review](#diagnostic-review)
 
-`cad <type> snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
+`cad +0.11.10@claude <type> snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the server holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
 mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.srdf`) or a drawing (`.dxf`). A
@@ -26,8 +26,8 @@ script is never a source, and SRC is a whole document, never a ref into one (`$I
 `--display '{"isolated": ["bracket"]}'` draws one part alone. Nothing is written but OUT.
 
 ```bash
-cad model snapshot "$ID" tmp/review.png
-cad model snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
+cad +0.11.10@claude model snapshot "$ID" tmp/review.png
+cad +0.11.10@claude model snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
 ```
 
 A face the mesher left without triangles is drawn without it, and one warning
@@ -56,10 +56,10 @@ side view for a pattern or silhouette, or a clipped view for internal geometry. 
 fixed set of views proves every face or feature is correct.
 
 ```bash
-cad model snapshot "$ID" tmp/iso.png
-cad model snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cad model snapshot "$ID" tmp/top.png --camera top
-cad model snapshot "$ID" tmp/front.png --camera front
+cad +0.11.10@claude model snapshot "$ID" tmp/iso.png
+cad +0.11.10@claude model snapshot "$ID" tmp/below_behind.png --camera 225:-30
+cad +0.11.10@claude model snapshot "$ID" tmp/top.png --camera top
+cad +0.11.10@claude model snapshot "$ID" tmp/front.png --camera front
 ```
 
 With no flags a snapshot is the `solid` display, an orthographic isometric camera fitted
@@ -143,7 +143,7 @@ millimetres, a robot's or a GLB's metres, a 3MF's declared unit; the middle of t
 model when left out) and `invert`; the cut is capped. Look straight at the cut:
 
 ```bash
-cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad +0.11.10@claude model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -156,15 +156,15 @@ Edit packet given to `--annotation` carries the person's own, which `--display` 
 override:
 
 ```bash
-cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
-cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
+cad +0.11.10@claude model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad +0.11.10@claude model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views
 
 A Quick Edit prompt carries a snapshot packet: inline JSON up to 1 KiB, or the
 path of a `.snapshot.json` (in a folder of the server's under `/tmp`). Its files are
-named relative to your workspace, else from `~/`; `cad <type> snapshot` reads either
+named relative to your workspace, else from `~/`; `cad +0.11.10@claude <type> snapshot` reads either
 from the workspace. Save inline JSON to a temporary `.snapshot.json` first. The packet
 holds:
 
@@ -183,12 +183,12 @@ holds:
 
 The views' cameras, the ink and the measurements are in the viewer's scene coordinates
 -- a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit -- and
-`cad <type> snapshot` reads them so; `clip.at` alone is in the file's unit, a GLB's metres.
+`cad +0.11.10@claude <type> snapshot` reads them so; `clip.at` alone is in the file's unit, a GLB's metres.
 
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad +0.11.10@claude model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 `--annotation FILE` draws the ink over the model, each mark on its part wherever the
@@ -206,8 +206,8 @@ display, hidden and isolated parts and pose, the ink and the dimensions over eac
 into the files its outputs name:
 
 ```bash
-cad model snapshot --job tmp/bracket.snapshot.json
-cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
+cad +0.11.10@claude model snapshot --job tmp/bracket.snapshot.json
+cad +0.11.10@claude model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
 ```
 
 `--job` takes a packet, a job (`{input, camera, display, preview, jointValues, outputs, ...}`)
@@ -230,8 +230,8 @@ export the model as a GLB at the tolerance wanted and draw that file; the model'
 every other picture of it, stay as they are:
 
 ```bash
-cad model export "$ID" tmp/fine.glb --tolerance 0.02 --angle 3
-cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
+cad +0.11.10@claude model export "$ID" tmp/fine.glb --tolerance 0.02 --angle 3
+cad +0.11.10@claude glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
 ```
 
 A preset or `azimuth:elevation` is fitted to what each picture shows, so two pictures of

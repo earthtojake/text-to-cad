@@ -36,7 +36,7 @@ this is a good default; a one-off part can be one script in a flat folder.
   vendor/                 # vendor STEP files, each with the xbf converted from it
     motor.step
     motor.xbf
-  STEP/  STL/  GLB/  3MF/  DXF/   # files written on request, by cad <type> export or exports.py
+  STEP/  STL/  GLB/  3MF/  DXF/   # files written on request, by cad +0.11.10@claude <type> export or exports.py
   tmp/                    # ignored scratch: checks, snapshots
 ```
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/plate.py
+cad +0.11.10@claude run src/plate.py
 ```
 
 and a `.gitignore` beside `src/`:
@@ -91,18 +91,18 @@ A second run replays the model and changes nothing. Then a part with configurati
 `src/assembly.py`, as in [models](model-contract.md#assemblies-call-their-parts):
 
 ```bash
-cad run src/assembly.py
-cad model inspect "$ID"
+cad +0.11.10@claude run src/assembly.py
+cad +0.11.10@claude model inspect "$ID"
 ```
 
 Running the root builds its children in the same run, each keeping its own document;
-running a child alone leaves the root as it was until the root runs. `cad <type> inspect`
+running a child alone leaves the root as it was until the root runs. `cad +0.11.10@claude <type> inspect`
 prints what the root's document holds (its parts, bounds, joints, couplings, states and motions) and
 what it was built from.
 
 | Need | Add |
 | --- | --- |
-| A file of a model | `cad model export "$ID" STEP/assembly.step` when asked; `exports.py` when the person keeps files current. See [exports](exports.md). |
+| A file of a model | `cad +0.11.10@claude model export "$ID" STEP/assembly.step` when asked; `exports.py` when the person keeps files current. See [exports](exports.md). |
 | A variant | Another `@model` calling the part's helper with other values. |
 | Shared factory or hole pattern | A plain helper under `src/lib/`, with `src/lib/__init__.py`. |
 | Left/right geometry | Mirror inline, or separate models for independent files and reuse. |
@@ -111,7 +111,7 @@ what it was built from.
 | An explode or a showcase | `cad.build123d`'s `animation()`. See [animation](animation.md). |
 | Materials | `from bd_materials import metals`; `part.material = metals.aluminum()`; board and finish looks from `cad.build123d.materials`. See [colour and materials](build123d-modeling.md#colour-and-materials). |
 | 2D drawing | A separate drawing script, beside the models it projects. |
-| Vendor CAD | The vendor STEP under `vendor/`, converted once with `cad step export vendor/motor.step vendor/motor.xbf` and read with `xbf.read` (an anchored path). |
+| Vendor CAD | The vendor STEP under `vendor/`, converted once with `cad +0.11.10@claude step export vendor/motor.step vendor/motor.xbf` and read with `xbf.read` (an anchored path). |
 
 ## Imports and shared code
 
@@ -122,11 +122,11 @@ imports work, and the folder above its topmost package is on the path too, so
 `src/chassis/frame.py` imports `lib.holes` as well. Both run alike:
 
 ```bash
-cad run src/chassis/frame.py
-cd src && cad run -m chassis.frame
+cad +0.11.10@claude run src/chassis/frame.py
+cd src && cad +0.11.10@claude run -m chassis.frame
 ```
 
-Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cad run
+Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cad +0.11.10@claude run
 src/chassis/frame.py`), a relative entry read from the folder the command runs in, as
 Python reads it; the only path a run adds is the script's own folder, last, so nothing beside the
 script shadows an installed package. A module and a same-named
@@ -140,7 +140,7 @@ that read it, and a comment re-runs nothing
 ## Assemblies and model boundaries
 
 A parent calls its child models inside its body, and each child builds in the same run:
-**running the root is the whole rebuild** (`cad run src/assembly.py`). Running a child
+**running the root is the whole rebuild** (`cad +0.11.10@claude run src/assembly.py`). Running a child
 alone rebuilds the child and leaves the assemblies that use it as they were.
 
 A child model has its own document and page; a helper runs within its caller and is no
@@ -169,6 +169,6 @@ Every exported file is reproducible from the code and its inputs, so the project
 unless the person asks for the files in the repository.
 
 Vendor STEP files are irreplaceable inputs: commit them. The xbf converted from one is
-made again by one `cad <type> export`. A file that starts with `version https://git-lfs` is a
+made again by one `cad +0.11.10@claude <type> export`. A file that starts with `version https://git-lfs` is a
 Git LFS pointer, not CAD data: `git lfs checkout` restores objects already in the local
 cache, and missing ones need fetching from the project's LFS remote.
