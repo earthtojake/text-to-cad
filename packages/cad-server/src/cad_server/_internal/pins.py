@@ -22,6 +22,9 @@ runs another version for it. So the version that reads a pin is the one it names
    whatever the automatic-update switch says -- and then the command runs. A move this shell
    cannot make (a sandbox that will not let it write the state folder) is ``cannot_install_here`` (exit 3).
 
+A command with no pin run by a version that has never started, where the default channel has no pointer, makes the
+default channel's first use first (``first_use``), so no version writes data before its first start is marked.
+
 Help, ``--version`` and a read-only report (``cad doctor --check``) do no work and read no pointer.
 
 The words each refusal says, and its reason, are this module's alone (``stale``, ``not_installed``,
@@ -38,8 +41,8 @@ from dataclasses import dataclass
 
 from cad.engine import places
 
-__all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "check", "development", "not_installed",
-           "other_version", "own", "parse", "released", "stale", "take", "update_default"]
+__all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "check", "development", "first_use",
+           "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "update_default"]
 
 # The characters of a release's name, as the ``cad`` command tells one (``released``).
 RELEASED = re.compile(r"[0-9.abcoprst]+")
@@ -75,10 +78,23 @@ def bad_channel(word: str) -> str:
             "letters, digits, '.', '_' or '-'")
 
 
-def stale(version: str, channel: str | None, now: str) -> str:
-    """A pin older than its channel's version (``stale_pin``)."""
-    return (f"this command is for text-to-cad {version}, and its channel ({channel or places.DEFAULT_CHANNEL}) is "
-            f"on text-to-cad {now} now: read the skill again, or start a new chat")
+def stale_head(version: str, channel: str | None, now: str | None) -> str:
+    """What a stale pin, and a stale launcher (``cad_mcp.engine.stale_line``, held equal by a test), say first: which
+    version this is, its channel, and the version that channel is on now (``now``; None where its pointer could not be
+    read again: a newer one)."""
+    return (f"this is text-to-cad {version}, and its channel ({channel or places.DEFAULT_CHANNEL}) is on "
+            + (f"text-to-cad {now} now" if now else "a newer text-to-cad now"))
+
+
+def stale(version: str, channel: str | None, now: str | None) -> str:
+    """A pin older than its channel's version (``stale_pin``), in one sentence an agent reading a skill acts on: the
+    cheapest step first -- the skill read again, since the app may hold its newer copy already --, then the repair
+    of the app's copy: ``cad update`` for the default channel (it gives this app's copy the new text), the plugin's
+    update in its app for a named one (its store delivers it)."""
+    repair = ("run `cad update`" if channel is None
+              else "update the text-to-cad plugin in the app it came from")
+    return (f"{stale_head(version, channel, now)}: read the skill again (the app may have its newer copy already); "
+            f"if it still names {version}, {repair}, then read the skill again or start a new chat")
 
 
 def not_installed(version: str, why: str, system: str | None = None) -> str:
@@ -171,8 +187,14 @@ def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
 
     if places.versioned() != pin.version:
         return
-    now = pointers.read(pin.channel)
+    try:
+        now = pointers.read(pin.channel)
+    except pointers.Unreadable as unreadable:
+        if not unreadable.corrupt:  # there and not readable now: nothing runs on a guess of which version it names
+            raise _failure(f"{unreadable}: run the command again", "failed") from None
+        now = None  # emptied by a crash: the move writes it again
     if now == pin.version:
+        _used(pin)
         return
     if now is not None and versions.older(pin.version, now):
         raise _failure(stale(pin.version, pin.channel, now), "stale_pin")
@@ -184,6 +206,7 @@ def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
     except OSError as error:  # the install lock, in a state folder this shell may not write
         raise _failure(cannot_move(pin, f"{error.strerror or error}"), "cannot_install_here") from None
     if moved.kind in ("same", "moved"):
+        _used(pin)
         return
     if moved.kind == "stale":
         raise _failure(stale(pin.version, pin.channel, moved.old or "?"), "stale_pin")
@@ -191,6 +214,37 @@ def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
         raise _failure(cannot_move(pin, moved.error or "it cannot be done from this shell"), "cannot_install_here")
     raise _failure(f"text-to-cad {pin.version} could not be started for the {pin.label} channel: {moved.error}",
                    "failed")
+
+
+def _used(pin: Pin) -> None:
+    """The pin's channel marked used (``pointers.used``), once a day at most: a pinned command that never reaches a
+    server (``cad +X@ch orcaslicer``) is a use too, which ``cad doctor --prune`` reads. Never a reason a command
+    fails."""
+    from cad_server._internal import pointers
+
+    try:
+        pointers.used(pin.channel, every=pointers.USED_DAILY)
+    except Exception:  # noqa: BLE001 - a mark
+        pass
+
+
+def first_use(*, told: Callable[[str], None] | None = None) -> None:
+    """A command with no pin, run by an installed version that has never started (no data marker) on a device whose
+    default channel has no pointer -- the newest version present, which the ``cad`` command runs where none has
+    started --: the default channel's first use made first (``apply``: its data imported, then its pointer, or the
+    updater's own sequence where the install command has run here), so the version writes nothing before its first
+    start is marked. Nothing otherwise, nor where a pointer cannot be read; the failure ``apply`` raises."""
+    from cad_server._internal import imports, pointers
+
+    name = places.versioned()
+    if name is None or imports.imported(name):
+        return
+    try:
+        if pointers.read(None) is not None:
+            return
+    except pointers.Unreadable:
+        return
+    apply(Pin(name, None, f"+{name}"), told=told)
 
 
 def update_default(version: str, *, told: Callable[[str], None] | None = None):

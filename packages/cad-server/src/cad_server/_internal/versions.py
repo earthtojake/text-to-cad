@@ -30,14 +30,18 @@ sandbox) -- it says so as a result (``Present.cannot``), never a traceback: the 
 
 **Move** (``move``): every update of a channel, under the install lock. Equal: nothing to do. Older than the
 channel's: stale, returned for the caller to say. Newer, or the channel's first use: the version made present,
-its first start (``first_start``: its data imported, ``cad_server._internal.imports``, and the proof it runs),
-then the pointer written -- the one write that is the update --, then every version no pointer names and nothing
-is connected to removed (``sweep``), then what the version left held handed to the new one (``handover``: the flat
-door of 0.11.10 and earlier follows the default channel, and the pages' port goes to the new version's server where
-the old one's stopped). A failure before the pointer is written changes no pointer and no other version. The
-default channel's first move on a device with the layout of 0.11.10 and earlier imports from that layout, and the
-sweep removes the layout's code, records and caches as soon as that is safe (``cad_server._internal.legacy``).
-Whether the automatic updates are on plays no part: a newer version asked for is moved to.
+its first start (``first_start``: its data imported, ``cad_server._internal.imports``, and the proof it runs:
+``proof``, its server's own start sequence up to ready to serve, then gone), what the channel leaves carried over
+into it (``imports.carry``: what the version left wrote after it was imported, or since another channel's move
+imported it), the version left told where its data goes (``successor``), then the pointer written -- the one write
+that is the update --, then every version no pointer names and nothing is connected to removed (``sweep``), then
+what the version left held handed to the new one (``handover``: the flat door of 0.11.10 and earlier follows the
+default channel, and the pages' port goes to the new version's server where the old one's stopped). A failure
+before the pointer is written changes no pointer and no other version. A pointer that is there and cannot be read
+now fails the move (``pointers.Unreadable``); one a crash emptied is written again. The default channel's first
+move on a device with the layout of 0.11.10 and earlier imports from that layout, and the sweep removes the layout's
+code, records and caches as soon as that is safe (``cad_server._internal.legacy``). Whether the automatic updates
+are on plays no part: a newer version asked for is moved to.
 
 **Servers** (``endpoint``, ``ask``). Each version's server is reached through its own door alone,
 ``<engines>/<version>``: asked whether work is in flight (``connected``), asked to stop (``stop_server``), started
@@ -45,13 +49,30 @@ Whether the automatic updates are on plays no part: a newer version asked for is
 agent's tool call. An app attached and idle, or a page open, does not.
 
 **Removal** (``remove``, ``sweep``). Garbage is a version no pointer names (nor the default channel's version as
-``pointers.default`` resolves it, where it has no pointer). One is removed under the install lock: its server's
-lock taken (the one its server takes to start, in ``<engines>/<version>``), so none starts meanwhile; a server
-that runs is asked whether anything is connected to it (``connected``: a running server that cannot say counts
-as connected, and stays) and stopped when nothing is (``stop_server``); a folder a process still runs from
-stays; the folder renamed aside (``versions/.trash-*``), which a refusal (Windows: a file in use) turns into a
-skip, then removed. ``sweep`` does that for every such version, removes the layout of 0.11.10 and earlier once the
-default channel has left it and that is safe (``legacy.remove``), and clears what an earlier removal left.
+``pointers.default`` resolves it, where it has no pointer, nor the one the mirror names) that has been a channel's
+version: its data is there (``imports.MARKER``, written by its first start). A version installed and never used --
+an update's target before its setup runs, a release the ``cad`` command or a launcher installs before it moves its
+channel, one ``cad setup --add`` installs -- is never removed by a sweep, nor is a folder whose code is incomplete
+(no code marker: an install cut short); ``cad doctor`` lists them and ``cad doctor --prune`` removes them
+(``sweep(unused=True)``), and an updater removes its own earlier target once it prepares a newer one
+(``remove_unused``). Every pointer is read as it is: one that cannot be read stops every removal for that pass
+(``pointers.Unreadable``), said.
+
+A used version's data goes to its successor before its folder goes: the version the channel that last left it
+moved to (``successor``, written by that move, ``SUCCESSOR`` in the version's folder; when that version goes in
+turn, those naming it are told its own). Where none is known, it is gone, or it is older (going back from a
+development build), the folder stays, and ``cad doctor`` says why.
+
+One is removed under the install lock: its server's lock taken (the one its server takes to start, in
+``<engines>/<version>``), so none starts meanwhile; a running server is left alone where another process runs from
+the folder (``releases.running``, its own processes aside: the folder would stay all the same), and is otherwise
+asked whether anything is connected to it (``connected``: a running server that cannot say counts as connected,
+and stays) and stopped when nothing is (``stop_server``); a folder a process still runs from stays; what the folder
+holds that its successor lacks carried over (``imports.carry``: a carry-over that could not read or write all of it
+keeps the folder for the next pass), what it kept for sending handed on (``_hand_on``); the folder renamed aside
+(``versions/.trash-*``), which a refusal (Windows: a file in use) turns into a skip, then removed. ``sweep`` does that
+for every such version, removes the layout of 0.11.10 and earlier once the default channel has left it and that is
+safe (``legacy.remove``, which carries it over too), and clears what an earlier removal left.
 
 Who removes a folder: every move, ``cad doctor --prune``, and every running server as it tends itself
 (``garbage``, then ``sweep`` sparing its own version). A server whose version no pointer names stops itself once
@@ -78,15 +99,22 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "LOCK", "Moved", "Present", "add", "add_command", "ask", "ask_flat", "connected", "development",
-           "endpoint", "first_start", "flat", "flat_endpoint", "folders", "garbage", "handover", "install_lock",
-           "make_present", "move", "older", "order", "present", "proof", "remove", "remove_now", "retiring", "serves", "serving",
-           "start_server", "stop_server", "sweep"]
+__all__ = ["CANNOT", "LOCK", "SUCCESSOR", "Moved", "Present", "add", "add_command", "ask", "ask_flat", "connected",
+           "development", "endpoint", "fate", "first_start", "flat", "flat_endpoint", "folders", "garbage", "handover",
+           "install_lock", "make_present", "move", "older", "order", "present", "proof", "prune", "prune_plan",
+           "remove", "remove_now",
+           "remove_unused", "retiring", "serves", "serving", "start_server", "stop_server", "successor", "sweep",
+           "used"]
 
 # The device's install lock, in the state folder: every install, move and removal holds it (``cad setup``'s too).
 LOCK = "install.lock"
 SERVER = "server"
 TRASH = ".trash-"
+# In a version's folder: the version the channel that last left it moved to, where its data goes (``successor``).
+SUCCESSOR = "successor"
+# In a version's folder: ``cad uninstall`` removed it and the system refused (Windows: the uninstall ran from it), so
+# the next sweep removes it whole, its data with it, as the person asked; a move to it clears this.
+UNINSTALLED = "uninstalled"
 CACHEDIR_TAG = ("Signature: 8a477f597d28d172789f06886806bc55\n"
                 "# This file is a cache directory tag created by text-to-cad: a version's code, made again whole\n"
                 "# by its install.\n")
@@ -334,11 +362,29 @@ def _probe(name: str, python: str | None = None) -> dict[str, Any]:
     return found
 
 
-def proof(name: str) -> dict[str, Any]:
-    """That present version ``name`` runs (``_probe``, by the Python its code marker names): what its own Python says
-    of it. ``Refused`` when not."""
-    found = places.version_record(name)
-    return _probe(name, found["python"] if found is not None else None)
+def proof(name: str, *, timeout: float | None = None) -> None:
+    """That present version ``name`` starts (``Refused`` in one line when not): its server's own start sequence run
+    up to ready to serve (``cad_server.engine.daemon.proof``: its data imported, its engine folder, its lock and its
+    door made, the server built over its data), in a process of its own Python that then exits, binding no port and
+    leaving no process. A server of it that runs already has started: nothing is run."""
+    if serves(name):
+        return
+    record = places.version_record(name)
+    python = record["python"] if record is not None else str(base.interpreter(places.code_dir(name) / SERVER))
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("PYTHON")}
+    environment[places.INSTALLATION_ENV] = name
+    said = ""
+    try:
+        done = subprocess.run([python, "-B", "-P", "-m", "cad_server._internal.engine_daemon", "--proof"],
+                              env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout or START_SECONDS,
+                              **places.windowless())
+        code, said = done.returncode, (done.stderr or done.stdout).strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        code, said = None, str(error)
+    if code != 0:
+        last = said.splitlines()[-1] if said else f"it exited {code}"
+        raise base.Refused(f"text-to-cad {name} does not start: {last.removeprefix('cad: ')}", "probe")
 
 
 def development(name: str, python: str, cad: str, prefix: str) -> dict[str, Any]:
@@ -351,6 +397,11 @@ def development(name: str, python: str, cad: str, prefix: str) -> dict[str, Any]
 
     if DEVELOPMENT.fullmatch(name or "") is None:
         raise ValueError(f"not a development version: {name!r}")
+    for path in (python, cad, prefix):
+        # The ``cad`` command's sh reads a development version's paths from its marker as they are written there.
+        if os.name != "nt" and any(character in path for character in '"\\') or any(ord(c) < 32 for c in path):
+            raise ValueError(f"the cad command cannot read the path {path!r}: move the checkout to a folder whose path "
+                             "has no double quote, backslash or control character")
     code = places.code_dir(name)
     with install_lock():
         for folder in (places.versions_dir(), places.version_dir(name), code):
@@ -384,8 +435,8 @@ def _kernel(name: str, probe: dict[str, Any], say: Callable[[str], None]) -> str
 def first_start(name: str, leaving: str | None = None, *, legacy_left: bool = False,
                 told: Callable[[str], None] | None = None) -> Any:
     """Present version ``name``'s first start: its data imported where it is not
-    (``imports.ensure``, from what its channel is ``leaving``), then the proof it runs (``proof``). What the import
-    did (``imports.Imported``); ``Refused`` when the version does not run."""
+    (``imports.ensure``, from what its channel is ``leaving``), then the proof it starts (``proof``: its server's own
+    start sequence). What the import did (``imports.Imported``); ``Refused`` when the version does not start."""
     from cad_server._internal import imports
 
     found = imports.ensure(name, leaving, legacy_left=legacy_left, told=told)
@@ -437,8 +488,18 @@ def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = 
     channel = None if channel is None else pointers.channel_name(channel)  # ``default`` is the default
     places.version_dir(new)
     with install_lock(waiting=lambda: say("waiting for another install of text-to-cad to finish")):
-        first_default = channel is None and pointers.read(None) is None
-        old = (pointers.leaving().version if channel is None else pointers.read(channel))
+        try:
+            current = pointers.read(channel)
+        except pointers.Unreadable as unreadable:
+            if not unreadable.corrupt:  # there, and not readable now: nothing moves on a guess
+                return Moved("failed", channel, new, None, f"{unreadable}: run the command again", said=said)
+            say(f"{unreadable}: it is written again")
+            current = None
+        first_default = channel is None and current is None
+        old = current
+        if first_default:
+            leaving = pointers._current(None)  # the layout of 0.11.10 and earlier, where the install command ran
+            old = leaving[0] if leaving is not None and leaving[1] else None
         legacy_left = first_default and legacy.present()
         if old == new and not first_default:
             if channel is None:
@@ -454,6 +515,22 @@ def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = 
             imported = first_start(new, None if legacy_left else old, legacy_left=legacy_left, told=say)
         except base.Refused as refused:
             return Moved("failed", channel, new, old, str(refused), made, said=said)
+        # What the channel leaves wrote since it was imported (or since another channel's move imported it): carried
+        # over, never from a newer version into an older one (going back from a development build).
+        from cad_server._internal import imports
+
+        if legacy_left:
+            imports.carry(imports.of_legacy(), new, told=say)
+        elif old is not None and old != new and older(old, new) and imports.imported(old):
+            imports.carry(imports.of_version(old), new, told=say)
+        with contextlib.suppress(OSError):
+            (places.version_dir(new) / UNINSTALLED).unlink()  # a channel is on it again: its data is kept
+        if old is not None and old != new and not legacy_left:
+            try:
+                _succeed(old, new)  # before the pointer: a version left never lacks where its data goes
+            except OSError as error:
+                say(f"text-to-cad {old} could not be told where its data goes ({error.strerror or error}): once no "
+                    "channel is on it, its folder stays, and cad doctor says why")
         try:
             pointers.write(channel, new, mirrored=False)
         except OSError as error:
@@ -529,16 +606,13 @@ def handover(channel: str | None, old: str | None, new: str, port: int | None, *
 
 
 def serves(name: str) -> bool:
-    """Whether version ``name``'s server runs: its lock in ``<engines>/<name>`` is held. Read, nothing changed."""
-    engine = places.engine_dir(name)
-    try:
-        held = _take(engine)
-    except OSError:
+    """Whether version ``name``'s server runs, asked without making or taking anything: its door answers who it is
+    (``{"op": "pid"}``). No engine folder, no lock file, or no answer: it does not (a server still starting, its lock
+    taken and its door not made yet, among them: a removal takes the lock itself, ``_take``)."""
+    found = endpoint(name)
+    if not found.lock.exists() or not found.address.exists():
         return False
-    if held is None:
-        return True
-    _drop(held, engine)
-    return False
+    return ask(name, {"op": "pid"}, seconds=SERVES_SECONDS) is not None
 
 
 # --- a version's server, asked through its own door ----------------------------------------------------
@@ -546,6 +620,7 @@ def serves(name: str) -> bool:
 # How long a version's server is given to answer one question (``ask``), to stop once asked (``stop_server``),
 # and to answer at its door once started (``start_server``).
 ASK_SECONDS = 10.0
+SERVES_SECONDS = 5.0
 STOP_SECONDS = 30.0
 START_SECONDS = 60.0
 
@@ -706,7 +781,7 @@ def retiring(name: str, working: bool) -> bool:
     """Whether version ``name``'s running server, with work in flight or not (``working``), stops now: no pointer
     names its version, it is not the default channel's as resolved with no pointer, and nothing is in flight.
     Decided under the install lock, never waited for: while a move or an install holds it (a pointer about to
-    name this version, among them), it is not decided now (False)."""
+    name this version, among them), it is not decided now (False); nor while a pointer cannot be read."""
     from cad_server._internal.file_lock import attempt
 
     if working:
@@ -717,22 +792,97 @@ def retiring(name: str, working: bool) -> bool:
             return False
         with attempt(state / LOCK) as held:
             return held and name not in _kept()
-    except OSError:
+    except OSError:  # a pointer that cannot be read (``pointers.Unreadable``) among them
         return False
 
 
+def used(name: str) -> bool:
+    """Whether version ``name`` has been used -- its data is there: its first start's marker (``imports.MARKER``), or a
+    data folder a process of it wrote at all --, so that its folder goes only by way of its successor
+    (``successor``). One installed and never used has none."""
+    from cad_server._internal import imports
+
+    return imports.imported(name) or os.path.lexists(places.data_dir(name))
+
+
+def successor(name: str) -> tuple[str | None, str]:
+    """Where version ``name``'s data goes when its folder does: the version the channel that last left it moved to
+    (``SUCCESSOR``), while it is there with its data and not older; else None and why, in words."""
+    from cad_server._internal import imports
+
+    path = places.version_dir(name) / SUCCESSOR
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None, "no channel has moved from it to another version, so where its data would go is unknown"
+    except OSError as error:
+        return None, f"{path} cannot be read ({error.strerror or error})"
+    if not places.VERSION.fullmatch(text):
+        return None, f"{path} names no version"
+    if not os.path.isdir(places.version_dir(text)) or not imports.imported(text):
+        return None, f"text-to-cad {text}, where its data would go, is gone"
+    if older(text, name):
+        return None, f"text-to-cad {text}, where its data would go, is older: data never goes back to an older version"
+    return text, ""
+
+
+def _succeed(old: str, new: str) -> None:
+    """Version ``old`` told its data goes to ``new`` (``SUCCESSOR``), durably: a channel leaves it for ``new`` now."""
+    from cad_server._internal.pointers import _land
+
+    if os.path.isdir(places.version_dir(old)):
+        _land(places.version_dir(old) / SUCCESSOR, f"{new}\n".encode("utf-8"))
+
+
+def _forward(gone: str, heir: str | None) -> None:
+    """Version ``gone`` removed: each other version whose data went to it told to send it to ``heir``, where it went."""
+    if heir is None:
+        return
+    for name in folders():
+        path = places.version_dir(name) / SUCCESSOR
+        try:
+            if path.read_text(encoding="utf-8").strip() == gone:
+                _succeed(name, heir)
+        except OSError:
+            continue
+
+
+# Why a sweep leaves a version that no pointer names (``fate``), and what ``remove`` answers, in a report's words.
+FATES = ("named", "unused", "partial", "successor")
+
+
+def fate(name: str, kept: set[str], *, unused: bool = False) -> str | None:
+    """What a sweep does with version ``name``'s folder, given the versions no removal takes (``kept``): None, it goes;
+    else why not -- ``named``, ``unused`` (installed and never used), ``partial`` (its code incomplete: no code marker)
+    or ``successor`` (used, and where its data would go is not known, ``successor``). With ``unused`` (``cad doctor
+    --prune``), a version never used goes, and so does an incomplete one."""
+    if name in kept:
+        return "named"
+    if os.path.lexists(places.version_dir(name) / UNINSTALLED):
+        return None
+    if not used(name):
+        return None if unused else ("unused" if places.version_record(name) is not None else "partial")
+    if places.version_record(name) is None and not unused:
+        return "partial"
+    return None if successor(name)[0] is not None else "successor"
+
+
 def garbage(spare: str | None = None) -> bool:
-    """Whether a ``sweep`` would find anything to do, read without the install lock: a present version folder no
-    pointer names (but ``spare``, the asker's own), a removal's leftovers, or the layout of 0.11.10 and earlier
-    once the default channel has left it. A running server asks it at each tending before it sweeps."""
+    """Whether a ``sweep`` would find anything to do, read without the install lock: a version folder it removes
+    (``fate``: no pointer names it, but ``spare``, the asker's own, and it has been used and has a successor), a
+    removal's leftovers, or the layout of 0.11.10 and earlier once the default channel has left it. False while a
+    pointer cannot be read. A running server asks it at each tending before it sweeps."""
     from cad_server._internal import legacy, pointers
 
-    kept = _kept() | ({spare} if spare else set())
-    if any(name not in kept for name in folders()):
-        return True
-    if any(entry.startswith(TRASH) for entry in _names(places.versions_dir())):
-        return True
-    return pointers.read(None) is not None and legacy.removable()
+    try:
+        kept = _kept() | ({spare} if spare else set())
+        if any(fate(name, kept) is None for name in folders()):
+            return True
+        if any(entry.startswith(TRASH) for entry in _names(places.versions_dir())):
+            return True
+        return pointers.read(None) is not None and legacy.removable()
+    except OSError:
+        return False
 
 
 def _take(folder: Path) -> Any:
@@ -758,7 +908,8 @@ def _kept(state: Path | None = None) -> set[str]:
     """The versions no removal takes: those a pointer names, the default channel's as it resolves with no pointer
     (``pointers.default``: the one a command with no pin runs), and the one the mirror for 0.11.10 and earlier names
     (``installations/current``): it follows the default pointer, and names another version only while a move that
-    could not write it has left it behind, when a client of those releases still starts that version."""
+    could not write it has left it behind, when a client of those releases still starts that version.
+    ``pointers.Unreadable`` when a pointer cannot be read: then nothing is removed."""
     from cad_server._internal import installations, pointers
 
     found = pointers.named(state)
@@ -769,13 +920,32 @@ def _kept(state: Path | None = None) -> set[str]:
 
 
 def remove(name: str, *, told: Callable[[str], None] | None = None) -> str:
-    """Version ``name`` removed when no pointer names it (see the module): ``removed``, or why not -- ``named``,
-    ``connected`` (its server runs and something is connected, or it cannot say), ``in use`` (a process runs from
-    its folder), ``refused`` (the system refused the rename or the lock) -- or ``absent``."""
+    """Version ``name`` removed as a sweep removes it (see the module): ``removed``, or why not -- ``named``,
+    ``unused``, ``partial``, ``successor`` (``fate``), ``connected`` (its server runs and something is connected, or it
+    cannot say), ``in use`` (a process runs from its folder), ``carry`` (what it holds could not all be carried over),
+    ``refused`` (the system refused the rename or the lock) -- or ``absent``."""
     say = told or (lambda _line: None)
     with install_lock():
+        if not os.path.lexists(places.version_dir(name)):
+            return "absent"
+        why = fate(name, _kept())
+        if why is not None:
+            return why
+        return _remove(name, say)
+
+
+def remove_unused(name: str, *, told: Callable[[str], None] | None = None) -> str:
+    """Version ``name`` removed where no pointer names it and it was never used (``used``): an updater's own earlier
+    target, which it made and never moved to, as it prepares a newer one. ``removed``, ``absent``, or why not
+    (``named``, ``used``, ``connected``, ``in use``, ``refused``)."""
+    say = told or (lambda _line: None)
+    with install_lock():
+        if not os.path.lexists(places.version_dir(name)):
+            return "absent"
         if name in _kept():
             return "named"
+        if used(name):
+            return "used"
         return _remove(name, say)
 
 
@@ -796,14 +966,31 @@ def _hand_on(name: str) -> None:
 
 
 def _remove(name: str, say: Callable[[str], None]) -> str:
+    """Version ``name``'s folder removed (see the module), its fate decided already: its successor, where it has been
+    used, given what it holds first."""
+    from cad_server._internal import imports, releases
+
     folder = places.version_dir(name)
     if not os.path.lexists(folder):
         return "absent"
+    heir = None
+    if used(name) and not os.path.lexists(folder / UNINSTALLED):
+        heir, why = successor(name)
+        if heir is None:
+            say(f"text-to-cad {name} is kept: {why}")
+            return "successor"
     engine = places.engine_dir(name)
     try:
         held = _take(engine)
-        if held is None and not connected(name) and stop_server(name):
-            held = _take(engine)
+        if held is None:
+            # Its server runs. Another process running from the folder keeps it whatever the server does: the server
+            # is left alone. Its own processes (it, its workers) do not count.
+            answer = ask(name, {"op": "pid"})
+            pid = answer.get("pid") if isinstance(answer, dict) else None
+            if releases.running(folder, besides=pid if type(pid) is int else None):
+                return "in use"
+            if not connected(name) and stop_server(name):
+                held = _take(engine)
     except OSError as error:
         say(f"text-to-cad {name} is kept: its server's lock cannot be taken ({error.strerror or error})")
         return "refused"
@@ -812,6 +999,11 @@ def _remove(name: str, say: Callable[[str], None]) -> str:
     try:
         if not quiet(folder):  # a server that let its lock go may not have exited yet: awaited, bounded
             return "in use"
+        if heir is not None:
+            carried = imports.carry(imports.of_version(name), heir, told=say)
+            if not carried.complete:
+                say(f"text-to-cad {name} is kept for now: what it holds could not all be carried into {heir}")
+                return "carry"
         _hand_on(name)
         aside = places.versions_dir() / f"{TRASH}{name}-{os.getpid()}-{os.urandom(4).hex()}"
         try:
@@ -824,16 +1016,20 @@ def _remove(name: str, say: Callable[[str], None]) -> str:
     shutil.rmtree(engine, ignore_errors=True)
     shutil.rmtree(aside, ignore_errors=True)
     _forget_records(folder)
-    say(f"removed text-to-cad {name}, which nothing uses now")
+    _forward(name, heir)
+    say(f"removed text-to-cad {name}, which nothing uses now" + (f" (its data carried into {heir})" if heir else ""))
     return "removed"
 
 
 def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
     """Version ``name``'s folder removed at a person's word (``cad uninstall``), whatever names it: under the install
     lock, its server's lock taken (its server stopped by the caller first; one that still runs keeps it:
-    ``connected``), the folder renamed aside and removed -- though this process runs from it, as ``cad uninstall``
-    typed in a terminal does: nothing is imported from it after --, and the records naming it forgotten. ``removed``,
-    ``absent``, ``connected`` or ``refused`` (the system refused the rename: on Windows, a file in use)."""
+    ``connected``), no other process running from it (``in use``; this process may: ``cad uninstall`` typed in a
+    terminal runs from the version it removes, and nothing is imported from it after), the folder renamed aside and
+    removed, and the records naming it forgotten. ``removed``, ``absent``, ``connected``, ``in use`` or ``refused``
+    (the system refused the rename: on Windows, a file in use)."""
+    from cad_server._internal import releases
+
     say = told or (lambda _line: None)
     with install_lock():
         folder = places.version_dir(name)
@@ -848,12 +1044,17 @@ def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
         if held is None:
             return "connected"
         try:
+            if releases.running(folder, besides=os.getpid()):
+                say(f"text-to-cad {name} is kept: a process still runs from {folder}")
+                return "in use"
             _hand_on(name)
             aside = places.versions_dir() / f"{TRASH}{name}-{os.getpid()}-{os.urandom(4).hex()}"
             try:
                 os.rename(folder, aside)
             except OSError as error:
                 say(f"text-to-cad {name} could not be removed: {error.strerror or error}")
+                with contextlib.suppress(OSError):  # the next sweep removes it whole, as asked
+                    (folder / UNINSTALLED).write_bytes(b"")
                 return "refused"
         finally:
             _drop(held, engine)
@@ -876,24 +1077,35 @@ def _forget_records(folder: Path) -> None:
             installations.forget(record["version"])
 
 
-def sweep(*, told: Callable[[str], None] | None = None, spare: str | None = None) -> dict[str, str]:
-    """Every version no pointer names removed where nothing is connected to it (``remove``), and what an earlier
-    removal left (``versions/.trash-*``, the engine folders of versions gone): what was done with each version
-    removal was tried on. Every move calls it, each running server as it tends itself (``spare``: its own
-    version, whose folder a process never removes while it runs from it) and ``cad doctor --prune``: so a server
-    that stopped itself, unnamed and idle, has its folder removed by the next of those."""
+def sweep(*, told: Callable[[str], None] | None = None, spare: str | None = None,
+          unused: bool = False) -> dict[str, str]:
+    """Every version no pointer names that has been used removed where nothing is connected to it, its data carried
+    into its successor first (``fate``, ``_remove``), and what an earlier removal left (``versions/.trash-*``, the
+    engine folders of versions gone): what was done with each version removal was tried on, and each used version
+    kept for want of a successor (``successor``). Every move calls it, each running server as it tends itself
+    (``spare``: its own version, whose folder a process never removes while it runs from it) and ``cad doctor
+    --prune`` (``unused``: the versions never used, and incomplete folders, go too): so a server that stopped itself,
+    unnamed and idle, has its folder removed by the next of those. A pointer that cannot be read removes nothing this
+    pass, said."""
     from cad_server._internal import legacy, pointers
 
     say = told or (lambda _line: None)
     done: dict[str, str] = {}
     with install_lock():
-        default = pointers.read(None)
+        try:
+            kept = _kept() | ({spare} if spare else set())
+            default = pointers.read(None)
+        except pointers.Unreadable as unreadable:
+            say(f"nothing is removed this time: {unreadable}")
+            return done
         if default is not None and legacy.removable():
             legacy.remove(default, say)  # the default channel has left it: gone once that is safe
-        kept = _kept() | ({spare} if spare else set())
         for name in folders():
-            if name not in kept:
+            why = fate(name, kept, unused=unused)
+            if why is None:
                 done[name] = _remove(name, say)
+            elif why == "successor":
+                done[name] = why
         root = places.versions_dir()
         for entry in _names(root):
             if entry.startswith(TRASH):
@@ -909,6 +1121,101 @@ def sweep(*, told: Callable[[str], None] | None = None, spare: str | None = None
                 if held is not None:
                     _drop(held, engines / entry)
                     shutil.rmtree(engines / entry, ignore_errors=True)
+    return done
+
+
+# --- cad doctor --prune -----------------------------------------------------------------------------------
+
+
+@dataclass
+class Prune:
+    """What ``cad doctor --prune`` removes, read before it asks and done exactly (``prune``): the named channels
+    unused for ``pointers.FORGOTTEN_DAYS`` it forgets (``channels``); each version folder it removes and why, in words
+    (``versions``: no channel on it and its data carried into its successor, installed and never used, or an
+    incomplete install); each used version no channel is on that it keeps, and why (``kept``); and whether the layout of
+    0.11.10 and earlier goes (``legacy``)."""
+
+    channels: list[Any] = field(default_factory=list)
+    versions: dict[str, str] = field(default_factory=dict)
+    kept: dict[str, str] = field(default_factory=dict)
+    legacy: bool = False
+
+    def __bool__(self) -> bool:
+        return bool(self.channels or self.versions or self.legacy)
+
+
+def prune_plan(now: float | None = None) -> Prune:
+    """``cad doctor --prune``'s plan, read and nothing changed (see ``Prune``). A version a forgotten channel was on
+    goes to the default channel's version, which ``prune`` names its successor as it forgets the channel.
+    ``pointers.Unreadable`` when a pointer cannot be read: then nothing is pruned."""
+    from cad_server._internal import legacy, pointers
+
+    plan = Prune(channels=pointers.unused(now))
+    forgotten = {pointer.channel for pointer in plan.channels}
+    left = {pointer.version for pointer in plan.channels}
+    kept = {pointer.version for pointer in pointers.listing() if pointer.channel not in forgotten}
+    kept |= _kept() - pointers.named()
+    default = pointers.read(None)
+    for name in folders():
+        if name in kept:
+            continue
+        heir = successor(name)[0]
+        if name in left and default not in (None, name):
+            heir = default if _heir(default, name) else None
+        if os.path.lexists(places.version_dir(name) / UNINSTALLED):
+            plan.versions[name] = "uninstalled, the system refused to remove it then"
+        elif not used(name):
+            plan.versions[name] = ("installed and never used" if places.version_record(name) is not None
+                                   else "its install is incomplete")
+        elif heir is not None:
+            plan.versions[name] = f"no channel is on it: its data goes into text-to-cad {heir} first"
+        else:
+            plan.kept[name] = successor(name)[1]
+    plan.legacy = default is not None and legacy.removable() and legacy.unsafe(default) is None
+    return plan
+
+
+def _heir(heir: str, name: str) -> bool:
+    """Whether version ``heir`` can take version ``name``'s data: there, with its data, and not older."""
+    from cad_server._internal import imports
+
+    return os.path.isdir(places.version_dir(heir)) and imports.imported(heir) and not older(heir, name)
+
+
+def prune(plan: Prune, *, told: Callable[[str], None] | None = None) -> dict[str, str]:
+    """``plan`` done, and nothing else, under the install lock: its channels forgotten (each one's version told its
+    data goes to the default channel's version, where no other channel is on it), the layout of 0.11.10 and earlier
+    removed where planned (``legacy.remove``), and each version planned removed (``_remove``: one with work in flight,
+    or a process running from it, stays). What was done with each version, by name."""
+    from cad_server._internal import legacy, pointers
+
+    say = told or (lambda _line: None)
+    done: dict[str, str] = {}
+    with install_lock():
+        default = pointers.read(None)
+        for pointer in plan.channels:
+            pointers.forget(pointer.channel)
+            say(f"forgot the {pointer.channel} channel (text-to-cad {pointer.version}), unused since "
+                f"{time.strftime('%Y-%m-%d', time.localtime(pointers.last_used(pointer) or 0))}")
+            if (default not in (None, pointer.version) and pointer.version not in pointers.named()
+                    and _heir(default, pointer.version)):
+                try:
+                    _succeed(pointer.version, default)
+                except OSError as error:
+                    say(f"text-to-cad {pointer.version} could not be told where its data goes "
+                        f"({error.strerror or error})")
+        if plan.legacy and default is not None:
+            legacy.remove(default, say)
+        kept = _kept()
+        for name in plan.versions:
+            if not os.path.lexists(places.version_dir(name)):
+                continue
+            why = fate(name, kept, unused=True)
+            done[name] = _remove(name, say) if why is None else why
+        root = places.versions_dir()
+        for entry in _names(root):
+            if entry.startswith(TRASH):
+                shutil.rmtree(root / entry, ignore_errors=True)
     return done
 
 

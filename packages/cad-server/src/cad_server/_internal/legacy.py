@@ -9,26 +9,34 @@ channel has a pointer, the layout's bulk goes as soon as it is safe (``unsafe`` 
 that move, and else at every ``versions.sweep`` (the next move, a server going idle, ``cad doctor --prune``).
 
 Safe means all of: the default's version has its data imported (its marker); it has started and its server
-runs (``versions.serves``); no server but that version's own holds the flat engine folder every client of 0.11.10 and
-earlier
-finds (``flat_server``: one started by uvx outside ``releases/`` among them); no process runs from the layout (``releases.running`` on its release folders and its
-kernel environments; on Windows, where that cannot be asked, a rename that the system refuses for a file in use
-keeps the folder). Nothing of an agent app's is read for it, and no record is kept: the layout's own folders are
-the record.
+runs (``versions.serves``); ``installations/current`` names a version, not a release of this layout (a mirror that
+could not be written, or 0.11.10 installed again by hand, sends every client of those releases to it: then nothing of
+the layout goes); no server but that version's own holds the flat engine folder every client of 0.11.10 and earlier
+finds (``flat_server``: one started by uvx outside ``releases/`` among them); no process runs from the layout
+(``releases.running`` on its release folders and its kernel environments; on Windows, where that cannot be asked, a
+rename that the system refuses for a file in use keeps the folder). Nothing of an agent app's is read for it, and no
+record is kept: the layout's own folders are the record.
+
+Before anything goes, what the layout holds that the default channel's version lacks is carried over into it
+(``imports.carry``: records, Recents, settings keys): a channel that moved first imported
+the layout hours before the default left it. A carry-over that could not read or write everything removes nothing,
+and the next sweep tries again.
 
 What ``remove`` removes, by name (``REMOVED``, ``CACHES``): each flat ``releases/<release>`` (renamed aside first)
 with its making's lock and its installation's record, and ``releases/`` once empty; the shared ``documents/``
-(the records) and ``recents/`` in the state folder; in the cache folder of 0.11.10 and earlier the kernel and ``cad
-run``
-environments (``base``), compiled Python (``pycache``), documents' bytes (``documents``), ``hulls``, ``mjcf`` and
-``homes``, and the cache folder once nothing else is in it.
+(the records) and ``recents/`` in the state folder; its kept telemetry batches (``analytics.KEPT``) move, whole, to
+the default channel's version, which sends them from then on (never copied, so never sent twice, nor imported
+again from here); in the cache folder of 0.11.10 and earlier the kernel and ``cad run`` environments (``base``), compiled Python
+(``pycache``), documents' bytes (``documents``), ``hulls``, ``mjcf``, ``homes`` and the interference checks' cache
+(``interference``), and the cache folder once nothing else is in it.
 
 What it keeps, because a client of 0.11.10 or earlier may still read it and it is small, or it is the device's: the
-shared ``settings.json`` (a telemetry no is written there too), ``engines/`` (the page token and port where a client
-of 0.11.10 or earlier finds them), the other small files there (``settings.lock``, ``install-channels.json``,
-``versions.json``, the telemetry spool, the updater's records), ``installations/`` (the mirror,
-``pointers.mirror``), and every global file: the pointers, ``install.lock``, ``install-receipt.json``,
-``install-aside/``, ``plugin/``, ``plugin.lock``, ``versions/``.
+shared ``settings.json`` (a telemetry no is written there too; a version with nothing older to import from imports
+these settings alone, ``imports.source``), ``engines/`` (the page token and port where a client of 0.11.10 or earlier
+finds them), the other small files there (``settings.lock``, ``install-channels.json``, ``versions.json``, the
+telemetry spool, the updater's records), ``installations/`` (the mirror, ``pointers.mirror``), and every global file:
+the pointers and their stamps, ``install.lock``, ``install-receipt.json``, ``install-aside/``, ``plugin/``,
+``plugin.lock``, ``versions/``.
 """
 
 from __future__ import annotations
@@ -40,17 +48,19 @@ from typing import Callable
 
 from cad.engine import places
 
-__all__ = ["CACHES", "IMPORTED", "REMOVED", "cache_root", "importable", "present", "remove", "removable", "root",
+__all__ = ["CACHES", "REMOVED", "SETTINGS", "cache_root", "importable", "present", "remove", "removable", "root",
            "unsafe"]
 
-# What a version imports from it (``imports`` names the same, relative to a data folder).
-IMPORTED = ("settings.json", "documents", "recents", "engines/token", "engines/engine.json", "telemetry-batches.jsonl")
-# What goes from the state folder, beside the flat release folders.
+# The settings it keeps, which a version with nothing older to import from imports alone once its bulk is gone.
+SETTINGS = "settings.json"
+# What goes from the state folder, beside the flat release folders: the records and Recents, carried over first
+# (``imports.carry``). Its kept telemetry batches move, whole, to the default's version (``remove``).
 REMOVED = ("documents", "recents")
+KEPT = "telemetry-batches.jsonl"
 # What goes from the cache folder of 0.11.10 and earlier: documents' bytes and their kept checks, convex hulls, MJCF
-# assets,
-# integrations' homes, the kernel and ``cad run`` environments, compiled Python.
-CACHES = ("documents", "hulls", "mjcf", "homes", "base", "pycache")
+# assets, integrations' homes, the interference checks' cache, the kernel and ``cad run`` environments, compiled
+# Python.
+CACHES = ("documents", "hulls", "mjcf", "homes", "interference", "base", "pycache")
 RELEASES = "releases"
 # How long the flat engine folder's server is given to say what it is (``flat_server``).
 ASK_SECONDS = 5.0
@@ -67,8 +77,9 @@ def cache_root() -> Path:
 
 
 def importable() -> bool:
-    """Whether the layout holds anything a version imports (``IMPORTED``)."""
-    return any(os.path.lexists(root() / name) for name in IMPORTED)
+    """Whether the layout still holds what a version imports beyond its kept settings: its bulk is there
+    (``removable``). Once that is removed, only its settings are read (``imports.source``)."""
+    return removable()
 
 
 def _releases() -> list[str]:
@@ -79,26 +90,32 @@ def _releases() -> list[str]:
 
 
 def removable() -> bool:
-    """Whether anything ``remove`` removes is here."""
-    return (bool(_releases()) or any(os.path.lexists(root() / name) for name in REMOVED)
+    """Whether anything ``remove`` removes, or moves, is here."""
+    return (bool(_releases()) or any(os.path.lexists(root() / name) for name in (*REMOVED, KEPT))
             or any(os.path.lexists(cache_root() / name) for name in CACHES))
 
 
 def present() -> bool:
-    """Whether this device has the layout: anything a version imports, or anything ``remove`` removes."""
-    return importable() or removable()
+    """Whether this device has the layout: anything ``remove`` removes. Its kept small files alone are not it."""
+    return removable()
 
 
 def unsafe(version: str) -> str | None:
     """Why the layout cannot be removed yet now that the default channel is on ``version``, in words; None when it
     is safe: ``version``'s data is imported, its server runs, and no process runs from the layout (see the
     module)."""
-    from cad_server._internal import imports, releases, versions
+    from cad_server._internal import imports, installations, releases, versions
 
     if not imports.imported(version):
         return f"text-to-cad {version}'s data is not imported yet"
     if not versions.serves(version):
         return f"text-to-cad {version} has not started yet"
+    current = installations.current_version()
+    if current is not None:
+        record = places.installation_record(installations.state().read(f"{installations.FOLDER}/{current}.json"))
+        if record is None or not _within(record["prefix"], places.versions_dir()):
+            return (f"installations/current names {current}, not a version in {places.versions_dir()}: every client of "
+                    "0.11.10 and earlier still runs that")
     flat = flat_server()
     if flat is not None and not _within(flat, places.code_dir(version)):
         return f"a server other than text-to-cad {version}'s holds the flat engine folder {places.engines_dir()}"
@@ -152,9 +169,9 @@ def _within(prefix: str, folder: Path) -> bool:
 
 def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
     """The layout's bulk removed (see the module) when the default channel is on ``version`` and it is safe
-    (``unsafe``): whether nothing of it is left to remove. Each folder is renamed aside before it is removed: one
-    the system refuses to rename (a file in use, on Windows) stays, said to ``told``, for the next sweep. Run
-    under the install lock (``versions.sweep``)."""
+    (``unsafe``), once what it holds that ``version`` lacks is carried over (``imports.carry``): whether nothing of it
+    is left to remove. Each folder is renamed aside before it is removed: one the system refuses to rename (a file
+    in use, on Windows) stays, said to ``told``, for the next sweep. Run under the install lock (``versions.sweep``)."""
     say = told or (lambda _line: None)
     if not removable():
         return True
@@ -162,17 +179,28 @@ def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
     if why is not None:
         say(f"the code and caches of 0.11.10 and earlier stay for now: {why}")
         return False
-    from cad_server._internal import installations
+    from cad_server._internal import imports, installations
 
-    current = installations.current()
+    carried = imports.carry(imports.of_legacy(), version, told=say)
+    if not carried.complete:
+        say("the code and caches of 0.11.10 and earlier stay for now: what they hold could not all be carried into "
+            f"text-to-cad {version}")
+        return False
+    from cad_server import analytics
+    from cad_server.settings import FILE
+
+    # Its kept batches: one owner at a time, so moved, never copied (``analytics.hand_on`` would move its spool too,
+    # which clients of 0.11.10 and earlier still write and send: this moves the batches alone).
+    try:
+        for entry in analytics._take_spool(root() / FILE, KEPT, "batch"):
+            analytics._keep(places.data_dir(version) / FILE, KEPT, entry)
+    except OSError as error:
+        say(f"the telemetry 0.11.10 and earlier kept for sending could not be handed on: {error.strerror or error}")
+        return False
     complete = True
     folder = root() / RELEASES
     for name in _releases():
         path = folder / name
-        if current is not None and installations._same_place(current["prefix"], path):
-            say(f"release {name} of 0.11.10 or earlier stays: it is current")
-            complete = False
-            continue
         if _gone(path, say):
             (folder / f"{name}.lock").unlink(missing_ok=True)
             for record in installations.records():

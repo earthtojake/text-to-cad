@@ -9,9 +9,20 @@ Each channel's pointer names the one version (``versions/<version>`` in the stat
 - ``<state>/default``: the default channel's version, one line.
 - ``<state>/channels/<name>``: a named channel's, one line, a file per channel.
 
-A pointer is written whole (``registry.Folder``: beside it, then renamed over), so a reader meets the one
-before or the one after (``write``); moving a channel to another version is ``versions.move``, which is the
-one writer of a pointer outside a test. ``listing`` says every pointer, ``named`` the versions they name.
+A pointer is written whole and made durable (``write``: beside it under a name no channel has, flushed to the
+disk, renamed over, and its folder flushed), so a reader meets the one before or the one after, and a crash never
+leaves an empty one; moving a channel to another version is ``versions.move``, which is the one writer of a pointer
+outside a test. ``listing`` says every pointer, ``named`` the versions they name.
+
+**A pointer that cannot be read is not "no pointer".** Only a file that is not there is none (``read``: None).
+One that is there and cannot be read now (a sharing violation on Windows, an antivirus scan, a permission), or
+holds no version (emptied by a crash), and a ``channels`` folder that cannot be listed, are ``Unreadable``: every
+removal reads the pointers that way (``versions._kept``) and removes nothing that pass, rather than take a
+channel's version for no one's. ``cad doctor`` says which.
+
+**When a channel was last used** (``used``, ``last_used``): a stamp of its own beside the pointers,
+``used/default`` or ``used/<name>``, whose time a server sets as it takes the channel's requests; so a pointer
+file is written by a move alone.
 
 **The default channel's version** (``default``): its pointer; with none, the version the layout of 0.11.10 and earlier
 names current (``installations/current``) where the install command has run here (its receipt,
@@ -34,9 +45,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cad.engine import places
+from cad.engine.atomic_replace import replace_atomic
 
-__all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "FORGOTTEN_DAYS", "Pointer", "channel_name", "default", "forget",
-           "last_used", "leaving", "listing", "mirror", "named", "read", "unused", "used", "write"]
+__all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "FORGOTTEN_DAYS", "Pointer", "USED", "Unreadable", "channel_name",
+           "default", "forget", "last_used", "leaving", "listing", "mirror", "named", "read", "started", "survey", "unused",
+           "used", "write"]
 
 # A named channel: a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. Safe as a
 # file's name on every system, and in a pin (``cad +<version>@<channel>``): the library's one rule
@@ -44,6 +57,8 @@ __all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "FORGOTTEN_DAYS", "Point
 CHANNEL = places.CHANNEL
 DEFAULT = places.DEFAULT_CHANNEL
 CHANNELS = "channels"
+# The channels' last-use stamps, a file each (``used``): ``used/default``, ``used/<name>``.
+USED = "used"
 # The install command's record of what it changed, whose presence says the install command ran here.
 RECEIPT = "install-receipt.json"
 
@@ -73,35 +88,88 @@ def _inside(channel: str | None) -> str:
     return DEFAULT if name is None else f"{CHANNELS}/{name}"
 
 
+class Unreadable(OSError):
+    """A pointer that is there and cannot be read now, or names no version, or the channels' folder that cannot be
+    listed: never "no pointer" (see the module). ``path`` is the file or folder; ``corrupt``, that it was read and
+    names no version (a crash emptied it), which only a move writing it again mends."""
+
+    def __init__(self, path: Path, why: str, *, corrupt: bool = False) -> None:
+        super().__init__(f"the pointer {path} cannot be read: {why}" if not corrupt
+                         else f"the pointer {path} names no version: {why}")
+        self.path = path
+        self.corrupt = corrupt
+
+
 def read(channel: str | None = None, state: Path | None = None) -> str | None:
-    """The version channel ``channel``'s pointer names (None: the default channel's), present or not; None
-    with no pointer, or one that names no version."""
-    data = _folder(state).read(_inside(channel))
-    text = data.decode("utf-8", "replace").strip() if data is not None else ""
-    return text if places.VERSION.fullmatch(text) else None
+    """The version channel ``channel``'s pointer names (None: the default channel's), present or not; None when it
+    has no pointer -- its file is not there. ``Unreadable`` for one that is there and cannot be read, or names no
+    version."""
+    path = _folder(state).path(_inside(channel))
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise Unreadable(path, error.strerror or str(error)) from None
+    text = data.decode("utf-8", "replace").strip()
+    if places.VERSION.fullmatch(text):
+        return text
+    raise Unreadable(path, f"it holds {len(data)} bytes and no version", corrupt=True)
 
 
 def write(channel: str | None, version: str, state: Path | None = None, *, mirrored: bool = True) -> Path:
-    """Channel ``channel``'s pointer (None: the default's) set to ``version``, landed whole: its file. Writing
-    the default's writes the mirror for 0.11.10 and earlier too (``mirror``), after it, unless ``mirrored`` is
-    false (``versions.move`` writes it itself, after the pointer, so it tells a failure of the one from the
-    other): a mirror that cannot be written is ``OSError``, with the pointer moved. ``ValueError`` for a name
-    that is no channel or no version."""
+    """Channel ``channel``'s pointer (None: the default's) set to ``version``, landed whole and made durable (see
+    the module): its file. Writing the default's writes the mirror for 0.11.10 and earlier too (``mirror``), after it,
+    unless ``mirrored`` is false (``versions.move`` writes it itself, after the pointer, so it tells a failure of the
+    one from the other): a mirror that cannot be written is ``OSError``, with the pointer moved. ``ValueError`` for a
+    name that is no channel or no version."""
     if not places.VERSION.fullmatch(version or ""):
         raise ValueError(f"not a version: {version!r}")
-    path = _folder(state).write(_inside(channel), f"{version}\n".encode("utf-8"))
+    path = _folder(state).path(_inside(channel))
+    _land(path, f"{version}\n".encode("utf-8"))
     if _inside(channel) == DEFAULT and mirrored:
         mirror(version, state)
     return path
 
 
+def _land(path: Path, data: bytes) -> None:
+    """``data`` at ``path``, whole and on the disk: written beside it under a name no channel has (a dot first),
+    flushed, renamed over it, and the folder flushed, so neither a reader nor a crash ever meets half of it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
+    try:
+        handle = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o644)
+        with os.fdopen(handle, "wb") as out:
+            out.write(data)
+            out.flush()
+            os.fsync(out.fileno())
+        replace_atomic(temporary, path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+    if os.name != "nt":  # a rename is durable once its folder is flushed; Windows' NTFS journals it
+        try:
+            folder = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(folder)
+        except OSError:
+            pass
+        finally:
+            os.close(folder)
+
+
 def forget(channel: str, state: Path | None = None) -> None:
-    """Named channel ``channel``'s pointer removed (``cad doctor --prune``'s, for a channel no longer used).
-    The default's is never forgotten: a device's default moves, and is gone only with the device's install
-    (``ValueError``)."""
+    """Named channel ``channel``'s pointer removed, and its last-use stamp (``cad doctor --prune``'s, for a channel no
+    longer used). The default's is never forgotten: a device's default moves, and is gone only with the device's
+    install (``ValueError``)."""
     if channel_name(channel) is None:
         raise ValueError("the default channel's pointer is never forgotten")
     _folder(state).remove(_inside(channel))
+    _folder(state).remove(f"{USED}/{channel}")
 
 
 # When this process last marked each channel used (``used``), so a server busy with requests marks it once a
@@ -110,11 +178,22 @@ USED_SECONDS = 60.0
 _used: dict[str, float] = {}
 
 
-def used(channel: object, state: Path | None = None) -> bool:
+def _stamp(channel: str | None, state: Path | None = None) -> Path:
+    """Channel ``channel``'s last-use stamp (None: the default's), there or not."""
+    return _folder(state).path(f"{USED}/{channel or DEFAULT}")
+
+
+# How often a pinned command marks its channel used (``pins.apply``): each is a process of its own.
+USED_DAILY = 86400.0
+
+
+def used(channel: object, state: Path | None = None, *, every: float | None = None) -> bool:
     """Channel ``channel`` (a request's ``channel``: absent, None or ``default`` is the default channel) marked
-    used now: its pointer's file's time set to now, where it has one -- the time ``cad doctor`` shows as the
-    channel's last use. Made by a server as it takes a request, outside any sandbox; never a pointer made, nor
-    one written. At most once a ``USED_SECONDS`` per channel in a process; quiet. Whether it was marked."""
+    used now: its stamp's time (``used/<channel>``, made where it is not) set to now, where the channel has a pointer
+    -- the time ``cad doctor`` shows as the channel's last use. Marked by a server as it takes a request, and by every
+    pinned command as its version reads the pin (``pins.apply``; ``every``: not where the stamp is newer than that
+    many seconds, ``USED_DAILY``); never a pointer made, nor one written. At most once a ``USED_SECONDS`` per channel
+    in a process; quiet, a failure (a sandbox's folder) never said. Whether it was marked."""
     import time
 
     try:
@@ -127,7 +206,19 @@ def used(channel: object, state: Path | None = None) -> bool:
         return False
     _used[key] = now
     try:
-        os.utime(_folder(state).path(_inside(name)))
+        if not _folder(state).path(_inside(name)).is_file():
+            return False
+        stamp = _stamp(name, state)
+        if every is not None:
+            try:
+                if time.time() - os.stat(stamp).st_mtime < every:
+                    return False
+            except FileNotFoundError:
+                pass
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        with open(stamp, "ab"):
+            pass
+        os.utime(stamp)
     except OSError:
         return False
     return True
@@ -135,8 +226,8 @@ def used(channel: object, state: Path | None = None) -> bool:
 
 @dataclass(frozen=True)
 class Pointer:
-    """A channel's pointer: its channel (None: the default), the version it names, and its file (whose time
-    is when the channel was last used, ``used``, or moved)."""
+    """A channel's pointer: its channel (None: the default), the version it names, and its file (whose time is
+    when the channel last moved)."""
 
     channel: str | None
     version: str
@@ -148,12 +239,16 @@ class Pointer:
 FORGOTTEN_DAYS = 30
 
 
-def last_used(pointer: Pointer) -> float | None:
-    """When ``pointer``'s channel was last used (``used``): its file's modified time; None where it cannot be read."""
-    try:
-        return os.stat(pointer.path).st_mtime
-    except OSError:
-        return None
+def last_used(pointer: Pointer, state: Path | None = None) -> float | None:
+    """When ``pointer``'s channel was last used: the later of its last-use stamp's time (``used``) and its pointer's
+    (a move is a use); None where neither can be read."""
+    found = []
+    for path in (_stamp(pointer.channel, state), pointer.path):
+        try:
+            found.append(os.stat(path).st_mtime)
+        except OSError:
+            pass
+    return max(found) if found else None
 
 
 def unused(now: float | None = None, state: Path | None = None) -> list[Pointer]:
@@ -164,21 +259,29 @@ def unused(now: float | None = None, state: Path | None = None) -> list[Pointer]
     now = time.time() if now is None else now
     found = []
     for pointer in listing(state):
-        when = last_used(pointer)
+        when = last_used(pointer, state)
         if pointer.channel is not None and when is not None and now - when >= FORGOTTEN_DAYS * 86400:
             found.append(pointer)
     return found
 
 
 def listing(state: Path | None = None) -> list[Pointer]:
-    """Every pointer on this device, the default's first, then the named channels' by name. A file that names
-    no version, or a name that is no channel, is none."""
+    """Every pointer on this device, the default's first, then the named channels' by name; a name that is no
+    channel's (a write's own file, a dot first) is none. ``Unreadable`` when a pointer there cannot be read, or the
+    channels' folder cannot be listed: never a shorter list."""
     folder = _folder(state)
     found = []
     version = read(None, state)
     if version is not None:
         found.append(Pointer(None, version, folder.path(DEFAULT)))
-    for name in folder.names(CHANNELS):
+    channels = folder.path(CHANNELS)
+    try:
+        names = sorted(os.listdir(channels))
+    except FileNotFoundError:
+        names = []
+    except OSError as error:
+        raise Unreadable(channels, error.strerror or str(error)) from None
+    for name in names:
         if CHANNEL.fullmatch(name) and name != DEFAULT:
             version = read(name, state)
             if version is not None:
@@ -186,8 +289,32 @@ def listing(state: Path | None = None) -> list[Pointer]:
     return found
 
 
+def survey(state: Path | None = None) -> list[Pointer | Unreadable]:
+    """Every pointer file on this device as ``listing`` reads it, one that cannot be read as its ``Unreadable`` in its
+    place rather than the whole list refused: what ``cad doctor`` reports."""
+    folder = _folder(state)
+    found: list[Pointer | Unreadable] = []
+    names: list[str | None] = [None]
+    channels = folder.path(CHANNELS)
+    try:
+        names += [name for name in sorted(os.listdir(channels)) if CHANNEL.fullmatch(name) and name != DEFAULT]
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        found.append(Unreadable(channels, error.strerror or str(error)))
+    for name in names:
+        try:
+            version = read(name, state)
+        except Unreadable as unreadable:
+            found.append(unreadable)
+            continue
+        if version is not None:
+            found.append(Pointer(name, version, folder.path(_inside(name))))
+    return found
+
+
 def named(state: Path | None = None) -> set[str]:
-    """The versions some pointer names."""
+    """The versions some pointer names (``Unreadable`` as ``listing``)."""
     return {pointer.version for pointer in listing(state)}
 
 
@@ -196,17 +323,25 @@ class Default:
     """The default channel's version and where it was found (``source``): ``pointer``; ``current``, the
     version ``installations/current`` names where the install command has run here and no pointer is
     (``legacy``: one of the layout of 0.11.10 and earlier, not the mirror of a version); ``newest``, the newest version
-    present. ``version`` None with none of them."""
+    present that has started (``started``), else the newest present. ``version`` None with none of them."""
 
     version: str | None
     source: str | None
     legacy: bool = False
 
 
+def started(name: str, state: Path | None = None) -> bool:
+    """Whether version ``name`` has started: its data's first-start marker is there (``imports.MARKER``), as the
+    ``cad`` command reads it too (a file there or not)."""
+    return ((state or places.state_dir()) / places.VERSIONS / name / places.DATA / "format.json").is_file()
+
+
 def default(state: Path | None = None) -> Default:
     """The default channel's version, for a command with no pin: its pointer; with none, the version the
     layout of 0.11.10 and earlier names current where the install command has run here (its receipt); else the newest
-    version present (``versions.present``); else none."""
+    version present that has started (``started``: one that never has is not taken for one whose data is there), else
+    the newest present -- which a command then runs only through the default channel's first use, its import and its
+    pointer first (``pins.first_use``) --; else none. ``Unreadable`` for a pointer that cannot be read."""
     found = read(None, state)
     if found is not None:
         return Default(found, "pointer")
@@ -216,13 +351,15 @@ def default(state: Path | None = None) -> Default:
     from cad_server._internal import versions
 
     present = versions.present(state)
-    return Default(present[-1], "newest") if present else Default(None, None)
+    used = [name for name in present if started(name, state)]
+    return Default((used or present)[-1], "newest") if present else Default(None, None)
 
 
 def leaving(state: Path | None = None) -> Default:
     """What the default channel leaves at its next move (``versions.move``): its pointer's version; with no
     pointer, the layout of 0.11.10 and earlier where the install command has run here and its ``current`` is not a
-    version's mirror (``legacy``); else nothing -- the channel's first use."""
+    version's mirror (``legacy``); else nothing -- the channel's first use. ``Unreadable`` for a pointer that cannot
+    be read."""
     found = read(None, state)
     if found is not None:
         return Default(found, "pointer")

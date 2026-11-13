@@ -1247,6 +1247,18 @@ class TheOneLineInstaller(unittest.TestCase):
             self.assertEqual(given, [*head, "cad-server==1.2.3", "cad", "setup"])
             done, given = run("--version", "0.0.1")  # older than the script's own, taken as asked
             self.assertEqual(given, [*head, "cad-server==0.0.1", "cad", "setup"])
+            # ... but never below the first pinned release on a device whose default channel has a pointer.
+            state = root / "state"
+            state.mkdir()
+            (state / "default").write_text("0.11.12\n", encoding="utf-8")
+            for asked in ("0.11.10", "0.10.4"):
+                done, given = run("--version", asked, CAD_STATE_DIR=str(state))
+                self.assertEqual((done.returncode, given), (1, []), done.stderr)
+                self.assertIn(f"going back to {asked}, a release before 0.11.11, is not supported", done.stderr)
+            done, given = run("--version", "0.11.11", CAD_STATE_DIR=str(state))
+            self.assertEqual(given, [*head, "cad-server==0.11.11", "cad", "setup"])
+            done, given = run("--uninstall", "--version", "0.10.4", CAD_STATE_DIR=str(root / "elsewhere"))
+            self.assertEqual(given, [*head, "cad-server==0.10.4", "cad", "uninstall"], "no versions here: as asked")
             # --uninstall picks the verb, wherever it is given; the rest goes to `cad uninstall`, told yes: the
             # person asked for it, and the installer asks nothing. A release from before uninstall asked takes no
             # --yes; a build named outright is taken as this one.
@@ -1346,6 +1358,7 @@ class TheOneLineInstaller(unittest.TestCase):
         text = INSTALL_PS1.read_text(encoding="utf-8").replace("\r\n", "\n")
         self.assertEqual(re.findall(r"^\s*\$AddSince = '([^']*)'$", text, re.M), ["0.11.11"])
         self.assertIn("if ($argument -eq '--add') {", text)
+        self.assertIn("(Test-Older $version $AddSince) -and", text, "going back below the first pinned release refused")
         self.assertIn("$rest = @('--add')", text)
         sh_text = INSTALL_SH.read_text(encoding="utf-8")
         self.assertEqual(re.findall(r'^ADD_SINCE="([^"]*)"$', sh_text, re.M), ["0.11.11"], "the two scripts agree")

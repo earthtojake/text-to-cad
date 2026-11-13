@@ -87,24 +87,41 @@ def listing() -> list[dict[str, Any]]:
             for entry in entries]
 
 
-def running(folder: Path | str) -> bool:
+def running(folder: Path | str, *, besides: int | None = None) -> bool:
     """Whether a process runs from ``folder``: one started by its Python or its command names it on its
     command line (``ps``), as written or by a link to it -- each path on the line read with its folder
-    resolved, as ``folder`` is, so a worker started by an alias of an environment's Python counts. True when
-    that cannot be asked: a folder is kept rather than taken from under a process. On Windows, where it cannot be
-    asked, False: there a folder is renamed aside before it is removed, which the system refuses for a file in use
-    (``versions.remove``, ``legacy.remove``)."""
+    resolved, as ``folder`` is, so a worker started by an alias of an environment's Python counts. ``besides``: a
+    process whose own, and its descendants', do not count (a version's server and its workers, asked before the
+    server is stopped; this process, which may run from the folder it removes). True when that cannot be asked: a
+    folder is kept rather than taken from under a process. On Windows, where it cannot be asked, False: there a
+    folder is renamed aside before it is removed, which the system refuses for a file in use (``versions.remove``,
+    ``legacy.remove``)."""
     if os.name == "nt":
         return False
     named = os.path.realpath(folder).rstrip(os.sep) + os.sep
     plain = os.path.abspath(folder).rstrip(os.sep) + os.sep
     try:
-        listed = subprocess.run(["ps", "-axo", "command="], stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace", timeout=10)
+        listed = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], stdin=subprocess.DEVNULL, capture_output=True,
+                                text=True, encoding="utf-8", errors="replace", timeout=10)
     except (OSError, subprocess.SubprocessError):
         return True
     if listed.returncode != 0:
         return True
+    rows: list[tuple[int, int, str]] = []
+    for line in listed.stdout.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append((int(parts[0]), int(parts[1]), parts[2]))
+    spared: set[int] = set()
+    if besides is not None:
+        spared.add(besides)
+        grew = True
+        while grew:
+            grew = False
+            for pid, parent, _command in rows:
+                if parent in spared and pid not in spared:
+                    spared.add(pid)
+                    grew = True
     resolved: dict[str, str] = {}
 
     def within(word: str) -> bool:
@@ -115,4 +132,4 @@ def running(folder: Path | str) -> bool:
         return (os.path.join(resolved[head], tail) + os.sep).startswith(named)
 
     return any(named in line or plain in line or any(word.startswith(os.sep) and within(word) for word in line.split())
-               for line in listed.stdout.splitlines())
+               for pid, _parent, line in rows if pid not in spared)

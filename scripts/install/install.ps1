@@ -197,6 +197,16 @@ function Install-TextToCad {
             Write-Host "error: not a release: $version" -ForegroundColor Red
             return
         }
+        # Going back below the first pinned release on a device that runs one: that release knows no version
+        # folders, and would point clients of it at another version than the default channel's. Not supported.
+        $state = if ($env:CAD_STATE_DIR) { $env:CAD_STATE_DIR } else {
+            Join-Path $(if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { Join-Path $HOME '.local\state' }) 'cad'
+        }
+        if ($origin -eq 'as --version asked' -and (Test-Older $version $AddSince) -and
+                (Test-Path -LiteralPath (Join-Path $state 'default') -PathType Leaf)) {
+            Write-Host "error: this computer runs text-to-cad $AddSince or newer: going back to $version, a release before $AddSince, is not supported" -ForegroundColor Red
+            return
+        }
         $requirement = "cad-server==$version"
         # The server, and the library it pins at its own release: uv reads both anew from the index.
         $refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')

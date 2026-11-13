@@ -55,9 +55,10 @@ When a command fails, its exit code says why:
 
 - 3: it could not install or switch to 0.11.10 from this shell. Do what it says, outside
   the sandbox or with its permission, then run the command again.
-- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again
-  (the app may have a newer copy) or start a new chat. If the skill still names the same release, the
-  text-to-cad plugin in this app needs an update, in the app or by the install command: tell the person.
+- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again;
+  if it still names the same release, this app's copy of the text-to-cad plugin is out of date: run
+  cad update (with no pin), or, where the copy came from an app's plugin store, update it there; then start
+  a new chat.
 - 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
   `~/.local/bin/cad` (`%USERPROFILE%\.local\bin\cad.exe` on Windows) instead.
 

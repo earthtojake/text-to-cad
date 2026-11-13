@@ -12,9 +12,12 @@ releases left behind that none running now needs (``cad_server._internal.leftove
 format, the bytecode of installations no longer registered, cache folders no record names, environments
 of models' packages unused for a week), and
 cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``, a person's
-command and never run by itself, forgets every named channel unused for 30 days (``pointers.unused``: never the
-default channel), then removes every version no pointer names -- never one with work in flight -- and the layout of
-0.11.10 and earlier once that is safe (``versions.sweep``), each thing it did said; and those records, the
+command and never run by itself, reads its plan once (``versions.prune_plan``), shows it, asks, and does exactly that
+(``versions.prune``): every named channel unused for 30 days forgotten (``pointers.unused``: never the default
+channel; its version's data goes to the default channel's version), every version no pointer names removed -- its data
+carried into its successor first, never one with work in flight -- with those installed and never used and those
+whose install is incomplete, and the layout of 0.11.10 and earlier once that is safe, each thing it did said; and
+those records, the
 launchers earlier releases published beside the proxy (0.8's ``cadgen``
 proxy, ``cadgen-<version>``, ``cadgen-python-<version>``: ``installations.prune_legacy``) and those leftovers, but
 any written in the last seven days, a line for each kind; ``--all-versions`` with it removes 0.7's
@@ -22,8 +25,9 @@ however recently written. Nothing is removed without ``--prune``.
 
 It is the one command that reads every version and channel on the device (``_versions``): each installed version
 (``versions/<version>``: where it is, whether it is completely installed, which channels are on it, whether its
-server runs and on which port, whether nothing names it), each channel with its version and when it was last used
-(its pointer file's time), and what is left of the layout of 0.11.10 and earlier and whether it can go yet.
+server runs and on which port, and what becomes of one no pointer names), each channel with its version and when it
+was last used, each pointer that cannot be read, and what is left of the layout of 0.11.10 and earlier and whether it
+can go yet.
 Everything else it does acts on the one version it runs as (the pinned one, or the default with no pin).
 
 It says what the device runs, comparing nothing: the current installation, the flat release folders of
@@ -151,10 +155,13 @@ def _versions() -> list[str]:
     """Every installed version and every channel on the device -- the one report that reads them all; everything
     else ``cad doctor`` does acts on the version it runs as. A line for each version (``versions/<version>``): where
     it is, whether it is completely installed, which channels are on it, whether its server runs and on which port,
-    and, where no pointer names it, that ``--prune`` removes it. A line for each channel: its version and when it was
-    last used (its pointer file's time, ``pointers.used``), and for a named one unused for ``FORGOTTEN_DAYS`` that
-    ``--prune`` forgets it. Then what is left of the layout of 0.11.10 and earlier, and whether it can go yet
-    (``legacy.unsafe``). Read alone: nothing is started, stopped or written."""
+    and, where no pointer names it, what becomes of it (``versions.fate``): removed by the next sweep, its data
+    carried into its successor; installed and never used, or incomplete, which ``--prune`` removes; or its data kept
+    because where it would go is unknown, and why. A line for each channel: its version and when it was last used
+    (``pointers.last_used``), and for a named one unused for ``FORGOTTEN_DAYS`` that ``--prune`` forgets it; a line for
+    each pointer that cannot be read (``pointers.Unreadable``: no version is removed while one cannot). Then what is
+    left of the layout of 0.11.10 and earlier, and whether it can go yet (``legacy.unsafe``). Read alone: nothing is
+    started, stopped, made or written (``versions.serves`` asks a door, and takes no lock)."""
     import time
 
     from cad.engine import places
@@ -162,9 +169,16 @@ def _versions() -> list[str]:
 
     lines: list[str] = []
     try:
-        listed = pointers.listing()
-        kept = versions._kept()
-        default = pointers.default()
+        surveyed = pointers.survey()
+        listed = [found for found in surveyed if isinstance(found, pointers.Pointer)]
+        unreadable = [found for found in surveyed if isinstance(found, pointers.Unreadable)]
+        for found in unreadable:
+            lines.append(f"pointer  {found}: no version is removed until it can be read")
+        try:
+            kept = versions._kept()
+            default = pointers.default()
+        except pointers.Unreadable:
+            kept, default = {found.version for found in listed}, pointers.Default(None, None)
         for name in versions.folders():
             on = [pointer.channel or "default" for pointer in listed if pointer.version == name]
             if not on and default.version == name:
@@ -178,13 +192,24 @@ def _versions() -> list[str]:
                 words.append("its server runs" + (f", pages on port {port}" if port else ""))
             else:
                 words.append("its server is not running")
-            if name not in kept:
-                words.append("nothing names it: cad doctor --prune removes it")
+            if name not in kept and not unreadable:
+                fate = versions.fate(name, kept)
+                if fate is None:
+                    heir = versions.successor(name)[0]
+                    words.append("the next sweep removes it" + (f", its data carried into text-to-cad {heir} first"
+                                                                if heir and versions.used(name) else ""))
+                elif fate == "unused":
+                    words.append("installed and never used: cad doctor --prune removes it")
+                elif fate == "partial":
+                    words.append("its install is incomplete: cad doctor --prune removes it")
+                elif fate == "successor":
+                    words.append(f"its data is kept: {versions.successor(name)[1]}")
             lines.append("version  " + "; ".join(words))
         if not versions.folders():
             lines.append("version  none installed in their own folders")
         now = time.time()
-        stale = {pointer.channel for pointer in pointers.unused(now)}
+        stale = {pointer.channel for pointer in listed if pointer.channel is not None
+                 and (pointers.last_used(pointer) or now) <= now - pointers.FORGOTTEN_DAYS * 86400}
         for pointer in listed:
             when = pointers.last_used(pointer)
             line = (f"channel  {pointer.channel or 'default'}: text-to-cad {pointer.version}, last used {_when(when)}")
@@ -192,12 +217,12 @@ def _versions() -> list[str]:
                 line += f"; unused for {pointers.FORGOTTEN_DAYS} days: cad doctor --prune forgets it"
             lines.append(line)
         if legacy.removable():
-            if default.version is None or pointers.read(None) is None:
+            if default.version is None or default.source != "pointer":
                 why = "the default channel has not moved off it yet"
             else:
                 why = legacy.unsafe(default.version)
             lines.append("legacy   the layout of 0.11.10 and earlier is here: "
-                         + (f"kept, {why}" if why else "safe to remove: cad doctor --prune removes it"))
+                         + (f"kept, {why}" if why else "safe to remove: the next sweep, or cad doctor --prune, removes it"))
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         lines.append(f"version  unknown ({type(error).__name__}: {error})")
     return lines
@@ -546,35 +571,29 @@ def _report_leftovers() -> list[str]:
     return lines
 
 
-def _prune_plan(all_versions: bool = False) -> list[str]:
+def _prune_plan(all_versions: bool = False, plan=None) -> list[str]:
     """What ``--prune`` removes, a line per kind with its count, read and nothing removed: what it asks
-    consent for (``cad_server._internal.consent``). The leftovers are read as they will be once the records
+    consent for (``cad_server._internal.consent``), and exactly what it then does. The channels and versions are
+    ``plan``'s (``versions.prune_plan``, read once). The leftovers are read as they will be once the records
     and release folders it removes first are gone (``_leftovers``' ``gone``): the bytecode of an installation
     it takes out is among them."""
-    from cad_server._internal import installations, leftovers
+    from cad_server._internal import installations, leftovers, pointers
     from cad_server._internal.leftovers import count
 
-    from cad_server._internal import pointers, versions
-
     lines = []
-    stale = pointers.unused()
-    for pointer in stale:
-        lines.append(f"the {pointer.channel} channel (text-to-cad {pointer.version}), unused since "
-                     f"{_when(pointers.last_used(pointer))}")
-    # What stays named once those are forgotten: the other pointers' versions, the default's as it resolves, and the
-    # mirror's (``versions._kept``).
-    forgotten = {pointer.channel for pointer in stale}
-    still = {pointer.version for pointer in pointers.listing() if pointer.channel not in forgotten}
-    kept = still | (versions._kept() - pointers.named()) | {pointers.default().version}
-    unnamed = [name for name in versions.folders() if name not in kept]
-    if unnamed:
-        lines.append(f"{count(len(unnamed), 'version', 'versions')} no channel is on: "
-                     f"{', '.join(f'text-to-cad {name}' for name in unnamed)} (one with work in flight is kept)")
+    if plan is not None:
+        for pointer in plan.channels:
+            lines.append(f"the {pointer.channel} channel (text-to-cad {pointer.version}), unused since "
+                         f"{_when(pointers.last_used(pointer))}")
+        for name, why in plan.versions.items():
+            lines.append(f"text-to-cad {name}: {why} (kept should it have work in flight)")
+        if plan.legacy:
+            lines.append("the code, records and caches of 0.11.10 and earlier, what they hold carried into the default "
+                         "channel's version first")
     records = installations.records()
     dangling = [record for record in records if not installations.alive(record)]
     if dangling:
         lines.append(f"{count(len(dangling), 'installation record', 'installation records')} whose interpreter is gone")
-    # The flat release folders of 0.11.10 and earlier go with that layout (``legacy.remove``), never here.
     folders: list[dict] = []
     legacy = installations.legacy_launchers()
     if legacy:
@@ -646,8 +665,10 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument(
         "--prune",
         action="store_true",
-        help="Remove the record of every registered installation whose interpreter is gone, every installed version "
-             "no channel is on and the layout of 0.11.10 and earlier once nothing runs from it, the per-version launchers earlier builds published "
+        help="Forget every named channel unused for 30 days; remove every installed version no channel is on (its "
+             "data carried into the version its channel moved to first), every one installed and never used, the "
+             "layout of 0.11.10 and earlier once nothing runs from it, the record of every registered installation "
+             "whose interpreter is gone, the per-version launchers earlier builds published "
              "beside the cad command, engine records of an older format, the bytecode folders of installations no "
              "longer registered, cache folders with no record, environments of models' packages and cadgen 0.7's "
              "store and state files (none written or used in the last 7 days), and exit: listed, with how many of "
@@ -715,7 +736,18 @@ def _prune(args, prog: str) -> int:
     from cad_server._internal.cli_errors import Failure, write
     from cad_server._internal.consent import confirm, retry
 
-    plan = _prune_plan(args.all_versions)
+    from cad_server._internal import pointers, versions
+
+    lines = []
+    try:
+        pruning = versions.prune_plan()
+    except pointers.Unreadable as unreadable:
+        pruning = None
+        lines.append(f"no channel or version is pruned: {unreadable}")
+    except OSError as error:
+        pruning = None
+        lines.append(f"the versions could not be looked at: {error}")
+    plan = _prune_plan(args.all_versions, pruning)
     if plan:
         try:
             confirm(f"removing {len(plan)} kind{'' if len(plan) == 1 else 's'} of leftovers", "Remove them?",
@@ -726,30 +758,24 @@ def _prune(args, prog: str) -> int:
                              *(f"  {line}" for line in plan), "This cannot be undone."])
         except Failure as failure:
             return write(failure, prog=prog, as_json=bool(args.json))
-    lines = []
     removed = installations.prune()
     lines += [f"removed {path}" for path in removed]
     if not removed:
         lines.append("no registered installation has lost its interpreter")
-    # The named channels unused for 30 days forgotten (never the default), then every version no pointer names, and
-    # the layout of 0.11.10 and earlier once it is safe (``versions.sweep``), each thing said.
-    from cad_server._internal import pointers, versions
-
-    try:
-        for pointer in pointers.unused():
-            pointers.forget(pointer.channel)
-            lines.append(f"forgot the {pointer.channel} channel (text-to-cad {pointer.version}), unused since "
-                         f"{_when(pointers.last_used(pointer))}")
-        said: list[str] = []
-        verdicts = versions.sweep(told=said.append)
-        # What the sweep said beside its verdicts (the layout of 0.11.10 and earlier going); each version's own line
-        # is its verdict's.
-        lines += [line for line in said if not any(line.startswith(f"removed text-to-cad {name}") for name in verdicts)]
-        lines += [f"removed text-to-cad {name}" if verdict == "removed"
-                  else f"kept text-to-cad {name}: {VERDICTS.get(verdict, verdict)}"
-                  for name, verdict in verdicts.items() if verdict != "absent"]
-    except OSError as error:
-        lines.append(f"the versions could not be looked at: {error}")
+    # The plan's channels forgotten, versions removed and the layout of 0.11.10 and earlier, exactly as it said them.
+    if pruning:
+        try:
+            said: list[str] = []
+            verdicts = versions.prune(pruning, told=said.append)
+            # What the prune said beside its verdicts; each version's own line is its verdict's.
+            lines += [line for line in said if not any(line.startswith(f"removed text-to-cad {name}") for name in verdicts)]
+            lines += [f"removed text-to-cad {name}" if verdict == "removed"
+                      else f"kept text-to-cad {name}: {VERDICTS.get(verdict, verdict)}"
+                      for name, verdict in verdicts.items() if verdict != "absent"]
+        except OSError as error:
+            lines.append(f"the versions could not be pruned: {error}")
+    for name, why in (pruning.kept.items() if pruning is not None else ()):
+        lines.append(f"kept text-to-cad {name}: no channel is on it, and its data is kept: {why}")
     # And the launchers earlier releases published beside the cad command: 0.8's proxy among them.
     lines += [f"removed {path}, a launcher the cad command replaces" for path in installations.prune_legacy()]
     # And what no cadgen needs any more: old engine records, bytecode, cache folders no record names.
@@ -763,7 +789,9 @@ def _prune(args, prog: str) -> int:
 
 # Why ``versions.sweep`` kept a version it would remove (``versions.remove``'s verdicts), in a report's words.
 VERDICTS = {"named": "a channel is on it", "connected": "it has work in flight, or its server cannot say",
-            "in use": "a process still runs from it", "refused": "the system refused to move it (a file in use)"}
+            "in use": "a process still runs from it", "refused": "the system refused to move it (a file in use)",
+            "successor": "where its data would go is unknown", "carry": "what it holds could not all be carried over",
+            "used": "it has been used", "unused": "installed and never used", "partial": "its install is incomplete"}
 
 
 def _check(name: str, status: str, detail: str, more: list[str] | None = None) -> dict:

@@ -373,11 +373,18 @@ class DoctorTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()) as helped, self.assertRaises(SystemExit):
             doctor.main(["--help"])
         self.assertIn("every installed version no channel is on", " ".join(helped.getvalue().split()))
-        with mock.patch.object(versions, "sweep", return_value={"1.2.0": "removed"}) as swept:
+        plan = versions.Prune(versions={"1.2.0": "installed and never used"})
+        with mock.patch.object(versions, "prune_plan", return_value=plan) as planned, \
+                mock.patch.object(versions, "prune", return_value={"1.2.0": "removed"}) as pruned, \
+                mock.patch.object(versions, "sweep", side_effect=AssertionError("exactly its plan: no sweep")):
             code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
-        swept.assert_called_once()
+        planned.assert_called_once()  # read once, shown, and done: the same plan
+        pruned.assert_called_once_with(plan, told=mock.ANY)
         self.assertIn("removed text-to-cad 1.2.0\n", out)
+        with mock.patch.object(versions, "prune_plan", return_value=versions.Prune()), \
+                mock.patch.object(versions, "prune", side_effect=AssertionError("an empty plan does nothing")):
+            self.assertEqual(_run(["--prune", "--yes"])[0], 0)
 
     def test_the_report_says_what_the_device_runs(self) -> None:
         from cad_server._internal import installations, releases

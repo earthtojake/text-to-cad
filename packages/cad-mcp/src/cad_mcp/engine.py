@@ -9,11 +9,13 @@ reads it the same way:
   install names its build in ``CAD_INSTALLATION_VERSION``); the channel is the ``--channel`` its app's server
   config gives it (none: the default channel). A source tree has no version (a checkout's tests, a development
   checkout), and reaches the server as every client of 0.11.10 and earlier does (below).
-- **Its version made ready** (``prepare``, at start, in the background, outside any sandbox): installed where it
-  is not (``uvx --from cad-server==<version> cad setup --add``, the ``cad`` command's own way); then, where its
-  channel's pointer (``pointer``) does not name it, that version's own ``cad`` run pinned to it (``cad
-  +<version>[@<channel>] setup --add --quiet``), which moves the channel to it or says it is stale -- the one rule
-  every pinned command keeps, run by the version's own code, never this copy of it.
+- **Its version made ready** (``prepare``, at start, in the background, outside any sandbox): its channel's
+  pointer (``pointer``) read first, and where that names a newer version (``older``) the transport is stale at
+  once and installs nothing; else its version installed where it is not (``uvx --from cad-server==<version> cad
+  setup --add``, the ``cad`` command's own way); then, where the pointer does not name it, that version's own
+  ``cad`` run pinned to it (``cad +<version>[@<channel>] setup --add --quiet``), which moves the channel to it or
+  says it is stale -- the one rule every pinned command keeps, run by the version's own code, never this copy of
+  it. Until it is done the transport is not ready (``unavailable``: being installed, ``installing_line``).
 - **The engine folder** (``engine_dir``): the server's door (a named pipe; on Windows a port file) and
   lock, named ``engine``, in a folder only this user can write (``folder_refusal``): a version's is
   ``<engines>/<version>`` (``engine_dir(version)``), its data ``versions/<version>`` in the state folder
@@ -28,9 +30,14 @@ reads it the same way:
   current installation's (``<state>/installations/current`` and its record), whatever release this transport is,
   and on a device with none, one registered first (``register``: the server this transport's environment
   carries, else its own release's, installed by uvx).
-- **Stale** (``stale``): once its channel's pointer names another version, this transport's version is not its
-  channel's any more (an update moved the channel on while the app's thread stayed open): every tool call is
-  answered with one line that says so (``shim``).
+- **Stale** (``stale``): once its channel's pointer names a NEWER version than its own (``older``: an update moved
+  the channel on while the app's thread stayed open; an app still holding an older copy), this transport's version
+  is not its channel's any more: it installs nothing, starts no server and connects to none (``connect``), and
+  every request is answered here with one line that says so (``stale_line``: the ``cad`` command's words for
+  which version this is and which its channel is on, then a thread's repair; ``shim``). A pointer naming an older version is no such thing: it is the channel this transport is moving.
+- **Every wait bounded**: a request waits for the version a few seconds at most (``unavailable``), a server's
+  answer through the door ``DOOR_SECONDS`` a line (``_line``), its start 60 seconds, its HTTP answer 10 minutes;
+  ``prepare``'s runs are bounded by ``PREPARE_SECONDS`` each, which bounds every wait for it (``READY_LIMIT``).
 - **The hold** (``hold``): a connection the server keeps while it is open, under a name the transport's
   MCP sessions are opened by, which end when it drops.
 """
@@ -41,6 +48,7 @@ import http.client
 import importlib.util
 import json
 import os
+import re
 import secrets
 import selectors
 import socket
@@ -149,8 +157,17 @@ STALE_EXIT = 4
 # ``versions.add_command``), for the line a transport says when it cannot install its version.
 INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"
 INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"
-# How long a version's install, and its own ``cad`` moving its channel, may take.
+# How long a version's install, and its own ``cad`` moving its channel, may take; and so the longest ``prepare``
+# can take, its two runs, which bounds every wait for it.
 PREPARE_SECONDS = 3600.0
+READY_LIMIT = 2 * PREPARE_SECONDS + 60.0
+# How long a request waits for its version to be ready before it is answered here (``unavailable``).
+READY_SECONDS = 5.0
+# How long a line the server sends through its door is waited for (``_line``).
+DOOR_SECONDS = 30.0
+# Why a transport cannot reach its server now (``unavailable``): its version is being installed (or its channel
+# moved to it), its channel is on a newer version, or its version could not be made ready.
+INSTALLING, STALE, FAILED = "installing", "stale", "failed"
 
 
 class Pin:
@@ -243,23 +260,92 @@ def add_command(version: str, system: str | None = None) -> str:
     return f"{INSTALL} -s -- --add {version}"
 
 
-def stale_line(version: str, channel: str | None, now: str) -> str:
-    """What a transport whose channel moved past its version answers each tool call with: the server's
-    ``pins.stale``, in a thread's words."""
-    return (f"this CAD app is text-to-cad {version}, and its channel ({channel or DEFAULT_CHANNEL}) is on "
-            f"text-to-cad {now} now: start a new thread to use it")
+# A release as PEP 440 spells one (the library's ``contract._RELEASE``), and a development build's name,
+# ``<release>-dev.<stamp>`` (the server's ``versions.DEVELOPMENT``): how ``order`` reads a version.
+_RELEASE = re.compile(
+    r"v?(?:(?P<epoch>\d+)!)?(?P<release>\d+(?:\.\d+)*)"
+    r"(?:[-_.]?(?P<pre>alpha|beta|preview|pre|rc|a|b|c)[-_.]?(?P<pre_n>\d+)?)?"
+    r"(?:-(?P<post_n1>\d+)|[-_.]?(?P<post>post|rev|r)[-_.]?(?P<post_n2>\d+)?)?"
+    r"(?:[-_.]?(?P<dev>dev)[-_.]?(?P<dev_n>\d+)?)?"
+    r"(?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?")
+_PRE = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
+_DEVELOPMENT = re.compile(r"(?P<release>.+)-dev\.(?P<stamp>[0-9]+)")
+_LAST, _FIRST = float("inf"), float("-inf")
+
+
+def order(name: str) -> tuple[Any, ...] | None:
+    """Where version ``name`` sorts among versions, or None for a name that is no release: the server's
+    ``versions.order``, copied and held equal by a test. Releases sort as PEP 440 sorts them; a development build,
+    ``<release>-dev.<stamp>``, after the release whose numbers it carries and before the next."""
+    built = _DEVELOPMENT.fullmatch(name or "")
+    found = _RELEASE.fullmatch((built["release"] if built else name or "").strip().lower())
+    if found is None:
+        return None
+    numbers = [int(part) for part in found["release"].split(".")]
+    while len(numbers) > 1 and numbers[-1] == 0:
+        numbers.pop()
+    post = found["post"] is not None or found["post_n1"] is not None
+    dev = found["dev"] is not None
+    if found["pre"] is not None:
+        pre: tuple[Any, ...] = (_PRE[found["pre"]], int(found["pre_n"] or 0))
+    else:
+        pre = (_FIRST,) if dev and not post else (_LAST,)
+    base = (int(found["epoch"] or 0), tuple(numbers), pre,
+            (int(found["post_n1"] or found["post_n2"] or 0),) if post else (_FIRST,),
+            (int(found["dev_n"] or 0),) if dev else (_LAST,))
+    return (*base, (1, int(built["stamp"])) if built else (0, 0))
+
+
+def older(one: str, other: str) -> bool:
+    """Whether version ``one`` is older than ``other`` (``order``); a name that is no release is older than none
+    and newer than none."""
+    first, second = order(one), order(other)
+    return first is not None and second is not None and first < second
+
+
+def stale_line(version: str, channel: str | None, now: str | None) -> str:
+    """What a transport whose channel moved past its version answers with, in one sentence: first which version this
+    is and which its channel is on now (``now``; None where the pointer could not be read again: a newer one), the
+    same words as the server's ``pins.stale_head`` (held equal by a test); then the repair for a tool call in a thread
+    whose transport is old, cheapest first: a new thread, which starts the app's newer copy where it has one; then,
+    where a new thread says the same, the app's copy brought up: ``cad update`` for the default channel, the plugin's
+    update in the app that delivered it for a named one."""
+    head = (f"this is text-to-cad {version}, and its channel ({channel or DEFAULT_CHANNEL}) is on "
+            + (f"text-to-cad {now} now" if now else "a newer text-to-cad now"))
+    repair = "run `cad update`" if channel is None else "update the text-to-cad plugin in the app it came from"
+    return f"{head}: start a new thread; if a new thread says the same, {repair}"
+
+
+def installing_line(version: str) -> str:
+    """What a transport answers while its version is being installed, or its channel moved to it (``prepare``)."""
+    return f"text-to-cad {version} is being installed on this computer: try again shortly"
 
 
 def stale() -> str | None:
-    """The line every tool call is answered with when this transport's channel has moved past its version
-    (``stale_line``), read now -- its pointer names another version -- or as preparing it found; else None."""
+    """The line this transport answers with once its channel has moved past its version (``stale_line``): its
+    channel's pointer, read now, names a newer version (``older``), or preparing it found so; else None."""
     pin = PIN
     if pin.version is None:
         return None
     if pin.stale is not None:
         return pin.stale
     now = pointer(pin.channel)
-    return stale_line(pin.version, pin.channel, now) if now is not None and now != pin.version else None
+    return stale_line(pin.version, pin.channel, now) if now is not None and older(pin.version, now) else None
+
+
+def unavailable(wait: float = 0.0) -> tuple[str, str] | None:
+    """Why this transport cannot reach its server now, as ``(INSTALLING | STALE | FAILED, line)``, or None when it
+    can: stale is said at once, whatever preparing is doing; else its version is waited for at most ``wait``
+    seconds, and is still being installed past them, or could not be made ready."""
+    line = stale()
+    if line is not None:
+        return STALE, line
+    if not PIN.ready.wait(wait):
+        return INSTALLING, installing_line(PIN.version or "")
+    if PIN.failed is not None:
+        return FAILED, PIN.failed
+    line = stale()
+    return (STALE, line) if line is not None else None
 
 
 def _cad_environment(version: str) -> dict[str, str]:
@@ -270,13 +356,17 @@ def _cad_environment(version: str) -> dict[str, str]:
 
 def prepare(pin: Pin | None = None) -> Pin:
     """This transport's version made ready to serve (see the module), once, in the background, as the app starts
-    it: ``pin.ready`` set when done, with ``failed`` or ``stale`` where it cannot serve. Nothing for a transport
-    with no version."""
-    import re
-
+    it: ``pin.ready`` set when done, with ``failed`` or ``stale`` where it cannot serve. Its channel's pointer is
+    read first: where it names a newer version the transport is stale at once, and nothing is installed or run
+    (an app holding an older copy would otherwise install that version again on every thread, only to find it
+    stale). Nothing for a transport with no version."""
     pin = pin or PIN
     try:
         if pin.version is None:
+            return pin
+        now = pointer(pin.channel)
+        if now is not None and older(pin.version, now):
+            pin.stale = stale_line(pin.version, pin.channel, now)
             return pin
         record = version_record(pin.version)
         if record is None:
@@ -295,8 +385,8 @@ def prepare(pin: Pin | None = None) -> Pin:
             return pin
         word = f"+{pin.version}" + (f"@{pin.channel}" if pin.channel else "")
         code, said = _run_code([record["cad"], word, "setup", "--add", "--quiet"], _cad_environment(pin.version))
-        if code == STALE_EXIT:
-            pin.stale = stale_line(pin.version, pin.channel, pointer(pin.channel) or "a newer version")
+        if code == STALE_EXIT:  # the channel moved past it while it was installed
+            pin.stale = stale_line(pin.version, pin.channel, pointer(pin.channel))
         elif code != 0:
             pin.failed = said or f"text-to-cad {pin.version} could not be started for the {pin.label} channel"
         return pin
@@ -760,13 +850,14 @@ def _not_started(code: int) -> ConnectionError:
 _STARTING = threading.Lock()
 
 
-def connect(*, start: bool = True, timeout: float = 60.0) -> Connection | None:
+def connect(*, start: bool = True, timeout: float = 60.0, wait: float = 0.0) -> Connection | None:
     """A connection to the server, started when ``start`` and none answers: by one thread of this process
-    at a time, a thread that waited for another's start taking the server it started. With a version, once it is
-    ready (``prepare``), and ``ConnectionError`` saying why where it cannot serve."""
-    PIN.ready.wait()
-    if PIN.failed is not None:
-        raise ConnectionError(PIN.failed)
+    at a time, a thread that waited for another's start taking the server it started. With a version, only once it
+    is ready (``prepare``, waited for at most ``wait`` seconds) and its channel's: ``ConnectionError`` saying why
+    where it cannot serve now (``unavailable``) -- a stale transport never connects, nor starts a server."""
+    why = unavailable(wait)
+    if why is not None:
+        raise ConnectionError(why[1])
     found = _connect()
     if found is not None or not start:
         return found
@@ -808,13 +899,49 @@ def _started(timeout: float) -> Connection:
     raise ConnectionError("the engine server did not start")
 
 
+def _line(connection: Connection, seconds: float | None = None) -> bytes:
+    """The next line the server sends on ``connection`` (empty once it closed it), waited for at most ``seconds``
+    (``DOOR_SECONDS``): ``ConnectionError`` past them, so a server that stopped answering never holds a request. Read
+    a byte at a time, never past its newline, so whatever reads the connection next reads from where it ends."""
+    seconds = DOOR_SECONDS if seconds is None else seconds
+    deadline = time.monotonic() + seconds
+    late = ConnectionError(f"the engine server did not answer within {seconds:g} seconds")
+    if WINDOWS:  # the port's socket: its own timeout, and none again after
+        sock = next((each for each in connection.closing if isinstance(each, socket.socket)), None)
+        if sock is None:
+            return connection.reader.readline()
+        sock.settimeout(seconds)
+        try:
+            return connection.reader.readline()
+        except TimeoutError:
+            raise late from None
+        finally:
+            try:
+                sock.settimeout(None)
+            except OSError:
+                pass
+    fd = connection.reader.fileno()
+    got = b""
+    with selectors.DefaultSelector() as selector:
+        selector.register(fd, selectors.EVENT_READ)
+        while not got.endswith(b"\n"):
+            left = deadline - time.monotonic()
+            if left <= 0 or not selector.select(left):
+                raise late
+            byte = os.read(fd, 1)
+            if not byte:
+                break
+            got += byte
+    return got
+
+
 def _exchange(connection: Connection, message: dict[str, Any], where: Path | None = None) -> dict[str, Any]:
     if WINDOWS:  # the token in the request too, first, which the server checks as it did the hello's
         message = {"token": (where or port_path()).read_text(encoding="utf-8").split()[1], **message}
     with connection:
         connection.writer.write((json.dumps(message) + "\n").encode())
         connection.writer.flush()
-        for line in connection.reader:
+        while line := _line(connection):
             answer = json.loads(line)
             if "log" in answer or set(answer) == {"progress"}:
                 continue
@@ -852,7 +979,7 @@ def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
             message = {"token": port_path().read_text(encoding="utf-8").split()[1], **message}
         connection.writer.write((json.dumps(message) + "\n").encode())
         connection.writer.flush()
-        if json.loads(connection.reader.readline() or b"{}").get("ok") is not True:
+        if json.loads(_line(connection) or b"{}").get("ok") is not True:
             raise ConnectionError("the engine server did not take the hold")
     except BaseException:
         connection.close()

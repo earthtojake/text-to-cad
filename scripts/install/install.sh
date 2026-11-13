@@ -122,6 +122,17 @@ older() {
   return 1
 }
 
+# The device's state folder, as text-to-cad's own code says it (CAD_STATE_DIR overrides it).
+state_dir() {
+  if [ -n "${CAD_STATE_DIR:-}" ]; then
+    printf '%s\n' "$CAD_STATE_DIR"
+  elif [ "$(uname -s)" = Darwin ]; then
+    printf '%s\n' "$HOME/Library/Application Support/cad"
+  else
+    printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/cad"
+  fi
+}
+
 # A release's version: a digit first, then digits, letters, dots, + and - alone.
 release() {
   case $1 in
@@ -237,6 +248,11 @@ main() {
       fi
     fi
     release "$version" || die "not a release: $version"
+    # Going back below the first pinned release on a device that runs one: that release knows no version folders,
+    # and would point clients of it at another version than the default channel's. Not supported.
+    if [ "$origin" = "as --version asked" ] && older "$version" "$ADD_SINCE" && [ -f "$(state_dir)/default" ]; then
+      die "this computer runs text-to-cad $ADD_SINCE or newer: going back to $version, a release before $ADD_SINCE, is not supported"
+    fi
     requirement="cad-server==$version"
     # The server, and the library it pins at its own release: uv reads both anew from the index.
     refresh="--refresh-package cad-server --refresh-package cad"

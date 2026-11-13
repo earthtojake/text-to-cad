@@ -409,8 +409,33 @@ class DevelopmentInstall(Sequence):
         code, out, err = self.setup_as(X)
         self.assertEqual(code, 0, out + err)
         self.assertEqual(pointers.read(None), X)
-        self.assertFalse(places.version_dir(dev).exists(), "the development version went with the move")
+        # Its data never goes back into an older version, so the development version's folder stays, and cad doctor
+        # says why; the checkout's environment stays in any case.
+        self.assertEqual(versions.successor(dev), (None, f"text-to-cad {X}, where its data would go, is older: data "
+                                                          "never goes back to an older version"))
+        self.assertEqual(versions.sweep(), {dev: "successor"})
         self.assertTrue(os.path.isfile(sys.executable), "and the checkout's environment stays")
+
+
+class TakeOver(Sequence):
+    def test_a_person_s_setup_waits_for_a_server_of_0_11_10_outside_the_install_lock(self) -> None:
+        # B10: the drain of a server of 0.11.10 may take an hour; no other channel's move waits on it.
+        from cad_server._internal.file_lock import attempt
+
+        self.present(X)
+        free: list[bool] = []
+
+        def take_over(_self, name, before):
+            with attempt(self.state / versions.LOCK) as held:
+                free.append(held)
+
+        before = {"installation": OLD, "pid": 1, "serving": {"port": 3245}}
+        with mock.patch.object(setup, "running_engine", return_value=before), \
+                mock.patch.object(setup, "legacy_server", return_value=True), \
+                mock.patch.object(setup.Installer, "_take_over", take_over):
+            code, out, err = self.setup_as(X)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(free, [True], "the install lock is let go before the old server is waited for")
 
 
 class Uninstall(Sequence):
@@ -466,8 +491,35 @@ class Uninstall(Sequence):
         self.assertEqual(pointers.read("codex"), Y)
         self.assertTrue(places.version_record(Y))
         self.assertEqual(installations.proxy_status(), installations.OK)
-        self.assertIn(f"stays: the copy of the plugin the codex (text-to-cad {Y}) channel delivered still uses it; "
-                      "remove that plugin in its app", out)
+        # What is true, and no loop: removing the store's plugin leaves its channel, so the line names --purge.
+        self.assertIn(f"stays: the codex (on text-to-cad {Y}) channel is still installed, and its store's copy of the "
+                      "plugin runs this command; `cad uninstall --purge` removes it too", out)
+
+    def test_nothing_is_removed_from_under_a_process_still_running(self) -> None:
+        # B9: whoever holds the flat door is asked to stop and awaited; a folder a process runs from stays, and so do
+        # the state and cache folders under --purge while a server runs: said, and the run fails.
+        from cad.engine import client
+        from cad_server._internal import releases
+
+        self.on(X)
+        flat = self.state / "releases" / OLD
+        (flat / "bin").mkdir(parents=True)
+        asked: list[dict] = []
+
+        def ask_flat(message, **_kwargs):
+            asked.append(message)
+            return {"ok": True, "pid": 7}
+
+        with mock.patch.object(versions, "ask_flat", ask_flat), \
+                mock.patch.object(client, "wait_gone", return_value=False), \
+                mock.patch.object(releases, "running", side_effect=lambda folder, besides=None: Path(folder) == flat):
+            code, out = self.run_uninstall(X, "--purge")
+        self.assertEqual(code, 1, out)
+        self.assertIn({"op": "stop"}, asked, "the flat door's server asked to stop")
+        self.assertIn("did not stop", out)
+        self.assertTrue(flat.is_dir(), "a release a process runs from stays")
+        self.assertIn("still runs", out)
+        self.assertTrue(self.state.is_dir(), "no --purge while something still runs")
 
     def test_a_store_on_the_same_version_keeps_it_and_purge_removes_everything(self) -> None:
         self.on(X)

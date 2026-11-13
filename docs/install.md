@@ -109,7 +109,9 @@ apps (with no receipt, every copy of ours it finds), the plugin folder, the rele
 your computer runs and its server, the folders of releases before 0.11.11, and the
 receipt. A copy from a plugin directory stays, with its release, its settings and its
 Recents: its store delivered it. While one does, so does the `cad` command it runs,
-and a line names that plugin: remove it in its app, then run `cad uninstall` again.
+and a line says which channel is still installed, on which release: its store's plugin
+uses the command, and `cad uninstall --purge` removes it too. Nothing is removed from
+under a program still running from it: the line says so, and the uninstall fails.
 A plugin directory's copy that the install command of a release through 0.11.10
 replaced is not put back: install it from the directory again to get it back.
 `--purge` with it removes everything: every release, a store's among them, and
@@ -471,7 +473,9 @@ update and names the install command.
 - A Codex or Cursor chat that was open when the update came says it is out of date:
   start a new chat.
 - A chat that was open in any app may say its commands are for the release before: read
-  the skill again, or start a new chat.
+  the skill again; if it still names the release before, the app's copy of the plugin is
+  behind: run `cad update` (with no release named), or update the plugin in the app it
+  came from, then start a new chat.
 - A copy of the plugin you installed yourself, with an app's own plugin commands rather
   than the install command, says it has fallen behind until you update it in that app
   ([App by app](#app-by-app)).
@@ -491,8 +495,12 @@ once: the default channel's and a store's, each with its own server. A `cad` com
 type with no release runs the default channel's release, and so do `cad status` and
 `cad stop`: each acts on one release.
 
-A release no channel is on any more is removed as soon as nothing is running on it.
-Going back to a release before 0.11.11 by hand is not supported.
+A release no channel is on any more is removed as soon as nothing is running on it,
+once what it wrote that the channel's new release lacks (documents, Recents, settings) is
+carried over. A release installed and never used, like an update waiting to run, stays
+until `cad doctor --prune`. Going back to a release before 0.11.11 by hand is not
+supported, and the install command refuses `--version` with one on a computer that runs
+0.11.11 or later.
 
 To find out a release is out, text-to-cad fetches `api.texttocad.dev/v1/versions` at
 most once an hour: one anonymous request, with no ID, path or anything about you,
@@ -520,10 +528,11 @@ each channel is on and when it was last used; the release the server runs; the p
 folder's release; where each app's plugin comes from and its release; and whether the CAD
 kernel loads.
 
-`cad doctor --prune` removes what nothing needs: a channel no copy has used for 30 days
-(its store's plugin is gone from your apps), any release no channel is on, and what
-releases before 0.11.11 left behind. It prints the list first and removes it once you say
-yes (`--yes` where it cannot ask). Nothing does this by itself.
+`cad doctor --prune` removes what nothing needs: a channel no command has used for 30
+days (its release's documents and Recents go to the default channel's release), any
+release no channel is on, a release installed and never used, and what releases before
+0.11.11 left behind. It prints exactly what it will remove first, and removes that once
+you say yes (`--yes` where it cannot ask). Nothing does this by itself.
 
 `cad doctor` starts the CAD server if none is running. `cad doctor --no-server` does not,
 and says whether one runs; `cad doctor --check` only reports, writing and starting nothing.

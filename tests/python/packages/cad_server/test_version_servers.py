@@ -54,6 +54,8 @@ class ServingUv(Uv):
 
 
 class Servers(Device):
+    REAL_SERVERS = True
+
     def setUp(self) -> None:
         super().setUp()
         self.port = free_port()
@@ -199,6 +201,7 @@ class Retiring(Servers):
         for name in (X, Y):
             self.version(name)
         pointers.write(None, Y)
+        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")  # the default left it
         self.start(X, tend=1.0)  # no pointer names it, nor the default: once idle, it goes
         self.until(lambda: not versions.serves(X), f"{X}'s server stops itself")
         self.assertTrue(places.version_dir(X).exists(), "a server never removes the folder it runs from")

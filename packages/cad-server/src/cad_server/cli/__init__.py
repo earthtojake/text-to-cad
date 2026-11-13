@@ -296,6 +296,21 @@ def _main(argv: list[str]) -> int:
             pins.apply(pin)
         except Failure as failure:
             return write(failure, prog="cad", as_json=wants_json(rest))
+    # No pin, run by a version that has never started where the default channel has no pointer (the newest version
+    # present, which the cad command runs where none has started): the default channel's first use made first, so
+    # nothing is written before the version's data is imported (`pins.first_use`). `setup` moves the channel itself,
+    # and `uninstall` takes things out.
+    elif pin is None and not helping and command not in _MOVES_ITSELF and _maybe_a_version():
+        from cad.engine.places import versioned
+
+        if versioned() is not None:
+            from cad_server._internal import pins
+            from cad_server._internal.cli_errors import Failure, wants_json, write
+
+            try:
+                pins.first_use()
+            except Failure as failure:
+                return write(failure, prog="cad", as_json=wants_json(rest))
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:
@@ -362,6 +377,21 @@ def _report(error: Exception) -> None:
 # `setup` (`update`), which say it their own way; `uninstall`; `run`, which is only the python it runs,
 # as the `cad` command's `run` is; `plugin`, which a switch runs with no one to read it; and `requirement`,
 # whose output a program reads.
+def _maybe_a_version() -> bool:
+    """Whether this process may be an installed version, told without importing the engine (a command imports no
+    more than it uses): told its name (a development version, ``CAD_INSTALLATION_VERSION``), or its environment is a
+    version's server, ``versions/<version>/code/server``. ``places.versioned`` then says."""
+    import os
+
+    if os.environ.get("CAD_INSTALLATION_VERSION"):
+        return True
+    parts = os.path.normcase(sys.prefix).split(os.sep)
+    return len(parts) >= 4 and parts[-1] == "server" and parts[-2] == "code" and parts[-4] == "versions"
+
+
+# Commands that never make the default channel's first use before they run (``pins.first_use``): setup moves it
+# itself (an updater's first run of it stops once its release is present), uninstall takes things out.
+_MOVES_ITSELF = frozenset({"setup", "uninstall"})
 _UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run", "plugin", "requirement"})
 
 

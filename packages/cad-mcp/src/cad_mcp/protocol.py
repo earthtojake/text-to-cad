@@ -4,7 +4,8 @@ One reader thread parses messages. Requests the host sends run on daemon threads
 bounded number at once, so the process ends with its host even mid-call, and a slow request (a model's bytes, a picture) never blocks the others; ``initialize`` and ``ping``
 run on the reader so a handshake is never queued behind work. Every outgoing
 message is one line written under one lock. This side only answers: it sends no
-requests of its own, so a response that arrives is ignored.
+requests of its own, so a response that arrives is ignored; the one message it
+sends unasked is a notification (``notify``).
 
 The standard output of the process belongs to the protocol alone:
 :func:`claim_stdout` moves the original descriptor aside and points descriptor 1
@@ -184,6 +185,11 @@ class Connection:
         self._cancelled.discard(request_id)
         if not cancelled:
             self._send(response)
+
+    def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
+        """A notification sent to the peer, unasked (an MCP ``notifications/...``)."""
+        if not self._closed:
+            self._send({"jsonrpc": "2.0", "method": method, **({"params": params} if params else {})})
 
     def _send(self, message: dict[str, Any]) -> None:
         frame = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"

@@ -153,11 +153,15 @@ made there --, the engine started; the current one, the engine's and each app's 
 stdout, exit 1 when the kernel is installed and does not load; `--check` the report alone, which registers,
 writes and starts nothing, what a bug report wants; `--json` it as one document, each check's name, status and
 detail) and the one command that reads every version and channel: each installed version (where it is, which
-channels are on it, whether its server runs and on which port, whether nothing names it), each channel with its
-version and when it was last used (its pointer file's time), and what is left of the layout of 0.11.10 and
-earlier and whether it can go yet. `cad doctor --prune`, a person's command and never automatic, forgets every
-named channel unused for 30 days (never the default), removes every version no pointer names -- never one with
-work in flight -- and the layout of 0.11.10 and earlier once that is safe, saying each thing it did, and what
+channels are on it, whether its server runs and on which port, and, where no channel is on it, what becomes of it:
+removed by the next sweep, its data carried into its successor; installed and never used; or its data kept, and why),
+each channel with its version and when it was last used (a stamp beside its pointer), each pointer that cannot be
+read, and what is left of the layout of 0.11.10 and earlier and whether it can go yet. `cad doctor --prune`, a
+person's command and never automatic, shows its plan, asks, and does exactly that: it forgets every named channel
+unused for 30 days (never the default; its version's data goes to the default channel's version), removes every
+version no channel is on -- its data carried into its successor first, never one with work in flight -- with the
+versions installed and never used, and the layout of 0.11.10 and earlier once that is safe, saying each thing it
+did, and what
 earlier releases left behind that nothing needs (`_internal/leftovers.py`: engine records of an older format,
 the bytecode of installations no longer registered, cache folders no record names, the launchers earlier releases
 published beside the `cad` command, 0.8's `cadgen` proxy among them; none written in the last seven days); `cad run` a
@@ -230,7 +234,9 @@ pointer names a newer version already. That version reads the pin (`_internal/pi
 version, it runs; newer, or the channel's first use, it moves the channel to itself first (the default channel,
 where the install command has run here, by the updater); older, it refuses. With no pin, the command runs the
 default channel's version: its pointer; else, where the install command has run here, the installation the layout of
-0.11.10 and earlier names current; else the newest version installed. The channel a command is on is
+0.11.10 and earlier names current; else the newest version installed that has started, else the newest
+installed, whose first command then makes the default channel's first use (its data imported, its pointer) before
+anything else, so no version writes data before its first start. The channel a command is on is
 `cad.engine.places.channel()` -- `default` for a pin that names none, and for no pin --, which its requests to the
 server name and `cad run` hands its program. Each refusal is one line on stderr (from the version, one JSON
 document on stdout under `--json`), with its exit status: 2 `bad_pin`, a first word `+...` that is no pin or names
@@ -238,7 +244,9 @@ no channel; 3 `cannot_install_here`, a version not installed that this shell cou
 run outside the sandbox (`curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add <version>`; in PowerShell
 `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add <version>`), or one whose channel it
 could not move; 4 `stale_pin`, a pin older than the version its channel is on now -- the chat's copy of the skill
-is older than the one installed: read the skill again, or start a new chat; 5 `other_version`, a version's own
+is older than the one installed: the line says to read the skill again, and, where it still names the same
+release, to bring this app's copy up (`cad update` for the default channel, the plugin's update in its app for a
+named one), then read it again or start a new chat; 5 `other_version`, a version's own
 `cad` given another version's pin. A `cad` command of 0.11.10 or earlier knows no pin: it says `+<version>` is an
 unknown command (exit 2).
 
@@ -252,10 +260,15 @@ layout below, in the state and cache folders (`cad.engine.places`). A version is
 its server and kernel environments, then its code marker -- by `cad setup --add` (`_internal/versions.py`),
 which writes the `cad` command where it is missing or of an older revision and changes nothing else; each delivery
 channel's pointer (`default`, `channels/<name>` in the state folder:
-`_internal/pointers.py`) names its version, moved by one routine that imports the new version's settings,
-Recents, records, page token and port from the version it replaces at its first start (`_internal/imports.py`)
-and removes the versions no pointer names; the layout of 0.11.10 and earlier is imported from and, once the default
-channel has left it and that is safe, its code, records and caches removed (`_internal/legacy.py`).
+`_internal/pointers.py`; a pointer that is there and cannot be read is never taken for none: nothing is removed
+while one cannot be) names its version, moved by one routine that imports the new version's settings, Recents,
+records, page token and port from the version it replaces at its first start (`_internal/imports.py`), proves the
+version's server starts (its own start sequence, up to ready to serve), carries over what the version it leaves
+wrote since, and removes the versions no channel is on that have been a channel's -- a version installed and never
+used is no sweep's -- each carrying what it holds that its successor lacks into it first (records, Recents,
+settings; never what it kept for telemetry, which moves once, to the next sender); the layout of 0.11.10 and earlier
+is imported from and, once the default channel has left it and that is safe, carried over, its code, records and
+caches removed (`_internal/legacy.py`).
 
 Each version in use runs its own server, reached through its own door alone, `<version>` in the engine folder,
 and only the default channel's also answers the flat door every client of 0.11.10 and earlier and every process
@@ -263,7 +276,9 @@ with no version finds (`engine/daemon.py`'s `Bridge`, the only code for earlier 
 channel's move stops its old version's server once no pointer names that version and nothing is in flight on it
 -- a build, a draw, an export, an agent's tool call; never an idle app or an open page --, and the new version's
 serves on the old one's port with the page token it imported; a server whose version no pointer names stops
-itself once idle, and another server's sweep, the next move or `cad doctor --prune` removes its folder. `cad stop`
+itself once idle, and another server's sweep, the next move or `cad doctor --prune` removes its folder, its data
+carried into the version its channel moved to; where that is unknown, the folder stays and `cad doctor` says why.
+`cad stop`
 and `cad status` act on one version's server: the pinned one, or the default's. Only the default channel's
 version, on a device where the install command has run (its receipt), has an updater: every other server's page
 and CAD app card show no update notice, no update button and no automatic-updates switch (the settings route

@@ -2281,6 +2281,52 @@ def _first_start() -> None:
         print(f"cad: imported {found.source.words()} into text-to-cad {name}", file=sys.stderr, flush=True)
 
 
+def proof() -> int:
+    """A version's proof before its channel's pointer moves to it (``cad_server._internal.versions.proof``): its
+    server's own start sequence up to ready to serve -- its lock taken in its engine folder, its data imported
+    (``_first_start``), the server built over that data and the records' migrations run, its door made --, then all of
+    it let go and the process gone: no port bound (a move may run in a sandbox that refuses one), no process left,
+    nothing served. 0 when it got there, or its server runs already; 1, with why on stderr, when not."""
+    from cad_server._internal import imports
+
+    name = versioned()
+    if name is None:
+        print("cad: the proof is a version's: this process is none", file=sys.stderr)
+        return 1
+    try:
+        held = lock()
+    except OSError as error:
+        print(f"cad: its server cannot take its lock in {engine_dir()}: {error.strerror or error}", file=sys.stderr)
+        return 1
+    if held is None:
+        return 0  # its server runs: it has started
+    daemon = None
+    door = None
+    try:
+        _first_start()
+        if not imports.imported(name):
+            print(f"cad: its data could not be imported into {_places.data_dir(name)}", file=sys.stderr)
+            return 1
+        daemon = Daemon()
+        from cad.engine.identity import migrate
+
+        migrate(daemon.models.registry())
+        if not WINDOWS:
+            from cad.engine.door import Door
+
+            door = Door(door_path(), lambda _ident, _protocol: None)
+        return 0
+    except Exception as error:  # noqa: BLE001 - the proof says why it did not start, in one line
+        print(f"cad: {type(error).__name__}: {error}", file=sys.stderr)
+        return 1
+    finally:
+        if door is not None:
+            door.close()
+        if daemon is not None:
+            daemon.shutdown()
+        let_go(held)
+
+
 def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool = False,
          foreground: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server --port``);

@@ -112,7 +112,7 @@ LOCK = "install.lock"  # ``cad_server._internal.versions.LOCK``: the device's in
 # and none of these is another program's that shares the name, and purge leaves it as it is (the engine's own
 # cache touches only its ``documents/``, ``engine/cache.py``).
 STATE_OURS = frozenset({"versions", "installations", "engines", "documents", "recents", "releases", "plugin", "settings.json",
-                        "settings.lock", "plugin.lock", "versions.json", "install-channels.json", "default", "channels",
+                        "settings.lock", "plugin.lock", "versions.json", "install-channels.json", "default", "channels", "used",
                         RECEIPT})
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
@@ -697,8 +697,8 @@ class Installer:
     def _move(self, before: dict[str, Any] | None) -> tuple[bool, Any]:
         """Step 5: the default channel moved to this run's version (``versions.move``), said in its lines; then,
         where a server of 0.11.10 or earlier held the flat door as this run began (``before``, ``legacy_server``)
-        and this is no updater's run, its port handed to this version's server (``_take_over``). ``(failed, what
-        the move did, or None for a process that is no version)``."""
+        and this is no updater's run, its port handed to this version's server (``_take_over``), once the install
+        lock is let go (``taking_over``). ``(failed, what the move did, or None for a process that is no version)``."""
         from cad.engine import places
         from cad_server._internal import versions
 
@@ -728,7 +728,9 @@ class Installer:
             self.say(f"default  the default channel stays where it was: {moved.error}")
             return True, moved
         if before is not None and not self.engine_update and legacy_server(before):
-            self._take_over(name, before)
+            # Done once the install lock is let go (``install``): its wait for the old server to drain may be long,
+            # and no other channel's move waits on it.
+            self.taking_over = (name, before)
         return False, moved
 
     def _take_over(self, name: str, before: dict[str, Any]) -> None:
@@ -738,7 +740,8 @@ class Installer:
         that door now (``daemon.Bridge``), on the port the old one served pages on, with the page token it imported,
         so a page open on it reloads into this version and every link still opens; then the layout of 0.11.10 and
         earlier removed, now that nothing of it runs (``versions.sweep``, ``legacy.remove``). What did not happen is
-        said, and fails nothing: the next command starts this version's server, on the next free port."""
+        said, and fails nothing: the next command starts this version's server, on the next free port. Run with no
+        lock held, its sweep taking the install lock as it does."""
         from cad.engine import client
         from cad_server._internal import versions
 
@@ -1059,6 +1062,9 @@ class Installer:
             if not (self.actions or self.stopped or registered["launcher"]["written"] or self.moved
                     or any(step.subject == providers.NEED_NODE for step in steps)):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
+        taking_over = getattr(self, "taking_over", None)
+        if taking_over is not None:  # outside the install lock: the drain it waits for may take an hour
+            self._take_over(*taking_over)
         if self.engine_update:
             # The default channel moved: an app that failed is said on stderr, and done again by the next update.
             return 0
@@ -1283,6 +1289,7 @@ class Installer:
                 self.say(f"command  {providers.shown(proxy, self.machine)} stays: {self._still_used(channels)}")
             if whole:
                 failed = self._stop() or failed
+                failed = self._stop_flat() or failed
                 failed = self._remove_versions(default, kept_by, purge) or failed
                 failed = self._remove_releases() or failed
                 failed = self._remove_plugin() or failed
@@ -1297,17 +1304,20 @@ class Installer:
                     receipt["updated"] = providers.stamp()
                     self._keep(receipt)
         if purge:
-            self._purge(state, cache)
+            failed = self._purge(state, cache) or failed
         restart = self._restart(apps, changed, "Next, restart to unload it:")
         return self._result(steps, extra, None, restart, 1 if failed else 0)
 
     @staticmethod
     def _still_used(channels: list[Any]) -> str:
-        """Why the ``cad`` command stays: which channels' copies still run it, and what to do."""
-        named = ", ".join(f"{pointer.channel} (text-to-cad {pointer.version})" for pointer in channels)
-        return (f"the copy of the plugin the {named} channel{'s' if len(channels) != 1 else ''} delivered still "
-                f"use{'' if len(channels) != 1 else 's'} it; remove that plugin in its app, then run `cad uninstall` "
-                "again (or `cad uninstall --purge` to remove everything)")
+        """Why the ``cad`` command stays: which channels are still installed, on which version, and that their
+        store's plugin runs it; ``--purge`` removes them too. (Removing a store's plugin in its app leaves its channel
+        installed: only ``cad doctor --prune``, after 30 days unused, or ``--purge`` takes a channel out.)"""
+        named = ", ".join(f"{pointer.channel} (on text-to-cad {pointer.version})" for pointer in channels)
+        many = len(channels) != 1
+        return (f"the {named} channel{'s are' if many else ' is'} still installed, and {'their' if many else 'its'} "
+                "store's copy of the plugin runs this command; `cad uninstall --purge` removes "
+                f"{'them' if many else 'it'} too")
 
     def _remove_versions(self, default: str | None, kept_by: dict[str, str | None], purge: bool) -> bool:
         """The default channel taken out: its pointer, the mirror 0.11.10 and earlier read (``installations/current``
@@ -1330,14 +1340,15 @@ class Installer:
         for name in names:
             # Its lock is awaited whether or not the stop is answered: a server this command already asked to stop
             # (``_stop``) answers nothing more on its way out, and holds its lock until its workers are gone.
-            if versions.serves(name):
+            if versions.endpoint(name).lock.exists():  # a server there, or on its way out
                 versions.ask(name, {"op": "stop"})
                 versions.gone(name)
             done = versions.remove_now(name, told=lambda line: self.say(f"version  {line}"))
             if done != "removed":
                 failed = True
-                self.say(f"version  {places.version_dir(name)} could not be removed whole ({done}): remove it "
-                         "once this command ends")
+                self.say(f"version  {places.version_dir(name)} could not be removed whole ({done}): "
+                         + ("a process still runs from it: stop it, then run this again" if done in ("in use", "connected")
+                            else "the next update or cad doctor --prune removes it"))
             else:
                 self.actions.append({"app": "version", "action": "remove", "kind": "remove",
                                      "path": str(places.version_dir(name)), "ok": True,
@@ -1383,8 +1394,9 @@ class Installer:
 
     def _remove_releases(self) -> bool:
         """The release folders removed, with their installations' records and ``current`` when it named
-        one of them: what the device runs from goes with an uninstall. True when one could not be removed
-        whole (on Windows, the folder this command runs from)."""
+        one of them: what the device runs from goes with an uninstall. One a process still runs from stays, said
+        (``releases.running``). True when one could not be removed whole (a process runs from it; on Windows, the
+        folder this command runs from)."""
         import shutil
 
         from cad_server._internal import installations, releases
@@ -1392,11 +1404,23 @@ class Installer:
         root = releases.root()
         if not root.exists():
             return False
+        busy = [entry for entry in sorted(root.iterdir()) if entry.is_dir() and not entry.is_symlink()
+                and releases.running(entry, besides=os.getpid())]
+        for folder in busy:
+            self.say(f"releases {self.providers.shown(str(folder), self.machine)} stays: a process still runs from it "
+                     "(stop it, then run this again)")
         for record in installations.records():
-            if installations._same_place(os.path.dirname(record["prefix"]), root):
+            if installations._same_place(os.path.dirname(record["prefix"]), root) and not any(
+                    installations._same_place(record["prefix"], folder) for folder in busy):
                 installations.forget(record["version"])
                 if installations.current_version() == record["version"]:
                     installations.state().remove(installations.CURRENT)
+        if busy:
+            for entry in root.iterdir():
+                if entry not in busy:
+                    (shutil.rmtree(entry, ignore_errors=True) if entry.is_dir() and not entry.is_symlink()
+                     else entry.unlink(missing_ok=True))
+            return True
         shutil.rmtree(root, ignore_errors=True)
         shown = self.providers.shown(str(root), self.machine)
         if root.exists():
@@ -1420,10 +1444,48 @@ class Installer:
                              "code": code, "ok": code == 0, "at": self.providers.stamp()})
         return code != 0
 
-    def _purge(self, state: Path, cache: Path) -> None:
+    def _stop_flat(self) -> bool:
+        """Whoever holds the flat door of 0.11.10 and earlier -- a server of those releases still running, as while
+        it drains after an update -- asked to stop, and its lock awaited (``versions.STOP_SECONDS``): nothing it runs
+        from is removed under it. True when one still runs."""
+        from cad.engine import client
+        from cad_server._internal import versions
+
+        if versions.ask_flat({"op": "pid"}, seconds=versions.SERVES_SECONDS) is None:
+            return False
+        versions.ask_flat({"op": "stop"})
+        try:
+            gone = client.wait_gone(timeout=versions.STOP_SECONDS, endpoint=versions.flat_endpoint())
+        except ConnectionError:
+            gone = False
+        if not gone:
+            self.say(f"engine   the server at {versions.flat_endpoint().address} did not stop: what it runs from stays")
+        return not gone
+
+    def _running(self, state: Path, cache: Path) -> list[str]:
+        """What still runs from the state or cache folder, in words: a version's server, the flat door's, or any
+        process (this one aside: ``cad uninstall`` runs from a version it removes)."""
+        from cad_server._internal import releases, versions
+
+        found = [f"text-to-cad {name}'s server" for name in versions.folders() if versions.serves(name)]
+        if versions.ask_flat({"op": "pid"}, seconds=versions.SERVES_SECONDS) is not None:
+            found.append(f"the server at {versions.flat_endpoint().address}")
+        for folder in (state, cache):
+            if folder.is_dir() and releases.running(folder, besides=os.getpid()):
+                found.append(f"a process running from {self.providers.shown(str(folder), self.machine)}")
+        return found
+
+    def _purge(self, state: Path, cache: Path) -> bool:
+        """The state and cache folders removed, where nothing runs from them any more (``_running``): else nothing of
+        them is, said. True when they could not be removed."""
         import shutil
 
         shown = self.providers.shown
+        running = self._running(state, cache)
+        if running:
+            self.say(f"folders  {shown(state, self.machine)} and {shown(cache, self.machine)} stay: "
+                     f"{'; '.join(running)} still runs. Stop it, then run cad uninstall --purge again")
+            return True
         for folder, ours in ((state, STATE_OURS), (cache, CACHE_OURS)):
             held = {entry.name for entry in folder.iterdir()} - {LOCK} if folder.is_dir() else set()
             if held and not held & ours:
@@ -1434,6 +1496,7 @@ class Installer:
             shutil.rmtree(folder, ignore_errors=True)
             self.say(f"folders  removed {shown(folder, self.machine)}" if not folder.exists()
                      else f"folders  {shown(folder, self.machine)} could not be removed whole")
+        return False
 
 
 def refresh_copies(told: Any) -> tuple[bool, list[dict[str, Any]]]:

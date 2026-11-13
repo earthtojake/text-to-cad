@@ -174,6 +174,35 @@ class DoorTest(unittest.TestCase):
             opened.close()
         self.assertEqual(heard, [1], "the engine heard protocol 1")
 
+    def test_a_server_that_stops_answering_never_holds_a_request(self) -> None:
+        # B11: each line the door is asked for is waited for DOOR_SECONDS at most, through the pipes and the port.
+        import socket
+
+        folder = Path(tempfile.mkdtemp(prefix="shim-silent-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        port_file = folder / "engine.port"
+        port_file.write_text(f"1 {'ab' * 16}\n", encoding="utf-8")
+        mine, theirs = socket.socketpair()
+        self.addCleanup(theirs.close)
+        stream = mine.makefile("rwb")
+        connections = [(True, engine.Connection(stream, stream, stream, mine))]
+        if os.name != "nt":
+            down, up = os.pipe(), os.pipe()  # a server that took the request and says nothing
+            self.addCleanup(os.close, down[1])
+            self.addCleanup(os.close, up[0])
+            connections.append((False, engine.Connection(open(down[0], "rb"), open(up[1], "wb"))))
+        for windows, connection in connections:
+            with self.subTest(windows=windows), mock.patch.object(engine, "WINDOWS", windows), \
+                    mock.patch.object(engine, "DOOR_SECONDS", 0.05):
+                said: list = []
+                asking = threading.Thread(target=lambda: said.append(
+                    self.assertRaises(ConnectionError, engine._exchange, connection, {"op": "http"}, port_file)),
+                    daemon=True)
+                asking.start()
+                asking.join(30)
+                self.assertFalse(asking.is_alive(), "the request was answered")
+                self.assertEqual(len(said), 1)
+
     def test_on_windows_it_says_hello_at_the_port_and_is_greeted_and_served(self) -> None:
         import socket
         import types
@@ -252,9 +281,19 @@ class PinTest(unittest.TestCase):
 
         return mock.patch.object(subprocess, "run", run)
 
-    def pinned(self, channel: str | None = None) -> engine.Pin:
-        with mock.patch.object(engine, "own_version", return_value=self.X):
+    def pinned(self, channel: str | None = None, version: str | None = None) -> engine.Pin:
+        with mock.patch.object(engine, "own_version", return_value=version or self.X):
             return engine.configure(channel)
+
+    def proxy(self):
+        """A ``Proxy`` whose client fails any call: nothing may reach a server."""
+        from cad_mcp import shim
+
+        class Client:
+            def call(self, *args, **kwargs):
+                raise AssertionError(f"nothing is sent: {args}")
+
+        return shim.Proxy(client=Client())
 
     def test_the_channel_is_an_argument_of_the_server_config(self) -> None:
         from cad_mcp import shim
@@ -315,22 +354,148 @@ class PinTest(unittest.TestCase):
             engine.connect()
         self.assertEqual(str(said.exception), pin.failed)
 
-    def test_stale_at_start_and_once_its_channel_moves_on(self) -> None:
+    def test_stale_once_its_channel_moves_on_and_where_its_own_cad_says_so(self) -> None:
         self.installed(self.X)
-        self.point(self.Y)
-        pin = self.pinned()
-        with self.run_as(lambda command: (engine.STALE_EXIT, "cad: this command is for text-to-cad 0.12.0, ...")):
-            engine.prepare(pin)
-        line = f"this CAD app is text-to-cad {self.X}, and its channel (default) is on text-to-cad {self.Y} now: " \
-               "start a new thread to use it"
-        self.assertEqual((pin.stale, engine.stale()), (line, line))
         moving = self.pinned("codex")
         self.point(self.X, "codex")
         with self.run_as(lambda command: self.fail("on its channel's version: nothing runs")):
             engine.prepare(moving)
         self.assertIsNone(engine.stale())
         self.point(self.Y, "codex")  # its channel updated while the thread stayed open
-        self.assertEqual(engine.stale(), line.replace("(default)", "(codex)"))
+        self.assertEqual(engine.stale(), engine.stale_line(self.X, "codex", self.Y))
+        # Its own version's cad finds the channel past it as it moves it (another moved it meanwhile): stale.
+        pin = self.pinned()
+        with self.run_as(lambda command: (self.point(self.Y), (engine.STALE_EXIT, "cad: this command is ..."))[1]):
+            engine.prepare(pin)
+        self.assertEqual((pin.stale, engine.stale()), (engine.stale_line(self.X, None, self.Y),) * 2)
+
+    def test_stale_means_its_channel_is_on_a_newer_version_never_an_older_one(self) -> None:
+        # B5: a launcher newer than its channel's pointer (a store just updated the plugin) is the channel's next
+        # version, never stale; one older than it is.
+        self.pinned(version=self.Y).ready.set()
+        for pointed, stale in ((self.X, False), (f"{self.Y}-dev.20261113000000", True), ("0.13.0rc1", True),
+                               ("0.12.1rc1", False), (self.Y, False)):
+            with self.subTest(pointed=pointed):
+                self.point(pointed)
+                self.assertEqual(engine.stale(), engine.stale_line(self.Y, None, pointed) if stale else None)
+
+    def test_a_launcher_newer_than_its_channel_says_it_is_being_installed_never_stale(self) -> None:
+        # B5: while it installs its version and moves its channel to it, a tool call is told its version is being
+        # installed and to try again shortly; nothing reaches a server, and the thread is never called stale.
+        from cad_mcp.protocol import RequestContext
+
+        self.point(self.X, "codex")
+        pin = self.pinned("codex", version=self.Y)
+        installing, go = threading.Event(), threading.Event()
+
+        def answers(command):
+            if command[0] == "uvx":
+                installing.set()
+                self.assertTrue(go.wait(30))
+                self.installed(self.Y)
+            else:
+                self.point(self.Y, "codex")
+            return 0, ""
+
+        with self.run_as(answers), mock.patch.object(engine, "READY_SECONDS", 0.01):
+            preparing = threading.Thread(target=engine.prepare, args=(pin,))
+            preparing.start()
+            self.addCleanup(preparing.join, 30)
+            self.addCleanup(go.set)
+            self.assertTrue(installing.wait(30))
+            self.assertIsNone(engine.stale())
+            answer = self.proxy().handle("tools/call", {"name": "cad_show", "arguments": {}}, RequestContext(1, {}))
+            self.assertEqual(answer, {"content": [{"type": "text", "text": engine.installing_line(self.Y)}],
+                                      "isError": True})
+            self.assertEqual(engine.installing_line(self.Y),
+                             f"text-to-cad {self.Y} is being installed on this computer: try again shortly")
+            go.set()
+            preparing.join(30)
+        self.assertEqual((pin.ready.is_set(), pin.stale, pin.failed, engine.stale()), (True, None, None, None))
+
+    def test_a_launcher_older_than_its_channel_installs_nothing_and_never_connects(self) -> None:
+        # B6: an app still holding an older copy is stale at once, its pointer read first: nothing is installed or
+        # run, no server is started or reached, and every request is answered here with the line.
+        from cad_mcp.protocol import RequestContext, RpcError
+
+        self.point(self.Y)
+        pin = self.pinned()
+        with self.run_as(lambda command: self.fail(f"a stale launcher runs nothing: {command}")):
+            engine.prepare(pin)
+        line = engine.stale_line(self.X, None, self.Y)
+        self.assertEqual((pin.ready.is_set(), pin.stale, pin.failed), (True, line, None))
+        with mock.patch.object(engine, "_connect", side_effect=AssertionError("never connects")), \
+                mock.patch.object(subprocess, "Popen", side_effect=AssertionError("never starts a server")):
+            for call in (engine.connect, lambda: engine.connect(start=False), engine.hold):
+                with self.assertRaises(ConnectionError) as said:
+                    call()
+                self.assertEqual(str(said.exception), line)
+            proxy = self.proxy()
+            for method in ("initialize", "tools/list", "resources/list", "resources/read"):
+                with self.subTest(method=method), self.assertRaises(RpcError) as refused:
+                    proxy.handle(method, {"uri": "ui://cad/app"}, RequestContext(1, {}))
+                self.assertEqual(refused.exception.message, line)
+            self.assertEqual(proxy.handle("tools/call", {"name": "cad_show"}, RequestContext(2, {}))["content"][0]["text"],
+                             line)
+            self.assertEqual(proxy.handle("ping", {}, RequestContext(3, {})), {})
+            proxy.notify("notifications/cancelled", {"requestId": 2})  # dropped
+
+    def test_a_server_running_for_a_version_its_channel_left_is_never_reached_again(self) -> None:
+        # B6: a launcher made ready before its channel moved on reaches its old server no more, nor restarts it.
+        self.installed(self.X)
+        self.pinned().ready.set()
+        self.point(self.Y)
+        with mock.patch.object(engine, "_connect", side_effect=AssertionError("never connects")), \
+                self.assertRaises(ConnectionError) as said:
+            engine.connect()
+        self.assertEqual(str(said.exception), engine.stale_line(self.X, None, self.Y))
+
+    def test_a_thread_open_across_its_channel_s_update_keeps_its_lists(self) -> None:
+        # Stale after it listed its tools: the list it had is answered again, each tool then answering the line.
+        from cad_mcp.protocol import RequestContext
+
+        self.installed(self.X)
+        self.pinned().ready.set()
+        proxy = self.proxy()
+        tools = {"tools": [{"name": "cad_show"}]}
+        with mock.patch.object(proxy, "_post", return_value=tools):
+            self.assertEqual(proxy.handle("tools/list", {}, RequestContext(1, {})), tools)
+        self.point(self.Y)
+        self.assertEqual(proxy.handle("tools/list", {}, RequestContext(2, {})), tools)
+
+    def test_while_its_version_installs_every_request_is_answered_here_within_its_bound(self) -> None:
+        # B11: past the initialize, a request never waits on the install: each is answered here in the form its
+        # method expects, the lists empty and announced as changed once the version is ready.
+        from cad_mcp import shim
+        from cad_mcp.protocol import RequestContext, RpcError
+
+        self.pinned()  # not ready: being installed
+        told: list[str] = []
+        announced = threading.Event()
+        proxy = self.proxy()
+        proxy.tell = lambda method, params: (told.append(method), len(told) == 2 and announced.set())
+        line = engine.installing_line(self.X)
+        with mock.patch.object(shim, "INITIALIZE_SECONDS", 0.01), mock.patch.object(engine, "READY_SECONDS", 0.01):
+            greeting = proxy.handle("initialize", {"protocolVersion": "2025-06-18"}, RequestContext(0, {}))
+            self.assertEqual(greeting["capabilities"], {"tools": {"listChanged": True}, "resources": {"listChanged": True}})
+            proxy.notify("notifications/initialized", {})
+            proxy.notify("notifications/cancelled", {"requestId": 9})
+            for method, answer in (("tools/list", {"tools": []}), ("resources/list", {"resources": []}),
+                                   ("resources/templates/list", {"resourceTemplates": []}), ("ping", {}),
+                                   ("tools/call", {"content": [{"type": "text", "text": line}], "isError": True})):
+                with self.subTest(method=method):
+                    self.assertEqual(proxy.handle(method, {}, RequestContext(1, {})), answer)
+            for method in ("resources/read", "completion/complete"):
+                with self.subTest(method=method), self.assertRaises(RpcError) as refused:
+                    proxy.handle(method, {"uri": "ui://cad/app"}, RequestContext(2, {}))
+                self.assertEqual((refused.exception.code, refused.exception.message), (shim.UNAVAILABLE, line))
+            with self.assertRaises(ConnectionError) as said:
+                engine.connect()  # bounded: answered at once, never waiting on the install
+            self.assertEqual(str(said.exception), line)
+        self.assertEqual(told, [], "nothing is announced before the version is ready")
+        engine.PIN.ready.set()
+        self.assertTrue(announced.wait(30), told)
+        self.assertEqual(told, ["notifications/resources/list_changed", "notifications/tools/list_changed"])
 
     def test_a_stale_thread_s_tool_call_is_answered_with_the_line_and_nothing_is_sent(self) -> None:
         from cad_mcp.protocol import RequestContext
@@ -455,6 +620,29 @@ class SameFoldersTest(unittest.TestCase):
             (code / places.VERSION_MARKER).write_text(json.dumps(marker), encoding="utf-8")
             self.assertEqual(engine.version_record("0.12.0"), places.version_record("0.12.0"))
             self.assertIsNone(engine.version_record("0.12.1"))
+
+    def test_it_orders_versions_as_the_server_does(self) -> None:
+        from cad_server._internal import versions
+
+        names = ["0.11.10", "0.11.11", "0.11.11-dev.20261113000000", "0.11.11-dev.20261114000000", "0.12.0.dev1",
+                 "0.12.0a1", "0.12.0rc1", "0.12.0", "0.12", "0.12.0.post1", "0.12.1", "1.0.0", "1!0.1", "not-a-version"]
+        for one in names:
+            self.assertEqual(engine.order(one) is None, versions.order(one) is None, one)
+            for other in names:
+                self.assertEqual(engine.older(one, other), versions.older(one, other), (one, other))
+
+    def test_the_stale_line_says_what_the_cad_command_s_says_then_its_own_repair(self) -> None:
+        # What a stale launcher says first is what the cad command says first for a stale pin; the repair is each
+        # one's own: a new thread first here, the skill read again there.
+        from cad_server._internal import pins
+
+        for channel, now in ((None, "0.12.1"), ("codex", "0.12.1"), (None, None)):
+            with self.subTest(channel=channel, now=now):
+                head = pins.stale_head("0.12.0", channel, now) + ": "
+                line = engine.stale_line("0.12.0", channel, now)
+                self.assertTrue(line.startswith(head + "start a new thread; if a new thread says the same, "), line)
+                self.assertTrue(pins.stale("0.12.0", channel, now).startswith(head + "read the skill again"))
+                self.assertIn("`cad update`" if channel is None else "update the text-to-cad plugin in the app", line)
 
 
 if __name__ == "__main__":

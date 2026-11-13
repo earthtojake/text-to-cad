@@ -100,9 +100,10 @@ release's library (the worker contract), so the server pins the library at its o
 stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. Each installed
 version has its own folder, data and server (`<state>/versions/<version>`); each channel is on one
-version (its pointer), a command with no pin runs the default channel's, a version no channel is on
-is removed once nothing is in flight there, and every command acts on one version, `cad doctor` alone
-reading them all. The default channel's server also holds the door and `installations/current` that
+version (its pointer), a command with no pin runs the default channel's, a version a channel left is
+removed once nothing is in flight there, what it wrote carried into the version that channel moved to
+(one installed and never used stays for `cad doctor --prune`), and every command acts on one version,
+`cad doctor` alone reading them all. The default channel's server also holds the door and `installations/current` that
 releases before 0.11.11 reach ([CONTRIBUTING.md, "Development
 dependencies"](CONTRIBUTING.md#development-dependencies)).
 A test or an experiment gets a server of its own with its own `CAD_STATE_DIR` and

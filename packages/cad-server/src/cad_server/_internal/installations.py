@@ -509,11 +509,24 @@ elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/c
 else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cad"
 fi
 say() {{ printf 'cad: %s\\n' "$1" >&2; exit "$2"; }}
-# Whether version $1 is installed: its code marker, written last, and the Python and cad it names (a key a line).
+# Whether version $1 is installed: its code marker, written last, and its Python and cad: a release's where every
+# release puts them, so no path is parsed; a development version's as its marker names them (a key a line, JSON's
+# escapes undone).
 present() {{
-  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/versions/$1/code/cad-version.json" 2>/dev/null)
-  cad=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/versions/$1/code/cad-version.json" 2>/dev/null)
+  [ -f "$state/versions/$1/code/cad-version.json" ] || return 1
+  case $1 in
+  *[!0-9.abcoprst]*)
+    python=$(record python "$state/versions/$1/code/cad-version.json")
+    cad=$(record cad "$state/versions/$1/code/cad-version.json") ;;
+  *)
+    python=$state/versions/$1/code/server/bin/python
+    cad=$state/versions/$1/code/server/bin/cad ;;
+  esac
   [ -x "$python" ] && [ -f "$cad" ]
+}}
+# The path key $1 of the record $2 names (a key a line), its JSON escapes undone.
+record() {{
+  sed -n 's/^ *"'"$1"'": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$2" 2>/dev/null | sed 's/\\\\\\(.\\)/\\1/g'
 }}
 # Version $1, as present found it, run with the arguments after it: a name of characters no release has (a
 # development build's) told to it, which its code cannot know; none told to a release.
@@ -525,12 +538,15 @@ run() {{
   shift
   exec "$python" "$cad" "$@"
 }}
-# Whether version $1's release numbers are below version $2's (a tie is not).
+# Whether version $1 is older than version $2, as the versions order them (versions.order) for the names releases and
+# development builds have: their release numbers, then a development build (-dev.<stamp>) after its release, by its
+# stamp (a tie is not older).
 older() {{
   awk -v a="$1" -v b="$2" 'function n(v) {{ sub(/[^0-9.].*/, "", v); return v }}
+function d(v) {{ if (match(v, /-dev\\.[0-9]+$/)) return substr(v, RSTART + 5) + 0; return -1 }}
 BEGIN {{ x = split(n(a), p, "."); y = split(n(b), q, ".")
   for (i = 1; i <= x || i <= y; i++) {{ if (p[i] + 0 < q[i] + 0) exit 0; if (p[i] + 0 > q[i] + 0) exit 1 }}
-  exit 1 }}'
+  if (d(a) < d(b)) exit 0; exit 1 }}'
 }}
 # The version file $1 names on its first line (a pointer, installations/current), as now; else now is empty.
 named() {{
@@ -569,14 +585,16 @@ case $1 in
   present "$version" && run "$version" "$@"
   # Not installed: stale where its channel is on a newer version already, else installed.
   if [ -n "$channel" ]; then named "$state/channels/$channel"; else named "$state/default"; fi
-  [ -n "$now" ] && older "$version" "$now" && say "{stale}" 4
+  if [ -n "$now" ] && older "$version" "$now"; then
+    if [ -n "$channel" ]; then say "{stale_named}" 4; fi
+    say "{stale_default}" 4
+  fi
   install "$version" "$@"
   ;;
 esac
 # No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
-# names
-# current where the install command has run here (its receipt), run as that layout's command ran it; else the
-# newest version installed.
+# names current where the install command has run here (its receipt), run as that layout's command ran it; else the
+# newest version installed that has started, else the newest installed.
 named "$state/default"
 if [ -n "$now" ]; then
   present "$now" && run "$now" "$@"
@@ -584,17 +602,22 @@ if [ -n "$now" ]; then
 fi
 if [ -f "$state/install-receipt.json" ]; then
   named "$state/installations/current"
-  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/installations/$now.json" 2>/dev/null)
-  cad=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/installations/$now.json" 2>/dev/null)
+  python=$(record python "$state/installations/$now.json")
+  cad=$(record cad "$state/installations/$now.json")
   [ -n "$now" ] && [ -x "$python" ] && [ -f "$cad" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
 fi
 newest=
+started=
 for marker in "$state"/versions/*/code/cad-version.json; do
   name=${{marker%/code/cad-version.json}}
   name=${{name##*/}}
   present "$name" || continue
   if [ -z "$newest" ] || ! older "$name" "$newest"; then newest=$name; fi
+  [ -f "$state/versions/$name/data/format.json" ] || continue
+  if [ -z "$started" ] || ! older "$name" "$started"; then started=$name; fi
 done
+# The newest that has started: one never started runs its channel's first use before anything else.
+[ -n "$started" ] && newest=$started
 [ -n "$newest" ] && present "$newest" && run "$newest" "$@"
 printf '%s\\n' '{refusal}' >&2
 exit 1
@@ -638,7 +661,8 @@ CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{{0,31}}")
 # The characters of a release's name: one installed from the index, and run with no name told.
 RELEASED = re.compile(r"[0-9.abcoprst]+")
 NAME = "CAD_INSTALLATION_VERSION"
-BAD_PIN, BAD_CHANNEL, STALE = {bad_pin!r}, {bad_channel!r}, {stale!r}
+BAD_PIN, BAD_CHANNEL = {bad_pin!r}, {bad_channel!r}
+STALE_DEFAULT, STALE_NAMED = {stale_default!r}, {stale_named!r}
 NOT_INSTALLED, DEVELOPMENT = {not_installed!r}, {development!r}
 
 
@@ -676,13 +700,18 @@ def present(state, version):
 
 
 def older(one, other):
-    """Whether version ``one``'s release numbers are below version ``other``'s (a tie is not)."""
-    def numbers(version):
-        return [int(part or 0) for part in re.match(r"[0-9.]*", version).group().split(".")]
+    """Whether version ``one`` is older than ``other``, as the versions order them for the names releases and
+    development builds have: their release numbers, then a development build (-dev.<stamp>) after its release, by
+    its stamp (a tie is not older)."""
+    def key(version):
+        numbers = [int(part or 0) for part in re.match(r"[0-9.]*", version).group().split(".")]
+        build = re.search(r"-dev\\.([0-9]+)$", version)
+        return numbers, int(build.group(1)) if build else -1
 
-    first, second = numbers(one), numbers(other)
+    (first, one_build), (second, other_build) = key(one), key(other)
     size = max(len(first), len(second))
-    return first + [0] * (size - len(first)) < second + [0] * (size - len(second))
+    first, second = first + [0] * (size - len(first)), second + [0] * (size - len(second))
+    return (first, one_build) < (second, other_build)
 
 
 def wait(child):
@@ -764,11 +793,12 @@ def main():
         # Not installed: stale where its channel is on a newer version already, else installed.
         now = named(os.path.join(state, "channels", channel) if channel else os.path.join(state, "default"))
         if now and older(version, now):
-            return say(STALE % {{"version": version, "channel": channel or "default", "now": now}}, 4)
+            return say((STALE_NAMED if channel else STALE_DEFAULT) % {{"version": version, "channel": channel,
+                                                                         "now": now}}, 4)
         return install(state, version, args)
     # No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
     # names current where the install command has run here (its receipt), run as that layout's command ran it;
-    # else the newest version installed.
+    # else the newest version installed that has started, else the newest installed.
     now = named(os.path.join(state, "default"))
     if now:
         found = present(state, now)
@@ -782,10 +812,16 @@ def main():
         names = sorted(os.listdir(os.path.join(state, "versions")))
     except OSError:
         names = []
-    newest = None
+    newest = started = None
     for name in names:
-        if VERSION.fullmatch(name) and present(state, name) and (newest is None or not older(name, newest)):
-            newest = name
+        if VERSION.fullmatch(name) and present(state, name):
+            if newest is None or not older(name, newest):
+                newest = name
+            # The newest that has started: one never started runs its channel's first use before anything else.
+            if os.path.isfile(os.path.join(state, "versions", name, "data", "format.json")) and (
+                    started is None or not older(name, started)):
+                started = name
+    newest = started or newest
     if newest:
         return run(newest, present(state, newest), args)
     sys.stderr.write({refusal!r} + "\\n")
@@ -805,7 +841,8 @@ def _main_text() -> str:
 
     return _MAIN.format(mark=MARK, revision=REVISION, refusal=NONE_INSTALLED, python=PYTHON, server=SERVER,
                         command=COMMAND, bad_pin=pins.bad_pin("%(word)s"), bad_channel=pins.bad_channel("%(word)s"),
-                        stale=pins.stale("%(version)s", "%(channel)s", "%(now)s"),
+                        stale_default=pins.stale("%(version)s", None, "%(now)s"),
+                        stale_named=pins.stale("%(version)s", "%(channel)s", "%(now)s"),
                         not_installed=pins.not_installed("%(version)s", "%(why)s", "nt"),
                         development=pins.development("%(version)s"))
 
@@ -1065,12 +1102,15 @@ def script(windows: bool = WINDOWS) -> str:
 
     # Its refusals are ``pins``' words, the same as a version says them, said in double quotes with the
     # script's variables where the version, channel, reason and word go.
-    words = {"bad_pin": pins.bad_pin("$1"), "bad_channel": pins.bad_channel("$1"),
-             "stale": pins.stale("$version", "${channel:-default}", "$now"),
-             "not_installed": pins.not_installed("$1", "$why", "posix"), "development": pins.development("$1")}
+    # A backtick is said as one (escaped): the stale line names `cad update`.
+    words = {key: text.replace("`", "\\`") for key, text in {
+        "bad_pin": pins.bad_pin("$1"), "bad_channel": pins.bad_channel("$1"),
+        "stale_default": pins.stale("$version", None, "$now"),
+        "stale_named": pins.stale("$version", "$channel", "$now"),
+        "not_installed": pins.not_installed("$1", "$why", "posix"), "development": pins.development("$1")}.items()}
     for text in words.values():
-        bare = text
-        for variable in ("${channel:-default}", "$version", "$now", "$why", "$1"):
+        bare = text.replace("\\`", "")
+        for variable in ("$channel", "$version", "$now", "$why", "$1"):
             bare = bare.replace(variable, "")
         if set(bare) & set('"`$\\'):
             raise ValueError(f"the cad command cannot say {text!r} in double quotes")

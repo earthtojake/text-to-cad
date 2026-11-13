@@ -7,6 +7,29 @@ process can see. So is the one act a text host's ``cad_show`` asks of the person
 browser: made here, in the environment the host gave this process, never in the server's
 (``browser.deliver``), and its outcome told to the server before the host has the answer
 (``browser.OPENED``). Nothing of it outlives the request it serves.
+
+**Answered here** (``Proxy.handle``): where this transport cannot reach its own version's server now
+(``engine.unavailable``), a request is answered by this process, never left waiting, and nothing reaches any
+server. Three cases: its version is being installed, or its channel moved to it (``engine.prepare``, at start;
+minutes on a slow network); its channel is on a newer version (stale, ``engine.stale``: for good, this process
+never installs, starts or connects); or its version could not be made ready (failed). Each request waits for the
+version ``engine.READY_SECONDS`` at most (``initialize`` ``INITIALIZE_SECONDS``, ``ping`` not at all), then:
+
+- ``initialize``: being installed, a greeting of this process's own (``_greeting``) that says the tool and
+  resource lists can change, and the server's session opened at the first request after the version is ready.
+  Stale or failed, a JSON-RPC error carrying the line: the app's start says why, and a new thread after the
+  repair starts again.
+- ``tools/call``: a result marked ``isError`` whose text is the line (``engine.installing_line``, ``stale_line``
+  or why it failed), which the agent reads and relays; nothing ran.
+- ``tools/list``, ``resources/list``, ``resources/templates/list``: being installed, an empty list, and once the
+  version is ready ``notifications/tools/list_changed`` (``resources/list_changed``) so the app asks again.
+  Stale or failed, the list this process last had from its server, where it had one (a thread open across its
+  channel's update keeps its tools, each answering with the stale line); else a JSON-RPC error carrying the line.
+- ``ping``: an empty result, at once (it is answered on the reader, which nothing may hold).
+- ``resources/read`` and every other request: a JSON-RPC error (``UNAVAILABLE``) carrying the line, which the app
+  may ask again.
+- Notifications (``notifications/initialized`` remembered for the session to come) are dropped: nothing they
+  concern exists on any server yet.
 """
 from __future__ import annotations
 
@@ -30,6 +53,12 @@ LOG = logging.getLogger("cad_mcp")
 # 30 seconds Codex gives a server to start. Past it -- a version being installed for the first time -- the
 # initialize is answered here, and the server's session opened at the host's next request.
 INITIALIZE_SECONDS = 20.0
+# The JSON-RPC error a request answered here carries (the server's own -32000, an implementation's).
+UNAVAILABLE = -32000
+# The lists an app asks for, what each answer holds them under, and the notification that it changed.
+LISTS = {"tools/list": ("tools", "notifications/tools/list_changed"),
+         "resources/list": ("resources", "notifications/resources/list_changed"),
+         "resources/templates/list": ("resourceTemplates", "notifications/resources/list_changed")}
 
 
 def initialize_params(params, launcher=None, holder=None, app=None):
@@ -74,7 +103,8 @@ class Holder:
     """This transport's hold on the server (``engine.hold``): taken as the transport starts, once its version is
     ready (``engine.prepare``), starting the server when none runs -- its own version's (a transport with no
     version: the current installation's) -- and kept while the host runs, so a shell the host runs in a sandbox
-    that cannot start a server always finds one. A hold does not keep a version whose channel moved on: its
+    that cannot start a server always finds one. A stale transport holds nothing and starts nothing
+    (``engine.connect``). A hold does not keep a version whose channel moved on: its
     server stops once nothing is in flight, and the next call is told the thread is stale. Once the host has
     quit, and this process with it, the server runs on unheld until it is stopped or an update replaces it. A
     server that goes while held (``cad stop``, a crash, an update) is held again at the host's next request,
@@ -102,6 +132,9 @@ class Holder:
         while True:
             self.wanted.wait()
             self.wanted.clear()
+            # Its version made ready first (``engine.prepare``, whose runs bound this wait); then ``hold`` refuses
+            # where the transport cannot serve: stale, or failed.
+            engine.PIN.ready.wait(engine.READY_LIMIT)
             try:
                 connection = hold(host=self.host, holder=self.ident)
             except Exception as error:  # noqa: BLE001 - held again at the next request; the thread lives
@@ -141,6 +174,9 @@ class Proxy:
         self.initialized = False  # whether the host said notifications/initialized
         self.app = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
+        self.tell = None  # what sends the host a notification (``protocol.Connection.notify``), once serving
+        self.listed = {}  # each list the server last answered (``LISTS``), for a thread that has gone stale
+        self.unlisted = set()  # the list-changed notifications owed once the version is ready
 
     def _send(self, message, session, *, fresh=False):
         if self.holder is not None:
@@ -221,10 +257,13 @@ class Proxy:
         if method == "initialize":
             params = initialize_params(params, self.launcher(), self.holder.ident if self.holder is not None else None,
                                        self.app)
-            if not engine.PIN.ready.wait(INITIALIZE_SECONDS):
+            why = engine.unavailable(INITIALIZE_SECONDS)
+            if why is not None and why[0] != engine.INSTALLING:
+                raise RpcError(UNAVAILABLE, why[1])  # stale or failed: the app's start says why
+            if why is not None:
                 # Its version is still being installed: the host is greeted here, inside its start window, and the
-                # server's session opened at its next request (``_post``), which waits for the version.
-                LOG.info("text-to-cad %s is being installed: the engine session opens at the next request",
+                # server's session opened at its first request once the version is ready (``_post``).
+                LOG.info("text-to-cad %s is being installed: the engine session opens once it is ready",
                          engine.PIN.version)
                 with self.lock:
                     self.initialize = params
@@ -233,16 +272,54 @@ class Proxy:
             with self.lock:
                 self.initialize = params
             return result
-        if method == "tools/call":
-            # A thread left open across its channel's update: its version is not its channel's any more, and the
-            # agent is told so in the call's answer (``engine.stale``), nothing run.
-            line = engine.stale()
-            if line is not None:
-                return {"content": [{"type": "text", "text": line}], "isError": True}
+        # Where its server cannot be reached now -- its version being installed, its channel on a newer one, or
+        # its version not made ready -- the request is answered here (the module's "Answered here"). A ping is
+        # answered on the reader, which nothing may hold: it waits for nothing.
+        why = engine.unavailable(0.0 if method == "ping" else engine.READY_SECONDS)
+        if why is not None:
+            return self._local(method, params, *why)
         result = self._post({"jsonrpc": "2.0", "id": context.request_id, "method": method, "params": params})
+        if method in LISTS and not params.get("cursor"):
+            with self.lock:
+                self.listed[method] = result
         # A text host's cad_show: the page the server names is opened here, never by the server, and the
         # server told whether it opened before the host is answered.
         return deliver(result, self.opener, self._tell) if method == "tools/call" else result
+
+    def _local(self, method, params, why, line):
+        """Request ``method`` answered here, where the server cannot be reached for reason ``why``
+        (``engine.unavailable``), which ``line`` says: see the module's "Answered here"."""
+        if method == "ping":
+            return {}
+        if method == "tools/call":
+            return {"content": [{"type": "text", "text": line}], "isError": True}
+        if method in LISTS:
+            key, changed = LISTS[method]
+            if why == engine.INSTALLING:
+                self._owe(changed)
+                return {key: []}
+            with self.lock:
+                kept = None if params.get("cursor") else self.listed.get(method)
+            if kept is not None:
+                return kept
+        raise RpcError(UNAVAILABLE, line)
+
+    def _owe(self, changed):
+        """List-changed notification ``changed`` sent once the version is ready, so the app asks again for a list
+        answered empty while it was installed: by one thread, which sends every one owed by then."""
+        with self.lock:
+            first = not self.unlisted
+            self.unlisted.add(changed)
+        if first:
+            threading.Thread(target=self._announce, name="cad-mcp-announce", daemon=True).start()
+
+    def _announce(self):
+        engine.PIN.ready.wait(engine.READY_LIMIT)  # ``engine.prepare``'s runs bound it
+        with self.lock:
+            owed, self.unlisted = sorted(self.unlisted), set()
+        for changed in owed:
+            if self.tell is not None:
+                self.tell(changed, {})
 
     def _tell(self, url, opened):
         """The server told, on this session, whether the page it asked this process to open opened
@@ -258,6 +335,8 @@ class Proxy:
                 self.initialized = True
                 if self.session is None:
                     return  # the server's session is not open yet: it is told as it opens (``_reopen``)
+        if engine.unavailable() is not None:
+            return  # nothing reaches a server this transport cannot reach now (the module's "Answered here")
         self._post({"jsonrpc": "2.0", "method": method, "params": params})
 
     def close(self):
@@ -274,13 +353,15 @@ class Proxy:
 
 def _greeting(params):
     """The host's initialize answered here, while this transport's version is installed (``Proxy.handle``): the
-    protocol it asked for, the capabilities every session of the server has, and the server's name. The server's
-    own answer -- its instructions among them -- is its session's, opened at the next request."""
+    protocol it asked for, the capabilities every session of the server has, with lists that change (a list asked
+    for before the version is ready is answered empty, and changes once it is: ``Proxy._owe``), and the server's
+    name. The server's own answer -- its instructions among them -- is its session's, opened at the first request
+    once the version is ready."""
     from cad_mcp import __version__
 
     asked = params.get("protocolVersion") if isinstance(params, dict) else None
     return {"protocolVersion": asked if isinstance(asked, str) and asked else "2025-06-18",
-            "capabilities": {"tools": {"listChanged": False}, "resources": {"listChanged": False}},
+            "capabilities": {"tools": {"listChanged": True}, "resources": {"listChanged": True}},
             "serverInfo": {"name": "cad", "title": "CAD", "version": engine.PIN.version or __version__}}
 
 
@@ -314,6 +395,7 @@ def serve(argv=None, channel=None):
 
     proxy = Proxy(holder=holder, launcher=launched)
     connection = Connection(requests, output, proxy.handle, workers=64, notification=proxy.notify)
+    proxy.tell = connection.notify
     # A host that ends this process with a signal rather than by closing its input (or both, at once): it
     # leaves as at the input's end, its session ended (``proxy.close``) before it exits.
     for name in ("SIGTERM", "SIGHUP"):
@@ -323,8 +405,10 @@ def serve(argv=None, channel=None):
         connection.serve()
     finally:
         proxy.close()
-        # A server this process is starting is up before it leaves, never half started after it.
-        holder.tried.wait(60)
+        # A server this process is starting is up before it leaves, never half started after it. While its version
+        # is still being installed the hold waits for that, and starts nothing: nothing to wait for.
+        if pin.ready.is_set():
+            holder.tried.wait(60)
     return 0
 
 

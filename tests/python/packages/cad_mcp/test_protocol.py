@@ -91,6 +91,10 @@ class ConnectionTest(unittest.TestCase):
         self.assertEqual(error["code"], -32603)
         self.assertIn("kaboom", error["message"])
 
+    def test_a_notification_is_sent_unasked_as_one_frame(self) -> None:
+        self.connection.notify("notifications/tools/list_changed", {})
+        self.assertEqual(self.sink.next(), {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+
     def test_garbage_gets_a_parse_error_and_the_stream_survives(self) -> None:
         self.pipe._lines.put(b"{not json\n")
         self.assertEqual(self.sink.next()["error"]["code"], -32700)

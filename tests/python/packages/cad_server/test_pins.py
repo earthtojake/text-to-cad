@@ -225,32 +225,60 @@ class TheCommand(Device):
         done = self.cad(how, "status")
         self.assertEqual((done.returncode, done.stderr), (1, proxy.NONE_INSTALLED + "\n"))
 
-    def test_both_order_versions_by_their_numbers_as_the_versions_do(self) -> None:
-        pairs = [("0.9.0", "0.12.0"), ("0.12.0", "0.12.1"), ("0.12", "0.12.1"), ("1.0.0", "0.99.99"),
-                 ("0.12.0", "0.12.0"), ("0.12.1rc1", "0.12.2"), (DEV, "0.12.1"), ("10.0.0", "9.0.0")]
+    def test_both_order_versions_as_the_versions_do(self) -> None:
+        # A10: the sh, the Windows main and ``versions.order`` agree on every name a release or a development build
+        # has (``X.Y.Z``, ``X.Y.Z-dev.<stamp>``), a development build after its own release and before the next.
+        names = ["0.9.0", "0.11.10", "0.11.11", "0.12", "0.12.0", "0.12.1", "1.0.0", "10.0.0", "0.99.99",
+                 "0.12.0-dev.20261113000000", "0.12.0-dev.20261114000000", "0.12.1-dev.20261101000000"]
         main: dict = {}  # the Windows main's functions, its last line (which runs it) left out
         exec(compile(installations.script(windows=True).replace("sys.exit(main())", ""), "main", "exec"), main)
         body = installations.script(windows=False).split("\nolder() {\n", 1)[1].split("\n}\n", 1)[0]
         program = f'older() {{\n{body}\n}}\nolder "$1" "$2"'  # the sh's function alone
-        for one, other in pairs:
-            with self.subTest(one=one, other=other):
-                sh = subprocess.run(["sh", "-c", program, "sh", one, other])
-                # A release's numbers decide; where they tie (a pre-release, a development build), neither is
-                # older here, and the version's own code, which reads the pin, orders them (``versions.order``).
-                expected = versions.older(one, other) and not _tie(one, other)
-                self.assertEqual((sh.returncode == 0, main["older"](one, other)), (expected, expected))
+        shells = [shell for shell in ("sh", "dash") if shutil.which(shell)]
+        for one in names:
+            for other in names:
+                expected = versions.older(one, other)
+                with self.subTest(one=one, other=other):
+                    self.assertEqual(main["older"](one, other), expected)
+                    for shell in shells:
+                        done = subprocess.run([shell, "-c", program, shell, one, other])
+                        self.assertEqual(done.returncode == 0, expected, shell)
 
+    def test_a_state_folder_with_quotes_and_backslashes_in_its_path_runs(self) -> None:
+        # A7: a release is run from where every release puts its Python and cad, no path parsed; a development
+        # version's and the layout before 0.12's read with JSON's escapes undone.
+        self.state = self.root / 'odd "quoted" \\ back' / "cad"
+        self.state.mkdir(parents=True)
+        self.version(X)
+        self.ran(self.cad("sh", f"+{X}", "status"), f"{X} unset +{X} status")
+        self.ran(self.cad("sh", "status"), f"{X} unset status")
+        self.version(DEV)
+        self.ran(self.cad("sh", f"+{DEV}", "status"), f"{DEV} {DEV} +{DEV} status")
+        shutil.rmtree(self.state / "versions")
+        self.legacy()
+        self.ran(self.cad("sh", "status"), "legacy -P -m cad_server._internal.proxy status")
 
-def _tie(one: str, other: str) -> bool:
-    import re
+    def test_no_pin_runs_the_newest_version_that_has_started(self) -> None:
+        def check(how: str) -> None:
+            self.version(X)
+            self.version(NEWER)
+            (self.state / "versions" / X / "data").mkdir()
+            (self.state / "versions" / X / "data" / "format.json").write_text("{}", encoding="utf-8")
+            self.ran(self.cad(how, "status"), f"{X} unset status")
 
-    def numbers(version: str) -> list[int]:
-        found = [int(part or 0) for part in re.match(r"[0-9.]*", version).group().split(".")]
-        while found and found[-1] == 0:
-            found.pop()
-        return found
+        self.both(check)
 
-    return numbers(one) == numbers(other)
+    def test_a_stale_line_names_the_repair_for_its_channel(self) -> None:
+        def check(how: str) -> None:
+            self.point("store", NEWER)
+            self.point(None, NEWER)
+            for pin, channel in ((f"+{X}@store", "store"), (f"+{X}", None)):
+                done = self.cad(how, pin, "status")
+                self.assertEqual(done.stderr, f"cad: {pins.stale(X, channel, NEWER)}\n")
+            self.assertIn("`cad update`", pins.stale(X, None, NEWER))
+            self.assertIn("update the text-to-cad plugin in the app it came from", pins.stale(X, "store", NEWER))
+
+        self.both(check)
 
 
 class AnOlderReleaseNeverRewritesIt(unittest.TestCase):
@@ -353,10 +381,29 @@ class Applying(unittest.TestCase):
             return failure
         return None
 
-    def test_equal_runs_and_reads_the_pointer_alone(self) -> None:
+    def test_equal_runs_reads_the_pointer_and_marks_the_channel_used_once_a_day(self) -> None:
         pointers.write("store", X, self.state)
+        with mock.patch.dict(pointers._used, clear=True):
+            self.assertIsNone(self.apply(f"+{X}@store"))
+        self.assertEqual((self.moved, sorted(os.listdir(self.state))), ([], ["channels", "used"]), "no move, no lock")
+        stamp = self.state / "used" / "store"
+        os.utime(stamp, (1_000_000, 1_000_000))
+        with mock.patch.dict(pointers._used, clear=True):
+            self.assertIsNone(self.apply(f"+{X}@store"))
+        self.assertGreater(stamp.stat().st_mtime, 1_000_000, "a pinned command that reaches no server is a use too")
+        os.utime(stamp, None)
+        with mock.patch.dict(pointers._used, clear=True), mock.patch("os.utime", side_effect=PermissionError(1, "no")):
+            self.assertIsNone(self.apply(f"+{X}@store"), "within the day: nothing written; and a mark never fails it")
+
+    def test_a_pointer_that_cannot_be_read_runs_nothing_and_an_emptied_one_is_moved(self) -> None:
+        pointers.write("store", X, self.state)
+        with mock.patch.object(Path, "read_bytes", side_effect=PermissionError(13, "sharing violation")):
+            refused = self.apply(f"+{X}@store")
+        self.assertEqual((refused.reason, self.moved), ("failed", []))
+        self.assertIn("cannot be read", str(refused))
+        (self.state / "channels" / "store").write_bytes(b"")
         self.assertIsNone(self.apply(f"+{X}@store"))
-        self.assertEqual((self.moved, os.listdir(self.state)), ([], ["channels"]), "no move, no lock taken")
+        self.assertEqual(self.moved, [("move", "store", X)])
 
     def test_older_than_its_channel_is_stale(self) -> None:
         pointers.write("store", NEWER, self.state)

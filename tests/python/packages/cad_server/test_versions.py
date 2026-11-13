@@ -72,6 +72,8 @@ class Uv:
 
 
 class Device(unittest.TestCase):
+    REAL_SERVERS = False
+
     def setUp(self) -> None:
         self.root = Path(os.path.realpath(tempfile.mkdtemp(prefix="cad-versions-")))
         self.addCleanup(shutil.rmtree, self.root, True)
@@ -92,6 +94,14 @@ class Device(unittest.TestCase):
         self.addCleanup(places._versioned.cache_clear)
         self.addCleanup(places._registered.cache_clear)
         self.said: list[str] = []
+        # The versions whose server runs (``serving``): asked of its door by ``versions.serves``, which these tests,
+        # running no server, answer from here (``REAL_SERVERS``: a suite whose servers are real asks them).
+        self.servers: dict[str, object] = {}
+        if not self.REAL_SERVERS:
+            serves = mock.patch.object(versions, "serves", side_effect=lambda name: name in self.servers
+                                       and not self.servers[name].closed)
+            serves.start()
+            self.addCleanup(serves.stop)
 
     def present(self, name: str) -> versions.Present:
         found = versions.make_present(name, told=self.said.append)
@@ -108,11 +118,18 @@ class Device(unittest.TestCase):
         return data
 
     def serving(self, name: str):
-        """Version ``name``'s server lock held, as its running server holds it: let go at the test's end."""
+        """Version ``name``'s server lock held, as its running server holds it, and its door answering
+        (``versions.serves``): let go at the test's end, or by closing what this returns."""
         held = places.lock(places.engine_dir(name) / "engine.lock")
         self.assertIsNotNone(held)
         self.addCleanup(held.close)
+        self.servers[name] = held
         return held
+
+    def moved(self, channel: str | None, name: str) -> versions.Moved:
+        found = versions.move(channel, name, told=self.said.append)
+        self.assertTrue(found.ok, found.error)
+        return found
 
     def legacy(self) -> None:
         """A device of 0.11.10, installed by the install command: its shared data, its flat release, its
@@ -138,7 +155,7 @@ class Device(unittest.TestCase):
             (flat / "bin" / script).write_text("", encoding="utf-8")
         installations.register(OLD, (str(flat / "bin" / "cad"), str(flat / "bin" / "python"), str(flat)))
         installations.point(OLD)
-        for name in legacy.CACHES:
+        for name in ("documents", "hulls", "mjcf", "homes", "interference", "base", "pycache"):
             (self.cache / name).mkdir(parents=True)
         (self.cache / "documents" / IDENT).mkdir()
         (self.cache / "documents" / IDENT / "document.xbf").write_bytes(b"the legacy document's bytes")
@@ -238,7 +255,7 @@ class Pointers(Device):
         pointers.write("my-store.2", X)
         pointers.write("a", Y)
         self.assertEqual((self.state / "channels" / "a").read_text(encoding="utf-8"), f"{Y}\n")
-        with mock.patch.object(registry, "replace_atomic", side_effect=OSError("disk full")):
+        with mock.patch.object(pointers, "replace_atomic", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 pointers.write("a", Z)
         self.assertEqual(pointers.read("a"), Y, "a write that fails leaves the one before")
@@ -349,7 +366,7 @@ class Import(Device):
         self.assertFalse((new / "versions.json").exists() or (new / "telemetry-spool.jsonl").exists())
         self.assertTrue(imports.imported(X))
 
-    def test_recents_opens_after_an_update_and_kept_telemetry_is_sent_by_the_new_version(self) -> None:
+    def test_recents_opens_after_an_update(self) -> None:
         from cad.engine.atomic_replace import put
 
         self.legacy()
@@ -360,9 +377,9 @@ class Import(Device):
         self.assertEqual(new.read_bytes(), b"the legacy document's bytes", "the record's bytes came with it")
         if os.name != "nt":
             self.assertEqual(os.stat(new).st_ino, os.stat(old).st_ino, "one volume: a hard link, no copy")
-        batches = (places.data_dir(X) / "telemetry-batches.jsonl").read_text(encoding="utf-8")
-        self.assertIn('"version": "0.11.10"', batches, "each batch whole, its own release in it")
-        self.assertFalse((places.data_dir(X) / "telemetry-spool.jsonl").exists(), "bare counts name no release")
+        self.assertFalse((places.data_dir(X) / "telemetry-batches.jsonl").exists() or
+                         (places.data_dir(X) / "telemetry-spool.jsonl").exists(),
+                         "what was kept for sending is never copied: it moves once, as the layout goes")
         # Every writer of the document cache writes a new file and renames it over: the old version's stays.
         registry.Registry(places.data_dir(X), cache=places.cache_dir(X)).cache.write(
             f"documents/{IDENT}/document.xbf", b"the new version's save")
@@ -417,16 +434,21 @@ class Moving(Device):
 
     def test_a_failure_before_the_pointer_changes_nothing(self) -> None:
         self.assertEqual(versions.move("store", X).kind, "moved")
-        before = sorted(str(path.relative_to(self.state)) for path in self.state.rglob("*")
-                        if Path(places.version_dir(Y)) not in path.parents and path != places.version_dir(Y))
+        # Only the new version's own folder may change, and the note in the version left of where its data would go,
+        # written before the pointer (``versions.SUCCESSOR``), which names nothing while a pointer names that version.
+        note = places.version_dir(X) / versions.SUCCESSOR
+
+        def listed() -> list[str]:
+            return sorted(str(path.relative_to(self.state)) for path in self.state.rglob("*")
+                          if Path(places.version_dir(Y)) not in path.parents and path not in (places.version_dir(Y), note))
+
+        before = listed()
 
         def unchanged(kind: str | None, moved: versions.Moved | None = None) -> None:
             if moved is not None:
                 self.assertEqual(moved.kind, kind)
             self.assertEqual(pointers.read("store"), X)
-            after = sorted(str(path.relative_to(self.state)) for path in self.state.rglob("*")
-                           if Path(places.version_dir(Y)) not in path.parents and path != places.version_dir(Y))
-            self.assertEqual(after, before, "only the new version's own folder may have changed")
+            self.assertEqual(listed(), before, "only the new version's own folder may have changed")
 
         self.uv.fail = lambda step: (1, "error: no solution") if step[1] == "pip" else None
         unchanged("failed", versions.move("store", Y))  # making it present
@@ -455,12 +477,14 @@ class Moving(Device):
 class Removal(Device):
     def test_unnamed_removed_named_connected_in_use_and_refused_kept(self) -> None:
         for name in (X, Y, Z):
-            self.present(name)
-        pointers.write("store", Y, mirrored=False)
-        pointers.write(None, Y, mirrored=False)
-        self.assertEqual(versions.remove(Y), "named")
-        held = self.serving(Z)
-        self.assertEqual(versions.remove(Z), "connected", "a running server that cannot say counts as connected")
+            self.data(name)
+        pointers.write("store", Z, mirrored=False)
+        pointers.write(None, Z, mirrored=False)
+        for name in (X, Y):  # left, the channel now on Z
+            (places.version_dir(name) / versions.SUCCESSOR).write_text(f"{Z}\n", encoding="utf-8")
+        self.assertEqual(versions.remove(Z), "named")
+        held = self.serving(Y)
+        self.assertEqual(versions.remove(Y), "connected", "a running server that cannot say counts as connected")
         with mock.patch.object(releases, "running", return_value=True):
             self.assertEqual(versions.remove(X), "in use")
         real = os.rename
@@ -477,9 +501,42 @@ class Removal(Device):
         self.assertFalse(places.version_dir(X).exists() or places.engine_dir(X).exists())
         # The server's answer: nothing connected, and it stops when asked.
         with mock.patch.object(versions, "connected", return_value=False), \
-                mock.patch.object(versions, "stop_server", side_effect=lambda _name: held.close() or True):
-            self.assertEqual(versions.sweep(), {Z: "removed"})
-        self.assertEqual(versions.present(), [Y])
+                mock.patch.object(versions, "stop_server", side_effect=lambda _name: held.close() or True), \
+                mock.patch.object(releases, "running", return_value=False):
+            self.assertEqual(versions.sweep(), {Y: "removed"})
+        self.assertEqual(versions.present(), [Z])
+
+    def test_a_server_is_left_running_where_another_process_runs_from_its_folder(self) -> None:
+        # A8: a process other than the server and its own (a command, a ``cad run``) keeps the folder whatever the
+        # server does, so the server is not stopped for nothing.
+        self.data(X)
+        self.data(Y)
+        pointers.write(None, Y, mirrored=False)
+        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
+        self.serving(X)
+        asked: list[dict] = []
+
+        def ask(_name, message, **_kwargs):
+            asked.append(message)
+            return {"ok": True, "pid": 4242} if message == {"op": "pid"} else {"ok": True, "working": False}
+
+        with mock.patch.object(versions, "ask", ask), \
+                mock.patch.object(releases, "running", return_value=True) as running, \
+                mock.patch.object(versions, "stop_server") as stopped:
+            self.assertEqual(versions.remove(X), "in use")
+        running.assert_called_once_with(places.version_dir(X), besides=4242)
+        stopped.assert_not_called()
+        self.assertEqual(asked, [{"op": "pid"}], "not even asked whether it works")
+
+    def test_running_spares_the_server_s_own_processes_and_no_other(self) -> None:
+        listed = ("  10   1 /bin/zsh\n  20  10 /v/code/server/bin/python -m cad_server._internal.engine_daemon\n"
+                  "  21  20 /v/code/base/k/bin/python -m cad.engine.worker\n")
+        done = subprocess.CompletedProcess([], 0, listed, "")
+        with mock.patch.object(releases.subprocess, "run", return_value=done), \
+                mock.patch.object(releases.os.path, "realpath", side_effect=lambda path: str(path)):
+            self.assertTrue(releases.running("/v"))
+            self.assertFalse(releases.running("/v", besides=20), "the server and its worker")
+            self.assertTrue(releases.running("/v", besides=21), "the worker alone: the server is another")
 
 
 class BeforeTwelve(Device):
@@ -508,6 +565,9 @@ class BeforeTwelve(Device):
             self.assertTrue((self.state / kept).exists(), kept)
         self.assertEqual(installations.current_version(), X)
         self.assertFalse((self.state / "installations" / f"{OLD}.json").exists(), "the flat release's record went")
+        # Its kept batches moved, once, to the default's version: never copied, so never sent twice.
+        self.assertFalse((self.state / "telemetry-batches.jsonl").exists())
+        self.assertIn('"b1"', (places.data_dir(X) / "telemetry-batches.jsonl").read_text(encoding="utf-8"))
 
     def test_it_stays_while_any_condition_fails(self) -> None:
         self.legacy()
@@ -615,15 +675,87 @@ class ServerDecisions(Device):
         pointers.write(None, X, mirrored=False)
         self.assertEqual((versions.flat(X), versions.flat(Y), versions.flat(None)), (True, False, False))
 
-    def test_garbage_is_a_version_no_pointer_names_but_the_asker_s_own(self) -> None:
-        for name in (X, Y):
-            self.present(name)
+    def test_garbage_is_a_left_version_never_one_installed_and_never_used(self) -> None:
+        # A1 (this test asserted the opposite before): a version installed and not yet named -- an update's target
+        # waiting for its setup, a pin's version before its move -- is never a sweep's, nor is an incomplete one.
+        left = "0.11.50"
+        self.present(X)
+        self.data(Y)
         pointers.write(None, Y, mirrored=False)
+        (places.code_dir(Z)).mkdir(parents=True)  # an install cut short: no code marker
+        self.assertFalse(versions.garbage(), "installed and never used, or incomplete: no sweep's")
+        self.assertEqual(versions.sweep(), {})
+        self.assertEqual(versions.folders(), [X, Y, Z])
+        self.assertEqual((versions.fate(X, versions._kept()), versions.fate(Z, versions._kept())), ("unused", "partial"))
+        # A version a channel left (used, unnamed, its successor known) is: swept, but never by its own server.
+        self.data(left)
+        (places.version_dir(left) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
         self.assertTrue(versions.garbage())
-        self.assertFalse(versions.garbage(spare=X), "a server never sweeps its own version")
+        self.assertFalse(versions.garbage(spare=left), "a server never sweeps its own version")
         with mock.patch.object(versions, "_remove", return_value="connected") as removing:
-            self.assertEqual(versions.sweep(spare=X), {})
+            self.assertEqual(versions.sweep(spare=left), {})
             removing.assert_not_called()
+        self.assertEqual(versions.sweep(), {left: "removed"})
+        self.assertEqual(versions.folders(), [X, Y, Z], "what was never used stays")
+        # cad doctor --prune removes those, as the person asks.
+        plan = versions.prune_plan()
+        self.assertEqual(set(plan.versions), {X, Z})
+        self.assertEqual(versions.prune(plan), {X: "removed", Z: "removed"})
+        self.assertEqual(versions.folders(), [Y])
+
+    def test_an_automatic_update_s_target_is_there_when_its_setup_runs_after_the_quiet_hour(self) -> None:
+        # A1: the target installed at once, its setup an hour later (the clock made short here), servers tending
+        # meanwhile -- each tend's sweep finds nothing to remove.
+        from types import SimpleNamespace
+
+        from cad_server import auto_updates
+        from cad_server._internal import update
+
+        self.data(X)
+        pointers.write(None, X, mirrored=False)
+        (self.state / "install-receipt.json").write_text('{"schema": 1}', encoding="utf-8")
+        seen: list[bool] = []
+
+        def install(version: str) -> dict:
+            self.present(version)
+            return {"cad": "the release's cad"}
+
+        def setup(record, frame=None):
+            seen.append(places.version_dir(Y).is_dir() and places.version_record(Y) is not None)
+            return 0, ""
+
+        engine = SimpleNamespace(stopping=threading.Event(), draining=False, worked=0.0, working=lambda: False)
+        job = update.Update()
+        with mock.patch.object(auto_updates, "IDLE_SECONDS", 0.5), mock.patch.object(update, "IDLE_POLL_SECONDS", 0.02), \
+                mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "", "CI": ""}), \
+                mock.patch("cad_server.updates.notice", return_value={"latest": Y, "version": X}), \
+                mock.patch("cad_server.updates.refresh", return_value=None), \
+                mock.patch.object(update, "install", side_effect=install), \
+                mock.patch.object(update, "run_setup", side_effect=setup):
+            self.assertEqual(job.automatic(engine), Y)
+            while not seen:  # the quiet hour, the servers tending all through it
+                self.assertFalse(versions.garbage(spare=X))
+                versions.sweep(spare=X)
+                job.thread.join(0.05)
+            job.thread.join(30)
+        self.assertEqual(seen, [True], "the target was there when its setup ran")
+
+    def test_an_updater_removes_its_own_earlier_target_as_it_prepares_a_newer_one(self) -> None:
+        from cad_server import auto_updates
+        from cad_server._internal import update
+
+        self.data(X)
+        pointers.write(None, X, mirrored=False)
+        self.present(Y)  # an earlier automatic attempt's target, never moved to
+        auto_updates.attempt(Y)
+        with mock.patch.object(update, "install", side_effect=lambda version: self.present(version).record):
+            update._discard(Y, Z)
+            self.assertFalse(places.version_dir(Y).exists())
+            self.present(Y)
+            pointers.write("store", Y, mirrored=False)
+            update._discard(Y, Z)
+        self.assertTrue(places.version_dir(Y).exists(), "a channel's version is never an updater's to remove")
+        self.assertEqual(versions.remove_unused(X), "named")
 
     def test_a_handover_takes_the_port_only_from_a_server_that_went(self) -> None:
         asked: list[tuple[str, dict]] = []
@@ -644,17 +776,59 @@ class ServerDecisions(Device):
             self.assertFalse(versions.handover(None, X, Y, 4000), "the old server still runs: it keeps its port")
             self.assertEqual(asked, [(X, {"op": "bridge"}), (Y, {"op": "bridge"})], "the old one let go first")
 
-    def test_a_channel_s_use_is_its_pointer_s_time_and_nothing_is_made_for_it(self) -> None:
+    def test_a_channel_s_use_is_a_stamp_beside_its_pointer_which_only_a_move_writes(self) -> None:
         pointers.write("store", X, mirrored=False)
         path = self.state / "channels" / "store"
         os.utime(path, (1_000_000, 1_000_000))
         with mock.patch.dict(pointers._used, clear=True):
             self.assertTrue(pointers.used("store"))
-            self.assertGreater(path.stat().st_mtime, 1_000_000)
+            stamp = self.state / "used" / "store"
+            self.assertGreater(stamp.stat().st_mtime, 1_000_000)
+            self.assertEqual(path.stat().st_mtime, 1_000_000, "the pointer is never written for a use")
+            self.assertGreater(pointers.last_used(pointers.listing()[0]), 1_000_000)
             self.assertFalse(pointers.used("store"), "once a minute at most")
             self.assertFalse(pointers.used(None), "the default channel has no pointer here: none is made")
             self.assertFalse(pointers.used("../x"), "no channel")
+        with mock.patch.dict(pointers._used, clear=True):
+            self.assertFalse(pointers.used("store", every=pointers.USED_DAILY), "a pinned command's: once a day")
         self.assertFalse((self.state / "default").exists())
+        pointers.forget("store")
+        self.assertFalse(stamp.exists(), "a channel forgotten, its stamp with it")
+
+    def test_a_pointer_that_cannot_be_read_is_not_no_pointer_and_nothing_is_removed(self) -> None:
+        # A3: an emptied pointer (a crash), or one that cannot be read now, never makes its version garbage.
+        self.data(X)
+        self.data(Y)
+        pointers.write("store", X, mirrored=False)
+        pointers.write(None, Y, mirrored=False)
+        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
+        (self.state / "channels" / "store").write_bytes(b"")
+        with self.assertRaises(pointers.Unreadable):
+            pointers.listing()
+        self.assertFalse(versions.garbage())
+        said: list[str] = []
+        self.assertEqual(versions.sweep(told=said.append), {})
+        self.assertIn("nothing is removed this time", said[0])
+        self.assertFalse(versions.retiring(X, working=False))
+        self.assertTrue(places.version_dir(X).is_dir())
+        real = Path.read_bytes
+
+        def denied(path):
+            if path.name == "store":
+                raise PermissionError(13, "sharing violation")
+            return real(path)
+
+        pointers.write("store", X, mirrored=False)
+        with mock.patch.object(Path, "read_bytes", denied):
+            with self.assertRaises(pointers.Unreadable):
+                pointers.read("store")
+            self.assertEqual(versions.sweep(), {})
+            moved = versions.move("store", Z)
+            self.assertEqual(moved.kind, "failed", "no move on a guess")
+        self.assertTrue(places.version_dir(X).is_dir())
+        (self.state / "channels" / "store").write_bytes(b"")
+        self.assertEqual(self.moved("store", Z).old, None, "an emptied pointer is written again by a move")
+        self.assertEqual(pointers.read("store"), Z)
 
     def test_a_pinned_command_s_stop_and_status_reach_its_own_version_alone(self) -> None:
         from cad.engine import client
@@ -746,6 +920,7 @@ class TelemetryAcrossVersions(Device):
                "counts": {"features": ["drawing"]}}
         (places.data_dir(X) / analytics.SPOOL).write_text(json.dumps(row) + "\n", encoding="utf-8")
         pointers.write(None, Y)
+        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")  # the default left it
         self.assertEqual(versions.sweep(), {X: "removed"})
         kept = [json.loads(line) for line in
                 (places.data_dir(Y) / analytics.SPOOL).read_text(encoding="utf-8").splitlines()]

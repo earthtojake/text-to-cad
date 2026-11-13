@@ -42,7 +42,10 @@ there (``versions.connected``), and otherwise retires by itself once it is idle.
 The server's own updater (``Update``): one at a time, in the background of the default version's server, the
 request that asked for it answered at once, and the page that asked reads where it is (``GET
 /api/v1/server``'s ``update``) until the server goes and V's comes back on the same port, with the same token.
-An automatic update installs V at once (step 1 of the contract, in the background) and runs its setup once the
+An update installs V, which no sweep removes while it waits, installed and never used (``versions.fate``); an
+updater that prepares a newer release removes its own earlier target, which it made and never moved to
+(``_discard``). An automatic update installs V at once (step 1 of the contract, in the background) and runs its
+setup once the
 server has handled nothing for ``auto_updates.IDLE_SECONDS``: no build, draw, export, request that serves or
 agent's tool call in flight (``Daemon.working``, asked every ``IDLE_POLL_SECONDS``) and none ended since
 (``Daemon.worked``: where "the last command" is read), no drain, no ``cad setup`` holding the install lock. A
@@ -234,6 +237,9 @@ class Update:
                 return dict(self.state)
             self.state = {"state": "working", "target": None, "progress": None, "error": None}
             self.started = time.monotonic()
+        from cad_server import auto_updates
+
+        previous = (auto_updates.attempted() or {}).get("release")
         if not installed_here():
             from cad_server.updates import command
 
@@ -246,7 +252,8 @@ class Update:
                 self.state = {"state": "idle", "target": None, "progress": None, "error": None}
                 return dict(self.state)
             self.state = {**self.state, "target": target}
-            self.thread = threading.Thread(target=self._run, args=(target,), name="cad-update", daemon=True)
+            self.thread = threading.Thread(target=self._run, args=(target, previous), name="cad-update",
+                                           daemon=True)
             self.thread.start()
             return dict(self.state)
 
@@ -255,12 +262,13 @@ class Update:
             self.state = {**self.state, "state": "failed", "error": error}
             self.failed_at = time.monotonic()
 
-    def _run(self, target: str) -> None:
+    def _run(self, target: str, previous: str | None = None) -> None:
         from cad_server._internal import base
 
         try:
             self._frame("install", f"text-to-cad {target}")
             record = install(target)
+            _discard(previous, target)
             self._frame("build123d")
             self._setup(target, record)
         except base.Refused as refused:
@@ -316,7 +324,8 @@ class Update:
                 self.auto = {"state": "preparing", "release": target, "progress": None}
                 self.urgent.clear()
                 self.started = time.monotonic()
-                self.thread = threading.Thread(target=self._automatic, args=(target, engine),
+                previous = (auto_updates.attempted() or {}).get("release")
+                self.thread = threading.Thread(target=self._automatic, args=(target, engine, previous),
                                                name="cad-update-automatic", daemon=True)
             auto_updates.attempt(target)
             self.thread.start()
@@ -324,15 +333,17 @@ class Update:
         except Exception:  # noqa: BLE001 - the server's tending never fails for an update
             return None
 
-    def _automatic(self, target: str, engine: Any) -> None:
-        """An automatic update: its release installed now; its setup once the server is idle (``_wait``), or at
-        once should a click make it its own."""
+    def _automatic(self, target: str, engine: Any, previous: str | None = None) -> None:
+        """An automatic update: its release installed now (an earlier target it made and never moved to, ``previous``,
+        removed: ``_discard``); its setup once the server is idle (``_wait``), or at once should a click make it its
+        own."""
         from cad_server import auto_updates
         from cad_server._internal import base
 
         try:
             self._frame("install", f"text-to-cad {target}")
             record = install(target)
+            _discard(previous, target)
             self._frame("build123d")
             with self.lock:
                 if self.auto is not None:
@@ -393,6 +404,20 @@ class Update:
                 self.state = {"state": "working", "target": auto.get("release"), "progress": auto.get("progress"),
                               "error": None}
                 return True
+
+
+def _discard(previous: str | None, target: str) -> None:
+    """The release this updater last went for (``previous``, ``auto_updates.attempted``), older than the one it has
+    just installed and never moved to, removed: installed and never used, no sweep would ever take it
+    (``versions.remove_unused``, which keeps one a pointer names or that has been used). Never raises."""
+    from cad_server._internal import versions
+
+    if not previous or previous == target or not versions.older(previous, target):
+        return
+    try:
+        versions.remove_unused(previous)
+    except Exception:  # noqa: BLE001 - a folder left is cad doctor --prune's: never a failed update
+        pass
 
 
 UPDATE = Update()
