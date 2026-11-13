@@ -1,0 +1,944 @@
+{
+  "operations": [
+    "export",
+    "snapshot",
+    "inspect",
+    "dfm",
+    "interference",
+    "solve",
+    "ranges",
+    "drc",
+    "erc",
+    "validate"
+  ],
+  "integrationOperations": [
+    "check"
+  ],
+  "views": [
+    "document",
+    "mesh",
+    "drawing",
+    "robot",
+    "plot"
+  ],
+  "documentTypes": [
+    {
+      "id": "model",
+      "title": "model",
+      "summary": "a model built from code and held in the engine's memory, with no file behind it: addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
+      "extensions": [],
+      "mime": "",
+      "view": "document",
+      "content": [
+        "geometry",
+        "assembly",
+        "names",
+        "colours",
+        "materials",
+        "element names",
+        "mechanism",
+        "configuration sequences",
+        "animations",
+        "build closure"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "inspect",
+          "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
+          "integration": "build123d",
+          "engine": false
+        },
+        {
+          "name": "interference",
+          "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "solve",
+          "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
+          "integration": "calculix",
+          "engine": false
+        },
+        {
+          "name": "ranges",
+          "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
+          "integration": "build123d",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a build123d Shape a model returns",
+          "provides": [
+            "geometry",
+            "assembly",
+            "names",
+            "colours",
+            "materials",
+            "element names",
+            "mechanism",
+            "configuration sequences",
+            "animations",
+            "build closure"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xbf",
+      "title": "XBF",
+      "summary": "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build closure",
+      "extensions": [
+        ".xbf"
+      ],
+      "mime": "application/octet-stream",
+      "view": "document",
+      "content": [
+        "geometry",
+        "assembly",
+        "names",
+        "colours",
+        "materials",
+        "element names",
+        "mechanism",
+        "configuration sequences",
+        "animations",
+        "build closure"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "inspect",
+          "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
+          "integration": "build123d",
+          "engine": false
+        },
+        {
+          "name": "interference",
+          "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "solve",
+          "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
+          "integration": "calculix",
+          "engine": false
+        },
+        {
+          "name": "ranges",
+          "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
+          "integration": "build123d",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": true,
+      "readerIntegration": "build123d",
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a build123d Shape a model returns",
+          "provides": [
+            "geometry",
+            "assembly",
+            "names",
+            "colours",
+            "materials",
+            "element names",
+            "mechanism",
+            "configuration sequences",
+            "animations",
+            "build closure"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "step",
+      "title": "STEP",
+      "summary": "an ISO 10303 (AP242) exchange file of exact geometry",
+      "extensions": [
+        ".step",
+        ".stp"
+      ],
+      "mime": "application/step",
+      "view": "document",
+      "content": [
+        "geometry",
+        "assembly",
+        "names",
+        "colours",
+        "materials",
+        "element names"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "inspect",
+          "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
+          "integration": "build123d",
+          "engine": false
+        },
+        {
+          "name": "interference",
+          "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "solve",
+          "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
+          "integration": "calculix",
+          "engine": false
+        },
+        {
+          "name": "ranges",
+          "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
+          "integration": "build123d",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": true,
+      "readerIntegration": "build123d",
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a build123d Shape a model returns",
+          "provides": [
+            "geometry",
+            "assembly",
+            "names",
+            "colours",
+            "materials",
+            "element names"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stl",
+      "title": "STL",
+      "summary": "a binary STL of one triangle mesh",
+      "extensions": [
+        ".stl"
+      ],
+      "mime": "model/stl",
+      "view": "mesh",
+      "content": [
+        "triangles"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+          "integration": null,
+          "engine": true
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
+          "integration": "trimesh",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": true,
+      "readerIntegration": "build123d",
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a build123d Shape a model returns",
+          "provides": [
+            "triangles"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glb",
+      "title": "GLB",
+      "summary": "a binary glTF scene of triangle meshes",
+      "extensions": [
+        ".glb"
+      ],
+      "mime": "model/gltf-binary",
+      "view": "mesh",
+      "content": [
+        "triangles",
+        "assembly",
+        "names",
+        "colours",
+        "materials",
+        "animations"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+          "integration": null,
+          "engine": true
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "inspect",
+          "summary": "its nodes, meshes and animations",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
+          "integration": "trimesh",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a build123d Shape a model returns",
+          "provides": [
+            "triangles",
+            "assembly",
+            "names",
+            "colours",
+            "materials",
+            "animations"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "threemf",
+      "title": "3MF",
+      "summary": "a 3D Manufacturing Format package of triangle meshes",
+      "extensions": [
+        ".3mf"
+      ],
+      "mime": "model/3mf",
+      "view": "mesh",
+      "content": [
+        "triangles",
+        "assembly",
+        "names",
+        "colours",
+        "materials"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
+          "integration": null,
+          "engine": true
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
+          "integration": "trimesh",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a build123d Shape a model returns",
+          "provides": [
+            "triangles",
+            "assembly",
+            "names",
+            "colours",
+            "materials"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dxf",
+      "title": "DXF",
+      "summary": "a 2D drawing of a planar document",
+      "extensions": [
+        ".dxf"
+      ],
+      "mime": "application/dxf",
+      "view": "drawing",
+      "content": [
+        "2D geometry",
+        "layers"
+      ],
+      "operations": [
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        },
+        {
+          "name": "dfm",
+          "summary": "check it as a sheet's cut file (--process sheet): closed contours, nothing cut twice, features against the kerf and the thickness, the sheet's size",
+          "integration": "build123d",
+          "engine": false
+        }
+      ],
+      "decorator": true,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": [
+        {
+          "integration": "build123d",
+          "accepts": "a planar build123d Shape a model returns (a sketch, a face, wires or edges)",
+          "provides": [
+            "2D geometry",
+            "layers"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "urdf",
+      "title": "URDF",
+      "summary": "a robot description (ROS's Unified Robot Description Format)",
+      "extensions": [
+        ".urdf"
+      ],
+      "mime": "application/xml; charset=utf-8",
+      "view": "robot",
+      "content": [
+        "links",
+        "joints",
+        "inertials",
+        "mesh references"
+      ],
+      "operations": [
+        {
+          "name": "validate",
+          "summary": "check it for conformance: structure, joints, inertials, mesh references",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        }
+      ],
+      "decorator": false,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": []
+    },
+    {
+      "id": "srdf",
+      "title": "SRDF",
+      "summary": "a MoveIt semantic robot description, read against its URDF",
+      "extensions": [
+        ".srdf"
+      ],
+      "mime": "application/xml; charset=utf-8",
+      "view": "robot",
+      "content": [
+        "planning groups",
+        "end effectors",
+        "group states",
+        "disabled collision pairs",
+        "virtual joints"
+      ],
+      "operations": [
+        {
+          "name": "validate",
+          "summary": "check it against its URDF: every name, chain, state and disabled pair",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        }
+      ],
+      "decorator": false,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": []
+    },
+    {
+      "id": "sdf",
+      "title": "SDF",
+      "summary": "an SDFormat world or model (Gazebo's Simulation Description Format)",
+      "extensions": [
+        ".sdf"
+      ],
+      "mime": "application/xml; charset=utf-8",
+      "view": "robot",
+      "content": [
+        "worlds",
+        "models",
+        "links",
+        "joints",
+        "mesh references"
+      ],
+      "operations": [
+        {
+          "name": "validate",
+          "summary": "check it for conformance, and with gz sdf --check where it is installed",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it as the viewer does, into a PNG",
+          "integration": "build123d",
+          "engine": true
+        }
+      ],
+      "decorator": false,
+      "reader": false,
+      "readerIntegration": null,
+      "edit": null,
+      "producers": []
+    },
+    {
+      "id": "kicad_pcb",
+      "title": "KiCad PCB",
+      "summary": "a KiCad printed circuit board, read with the .kicad_pro beside it",
+      "extensions": [
+        ".kicad_pcb"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "plot",
+      "content": [
+        "board outline",
+        "layers",
+        "footprints",
+        "pads",
+        "nets",
+        "tracks",
+        "vias",
+        "zones",
+        "design rules"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
+          "integration": "kicad",
+          "engine": false
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw it flat, as the viewer's board view does, into a PNG",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "inspect",
+          "summary": "what the board holds: its format, thickness, size, layers, parts and nets",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "drc",
+          "summary": "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
+          "integration": "kicad",
+          "engine": false
+        }
+      ],
+      "decorator": false,
+      "reader": true,
+      "readerIntegration": null,
+      "edit": {
+        "integration": "kicad",
+        "noun": "board",
+        "hands": "the open board, through KiCad's IPC API (kicode's KiPy)",
+        "changes": [
+          "board outline",
+          "layers",
+          "footprints",
+          "pads",
+          "nets",
+          "tracks",
+          "vias",
+          "zones",
+          "design rules"
+        ]
+      },
+      "producers": []
+    },
+    {
+      "id": "kicad_sch",
+      "title": "KiCad schematic",
+      "summary": "a KiCad schematic, read with every sheet of its project's hierarchy",
+      "extensions": [
+        ".kicad_sch"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "plot",
+      "content": [
+        "sheets",
+        "symbols",
+        "pins",
+        "fields",
+        "wires",
+        "buses",
+        "labels",
+        "junctions",
+        "no-connects",
+        "nets"
+      ],
+      "operations": [
+        {
+          "name": "export",
+          "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
+          "integration": "kicad",
+          "engine": false
+        },
+        {
+          "name": "snapshot",
+          "summary": "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "inspect",
+          "summary": "what the schematic holds: its sheets, parts and nets; with a ref, what that names",
+          "integration": null,
+          "engine": false
+        },
+        {
+          "name": "erc",
+          "summary": "KiCad's electrical rules check: errors fail it, warnings are said",
+          "integration": "kicad",
+          "engine": false
+        }
+      ],
+      "decorator": false,
+      "reader": true,
+      "readerIntegration": null,
+      "edit": {
+        "integration": "kicad",
+        "noun": "schematic",
+        "hands": "the open schematic, its project's symbol libraries loaded, through KiCad's IPC API (kicode's KiPy)",
+        "changes": [
+          "sheets",
+          "symbols",
+          "pins",
+          "fields",
+          "wires",
+          "buses",
+          "labels",
+          "junctions",
+          "no-connects",
+          "nets"
+        ]
+      },
+      "producers": []
+    }
+  ],
+  "integrations": [
+    {
+      "name": "build123d",
+      "summary": "build123d and the OCCT kernel under it (OCP): model code builds with it, and the engine makes, reads, writes and draws documents with it",
+      "extra": "build123d",
+      "process": "in-process",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "build123d",
+        "OCP",
+        "bd_materials"
+      ],
+      "distributions": [
+        "build123d",
+        "cadquery-ocp-novtk",
+        "bd_materials",
+        "threejs-materials",
+        "matplotlib",
+        "shapely",
+        "ezdxf",
+        "pillow",
+        "scipy"
+      ],
+      "commands": [],
+      "holds": "the CAD kernel",
+      "downloadMb": 240,
+      "alongside": [],
+      "python": null,
+      "platforms": [],
+      "program": null
+    },
+    {
+      "name": "kicad",
+      "summary": "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes through the API",
+      "extra": "kicad",
+      "process": "separate",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "kicode"
+      ],
+      "distributions": [
+        "kicode"
+      ],
+      "commands": [
+        "kicad-cli"
+      ],
+      "holds": "KiCad's kicad-cli",
+      "downloadMb": 100,
+      "alongside": [],
+      "python": null,
+      "platforms": [],
+      "program": {
+        "name": "kicad-cli",
+        "minimum": "9.0",
+        "override": "CAD_KICAD_CLI"
+      }
+    },
+    {
+      "name": "trimesh",
+      "summary": "trimesh, the triangle-mesh library: a mesh's manufacturing check measures it with trimesh for 3D printing -- its walls, overhangs and support; every other process is judged on exact geometry",
+      "extra": "trimesh",
+      "process": "in-process",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "trimesh"
+      ],
+      "distributions": [
+        "trimesh",
+        "rtree",
+        "scipy",
+        "networkx"
+      ],
+      "commands": [],
+      "holds": "trimesh",
+      "downloadMb": 40,
+      "alongside": [],
+      "python": null,
+      "platforms": [],
+      "program": null
+    },
+    {
+      "name": "mujoco",
+      "summary": "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no renderer) and MuJoCo Studio's web viewer: cad.mujoco makes a document a mujoco.MjSpec, chooses a part's collision on it and saves it; `cad mujoco check robot.xml` compiles a MuJoCo model with the core, so what MuJoCo refuses is a finding with MuJoCo's own words; and `cad run mujoco-studio --model scene.xml` serves the model in Studio for the person to open in a browser",
+      "extra": "mujoco",
+      "process": "in-process",
+      "operations": [
+        {
+          "name": "check",
+          "summary": "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo refuses or warns of, the model-health checks, what collides as what, and the contact excludes",
+          "integration": "mujoco",
+          "engine": false
+        }
+      ],
+      "files": [
+        ".xml",
+        ".mjcf"
+      ],
+      "modules": [
+        "mujoco"
+      ],
+      "distributions": [
+        "mujoco-core",
+        "mujoco-studio"
+      ],
+      "commands": [
+        "mujoco-studio"
+      ],
+      "holds": "MuJoCo's headless core and MuJoCo Studio",
+      "downloadMb": 20,
+      "alongside": [],
+      "python": null,
+      "platforms": [],
+      "program": null
+    },
+    {
+      "name": "coacd",
+      "summary": "CoACD, the approximate convex decomposition of a triangle mesh: cad.mujoco.decompose makes a part of a MuJoCo function's spec collide as the convex hulls CoACD cuts its mesh into, its visual whole, always in a process of its own (its TBB and the kernel's cannot share one), the hulls kept in the engine's cache by the mesh's digest",
+      "extra": "coacd",
+      "process": "separate",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "coacd"
+      ],
+      "distributions": [
+        "coacd"
+      ],
+      "commands": [],
+      "holds": "CoACD's convex decomposition",
+      "downloadMb": 4,
+      "alongside": [],
+      "python": null,
+      "platforms": [],
+      "program": null
+    },
+    {
+      "name": "netgen",
+      "summary": "netgen, the tetrahedral mesher: a stress study (solve) meshes a part's own faces with it, curved second-order elements, every face kept under its ref, always in a process of its own (its OpenCascade and the kernel's cannot share one)",
+      "extra": "netgen",
+      "process": "separate",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "netgen"
+      ],
+      "distributions": [
+        "netgen-mesher"
+      ],
+      "commands": [],
+      "holds": "the netgen mesher",
+      "downloadMb": 11,
+      "alongside": [],
+      "python": null,
+      "platforms": [],
+      "program": null
+    },
+    {
+      "name": "calculix",
+      "summary": "CalculiX's solver, ccx, as the cad-ccx package carries it: a stress study (solve) writes its input, runs it headless on one thread in a private folder, and reads its answer",
+      "extra": "calculix",
+      "process": "separate",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "cad_ccx"
+      ],
+      "distributions": [
+        "cad-ccx"
+      ],
+      "commands": [
+        "ccx"
+      ],
+      "holds": "CalculiX's ccx solver",
+      "downloadMb": 13,
+      "alongside": [
+        "build123d",
+        "netgen"
+      ],
+      "python": null,
+      "platforms": [],
+      "program": {
+        "name": "ccx",
+        "minimum": "2.20",
+        "override": "CAD_CCX"
+      }
+    },
+    {
+      "name": "blender",
+      "summary": "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad exports into Blender's scene, every part where the file places it and each clip playable alone (cad.blender.load), then frames, lights and renders it with bpy itself",
+      "extra": "blender",
+      "process": "in-process",
+      "operations": [],
+      "files": [],
+      "modules": [
+        "bpy"
+      ],
+      "distributions": [
+        "bpy"
+      ],
+      "commands": [],
+      "holds": "Blender as a Python module",
+      "downloadMb": 430,
+      "alongside": [],
+      "python": "3.13",
+      "platforms": [
+        "macOS arm64",
+        "Linux x86-64",
+        "Windows x86-64",
+        "Windows arm64"
+      ],
+      "program": null
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 /**
- * The shared packages' own source maps, for the CAD Viewer's and the CAD app's builds: a page's map leads a frame
+ * The shared packages' own source maps, for the viewer's and the CAD app's builds: a page's map leads a frame
  * in a package's code to that package's source (`src/`), with the source's text, and not to the compiled file in
  * `dist/` the page imports, so a crash there reaches PostHog as the source.
  *

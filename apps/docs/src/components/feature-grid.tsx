@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import Link from "next/link";
 import type { CSSProperties } from "react";
 import { FeatureArt } from "@/components/feature-art";
 import { FeaturesReveal } from "@/components/features-reveal";
@@ -7,8 +8,8 @@ import { siteConfig } from "@/lib/site";
 
 /**
  * The homepage's Features (`features`, the README's Features): one tile per feature, each a picture of
- * the file it makes over that file's name in a caption bar, then its name, linking to the
- * page that documents it, and what it does (its summary's links are markdown, as the README's are).
+ * the file it makes over that file's name in a caption bar, then its name, linking to its page in
+ * the documentation's Skills, and what it does (its summary's links are markdown, as the README's are).
  * Two columns from a tablet up, one on a phone.
  */
 
@@ -101,15 +102,13 @@ export function FeatureGrid() {
             </p>
             <div className="flex-1 space-y-1 px-4 pt-3 pb-4">
               <h3 className="text-sm font-medium text-foreground">
-                <a
-                  href={`${siteConfig.repository}/blob/main/${feature.path}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href={feature.page}
                   className="inline-flex items-center gap-1.5 rounded-sm underline-offset-4 hover:underline"
                 >
                   {feature.name}
-                  <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </a>
+                  <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </Link>
               </h3>
               <p className="text-sm leading-6 text-muted-foreground"><Summary text={feature.summary} /></p>
             </div>

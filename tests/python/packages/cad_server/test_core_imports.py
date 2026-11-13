@@ -6,7 +6,7 @@
   imports no module of the server's or the shim's, not even lazily: every import a library module
   makes, at its top or in a function, is of the library.
 - **The server** (``cad-server``: ``cad_server``): what runs in the daemon or a command -- the
-  daemon, the registry, the HTTP API, the CAD Viewer's and the CAD app's servers, every verb, the
+  daemon, the registry, the HTTP API, the viewer's and the CAD app's servers, every verb, the
   environment makers, telemetry. It runs in the core, where the CAD kernel is not installed, so
   importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.

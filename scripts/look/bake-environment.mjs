@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Bake the shared reflection environment: the CAD Viewer's neutral studio (core's
+// Bake the shared reflection environment: the viewer's neutral studio (core's
 // `createStudioEnvironmentScene` at its defaults, the one an authored finish reflected) as a
 // Radiance HDR equirectangular image, which the engine ships (`cad/engine/render/studio.hdr`,
 // served at `GET /api/v1/look/environment`) and both renderers light an engine document's regular
@@ -134,7 +134,7 @@ for (let index = 0; index < WIDTH * HEIGHT; index += 1) {
 }
 const body = [];
 for (let row = 0; row < HEIGHT; row += 1) body.push(...encodeScanline(encoded.subarray(row * WIDTH * 4, (row + 1) * WIDTH * 4), WIDTH));
-const header = "#?RADIANCE\n# cadgen: the CAD Viewer's neutral studio (createStudioEnvironmentScene, its defaults), "
+const header = "#?RADIANCE\n# cadgen: the viewer's neutral studio (createStudioEnvironmentScene, its defaults), "
   + "rows +Z to -Z, columns -X, +Y, +X, -Y\nFORMAT=32-bit_rle_rgbe\n\n"
   + `-Y ${HEIGHT} +X ${WIDTH}\n`;
 fs.writeFileSync(OUT, Buffer.concat([Buffer.from(header, "ascii"), Buffer.from(body)]));

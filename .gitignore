@@ -98,7 +98,7 @@ models/*/unported/validation/
 packages/*/build/
 packages/aliases/*/build/
 
-# The server's packaged runtime: the CAD Viewer's built client (viewer/), the CAD
+# The server's packaged runtime: the viewer's built client (viewer/), the CAD
 # app (mcp/) and the agent-app plugin, a copy of the root's manifests and skills/ (plugin/).
 # All are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the server's wheel;
 # none is committed. A fresh checkout has no _runtime until the bundler runs, and the

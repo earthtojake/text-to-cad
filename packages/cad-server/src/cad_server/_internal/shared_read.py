@@ -6,7 +6,7 @@ leaves out ``FILE_SHARE_DELETE``, so while ANY handle opened that way is alive,
 deleting the file, renaming it or replacing it fails with ``WinError 32``
 (ERROR_SHARING_VIOLATION) for everyone else.
 
-A reader that merely looks — the CAD Viewer hashing a model for its catalog row
+A reader that merely looks — the viewer hashing a model for its catalog row
 on a background thread, a status poll hashing a STEP to find its tree — must
 not turn the user's ``rm part.stl`` into that error. So those readers open
 through here, which on Windows asks for all three share modes. The read itself

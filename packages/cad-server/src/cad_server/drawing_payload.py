@@ -61,7 +61,7 @@ of its own near-black.
 
 Storage
 -------
-Nothing is stored. The CAD Viewer's route holds the payloads it rendered in its
+Nothing is stored. The viewer's route holds the payloads it rendered in its
 own memory, by the bytes it read, and renders those bytes
 (``build_drawing_payload(path, data)``; ``cad_server.viewer.drawings``).
 """

@@ -1,4 +1,4 @@
-"""The engine's CAD Viewer HTTP application and its short-lived launcher.
+"""The engine's viewer HTTP application and its short-lived launcher.
 
 ``cad viewer [FILE ...]`` ensures the installation's engine and opens its one
 page: the home, or each file's page. The built React client ships in

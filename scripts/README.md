@@ -66,7 +66,7 @@ where those files ship, so these scripts are what produces them.
   — and a PATH that holds no test fails the run. `CAD_TEST_SHARD=I/N` runs one
   shard of each suite's files: CI splits a whole run over two jobs on Linux and
   three on Windows.
-  - `--select` picks one group: `cadgen` (the package suites, CAD Viewer backend
+  - `--select` picks one group: `cadgen` (the package suites, viewer backend
     included; CI's `packages` jobs), `viewer` (that backend alone, ~11 s), `skills` (every skill's
     suite), `all` (the default).
   - `--print-weights` prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file
@@ -128,7 +128,7 @@ where those files ship, so these scripts are what produces them.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
   every renderer draws its chrome through the one frame, `kit/shell/ViewFrame.jsx`), and every
-  string the CAD Viewer and the CAD app show read through the locale files. Run by `test-js.sh`
+  string the viewer and the CAD app show read through the locale files. Run by `test-js.sh`
   (the first two also as `npm run check:boundaries`).
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
   resolution, path narrowing, fail-closed unittest loading, the per-file
@@ -247,7 +247,8 @@ where those files ship, so these scripts are what produces them.
   Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
   no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
-  its public URLs. Called by `deploy-docs.yml` and `deploy-api.yml`.
+  its public URLs; with `--preview`, deploys the checkout as a Vercel preview instead
+  and leaves production alone. Called by `deploy-docs.yml` and `deploy-api.yml`.
 
 `install/` — the one-line installer, and local testing.
 
@@ -308,7 +309,7 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 | `test.yml` | pushes to and PRs against `main` and `build-test`; nightly on `main`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run whole on its one flag, only when the change selects it (`select_checks.py`; `docs/contributing/testing.md#ci` lists the jobs): `static` always (the version check, the tracked tree's rules, the light contracts, the API's tests; on a pull request, what merging it releases); the package suites on Linux and Windows, in shards (`packages (Linux I/2)`, `packages (Windows I/3)`); `routing (macOS)`; `skills`; `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`; `fea`, `kicad`, `blender`; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheels and runs the installed-mode tests; `viewer-e2e` serves that bundle's viewer through the backend to the launch smoke test and the browser gates. A full run (a `VERSION` change, the nightly, a dispatch, `Publish Release`'s call) adds the release tier: the package suites on Python 3.13 and the installer rehearsals. `CI`, the one required check, fails when any job did. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
-| `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
+| `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`), or, dispatched with `preview`, that ref as a Vercel preview with production untouched: configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 | `deploy-api.yml` (`Deploy API`) | pushes to `main` that change `apps/api`; manual dispatch | Deploys `api.texttocad.dev` (`apps/api`) to Vercel production after its tests (`test-api.sh`). It follows no release. |
 | `install-linux.yml` (`Linux installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.sh`, piped, on `ubuntu-latest` and in `python:3.12-slim-bookworm`, against this tree's wheel or, dispatched with `published`, the site's `install.sh` and PyPI; checks `cad --version` and `cad doctor`. |
 | `install-windows.yml` (`Windows installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install`); manual dispatch | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds, or, dispatched with `published`, the site's `install.ps1` and PyPI. |
@@ -317,5 +318,5 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 bump (`release/bump-version.sh`); merging either starts `Publish Release` (PyPI,
 then the install branches); `Deploy Docs` redeploys. `main` is the one branch you
 develop on, and what releases tag; installers follow `latest`, written only by
-`Publish Release`; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
+`Publish Release`; `build-test` is the rehearsal. The viewer is a local-filesystem
 app with no hosted deployment.

@@ -303,7 +303,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const exported = vi.fn();
   const perform = { 'copy-path': vi.fn(), 'copy-link': vi.fn(), reveal: vi.fn(), browser: vi.fn() };
-  // The host's items as the CAD viewer's Export hands them: a submenu of formats.
+  // The host's items as the viewer's Export hands them: a submenu of formats.
   const exportMenu = <DropdownMenuSub><DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger><DropdownMenuSubContent aria-label="Export">
     <DropdownMenuItem data-export-format="step" onSelect={() => exported('step')}>STEP</DropdownMenuItem>
   </DropdownMenuSubContent></DropdownMenuSub>;

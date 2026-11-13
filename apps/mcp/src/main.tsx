@@ -79,7 +79,7 @@ async function start() {
       return;
     }
     // Whether the host carries this page's calls to CAD's server: what it declared, until a call says
-    // (`host/channel.ts`). A host that refuses them all gets the CAD Viewer's page instead.
+    // (`host/channel.ts`). A host that refuses them all gets the viewer's page instead.
     const channel = createChannel(declaresServerTools(bridge.hostCapabilities));
     // The page's capability, from the launch or the tool that launched it (`host/capability.ts`). With none,
     // nothing it asks CAD's server can be answered: the card says it cannot connect, and links the page.

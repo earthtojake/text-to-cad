@@ -25,7 +25,7 @@ export interface ViewReporter {
 }
 
 /**
- * One view: the shared CAD viewer over this host — the model a launch names, by its absolute path,
+ * One view: the shared viewer over this host — the model a launch names, by its absolute path,
  * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
  * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
  * the file manager), and at the right the host's update and Full size. A view browses from its model's folder, shows what is opened in place, and adds what it

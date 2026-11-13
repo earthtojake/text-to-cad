@@ -1,7 +1,7 @@
 # cad-server
 
 The CAD server for text-to-cad, imported as `cad_server`: the computer's one daemon that builds, keeps and
-serves CAD documents; the CAD Viewer and the CAD app's MCP endpoint on its listener; the environment the
+serves CAD documents; the viewer and the CAD app's MCP endpoint on its listener; the environment the
 CAD kernel runs in; the installations and the one that is current; and the command that runs and
 installs them all.
 
@@ -37,7 +37,7 @@ src/cad_server/
                          #   engine sessions (http), tools and launches (server), how a host
                          #   presents CAD (host), open views (views), sidebar views shared in
                          #   memory (sidebar), the viewer routes in-process (tunnel), the page
-                         #   (ui), and the CAD Viewer link for a host that renders no MCP Apps
+                         #   (ui), and the viewer link for a host that renders no MCP Apps
                          #   (browser)
   robot_payload.py       # a robot description resolved for the viewer's page: its
                          #   articulation, its visuals in rest space, the facts a person
@@ -79,7 +79,7 @@ src/cad_server/
                          #   `file_lock.state`), the CLI derivation, the one parser every
                          #   command reads its options by (cli_parser) and the one failure
                          #   contract every command fails by (cli_errors)
-  _runtime/              # BUILT: the CAD Viewer client, the CAD app page and the agent-app
+  _runtime/              # BUILT: the viewer client, the CAD app page and the agent-app
                          #   plugin (its manifests and skills) -- produced when the wheel is
                          #   packaged, never committed, never edited
 ```

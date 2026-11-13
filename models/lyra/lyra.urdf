@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="lyra">
   <!--
-    robot: lyra (RIGHT hand) | consumers: CAD Viewer, external URDF consumers (RViz/MoveIt)
+    robot: lyra (RIGHT hand) | consumers: the text-to-cad viewer, external URDF consumers (RViz/MoveIt)
     units: meters, kilograms, radians | frames: wrist-flange mount face center = origin,
     +Z distal (fingers up), +Y palmar, +X radial (thumb side)
     root: wrist_mount (frame-only) | source of dimensions: src/lyra.py / src/lib/chain.py (mm)

@@ -27,7 +27,7 @@ one. The keys are in [study-file.md](study-file.md).
 
 ## Choosing faces
 
-A face the user selected in the CAD Viewer arrives as `/work/bracket.step#bracket/face 17` and is
+A face the user selected in the viewer arrives as `/work/bracket.step#bracket/face 17` and is
 exact. Otherwise the setup (`cad step solve part.step`) lists each face with its area, centre,
 surface type and a hint (`plane, normal -Z, largest`): "the base" or "the mounting face" is usually
 the largest planar face with a downward normal, "the top of the upright" a small planar face at the

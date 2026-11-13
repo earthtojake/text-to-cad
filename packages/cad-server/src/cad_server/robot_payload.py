@@ -162,7 +162,7 @@ DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
 DRAWABLE_SHAPES = ("box", "capsule", "cylinder", "sphere")
 # What a visual's placement multiplies a decoded mesh by, by format, so the mesh lands in the
 # robot's metres. glTF is metres by its spec and the page decodes a GLB into millimetres (the
-# CAD Viewer's scene unit), so every GLB -- a link's mesh file and a primitive cadgen meshed
+# viewer's scene unit), so every GLB -- a link's mesh file and a primitive cadgen meshed
 # alike -- carries 0.001. An STL has no unit and the page does not read a 3MF's: both are
 # drawn as the numbers they hold, which the description's mesh scale converts to metres.
 _DECODED_TO_METRES = {"glb": 0.001, "stl": 1.0, "3mf": 1.0}
@@ -533,7 +533,7 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
     """The URDF whose robot an SRDF plans for, or a refusal naming the search.
 
     An SRDF carries planning semantics only. It pairs with the same-folder ``.urdf``
-    whose ``<robot name>`` matches -- the rule ``cad srdf validate`` and the CAD Viewer
+    whose ``<robot name>`` matches -- the rule ``cad srdf validate`` and the viewer
     use -- and exactly one may match.
     """
     from cad.srdf._validation import find_paired_urdf

@@ -4,7 +4,7 @@
  * (`entryMenu`: Copy path, and the file shown in the desktop's file manager) and the navbar's ⋯
  * after the file's name (`ViewerNavbar.jsx`: Copy path, then Open in — `openInMenu`: the host's
  * browser page of the document, and the desktop's file manager by its name — then the host's own
- * items, the CAD viewer's Export).
+ * items, the viewer's Export).
  *
  * Pure, so `node --test` loads it without the bundler's aliases: the labels are in the language of
  * the `t` its caller hands it (`useI18n()`'s), English where it hands none.

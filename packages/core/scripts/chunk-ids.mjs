@@ -1,11 +1,11 @@
 /**
- * The debug id each chunk of a page goes by, for the CAD Viewer's and the CAD app's builds. A page names
+ * The debug id each chunk of a page goes by, for the viewer's and the CAD app's builds. A page names
  * its chunks' ids (`__cadChunkIds`, which ../src/client/crash.js reads into a crash's frames), and a release
  * files each chunk's source map in PostHog under the chunk's id, which keeps one map an id.
  *
  * So one id must name one chunk's text with one map, in every page and every release. A bundler's id
  * names the code alone (rolldown's does): the CAD app, which rewrites a chunk's imports, would run other
- * text under the id the CAD Viewer's copy of that chunk goes by, and a source change that moves no code,
+ * text under the id the viewer's copy of that chunk goes by, and a source change that moves no code,
  * such as a comment, would keep a chunk's id with a new map. A page's build therefore stamps each chunk
  * anew, with an id its text and its map decide together.
  */

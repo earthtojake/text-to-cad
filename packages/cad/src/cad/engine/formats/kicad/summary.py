@@ -56,7 +56,7 @@ def inspect_board(path: Path | str) -> dict:
                     "missing": [{"name": "...", "reason": "not-found", "parts": ["U1"]}, ...],
                     "without": ["H1"]}}   # the parts that name no model (none hidden)
 
-    ``models`` is each 3D model the footprints name, answered as the CAD Viewer's 3D view reads it
+    ``models`` is each 3D model the footprints name, answered as the viewer's 3D view reads it
     (:mod:`cad.engine.formats.kicad.models3d`: the STEP on this computer it is, or why there is none).
 
     Raises ``FileNotFoundError`` for a missing file and ``ValueError`` for one that is not a KiCad

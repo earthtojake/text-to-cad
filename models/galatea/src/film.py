@@ -150,7 +150,7 @@ CUT = [
     ("crouch", range(0, 40), "every motion checked: interference, balance, torque"),
     ("scan", quick(72, 4), None),
     ("walk", range(0, 60), None),
-    ("views", None, "the same file, as the CAD viewer draws it"),
+    ("views", None, "the same file, as the viewer draws it"),
     ("sim", None, None),
     ("end", None, None),
 ]

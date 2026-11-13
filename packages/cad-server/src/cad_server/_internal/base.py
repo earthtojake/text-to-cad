@@ -1,7 +1,7 @@
 """The base: the one environment models and the engine's kernel processes run in.
 
 The ``cadgen`` wheel's required dependencies are the core -- the engine's server, the ``cadgen``
-command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, build123d and the rest) is
+command, the viewer's server, the MCP shim --, and the CAD kernel (OCP, build123d and the rest) is
 its ``build123d`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
 itself: the engine makes one environment per installation, the base, and every process that loads
 the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel

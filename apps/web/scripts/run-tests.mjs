@@ -32,7 +32,7 @@ const tests = (requestedTests.length ? requestedTests : defaultTestRoots.flatMap
   .sort();
 
 if (!tests.length) {
-  console.error("No CAD Viewer tests found.");
+  console.error("No viewer tests found.");
   process.exit(1);
 }
 

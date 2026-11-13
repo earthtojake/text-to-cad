@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="juno">
   <!--
-    robot: juno | consumers: CAD Viewer, external URDF consumers (RViz/MoveIt/simulators)
+    robot: juno | consumers: the text-to-cad viewer, external URDF consumers (RViz/MoveIt/simulators)
     units: meters, kilograms, radians | frames: +X forward, +Y robot-left, +Z up (REP-103)
     root: base_footprint (frame-only) | source of dimensions: juno.step.py / juno_parts/chain.py (mm)
     meshes: 3MF/, the mm 3MF src/exports.py writes of each link model of src/juno.py, in that link's part-local frame (scale 0.001); link

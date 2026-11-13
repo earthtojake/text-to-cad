@@ -10,12 +10,12 @@ HOST="127.0.0.1"
 # (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
 RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
 
-echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
+echo "==> viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
 
 # The built client has to be IN the wheel's runtime: its absence is the exact regression
 # this guards, and it surfaces as a served page that is 404 rather than as a bad server.
 if [ ! -f "$RUNTIME/index.html" ]; then
-  echo "FAIL: no bundled CAD Viewer client at $RUNTIME (index.html missing)" >&2
+  echo "FAIL: no bundled viewer client at $RUNTIME (index.html missing)" >&2
   echo "      Run scripts/bundle/bundle.sh first (test.yml bundles before this step)." >&2
   exit 1
 fi

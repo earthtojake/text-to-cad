@@ -31,7 +31,7 @@ where it is.
     authored DIRECTLY in the engine frame at crank angle θ = 0.
 - Build: `python src/radial.py` builds the whole engine into its document (an
   unchanged system is a no-op: the server keeps each system's work in memory) and the
-  CAD Viewer follows it; `cad model snapshot <id> out.png` renders it
+  viewer follows it; `cad model snapshot <id> out.png` renders it
   (`skills/cad/references/snapshot-review.md` has the camera and size flags).
 - Never edit `spec.py`, `kin.py`, `geo.py`, `palette.py`, `mechanism.py`,
   `radial.py`, or another builder's module. If you need a shared number

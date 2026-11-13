@@ -109,7 +109,7 @@ function FullSizeButton({ bridge }: { bridge: Bridge }) {
 }
 
 /**
- * The CAD Viewer's page of each document a launch named, from its `browser` (`cad_server/mcp/server.py`'s
+ * The viewer's page of each document a launch named, from its `browser` (`cad_server/mcp/server.py`'s
  * `_reach`, the link a text client's `cad_show` gives): by absolute path, the home's under ''.
  */
 type Pages = ReadonlyMap<string, string>;

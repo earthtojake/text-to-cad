@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cad-server"
 version = "0.11.10"
-description = "The CAD server for text-to-cad: the device's daemon that builds, keeps and serves CAD documents, the CAD Viewer, the CAD app's MCP endpoint, and the command that runs and installs them."
+description = "The CAD server for text-to-cad: the device's daemon that builds, keeps and serves CAD documents, the viewer, the CAD app's MCP endpoint, and the command that runs and installs them."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -32,7 +32,7 @@ dependencies = [
   # uv: a dependency, so it is always there (its wheel carries the binary, `uv.find_uv_bin`), on a
   # machine with no uv on PATH too.
   "uv>=0.7",
-  # The CAD Viewer's DXF pane flattens a drawing with ezdxf in the server's own process.
+  # The viewer's DXF pane flattens a drawing with ezdxf in the server's own process.
   "ezdxf",
   # The DXF pane's raster and the Recents' previews are drawn with Pillow.
   "pillow",
@@ -62,7 +62,7 @@ where = ["src"]
 include = ["cad_server", "cad_server.*"]
 
 [tool.setuptools.package-data]
-# _runtime holds what the server serves that is not Python: the CAD Viewer's built client that
+# _runtime holds what the server serves that is not Python: the viewer's built client that
 # `cad viewer` serves, the CAD app page its MCP endpoint serves, and the agent-app plugin (its
 # manifests and the skills) it writes into the plugin folder. It is data, not a subpackage (no
 # __init__), and it is found at call time by cad_server.assets. A glob takes no dot folder, so the

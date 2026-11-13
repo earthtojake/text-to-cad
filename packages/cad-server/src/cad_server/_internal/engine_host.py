@@ -1,4 +1,4 @@
-"""The server's composition root: the CAD Viewer's and the CAD app's HTTP application on the engine's
+"""The server's composition root: the viewer's and the CAD app's HTTP application on the engine's
 listener, and the environment the engine's kernel processes run in, which the engine makes when it is
 absent.
 

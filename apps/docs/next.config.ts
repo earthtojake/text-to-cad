@@ -11,7 +11,20 @@ const nextConfig: NextConfig = {
   // texttocad.dev/install: the short link to the install box in the hero (`#install`). Temporary, so
   // it can move.
   async redirects() {
-    return [{ source: "/install", destination: "/#install", permanent: false }];
+    return [
+      { source: "/install", destination: "/#install", permanent: false },
+      // The reference's page of commands was /docs/reference/commands before it was generated.
+      { source: "/docs/reference/commands", destination: "/docs/reference/cli", permanent: true },
+      { source: "/docs/reference/commands.md", destination: "/docs/reference/cli.md", permanent: true },
+    ];
+  },
+  // /docs/<page>.md, and /docs.md for /docs itself: a page of the documentation as Markdown, for an
+  // agent (app/docs-md).
+  async rewrites() {
+    return [
+      { source: "/docs.md", destination: "/docs-md" },
+      { source: "/docs/:path(.+)\\.md", destination: "/docs-md/:path" },
+    ];
   },
   // texttocad.dev/install.sh and /install.ps1: the one-line installer, copied into public/ from
   // scripts/install/ as the site builds (scripts/install-scripts.mjs). Plain text, so `irm` hands

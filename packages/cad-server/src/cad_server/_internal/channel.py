@@ -6,12 +6,12 @@ install command points the apps at says ``<host>-install``, an install by hand f
 ``CAD_INSTALL_CHANNEL=<id>``, plus ``CAD_AUTO_UPDATED=1`` when something other than the person
 keeps that copy up to date (the store that reviewed it). The build
 that makes the plugin writes them; nothing works them out from folders, ids or a host's
-internals. The CAD Viewer the server starts inherits them. They are environment, not flags,
+internals. The viewer the server starts inherits them. They are environment, not flags,
 because a plugin's config pins a release of cadgen that may predate a setting: a cadgen ignores an
 environment variable it does not know, where a flag it does not know would stop the server.
 
 Only the server hears it, though, and most of CAD's work is not the server's: a skill's ``cadgen``
-command, a model script and the CAD Viewer a skill opens run with nothing a plugin set -- nor is the
+command, a model script and the viewer a skill opens run with nothing a plugin set -- nor is the
 counting: the server's sessions are counted by the engine, whose environment is whoever started it,
 often ``python model.py``. So the engine writes down, for its installation, the channel each plugin's stdio
 transport says as it opens a session (``remember``, from the transport's initialize): the device runs one

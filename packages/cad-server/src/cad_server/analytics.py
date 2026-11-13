@@ -23,7 +23,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   naming no tool of cadgen's counted as ``cad_unknown``'s (``UNKNOWN_TOOL``), never by the name it sent;
 - ``tool_failure`` (the CAD app): how many of a tool's calls failed for each reason (``FAILURES``): one
   word cadgen chose where the call failed -- the caller named no file, or no view; a view that did not
-  answer; the CAD Viewer that did not start; cadgen's own bug -- never the failure's message;
+  answer; the viewer that did not start; cadgen's own bug -- never the failure's message;
 - ``view`` (the apps): how many times a CAD view was touched by a person or switched models --
   time spent looking at a model calls no tool, and is use all the same;
 - ``files`` (the apps): how many distinct models (kind ``model``) and files of each format (``xbf``,
@@ -364,7 +364,7 @@ OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read, or a
 # call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s). The view's: it
 # did not answer in time (``timeout``), answered with an error or without
-# an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the CAD Viewer
+# an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the viewer
 # did not start (``no_viewer``), or the engine could start no kernel process for the call -- no kernel environment,
 # a pool the system refused (``no_kernel``, schema 10's; earlier schemas counted it as ``other``; its crash, with its
 # ``cause``, is sent once per failure, ``cad_server.mcp.server``). cadgen's: anything else it raised (``bug``,

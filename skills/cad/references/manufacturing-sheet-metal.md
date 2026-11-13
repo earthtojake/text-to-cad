@@ -144,7 +144,7 @@ can be made.
 ## Cut files (DXF)
 
 A laser, plasma, waterjet or routing shop cuts the DXF, so check the exact file it gets (a
-text-to-cad drawing's is the one `cad xbf export <id> part.dxf` wrote), not the model it came from:
+text-to-cad drawing's is the one `cad model export <id> part.dxf` wrote), not the model it came from:
 
 ```bash
 cad dxf dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.2

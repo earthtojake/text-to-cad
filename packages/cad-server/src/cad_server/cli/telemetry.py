@@ -45,7 +45,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         prog=prog,
         description=(
             "Show or change the usage stats and crash reports text-to-cad sends from CAD's apps (the CAD app in an agent "
-            "app, and the CAD Viewer) and its build daemon. By default, once a cad command has said so: a random "
+            "app, and the viewer) and its build daemon. By default, once a cad command has said so: a random "
             "install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the "
             "viewer's tools and settings are used (never a value or a name), files shown by format, builds and "
             "snapshots, how they ended and how long they took, and where text-to-cad's own code failed (never a "

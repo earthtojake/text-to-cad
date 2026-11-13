@@ -7,7 +7,7 @@
 # Nothing cadgen ships loads it -- cadgen's snapshots are drawn by OCCT, and the wheel does
 # not carry this page. Its one reader is the OCCT parity bench (scripts/bench/occt_parity.py),
 # which runs this before it drives the page in a headless Chromium to compare OCCT's stills
-# with the viewer's: it is built from the same @cad/core entrypoint the CAD Viewer
+# with the viewer's: it is built from the same @cad/core entrypoint the viewer
 # uses, so its picture is the viewport's.
 #
 # The esbuild toolchain and the pinned three/meshoptimizer are npm-installed once into

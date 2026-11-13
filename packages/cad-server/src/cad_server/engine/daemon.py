@@ -107,7 +107,7 @@ __all__ = ["DEFAULT_PORT", "PortHeld", "let_go", "main", "port_holder", "worker_
 
 
 def _application(server: Any, host: str, port: int) -> Any:
-    """The server's HTTP application on the engine's listener: the CAD Viewer's and the CAD app's
+    """The server's HTTP application on the engine's listener: the viewer's and the CAD app's
     (``cad_server._internal.engine_host.http_factory``, the one module that imports either)."""
     from cad_server._internal.engine_host import http_factory
 

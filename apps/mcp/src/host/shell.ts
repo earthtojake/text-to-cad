@@ -200,7 +200,7 @@ export function say(message: string, bridge?: Pick<Bridge, 'notify'>, presentati
 /**
  * What the card shows where it cannot connect (`Unconnected`), as the app's notice shows it
  * (`Notice.tsx`'s `Unreachable`): the line in the host's language (its locale, else the frame's
- * languages), and the CAD Viewer's page of what the card was to show, opened through the host where it
+ * languages), and the viewer's page of what the card was to show, opened through the host where it
  * opens links (`ui/open-link`), else as an ordinary link in a new window. Inline, the card is the
  * notice's height.
  */

@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the CAD Viewer.
+description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the text-to-cad viewer.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -45,7 +45,7 @@ each such library was not found and DRC `lib_footprint_issues` that it is not en
 carries its libraries (`${KIPRJMOD}`) needs no KiCad.
 
 kicode's KiCad is a nightly (10.99), so a board or schematic it saves is in the nightly's format, which a
-stable KiCad app refuses; viewing and snapshots still work, and the CAD Viewer's Open in says which KiCad on
+stable KiCad app refuses; viewing and snapshots still work, and the viewer's Open in says which KiCad on
 this computer can open the file.
 
 ## Native files are the source

@@ -31,7 +31,7 @@ class Registry(unittest.TestCase):
                 self.assertTrue(help_text.strip(), f"{name} needs help text")
 
     def test_the_viewer_verbs_are_registered_and_lazy(self):
-        # The CAD Viewer's backend is cad_server.viewer, reached through the front
+        # The viewer's backend is cad_server.viewer, reached through the front
         # door as a launcher for the shared engine. Registered by dotted module
         # name like everything else, so `cad --help` imports none of it.
         for name in ("viewer",):

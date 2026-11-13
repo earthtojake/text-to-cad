@@ -39,10 +39,10 @@ There are two routes to one:
 | **MuJoCo model by hand** | The MJCF (`robot.xml`, and a `scene.xml` that includes it), then `cad mujoco check`. | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | **Link meshes from a CAD model for a hand-written file** | One mesh per link in the link's frame: `cad model export <id> link.stl`. | [Meshes](references/meshes.md) |
 | **Mass, center of mass, inertia** | Materials on the CAD parts (generated, exact), `mass()` where the hardware's weight is measured and `point_mass()` for what the CAD leaves out; else a formula or a throwaway script, never intuition. | [Inertials](references/inertials.md) |
-| **Close a nonlinear four-bar in the CAD Viewer** | `<tcad:four_bar>` on the derived URDF joint. | [Four-bar](references/urdf-four-bar.md) |
+| **Close a nonlinear four-bar in the viewer** | `<tcad:four_bar>` on the derived URDF joint. | [Four-bar](references/urdf-four-bar.md) |
 | **See the robot, a pose or a named state** | `cad urdf snapshot` or `cad srdf snapshot` (the CAD model's `cad model snapshot` for a robot with one); an MJCF is opened by the person in MuJoCo Studio. | [Snapshots](references/snapshots.md) |
 | **Check a change** | The format's check (`cad urdf validate`, `cad srdf validate`, `cad mujoco check`), then its review. | [Check each change](#check-each-change) |
-| **Open an existing URDF, SRDF or MJCF** | Show it to the person: a URDF or an SRDF in the CAD Viewer, an MJCF in MuJoCo Studio. | [Show the model](#show-the-model) |
+| **Open an existing URDF, SRDF or MJCF** | Show it to the person: a URDF or an SRDF in the viewer, an MJCF in MuJoCo Studio. | [Show the model](#show-the-model) |
 
 ## Setup
 
@@ -64,7 +64,7 @@ kernel. `cad mujoco check` and `cad run mujoco-studio` use MuJoCo's headless cor
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
 `mujoco` gets the same. `decompose()` in a MuJoCo function uses CoACD, `cad[coacd]` (one wheel,
-about 3 MB), which the engine likewise fetches into an environment of its own the first time a part
+about 4 MB), which the engine likewise fetches into an environment of its own the first time a part
 is decomposed, and reuses after. `cad <verb> --help` gives the complete current interface.
 
 ## Generate from CAD
@@ -451,6 +451,6 @@ open in the app's browser pane where it has one, or their browser: a model's pag
 download: give its path. Never screenshot the viewer to check your own work; review with
 `cad <type> snapshot`. If it fails to launch, say so.
 
-An MJCF is the exception: the CAD Viewer and `cad_show` do not open one. Show the person the CAD
+An MJCF is the exception: the viewer and `cad_show` do not open one. Show the person the CAD
 model it was generated from, and for the MJCF itself run `cad run mujoco-studio --model FILE` and
 give them the URL it prints.

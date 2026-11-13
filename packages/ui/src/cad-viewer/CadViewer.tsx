@@ -108,7 +108,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
 const reportError = (error: Error) => console.error(error);
 
 /**
- * The CAD viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
+ * The viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
  * with its five renderers (an engine document, which a STEP opens as; DXF; GLB; STL/3MF; URDF/SRDF/SDF), the host's home (the model
  * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
  * follows the catalog of the file on screen and refreshes it when the page is focused or shown

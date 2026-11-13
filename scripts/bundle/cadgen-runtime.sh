@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Build the server's non-Python runtime INTO ITS PACKAGE (packages/cad-server/src/cad_server/_runtime).
 #
-# The server ships three things it does not write in Python: the CAD Viewer's built client
+# The server ships three things it does not write in Python: the viewer's built client
 # (`cad viewer` serves it), the one-file CAD app an agent host renders (`cad-mcp`
 # serves it), and the agent-app plugin -- the repository root's plugin files and the skills --
 # which it writes into the plugin folder every agent app is pointed at (`cad plugin`,
@@ -15,7 +15,7 @@ set -euo pipefail
 # stamping derived version metadata); call this directly only when debugging one stage.
 #
 # Stages (default: all three):
-#   --viewer    CAD Viewer client (vite)               -> _runtime/viewer
+#   --viewer    the viewer's client (vite)             -> _runtime/viewer
 #   --mcp       CAD app page (vite)                    -> _runtime/mcp
 #   --plugin    the plugin's files and skills/ (copies) -> _runtime/plugin
 #
@@ -88,7 +88,7 @@ Builds the server's packaged runtime assets into packages/cad-server/src/cad_ser
 None of it is committed; the wheel is where it ships.
 
 Stages (default: all three):
-  --viewer    CAD Viewer client (vite)                -> _runtime/viewer
+  --viewer    the viewer's client (vite)              -> _runtime/viewer
   --mcp       CAD app page (vite)                     -> _runtime/mcp
   --plugin    the plugin's files and skills/ (copies) -> _runtime/plugin
 
@@ -163,12 +163,12 @@ require_dir() {
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "$1 is required to build the CAD Viewer client." >&2
+    echo "$1 is required to build the viewer client." >&2
     exit 1
   fi
 }
 
-# --- the CAD Viewer client -----------------------------------------------------------
+# --- the viewer client -----------------------------------------------------------
 # The COMMITTED lockfile decides the package manager, not what happens to be installed
 # on this machine: pnpm and npm lay out node_modules differently, so the same source
 # revision could otherwise be bundled against a different tree. An explicit
@@ -208,7 +208,7 @@ build_viewer_client() {
     pnpm) CI=true pnpm --dir "$VIEWER_APP_DIR" run build ;;
     npm)  npm --prefix "$VIEWER_APP_DIR" run build ;;
     *)
-      echo "Unsupported CAD Viewer package manager: $package_manager" >&2
+      echo "Unsupported viewer package manager: $package_manager" >&2
       echo "Set CAD_VIEWER_PACKAGE_MANAGER to pnpm or npm." >&2
       exit 1
       ;;

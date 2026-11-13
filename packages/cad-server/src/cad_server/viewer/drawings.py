@@ -95,7 +95,7 @@ class DrawingRenders:
     """The route's renders, one per drawing's bytes, off the request, and the answers they made.
 
     ``hold_seconds`` is how long a request waits on a render before answering 202, and
-    ``retry_ms`` the wait the 202 asks of the client before it asks again. The CAD Viewer holds
+    ``retry_ms`` the wait the 202 asks of the client before it asks again. The viewer holds
     and has the client ask again at once; the CAD app's tunnel, whose calls share a host's few
     slots, holds briefly and has its page come back a moment later (``cad_server.mcp.tunnel``).
     ``on_crash`` hears a render that failed for a reason other than its drawing (a bug, not a

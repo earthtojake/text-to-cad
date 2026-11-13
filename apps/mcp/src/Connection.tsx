@@ -18,7 +18,7 @@ import { Unreachable, noticeTranslator } from './Notice';
  * - `probing`: the host refused a call before any came back (`host/channel.ts`): the card tries the
  *   engine directly over HTTP (`host/direct.ts`);
  * - `direct`: it answered, and the card runs over that;
- * - `none`: it did not: the card says so, and links the CAD Viewer's page instead (`Unreachable`).
+ * - `none`: it did not: the card says so, and links the viewer's page instead (`Unreachable`).
  *
  * Whatever the route, a call CAD's server refused for the card's capability (`Channel.refusal`) ends on
  * that notice too, in its own words for a view opened before CAD restarted.

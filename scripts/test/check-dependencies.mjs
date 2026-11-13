@@ -120,7 +120,11 @@ function inspect(file) {
 inspect(start);
 // Any Node-only helper reachable from UI or an app's browser renderer is a leak,
 // even through a re-export or an otherwise framework-independent core module.
-for (const root of files.filter(file => ['packages/ui/', 'apps/web/', 'apps/mcp/', 'apps/docs/'].some(prefix => repoPath(file).startsWith(prefix)))) {
+// The docs site is a Next.js app: its server components and route handlers run in Node as it
+// builds (they read the documentation's Markdown), so there only a client module, one that says
+// "use client", is a browser renderer.
+const rendersInBrowser = file => !repoPath(file).startsWith('apps/docs/') || /^\s*(?:(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)*(['"])use client\1/.test(fs.readFileSync(file, 'utf8'));
+for (const root of files.filter(file => ['packages/ui/', 'apps/web/', 'apps/mcp/', 'apps/docs/'].some(prefix => repoPath(file).startsWith(prefix)) && rendersInBrowser(file))) {
   const seen = new Set();
   function checkBrowser(file) {
     if (seen.has(file)) return; seen.add(file);

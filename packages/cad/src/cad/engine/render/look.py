@@ -2,13 +2,13 @@
 
 ``occt.py`` draws it on OCCT's PBR raster (``finish.py``; X-ray on its Phong program), the engine
 serves it as JSON (``GET /api/v1/look``, its environment at ``GET /api/v1/look/environment``:
-``serve.py``), and the CAD Viewer draws an engine document's regular modes by it through three's
+``serve.py``), and the viewer draws an engine document's regular modes by it through three's
 physical materials (core's ``lib/xbf/xbfLook.js``). Preview's photographic look is not here.
 
 **The light.** One key, a directional light at ``intensity`` (radiance: a white surface facing it
 reflects ``intensity / pi``), and one environment, ``studio.hdr`` beside this module, lighting
 every surface at ``environment.intensity``. Nothing else: no ambient term, no fill, no shadow
-(X-ray apart: its own model, below). The environment is the CAD Viewer's neutral studio (the one
+(X-ray apart: its own model, below). The environment is the viewer's neutral studio (the one
 an authored finish reflected), baked once by ``scripts/look/bake-environment.mjs`` as a 512 x 256
 equirectangular Radiance image in the document's frame: rows from +Z (the top row) to -Z, columns once around +Z from -X through +Y, +X
 and -Y; a pixel is ``m / 255 * 2 ** (e - 128)``, as three's HDRLoader decodes it. Both renderers

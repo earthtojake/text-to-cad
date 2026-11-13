@@ -5,7 +5,7 @@ set -euo pipefail
 # the server's and the shim's, and the alias's (cadgen), which carries nothing but the library at the
 # release.
 #
-# The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
+# The server ships JavaScript it serves (the viewer's built client, the CAD app page) and
 # non-Python data it reads (collation.json); the library ships the page `serve` shows a document
 # in and the environment image its look lights with.
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of

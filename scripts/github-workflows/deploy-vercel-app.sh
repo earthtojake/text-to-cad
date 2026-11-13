@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 LABEL=""
 PROJECT_ID=""
 PUBLIC_URLS=""
+PREVIEW=0
 
 usage() {
   cat <<'EOF'
@@ -16,6 +17,11 @@ Usage:
     --project-id PROJECT_ID \
     --public-urls "https://example.com https://www.example.com"
 
+  scripts/github-workflows/deploy-vercel-app.sh \
+    --label "Docs app" \
+    --project-id PROJECT_ID \
+    --preview
+
 Deploys one Vercel project to production from the current checkout:
 
 1. configures Vercel Authentication to protect preview deployments only
@@ -24,8 +30,13 @@ Deploys one Vercel project to production from the current checkout:
 3. verifies each public production URL responds with HTTP 2xx/3xx
 4. appends a deployment summary to GITHUB_STEP_SUMMARY when set
 
+With --preview it deploys a preview instead: the checkout as it is (a branch),
+built for Vercel's preview environment and deployed with no --prod, at a URL of
+its own that Vercel Authentication protects. Production and its public URLs are
+never touched, and --public-urls is not taken.
+
 Requires VERCEL_TOKEN and VERCEL_ORG_ID in the environment and the vercel CLI
-on PATH. Run from a checkout of main (or a release tag).
+on PATH. Run a production deploy from a checkout of main (or a release tag).
 EOF
 }
 
@@ -51,6 +62,9 @@ while [ "$#" -gt 0 ]; do
       PUBLIC_URLS="$2"
       shift
       ;;
+    --preview)
+      PREVIEW=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -64,7 +78,11 @@ done
 
 [ -n "$LABEL" ] || die "--label is required"
 [ -n "$PROJECT_ID" ] || die "--project-id is required"
-[ -n "$PUBLIC_URLS" ] || die "--public-urls is required"
+if [ "$PREVIEW" -eq 1 ]; then
+  [ -z "$PUBLIC_URLS" ] || die "--preview deploys no production URL: leave --public-urls out"
+else
+  [ -n "$PUBLIC_URLS" ] || die "--public-urls is required"
+fi
 [ -n "${VERCEL_TOKEN:-}" ] || die "VERCEL_TOKEN must be set"
 [ -n "${VERCEL_ORG_ID:-}" ] || die "VERCEL_ORG_ID must be set"
 command -v vercel >/dev/null 2>&1 || die "vercel CLI is required"
@@ -131,6 +149,27 @@ export VERCEL_ORG_ID
 export VERCEL_PROJECT_ID="$PROJECT_ID"
 
 echo "Using Vercel project root from project settings for $LABEL."
+if [ "$PREVIEW" -eq 1 ]; then
+  # A preview: Vercel's preview environment, built and deployed with no --prod, so the
+  # production deployment and its domains stay as they are.
+  vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+  vercel build --token="$VERCEL_TOKEN"
+  deployment_output="$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")"
+  echo "$deployment_output"
+  deployment_url="$(printf '%s\n' "$deployment_output" | tail -n 1)"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "### $LABEL"
+      echo
+      echo "Preview URL: $deployment_url"
+      echo
+      echo "> A preview is behind Vercel Authentication: sign in to Vercel as a member of the project's team to open it. Production is unchanged."
+      echo
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
+  echo "$LABEL preview deployed: $deployment_url"
+  exit 0
+fi
 vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 vercel build --prod --token="$VERCEL_TOKEN"
 deployment_output="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"

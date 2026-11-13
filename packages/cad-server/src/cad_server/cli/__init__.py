@@ -263,7 +263,7 @@ def _main(argv: list[str]) -> int:
     if command in _REGISTERS and not helping:
         _adopt()
     # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
-    # with, so the CAD app and the CAD Viewer say it (`cad_server/updates.py`). What a command does say,
+    # with, so the CAD app and the viewer say it (`cad_server/updates.py`). What a command does say,
     # once and before its work, is what those two send by default (`cad_server/analytics.py`) -- to a
     # person: an answer in JSON is a program's, so the notice waits for a later run a person reads, and
     # nothing is sent by default until it is said.

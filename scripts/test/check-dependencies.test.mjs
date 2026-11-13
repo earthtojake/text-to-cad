@@ -28,6 +28,11 @@ test('rejects Node builtins reached through a dynamic core import',()=>fixture({
   'apps/web/src/App.ts':"const read = () => import('@cad/core/lib/node.js');",
   'packages/core/src/lib/node.js':"import fs from 'fs'; export const read = fs.readFileSync;",
 },result=>assert.ok(result.errors.some(error=>error.includes('reaches Node-only')))));
+test('lets the docs site read files on its server and never in a client module',()=>fixture({
+  'apps/docs/src/lib/source.ts':"import fs from 'node:fs'; export const read = fs.readFileSync;",
+  'apps/docs/src/app/page.tsx':"import { read } from '@/lib/source'; export default read;",
+  'apps/docs/src/components/search.tsx':"// The search.\n'use client';\nimport { read } from '@/lib/source'; export default read;",
+},result=>assert.deepEqual(result.errors,['apps/docs/src/components/search.tsx reaches Node-only apps/docs/src/lib/source.ts'])));
 test('keeps concrete renderers out of the FileViewer import graph',()=>fixture({
   'packages/ui/src/file-viewer/index.ts':"export * from '../renderers/step';",
   'packages/ui/src/renderers/step/index.ts':'export const step = 1;',

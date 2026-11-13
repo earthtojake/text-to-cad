@@ -7,7 +7,7 @@ and laws 23 to 28); the mechanism is the engine README's **Document types and in
 ([`packages/cad-server/src/cad_server/engine/README.md`](../../packages/cad-server/src/cad_server/engine/README.md)).
 
 A document type is a file cad **shows**: every type has a view (`document`, `mesh`, `drawing`, `robot`,
-`plot`), is listed by the CAD Viewer and has a snapshot. A file cad only writes or checks is not one,
+`plot`), is listed by the viewer and has a snapshot. A file cad only writes or checks is not one,
 however much cad does with it: an MJCF is an export's destination and the `mujoco` integration's to
 check (`cad mujoco check`), and MuJoCo Studio shows it. For such a file, give its tool's integration an
 operation instead ([Adding an integration](adding-an-integration.md)).
@@ -37,8 +37,9 @@ where a command or a program first needs it.
       by an edit (`Edit`: `<type>.edit`, a `with` block), never both. `wire` only if a released protocol already spells it
       otherwise; a new type never needs one.
 - [ ] **Regenerate the JavaScript**: `python -m cad.registry --js >
-      packages/core/src/lib/documentTypes.generated.js`. `tests/python/packages/cad/test_registry.py`
-      fails until you do.
+      packages/core/src/lib/documentTypes.generated.js`, and the documentation site's copy,
+      `python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`.
+      `tests/python/packages/cad/test_registry.py` fails until you do.
 - [ ] **The type's package**, `packages/cad/src/cad/<id>/__init__.py`, ending in
       `_bind(__name__)` (`cad._internal.document_type`). Put here only what takes paths, plain values
       or our own types (the signature rule): its reader, its check (`validate`, `drc`, ...), its standard's
@@ -71,8 +72,8 @@ where a command or a program first needs it.
       ([testing](testing.md#ci)).
 - [ ] **Docs to touch**: the library README's **Definitions** (the list of ids) and its shape of the
       package, the engine README's **CLI**, the server README's **Commands**, the skill that teaches
-      the type, the README and the docs site's homepage (`apps/docs/src/lib/content.ts`) if they list
-      formats, and `AGENTS.md` only if a repo-level rule changed.
+      the type, the README
+      and the docs site's homepage (`apps/docs/src/lib/content.ts`) if they list formats, and `AGENTS.md` only if a repo-level rule changed.
 
 ## Designing its viewer
 
