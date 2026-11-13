@@ -162,11 +162,11 @@ a move are exact.
 
 After each group:
 
-- **DRC.** `cad +0.11.10 kicad_pcb drc board.kicad_pcb`: fix every courtyard, clearance and edge error.
+- **DRC.** `cad +0.11.11 kicad_pcb drc board.kicad_pcb`: fix every courtyard, clearance and edge error.
   Unconnected items are expected until routing.
 - **Your own measurements.** A check script reading the saved board measures each pin to its part,
   each ground pad's via site and each crystal's gaps ([layout's list](layout.md#a-property-check)).
-- **The ratsnest.** `cad +0.11.10 kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`.
+- **The ratsnest.** `cad +0.11.11 kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`.
   Short, uncrossed lines mean the group sits well. A line that must cross a pad row, or ends at a pad
   walled in by parts, is a lane still to open. DRC's unconnected items list every connection still
   to route; each needs a way through.

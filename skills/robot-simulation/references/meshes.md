@@ -4,7 +4,7 @@ Bad mesh handling is a top URDF and MJCF failure mode, and it usually happens *b
 
 ## Generated Descriptions
 
-A description generated from a CAD model (`cad +0.11.10 model export <id> robot.xml` or `robot.urdf`, or `cad.mujoco.spec`) writes its own meshes, and none of the steps below apply:
+A description generated from a CAD model (`cad +0.11.11 model export <id> robot.xml` or `robot.urdf`, or `cad.mujoco.spec`) writes its own meshes, and none of the steps below apply:
 
 - one binary STL per part prototype, in **metres** and in the part's own frame, written once however many links place it, named `<model>_<part>.stl`; the description places it in its link with an origin, so no `scale` is needed or written;
 - beside the file: in `assets/` for an MJCF (its `meshdir`), in `meshes/` for a URDF, each named by relative path, so the file and its meshes move together as one folder;
@@ -24,7 +24,7 @@ The unit of export is the **link**, not the assembly and not the CAD feature tre
 2. Never point multiple links at one combined assembly mesh with compensating origins. If two links share a source body, the body must be split at the joint in CAD before export.
 3. Export each link's mesh **in that link's own frame** — the frame the ledger defines, coincident with the parent joint frame at zero position. Done right, every `<visual><origin>` is identity (`0 0 0`, `0 0 0`), which is the convention to follow and the easiest state to audit.
 4. If an export cannot be re-framed (vendor mesh, scanned part), a nonzero visual origin is acceptable but must be recorded in the ledger with its source; it is a per-link constant, not a tuning knob.
-5. Splitting, re-framing, and exporting STEP/STL/3MF/GLB assets belongs to the owning CAD workflow: with a text-to-cad model, each link is a model of its own returning the link's part in the link's frame, and `cad +0.11.10 model export <id> link.stl` writes its mesh. Do not attempt to fix a wrong split by editing URDF origins or MJCF body positions.
+5. Splitting, re-framing, and exporting STEP/STL/3MF/GLB assets belongs to the owning CAD workflow: with a text-to-cad model, each link is a model of its own returning the link's part in the link's frame, and `cad +0.11.11 model export <id> link.stl` writes its mesh. Do not attempt to fix a wrong split by editing URDF origins or MJCF body positions.
 
 Checklist after export, before authoring:
 
@@ -56,7 +56,7 @@ When a description references exported mesh assets, record in its ledger:
 In URDF:
 
 - **Local relative paths** (`3MF/forearm_link.3mf`) resolve from the `.urdf` file's directory. Preferred for a robot kept in a project tree — the bundled validator verifies these files exist.
-- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific (`--packages NAME=PATH` resolves them for the validator alone); confirm the consuming environment resolves the package root as expected. The CAD Viewer and `cad +0.11.10 urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
+- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific (`--packages NAME=PATH` resolves them for the validator alone); confirm the consuming environment resolves the package root as expected. The CAD Viewer and `cad +0.11.11 urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
 - Remote URIs are accepted with warnings; avoid them for durable fixtures.
 
 In MJCF, a mesh `file` resolves from the `<compiler meshdir>`, itself relative to the model file: keep the meshes in that folder, beside the model ([mjcf-authoring.md](mjcf-authoring.md)).
@@ -65,7 +65,7 @@ Keep mesh files under the same model directory tree as the description, so the f
 
 What the CAD Viewer and the snapshots draw is narrower than what the validators accept: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives, which the server meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI, a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it. Each format's full list is in [snapshots.md](snapshots.md).
 
-An MJCF's meshes are MuJoCo's to read: STL, OBJ or MSH files, found under the compiler's `meshdir` (or `assetdir`) beside the main file. A 3MF or GLB is no MuJoCo mesh at all: export the link as STL (`cad +0.11.10 model export <id> link.stl`). No `cad` view draws an MJCF; `cad +0.11.10 mujoco check` says a mesh file MuJoCo cannot find or read. MuJoCo hulls every mesh it collides, so an MJCF's collision mesh is its convex hull whatever its shape ([mjcf-authoring.md](mjcf-authoring.md#visual-and-collision-geoms)).
+An MJCF's meshes are MuJoCo's to read: STL, OBJ or MSH files, found under the compiler's `meshdir` (or `assetdir`) beside the main file. A 3MF or GLB is no MuJoCo mesh at all: export the link as STL (`cad +0.11.11 model export <id> link.stl`). No `cad` view draws an MJCF; `cad +0.11.11 mujoco check` says a mesh file MuJoCo cannot find or read. MuJoCo hulls every mesh it collides, so an MJCF's collision mesh is its convex hull whatever its shape ([mjcf-authoring.md](mjcf-authoring.md#visual-and-collision-geoms)).
 
 ## Visual vs Collision Assets
 

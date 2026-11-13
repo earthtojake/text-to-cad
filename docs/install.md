@@ -29,7 +29,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.10 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.11 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`versions/<release>`), from uv's cache where it has it, and runs the rest from
@@ -222,7 +222,7 @@ release the directory last delivered, beside the install command's
 ([Releases side by side](#releases-side-by-side)), and the directory updates it. Where
 the `cad` command is missing, its skills install it with uv rather than the install script;
 for this release that is
-`uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup --add`. Copies
+`uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.11 cad setup --add`. Copies
 from it through 0.11.10 name CAD's server: when Claude
 Code starts it, it offers no tools, since the Code tab refuses the calls its cards
 make; set `CAD_MCP_CARDS=1` in the server's environment to keep them, for testing.
@@ -622,8 +622,8 @@ release's folder when the release is removed.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.11.10'` (`cad requirement build123d` prints the exact
-requirement; `pip install cad==0.11.10` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
+`pip install 'cad[build123d]==0.11.11'` (`cad requirement build123d` prints the exact
+requirement; `pip install cad==0.11.11` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
 A release whose worker contract the server does not speak is refused in one line that says

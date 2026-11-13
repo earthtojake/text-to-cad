@@ -4,7 +4,7 @@ description: Make an engineering drawing of a part as a PDF - orthographic views
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
-  version: "0.11.10"
+  version: "0.11.11"
 ---
 
 # Engineering drawing
@@ -24,23 +24,23 @@ toolpaths, not documents, and a different job.
 
 ## Setup
 
-Every command in this skill starts `cad +0.11.10`: it runs text-to-cad 0.11.10, the release this skill was
+Every command in this skill starts `cad +0.11.11`: it runs text-to-cad 0.11.11, the release this skill was
 written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
 PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
 
-If `cad` is missing, or says it does not know `+0.11.10` (an older text-to-cad), install this release,
+If `cad` is missing, or says it does not know `+0.11.11` (an older text-to-cad), install this release,
 outside the sandbox or with its permission, then run the command again:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.10
+curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.11
 ```
 
-On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.10`.
-It installs 0.11.10 and the `cad` command and changes nothing else.
+On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.11`.
+It installs 0.11.11 and the `cad` command and changes nothing else.
 
 When a command fails, its exit code says why:
 
-- 3: it could not install or switch to 0.11.10 from this shell. Do what it says, outside
+- 3: it could not install or switch to 0.11.11 from this shell. Do what it says, outside
   the sandbox or with its permission, then run the command again.
 - 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again;
   if it still names the same release, this app's copy of the text-to-cad plugin is out of date: run
@@ -49,7 +49,7 @@ When a command fails, its exit code says why:
 - 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
   `~/.local/bin/cad` (`%USERPROFILE%\.local\bin\cad.exe` on Windows) instead.
 
-`cad +0.11.10 doctor --check` explains any other failure, changing nothing; `cad +0.11.10 doctor` repairs what
+`cad +0.11.11 doctor --check` explains any other failure, changing nothing; `cad +0.11.11 doctor` repairs what
 it reports. Tell the person any next step it prints.
 
 ## Workflow
@@ -81,7 +81,7 @@ it reports. Tell the person any next step it prints.
    wider than the sheet's note column is refused, and `notes=` takes a LIST
    (`notes="BREAK EDGES"` is a sequence of eleven characters, so it is refused
    too).
-5. Run `cad +0.11.10 run <name>_drawing.py`. It prints the PDF it wrote, and **anything
+5. Run `cad +0.11.11 run <name>_drawing.py`. It prints the PDF it wrote, and **anything
    it noticed while drawing** — read those first:
    - *"measures blank paper"*: the dimension's model points do not land on the
      view's geometry. Almost always the part was built from a corner and the

@@ -302,7 +302,7 @@ hinge("pin", rocker, coupler, C, connect=False)   # the loop's last joint: the c
 
 The document keeps every pair; a loop's pairs are not posed (there is no solver), so a
 mechanism state or a configuration sequence that moves one is refused or left out, and
-`cad +0.11.10 model ranges` sweeps none of them. A robot description follows the pairs from the
+`cad +0.11.11 model ranges` sweeps none of them. A robot description follows the pairs from the
 ground and leaves out the pair that reaches a link a second time, the one paired last: the
 MJCF closes the loop there with an equality between two sites, one on each body where the
 joint stands (a hinge is two `connect`s, a ball one), and the URDF, a tree, leaves it out
@@ -340,7 +340,7 @@ free(root)                                  # the base is not bolted to the worl
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
   label on the assembly or below it, in SI, from the drive's datasheet: URDF's `<limit>`, MJCF's
   `actuatorfrcrange` (MJCF has no speed bound). Declare it after the joint is made. A joint without
-  one is written `effort="0" velocity="0"` in a URDF, which `cad +0.11.10 urdf validate` warns a ROS
+  one is written `effort="0" velocity="0"` in a URDF, which `cad +0.11.11 urdf validate` warns a ROS
   controller reads literally.
 - **`mass(part_or_assembly, grams)`** is what it weighs in all: its solids keep the ratios their
   materials' densities give (one density for all where none of them has a material; a part with no material among parts that have one carries none of the total, and the export says so) and are scaled alike to
@@ -427,8 +427,8 @@ apart, a cover vanishing, a part spinning for show) is an animation of the GLB:
 A pose is drawn on demand:
 
 ```bash
-cad +0.11.10 model snapshot "$ID" tmp/open.png --pose open
-cad +0.11.10 model snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad +0.11.11 model snapshot "$ID" tmp/open.png --pose open
+cad +0.11.11 model snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
 ```
 
 `--pose` takes a mechanism state's name, or joint and coupling values as JSON (a turn
@@ -446,7 +446,7 @@ of jobs draws its frames in one command, each from one camera
 ([a camera that does not move](snapshot-review.md#annotations-and-quick-edit-views)):
 
 ```bash
-cad +0.11.10 model snapshot "$ID" tmp/stride.png --pose walk@0.6
+cad +0.11.11 model snapshot "$ID" tmp/stride.png --pose walk@0.6
 ```
 
 ```json
@@ -459,14 +459,14 @@ is its pelvis walks in the air.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. `cad +0.11.10 model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
+mid-motion. `cad +0.11.11 model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
 parts at each pose it is given, a state or a sequence at a time of it: give it every state, and
 each sequence at the times that matter
 ([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
 check script, pose the model there, taking its parts placed with
 `leaves(tree)` (`cad.build123d`) through `find_part`, copied from
 [Opening geometry](inspection-and-validation.md#opening-geometry). Where a joint's stops are
-the parts meeting, `cad +0.11.10 model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):
+the parts meeting, `cad +0.11.11 model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):
 
 ```python
 from cad.build123d import leaves, overlap_volume, posed

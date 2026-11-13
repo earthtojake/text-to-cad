@@ -7,7 +7,7 @@ board at its block's end, and the next step reads what the last one saved. Each 
 
 ## The method
 
-1. **Start from the schematic.** Export its netlist (`cad +0.11.10 kicad_sch export board.kicad_sch --to netlist
+1. **Start from the schematic.** Export its netlist (`cad +0.11.11 kicad_sch export board.kicad_sch --to netlist
    -o tmp`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")` in the script), then bring the
    parts and nets onto the board in an edit:
    `b.import_netlist("tmp/board.net")` (`dry_run=True` first to see what it would change). The
@@ -24,10 +24,10 @@ board at its block's end, and the next step reads what the last one saved. Each 
    out: fixed parts first (connectors, mounting holes, anything the enclosure locates), then each IC
    with its own group, in order of how little distance each connection tolerates. Draw the outline
    with rounded or chamfered corners, as the person confirms. A horizontal connector sits at a board
-   edge with its mating face out over it; check it in a GLB export opened in the viewer (`cad +0.11.10 kicad_pcb
+   edge with its mating face out over it; check it in a GLB export opened in the viewer (`cad +0.11.11 kicad_pcb
    export board.kicad_pcb --to glb -o tmp/glb`). Keep the parts on one side, and ask the person before
    putting any on the other. Move parts with `b.update_items(...)` and `b.flip_items(...)` in one
-   script per group, then look: `cad +0.11.10 kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display
+   script per group, then look: `cad +0.11.11 kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display
    placement` shows the pads and every unrouted connection (the ratsnest). Short, uncrossed ratsnest
    lines mean the group is placed well. Placement is iterative: routing will move parts again.
 4. **Plan the fan-outs before routing.** For each fine-pitch part, decide which way each pin escapes
@@ -88,8 +88,8 @@ board at its block's end, and the next step reads what the last one saved. Each 
    print("\n".join(routed.human_lines()))   # each connection; one NOT routed says why and what walls it in
    ```
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
-   `cad +0.11.10 kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
-   errors are what to fix now. Look at each side's copper too (`cad +0.11.10 kicad_pcb snapshot board.kicad_pcb
+   `cad +0.11.11 kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
+   errors are what to fix now. Look at each side's copper too (`cad +0.11.11 kicad_pcb snapshot board.kicad_pcb
    tmp/copper.png --display copper`, and `--display '{"mode":"copper","side":"bottom"}'` for the back).
    Moving a part after routing is fine: reroute what it touched. A pour's
    thermal reliefs round dense small pads can neck below the minimum connection width
@@ -212,7 +212,7 @@ where the legs split.
 
 ## A property check
 
-Save it beside the board and run it with `cad +0.11.10 run layout_checks.py board.kicad_pcb`. It reads the saved
+Save it beside the board and run it with `cad +0.11.11 run layout_checks.py board.kicad_pcb`. It reads the saved
 board and prints what breaks the method: segments off the 45° grid, two-pad nets much longer than the
 straight line between their pads, and tracks too narrow for their current.
 

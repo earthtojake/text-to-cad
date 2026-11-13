@@ -59,8 +59,8 @@ if __name__ == "__main__":
   search path, last, after everything installed, so a module beside it imports by its own
   name unless an installed module has that name. A script inside a
   package (its folder holds an `__init__.py`) is that package's module, so its relative
-  imports (`from ..lib.dims import WIDTH`) work under `cad +0.11.10 run proj/parts/block.py` and
-  `cad +0.11.10 run -m proj.parts.block` alike. An edit to any module it imports is read on the
+  imports (`from ..lib.dims import WIDTH`) work under `cad +0.11.11 run proj/parts/block.py` and
+  `cad +0.11.11 run -m proj.parts.block` alike. An edit to any module it imports is read on the
   next run.
 - **`import build123d as bd` costs nothing until it is used.** The library makes the import of
   `build123d` (and `OCP`) lazy: the module binds at once and the kernel loads on the
@@ -255,7 +255,7 @@ worker and builds cold; where the server retired the worker, the run says why un
 
 A document's id names the model, not a state of it: it is the same after every edit. What
 names the state is the key of the code and inputs it was built from,
-`handle.report["closure"]["key"]` (`cad +0.11.10 model inspect "$ID" --query closure` prints it): a
+`handle.report["closure"]["key"]` (`cad +0.11.11 model inspect "$ID" --query closure` prints it): a
 file derived from a document (a simulator's description, a GLB beside a film) that records
 the key can tell whether the document has been built from other sources since. The key is
 `None` where the model's code cannot be keyed.
@@ -277,13 +277,13 @@ re-runs the body that read it:
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
   part. A STEP that names other files as its parts (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
-  `cad +0.11.10 <type> export`: export it again from its CAD tool as one file.
+  `cad +0.11.11 <type> export`: export it again from its CAD tool as one file.
 - **A read tree's parts, placed**: `leaves(tree)` (`cad.build123d`) gives each leaf
   where it stands in the file's frame, out of the tree and on the same B-rep, with its
   label, colour and material (`paths=True`: `(path, leaf)` pairs). Never `located` or
   `moved` a node of the tree itself: build123d copies it with its parent, the whole
   assembly, on every call.
-- **A vendor STEP is converted once**: `cad +0.11.10 step export vendor.step vendor.xbf` writes an
+- **A vendor STEP is converted once**: `cad +0.11.11 step export vendor.step vendor.xbf` writes an
   xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
@@ -333,40 +333,40 @@ script's folder and that name, independent of which file in the folder declares 
 names in one folder are refused with both declaration locations. A model's name is its identity
 within its namespace, the function's name by default, `name=` gives it another. The namespace
 is the script's folder, with no project detection. Moving a named model to another file of its folder
-keeps its id: run the file it left with `cad +0.11.10 run` (or delete it) first, since until then the server
+keeps its id: run the file it left with `cad +0.11.11 run` (or delete it) first, since until then the server
 knows that file by its last run, and refuses the new file's declaration naming both. The page is
-`/<id>` on the server's address; `cad +0.11.10 <type> export`, `snapshot` and `inspect`, and the
+`/<id>` on the server's address; `cad +0.11.11 <type> export`, `snapshot` and `inspect`, and the
 CAD app's tools, take the id and read the document as the server holds it. No command
 imports, runs or builds a script: editing the script changes nothing until Python runs
 it again.
 
 - **Documents outlive their workers.** A document stays held after its script's worker
-  retires (`cad +0.11.10 status`: `live` with its worker, `held` without one, where `made_by`
+  retires (`cad +0.11.11 status`: `live` with its worker, `held` without one, where `made_by`
   is null), under one memory budget (`CAD_ENGINE_MEMORY_MB`, default a quarter of the
   machine's) that never drops a document a page watches.
 - **The server never reruns code.** A document it no longer holds (its file in the server's
   cache deleted, or never saved) is refused with the command that
-  brings it back, `cad +0.11.10 run <the script that defines it>`, by the page, `cad +0.11.10 <type> inspect`
-  and `cad_show` alike (`cad +0.11.10 status`: `unsaved`, or `detached` once its script is gone).
+  brings it back, `cad +0.11.11 run <the script that defines it>`, by the page, `cad +0.11.11 <type> inspect`
+  and `cad_show` alike (`cad +0.11.11 status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in text-to-cad's state folder (`documents/<uuid>/document.json`:
-  the script and function that build it (the rebuild command is `cad +0.11.10 run` of that script, with the
+  the script and function that build it (the rebuild command is `cad +0.11.11 run` of that script, with the
   `--with` its last run was given); never geometry). The home lists the records, models and files alike, pinned first, then by
   last activity. A record whose
   script is gone is detached: listed, saying so, with no rebuild command. Nothing else is
   written beside your files: no record of a run.
 - **A restart reopens what was built.** The server keeps each model document's bytes in
   the platform's cache folder (`~/.cache/cad/documents/`), once it is idle, so after a
-  restart its id answers every verb as last built (`cad +0.11.10 status`: `held`, on `disk`).
+  restart its id answers every verb as last built (`cad +0.11.11 status`: `held`, on `disk`).
   A document is what its last run made: the server never checks the code on disk against
   it, no surface says the script changed, and nothing reruns. After an edit, run the script
-  (`cad +0.11.10 run /work/arm.py`) to update the document and its open pages.
-  The cache keeps every document until you delete it (`cad +0.11.10 delete <id>`, or a script's
+  (`cad +0.11.11 run /work/arm.py`) to update the document and its open pages.
+  The cache keeps every document until you delete it (`cad +0.11.11 delete <id>`, or a script's
   path for every document of it, or Delete in a card's menu on the home); nothing evicts
   from it. Deleting removes the record and the cached document, never a file. It asks
   first: at a terminal `Delete them? (y/N)`; where nothing can ask, it deletes nothing
   without `--yes` (exit 2, `confirmation_required`, naming the command with it). Delete
-  only what the person asked to delete, with `--yes`; `cad +0.11.10 delete <id> --dry-run` lists
+  only what the person asked to delete, with `--yes`; `cad +0.11.11 delete <id> --dry-run` lists
   what it would delete, and how many.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
   shape) is handed over: `model(shape, name="plate")` makes a document of it, held,
@@ -376,8 +376,8 @@ it again.
   shape go with it; a GLB's animations are passed as `animations=[...]`. Nothing builds
   it again: its record says a program the server did not run showed it, so run that
   program again. A decorated function in no saved file is refused, with these words.
-- `cad +0.11.10 status` lists the workers and the documents the server holds (`--json` as
-  data); `cad +0.11.10 stop` stops the server and any older one still running. At most
+- `cad +0.11.11 status` lists the workers and the documents the server holds (`--json` as
+  data); `cad +0.11.11 stop` stops the server and any older one still running. At most
   `CAD_ENGINE_WORKERS` workers live (default: the machine's cores); a worker is retired only
   when the workers' memory is over `CAD_ENGINE_WORKER_RSS_MB`, never for idleness,
   and its script's next run starts cold. `CAD_ENGINE_DIR` moves the
@@ -385,7 +385,7 @@ it again.
 
 ## Progress and the report
 
-A run says where it is: on a terminal, `cad +0.11.10 run model.py` draws a bar on stderr, and the
+A run says where it is: on a terminal, `cad +0.11.11 run model.py` draws a bar on stderr, and the
 viewer's page shows the same. Nothing in the model says it: while a body runs, the bar
 names each `@memo` call and each child model it calls, by its function's name, as it
 begins, and counts it when it ends. A long body split into `@memo` stages (`finger`,
@@ -418,5 +418,5 @@ returns the same report as data, a dict per model in `.models`: `id`, `memo`, `b
 `children`:
 
 ```bash
-cad +0.11.10 run -c "import bracket; print(bracket.bracket.build().models[0]['retention'])"
+cad +0.11.11 run -c "import bracket; print(bracket.bracket.build().models[0]['retention'])"
 ```

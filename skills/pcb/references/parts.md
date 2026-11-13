@@ -20,7 +20,7 @@ and geometry across all those shapes. A hole without copper is not an electrical
 STEP export needs the footprint's actual 3D models. Verify model path, offset, scale and rotation.
 `--subst-models` can substitute a matching STEP/IGES model for VRML. Missing models must be
 reported; an enclosure check based on the bare board cannot establish component clearance.
-`cad +0.11.10 kicad_pcb inspect board.kicad_pcb --json` lists each model missing (`models.missing`) before any
+`cad +0.11.11 kicad_pcb inspect board.kicad_pcb --json` lists each model missing (`models.missing`) before any
 export. KiCad's library has none for many parts a case is built round (keyboard switches, EC11
 encoders, 3.5 mm Eurorack jacks, 9 mm pots, several LEDs and USB-C receptacles): draw each from its
 datasheet with the cad skill, export it as STEP into the project (`board.3dshapes/`), and name it in the
@@ -43,7 +43,7 @@ project's copy of the footprint as `${KIPRJMOD}/board.3dshapes/<name>.step`.
 ## The BOM is the schematic's
 
 Never edit an exported BOM. Change the schematic's field (`Value`, `MPN`, `LCSC`) and export it again
-(`cad +0.11.10 kicad_sch export --to bom`): a hand edit to the CSV disagrees with the board and is lost at the
+(`cad +0.11.11 kicad_sch export --to bom`): a hand edit to the CSV disagrees with the board and is lost at the
 next export.
 
 ## A new footprint
