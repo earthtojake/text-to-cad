@@ -891,6 +891,10 @@ class Step:
     note: str = ""  # how it is done, when not by a command of its own ("in the same edit")
     cwd: Optional[str] = None  # where its commands run, when that matters (a project's server)
     agents: List[str] = field(default_factory=list)  # the Skills CLI agents its command adds the skills for
+    # A step that leaves the app with an older release's copy of ours because it cannot run here -- its command is not
+    # on the PATH of the process that runs the plan, often a server an app started --: why, in words. The setup
+    # records the app behind (``cad_server.cli.setup.BEHIND``) rather than up to date.
+    behind: str = ""
 
     @property
     def label(self) -> str:
@@ -1399,6 +1403,17 @@ def _leave(app: App, subject: str) -> Step:
     return Step(app.id, "leave", subject)
 
 
+def _no_command(app: App, release: str, subject: str) -> Step:
+    """The step for an app whose command is not on this PATH: left, and -- where the app keeps a copy of ours of an
+    older release, which only its command brings along (a copy, not a folder read in place) -- left behind, so the
+    setup records it (``Step.behind``) and a later run from a shell that has the command gives it the text."""
+    step = _leave(app, subject)
+    ours = app.ours()
+    if ours is not None and not ours.store and _status(ours, release) == "older":
+        step.behind = f"no {app.id} command on the PATH the setup ran with"
+    return step
+
+
 def _removal(app: App, copy: Copy, machine: Machine, action: str = "remove duplicate") -> Step:
     """The step that takes ``copy`` out of ``app``, by the app's own command or as a file."""
     cli = app.command
@@ -1561,7 +1576,7 @@ def _plan_codex(app: App, release: str, machine: Machine, folder: Optional[Path]
     steps += _github_catalog(app) + _codex_line(app, machine)
     here, ours = shown(folder, machine), app.ours()
     if not app.command:
-        return steps + [_leave(app, f"no codex command on this PATH to add {here} to Codex with")]
+        return steps + [_no_command(app, release, f"no codex command on this PATH to add {here} to Codex with")]
     cli, market = app.command, app.marketplaces.get(MARKETPLACE)
     add = [cli, "plugin", "add", PLUGIN_ID]
     if ours is not None and _points(market, folder):
@@ -1625,7 +1640,8 @@ def _plan_grok(app: App, release: str, machine: Machine, fed: bool = False, **_:
         return _served(app, machine)
     steps = _duplicates(app, machine)
     if not app.command:
-        return steps + [_leave(app, f"no grok command on this PATH: install {PLUGIN} from Grok Build itself")]
+        return steps + [_no_command(app, release, f"no grok command on this PATH: install {PLUGIN} from Grok Build "
+                                                  "itself")]
     ours = app.ours()
     if ours is not None:
         status = _status(ours, release)

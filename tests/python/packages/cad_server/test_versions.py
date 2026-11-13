@@ -528,8 +528,9 @@ class Removal(Device):
         stopped.assert_not_called()
         self.assertEqual(asked, [{"op": "pid"}], "not even asked whether it works")
 
+    @unittest.skipIf(os.name == "nt", "POSIX lists processes (ps); Windows has its own answer, the test below")
     def test_running_spares_the_server_s_own_processes_and_no_other(self) -> None:
-        listed = ("  10   1 /bin/zsh\n  20  10 /v/code/server/bin/python -m cad_server._internal.engine_daemon\n"
+        listed =("  10   1 /bin/zsh\n  20  10 /v/code/server/bin/python -m cad_server._internal.engine_daemon\n"
                   "  21  20 /v/code/base/k/bin/python -m cad.engine.worker\n")
         done = subprocess.CompletedProcess([], 0, listed, "")
         with mock.patch.object(releases.subprocess, "run", return_value=done), \
@@ -537,6 +538,15 @@ class Removal(Device):
             self.assertTrue(releases.running("/v"))
             self.assertFalse(releases.running("/v", besides=20), "the server and its worker")
             self.assertTrue(releases.running("/v", besides=21), "the worker alone: the server is another")
+
+    @unittest.skipIf(os.name != "nt", "Windows' answer; POSIX lists processes, the test above")
+    def test_running_on_windows_asks_nothing_and_leaves_the_folder_to_its_rename(self) -> None:
+        # Windows cannot be asked which process runs from a folder: False, nothing run, and the removal's rename
+        # aside, which the system refuses while a file there is in use (a running python.exe, a loaded .pyd), keeps it.
+        with mock.patch.object(releases.subprocess, "run") as run:
+            self.assertFalse(releases.running(r"C:\v"))
+            self.assertFalse(releases.running(r"C:\v", besides=20))
+        run.assert_not_called()
 
 
 class BeforeTwelve(Device):

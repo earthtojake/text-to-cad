@@ -844,6 +844,37 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertNotIn(setup.BEHIND, self.receipt())
         self.assertEqual([line for line in doctor._apps() if ": behind " in line], [])
 
+    def test_an_app_whose_command_is_not_on_the_setup_s_path_and_holds_an_older_copy_is_recorded_behind(self) -> None:
+        """Codex's copy of an earlier release (its config and plugin cache), and no codex command on the PATH the
+        setup runs with -- an update run by a server an app started --: Codex keeps the older text, so it is behind,
+        not up to date; ``cad update`` from a shell that has the command gives it the text and takes the record out.
+        Found by the update rehearsal (``scripts/test/rehearse-update.py app-behind``)."""
+        from cad_server.cli import doctor
+        from cad_server.cli import update as update_command
+
+        codex = self.home / ".codex"
+        (codex / "plugins" / "cache" / "text-to-cad" / "text-to-cad" / "0.0.1").mkdir(parents=True)
+        (codex / "config.toml").write_text(
+            f'[marketplaces.text-to-cad]\nsource_type = "local"\nsource = {json.dumps(str(plugin.folder()))}\n'
+            '[plugins."text-to-cad@text-to-cad"]\nenabled = true\n', encoding="utf-8")
+        code, out, _err = self.run_setup("--only", "codex")
+        self.assertIn("no codex command on this PATH", out)
+        row = self.receipt()[setup.BEHIND]["codex"]
+        self.assertEqual((row["release"], row["why"]), (RELEASE, "no codex command on the PATH the setup ran with"))
+        self.assertEqual(len([line for line in doctor._apps() if line.startswith("app      Codex: behind ")]), 1)
+        command(self.bin, "codex", "sys.exit(0)\n")  # the agent's shell has it on its PATH
+        with mock.patch.object(updates, "newest", return_value=None):
+            code, out, _err = self._run(update_command.main, ())
+        self.assertEqual(code, 0, out)
+        self.assertIn(["codex", "plugin", "add", "text-to-cad@text-to-cad"],
+                      [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()])
+        self.assertNotIn(setup.BEHIND, self.receipt())
+
+    def test_an_app_with_no_copy_of_ours_and_no_command_here_is_not_behind(self) -> None:
+        (self.home / ".codex").mkdir()
+        self.run_setup("--only", "codex")
+        self.assertNotIn(setup.BEHIND, self.receipt())
+
     def test_a_step_that_did_its_work_and_exited_non_zero_is_said_as_done_with_the_warning_quoted(self) -> None:
         # Gemini CLI links the extension, then exits 1 when its integrity store cannot be verified.
         command(self.bin, "gemini", """import os, pathlib

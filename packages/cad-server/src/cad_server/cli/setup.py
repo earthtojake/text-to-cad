@@ -1179,6 +1179,9 @@ class Installer:
                 for app in step.agents or [step.app]:  # one Skills CLI command gives every agent its skills
                     if outcome.get(app) is None:  # a step "in the command above" never clears that command's failure
                         outcome[app] = why
+        for step in steps:  # left with an older copy for want of its command here: behind, not up to date
+            if step.behind and step.app not in outcome:
+                outcome[step.app] = step.behind
         self._behind(receipt, steps, outcome)
         return failed, changed
 

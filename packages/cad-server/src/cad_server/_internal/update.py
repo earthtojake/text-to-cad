@@ -33,15 +33,24 @@ That is what any release's setup is handed: one argument, and no variable, file 
    then the pointer written -- the one write that is the update -- and the mirror. Fails before the pointer:
    nothing changed but V's own folder. After it: V is the default, the old version is removed when nothing is
    connected to it (else by the next sweep), and V's server takes the old one's port where the old one stopped.
-3. The apps step. Fails for an app: that app keeps its copy of the text before, said, and the setup exits 1;
-   ``cad update`` or the install command run again does it again (``move`` finds V already the default).
+3. The apps step. Fails for an app -- a command of it fails, or its command is not on the PATH the setup runs with
+   while it keeps an older copy of ours --: that app keeps its copy of the text before, said on stderr, and is
+   recorded behind in the receipt (``cli.setup.BEHIND``), which ``cad doctor`` names. An updater's run
+   (``--engine-update``) still exits 0, since the default channel moved; a person's run (the install command, ``cad
+   update`` run from a terminal) exits 1 for a command that failed (a command missing from its PATH is said in its
+   plan, and recorded, but fails nothing). ``cad update`` or the install command run again does the step again
+   (``move`` finds V already the default), and so does the default version's server by itself once a day while idle
+   (``Update.catch_up``).
 
 Nothing running is switched under a command: the old version's server is stopped only when nothing is in flight
 there (``versions.connected``), and otherwise retires by itself once it is idle.
 
 The server's own updater (``Update``): one at a time, in the background of the default version's server, the
 request that asked for it answered at once, and the page that asked reads where it is (``GET
-/api/v1/server``'s ``update``) until the server goes and V's comes back on the same port, with the same token.
+/api/v1/server``'s ``update``) until one of two endings: the server goes and V's comes back on the same port, with the
+same token (nothing was in flight here, and no other channel is on this version); or this server stays -- work in
+flight here, or another channel still on its version -- and the update ends as ``moved``, naming the address of V's
+server, started on the next free port, which the page goes to (``Update.snapshot``, ``_moved``).
 An update installs V, which no sweep removes while it waits, installed and never used (``versions.fate``); an
 updater that prepares a newer release removes its own earlier target, which it made and never moved to
 (``_discard``). An automatic update installs V at once (step 1 of the contract, in the background) and runs its

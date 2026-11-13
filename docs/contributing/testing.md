@@ -50,10 +50,13 @@ enough. Every other job runs on the changes that reach it. The two there now:
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
   so no release ships unrehearsed. They also run on a change to the installers themselves.
-- The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs a real 0.11.10
-  from PyPI on a private device and updates it into this tree's build by each of its update paths, on
-  Linux, macOS and Windows, about 8 minutes a system: the migration every device makes unattended. It
-  runs with the installer rehearsals, and on a change to the rehearsal itself.
+- The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs real releases
+  from PyPI on private devices and updates them into this tree's build, on Linux, macOS and Windows, in
+  two legs a system that run side by side: `into` (0.11.10's and 0.11.0's own update paths, and the
+  interruptions) and `around` (this build's own automatic update, work in flight, a new server before
+  the switch, an app an update could not reach, and 0.10.4). About 11 to 13 minutes a system on macOS:
+  the migration every device makes unattended. It runs with the installer rehearsals, and on a change
+  to the rehearsal itself. A scenario runs alone too, as `scripts/test/rehearse-update.py in-flight`.
 
 A job moves into the tier, or out of it, with that argument in its pull request.
 
