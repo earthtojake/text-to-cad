@@ -78,6 +78,32 @@ class Measurements(unittest.TestCase):
         self.assertEqual("s = sphere(10); // kept\nreturn s;\n", queryable(text))
 
 
+class Command(unittest.TestCase):
+    def test_the_integration_declares_gsl_and_cad_run_gsl_reaches_its_command(self) -> None:
+        from cad._internal.integrations import INTEGRATIONS as REGISTERED, for_command
+        from cad.registry import INTEGRATIONS
+
+        omega = INTEGRATIONS["omega"]
+        self.assertEqual((omega.commands, omega.probe.override), (("gsl",), "CAD_GSL"))
+        self.assertIn("omega-core", omega.distributions)
+        self.assertEqual((for_command("gsl"), for_command("gsl.exe")), ("omega", "omega"))
+        self.assertEqual(REGISTERED["omega"].runner, "cad.omega._command")
+
+    def test_a_gsl_that_is_not_there_is_one_missing_tool_result_naming_the_extra(self) -> None:
+        import contextlib
+        import io
+        import os
+        from unittest import mock
+
+        from cad.omega._command import main
+
+        err = io.StringIO()
+        with mock.patch.dict(os.environ, {"CAD_GSL": os.path.join(tempfile.gettempdir(), "no-such-gsl")}), \
+                contextlib.redirect_stderr(err):
+            self.assertEqual(2, main(["gsl", "--version"]))
+        self.assertIn("cad[omega]", err.getvalue())
+
+
 @unittest.skipUnless(HAS_OMEGA, NEEDS_OMEGA)
 class Check(unittest.TestCase):
     def setUp(self) -> None:
