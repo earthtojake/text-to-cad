@@ -74,7 +74,12 @@ mkdir -p "$EMPTY" "$DIST"
 # folder, stopped on the way out.
 export CAD_ENGINE_DIR="$WORK/engine" CAD_CACHE_DIR="$WORK/no-0.7-store"
 cleanup() {
-  # The installed server stops the daemon its builds started.
+  # The version's server the CAD app started (the cad command stops the default channel's), and the daemon the
+  # installed server's own commands started, if any.
+  if [ -x "$WORK/bin/cad" ]; then
+    "$WORK/bin/cad" stop >/dev/null 2>&1 \
+      || echo "warning: this run's version's server did not stop; it goes once idle" >&2
+  fi
   if [ -x "$VENV/bin/python" ]; then
     "$VENV/bin/python" -m cad_server.engine stop >/dev/null 2>&1 \
       || echo "warning: this run's engine daemon did not stop; it goes once idle" >&2
@@ -192,13 +197,20 @@ while read -r command; do
   echo "   $COMMAND $command"
 done <"$WORK/commands.txt"
 
+# The shim is a release's: as on a person's device, it installs its own version on this private device at its
+# first start (`uvx --from cad-server==<VERSION> cad setup --add`, the kernel's environment with it) and serves
+# from that version's server. uv reads the wheels under test beside its index (UV_FIND_LINKS for the uvx, the
+# server's own CAD_UPDATE_FIND_LINKS for the environments it makes) and takes them over an index's release of
+# the same number: which wheel was installed is checked below, so a release on PyPI never stands in.
+export UV_FIND_LINKS="$WHEELS" CAD_UPDATE_FIND_LINKS="$WHEELS"
 step "Serve the CAD app over MCP through the shim, as an agent host starts it"
 "$VENV/bin/python" - "$VENV/bin/$SHIM_COMMAND" "$WORK" <<'PY' || exit 1
 import json, os, subprocess, sys, threading
 import cad_server
 
 server = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-watchdog = threading.Timer(60, server.kill)
+# Bounds a hang, not the work: the first start installs the version, its kernel's environment among it.
+watchdog = threading.Timer(900, server.kill)
 watchdog.daemon = True
 watchdog.start()
 
@@ -244,27 +256,43 @@ watchdog.cancel()
 print(f"   {len(tools)} tools; the app is {len(page) // 1024} KiB at {uri}")
 PY
 
-step "Starting the CAD app registered the server and wrote the $COMMAND command the skills run"
+step "Starting the CAD app installed its version from these wheels, moved the default channel to it, and wrote the $COMMAND command"
 VERSION_INSTALLED="$("$VENV/bin/python" -c 'import cad_server; print(cad_server.__version__)')"
+MARKER="$CAD_STATE_DIR/versions/$VERSION_INSTALLED/code/cad-version.json"
 RECORD="$CAD_STATE_DIR/installations/$VERSION_INSTALLED.json"
 PROXY="$CAD_LAUNCHER_DIR/$COMMAND"
-[ -f "$RECORD" ] || fail "no record of $VERSION_INSTALLED in $CAD_STATE_DIR/installations"
-# Compared resolved: the temporary folder's path may be spelled through a symlink (/var, /private/var).
-"$VENV/bin/python" - "$RECORD" "$VENV" <<'PY' || exit 1
-import json, os, sys
-record = json.load(open(sys.argv[1], encoding="utf-8"))
-if os.path.realpath(record["prefix"]) != os.path.realpath(sys.argv[2]):
-    sys.exit(f"FAIL: {sys.argv[1]} names {record['prefix']}, not {sys.argv[2]}")
+[ -f "$MARKER" ] || fail "$VERSION_INSTALLED is not installed: no $MARKER"
+[ "$(cat "$CAD_STATE_DIR/default")" = "$VERSION_INSTALLED" ] || fail "the default channel is not on $VERSION_INSTALLED"
+[ -f "$RECORD" ] || fail "no record of $VERSION_INSTALLED in $CAD_STATE_DIR/installations (the mirror)"
+# The version's server is the wheel under test, file for file (an index's release of the same number is not), and
+# the mirror's record names it. Compared resolved: the temporary folder may be spelled through a symlink.
+"$VENV/bin/python" - "$MARKER" "$RECORD" "$WHEELS" <<'PY' || exit 1
+import base64, glob, hashlib, json, os, sys, zipfile
+marker = json.load(open(sys.argv[1], encoding="utf-8"))
+record = json.load(open(sys.argv[2], encoding="utf-8"))
+if os.path.realpath(record["prefix"]) != os.path.realpath(marker["prefix"]):
+    sys.exit(f"FAIL: {sys.argv[2]} names {record['prefix']}, not the version's server {marker['prefix']}")
+site = (glob.glob(os.path.join(marker["prefix"], "lib", "python*", "site-packages"))
+        or [os.path.join(marker["prefix"], "Lib", "site-packages")])[0]
+wheel = glob.glob(os.path.join(sys.argv[3], "cad_server-[0-9]*.whl"))[0]
+with zipfile.ZipFile(wheel) as archive:
+    files = [name for name in archive.namelist() if name.startswith("cad_server/") and name.endswith(".py")]
+    for name in files:
+        want = hashlib.sha256(archive.read(name)).digest()
+        path = os.path.join(site, *name.split("/"))
+        if not os.path.isfile(path) or hashlib.sha256(open(path, "rb").read()).digest() != want:
+            sys.exit(f"FAIL: the version's server is not {os.path.basename(wheel)}: {name} differs")
+print(f"   {len(files)} modules of {os.path.basename(wheel)} in {marker['prefix']}")
 PY
 [ -x "$PROXY" ] && grep -q "^# $COMMAND proxy: " "$PROXY" || fail "$PROXY is not the $COMMAND command"
 same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
 # cad run is uv run with cad pinned at the installation's release: the program runs on that release's library.
 [ "$("$PROXY" run -c 'import cad; print(cad.__version__)' | tail -n 1)" = "$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')" ] \
   || fail "$COMMAND run does not run the installation's release of cad"
-# The first installation on this machine is its current one, the one the command runs.
+# The mirror clients of 0.11.10 and earlier read names the default channel's version.
 [ "$(cat "$CAD_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
   || fail "$VERSION_INSTALLED is not the current installation"
-echo "   $(basename "$RECORD"), current, and $PROXY"
+echo "   versions/$VERSION_INSTALLED, the default channel, $(basename "$RECORD"), current, and $PROXY"
 
 step "Build a real model with no repo in sight"
 mkdir -p "$EMPTY/models"

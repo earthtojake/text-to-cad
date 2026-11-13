@@ -10,11 +10,7 @@
         "--from",
         "cad-mcp==0.11.10",
         "cad-mcp"
-      ],
-      "env": {
-        "CAD_INSTALL_CHANNEL": "cursor-marketplace",
-        "CAD_AUTO_UPDATED": "1"
-      }
+      ]
     }
   }
 }

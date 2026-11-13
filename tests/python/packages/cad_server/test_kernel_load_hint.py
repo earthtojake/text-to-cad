@@ -20,7 +20,8 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 from cad_server._internal.cli_errors import report_cli_error  # noqa: E402
-from cad_server._internal.kernel_load_hint import SMART_APP_CONTROL_HINT, kernel_load_hint, native_load_hint  # noqa: E402
+from cad_server._internal.kernel_load_hint import (SMART_APP_CONTROL_HINT, kernel_load_hint, native_load_hint,  # noqa: E402
+                                                      system_library_hint)
 
 REFUSED = "DLL load failed while importing OCP: Access is denied."
 
@@ -63,6 +64,17 @@ class KernelLoadHintTest(unittest.TestCase):
         self.assertIsNotNone(kernel_load_hint(line, platform="win32"))
         self.assertIsNone(kernel_load_hint(line, platform="linux"))
         self.assertIsNone(kernel_load_hint("ModuleNotFoundError: No module named 'OCP'", platform="win32"))
+
+    def test_a_missing_system_library_on_linux_names_it_and_opengl_s_package(self) -> None:
+        # ``cad doctor`` on a slim container image: OCP links against libGL.so.1, which it lacks.
+        line = "ImportError: libGL.so.1: cannot open shared object file: No such file or directory"
+        self.assertEqual(system_library_hint(line, platform="linux"),
+                         ("hint: the CAD kernel needs Mesa's OpenGL library, libGL.so.1, which this system lacks "
+                          "(Debian, Ubuntu: sudo apt-get install libgl1; Fedora: sudo dnf install mesa-libGL).",))
+        self.assertIn("libXrender.so.1", system_library_hint(line.replace("libGL.so.1", "libXrender.so.1"),
+                                                             platform="linux")[0])
+        self.assertIsNone(system_library_hint(line, platform="darwin"))
+        self.assertIsNone(system_library_hint("ModuleNotFoundError: No module named 'OCP'", platform="linux"))
 
     def test_the_default_platform_is_the_running_one(self) -> None:
         with mock.patch.object(sys, "platform", "win32"):

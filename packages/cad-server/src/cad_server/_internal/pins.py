@@ -14,7 +14,7 @@ runs another version for it. So the version that reads a pin is the one it names
    every request to the engine carries (``cad.engine.client``) and ``cad run`` hands its program.
 3. ``apply``: the version's channel made to run it, for a process that is an installed version
    (``places.versioned``; a process with no version -- a checkout, a test's device, an installation of the layout
-   before 0.12 -- moves nothing). The channel's pointer (``pointers``) read, no lock taken: equal, the command
+   of 0.11.10 and earlier -- moves nothing). The channel's pointer (``pointers``) read, no lock taken: equal, the command
    runs; older than the pin's version, the pin is stale (``stale_pin``, exit 4: the chat's copy of the skill is
    older than the one installed); newer, or the channel's first use, the channel moved (``versions.move``) -- the
    default channel, where the install command has run here (its receipt), by the updater's own sequence

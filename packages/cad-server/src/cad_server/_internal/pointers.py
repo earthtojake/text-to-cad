@@ -35,8 +35,8 @@ from pathlib import Path
 
 from cad.engine import places
 
-__all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "Pointer", "channel_name", "default", "forget", "leaving",
-           "listing", "mirror", "named", "read", "used", "write"]
+__all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "FORGOTTEN_DAYS", "Pointer", "channel_name", "default", "forget",
+           "last_used", "leaving", "listing", "mirror", "named", "read", "unused", "used", "write"]
 
 # A named channel: a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. Safe as a
 # file's name on every system, and in a pin (``cad +<version>@<channel>``): the library's one rule
@@ -141,6 +141,33 @@ class Pointer:
     channel: str | None
     version: str
     path: Path
+
+
+# How long a named channel goes unused before ``cad doctor --prune`` forgets it (``unused``): a store's copy that is
+# gone from every app leaves its pointer, and nothing else ever moves or removes it. Never the default channel.
+FORGOTTEN_DAYS = 30
+
+
+def last_used(pointer: Pointer) -> float | None:
+    """When ``pointer``'s channel was last used (``used``): its file's modified time; None where it cannot be read."""
+    try:
+        return os.stat(pointer.path).st_mtime
+    except OSError:
+        return None
+
+
+def unused(now: float | None = None, state: Path | None = None) -> list[Pointer]:
+    """The named channels unused for ``FORGOTTEN_DAYS`` (``last_used``), which ``cad doctor --prune`` forgets: a
+    person's command, never automatic. Never the default channel."""
+    import time
+
+    now = time.time() if now is None else now
+    found = []
+    for pointer in listing(state):
+        when = last_used(pointer)
+        if pointer.channel is not None and when is not None and now - when >= FORGOTTEN_DAYS * 86400:
+            found.append(pointer)
+    return found
 
 
 def listing(state: Path | None = None) -> list[Pointer]:

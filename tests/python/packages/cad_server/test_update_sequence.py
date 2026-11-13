@@ -18,6 +18,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -49,10 +50,15 @@ class Sequence(Device):
             self.addCleanup(patch.stop)
 
     def interpreter(self, folder: str) -> None:
-        """On Windows the cad command's Python, as uv makes it, without uv."""
+        """On Windows the cad command's Python, as uv makes it, without uv: its ``python.exe``, and the interpreter its
+        ``pyvenv.cfg`` names as its home, which ``installations._interpreter_ok`` asks for too (without it the command
+        just written reads as stale)."""
         Path(folder, "Scripts").mkdir(parents=True, exist_ok=True)
         Path(folder, "Scripts", "python.exe").write_bytes(b"MZ")
-        Path(folder, "pyvenv.cfg").write_text(f"home = {self.root}\nversion_info = 3.14.0\n", encoding="utf-8")
+        home = self.root / "python-home"
+        home.mkdir(exist_ok=True)
+        (home / "python.exe").write_bytes(b"MZ")
+        Path(folder, "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.0\n", encoding="utf-8")
 
     def setup_as(self, name: str, *argv: str) -> tuple[int, str, str]:
         """``cad setup`` run by version ``name``'s own process (its code says its version by its folder)."""
@@ -423,6 +429,32 @@ class Uninstall(Sequence):
         for gone in ("default", setup.RECEIPT, "installations/current", f"installations/{X}.json", "plugin"):
             self.assertFalse((self.state / gone).exists(), gone)
         self.assertEqual(installations.proxy_status(), installations.MISSING)
+
+    def test_a_server_on_its_way_out_is_awaited_answered_or_not(self) -> None:
+        # The server was asked to stop already (``cad stop``) and answers nothing more, but holds its lock a moment
+        # longer while its workers go: the uninstall waits for the lock rather than finding the version connected.
+        self.on(X)
+        engine = places.engine_dir(X)
+        held = versions._take(engine)
+        self.assertIsNotNone(held)
+        asked = threading.Event()
+
+        def ask(name, message, **kwargs):
+            asked.set()
+            return None  # no answer from a server on its way out
+
+        def going() -> None:
+            asked.wait(30)
+            versions._drop(held, engine)
+
+        letting_go = threading.Thread(target=going)
+        letting_go.start()
+        self.addCleanup(letting_go.join)
+        with mock.patch.object(versions, "ask", side_effect=ask):
+            code, out = self.run_uninstall(X)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(asked.is_set())
+        self.assertFalse(places.version_dir(X).exists(), out)
 
     def test_a_store_s_channel_its_version_and_the_cad_command_stay(self) -> None:
         self.on(X)

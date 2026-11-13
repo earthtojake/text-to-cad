@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 7, 2026">
+    <LegalPage title="Privacy Policy" updated="November 13, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -43,10 +43,9 @@ export default function PrivacyPolicyPage() {
                 clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
-                which of them sent it, the text-to-cad version, where it was installed from (a plugin
-                directory, the Cursor Marketplace, GitHub, or a development install, as the plugin’s
-                CAD app names it and notes on your computer for the viewer and text-to-cad’s commands to
-                report too), your operating
+                which of them sent it, the text-to-cad version, which channel delivered your copy (our
+                install command, a plugin directory, or a development install) and which agent app ran
+                it, your operating
                 system and processor type, and the name and version of your agent app and how it shows
                 CAD (or that it is the browser viewer);
               </li>
@@ -111,7 +110,7 @@ export default function PrivacyPolicyPage() {
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
             time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
-            or the Cursor Marketplace updates, and section 5 says how to turn it off. An update you ask
+            updates, and section 5 says how to turn it off. An update you ask
             for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
             release from PyPI, as the install command does.
           </li>

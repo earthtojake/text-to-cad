@@ -79,11 +79,11 @@ def halt():
 
 
 # The variables an agent host sets in the shells it runs a command in, which name it there as
-# ``cad_server.mcp.host.family`` names it from its process: Codex's (seen with ``env`` in codex-cli
-# 0.163's ``exec`` and ``sandbox`` shells), then Claude Code's. Codex first: a Codex started from a
-# Claude Code shell inherits Claude Code's.
+# ``cad_server.mcp.host.family`` names it from its process, each by the app's token as telemetry reports it
+# (``app``): Codex's (seen with ``env`` in codex-cli 0.163's ``exec`` and ``sandbox`` shells), then Claude Code's.
+# Codex first: a Codex started from a Claude Code shell inherits Claude Code's.
 SHELLS = (("codex", ("CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "CODEX_SANDBOX")),
-          ("claude code", ("CLAUDECODE",)))
+          ("claude-code", ("CLAUDECODE",)))
 
 
 def shell(environ=None) -> str | None:
@@ -95,14 +95,33 @@ def shell(environ=None) -> str | None:
     return None
 
 
-# The apps an MCP handshake's client name (``clientInfo.name``) names, where it is not the app's own name.
-APPS = {"codex-mcp-client": "codex", "cursor-vscode": "cursor", "claude-code": "claude code", "claude-ai": "claude"}
+# The apps an MCP handshake's client name (``clientInfo.name``) names, where it is not the app's own name, as
+# telemetry's receiver reads them too (``AGENT_APPS``, held equal by a test). Any other name is the app itself,
+# made a token (``_token``).
+APPS = {"codex-mcp-client": "codex", "cursor-vscode": "cursor", "claude-code": "claude-code",
+        "claude-ai": "claude-desktop"}
+# Client names that are no MCP client's and name no app: the browser viewer's page names itself (``cad-viewer``,
+# ``cadgen-viewer`` before 0.10), and a client that could not say is ``unknown``.
+NO_APP = frozenset({"cad-viewer", "cadgen-viewer", "unknown"})
+
+
+def _token(name: str) -> str | None:
+    """A client's name as an app's token: each run of characters outside ``[a-z0-9._-]`` one ``-``, leading
+    characters that are not a letter or digit dropped, at most 40 characters; None for nothing left."""
+    import re
+
+    return re.sub(r"^[^a-z0-9]+", "", re.sub(r"[^a-z0-9._-]+", "-", name))[:40] or None
 
 
 def app(client=None, environ=None) -> str | None:
-    """The agent app an event comes from, detected: the MCP handshake's client name where there is one (``client``:
-    ``APPS``, else the name as given), else the app whose shell this is (``shell``, from ``environ``), else None."""
-    name = str(client or "").strip().lower()[:64]
-    if name and name != "unknown":
-        return APPS.get(name, name)
+    """The agent app an event comes from, detected, as a token: the MCP handshake's client name where there is one
+    (``client``: ``APPS``, else the name made a token; a name of ``NO_APP`` is none), else the app whose shell this
+    is (``shell``, from ``environ``), else None."""
+    name = str(client or "").strip().lower()
+    if name in APPS:
+        return APPS[name]
+    if name and name not in NO_APP:
+        found = _token(name)
+        if found is not None:
+            return found
     return shell(environ)

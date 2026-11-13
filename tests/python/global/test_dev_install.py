@@ -40,7 +40,8 @@ class DevPluginTests(unittest.TestCase):
                     if isinstance(servers, str):
                         servers = json.loads((plugin / servers).read_text(encoding="utf-8"))["mcpServers"]
                     self.assertEqual(servers, {"cad": server})
-                    self.assertEqual(server["env"], {"CAD_INSTALL_CHANNEL": "dev", "CAD_MCP_APP_DIR": "/pages/1",
+                    # Its development name, and no channel: the default channel is moved to it.
+                    self.assertEqual(server["env"], {"CAD_MCP_APP_DIR": "/pages/1",
                                                      "CAD_INSTALLATION_VERSION": "1.2.3-dev.1"})
                     self.assertEqual(sorted(path.parent.name for path in plugin.glob("skills/*/SKILL.md")), skills)
                     self.assertFalse(list(plugin.rglob("__pycache__")))
@@ -103,7 +104,7 @@ class DevPluginTests(unittest.TestCase):
         # The app starts the shim's wheel; the server's, with the library's beside it, is the version.
         self.assertEqual((server["args"], server["env"]),
                          ([*dev_install.LAUNCHER[1:], str(shim), "cad-mcp"],
-                          {"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": "v"}))
+                          {"CAD_INSTALLATION_VERSION": "v"}))
         uvx = [*dev_install.LAUNCHER[:-1], "--with", str(library), dev_install.LAUNCHER[-1], str(wheel)]
         # The server's installation is installed as this install's version, and the default channel moved to it, by
         # its own python.

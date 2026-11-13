@@ -7,11 +7,13 @@ text-to-cad is a local development tool: agent skills and the text-to-cad server
 transport, `cad-mcp`), which builds, views and exports CAD models on your own machine.
 Everything below runs as you, with your files.
 
-**The server.** One warm server daemon on your computer does the building,
-viewing and exporting. Its clients reach it through its door, a named pipe
-with a pair of pipes per connection, that only you can open (on Windows, a
-loopback port and a token in a file only you can read). The door lives in the
-server's folder (`CAD_ENGINE_DIR`, by default
+**The server.** A warm server daemon on your computer does the building,
+viewing and exporting: one for each installed version of text-to-cad (usually
+one; two when a plugin directory's copy runs another release beside yours). Its
+clients reach it through its door, a named pipe with a pair of pipes per
+connection, that only you can open (on Windows, a loopback port and a token in a
+file only you can read). Each version's door lives in its own folder inside the
+servers' folder (`CAD_ENGINE_DIR`, by default
 `cad-engine` in `$XDG_RUNTIME_DIR`, else in a temporary folder that is yours alone (on macOS
 the system's per-user one, else `$TMPDIR`),
 else `/tmp/cad-<uid>`). The client and the daemon refuse a folder that
@@ -30,8 +32,9 @@ installation keeps and names in `cad status`). Every route needs one of three
 credentials, all made from one token:
 
 - **The token** is yours, not one server's: made once, kept in a file only you
-  can read in your state folder (`engines/token`), and served by every
-  installation's server at every start until you rotate it. No URL carries it,
+  can read in your state folder (`engines/token` in each version's data folder,
+  copied to the next version when you update), and served by every version's
+  server at every start until you rotate it. No URL carries it,
   and only `cad viewer --api-only --json` prints it, for the development
   client's proxy. Your own clients read it through the server's door and send
   it as a Bearer header.

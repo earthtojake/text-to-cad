@@ -15,6 +15,12 @@ that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
 
+The package is the copy OpenAI's directory delivers, on its own channel, `codex`: every pin in it is stamped
+`@codex` (`cad +<VERSION>@codex <verb>`, `channel_stamp.py`, the routine the directory branch of claude.ai
+uses too), and its launcher is told the channel as an argument in its server config (`cad-mcp --channel
+codex`), so the device keeps that copy's version apart from the default channel's and the install
+command's updates never move it.
+
 The checks are the package rules the portal documents, named by its error codes
 (https://developers.openai.com/plugins/deploy/submission-errors). Listing limits
 are the final-submission ones, such as 30 characters for the name and subtitle,
@@ -37,10 +43,15 @@ import subprocess
 import sys
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import channel_stamp  # noqa: E402 - beside this script: the one stamping routine, plugin_branch.py's too
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".codex-plugin/plugin.json"
 ROOTS = (".codex-plugin", "skills", "LICENSE")
 MCP_CONFIG = ".mcp.json"
+# The delivery channel of the copy this package is: OpenAI's directory's.
+CHANNEL = "codex"
 ICONS = ("logo", "logoDark", "composerIcon", "composerIconDark")
 SEMVER = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?")
 # A clone without git-lfs (CI's included) checks LFS-tracked files out as pointers.
@@ -155,13 +166,19 @@ def collect(root: Path) -> Package:
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
                                    False)
+    version = manifest.get("version")
+    if isinstance(version, str) and version:
+        stamped, errors = channel_stamp.stamp({path: data for path, (data, _) in package.files.items()},
+                                              version, CHANNEL)
+        package.files = {path: (stamped[path], executable) for path, (_, executable) in package.files.items()}
+        package.errors.extend(errors)
     return package
 
 
 def with_channel(package: Package, data: bytes) -> bytes:
-    """The server config naming OpenAI's directory as the install's channel, in its server's
-    environment (the server's `_internal/channel.py`): this package goes only there. Analytics report
-    it, and `CAD_AUTO_UPDATED` leaves the copy to the directory, which updates it."""
+    """The server config whose one `cad-mcp` launcher is told this package's channel as its argument (`cad-mcp
+    --channel codex`): the launcher runs its version on that channel. Nothing in its environment says a channel
+    or who updates the copy (a config of 0.11.10 or earlier did, and is ignored now)."""
     try:
         config = json.loads(data)
         servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
@@ -171,8 +188,7 @@ def with_channel(package: Package, data: bytes) -> bytes:
     if len(servers) != 1:
         package.errors.append(f"{MCP_CONFIG} must start exactly one `cad-mcp` server (found {len(servers)})")
         return data
-    servers[0]["env"] = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": "openai-directory",
-                         "CAD_AUTO_UPDATED": "1"}
+    servers[0]["args"] = [*servers[0]["args"], "--channel", CHANNEL]
     return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 

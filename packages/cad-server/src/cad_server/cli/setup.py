@@ -1314,7 +1314,7 @@ class Installer:
         and the records naming a version), and its version -- its server stopped first -- unless a named channel is
         on it; with ``purge``, every version, each server stopped. Run under the install lock. True when a version
         could not be removed whole (on Windows, the folder this command runs from)."""
-        from cad.engine import client, places
+        from cad.engine import places
         from cad_server._internal import installations, pointers, versions
 
         failed = False
@@ -1328,11 +1328,11 @@ class Installer:
         if installations.current_version() in (*names, default):
             installations.state().remove(installations.CURRENT)
         for name in names:
-            if versions.serves(name) and versions.ask(name, {"op": "stop"}) is not None:
-                try:
-                    client.wait_gone(timeout=versions.STOP_SECONDS, endpoint=versions.endpoint(name))
-                except ConnectionError:
-                    pass
+            # Its lock is awaited whether or not the stop is answered: a server this command already asked to stop
+            # (``_stop``) answers nothing more on its way out, and holds its lock until its workers are gone.
+            if versions.serves(name):
+                versions.ask(name, {"op": "stop"})
+                versions.gone(name)
             done = versions.remove_now(name, told=lambda line: self.say(f"version  {line}"))
             if done != "removed":
                 failed = True

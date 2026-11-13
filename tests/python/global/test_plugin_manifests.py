@@ -350,41 +350,17 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
 
-    def test_every_plugin_on_main_names_its_own_channel(self) -> None:
-        # Each plugin's startup config names where its installs come from, in its server's
-        # environment, and CAD_AUTO_UPDATED=1 where a store keeps the copy up to date: the Cursor
-        # Marketplace, which reads main. Gemini updates its extension only when asked. Environment, not
-        # flags: main pins the last release, and a release ignores a variable it does not know but
-        # refuses a flag. Nothing is worked out at runtime (the server's _internal/channel.py); the plugin
-        # branch and the OpenAI ZIP stamp their own.
-        import sys
-
-        from tests.python.support.paths import add_sources
-
-        add_sources()
-        from cad_server._internal.channel import is_channel
-        from cad_server._internal.plugin import CHANNELS as FOLDER_CHANNELS
-
-        said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
-                for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
-        self.assertEqual(said, {
-            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
-            "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
-            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-marketplace", "CAD_AUTO_UPDATED": "1"},
-            "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
-            "gemini-extension.json": {"CAD_INSTALL_CHANNEL": "gemini-github"},
-        })
-        # Every channel any package names is one the analytics receiver takes; and `claude-directory` and
-        # `claude-desktop`, which claude.ai's directory's copies and Claude Desktop's entries through 0.11.10 still
-        # send though Claude now gets no server.
-        receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")
-        named = {env["CAD_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "claude-desktop",
-                                                                           "cursor-github", "openai-directory", "dev"} \
-            | set(FOLDER_CHANNELS.values())
-        for channel in sorted(named):
-            with self.subTest(channel=channel):
-                self.assertTrue(is_channel(channel))
-                self.assertIn(f"'{channel}'", receiver)
+    def test_no_plugin_on_main_names_a_channel(self) -> None:
+        # Main's text is our own, the default channel: no config names a channel or says who updates the copy
+        # (the variables 0.11.10 and earlier read, which a copy of those releases still sets, are ignored now),
+        # and no launcher is given `--channel`. A store's copy is told its channel by the builder that makes it
+        # (scripts/release/plugin_branch.py, plugin_zip.py). The Cursor Marketplace reads main as it is, so its
+        # copies are on the default channel too.
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
+            with self.subTest(path=path.name):
+                server = load_json(path)["mcpServers"]["cad"]
+                self.assertNotIn("env", server)
+                self.assertNotIn("--channel", server["args"])
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

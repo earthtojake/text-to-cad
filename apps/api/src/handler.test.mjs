@@ -60,8 +60,8 @@ const send = (store, method, path, body, headers = {}, country = 'DE') => handle
   method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
 }), store, { country });
 
-const CONTEXT = ['install_id', 'session_id', 'version', 'channel', 'source', 'process', 'platform', 'arch', 'client', 'client_version',
-  'presentation'];
+const CONTEXT = ['install_id', 'session_id', 'version', 'channel', 'app', 'legacy_channel', 'source', 'process', 'platform', 'arch',
+  'client', 'client_version', 'presentation'];
 // A row's own fields, by its event.
 const fieldsOf = row => Object.fromEntries(Object.entries(row).filter(([key]) => !CONTEXT.includes(key)));
 
@@ -276,18 +276,47 @@ test('schema 7 counts the controls a person used, and how long a tool that stays
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 200));
 });
 
-test("the install command's channels are stored as what happened, and the -github a release before sent still is", async () => {
-  for (const channel of ['claude-install', 'codex-install', 'cursor-install', 'gemini-install',
-    'claude-github', 'codex-github', 'cursor-github', 'gemini-github']) {
-    for (const batch of [{ ...CONTROLS, schema: 8, channel }, { ...BATCH, channel }]) {
+test("an older release's channel is stored as the delivery channel and app it was, and as it was sent", async () => {
+  // [as sent, channel, app], where the batch's MCP client names no app.
+  const families = [
+    ['claude-install', 'default', 'claude-code'], ['codex-install', 'default', 'codex'], ['cursor-install', 'default', 'cursor'],
+    ['gemini-install', 'default', 'gemini'], ['claude-github', 'default', 'claude-code'], ['codex-github', 'default', 'codex'],
+    ['cursor-github', 'default', 'cursor'], ['gemini-github', 'default', 'gemini'], ['claude-desktop', 'default', 'claude-desktop'],
+    ['agent-plugins', 'default', 'unknown'], ['claude-directory', 'claude', 'claude-code'], ['openai-directory', 'codex', 'codex'],
+    ['cursor-marketplace', 'default', 'cursor'], ['dev', 'dev', 'unknown'], ['unknown', 'unknown', 'unknown'],
+  ];
+  for (const [sent, channel, app] of families) {
+    for (const batch of [{ ...CONTROLS, schema: 8, channel: sent }, { ...BATCH, channel: sent, client: undefined }]) {
       const store = memory();
-      assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204, channel);
-      assert.ok(store.rows.length > 0 && store.rows.every(row => row.channel === channel), channel);
+      assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204, sent);
+      assert.ok(store.rows.length > 0, sent);
+      assert.deepEqual([...new Set(store.rows.map(row => `${row.channel} ${row.app} ${row.legacy_channel}`))], [`${channel} ${app} ${sent}`]);
     }
   }
+  // Schema 1 named no channel: its rows keep how the install was made, and say so of the channel.
+  const first = memory();
+  assert.equal((await send(first, 'POST', '/v1/events', { ...SCHEMA_1, client: undefined })).status, 204);
+  assert.ok(first.rows.every(row => row.channel === 'unknown' && row.app === 'unknown' && row.legacy_channel === 'unknown'
+    && row.source === 'store'));
+  // The old list is checked as ever.
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, channel: 'claude-somewhere' })).status, 400);
+  assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, channel: 'default' })).status, 400, "schema 11's word, not 10's");
   assert.deepEqual(store.rows, []);
+});
+
+test("an older batch's app is its MCP client's first, and the old channel's only where the client names none", async () => {
+  for (const [client, sent, app] of [
+    ['codex-mcp-client', 'claude-directory', 'codex'], // the directory's copy, run by Codex
+    ['cursor-vscode', 'codex-install', 'cursor'], ['claude-code', 'cursor-github', 'claude-code'], ['claude-ai', 'claude-github', 'claude-desktop'],
+    ['Zed:Agent', 'agent-plugins', 'zed-agent'], // any other client is its own app, made a token
+    ['unknown', 'gemini-install', 'gemini'], // a client that says nothing
+    ['cad-viewer', 'codex-install', 'codex'], ['cadgen-viewer', 'claude-desktop', 'claude-desktop'], // the browser viewer's page names no app
+  ]) {
+    const store = memory();
+    assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, channel: sent, client: { name: client } })).status, 204, client);
+    assert.deepEqual([store.rows[0].app, store.rows[0].client], [app, client], client);
+  }
 });
 
 test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
@@ -415,6 +444,31 @@ test("schema 10's crash of no kernel process says which failure it was, a word o
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
 });
 
+// Schema 11: the install as two fields, the delivery channel and the agent app.
+const PINNED = { ...PARTS, schema: 11, channel: 'claude', app: 'claude-code', client: { name: 'claude-code', version: '2.1.0' } };
+
+test('schema 11 names the delivery channel and the agent app, each checked by its shape, never against a list', async () => {
+  for (const [channel, app] of [['default', 'codex'], ['claude', 'claude-code'], ['codex', 'unknown'], ['dev', 'cursor'],
+    ['someone.else_2', 'visual-studio-code']]) {
+    const store = memory();
+    assert.equal((await send(store, 'POST', '/v1/events', { ...PINNED, channel, app })).status, 204, `${channel} ${app}`);
+    assert.ok(store.rows.every(row => row.channel === channel && row.app === app && row.legacy_channel === null), `${channel} ${app}`);
+  }
+  // Named, so a batch sent again keeps its ids, made as every named schema's are.
+  const store = memory();
+  await send(store, 'POST', '/v1/events', PINNED);
+  assert.equal(store.rows[0].id, idOf(PINNED.batch, `snapshot ${PINNED.events[0].kind}`));
+  for (const bad of [
+    { ...PINNED, channel: undefined }, { ...PINNED, app: undefined }, // both, always
+    { ...PINNED, channel: 'Claude' }, { ...PINNED, channel: '-claude' }, { ...PINNED, channel: 'a'.repeat(33) },
+    { ...PINNED, channel: 'claude code' }, { ...PINNED, channel: '' }, { ...PINNED, channel: 7 },
+    { ...PINNED, app: 'Claude Code' }, { ...PINNED, app: 'a'.repeat(41) }, { ...PINNED, app: '/Users/someone' },
+    { ...PINNED, legacy_channel: 'claude-directory' }, // the receiver's word, never a sender's
+    { ...PINNED, source: 'store' },
+    { ...PINNED, schema: 10 }, // schema 10 sends no app
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 120));
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
@@ -428,12 +482,22 @@ test('every schema a released cadgen sends is stored: a copy nobody updated keep
     [version, channel, source, process, 'files', 'step', 2],
     [version, channel, source, process, 'files', 'stl', 1],
   ];
-  assert.deepEqual(store.rows.map(row => [row.version, row.channel, row.source, row.process, row.event, row.kind ?? null, row.count ?? null]), [
+  assert.deepEqual(store.rows.map(row => [row.version, row.legacy_channel, row.source, row.process, row.event, row.kind ?? null, row.count ?? null]), [
     ...expected('0.7.11', 'unknown', 'store', 'app'),
     ...expected('0.7.15', 'claude-directory', null, 'app'),
     ...expected('0.7.15', 'claude-directory', null, 'viewer'),
   ]);
   assert.ok(store.rows.every(row => !('file' in row)));
+  // Translated, an older named batch keeps the row ids it had: sent twice, it is the same rows twice.
+  for (const [named, key] of [[NAMED, 'build step script'], [ENGINE, 'build xbf script'], [CONTROLS, 'control pencil'],
+    [PARTS, 'snapshot model'], [{ ...PARTS, schema: 10 }, 'snapshot model']]) {
+    const twice = memory();
+    await send(twice, 'POST', '/v1/events', named);
+    await send(twice, 'POST', '/v1/events', named);
+    const ids = twice.rows.map(row => row.id);
+    assert.deepEqual(ids.slice(ids.length / 2), ids.slice(0, ids.length / 2), `schema ${named.schema}`);
+    assert.equal(ids[0], idOf(named.batch, key), `schema ${named.schema}`);
+  }
 });
 
 test('a batch goes on with the country the host placed it in: never its address, nor anything finer', async () => {

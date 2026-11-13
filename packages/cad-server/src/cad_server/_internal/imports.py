@@ -20,11 +20,12 @@ what cannot be made again, copied from a source and never changed there, the sou
   so the new version sends what the old one had not.
 
 Not imported: the other caches (a document's kept checks and derived views, hulls, MJCF assets, homes), the
-telemetry spool (``telemetry-spool.jsonl``: each row is the answer, a time and bare counts, which a sender merges
-into its own batch under its own release and channel; a row does not say the release, channel or process it was
-counted in, so another version would send it as its own), the version feed's cache (``versions.json``), the install channels (``install-channels.json``), the updater's
+telemetry spool (``telemetry-spool.jsonl``: the version it replaces may still be running and sending it; each row
+says who counted it, and what is left of it is moved to the version that sends next as that version's folder is
+removed, ``versions._hand_on``), the version feed's cache (``versions.json``), the updater's
 records (``update-automatic.json``, ``update.json``, ``update.log``), the lock (``settings.lock``) and the
-source's own ``MARKER``. Every format but the engine record's is this release's own already, so nothing else
+source's own ``MARKER``. A telemetry no the device keeps is taken into the copy (``analytics.inherit_no``). Every
+format but the engine record's is this release's own already, so nothing else
 is converted; the server's own migrations at its start (``identity.migrate``) run on the copy as on any data.
 
 **The source** (``source``): what the channel leaves (``versions.move`` names it) -- a version, where it is
@@ -173,6 +174,11 @@ def ensure(name: str, leaving: str | None = None, *, legacy_left: bool = False,
             shutil.rmtree(staging, ignore_errors=True)
         else:
             os.rename(staging, data)
+        # A no the device keeps (``analytics.everywhere``), newer than the answer imported or with none imported, is
+        # this version's too: a version made present after a no sends nothing, whatever it imported from.
+        from cad_server import analytics
+
+        analytics.inherit_no(data / SETTINGS)
         record = {"schema": SCHEMA, "version": name, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "skipped": said,
                   "imported": None if found is None else {"kind": found.kind, "version": found.version}}
         from cad._internal.atomic_replace import write_bytes_atomic

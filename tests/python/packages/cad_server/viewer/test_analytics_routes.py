@@ -19,6 +19,9 @@ import cad_server
 from cad_server.analytics import PRIVACY_URL, Recorder
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+RELEASE = __import__("cad_server").__version__
 
 STL = b"solid t\nendsolid t\n"
 
@@ -61,7 +64,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # A plugin's install outside CI, where the default holds (a checkout is a development install, which sends
         # nothing by default).
         environment = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
-                                                   "CAD_INSTALL_CHANNEL": "claude-github", "CI": ""})
+                                                   "CAD_INSTALLATION_VERSION": RELEASE, "CI": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"
@@ -199,14 +202,11 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
     def test_the_update_button_reads_whether_a_newer_release_is_out(self) -> None:
         # The CAD app's notice (`cad_server/updates.py`), from the same feed; this page copies its prompt,
-        # and nothing it does is kept: there is no answer to post. A Viewer no plugin's server started
-        # names no channel: a skills-only install, which nothing else updates.
+        # and nothing it does is kept: there is no answer to post. A process with no version is the default's.
         (self.tmp / "state").mkdir(exist_ok=True)
         (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
                                                           encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": "", "CAD_AUTO_UPDATED": "", "CI": "",
-                                          "CAD_UPDATE_CHECK": ""}), \
-                mock.patch("cad_server._internal.channel._source_tree", return_value=False):
+        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": RELEASE, "CI": "", "CAD_UPDATE_CHECK": ""}):
             status, answer = self.request("GET", "/api/v1/server")
             self.assertEqual((status, answer["notice"], answer["release"]),
                              (200, {"latest": "99.0.0", "version": cad_server.__version__}, cad_server.__version__))

@@ -1,82 +1,51 @@
-"""Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
+"""Where an event comes from, and whether this process has an updater: the delivery channel and the app.
 
-Each plugin says both in its CAD server's startup config, as the server's environment (the plugin folder the
-install command points the apps at says ``<host>-install``, an install by hand from the repository
-``<host>-github``):
-``CAD_INSTALL_CHANNEL=<id>``, plus ``CAD_AUTO_UPDATED=1`` when something other than the person
-keeps that copy up to date (the store that reviewed it). The build
-that makes the plugin writes them; nothing works them out from folders, ids or a host's
-internals. The CAD Viewer the server starts inherits them. They are environment, not flags,
-because a plugin's config pins a release of cadgen that may predate a setting: a cadgen ignores an
-environment variable it does not know, where a flag it does not know would stop the server.
+**The channel** is a pin's (``cad +<version>@<channel> <verb>``) or a launcher's (``cad-mcp --channel NAME``):
+who delivered the copy of the plugin whose text ran the command, as that copy says it. A store's copy carries
+its channel in every pin (its builder stamps it); our own text -- the install command's plugin folder, the
+``latest`` branch, a copy installed from GitHub by hand -- carries none, and runs on the default channel. Nothing
+here keeps a list of channels or decides anything by a channel's name: a request carries its channel
+(``places.channel``, ``client.with_channel``), a session its launcher's (``mcp.http.Session.channel``), and
+telemetry reports it beside the app (``describe``), ``default`` for none. A server's environment says no
+channel: ``CAD_INSTALL_CHANNEL`` and ``CAD_AUTO_UPDATED``, which plugin configs of 0.11.10 and earlier set, are
+read for nothing.
 
-Only the server hears it, though, and most of CAD's work is not the server's: a skill's ``cadgen``
-command, a model script and the CAD Viewer a skill opens run with nothing a plugin set -- nor is the
-counting: the server's sessions are counted by the engine, whose environment is whoever started it,
-often ``python model.py``. So the engine writes down, for its installation, the channel each plugin's stdio
-transport says as it opens a session (``remember``, from the transport's initialize): the device runs one
-installation, the current one, whose engine every transport reaches and whose ``cadgen`` command every
-skill runs. Any process of that installation
-that was not told a channel itself reports the one written down (``recorded``), re-read with each batch,
-as the engine outlives the server that wrote it. Where two plugins pin the same release on one machine
-they share an installation, and the server that started last is the one written down: the app most
-likely in use. A server no plugin named is configured by hand: what it counts says ``unknown``, unless
-a plugin's server once ran from its installation, whose channel it then shares.
+**The app** an event comes from is detected, never told: the MCP handshake's client name where there is one,
+else the markers an agent app sets in the shells it runs (``engine_host.app``), else ``unknown``.
 
-cadgen reads a channel as a token and nothing more: telemetry reports it, and nothing decides by
-its name but ``dev``, a development install (and a source tree, installed editable or imported from
-a checkout by path), which hears of no release and sends no telemetry by default. A process of an
-installation no plugin's server ever ran from -- a skills-only install, or cad run by hand -- is
-``unknown``. Which app runs a server is not a channel either: the MCP handshake says that
-(``clientInfo``), so a plugin several apps read names one channel.
+**A development build** (``development``) is a version named ``<release>-dev.<time>`` (``dev_install``), or a
+source tree -- installed editable, or imported from a checkout by path -- that was not told which version it runs
+as (``places.INSTALLATION_ENV``). It hears of no release and sends no telemetry by default; what it sends with
+telemetry turned on says the channel ``dev``.
 
-Whether a process hears of a new release (``cad_server/updates.py``) is ``told``: the default channel's
-version alone (a named channel's copy is updated by whoever delivers it), never a development install.
-``CAD_AUTO_UPDATED``, which a config of 0.11.10 or earlier set for a copy something else updates, is read for
-nothing now.
-
-The delivery channel of a pinned release (``cad +<version>@<channel>``, a launcher's ``--channel``) is another
-thing than this module's install channel: it is the request's (``places.channel``), and ``describe`` says it, with
-the app an event comes from, as telemetry will report the two.
+**The updater** (``told``): only the default channel has one (a named channel's copy is updated by whoever
+delivers it), only where the install command has run (its receipt), and never for a development build. A
+process with no version (a person's own environment) is the default's.
 """
 
 from __future__ import annotations
 
 import functools
-import hashlib
-import json
 import logging
 import os
 import re
 from pathlib import Path
 
-ENV = "CAD_INSTALL_CHANNEL"
-AUTO_UPDATED_ENV = "CAD_AUTO_UPDATED"
 DEV = "dev"
 UNKNOWN = "unknown"
-_TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
-# Where each installation's channel is written down, in the data folder, and how many installations
-# it keeps: the most recently written, as uv makes a new one for each release a plugin pins.
-RECORD = "install-channels.json"
-KEPT_INSTALLATIONS = 16
 
 LOG = logging.getLogger("cad_server.channel")
 
 
-def is_channel(value: object) -> bool:
-    """Whether ``value`` is a channel a plugin can name: a short lowercase token."""
-    return isinstance(value, str) and bool(_TOKEN.fullmatch(value)) and value != UNKNOWN
-
-
 @functools.cache
 def _source_tree() -> bool:
-    """An editable install, or cadgen imported from a checkout by path -- as the engine daemon and its
-    workers are (``PYTHONPATH`` names the checkout's ``src`` first), where the first metadata found
-    can be a build's leftover rather than the editable install's record. Told by where cadgen is
-    imported from before any metadata is read: the scan costs every command that counts something
-    tens of milliseconds, and cadgen imported from a folder of installed packages is no source tree
-    (an editable install imports from its source)."""
-    package = Path(__file__).resolve().parents[1]  # cadgen/
+    """An editable install, or the server imported from a checkout by path -- as the engine daemon and its
+    workers are (``PYTHONPATH`` names the checkout's ``src`` first), where the first metadata found can be a
+    build's leftover rather than the editable install's record. Told by where the server is imported from before
+    any metadata is read: the scan costs every command that counts something tens of milliseconds, and a server
+    imported from a folder of installed packages is no source tree (an editable install imports from its
+    source)."""
+    package = Path(__file__).resolve().parents[1]  # cad_server/
     if package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file():
         return True
     if package.parent.name in ("site-packages", "dist-packages"):
@@ -86,90 +55,38 @@ def _source_tree() -> bool:
     return editable_source() is not None
 
 
-def named() -> str | None:
-    """The channel this process was told itself: what its plugin named, else ``dev`` for a source tree, else ``None``."""
-    value = str(os.environ.get(ENV) or "").strip()
-    if is_channel(value):
-        return value
-    return DEV if _source_tree() else None
+# A development build's name, ``<release>-dev.<YYYYmmddHHMMSS>``: ``versions.DEVELOPMENT``, copied so that asking
+# imports nothing of the engine's (a command that needs none of it, ``cad orcaslicer``, reads it), held equal by a test.
+_DEVELOPMENT = re.compile(r"(?P<release>.+)-dev\.(?P<stamp>[0-9]+)")
 
 
-def channel() -> str:
-    """This install's channel: what its plugin named, else ``dev`` for a source tree, else the one written down for
-    this installation (``recorded``), else ``unknown``."""
-    return named() or recorded() or UNKNOWN
-
-
-def _record_path() -> Path:
-    """The channels' record, in this process's data folder (``places.data_dir``)."""
-    from cad.engine.places import data_dir
-
-    return data_dir() / RECORD
-
-
-@functools.cache
-def installation() -> str:
-    """This installation's short name: its cadgen folder's."""
-    package = str(Path(__file__).resolve().parents[1])
-    return hashlib.sha256(package.encode("utf-8")).hexdigest()[:16]
-
-
-def _load(path: Path) -> dict[str, str]:
+def development() -> bool:
+    """Whether this process is a development build (see the module): the version it was told it runs as
+    (``CAD_INSTALLATION_VERSION``, which the ``cad`` command and a server tell a development build's processes) is a
+    development build's name; told none, a source tree is one, and an installed server is one where the version it
+    runs as (``places.installation``: its version folder's) is. Never raises: what cannot be read is no development
+    build."""
     try:
-        kept = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, ValueError):
-        return {}
-    return {key: value for key, value in kept.items() if is_channel(value)} if isinstance(kept, dict) else {}
+        told = os.environ.get("CAD_INSTALLATION_VERSION", "").strip()
+        if told:
+            return _DEVELOPMENT.fullmatch(told) is not None
+        if _source_tree():
+            return True
+        from cad.engine.places import installation
 
-
-def recorded(*, path: Path | None = None) -> str | None:
-    """The channel a plugin's server last wrote down for this installation (``remember``), or ``None``. Never
-    raises: a record that cannot be read is no record."""
-    try:
-        return _load(path or _record_path()).get(installation())
-    except Exception:  # noqa: BLE001 - a channel is only reported: nothing may fail for want of one
-        LOG.debug("could not read the install channel", exc_info=True)
-        return None
-
-
-def remember(value: str | None = None, *, path: Path | None = None) -> str | None:
-    """Write down a plugin's channel -- ``value``, what a plugin's stdio transport said as it opened a session
-    (the engine's MCP server, at initialize), else what this process's plugin named -- for every process of
-    this installation that was not told one (``recorded``). Nothing is written when there is nothing named, or
-    when it is what the record holds already. What was written, or ``None``. Never raises."""
-    value = str((os.environ.get(ENV) if value is None else value) or "").strip()
-    if not is_channel(value):
-        return None
-    try:
-        from cad._internal.atomic_replace import write_bytes_atomic
-        from cad_server._internal.file_lock import state
-
-        path = path or _record_path()
-        key = installation()
-        if _load(path).get(key) == value:  # as nearly every start finds it: no lock to wait on, nothing to write
-            return value
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with state(path.parent):  # the data folder's one lock
-            kept = _load(path)
-            if kept.get(key) == value:
-                return value
-            kept.pop(key, None)
-            kept[key] = value  # the last written is the newest: the oldest go first past the cap
-            kept = dict(list(kept.items())[-KEPT_INSTALLATIONS:])
-            write_bytes_atomic(path, (json.dumps(kept, indent=2) + "\n").encode("utf-8"))
-        return value
-    except Exception:  # noqa: BLE001 - a channel is only reported: nothing may fail for want of one
-        LOG.debug("could not write the install channel down", exc_info=True)
-        return None
+        return _DEVELOPMENT.fullmatch(installation() or "") is not None
+    except Exception:  # noqa: BLE001 - a fact for a report and a default, never a reason to fail
+        LOG.debug("could not tell whether this is a development build", exc_info=True)
+        return False
 
 
 def told() -> bool:
-    """Whether this process hears of a new release: the default channel's version alone, the one channel with an
-    updater (a named channel's copy is updated by whoever delivers it), on a device where the install command has
-    run (its receipt: where it has not, there is no install to update), and never a development install. A process
-    with no version (as every one of 0.11.10 and earlier) is the default's. ``CAD_AUTO_UPDATED``, which a plugin
-    config of 0.11.10 or earlier still sets, decides nothing: which channel a version is on says it."""
-    return channel() != DEV and default_version()  # a record says ``dev`` only for a development install's own
+    """Whether this process hears of a new release, and shows an update notice, an update button and the
+    automatic-updates switch: the default channel's version alone, the one channel with an updater (a named
+    channel's copy is updated by whoever delivers it), on a device where the install command has run (its receipt:
+    where it has not, there is no install to update), and never a development build. A process with no version is
+    the default's."""
+    return not development() and default_version()
 
 
 def default_version() -> bool:
@@ -190,13 +107,17 @@ def default_version() -> bool:
 
 
 def describe(channel: str | None = None, client: str | None = None, environ=None) -> dict[str, str]:
-    """Where an event comes from, as telemetry will say it (two fields): ``channel``, the delivery channel of the
-    request or session it counts (a request's ``channel``, a launcher's ``--channel``; none is ``default``), and
-    ``app``, the agent app running it -- detected, never told: from the MCP handshake's client name where there is
-    one (``client``), else from the markers an app sets in its shell (read from ``environ``: a command's own
-    environment, or a build request's ``env``), else ``unknown`` (``engine_host.app``, the host adapter's)."""
+    """Where an event comes from, as telemetry says it (two fields, ``cad_server.analytics``): ``channel``, the
+    delivery channel of the request or session it counts (a request's ``channel``, a launcher's ``--channel``; none
+    is ``default``; ``dev`` from a development build), and ``app``, the agent app running it -- detected, never
+    told: from the MCP handshake's client name where there is one (``client``), else from the markers an app sets
+    in its shell (read from ``environ``: a command's own environment, or a build request's ``env``), else
+    ``unknown`` (``engine_host.app``, the host adapter's)."""
     from cad.engine.places import CHANNEL, DEFAULT_CHANNEL
     from cad_server._internal.engine_host import app
 
-    named = channel if isinstance(channel, str) and CHANNEL.fullmatch(channel) else DEFAULT_CHANNEL
+    if development():
+        named = DEV
+    else:
+        named = channel if isinstance(channel, str) and CHANNEL.fullmatch(channel) else DEFAULT_CHANNEL
     return {"channel": named, "app": app(client, environ) or UNKNOWN}

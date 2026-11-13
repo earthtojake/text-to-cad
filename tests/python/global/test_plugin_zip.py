@@ -35,9 +35,16 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(out) as archive:
                 members = archive.namelist()
                 manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
-                # The skills byte for byte the checkout's: their `cad +<VERSION>` pins are the release's.
-                changed = [name for name in members if name.startswith("skills/") and not name.endswith("/")
-                           and archive.read(name) != (REPO_ROOT / name).read_bytes()]
+                # The skills the checkout's but for the channel: every pin of the release stamped `@codex`, the
+                # channel OpenAI's directory delivers (`channel_stamp.py`), nothing else changed.
+                version = manifest["version"]
+                skills = {name: archive.read(name).decode("utf-8") for name in members
+                          if name.startswith("skills/") and not name.endswith("/")}
+                changed = [name for name, text in skills.items()
+                           if text.replace(f"+{version}@codex", f"+{version}")
+                           != (REPO_ROOT / name).read_text(encoding="utf-8")
+                           or plugin_zip.channel_stamp.unstamped(text, version, "codex")]
+                pinned = sum(text.count(f"+{version}@codex") for text in skills.values())
         # The plugin is at the archive's root, each folder with an entry of its own: the
         # portal turned away a top-level folder without one as holding no plugin.
         names = {name for name in members if not name.endswith("/")}
@@ -45,6 +52,7 @@ class PluginZipTests(unittest.TestCase):
                          {f"{folder}/" for folder in plugin_zip.folders(names)})
         self.assertIn(".codex-plugin/", members)
         self.assertEqual(changed, [])
+        self.assertGreater(pinned, 100, "the skills' pins were found")
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
         roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())
@@ -79,7 +87,8 @@ class PluginZipTests(unittest.TestCase):
             root = Path(directory)
             (root / ".codex-plugin").mkdir()
             (root / "skills/demo").mkdir(parents=True)
-            (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nSteps.\n", encoding="utf-8")
+            (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nRun `cad +1.0.0 x`.\n",
+                                                      encoding="utf-8")
             server = {"command": "uvx", "args": ["--from", "cad-mcp==1.0.0", "cad-mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
@@ -93,11 +102,19 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(root / "out.zip") as archive:
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                # The package names its channel, OpenAI's directory, in its server's environment, which
-                # analytics report; CAD_AUTO_UPDATED leaves the copy to the directory, which updates it.
+                # The package is OpenAI's directory's copy, on its channel: its launcher is told the channel as
+                # its argument, and every pin carries it.
                 self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"],
-                                 {**server, "env": {"CAD_INSTALL_CHANNEL": "openai-directory", "CAD_AUTO_UPDATED": "1"}})
+                                 {**server, "args": [*server["args"], "--channel", "codex"]})
                 self.assertNotIn("codex.mcp.json", archive.namelist())
+                self.assertIn(b"Run `cad +1.0.0@codex x`.", archive.read("skills/demo/SKILL.md"))
+
+            # A pin of another version, or a file whose pins cannot be read, fails the package.
+            (root / "skills/demo/notes.md").write_bytes("caf\u00e9 `cad +0.9.0 x`".encode("latin-1"))
+            self.assertEqual(sorted(error.split(":")[0] for error in build(manifest)), ["skills/demo/notes.md"])
+            (root / "skills/demo/notes.md").write_text("`cad +0.9.0 x`", encoding="utf-8")
+            self.assertEqual(build(manifest), ["skills/demo/notes.md: cad +0.9.0 is not stamped @codex for 1.0.0"])
+            (root / "skills/demo/notes.md").unlink()
 
             # The portal refuses a subtitle over 30 characters (main's, until this check).
             change = {"interface": {**manifest["interface"], "shortDescription": "Design physical products with AI."}}

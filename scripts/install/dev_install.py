@@ -119,16 +119,13 @@ def dev_root(host: str, root: Path = REPO_ROOT) -> Path:
     return root / "tmp" / f"{host}-dev"
 
 
-# A development install's channel, in its server's environment (cadgen's _internal/channel.py): its
-# analytics are told apart, and it is never offered an update.
-CHANNEL = {"CAD_INSTALL_CHANNEL": "dev"}
-
-
 def server_entry(host: str, python: str, page_dir: Path, version: str | None = None) -> dict:
     """CAD's server for a development install: this checkout's interpreter, this install's page, and
     the version it registers as at each start, `version` (cadgen's _internal/installations.py; a
-    source tree registers none unless named)."""
-    entry = {"command": python, "args": ["-m", "cad_mcp"], "env": {**CHANNEL, "CAD_MCP_APP_DIR": str(page_dir)}}
+    source tree registers none unless named). Its name, `<VERSION>-dev.<time>`, is what makes it a development
+    build to the server (the server's _internal/channel.py): it sends no telemetry by default and hears of no
+    release. Nothing names a channel: the default channel is moved to it."""
+    entry = {"command": python, "args": ["-m", "cad_mcp"], "env": {"CAD_MCP_APP_DIR": str(page_dir)}}
     if version:
         entry["env"][VERSION_ENV] = version
     if host == "codex":
@@ -376,12 +373,13 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
         shim = sorted(wheel.parent.glob("cad_mcp-*.whl"))
         if not shim:
             raise Refused(f"no shim wheel beside {wheel}.")
-        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(shim[0]), "cad-mcp"], "env": dict(CHANNEL)}
+        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(shim[0]), "cad-mcp"]}
         if host == "codex":
             server["startup_timeout_sec"] = CODEX_STARTUP_SECONDS
         if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
             return server, {}, None
-        server["env"][VERSION_ENV] = version
+        # Its name makes it a development build to the server (the server's _internal/channel.py).
+        server["env"] = {VERSION_ENV: version}
         register([*uvx_from(wheel), "python"], version)
         return server, skill_rewrites(version), None
     python = interpreter()

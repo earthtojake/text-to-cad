@@ -101,7 +101,7 @@ entry until Claude Desktop next starts. What was measured of those hosts, for wh
 
 - **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
   and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
-  `CAD_INSTALL_CHANNEL=claude-desktop`), and again with `developer_settings.json` at
+  as releases through 0.11.10 wrote it), and again with `developer_settings.json` at
   `"allowDevTools": false`. The first card after the app starts can take a while to connect: a
   `cad_view` about 6 s after `cad_show` said it had not reached CAD's server, and at about 20 s it
   answered.
@@ -221,13 +221,13 @@ the launch's `_meta` first (`host/capability.ts`).
   the release before back, and the card, reading its own release again with the update failed
   (`useUpdate`'s `settle`), says why in the same toast and offers the button again.
   A text client gets one line with its first `cad_show` result instead, naming the install
-  command. Where the
-  install came from is its channel, which each plugin's startup config names in
-  the server's environment (`CAD_INSTALL_CHANNEL`, `cad_server/_internal/channel.py`),
-  with `CAD_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
-  copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store, until the store moves an app's plugin ahead of the engine: then
-  the button shows there too, and moves the engine to that release. The telemetry: the server
+  command. Only the
+  default channel's version, on a device where the install command has run, has an updater
+  (`cad_server/_internal/channel.py`'s `told`): every other server's card shows no notice, no button
+  and no automatic-updates switch (its settings answer `updates` null). A store's copy is on the store's
+  own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
+  name -- and is updated by the store alone; the Cursor Marketplace reads the repository as it is, our
+  own text, so its copy is on the default channel. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --

@@ -608,17 +608,45 @@ def connected(name: str) -> bool:
 
 def stop_server(name: str) -> bool:
     """Version ``name``'s server, asked through its own door to stop once nothing is in flight (``{"op": "stop",
-    "drain": true}``, the drain every release since 0.10 speaks), and waited for until its lock is free
-    (``STOP_SECONDS`` at most): whether it is gone. One that cannot be asked, or is not gone in time, is not
-    stopped: False."""
-    from cad.engine import client
-
+    "drain": true}``, the drain every release since 0.10 speaks), and waited for until it is gone (``gone``):
+    whether it is. One that cannot be asked, or is not gone in time, is not stopped: False."""
     if ask(name, {"op": "stop", "drain": True}) is None:
         return False
+    return gone(name)
+
+
+def gone(name: str, seconds: float = STOP_SECONDS) -> bool:
+    """Whether version ``name``'s server, asked to stop (by this process or another, answered or not: a server on
+    its way out answers nothing more), is gone within ``seconds``: its lock free -- held until its workers have
+    stopped -- and then no process left running from its folder (``quiet``). What every removal waits for before it
+    tries the folder."""
+    from cad.engine import client
+
+    began = time.monotonic()
     try:
-        return client.wait_gone(timeout=STOP_SECONDS, endpoint=endpoint(name))
+        if not client.wait_gone(timeout=seconds, endpoint=endpoint(name)):
+            return False
     except ConnectionError:
         return False
+    return quiet(places.version_dir(name), max(0.0, seconds - (time.monotonic() - began)))
+
+
+# How long a removal waits for the processes of a version whose server has let its lock go to end (``quiet``): a
+# server exits a moment after it lets go, its workers with it.
+QUIET_SECONDS = 10.0
+
+
+def quiet(folder: Path, seconds: float = QUIET_SECONDS) -> bool:
+    """Whether no process runs from ``folder`` (``releases.running``), awaited for ``seconds`` at most: a server lets
+    its lock go before its process, and its workers', have ended."""
+    from cad_server._internal import releases
+
+    deadline = time.monotonic() + seconds
+    while releases.running(folder):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
 
 
 def start_server(name: str, *, timeout: float = START_SECONDS) -> bool:
@@ -751,9 +779,23 @@ def remove(name: str, *, told: Callable[[str], None] | None = None) -> str:
         return _remove(name, say)
 
 
-def _remove(name: str, say: Callable[[str], None]) -> str:
-    from cad_server._internal import releases
+def _hand_on(name: str) -> None:
+    """What version ``name`` kept for sending and has not sent -- its telemetry spool and kept batches, each row saying
+    who counted it -- moved, as it goes, to the version that sends next (``analytics.hand_on``): the default
+    channel's, else the newest other version a pointer names. Nothing goes where no other version is named."""
+    from cad_server import analytics
+    from cad_server._internal import imports, pointers
+    from cad_server.settings import FILE
 
+    named = [pointer.version for pointer in pointers.listing() if pointer.version != name and imports.imported(pointer.version)]
+    if not named:
+        return
+    default = pointers.read(None)
+    target = default if default in named else max(named, key=_order_key)
+    analytics.hand_on(places.data_dir(name) / FILE, places.data_dir(target) / FILE)
+
+
+def _remove(name: str, say: Callable[[str], None]) -> str:
     folder = places.version_dir(name)
     if not os.path.lexists(folder):
         return "absent"
@@ -768,8 +810,9 @@ def _remove(name: str, say: Callable[[str], None]) -> str:
     if held is None:
         return "connected"
     try:
-        if releases.running(folder):
+        if not quiet(folder):  # a server that let its lock go may not have exited yet: awaited, bounded
             return "in use"
+        _hand_on(name)
         aside = places.versions_dir() / f"{TRASH}{name}-{os.getpid()}-{os.urandom(4).hex()}"
         try:
             os.rename(folder, aside)
@@ -805,6 +848,7 @@ def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
         if held is None:
             return "connected"
         try:
+            _hand_on(name)
             aside = places.versions_dir() / f"{TRASH}{name}-{os.getpid()}-{os.urandom(4).hex()}"
             try:
                 os.rename(folder, aside)

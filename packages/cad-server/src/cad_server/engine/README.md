@@ -281,7 +281,19 @@ its server; on two versions, two servers, each on its own port (the second rolls
   under way. It never removes its own folder: each running server's tending sweeps every other version no
   pointer names (`versions.garbage`, `versions.sweep` sparing its own), as every move and `cad doctor --prune`
   do. The layout of 0.11.10 and earlier goes by the same sweep once it is safe (`legacy.remove`).
-- `cad stop` and `cad status` act on one version's server: the pinned one, or the default's with no pin.
+- **A removal waits for what is going** (`versions.gone`, `versions.quiet`): a server asked to stop -- by this
+  process or another, answered or not -- is gone once its lock is free and no process runs from its version's
+  folder any more (it lets the lock go a moment before it and its workers exit), awaited with a bound before the
+  folder is tried; one still running after it keeps the folder for the next sweep. As a version's folder goes, what
+  it kept for telemetry and had not sent -- each spool row saying the version, channel and app that counted it,
+  each kept batch whole under its own id -- moves to the version that sends next (`versions._hand_on`,
+  `analytics.hand_on`): the default channel's, else the newest other version a pointer names.
+- `cad stop` and `cad status` act on one version's server: the pinned one, or the default's with no pin. Only `cad
+  doctor` reads every version and channel (`cli/doctor.py`'s `_versions`): each version, where it is, the channels
+  on it, its server and port, whether nothing names it; each channel, its version and its last use (its pointer
+  file's time, which a server marks as it takes a request on that channel, `pointers.used`). `cad doctor --prune`,
+  a person's command, forgets the named channels unused for `pointers.FORGOTTEN_DAYS` (never the default) and then
+  sweeps.
 
 A process with no version (a checkout, a test's device, a release of 0.11.10 and earlier) keeps that layout: the
 device's one engine is the current installation's, `<state>/installations/current` names it

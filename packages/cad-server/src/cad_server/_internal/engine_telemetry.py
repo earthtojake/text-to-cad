@@ -248,13 +248,15 @@ def _snapshot_failure(facts: dict[str, Any], error: dict[str, Any] | None, outco
 
 
 def answered(answer: dict[str, Any], seconds: float, env: Any, *, fresh: bool | None = None, died: Any = None,
-             unavailable: BaseException | None = None, path: Any = None) -> bool:
+             unavailable: BaseException | None = None, path: Any = None, channel: str | None = None) -> bool:
     """One model build the daemon answered (``cad_server.engine.daemon``'s ``build``), counted for the person who
     asked it: ``answer`` as it was sent, ``seconds`` the daemon's time on it, ``env`` the asker's environment
     (``request["env"]``: a no there, or no environment told, counts nothing; else the settings decide, as a
     command's count would), ``fresh`` whether its worker was started for it, ``died`` the exit status of one that
     died under it (``True`` where none is known), ``unavailable`` the error of a kernel environment that could not
-    be made (its crash reported once per failed making, ``first_report``). Kept in the spool, and the sender
+    be made (its crash reported once per failed making, ``first_report``), ``channel`` the request's delivery channel
+    (``request["channel"]``: None, the default). Kept in the spool, said to come from that channel and the app the
+    asker's environment names (``analytics.source``), and the sender
     started when the spool has waited a window: a local write, after the answer, never the network. Whether it
     was kept. Never raises."""
     try:
@@ -267,7 +269,7 @@ def answered(answer: dict[str, Any], seconds: float, env: Any, *, fresh: bool | 
             crash = analytics.signature(unavailable, "build")
             if crash is not None:
                 found.setdefault("crashes", []).append(crash)
-        if not analytics.spool(found, path=path, env=env):
+        if not analytics.spool(found, path=path, env=env, channel=channel or "default"):
             return False
         from cad_server._internal import telemetry_send
 

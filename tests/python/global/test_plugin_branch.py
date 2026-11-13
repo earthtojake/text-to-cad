@@ -34,13 +34,13 @@ class PluginTreeTests(unittest.TestCase):
         skills = {path for path in on_main if path.startswith("skills/")}
         blobs = branch.read_blobs(REPO_ROOT, sorted({blob for _mode, blob in on_main.values()}))
         # latest: every host's manifest and config, the marketplace catalog, Codex's, Grok Build's and the Agent
-        # Plugins standard's, and every skill; each file main's, but the README and latest's Cursor config.
+        # Plugins standard's, and every skill; each file main's but the README: our own text, the default channel.
         install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
         self.assertEqual(set(install), {*branch.FILES, *branch.MARKETPLACE_FILES, *branch.STANDARD_FILES,
                                         *branch.GROK_FILES, "README.md", *skills})
         self.assertEqual([path for path, (_mode, data) in sorted(install.items()) if data != blobs[on_main[path][1]]],
-                         ["README.md", "cursor.mcp.json"])
+                         ["README.md"])
         # Claude Code gets the skills alone from latest; Grok Build reads its own manifest first, naming the server.
         self.assertEqual({path: json.loads(install[path][1]).get("mcpServers")
                           for path in (".claude-plugin/plugin.json", ".grok-plugin/plugin.json")},
@@ -56,8 +56,18 @@ class PluginTreeTests(unittest.TestCase):
         self.assertNotIn("mcpServers", json.loads(directory[".claude-plugin/plugin.json"][1]))
         self.assertEqual(branch.type_errors(directory), [])
         self.assertEqual({path for path in directory if path.startswith("skills/")}, skills)
-        # Byte for byte main's: the skills' `cad +<VERSION>` pins are the release's in every copy.
-        self.assertEqual([path for path in skills if directory[path][1] != blobs[on_main[path][1]]], [])
+        # Main's but for the channel: every pin of the release stamped `@claude`, the channel claude.ai's directory
+        # delivers (`channel_stamp.py`), and nothing else changed -- the install line's `--add <VERSION>` names a
+        # version, not a pin, and stays.
+        version = _manifest["version"]
+        pinned = 0
+        for path in sorted(skills):
+            main, copy = blobs[on_main[path][1]].decode("utf-8"), directory[path][1].decode("utf-8")
+            self.assertEqual(copy.replace(f"+{version}@claude", f"+{version}"), main, path)
+            self.assertEqual(branch.channel_stamp.unstamped(copy, version, "claude"), [], path)
+            pinned += copy.count(f"+{version}@claude")
+        self.assertGreater(pinned, 100, "the skills' pins were found")
+        self.assertIn(f"--add {version}`", directory["skills/cad/SKILL.md"][1].decode("utf-8"))
 
     def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
         # The catalog lists the plugin at the root of the branch it is read from, so a marketplace
@@ -90,22 +100,18 @@ class PluginTreeTests(unittest.TestCase):
             with self.subTest(copy=copy):
                 self.assertEqual(missing, [])
 
-    def test_each_config_names_the_channel_its_installs_come_from(self) -> None:
-        # Every installer but claude.ai's directory, whose copy has no server, follows latest, where the configs
-        # keep main's channels but Cursor's: main's names the Cursor Marketplace, which reads main and updates
-        # its copies, and a Cursor install by hand clones the branch. The server's environment is the plugin's
-        # say (the server's _internal/channel.py).
-        tree, errors, _manifest = branch.build(REPO_ROOT, "latest")
-        self.assertEqual(errors, [])
-        said = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
-                for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "mcp.json", "gemini-extension.json")}
-        self.assertEqual(said, {
-            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
-            "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
-            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-github"},
-            "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
-            "gemini-extension.json": {"CAD_INSTALL_CHANNEL": "gemini-github"},
-        })
+    def test_no_config_names_a_channel_or_who_updates_the_copy(self) -> None:
+        # A channel is a pin's (`cad +<VERSION>@<channel>`) or a store's launcher's argument (`cad-mcp --channel`),
+        # never a server's environment: no copy's config sets the variables 0.11.10 and earlier read.
+        for copy in branch.COPIES:
+            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
+            self.assertEqual(errors, [], copy)
+            for path, (_mode, data) in tree.items():
+                if path.endswith(".json") and not path.startswith("skills/"):
+                    with self.subTest(copy=copy, path=path):
+                        self.assertNotIn(b"CAD_INSTALL_CHANNEL", data)
+                        self.assertNotIn(b"CAD_AUTO_UPDATED", data)
+                        self.assertNotIn(b"--channel", data)
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'
@@ -181,6 +187,24 @@ class PluginTreeTests(unittest.TestCase):
             second = branch.commit(root, branch.build(root, "directory")[0], first, "demo 1.0.1")
             self.assertEqual(git(root, "rev-parse", f"{second}^"), first)
             self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), "two")
+
+            # The copy's pins carry its channel: a pin of the release is stamped, the line installing it is not, and
+            # a pin of any other version left in the text fails the build.
+            (root / "skills/s/SKILL.md").write_text("Run `cad +1.0.0 model x` (`+1.0.0`); `--add 1.0.0`.\n",
+                                                   encoding="utf-8")
+            git(root, "commit", "-q", "-am", "pinned")
+            tree, errors, _manifest = branch.build(root, "directory")
+            self.assertEqual(errors, [])
+            self.assertEqual(tree["skills/s/SKILL.md"][1],
+                             b"Run `cad +1.0.0@claude model x` (`+1.0.0@claude`); `--add 1.0.0`.\n")
+            self.assertEqual(branch.build(root, "latest")[0]["skills/s/SKILL.md"][1],
+                             b"Run `cad +1.0.0 model x` (`+1.0.0`); `--add 1.0.0`.\n")
+            (root / "skills/s/SKILL.md").write_text("Run `cad +0.9.0 model x`.\n", encoding="utf-8")
+            git(root, "commit", "-q", "-am", "another version")
+            self.assertEqual(branch.build(root, "directory")[1],
+                             ["skills/s/SKILL.md: cad +0.9.0 is not stamped @claude for 1.0.0"])
+            (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
+            git(root, "commit", "-q", "-am", "unpinned")
 
             # A file the directory refuses, in a skill, fails the build: no skill is left out to make it pass.
             (root / "skills/p/scripts").mkdir()

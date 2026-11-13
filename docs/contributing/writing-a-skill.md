@@ -90,12 +90,14 @@ section named for each.
 Each skill installs on its own, so the few things every skill must say are copied into each, word
 for word, and tests keep the copies from drifting:
 
-- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command, in every
-  skill that runs the server, and in no other.
+- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command, and what
+  a pinned command's exit codes mean, in every skill that runs the server, and in no other.
 - **Pins** (`tests/python/global/test_skill_commands_pin_their_release.py`): every `cad` command in a
   code block or span, placeholders such as `cad +<VERSION> <type> inspect` too, starts `cad +<VERSION>`.
   The header's `metadata.version` and these pins are stamped by the release script
   (`scripts/release/sync-version.mjs`) and never edited by hand; a new skill copies them from one beside it.
+  The source never names a channel: the release adds one to every pin of a store's copy as it builds it
+  (`cad +<VERSION>@claude` for claude.ai's directory, `@codex` for OpenAI's).
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at.
 

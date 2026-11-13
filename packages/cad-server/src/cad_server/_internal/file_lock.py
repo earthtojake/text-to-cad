@@ -1,6 +1,6 @@
 """An exclusive lock between processes, held on a file of its own beside what it guards, and the
-data folder's one lock (``state``: a version's data folder, ``places.data_dir``, the state folder before
-0.12), which every change of a small file there holds."""
+data folder's one lock (``state``: a version's data folder, ``places.data_dir``, the state folder for a process with no
+version, as in 0.11.10 and earlier), which every change of a small file there holds."""
 
 from __future__ import annotations
 

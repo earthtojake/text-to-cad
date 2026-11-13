@@ -57,9 +57,13 @@ class DoctorTests(unittest.TestCase):
         state = TemporaryDirectory()
         self.addCleanup(state.cleanup)
         self.state = Path(state.name)
-        # A plugin's install outside CI, where telemetry's default holds.
+        # A release's install outside CI, where telemetry's default holds: not a source tree (a checkout is a
+        # development build), with no version named, so what the doctor registers is its own to decide.
+        tree = mock.patch("cad_server._internal.channel._source_tree", return_value=False)
+        tree.start()
+        self.addCleanup(tree.stop)
         environment = mock.patch.dict("os.environ", {"CAD_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CAD_TELEMETRY": "",
-                                                     "CAD_INSTALL_CHANNEL": "claude-github", "CI": "",
+                                                     "CI": "",
                                                      # The cad command goes to a folder of the test's, never ~/.local/bin.
                                                      "CAD_LAUNCHER_DIR": str(self.state / "bin"),
                                                      "PATH": str(self.state / "unrelated-bin"),
@@ -372,7 +376,7 @@ class DoctorTests(unittest.TestCase):
         with mock.patch.object(versions, "sweep", return_value={"1.2.0": "removed"}) as swept:
             code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
-        swept.assert_called_once_with()
+        swept.assert_called_once()
         self.assertIn("removed text-to-cad 1.2.0\n", out)
 
     def test_the_report_says_what_the_device_runs(self) -> None:

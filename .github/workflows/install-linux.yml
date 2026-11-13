@@ -133,13 +133,27 @@ jobs:
           fi
           echo "CAD_RELEASE=$release" >> "$GITHUB_ENV"
 
+      # The install makes the CAD kernel's environment. The slim image has no OpenGL library, which the kernel
+      # links against, so there the doctor is right to fail it (exit 1) and must name the missing library and its
+      # package; on the runner's Ubuntu the kernel loads (exit 0).
       - name: The cad command and the doctor
         shell: sh
+        env:
+          SLIM: ${{ matrix.image != '' }}
         run: |
           said=$("$HOME/.local/bin/cad" --version)
           echo "$said"
           [ "$said" = "cad $CAD_RELEASE" ]
-          "$HOME/.local/bin/cad" doctor
+          status=0
+          report=$("$HOME/.local/bin/cad" doctor) || status=$?
+          echo "$report"
+          if [ "$SLIM" = true ]; then
+            [ "$status" -eq 1 ] || { echo "expected the doctor to fail the kernel here (exit 1), got $status"; exit 1; }
+            echo "$report" | grep -q "libGL.so.1" || { echo "expected the doctor to name libGL.so.1"; exit 1; }
+            echo "$report" | grep -q "apt-get install libgl1" || { echo "expected the doctor to name its package"; exit 1; }
+          else
+            [ "$status" -eq 0 ] || { echo "the doctor failed (exit $status)"; exit 1; }
+          fi
 
       # The skills' setup block's line, `curl ... | sh -s -- --add X`: that release installed alone, and the pinned
       # command run.

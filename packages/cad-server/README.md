@@ -79,8 +79,8 @@ src/cad_server/
                          #   (plugin), the agent apps setup reads and writes (providers),
                          #   what earlier releases left behind (leftovers), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
-                         #   server's observer of the engine and the telemetry sender, the
-                         #   install channel, file locks (the data folder's one lock:
+                         #   server's observer of the engine and the telemetry sender, where
+                         #   an event comes from and who has an updater (channel), file locks (the data folder's one lock:
                          #   `file_lock.state`), the CLI derivation, the one parser every
                          #   command reads its options by (cli_parser) and the one failure
                          #   contract every command fails by (cli_errors)
@@ -146,16 +146,21 @@ orcaslicer complete --printer P --process P --filament F [--out DIR]` writes the
 in and the printer named as compatible, for OrcaSlicer's own command line (the `orcaslicer` integration's two
 operations, which take preset names and no FILE). Its code is the library's, the standard library alone, so
 they always run in this process: no engine, no environment made. `cad serve`,
-`status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
-installation registered, the `cad` command written, whether the CAD kernel environment is made and the
-integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's
-and each app's plugin's: the whole report on stdout, exit 1 when the kernel is installed and does not load;
-`--check` the report alone, which registers, writes and starts nothing, what a bug report wants; `--json` it
-as one document, each check's name, status and detail) and what earlier releases
-left behind that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine
-records of an older format, the bytecode of installations no longer registered, cache folders no record
-names, the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among
-them; none written in the last seven days; and every version no channel is on, `versions.sweep`); `cad run` a
+`status`, `stop`, `delete` and `server` are the engine's process control, each acting on one version's server
+(the pinned one, or the default's); `cad doctor` the setup of the version it runs as (the installation
+registered, the `cad` command written, whether the CAD kernel environment is made and the integrations' -- never
+made there --, the engine started; the current one, the engine's and each app's plugin's: the whole report on
+stdout, exit 1 when the kernel is installed and does not load; `--check` the report alone, which registers,
+writes and starts nothing, what a bug report wants; `--json` it as one document, each check's name, status and
+detail) and the one command that reads every version and channel: each installed version (where it is, which
+channels are on it, whether its server runs and on which port, whether nothing names it), each channel with its
+version and when it was last used (its pointer file's time), and what is left of the layout of 0.11.10 and
+earlier and whether it can go yet. `cad doctor --prune`, a person's command and never automatic, forgets every
+named channel unused for 30 days (never the default), removes every version no pointer names -- never one with
+work in flight -- and the layout of 0.11.10 and earlier once that is safe, saying each thing it did, and what
+earlier releases left behind that nothing needs (`_internal/leftovers.py`: engine records of an older format,
+the bytecode of installations no longer registered, cache folders no record names, the launchers earlier releases
+published beside the `cad` command, 0.8's `cadgen` proxy among them; none written in the last seven days); `cad run` a
 program exactly as `uv run` runs it -- uv run's
 options, a script's `# /// script` header, a project -- with cad pinned at this release and the
 integrations its imports use (`_internal/extras.py`, `_internal/scan.py`, by the library's registry), in an
@@ -186,7 +191,10 @@ still runs it (said, with which) --, and `--purge` everything; asked first as ev
 delete`, `cad doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
 `_internal/consent.py`);
 `cad plugin` writes
-the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
+the plugin folder and prints its path; and `cad telemetry` the person's answer, whose no, wherever it is said
+(`cad telemetry off`, the app menu's switch, `cad setup --no-telemetry`), is said in every version on the device
+and in the state folder's settings, where 0.11.10 and earlier read it and where a version installed later takes it
+from as it first starts (`analytics.everywhere`, `inherit_no`). The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
 
 **Since 0.11.8** `cad <type> inspect`'s text names at most four parts on a line of materials, then the first
@@ -202,8 +210,10 @@ the way it takes a local plugin (`_internal/providers.py`): a local catalog that
 place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
 skills copied by the Skills CLI for the agents without a plugin. Claude gets the skills alone: `cad setup`
 writes no CAD server into Claude Desktop's config, and takes out the one releases through 0.11.10 wrote
-there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex, the Cursor Marketplace)
-is the app's to deliver and update: every `cad setup` keeps it, adds nothing of ours beside it, and says
+there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex) is the app's to deliver and update, on
+that store's own channel -- every pin in its text carries it (`cad +<version>@claude`, `@codex`), and its CAD
+app's launcher is given it as an argument (`cad-mcp --channel codex`); the Cursor Marketplace reads the
+repository as it is, our own text, and is on the default channel: every `cad setup` keeps it, adds nothing of ours beside it, and says
 how to switch (remove it in the app's own plugin manager, then run the install command again). An update writes the folder for the
 new release and brings our copies along, a person's or an automatic one; a store's copy, and the version its
 channel is on, are its store's to update. A model builds by running its script: `cad +<version> run model.py`, through
@@ -254,7 +264,17 @@ channel's move stops its old version's server once no pointer names that version
 -- a build, a draw, an export, an agent's tool call; never an idle app or an open page --, and the new version's
 serves on the old one's port with the page token it imported; a server whose version no pointer names stops
 itself once idle, and another server's sweep, the next move or `cad doctor --prune` removes its folder. `cad stop`
-and `cad status` act on one version's server: the pinned one, or the default's.
+and `cad status` act on one version's server: the pinned one, or the default's. Only the default channel's
+version, on a device where the install command has run (its receipt), has an updater: every other server's page
+and CAD app card show no update notice, no update button and no automatic-updates switch (the settings route
+answers its `updates` null, `_internal/channel.py`'s `told`).
+
+Telemetry (`analytics.py`) describes each batch with two fields: `channel`, the delivery channel of the
+requests or sessions it counted (a pin's or a launcher's, `default` for none, `dev` from a development build),
+and `app`, the agent app that ran them, detected (the MCP handshake's client name, else the markers an app sets in
+its shell, else `unknown`) -- one batch for each version, channel and app a window counted. A row a command or a
+build keeps for sending says the three itself, so what a version had not sent when its folder goes is moved, as
+it goes, to the version that sends next (`analytics.hand_on`).
 
 The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
 place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and

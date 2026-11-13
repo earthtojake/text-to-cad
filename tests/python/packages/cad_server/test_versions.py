@@ -671,11 +671,137 @@ class ServerDecisions(Device):
     def test_an_event_says_its_channel_and_the_app_it_came_from(self) -> None:
         from cad_server._internal.channel import describe
 
-        self.assertEqual(describe("codex", "codex-mcp-client"), {"channel": "codex", "app": "codex"})
-        self.assertEqual(describe(None, "cursor-vscode", {}), {"channel": "default", "app": "cursor"})
-        self.assertEqual(describe("claude", None, {"CLAUDECODE": "1"}), {"channel": "claude", "app": "claude code"})
-        self.assertEqual(describe("Not A Channel", "some-host", {}), {"channel": "default", "app": "some-host"})
-        self.assertEqual(describe(None, None, {}), {"channel": "default", "app": "unknown"})
+        with mock.patch("cad_server._internal.channel._source_tree", return_value=False):  # a release, not a checkout
+            self.assertEqual(describe("codex", "codex-mcp-client"), {"channel": "codex", "app": "codex"})
+            self.assertEqual(describe(None, "cursor-vscode", {}), {"channel": "default", "app": "cursor"})
+            self.assertEqual(describe("claude", None, {"CLAUDECODE": "1"}), {"channel": "claude", "app": "claude-code"})
+            self.assertEqual(describe("Not A Channel", "Some Host", {}), {"channel": "default", "app": "some-host"})
+            self.assertEqual(describe(None, None, {}), {"channel": "default", "app": "unknown"})
+        # A development build says `dev`: a checkout not told the version it runs as is one.
+        self.assertEqual(describe("codex", "codex-mcp-client")["channel"], "dev")
+        from cad_server._internal import channel
+
+        self.assertEqual(channel._DEVELOPMENT.pattern, versions.DEVELOPMENT.pattern, "one rule, copied")
+
+
+class TelemetryAcrossVersions(Device):
+    """A no is a no everywhere (``analytics.everywhere``, ``inherit_no``), and what a version had not sent goes on with
+    the next as its folder goes (``analytics.hand_on``)."""
+
+    def off_in(self, name: str) -> None:
+        from cad_server import analytics
+
+        with mock.patch.object(places, "versioned", return_value=name):
+            chosen = analytics.choose(False, by="cli", forget=lambda _id: True)
+        self.assertTrue(chosen["saved"])
+
+    def sharing(self, name: str) -> bool:
+        from cad_server import analytics
+
+        with mock.patch.object(places, "versioned", return_value=name), \
+                mock.patch("cad_server._internal.channel._source_tree", return_value=False), \
+                mock.patch.dict(os.environ, {"CI": "", "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""}):
+            return analytics.status(probe=False, keep=False)["sharing"]
+
+    def test_off_in_one_version_is_off_in_every_version_and_in_any_made_present_afterwards(self) -> None:
+        told = {"telemetry": {"choice": "on", "disclosure": 1, "by": "cli", "decidedAt": 1.0, "id": "an-id"}}
+        self.data(X, told)
+        self.data(Y, told)
+        self.assertTrue(self.sharing(X) and self.sharing(Y))
+        self.off_in(Y)
+        self.assertFalse(self.sharing(X), "said in the other version too")
+        self.assertFalse(self.sharing(Y))
+        device = json.loads((self.state / "settings.json").read_text(encoding="utf-8"))["telemetry"]
+        self.assertEqual(device["choice"], "off", "and at the old place, made, in the form every release reads")
+        x = json.loads((places.data_dir(X) / "settings.json").read_text(encoding="utf-8"))["telemetry"]
+        self.assertEqual((x["choice"], "id" in x, x["forget"]), ("off", False, ["an-id"]), "its id owed a deletion")
+        # A version made present afterwards: a newer one importing from Y, and an older one with nothing older to
+        # import from -- both start with the off.
+        for name in (Z, "0.11.99"):
+            self.present(name)
+            imports.ensure(name)
+            with self.subTest(version=name):
+                self.assertFalse(self.sharing(name))
+                kept = json.loads((places.data_dir(name) / "settings.json").read_text(encoding="utf-8"))
+                self.assertEqual(kept["telemetry"]["choice"], "off")
+
+    def test_a_later_yes_in_a_version_is_its_own_and_what_imports_from_it(self) -> None:
+        from cad_server import analytics
+
+        self.data(X)
+        self.off_in(X)
+        with mock.patch.object(places, "versioned", return_value=X):
+            analytics.choose(True, by="cli")
+        self.assertTrue(self.sharing(X))
+        self.present(Y)
+        imports.ensure(Y, leaving=X)
+        self.assertTrue(self.sharing(Y), "the yes is newer than the device's no")
+
+    def test_what_a_version_kept_for_sending_goes_to_the_next_as_its_folder_goes(self) -> None:
+        from cad_server import analytics
+
+        self.data(X)
+        self.data(Y)
+        row = {"answer": [None, None], "at": 1.0, "source": {"version": X, "channel": "codex", "app": "codex"},
+               "counts": {"features": ["drawing"]}}
+        (places.data_dir(X) / analytics.SPOOL).write_text(json.dumps(row) + "\n", encoding="utf-8")
+        pointers.write(None, Y)
+        self.assertEqual(versions.sweep(), {X: "removed"})
+        kept = [json.loads(line) for line in
+                (places.data_dir(Y) / analytics.SPOOL).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(kept, [row], "handed on whole, still saying who counted it")
+
+
+class DoctorReadsEveryVersion(Device):
+    """``cad doctor`` is the one command that reads every version and channel; ``--prune`` forgets the named channels
+    unused for 30 days, never the default, and removes the versions then unnamed."""
+
+    def report(self) -> list[str]:
+        from cad_server.cli import doctor
+
+        with mock.patch.object(versions, "serving", return_value=None):
+            return doctor._versions()
+
+    def test_the_report_and_the_prune(self) -> None:
+        import contextlib
+        import io
+        import time
+
+        from cad_server.cli import doctor
+
+        self.data(X)
+        self.data(Y)
+        self.data(Z)
+        pointers.write(None, Y)
+        pointers.write("old-store", X, mirrored=False)
+        versions.move("store", Z)
+        long_ago = time.time() - (pointers.FORGOTTEN_DAYS + 1) * 86400
+        for path in (self.state / "channels" / "old-store", self.state / "default"):
+            os.utime(path, (long_ago, long_ago))
+        held = self.serving(Z)
+        said = self.report()
+
+        def line(start: str) -> str:
+            found = [each for each in said if each.startswith(start)]
+            self.assertEqual(len(found), 1, said)
+            return found[0]
+
+        self.assertIn("channels old-store; its server is not running", line(f"version  text-to-cad {X} "))
+        self.assertIn("channels default; its server is not running", line(f"version  text-to-cad {Y} "))
+        self.assertIn("channels store; its server runs", line(f"version  text-to-cad {Z} "))
+        self.assertIn("unused for 30 days: cad doctor --prune forgets it", line("channel  old-store: "))
+        self.assertIn(f"text-to-cad {Z}, last used ", line("channel  store: "))
+        self.assertNotIn("forgets it", line("channel  default: "), "the default channel is never forgotten")
+        held.close()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), mock.patch.object(versions, "connected", return_value=False):
+            self.assertEqual(doctor.main(["--prune", "--yes"]), 0)
+        printed = out.getvalue()
+        self.assertIn(f"forgot the old-store channel (text-to-cad {X})", printed)
+        self.assertIn(f"removed text-to-cad {X}", printed)
+        self.assertIsNone(pointers.read("old-store"))
+        self.assertEqual((pointers.read(None), pointers.read("store")), (Y, Z))
+        self.assertEqual(versions.folders(), [Y, Z])
 
 
 if __name__ == "__main__":

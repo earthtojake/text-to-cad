@@ -123,7 +123,8 @@ class PathTableTest(Device):
                 "pycache": version / "code" / "pycache", "installation": X})
             self.assertEqual(places.legacy_cache_dir(), self.cache, "CAD_CACHE_DIR names the layout of 0.11.10 and earlier alone")
             self.assertEqual(places.engines_dir(), self.engines, "the flat door's folder")
-            self.assertEqual(stat.S_IMODE((version / "code" / "pycache").stat().st_mode), 0o700)
+            if os.name != "nt":  # Windows has no mode bits: the folder is the user's by its profile folder's ACL
+                self.assertEqual(stat.S_IMODE((version / "code" / "pycache").stat().st_mode), 0o700)
         # Any version's folders by name, whatever this process is.
         self.assertEqual((places.code_dir("0.11.99"), places.data_dir("0.11.99"), places.cache_dir("0.11.99"),
                           places.engine_dir("0.11.99")),
@@ -135,8 +136,13 @@ class PathTableTest(Device):
         with self.running_in(self.state / "versions" / X / "code" / "server"):
             held = places.lock()
             self.addCleanup(held.close)
+        # On POSIX by its mode (``places.make_engine_dir``, ``folder_refusal``); Windows has no mode bits to set or read
+        # (a folder reads 0o777): there it is the user's by where it is, inside their profile, as every folder of the
+        # engine's is (``places.default_engine_dir``), and nothing checks it.
         for folder in (self.engines, self.engines / X):
-            self.assertEqual(stat.S_IMODE(folder.stat().st_mode), 0o700, folder)
+            self.assertTrue(folder.is_dir(), folder)
+            if os.name != "nt":
+                self.assertEqual(stat.S_IMODE(folder.stat().st_mode), 0o700, folder)
         self.assertTrue((self.engines / X / "engine.lock").is_file())
         self.assertFalse((self.engines / "engine.lock").exists(), "the flat lock is not this version's")
 

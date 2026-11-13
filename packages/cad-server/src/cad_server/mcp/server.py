@@ -507,12 +507,6 @@ class Server:
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         transport = meta.get("dev.texttocad/transport") if isinstance(meta.get("dev.texttocad/transport"), dict) else {}
         presentation, self.renders, why = host.presentation(client, offered, transport.get("launcher"))
-        if isinstance(transport.get("channel"), str):
-            # Where the plugin that started the transport came from, written down for this installation's
-            # processes that no plugin told (``cad_server._internal.channel.remember``), in the background.
-            from cad_server._internal.channel import remember
-
-            threading.Thread(target=remember, args=(transport["channel"],), name="cad-channel", daemon=True).start()
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
         self._declared = why.startswith("declared")
         self.tabs, self.text = presentation == "tabs", presentation == "text"

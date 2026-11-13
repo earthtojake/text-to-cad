@@ -3,7 +3,7 @@
 ``<state>/releases/<version>`` is where 0.11.10 and earlier installed a release: its core in a virtual environment,
 made by uv, its marker (``cad-release.json``) written last. Those releases' updaters make one for the release they
 move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). From
-0.11.11 a release lives in ``versions/<version>`` (``cad_server._internal.versions``), whose server environment is
+the first pinned release on, a release lives in ``versions/<version>`` (``cad_server._internal.versions``), whose server environment is
 made by the same recipe (``recipe``) and carries the same marker; the flat folders are the layout of 0.11.10 and
 earlier, removed with it once nothing runs from them (``cad_server._internal.legacy``), and by ``cad uninstall``.
 

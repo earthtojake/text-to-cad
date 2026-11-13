@@ -43,13 +43,6 @@ class Session:
     def close(self):
         self.server.sidebar_views.close()
 
-    def described(self):
-        """What this session's events say of where they come from (``channel.describe``): its channel, and the
-        app its MCP handshake names."""
-        from cad_server._internal.channel import describe
-
-        return describe(self.channel, self.client)
-
 
 class Sessions:
     def __init__(self, engine):
@@ -107,7 +100,16 @@ class Sessions:
         page = AppPage(Path(directory)) if isinstance(directory, str) and directory else AppPage()
         app = ViewerApp(self.engine.server, host=self.engine.host, port=self.engine.server.port,
                          start=options.get('cwd') if isinstance(options.get('cwd'), str) else None)
-        app.analytics = self.engine.analytics
+        # The session's launcher's delivery channel (its ``pin``: ``cad_mcp``'s ``--channel``; none, or a launcher of
+        # 0.11.10 and earlier, is the default) and its client: every use it counts is counted under the two
+        # (``Recorder.of``), a batch of their own.
+        from cad.engine.places import CHANNEL
+        pin = options.get('pin') if isinstance(options.get('pin'), dict) else {}
+        channel = pin.get('channel') if isinstance(pin.get('channel'), str) and CHANNEL.fullmatch(pin['channel']) else None
+        client = params.get('clientInfo')
+        client = client if isinstance(client, dict) else {}
+        analytics = self.engine.analytics.of(channel, client.get('name'))
+        app.analytics = analytics
         app.consent_by = "app"
         # A fresh link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
         # the card's capability already reaches everything a link does.
@@ -122,19 +124,14 @@ class Sessions:
         # under the same host gives the views it already shows the one they carry.
         token = options.get('app')
         token = token if isinstance(token, str) and 32 <= len(token) <= 256 else None
-        server = Server(page=page, tunnel=ViewerTunnel(app=app), analytics=self.engine.analytics, app_token=token,
+        server = Server(page=page, tunnel=ViewerTunnel(app=app), analytics=analytics, app_token=token,
                         sidebar_views=SidebarViews(self.sidebar), viewer_url=viewer_url,
                         sync_document=self.engine.server.sync, warm=self.engine.server.warm,
                         in_browser=self.engine.server.in_page, browser_opened=self.engine.server.page_opening,
                         engine_origin=self.engine.server.url)
         result = server.handle('initialize', params, RequestContext(None, {}))
-        client = params.get('clientInfo')
-        client = client if isinstance(client, dict) else {}
         holder = options.get('holder')
         holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None
-        pin = options.get('pin') if isinstance(options.get('pin'), dict) else {}
-        from cad.engine.places import CHANNEL
-        channel = pin.get('channel') if isinstance(pin.get('channel'), str) and CHANNEL.fullmatch(pin['channel']) else None
         return Session(server, result['protocolVersion'], str(client.get('name', 'unknown')), holder=holder,
                        channel=channel), result
 

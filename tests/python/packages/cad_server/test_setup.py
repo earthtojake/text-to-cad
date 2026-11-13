@@ -100,8 +100,7 @@ elif args[:3] == ["plugin", "marketplace", "add"]:
 def plugin_source(root: Path) -> Path:
     """A plugin of the test's own, laid out as the server's wheel carries it: every file the folder is
     written from, and a skill."""
-    server = {"mcpServers": {"cad": {"command": "uvx", "args": [*LAUNCHER[1:], "cad-mcp==0.0.1", "cad-mcp"],
-                                     "env": {"CAD_INSTALL_CHANNEL": "x"}}}}
+    server = {"mcpServers": {"cad": {"command": "uvx", "args": [*LAUNCHER[1:], "cad-mcp==0.0.1", "cad-mcp"]}}}
     files = {name: b"bytes" for name in plugin.FILES}
     files.update({name: json.dumps({"name": "text-to-cad", "version": "0.0.1"}).encode() for name in plugin.MANIFESTS})
     files.update({name: json.dumps(server).encode() for name in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json",

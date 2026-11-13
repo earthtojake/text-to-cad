@@ -27,6 +27,9 @@ from cad_server.viewer.recents import RecentStore
 from cad_server.mcp.server import _AGENT_TOOLS, CLAUDE_CODE_INSTRUCTIONS, FOLLOWS, Server, local_path, no_drive
 from cad_server.mcp.tunnel import MAX_REPLY_BYTES
 from cad_server.mcp.ui import AppPage
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+RELEASE = __import__("cad_server").__version__
 
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
 CLAUDE = {"name": "claude-ai", "version": "0.1.0"}
@@ -56,7 +59,7 @@ def offer_an_update(test: unittest.TestCase) -> None:
     """A feed read today that offers 99.0.0 to the Claude plugin installed from GitHub (`cad_server/updates.py`)."""
     state = Path(tempfile.mkdtemp())
     test.addCleanup(shutil.rmtree, state, ignore_errors=True)
-    patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALL_CHANNEL": "claude-github", "CAD_AUTO_UPDATED": "", "CI": "",
+    patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALLATION_VERSION": RELEASE, "CI": "",
                                            "CAD_UPDATE_CHECK": ""})
     patched.start()
     test.addCleanup(patched.stop)

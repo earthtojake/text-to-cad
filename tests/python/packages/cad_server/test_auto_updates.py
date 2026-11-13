@@ -25,6 +25,9 @@ add_repo_path("packages/cad/src")
 
 from cad_server import auto_updates  # noqa: E402
 from cad_server._internal import update  # noqa: E402
+# A release's process: a checkout is a development build, never told of a release and sending nothing by default,
+# unless it is told the version it runs as (``cad_server/_internal/channel.py``).
+RELEASE = __import__("cad_server").__version__
 
 DAY = auto_updates.RETRY_SECONDS
 
@@ -38,7 +41,7 @@ class Fixture(unittest.TestCase):
         self.addCleanup(shutil.rmtree, engine, True)
         patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.root / "state"),
                                                "CAD_CACHE_DIR": str(self.root / "cache"), "CAD_ENGINE_DIR": engine,
-                                               "CI": "", "CAD_UPDATE_CHECK": "", "CAD_INSTALL_CHANNEL": "claude-github"})
+                                               "CI": "", "CAD_UPDATE_CHECK": "", "CAD_INSTALLATION_VERSION": RELEASE})
         patched.start()
         self.addCleanup(patched.stop)
         (self.root / "state").mkdir()

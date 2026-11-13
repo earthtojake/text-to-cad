@@ -7,8 +7,8 @@ cad_server._internal.launch), and that installation writes the `cad` command, `~
 sandbox, the command can. Every command a skill runs names the skill's release first, `cad +<VERSION>
 <verb>`, so the skill text of a release runs that release's software and no other; the release
 stamps the pin (scripts/release/sync-version.mjs) and test_skill_commands_pin_their_release.py holds
-every command to it. The setup block says what the pin does and how to install that release when the
-command cannot. A skill that runs the server any other way -- a `pip install -r requirements.txt` into
+every command to it. The setup block says what the pin does, how to install that release when the
+command cannot, and what the exit codes a pin adds (3, 4, 5) mean. A skill that runs the server any other way -- a `pip install -r requirements.txt` into
 the project's interpreter -- makes a second installation, and its docs may describe a release that is
 not the one running.
 
@@ -31,18 +31,28 @@ SETUP = """Every command in this skill starts `cad +{X}`: it runs text-to-cad {X
 written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
 PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
 
-If `cad` is missing, or says it does not know `+{X}` (an older text-to-cad), or says {X} is not
-installed and could not be installed from this shell, install this release, outside the sandbox or
-with its permission, then run the command again:
+If `cad` is missing, or says it does not know `+{X}` (an older text-to-cad), install this release,
+outside the sandbox or with its permission, then run the command again:
 
 ```bash
 {install} -s -- --add {X}
 ```
 
 On Windows, in PowerShell: `& ([scriptblock]::Create((irm {install_windows_script}))) --add {X}`.
-It installs {X} and the `cad` command and changes nothing else. `cad +{X} doctor --check` explains any
-other failure, changing nothing; `cad +{X} doctor` repairs what it reports. Tell the person any next
-step it prints.
+It installs {X} and the `cad` command and changes nothing else.
+
+When a command fails, its exit code says why:
+
+- 3: it could not install or switch to {X} from this shell. Do what it says, outside
+  the sandbox or with its permission, then run the command again.
+- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again
+  (the app may have a newer copy) or start a new chat. If the skill still names the same release, the
+  text-to-cad plugin in this app needs an update, in the app or by the install command: tell the person.
+- 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
+  `~/.local/bin/cad` (`%USERPROFILE%\\.local\\bin\\cad.exe` on Windows) instead.
+
+`cad +{X} doctor --check` explains any other failure, changing nothing; `cad +{X} doctor` repairs what
+it reports. Tell the person any next step it prints.
 """
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)

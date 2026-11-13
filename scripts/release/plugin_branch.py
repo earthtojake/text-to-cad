@@ -20,11 +20,12 @@ Two copies, differing in what they carry:
   only the file types the directory accepts from an organization it has not verified
   (`type_errors`): another file type anywhere in it fails the build. It holds every skill.
 
-Each MCP config names the channel its installs come from in its server's environment,
-`CAD_INSTALL_CHANNEL` (`COPIES`; the server's `_internal/channel.py`). A config the copy does
-not override keeps main's: on `main` the Claude config names `claude-github`, and the Cursor
-one the Cursor Marketplace, which reads `main` and keeps its copies up to date
-(`CAD_AUTO_UPDATED=1`), which `latest`'s Cursor config, cloned by hand, is not.
+Each copy runs the release it was built from, on a delivery channel: `latest` is our own text, every
+pin as main has it (`cad +<VERSION> <verb>`), the default channel; the directory's copy has every pin
+stamped `@claude` (`cad +<VERSION>@claude <verb>`, `channel_stamp.py`), the channel claude.ai's directory
+delivers, so its updates move that channel alone. No MCP config names a channel or says who updates it:
+the launcher of a store that delivers one is given it as an argument (`cad-mcp --channel NAME`), and
+the directory's copy carries no server at all.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -48,6 +49,9 @@ import sys
 import tempfile
 from typing import NamedTuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import channel_stamp  # noqa: E402 - beside this script: the one stamping routine, plugin_zip.py's too
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
 ICON = ".claude-plugin/icon.png"
@@ -67,16 +71,16 @@ GROK_FILES = (".grok-plugin/plugin.json",)
 
 class Copy(NamedTuple):
     files: tuple[str, ...]
-    # Each config's channel, where the copy's differs from main's.
-    channels: dict[str, str]
+    # The delivery channel every pin of the copy is stamped with (`channel_stamp.py`); None: the default, as on main.
+    channel: str | None
     # Whether the copy holds only what claude.ai's directory accepts from an organization it has not
     # verified: the skills alone, in the file types `type_errors` allows.
     skills_only: bool = False
 
 
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES, {"cursor.mcp.json": "cursor-github"}),
-    "directory": Copy(DIRECTORY_FILES, {}, skills_only=True),
+    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES, None),
+    "directory": Copy(DIRECTORY_FILES, "claude", skills_only=True),
 }
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -155,22 +159,14 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
     return LINK.sub(point, text)
 
 
-def with_channel(path: str, data: bytes, channel: str, errors: list[str]) -> bytes:
-    """An MCP config whose one `cad-mcp` server names `channel` as its install channel, and not
-    `CAD_AUTO_UPDATED`: no copy this script builds is kept up to date by a store."""
-    try:
-        config = json.loads(data)
-        servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
-    except (ValueError, KeyError, TypeError, AttributeError):
-        errors.append(f"{path} is not an mcpServers config this script can read")
-        return data
-    if len(servers) != 1:
-        errors.append(f"{path} must start exactly one `cad-mcp` server (found {len(servers)})")
-        return data
-    env = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": channel}
-    env.pop("CAD_AUTO_UPDATED", None)
-    servers[0]["env"] = env
-    return json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
+def stamped(tree: dict[str, tuple[str, bytes]], version: object,
+            channel: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree with every pin of the release (the manifest's `version`) stamped `@channel` (`channel_stamp.stamp`),
+    and what fails the build."""
+    if not isinstance(version, str) or not version:
+        return tree, [f"{MANIFEST}: no `version`, so its pins cannot be stamped @{channel}"]
+    files, errors = channel_stamp.stamp({path: data for path, (_mode, data) in tree.items()}, version, channel)
+    return {path: (mode, files[path]) for path, (mode, _data) in tree.items()}, errors
 
 
 def type_error(path: str, data: bytes) -> str | None:
@@ -231,7 +227,7 @@ def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
 
 def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """A copy's tree as path -> (git mode, bytes), what breaks the directory's rules, and the manifest."""
-    files, channels, skills_only = COPIES[copy]
+    files, channel, skills_only = COPIES[copy]
     entries = tracked(root)
     chosen = {path: entry for path, entry in entries.items()
               if path in files or path.startswith(DIRECTORIES)}
@@ -240,9 +236,6 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
         return {}, errors + [f"{README} is not tracked"], {}
     blobs = read_blobs(root, sorted({blob for _, blob in [*chosen.values(), entries[README]]}))
     tree = {path: (mode, blobs[blob]) for path, (mode, blob) in chosen.items()}
-    for path, channel in channels.items():
-        if path in tree:
-            tree[path] = (tree[path][0], with_channel(path, tree[path][1], channel, errors))
     try:
         manifest = json.loads(tree[MANIFEST][1]) if MANIFEST in tree else {}
     except ValueError as error:
@@ -258,6 +251,9 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
     head = git(root, "rev-parse", "HEAD").decode().strip()
     text = readme_for_tree(text, set(tree), set(entries), url, head, errors)
     tree[README] = ("100644", text.encode("utf-8"))
+    if channel is not None:
+        tree, stamping = stamped(tree, manifest.get("version"), channel)
+        errors += stamping
     return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest
 
 

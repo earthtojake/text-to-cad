@@ -45,9 +45,8 @@ plugin_branch = _load("plugin_folder_plugin_branch", REPO_ROOT / "scripts" / "re
 wheel_contents = _load("plugin_folder_wheel_contents", REPO_ROOT / "scripts" / "release" / "wheel_contents.py")
 
 VERSION = "9.9.9"
-# The file each host's CAD server line is in, and the channel it is told: the install command's, never GitHub's.
-CHANNELS = {"claude.mcp.json": "claude-install", "codex.mcp.json": "codex-install", "cursor.mcp.json": "cursor-install",
-            "gemini-extension.json": "gemini-install", "mcp.json": "agent-plugins"}
+# The file each host's CAD server line is in: the default channel's, no channel named.
+SERVERS = ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "gemini-extension.json", "mcp.json")
 
 
 def _files(folder: Path) -> dict[str, Path]:
@@ -97,18 +96,20 @@ class ThePluginFolder(unittest.TestCase):
         self.assertEqual([(entry["name"], entry["source"], entry["version"]) for entry in catalog["plugins"]],
                          [(plugin.NAME, "./", VERSION)])
         line = [*launch.LAUNCHER[1:], f"{launch.SHIM}=={VERSION}", launch.SHIM_COMMAND]
-        for name, channel in CHANNELS.items():
+        self.assertEqual(plugin.SERVERS, SERVERS)
+        for name in SERVERS:
             with self.subTest(config=name):
                 root = json.loads((REPO_ROOT / name).read_text(encoding="utf-8"))["mcpServers"]
                 servers = json.loads(files[name].read_text(encoding="utf-8"))["mcpServers"]
                 self.assertEqual(list(servers), ["cad"])
-                self.assertEqual((servers["cad"]["command"], servers["cad"]["args"], servers["cad"]["env"]),
-                                 (launch.LAUNCHER[0], line, {"CAD_INSTALL_CHANNEL": channel}))
+                # This version's launcher, told no channel and nothing in its environment.
+                self.assertEqual((servers["cad"]["command"], servers["cad"]["args"], servers["cad"].get("env")),
+                                 (launch.LAUNCHER[0], line, None))
                 # The rest of each host's entry is the repository's (Codex's startup timeout, the standard's type).
-                self.assertEqual({key: value for key, value in servers["cad"].items() if key not in ("args", "env")},
-                                 {key: value for key, value in root["cad"].items() if key not in ("args", "env")})
+                self.assertEqual({key: value for key, value in servers["cad"].items() if key != "args"},
+                                 {key: value for key, value in root["cad"].items() if key != "args"})
         for name in plugin.FILES:
-            if name not in plugin.MANIFESTS and name not in CHANNELS and name != plugin.CATALOG:
+            if name not in plugin.MANIFESTS and name not in SERVERS and name != plugin.CATALOG:
                 self.assertEqual(files[name].read_bytes(), (REPO_ROOT / name).read_bytes(), name)
 
     def test_the_skills_hold_nothing_a_wheel_would_leave_out(self) -> None:

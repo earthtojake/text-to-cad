@@ -877,7 +877,8 @@ class Daemon:
         from cad_server._internal import engine_telemetry
 
         engine_telemetry.answered(told["answer"], told.get("seconds", time.monotonic() - began), request.get("env"),
-                                  fresh=told.get("fresh"), died=told.get("died"), unavailable=told.get("unavailable"))
+                                  fresh=told.get("fresh"), died=told.get("died"), unavailable=told.get("unavailable"),
+                                  channel=request.get("channel") if isinstance(request.get("channel"), str) else None)
 
     @staticmethod
     def _where(error: Exception, worker: Process | None) -> str:

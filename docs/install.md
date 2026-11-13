@@ -32,8 +32,14 @@ checksum. It:
    `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.10 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
-   (`releases/<release>`), from uv's cache where it has it, and runs the rest from
-   there. On a computer 0.8 was set up on, it then moves what 0.10 keeps of 0.8's state
+   (`versions/<release>`), from uv's cache where it has it, and runs the rest from
+   there. The folder holds the release's server and the CAD kernel models run in
+   (OCP, build123d and what they need: about 240 MB to download, about 620 MB on
+   disk), so your first model doesn't wait for it
+   ([What a model runs in](#what-a-model-runs-in)). On Linux the CAD kernel needs the
+   system's OpenGL library, `libGL.so.1` (the `libgl1` package on Debian and Ubuntu):
+   without it, `cad doctor` reports the kernel as failing straight after the install.
+   On a computer 0.8 was set up on, it first moves what 0.10 keeps of 0.8's state
    folder into its own, once: your telemetry answer and language, the documents' records
    and Recents, and 0.8's setup receipt
    ([Migrating from 0.8](migrations/migrating-0.8-to-0.10.md), item 5).
@@ -42,19 +48,22 @@ checksum. It:
    its plan for each: add, update, remove a duplicate, or leave as it is.
 5. Stops 0.8's server, where 0.8 is installed, with that installation's own
    `cadgen stop`, and says what it stopped: 0.10 never talks to anything of 0.8's itself.
-   An app still running the 0.8 plugin goes on with 0.8 alone until it restarts (step 11
+   An app still running the 0.8 plugin goes on with 0.8 alone until it restarts (step 10
    lists the apps to restart); a 0.8 server it starts again keeps CAD's port (3245, or
-   `CAD_ENGINE_PORT`), and 0.10's serves on the next free port, and says so.
-6. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
-   Windows `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
-   `cad-launcher`), as the CAD server does when it starts.
-7. Installs no CAD kernel: the environment a model runs in, the release with its CAD
-   kernel (OCP, build123d and what they need: about 240 MB to download, about 620 MB on
-   disk), is made on
-   first need -- the first model, or the first view that needs the kernel -- in
-   text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)). An update
-   you run makes none either; an automatic update makes its release's before it restarts
-   the server on it, so your next model doesn't wait for one.
+   `CAD_ENGINE_PORT`), and the new release's serves on the next free port, and says so.
+6. Writes the `cad` command (`~/.local/bin/cad`; on Windows
+   `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
+   `cad-launcher`). Every release is run through it
+   ([Releases side by side](#releases-side-by-side)).
+7. Moves your computer to this release (its default channel:
+   [Releases side by side](#releases-side-by-side)). It copies what cannot be
+   made again from the release it replaces: your settings (the telemetry and
+   automatic-update choices among them), Recents, the documents' records, and the port
+   and token of CAD's page links. A CAD server that is running finishes what it is doing
+   (a build, an export), stops, and this release's takes its place on the same port, so
+   every open page and card keeps its link and reloads itself. With none running, the
+   next CAD session starts this release's. The release before is removed once nothing
+   is running on it. Should this step fail, nothing has changed, and no app is touched.
 8. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
@@ -68,13 +77,9 @@ checksum. It:
    alone, no CAD server: the one releases through 0.11.10 wrote into Claude Desktop's
    config is taken out, the rest of the file kept and a `.bak` of it beside it, and so
    is a CAD server added to Claude Code with `claude mcp add`, for you or for one project.
-9. Writes a receipt of everything it changed in text-to-cad's state folder.
-10. Moves your computer's CAD server to this release: a running server finishes
-    what it is doing (a build, an export), stops, and this release's takes its place
-    on the same port, so every open page and card keeps its link and reloads itself;
-    should it not start, the release before comes back. With none running, the next
-    CAD session starts this release's.
-11. Says what each app has now, and ends with the apps to restart to load what it
+9. Writes a receipt of everything it changed in text-to-cad's state folder. The
+   receipt is also what lets this install update itself ([Updates](#updates)).
+10. Says what each app has now, and ends with the apps to restart to load what it
     installed or updated ("Next, restart to load it:"). An agent whose skills folder lacks one of the skills it
     was given fails the run: its line says which, and the command exits 1.
 
@@ -87,35 +92,43 @@ curl -fsSL https://texttocad.dev/install.sh | sh -s -- --dry-run            # pr
 curl -fsSL https://texttocad.dev/install.sh | sh -s -- --only claude,codex  # only these apps
 curl -fsSL https://texttocad.dev/install.sh | sh -s -- --no-telemetry       # also turn telemetry off
 curl -fsSL https://texttocad.dev/install.sh | sh -s -- --uninstall          # undo what the receipt records
+curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add X.Y.Z          # install release X.Y.Z alone
 ```
 
 `--only` takes `claude`, `claude-desktop`, `codex`, `cursor`, `grok` and `gemini`, and
 the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsurf`,
 `goose` and so on; `cad setup --help` lists them).
-`--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what
-the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
-store's, removes the `cad` command and stops the server. A plugin directory's copy that
-the install command of a release through 0.11.10 replaced is not put back: install it
-from the directory again to get it back. `--purge` with it also removes text-to-cad's state and cache folders.
+`--add X.Y.Z` installs that one release, and the `cad` command where it is missing,
+and changes nothing else: no app, no other release, no setting. A skill asks for it
+when the release its commands name is missing and cannot be installed from the
+agent's shell. It works for 0.11.11 and later.
+
+`--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what the
+install command put on your computer. That is the copies of text-to-cad it gave your
+apps (with no receipt, every copy of ours it finds), the plugin folder, the release
+your computer runs and its server, the folders of releases before 0.11.11, and the
+receipt. A copy from a plugin directory stays, with its release, its settings and its
+Recents: its store delivered it. While one does, so does the `cad` command it runs,
+and a line names that plugin: remove it in its app, then run `cad uninstall` again.
+A plugin directory's copy that the install command of a release through 0.11.10
+replaced is not put back: install it from the directory again to get it back.
+`--purge` with it removes everything: every release, a store's among them, and
+text-to-cad's state and cache folders, your settings and Recents with them.
 Asking for it is the yes: the install command passes `--yes` to `cad uninstall`. Run
 `cad uninstall` yourself and it prints the same plan and asks before it changes
 anything (`Take text-to-cad out as planned? (y/N)`); where nothing can ask (a script,
 an agent), it changes nothing without `--yes`, and says the command with it.
 `cad delete`, `cad doctor --prune` and `cad server --rotate-token` ask the same way.
 
-Without `--purge`, `cad uninstall` leaves these behind:
-
-- In the state folder (`~/Library/Application Support/cad` on macOS, `~/.local/state/cad`
-  on Linux, `%USERPROFILE%\.local\state\cad` on Windows): `settings.json`, `versions.json`,
-  the lock files (`*.lock`), an empty `installations` folder, and the documents' records and
-  Recents (`documents`, `recents`) if you have any.
-- The cache folder, `~/.cache/cad` (`%USERPROFILE%\.cache\cad` on Windows): the environments
-  models ran in, the documents as last built, and compiled bytecode.
-
-`--purge` removes both folders. Neither touches uv or what uv keeps in its own cache.
+The state folder is `~/Library/Application Support/cad` on macOS, `~/.local/state/cad`
+on Linux and `%USERPROFILE%\.local\state\cad` on Windows; the cache folder is
+`~/.cache/cad` (`%USERPROFILE%\.cache\cad` on Windows). Without `--purge`, the state
+folder keeps a few small files that releases before 0.11.11 read, `settings.json`
+among them. Neither touches uv or what uv keeps in its own cache.
 
 `--version <release>` installs that release instead of the latest; a release from
-before the install command has no `cad setup` to run. To read the script before it
+before the install command has no `cad setup` to run. Going back to a release before
+0.11.11 by hand, this way or any other, is not supported. To read the script before it
 runs, download it first, then run it:
 
 ```bash
@@ -182,8 +195,9 @@ installed this way with the plugin folder's ([What each app gets](#what-each-app
 
 Each app's heading also says how to update text-to-cad, and how to reinstall it:
 remove it, then install it again. Updating the plugin updates CAD: the new
-release is downloaded the first time it runs, and the skills and the
-server share it. Earlier releases stay in uv's cache until you run `uv cache prune`.
+release is installed the first time one of its commands runs, and the skills and the
+server share it. uv keeps what it downloaded in its own cache until you run
+`uv cache prune`.
 
 ### Claude Code
 
@@ -198,7 +212,9 @@ claude plugin install text-to-cad@earthtojake
 Asking it to show a model gives you a link that opens the model in your browser,
 or in the desktop app's browser pane.
 
-The copy from claude.ai's plugin directory carries the skills alone too. Copies
+The copy from claude.ai's plugin directory carries the skills alone too. It runs the
+release the directory last delivered, beside the install command's
+([Releases side by side](#releases-side-by-side)), and the directory updates it. Copies
 from it through 0.11.10 name CAD's server: when Claude
 Code starts it, it offers no tools, since the Code tab refuses the calls its cards
 make; set `CAD_MCP_CARDS=1` in the server's environment to keep them, for testing.
@@ -247,7 +263,9 @@ the releases, so install it from the marketplace. The install command keeps a co
 from the directory, which the directory updates, and adds nothing beside it: to get
 the release's instead, remove it in Codex's plugin manager, then run the install
 command again. Installing from the directory alone also works, since the plugin's
-server sets everything up on its first start. A copy from the directory and one from
+server sets everything up on its first start. A copy from the directory runs the
+release the directory last delivered, beside the install command's
+([Releases side by side](#releases-side-by-side)). A copy from the directory and one from
 the marketplace would load side by side: keep one.
 
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
@@ -304,7 +322,7 @@ grok plugin enable text-to-cad
 
 Grok Build reads its own manifest (`.grok-plugin/plugin.json`), which names CAD's
 server, before Claude's, which names none. Grok shows tool results as text, so
-asking it to show a model gives you a CAD Viewer link.
+asking it to show a model gives you a link that opens it in your browser.
 
 To update, run this, then restart Grok Build:
 
@@ -326,8 +344,8 @@ gemini extensions install https://github.com/earthtojake/text-to-cad --ref lates
 
 Gemini installs the plugin as an extension, with the skills and CAD's server
 (`--consent` answers its security prompt). Like
-Grok, it shows tool results as text, so asking it to show a model gives you a CAD
-Viewer link.
+Grok, it shows tool results as text, so asking it to show a model gives you a link
+that opens it in your browser.
 
 To update now, run this, then restart Gemini:
 
@@ -374,7 +392,7 @@ name the agent and install for your user:
 
 Each skill runs text-to-cad's server through the `cad` command, which the install command
 writes (each skill's setup says so), so run it once. Without the plugin there is no CAD
-server, so the skills open models in the CAD Viewer in your browser.
+server, so the skills open models in your browser.
 
 **To update or reinstall, run the same command again**, then restart the app.
 `add` re-fetches the package and overwrites what is already installed, so it both
@@ -393,20 +411,20 @@ No plugin for your agent yet?
 
 ## Updates
 
-text-to-cad updates itself with every release that breaks nothing, which needs nothing of
-you: fixes, additions, and new names for what a model imports with the old names still working
-(a model that still uses an old name says so in a warning naming the new one). Its version
-numbers follow [Semantic Versioning](https://semver.org), so the number says which kind a
-release is: before 1.0, a patch release, like 0.11.0 to
+What the install command set up updates itself with every release that breaks nothing,
+which needs nothing of you: fixes, additions, and new names for what a model imports with
+the old names still working (a model that still uses an old name says so in a warning
+naming the new one). Its version numbers follow [Semantic Versioning](https://semver.org),
+so the number says which kind a release is: before 1.0, a patch release, like 0.11.0 to
 0.11.1; from 1.0, a patch or minor release, like 1.4.2 to 1.4.3 or 1.5.0. Once an hour the
 CAD server checks whether a newer release is out, and when it is one of those, it
-installs it in the background at once, then, once nothing
-has run for a minute (no build, picture, export or agent's request underway), updates
-text-to-cad in every agent app on your computer as the install command does and
-restarts on the new release. A CAD Viewer page or a CAD card that is open reloads
-itself into it. Should an update fail, the server stays on, or goes back to, the
-release it ran, and that release is not tried again by itself for a day; a newer one
-is tried when it comes out. With no network nothing happens, and nothing waits.
+installs it in the background at once. It then waits until text-to-cad has had nothing
+to do for an hour (no build, picture, export or agent's request), so an update rarely
+lands while an agent is working. Then it moves your computer to the new release and
+updates text-to-cad in every agent app on your computer, as the install command does.
+Should an update fail, your computer stays on the release it ran, and that release is
+not tried again by itself for a day; a newer one is tried when it comes out. With no
+network nothing happens, and nothing waits.
 
 A release that may break something never installs itself: before 1.0, a new minor or major
 release, like 0.11 to 0.12; from 1.0, a new major release, like 1.5 to 2.0. It can rename a
@@ -415,55 +433,71 @@ you. CAD shows its update button for it, and `cad update auto` says it is out; c
 button or run `cad update` when you are ready.
 
 To turn automatic updates off, uncheck **Automatic updates** in the menu under CAD's
-logo (in the CAD Viewer or a CAD card), or run `cad update auto off`; `cad update auto
-on` turns them back on, and `cad update auto` says whether they are on, when the server
-last checked and when it checks next. The setting is one for every app and release on
-your computer. `CAD_UPDATE_CHECK=0` in the server's environment turns the check off, and
-automatic updates with it.
+logo (on a CAD page in your browser or a CAD card), or run `cad update auto off`; `cad
+update auto on` turns them back on, and `cad update auto` says whether they are on, when
+the server last checked and when it checks next. The setting is one for every app on your
+computer, and each update carries it to the new release. `CAD_UPDATE_CHECK=0` in the
+server's environment turns the check off, and automatic updates with it.
 
 With automatic updates off, or until one comes, CAD shows an update button when a
 newer release is out: a blue icon first in its navbar and on its home, and in the
-corner of a CAD card that has no navbar. Click it, and the server does the same at
-once; the page or the card reloads itself once the server is back. An app that shows
-CAD's replies as text gets a line with its first reply instead, naming the install
-command.
+corner of a CAD card that has no navbar. Click it, and the update happens at once, with
+no wait for a quiet hour. An app that shows CAD's replies as text gets a line with its
+first reply instead, naming the install command.
 
 Running the install command again does the same, and so does `cad update` in a
-terminal: each installs the newest release, updates every app, moves the server to
-it and lists the apps to restart. `cad update --dry-run` changes nothing: it reads the
-version feed and says the release an update would install (or that it would set this
-one up again, and why), then prints the plan. To update one app by hand, run the update
-commands under its heading, then restart it.
+terminal: each acts at once, installs the newest release, updates every app, moves
+your computer to it and lists the apps to restart. `cad update --dry-run` changes
+nothing: it reads the version feed and says the release an update would install (or
+that it would set this one up again, and why), then prints the plan. To update one app
+by hand, run the update commands under its heading, then restart it.
 
 An update writes the plugin folder again for the new release
 ([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
 read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
-the skills alone) get it again. Should the new release's server not start, the release
-before comes back, and its plugin with it; the CAD Viewer page
-you clicked in says the update failed, and offers it again.
+the skills alone) get it again. Should the new release fail before your computer has
+moved to it, nothing has changed, and the page you clicked in says the update failed.
 
-Your computer runs one CAD server, the current release's, whatever release each
-app's plugin names: an app whose plugin is behind or ahead uses that server all the
-same. An app runs its updated plugin from the session it starts after the update.
-Each release is kept in a folder of its own in text-to-cad's state folder
-(`releases/<release>`): the one before the current stays, to go back to should the
-new one not start, and older ones go at the next update. A release whose update failed
-and went back is removed once the release before is running again (it is still not tried
-again by itself for a day), and `cad doctor --prune` removes any release folder but the
-current one and the one before, once you say yes to the list it prints (`--yes` where it
-cannot ask). `cad doctor` lists them
-([Checking what your computer runs](#checking-what-your-computer-runs)).
+Only what the install command set up updates itself; the receipt it writes is what says
+so. A copy from a plugin directory (claude.ai's, Codex's) is updated by its store: CAD
+shows no update button for it, and `cad update` there says its store updates it. On a
+computer where the install command never ran, `cad update` says there is nothing to
+update and names the install command.
 
-Copies from a plugin directory or the Cursor Marketplace are not told of a release
-from the feed, since their store updates their plugin. Once the store has moved an
-app's plugin ahead of your server, the button shows for them too, and moves the
-server to it.
+### After an update
+
+- A CAD page open in your browser, or a CAD card, loses the server for about a second,
+  then reloads into the new release at the same address. Links you shared keep working.
+- A Codex or Cursor chat that was open when the update came says it is out of date:
+  start a new chat.
+- A chat that was open in any app may say its commands are for the release before: read
+  the skill again, or start a new chat.
+- A copy of the plugin you installed yourself, with an app's own plugin commands rather
+  than the install command, says it has fallen behind until you update it in that app
+  ([App by app](#app-by-app)).
+
+### Releases side by side
+
+Each release is installed in a folder of its own in text-to-cad's state folder
+(`versions/<release>`), with its own settings, Recents and CAD server. Every command a
+skill runs names the release it was written for (`cad +<release> ...`), and runs exactly
+that release, installing it first if it is missing.
+
+Who delivers a copy of text-to-cad is its channel. The copies the install command set up,
+and a copy you installed yourself, share the default channel. A plugin directory's copy
+is on a channel of its own (`claude` for claude.ai's, `codex` for Codex's), which only its
+store moves. Each channel is on one release at a time, so two releases can be installed at
+once: the default channel's and a store's, each with its own server. A `cad` command you
+type with no release runs the default channel's release, and so do `cad status` and
+`cad stop`: each acts on one release.
+
+A release no channel is on any more is removed as soon as nothing is running on it.
+Going back to a release before 0.11.11 by hand is not supported.
 
 To find out a release is out, text-to-cad fetches `api.texttocad.dev/v1/versions` at
 most once an hour: one anonymous request, with no ID, path or anything about you,
-never in CI and never for a copy that something else updates.
-`CAD_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
-release says so too, with no request at all. A click on the button reads the feed
+never in CI and only for what the install command set up.
+`CAD_UPDATE_CHECK=0` turns it off. A click on the button reads the feed
 again, for the newest release. With automatic updates off, the server reads the feed
 only while a CAD page or card is open.
 
@@ -481,29 +515,35 @@ step, and an agent with the CAD skill can follow it.
 
 ## Checking what your computer runs
 
-Run `cad doctor`. It says which releases are there and which one is current
-(`releases 0.10.4 (the release before), 0.11.0 (current)`), the release the server runs,
-the plugin folder's, where each app's plugin comes from and its release, and whether the
-CAD kernel loads.
+Run `cad doctor`. It lists every release installed and every channel, with the release
+each channel is on and when it was last used; the release the server runs; the plugin
+folder's release; where each app's plugin comes from and its release; and whether the CAD
+kernel loads.
+
+`cad doctor --prune` removes what nothing needs: a channel no copy has used for 30 days
+(its store's plugin is gone from your apps), any release no channel is on, and what
+releases before 0.11.11 left behind. It prints the list first and removes it once you say
+yes (`--yes` where it cannot ask). Nothing does this by itself.
 
 `cad doctor` starts the CAD server if none is running. `cad doctor --no-server` does not,
 and says whether one runs; `cad doctor --check` only reports, writing and starting nothing.
 
-`cad status` reports only the server, and starts none: the release it runs, its workers and
+`cad status` reports only one server, and starts none: the release it runs, its workers and
 what it serves. It does not list the releases on your computer.
 
 ## What a model runs in
 
 The release the install command runs is text-to-cad's server (`cad-server`): the
-`cad` command, the CAD Viewer's server and the engine every build goes through, without
-the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
+`cad` command, the server of CAD's pages in your browser and the engine every build goes
+through. Each app's CAD server is the smaller `cad-mcp`, which
 reaches it. A model runs where the kernel is. `cad run` runs it exactly as `uv run` would -- the same
-options and the same script header -- in an environment the server makes with uv in its cache
-folder and keeps: the library pinned at the server's release, with the integrations the script's
+options and the same script header -- in an environment made with uv in the release's own folder
+and kept: the library pinned at the server's release, with the integrations the script's
 imports use (`import build123d`: `cad[build123d]`), on the server's Python, 3.14. The server's own
 kernel processes run in the `cad[build123d]` one: exports, snapshots and the meshes the viewer
-shows. Nothing is installed in advance: each environment is made the first time something needs
-it, and a first model or view waits for it. A model run so imports what its environment holds.
+shows. That one is made when the release is installed; every other is made the first time
+something needs it, and the run that needs it waits for it. A model run so imports what its
+environment holds.
 `cad[build123d]` is about 240 MB to download, and `cad[kicad]`, made the first time a board needs
 it, about 100 MB. On disk, measured on an Apple silicon Mac, they take about 620 MB and 340 MB. A
 script that imports Blender's `bpy` gets `cad[blender]`, whose environment is made on Python 3.13, the
@@ -528,9 +568,8 @@ on the next run after an edit). A script with no header inside a Python project
 (`pyproject.toml`) runs with the project's dependencies -- exactly its `uv.lock`'s where it has one
 -- and reads the project's uv configuration and your shell's uv settings (a private index, say), as
 `uv run` does. A requirement that cannot be installed
-beside cad's own is refused in one line, with uv's reason. After an update the environments of
-the release before are kept, as the way back; `cad doctor --prune` removes the environments no
-model has used for a week.
+beside cad's own is refused in one line, with uv's reason. The environments go with their
+release's folder when the release is removed.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:

@@ -230,15 +230,15 @@ def describe(engine: dict[str, Any] | None = None, *, now: float | None = None) 
     feed was last read and when it is next due, and -- from the engine's ``status`` (its ``update``) --
     a release it is getting ready to switch to; else the last automatic attempt that failed."""
     from cad_server import updates
-    from cad_server._internal.channel import DEV, channel
+    from cad_server._internal.channel import development
 
     now = time.time() if now is None else now
     found = read()
     reason = {"default": "by default", "choice": "your choice",
               "environment": "CAD_UPDATE_CHECK or CI in this environment"}[found["reason"]]
     line = f"{'on' if found['automatic'] else 'off'} ({reason})"
-    development = channel() == DEV
-    if found["automatic"] and development:
+    development_build = development()
+    if found["automatic"] and development_build:
         line += ", but a development install is never updated by itself"
     try:
         checked = updates._load(updates._cache()).get("checked")
@@ -248,7 +248,7 @@ def describe(engine: dict[str, Any] | None = None, *, now: float | None = None) 
         line += f"; feed last read {_when(checked)}"
         if found["automatic"]:
             line += f", next due {_when(max(now, checked + updates.CHECK_SECONDS))}"
-    elif found["automatic"] and not development:
+    elif found["automatic"] and not development_build:
         line += "; feed not read yet: the engine reads it within the hour"
     pending = ((engine or {}).get("automatic") if isinstance(engine, dict) else None) or None
     if isinstance(pending, dict) and pending.get("release"):

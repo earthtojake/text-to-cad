@@ -50,6 +50,10 @@ enough. Every other job runs on the changes that reach it. The two there now:
   few pull requests, and before this layout they ran only after a merge (in November 2026 the Linux
   one had passed 7 runs of 7, the Windows one 23 pushes of 25); a release pull request runs every job,
   so no release ships unrehearsed. They also run on a change to the installers themselves.
+- The update rehearsal (`update-rehearsal`, `scripts/test/rehearse-update.py`) installs a real 0.11.10
+  from PyPI on a private device and updates it into this tree's build by each of its update paths, on
+  Linux, macOS and Windows, about 8 minutes a system: the migration every device makes unattended. It
+  runs with the installer rehearsals, and on a change to the rehearsal itself.
 
 A job moves into the tier, or out of it, with that argument in its pull request.
 
@@ -219,8 +223,8 @@ tests resolve. Root prose, the plugin manifests and configs, the release scripts
 
 **The release tier** runs on a full run only, so before a release ships and not
 on every push ([its criterion](#what-runs-where)): the packages' suites on Python
-3.13, and the installer rehearsals, which also run on a change to the installers
-themselves (`scripts/install`, the two workflows). The nightly run, on `main`, is
+3.13, and the installer and update rehearsals, which also run on a change to the installers
+themselves (`scripts/install`, the two workflows) or to the update rehearsal. The nightly run, on `main`, is
 that tier for whatever merged without a release; it runs nothing when a run
 already tested `main`'s tree in full.
 
@@ -372,7 +376,9 @@ keeps them out of `models/`.
 **Rehearsals.** The release pipeline is rehearsed on `build-test`
 ([Rehearsing on `build-test`](../../CONTRIBUTING.md#rehearsing-on-build-test)), and the installers on
 a fresh machine by `install-linux.yml` and `install-windows.yml`, which `test.yml` calls in the release
-tier and which a dispatch with `published` runs against the release people install today.
+tier and which a dispatch with `published` runs against the release people install today. The update
+from 0.11.10 into this tree is rehearsed by `scripts/test/rehearse-update.py`, which `test.yml`'s
+`update-rehearsal` job runs in the same tier and which runs locally too (it needs uv and the network).
 
 ### Performance changes
 

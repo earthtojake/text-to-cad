@@ -202,7 +202,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    Recents, the registry, the page token and port, and the caches above under `data/cache/`), its
    environments and bytecode in `code/` (the base and each run's under `code/base/`, bytecode under
    `code/pycache/`), and its door in `<version>` in the engine folder; the state folder itself holds only
-   the device's globals (the installations' records, the install receipt and lock, the plugin folder).
+   the device's globals (each delivery channel's pointer, `default` and `channels/<name>`; the installations'
+   records and the mirror clients of 0.11.10 and earlier read; the install receipt and lock; the plugin folder;
+   and the settings file of 0.11.10 and earlier, which also keeps a telemetry no for every version).
    Which a process is, and so every path, is `cad.engine.places`' one rule (`versioned`). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
@@ -392,7 +394,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
     feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
     leave every update to the person) waits on nothing: the server installs the release in the
-    background and switches only once it has been idle for a minute. It takes a release that breaks
+    background and runs its setup only once the default channel's version has had no command for an hour. Only
+    the default channel's version, on a device where the install command has run, has an updater: a store's copy
+    is updated by the store. It takes a release that breaks
     nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
     from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
     person's click.
@@ -408,7 +412,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     and the viewer's background sends take, and a command or the daemon that finds it has waited more
     than a window, with no other process sending, starts a sender detached that sends it and exits
     (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
-    kept beside the settings, and the next process that sends sends it, in the background. One
+    kept beside the settings, and the next process that sends sends it, in the background. A version that
+    leaves the device sends nothing as it goes: what it kept unsent -- each row saying the version, channel and
+    app that counted it, each kept batch under its own id -- is moved, a local file, to the version that sends
+    next (the server's `analytics.hand_on`), and a resend of a batch counts once. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
     The pages load nothing from the internet: everything they show ships in the wheel.
     *Pressure-test*: with an installed server, each integration's environment made by its first

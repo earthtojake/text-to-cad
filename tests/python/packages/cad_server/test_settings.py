@@ -28,13 +28,13 @@ class StateFolderTest(unittest.TestCase):
     """The state folder's small files hold what is read of them, and every change of one holds the
     folder's one lock (``file_lock.state``): no lock file of its own, no stamp file."""
 
-    def test_the_settings_channels_feed_and_spool_share_one_lock_and_keep_what_is_read(self) -> None:
+    def test_the_settings_feed_and_spool_share_one_lock_and_keep_what_is_read(self) -> None:
         import os
         import time
         from unittest import mock
 
         from cad_server import analytics, language, updates
-        from cad_server._internal import channel, telemetry_send
+        from cad_server._internal import telemetry_send
 
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
@@ -42,12 +42,12 @@ class StateFolderTest(unittest.TestCase):
         state.mkdir()
         (state / "versions.json").write_text(json.dumps({"checked": 0, "feed": {"latest": "1.0.0"}, "dismissed": "1.0.0"}),
                                             encoding="utf-8")  # a field nothing reads, kept by an earlier write
-        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALL_CHANNEL": "claude-github",
-                                          "CAD_AUTO_UPDATED": "", "CAD_UPDATE_CHECK": "", "CI": "",
+        # A release's process (a checkout is a development build unless told the version it runs as).
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALLATION_VERSION": "0.11.10",
+                                          "CAD_UPDATE_CHECK": "", "CI": "",
                                           "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""}):
             language.change({"locale": "ja"})
             analytics.choose(True, by="cli")
-            self.assertEqual(channel.remember(), "claude-github")
             self.assertEqual(updates.feed(get=lambda _url: {"latest": "9.9.9"}), {"latest": "9.9.9"})
             self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]}))
             later = time.time() + analytics.FLUSH_SECONDS + 1
@@ -55,11 +55,10 @@ class StateFolderTest(unittest.TestCase):
             self.assertTrue(telemetry_send.start_if_due(now=later, spawn=started.append))
             self.assertFalse(telemetry_send.start_if_due(now=later + 1, spawn=started.append), "one sender a window")
         self.assertEqual(sorted(path.name for path in state.iterdir()),
-                         ["install-channels.json", "settings.json", "settings.lock", "telemetry-spool.jsonl", "versions.json"])
+                         ["settings.json", "settings.lock", "telemetry-spool.jsonl", "versions.json"])
         self.assertEqual(os.stat(state / "settings.lock").st_mtime, later, "the lock's time is the last sender's start")
         self.assertEqual(set(json.loads((state / "versions.json").read_text(encoding="utf-8"))), {"checked", "feed"})
         self.assertEqual(json.loads((state / "settings.json").read_text(encoding="utf-8"))["language"], {"locale": "ja"})
-        self.assertEqual(channel.recorded(path=state / "install-channels.json"), "claude-github")
 
 
 if __name__ == "__main__":

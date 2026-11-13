@@ -64,10 +64,12 @@ People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/i
 (Windows: `irm https://www.texttocad.dev/install.ps1 | iex`): the bootstrap in
 `scripts/install/` runs the newest release's `cad setup` through uvx
 (`--from cad-server==<VERSION>`), which installs that release in its own folder
-(`<state>/releases/<release>`), sets up the plugin in every agent app on the device (the skills
-alone, through the Skills CLI, for the agents without a plugin) and moves the device's server to it,
-asking nothing, and, run again, updates them; the update button in the CAD Viewer and the CAD app,
-and `cad update`, take the same steps.
+(`<state>/versions/<release>`), moves the default channel to it, and sets up the plugin in every
+agent app on the device (the skills alone, through the Skills CLI, for the agents without a plugin),
+asking nothing, and, run again, updates them. Its receipt gives the default channel an updater: the
+update button in the browser and the CAD app, `cad update` and the automatic update install the
+newer release and run its own setup (`cad_server/_internal/update.py`, the contract between
+releases).
 
 text-to-cad is three distributions from this repository at one `VERSION`: the library `cad`
 (import `cad`, the CAD kernel as its `build123d` extra), the server
@@ -81,26 +83,32 @@ a worker, the library; run in the daemon or a command, the server; run inside th
 the shim. The plugin server configs run the shim as ONE uvx command,
 `uvx --no-config --managed-python --python 3.14 --from cad-mcp==<VERSION> cad-mcp`, and the
 server runs as `uvx ... --from cad-server==<VERSION> cad <verb>` (`cad_server._internal.launch`).
-The server installs the library with its `build123d` extra, with uv, on first need, into one base
-environment per installation that its kernel processes run in (`cad_server._internal.base`); `cad run`
-is `uv run` with the library pinned at the device's release and the integrations a program's imports
+The server installs the library with its `build123d` extra, with uv, as a version is installed, into the
+version's base environment that its kernel processes run in (`cad_server._internal.base`); `cad run`
+is `uv run` with the library pinned at its version's release and the integrations a program's imports
 use, in an environment the engine makes per set (`cad_server._internal.extras`), a program's own
 folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
 sandbox, the command can), and every command a skill runs pins the skill's release,
-`cad +<VERSION> <verb>`, which the release stamps (`sync-version.mjs`), so a skill runs its own release. Every
+`cad +<VERSION> <verb>`, which the release stamps (`sync-version.mjs`), so a skill runs its own release,
+installed first where it is missing. A store's copy names its delivery channel in every pin too
+(`cad +<VERSION>@claude`, `@codex`), stamped by `plugin_branch.py` and `plugin_zip.py`; ours names none,
+the default channel. The software keeps no list of channels. Every
 requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):
 the three distributions are released in lockstep, one `VERSION`, and the server speaks only its own
 release's library (the worker contract), so the server pins the library at its own release. The release
 stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
-`scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. The device runs one
-server, the current installation's (`<state>/installations/current`): the CAD app, every thread and
-every skill command share one daemon, and only an update moves it to
-another ([CONTRIBUTING.md, "Development dependencies"](CONTRIBUTING.md#development-dependencies)).
+`scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. Each installed
+version has its own folder, data and server (`<state>/versions/<version>`); each channel is on one
+version (its pointer), a command with no pin runs the default channel's, a version no channel is on
+is removed once nothing is in flight there, and every command acts on one version, `cad doctor` alone
+reading them all. The default channel's server also holds the door and `installations/current` that
+releases before 0.11.11 reach ([CONTRIBUTING.md, "Development
+dependencies"](CONTRIBUTING.md#development-dependencies)).
 A test or an experiment gets a server of its own with its own `CAD_STATE_DIR` and
 `CAD_ENGINE_DIR`. In a checkout, install `requirements-dev.txt` (the three editable, the library
 with its `build123d` extra: its own base) and test in agent apps with `scripts/install/dev_install.py`,
-which points both at the checkout.
+which installs the checkout as a development version and moves the default channel to it.
 
 ## Repo Map
 
@@ -111,7 +119,8 @@ which points both at the checkout.
   `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `gemini-extension.json`, and the
   [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
-  `skills/` directly. Installers take it from the `latest` branch, which
+  `skills/` directly. Installers take it from the `latest` branch, and claude.ai's directory
+  from `claude-plugin` (the skills alone, pinned `@claude`), which
   `scripts/release/plugin_branch.py` builds from this tree at each release.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.

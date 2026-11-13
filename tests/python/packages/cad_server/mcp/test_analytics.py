@@ -21,7 +21,8 @@ from pathlib import Path
 from unittest import mock
 
 from cad_server import cli
-from cad_server._internal import channel as install_channel, file_lock
+from cad_server import analytics
+from cad_server._internal import file_lock
 from cad_server.analytics import (KEPT, NOTICE_ENV, PRIVACY_URL, Recorder, _post, choose, died, forget_pending, notice_text, notify, spool, status)
 from cad_server.cli import telemetry as telemetry_cli
 from cad_mcp.shim import initialize_params
@@ -30,9 +31,13 @@ from cad_server.mcp.server import Server
 from cad_server.mcp.ui import AppPage
 from cad_server.viewer.recents import RecentStore
 
-# Where the notice is said, and the default holds: an install a plugin made (a checkout is a development install,
-# never told and sending nothing by default), outside CI. Every test runs there unless it says otherwise.
-TOLD = {"CAD_INSTALL_CHANNEL": "claude-github", "CI": ""}
+# Where the notice is said, and the default holds: a release's process outside CI (a checkout is a development build
+# unless it is told the version it runs as, and then sends nothing by default: ``cad_server/_internal/channel.py``).
+# Every test runs there unless it says otherwise.
+RELEASE = __import__("cad_server").__version__
+TOLD = {"CAD_INSTALLATION_VERSION": RELEASE, "CI": ""}
+# A development build's name, which makes a process one (``channel.development``).
+DEVELOPMENT = {"CAD_INSTALLATION_VERSION": f"{RELEASE}-dev.20261113120000"}
 QUIET = {"DO_NOT_TRACK": "", "CAD_TELEMETRY": "", NOTICE_ENV: "", **TOLD}
 
 
@@ -58,14 +63,14 @@ class _Tmp(unittest.TestCase):
         self.addCleanup(threads.stop)
         self.addCleanup(lambda: [thread.join(10) for thread in begun])
 
-    def serve(self, channel: str, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
+    def serve(self, channel: str | None, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
         sent: list[dict] = []
-        # The channel the plugin's startup command named, as the server hands it on (`cad_server/_internal/channel.py`).
-        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": channel}):
-            recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
+        # A session on its launcher's delivery channel (``cad-mcp --channel``), as the engine's sessions see the
+        # recorder (``mcp.http.Sessions``: ``Recorder.of``).
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
         server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
-                        analytics=recorder)
+                        analytics=recorder.of(channel, client))
         server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": client, "version": "0.159.0"}}), None)
         return server, sent
@@ -112,7 +117,7 @@ class ConsentTest(_Tmp):
     def test_ci_and_a_development_install_send_nothing_by_default_even_where_the_person_was_told(self) -> None:
         self.assertTrue(notify(io.StringIO(), path=self.path))  # told, by a plugin's command
         self.assertEqual(status(path=self.path)["reason"], "default")
-        for name, value in (("CI", "true"), ("CAD_INSTALL_CHANNEL", "dev")):
+        for name, value in (("CI", "true"), *DEVELOPMENT.items()):
             with self.subTest(name=name), mock.patch.dict("os.environ", {name: value}):
                 self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
                 choose(True, by="cli", path=self.path)  # a yes holds anywhere
@@ -245,11 +250,11 @@ class OneAnswerTest(_Tmp):
         self.assertEqual(len(sent), 1)
 
     def test_only_a_page_answers_and_its_toggle_changes_it_whenever(self) -> None:
-        server, sent = self.serve("claude-github", client="some-terminal-agent")
+        server, sent = self.serve(None, client="some-terminal-agent")
         with self.assertRaisesRegex(RpcError, "unknown tool"):  # a client with no page has no cad_http
             self.agent(server, "PUT", "/api/v1/settings", {"telemetry": {"share": True}})
         self.assertEqual(status(path=self.path)["reason"], "untold")
-        server, sent = self.serve("claude-github")
+        server, sent = self.serve(None)
         self.consent(server, True)
         self.assertTrue(status(path=self.path)["sharing"])
         self.consent(server, False)  # the app menu's toggle changes it whenever
@@ -264,7 +269,7 @@ class OneAnswerTest(_Tmp):
 
 class ServerCountsTest(_Tmp):
     def test_a_yes_sends_use_files_counted_and_metadata_and_nothing_the_person_made(self) -> None:
-        server, sent = self.serve("claude-directory")
+        server, sent = self.serve("claude")
         self.assertNotIn("ask", self.consent(server))  # nothing in a CAD app asks: a command tells
         self.consent(server, True)
         secret, plate = self.tmp / "secret-bracket.step", self.tmp / "secret-plate.STL"
@@ -290,8 +295,10 @@ class ServerCountsTest(_Tmp):
             {"name": "tool", "tool": "cad_open", "calls": 1, "errors": 0},
             {"name": "view", "calls": 1},
         ])
-        self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (10, "app", "claude-directory", "tabs", "codex-mcp-client"))
+        # Schema 11: the session's delivery channel and the app its client names, two fields of the batch.
+        self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["app"],
+                          payload["presentation"], payload["client"]["name"]),
+                         (11, "app", "claude", "codex", "tabs", "codex-mcp-client"))
         # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
         self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
         self.assertIsInstance(payload["at"], int)
@@ -310,7 +317,7 @@ class ServerCountsTest(_Tmp):
     def test_a_views_controls_are_counted_by_name_and_seconds_only_with_consent(self) -> None:
         # The page's report of what a person used (`@cad/ui`'s `usage/controls.js`), through the CAD app's
         # own route: counted only under the person's yes.
-        server, sent = self.serve("claude-directory")
+        server, sent = self.serve("claude")
         report = {"controls": [{"control": "pencil", "count": 2, "seconds": 95}, {"control": "display_xray", "count": 1, "seconds": 0}]}
         self.assertEqual(self.http(server, "POST", "/api/v1/local/activity", report)[0], 204)
         self.assertFalse(server.analytics.flush(), "nobody told, nothing said yes: nothing goes")
@@ -327,7 +334,7 @@ class ServerCountsTest(_Tmp):
         # The agent cannot speak for the person's hands.
         self.assertTrue(self.agent(server, "POST", "/api/v1/local/activity", report)["isError"])
         self.assertTrue(server.analytics.flush())
-        self.assertEqual(sent[-1]["schema"], 10)
+        self.assertEqual(sent[-1]["schema"], 11)
         self.assertEqual([event for event in sent[-1]["events"] if event["name"] == "control"], [
             {"name": "control", "control": "display_xray", "count": 1, "seconds": 0},
             {"name": "control", "control": "pencil", "count": 2, "seconds": 395},
@@ -354,7 +361,7 @@ class ServerCountsTest(_Tmp):
 
     def test_a_server_nobody_used_sends_nothing(self) -> None:
         # Codex starts a server per thread, and some only to list tools: none of them is a user.
-        server, sent = self.serve("claude-directory")
+        server, sent = self.serve("claude")
         self.consent(server, True)
         self.call(server, "cad_sync", {"view": "v", "surface": "sidebar"})
         self.assertFalse(server.analytics.flush())
@@ -441,7 +448,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(following, sent)
 
     def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
-        server, sent = self.serve("claude-directory")
+        server, sent = self.serve("claude")
         self.consent(server, True)
         notes = self.tmp / "secret-notes.txt"
         notes.write_text("not CAD", encoding="utf-8")
@@ -468,7 +475,7 @@ class ServerCountsTest(_Tmp):
         # Answered with an error before any tool runs, each is counted all the same: a tool of cadgen's this host was
         # not listed (a text host shows no views) as its own, no view; a name cadgen has no tool by, or none at all,
         # as `cad_unknown`'s -- never the host's string; arguments that are no object as that tool's bad request.
-        server, sent = self.serve("claude-directory", client="some-agent")
+        server, sent = self.serve("claude", client="some-agent")
         self.assertTrue(server.text, "no extension, no known launcher: a text host")
         choose(True, by="cli", path=self.path)
         context = RequestContext(1, {"threadId": "t"})
@@ -590,7 +597,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent[-2]["events"][0], {"name": "files", "kind": "glb", "count": 3})
 
     def test_counts_go_from_the_notice_on_without_a_restart(self) -> None:
-        server, sent = self.serve("claude-github")
+        server, sent = self.serve(None)
         self.call(server, "cad_show", {"source": "a.step"})
         self.assertEqual(self.consent(server), {"share": False, "reason": "untold", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
@@ -610,7 +617,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent[0]["install"], status(path=self.path)["id"])
 
     def test_an_off_deletes_the_id_and_asks_for_deletion_and_no_agent_reaches_the_setting(self) -> None:
-        server, sent = self.serve("claude-directory", "codex-mcp-client")
+        server, sent = self.serve("claude", "codex-mcp-client")
         server.analytics.choose(True, by="app")
         identity = status(path=self.path)["id"]
         deleted = threading.Event()
@@ -649,7 +656,7 @@ class ServerCountsTest(_Tmp):
             self.call(server, "cad_telemetry")
 
     def test_an_off_reports_when_the_choice_cannot_be_saved(self) -> None:
-        server, _ = self.serve("claude-directory")
+        server, _ = self.serve("claude")
         server.analytics.choose(True, by="app")
         with mock.patch("cad_server.settings.write_bytes_atomic", side_effect=OSError("read only")):
             code, answer = self.http(server, "PUT", "/api/v1/settings", {"telemetry": {"share": False}})
@@ -798,110 +805,85 @@ class SenderTest(_Tmp):
         self.assertEqual(len(sent), 6, "neither the spool's batch nor the app's own")
 
 
-class InstallChannelTest(_Tmp):
-    """Where the install came from (`cad_server/_internal/channel.py`): only the CAD server is told, by its plugin; it
-    writes the channel down for its installation, and every recorder of it -- the engine's for the CAD app's
-    sessions and for the browser viewer, the sender a command starts -- reports that, unless its process was told
-    one itself."""
+class WhereFromTest(_Tmp):
+    """Where a count came from, schema 11's two batch fields (`cad_server/_internal/channel.py`'s `describe`): the
+    delivery channel of the session or request it counted (`default` for none, `dev` from a development build) and the
+    app, detected -- one batch for each pair. No environment of a server says a channel: the configs of 0.11.10 and
+    earlier that set `CAD_INSTALL_CHANNEL` are ignored."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.record = self.tmp / install_channel.RECORD  # beside the settings, where a recorder given them reads it
-        # Not a source tree: a checkout is a development install, whatever the record says.
-        for patched in (mock.patch("cad_server._internal.channel._source_tree", return_value=False),
-                        mock.patch.object(install_channel, "_record_path", return_value=self.record)):
-            patched.start()
-            self.addCleanup(patched.stop)
         choose(True, by="cli", path=self.path)
+        self.sent: list[dict] = []
+        self.recorder = Recorder(path=self.path, send=lambda payload: self.sent.append(payload) or True)
 
-    def started(self, process: str, channel: str = "") -> tuple[Recorder, list[dict]]:
-        sent: list[dict] = []
-        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": channel}):
-            recorder = Recorder(process=process, path=self.path, send=lambda payload: sent.append(payload) or True)
-        return recorder, sent
+    def test_each_session_s_channel_and_app_is_a_batch_of_its_own(self) -> None:
+        store = self.recorder.of("codex", "codex-mcp-client")
+        default = self.recorder.of(None, "claude-code")
+        store.started(client={"name": "codex-mcp-client", "version": "0.163.0"}, presentation="tabs")
+        default.started(client={"name": "claude-code", "version": "2.1.0"}, presentation="text")
+        store.called("cad_show", True)
+        default.called("cad_show", True)
+        default.called("cad_view", True)
+        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": "claude-github", "CAD_AUTO_UPDATED": "1"}):
+            self.assertTrue(self.recorder.flush())
+        by = {(batch["channel"], batch["app"]): batch for batch in self.sent}
+        self.assertEqual(set(by), {("codex", "codex"), ("default", "claude-code")})
+        self.assertEqual((by["codex", "codex"]["client"]["name"], by["codex", "codex"]["presentation"],
+                          [event["tool"] for event in by["codex", "codex"]["events"]]),
+                         ("codex-mcp-client", "tabs", ["cad_show"]))
+        self.assertEqual((by["default", "claude-code"]["presentation"],
+                          [event["tool"] for event in by["default", "claude-code"]["events"]]),
+                         ("text", ["cad_show", "cad_view"]))
+        self.assertEqual(len({batch["batch"] for batch in self.sent}), 2, "each under an id of its own")
+        self.assertEqual({batch["schema"] for batch in self.sent}, {11})
 
-    def channel_of(self, recorder: Recorder, sent: list[dict]) -> str:
-        recorder.called("cad_show", True)
-        self.assertTrue(recorder.flush())
-        return sent[-1]["channel"]
+    def test_a_page_and_a_development_build(self) -> None:
+        # The browser viewer's own client name is no MCP client's: it names no app. Nothing in the server's
+        # environment names a channel: the default's.
+        viewer = Recorder(process="viewer", path=self.path, send=lambda payload: self.sent.append(payload) or True)
+        viewer.started(client={"name": "cad-viewer", "version": RELEASE}, presentation="browser")
+        viewer.viewed()
+        self.assertTrue(viewer.flush())
+        self.assertEqual((self.sent[-1]["channel"], self.sent[-1]["app"], self.sent[-1]["client"]["name"]),
+                         ("default", "unknown", "cad-viewer"))
+        # A development build says `dev`, whatever channel its session names.
+        with mock.patch.dict("os.environ", DEVELOPMENT):
+            development = Recorder(path=self.path, send=lambda payload: self.sent.append(payload) or True)
+            development.of("claude", "cursor-vscode").called("cad_show", True)
+            self.assertTrue(development.flush())
+        self.assertEqual((self.sent[-1]["channel"], self.sent[-1]["app"]), ("dev", "cursor"))
 
-    def server_starts(self, channel: str) -> str | None:
-        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": channel}):
-            return install_channel.remember(path=self.record)
+    def test_a_spool_row_says_who_counted_it_and_is_sent_as_that(self) -> None:
+        # A build the daemon answered for a request on the codex channel from a Claude Code shell, and a row a version
+        # that is gone kept (handed on to this one: ``hand_on``).
+        self.assertTrue(spool({"features": ["drawing"]}, path=self.path, env={"CLAUDECODE": "1"}, channel="codex"))
+        kept = json.loads(self.path.with_name(analytics.SPOOL).read_text(encoding="utf-8"))
+        self.assertEqual(kept["source"], {"version": RELEASE, "channel": "codex", "app": "claude-code"})
+        other = {**kept, "source": {"version": "0.11.99", "channel": "default", "app": "codex"}}
+        with self.path.with_name(analytics.SPOOL).open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(other) + "\n")
+        sender = Recorder(process="cli", path=self.path, send=lambda payload: self.sent.append(payload) or True)
+        self.assertTrue(sender.flush())
+        self.assertEqual(sorted((batch["version"], batch["channel"], batch["app"]) for batch in self.sent),
+                         sorted([("0.11.99", "default", "codex"), (RELEASE, "codex", "claude-code")]))
+        self.assertEqual({key for batch in self.sent for key in ("client", "presentation") if key in batch}, set())
 
-    def test_every_process_of_the_installation_reports_the_channel_its_plugins_server_wrote_down(self) -> None:
-        sender, from_sender = self.started("cli")  # the telemetry sender a command starts
-        viewer, from_viewer = self.started("viewer")
-        # The CAD app's sessions' recorder, in an engine a `python model.py` started: told nothing, as the engine's
-        # environment is whoever started it -- a plugin names only its own server, which runs in another process.
-        app, from_app = self.started("app")
-        told, from_told = self.started("viewer", "codex-github")  # a Viewer the CAD server started: told its own
-        # A skills-only install: no plugin's server ever ran from it.
-        self.assertEqual([self.channel_of(*started) for started in ((sender, from_sender), (viewer, from_viewer),
-                                                                      (app, from_app))], ["unknown"] * 3)
-        self.assertEqual(self.server_starts("claude-github"), "claude-github")
-        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
-                         {install_channel.installation(): "claude-github"})
-        # Read again for each batch: the sender, the Viewer and the engine were running before the server started.
-        self.assertEqual(self.channel_of(sender, from_sender), "claude-github")
-        self.assertEqual(self.channel_of(viewer, from_viewer), "claude-github")
-        self.assertEqual(self.channel_of(app, from_app), "claude-github", "the CAD app's batches say its plugin's channel")
-        self.assertEqual(self.channel_of(told, from_told), "codex-github")  # what a process was told comes first
-        # Two plugins pinning one release share its installation: the server that started last is written down.
-        self.server_starts("agent-plugins")
-        self.assertEqual(self.channel_of(sender, from_sender), "agent-plugins")
-
-    def test_the_record_holds_closed_tokens_for_the_newest_installations_and_never_fails_anything(self) -> None:
-        self.assertIsNone(self.server_starts(""))  # nothing named, nothing written
-        self.assertFalse(self.record.exists())
-        self.record.write_text("not json", encoding="utf-8")
-        self.assertIsNone(install_channel.recorded(path=self.record))
-        self.assertIsNone(self.server_starts("Not A Channel!"))
-        self.assertEqual(self.server_starts("claude-github"), "claude-github")  # a broken record is written afresh
-        with mock.patch("cad._internal.atomic_replace.write_bytes_atomic") as write:
-            self.assertEqual(self.server_starts("claude-github"), "claude-github")
-        write.assert_not_called()  # what the record holds already is not written again
-        for index in range(install_channel.KEPT_INSTALLATIONS + 3):
-            with mock.patch.object(install_channel, "installation", return_value=f"install-{index}"):
-                self.server_starts("codex-github")
-        kept = json.loads(self.record.read_text(encoding="utf-8"))
-        self.assertEqual(list(kept), [f"install-{index}" for index in range(3, install_channel.KEPT_INSTALLATIONS + 3)])
-        # A value no plugin could name is no channel, whatever wrote it.
-        self.record.write_text(json.dumps({install_channel.installation(): "unknown"}), encoding="utf-8")
-        self.assertIsNone(install_channel.recorded(path=self.record))
-        with mock.patch("cad_server._internal.channel._load", side_effect=PermissionError):
-            self.assertIsNone(install_channel.recorded(path=self.record))
-            self.assertIsNone(self.server_starts("claude-github"))
-
-    def test_a_development_install_stays_one(self) -> None:
-        # A development install's own server writes `dev` down for its installation, so its engine, which takes no
-        # channel from whoever started it, still sends nothing by default.
-        self.path.write_text(json.dumps({"telemetry": {"notifiedAt": time.time(), "notice": 1}}), encoding="utf-8")
-        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": ""}):
-            self.assertEqual(status(path=self.path)["reason"], "default")
-            self.server_starts("dev")
-            self.assertEqual(install_channel.channel(), "dev")
-            self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
-
-    def test_the_engine_writes_down_the_channel_a_transport_says_as_its_session_opens(self) -> None:
-        # The plugin's startup config names it to its stdio transport, which says it in its initialize
-        # (``cad_mcp.shim.initialize_params``); the engine's MCP server writes it down for its installation.
-        (self.tmp / "app").mkdir(exist_ok=True)
-        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
-                        analytics=Recorder(path=self.path, send=lambda _payload: True))
-        with mock.patch.dict("os.environ", {"CAD_INSTALL_CHANNEL": "claude-github"}):
-            params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
-                                        "clientInfo": {"name": "claude-code", "version": "2.1.0"}})
-        server.handle("initialize", params, None)
-        deadline = time.monotonic() + 30
-        while True:  # written in the background as the session opens, atomically: read once it is readable
-            try:
-                written = json.loads(self.record.read_text(encoding="utf-8"))
-                break
-            except (OSError, ValueError):  # not there yet, or Windows refusing a file mid-replace
-                self.assertLess(time.monotonic(), deadline, "the channel was written down")
-                time.sleep(0.01)
-        self.assertEqual(written, {install_channel.installation(): "claude-github"})
+    def test_what_a_version_kept_is_handed_on_once(self) -> None:
+        leaving = self.tmp / "leaving" / "settings.json"
+        leaving.parent.mkdir()
+        leaving.write_text(self.path.read_text(encoding="utf-8"), encoding="utf-8")  # imported: the same answer
+        self.assertTrue(spool({"features": ["drawing"]}, path=leaving, env={}))
+        self.recorder.called("cad_show", True)
+        self.recorder.close()  # its batch kept whole as it exits
+        os.replace(self.path.with_name(KEPT), leaving.with_name(KEPT))
+        self.assertEqual(analytics.hand_on(leaving, self.path), 2)
+        self.assertFalse(leaving.with_name(analytics.SPOOL).exists())
+        self.assertEqual(analytics.hand_on(leaving, self.path), 0, "nothing is moved twice")
+        sender = Recorder(process="cli", path=self.path, send=lambda payload: self.sent.append(payload) or True)
+        sender.flush()
+        self.assertEqual(sorted(event["name"] for batch in self.sent for event in batch["events"]),
+                         ["feature", "tool"])
 
 
 class BeforeTelemetryTest(_Tmp):
@@ -1016,7 +998,7 @@ class NoticeTest(_Tmp):
             self.assertEqual(status(path=self.path)["reason"], "default")
 
     def test_nothing_is_said_where_nothing_would_be_sent_by_default(self) -> None:
-        for name, value in (("CI", "true"), ("CAD_INSTALL_CHANNEL", "dev"), ("DO_NOT_TRACK", "1"),
+        for name, value in (("CI", "true"), *DEVELOPMENT.items(), ("DO_NOT_TRACK", "1"),
                             ("CAD_TELEMETRY", "0"), ("CAD_TELEMETRY", "1"),
                             (NOTICE_ENV, "0")):
             with self.subTest(name=name, value=value), mock.patch.dict("os.environ", {name: value}):
@@ -1054,7 +1036,7 @@ class NeverInTheWayTest(_Tmp):
     call = ServerCountsTest.call
 
     def test_a_broken_telemetry_layer_fails_nothing_and_logs_nothing_a_host_shows(self) -> None:
-        server, sent = self.serve("claude-directory")
+        server, sent = self.serve("claude")
         with mock.patch("cad_server.analytics.status", side_effect=RuntimeError("broken")), \
                 mock.patch("cad_server.analytics.choose", side_effect=RuntimeError("broken")), \
                 self.assertNoLogs("cad_server.analytics", level="INFO"):
@@ -1068,7 +1050,7 @@ class NeverInTheWayTest(_Tmp):
             server.analytics.close()
 
     def test_no_tool_call_waits_on_the_network(self) -> None:
-        server, sent = self.serve("claude-directory")
+        server, sent = self.serve("claude")
         self.consent(server, True)
         release, asked, finished = threading.Event(), threading.Event(), threading.Event()
         self.addCleanup(release.set)

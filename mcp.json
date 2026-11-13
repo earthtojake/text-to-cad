@@ -12,10 +12,7 @@
         "--from",
         "cad-mcp==0.11.10",
         "cad-mcp"
-      ],
-      "env": {
-        "CAD_INSTALL_CHANNEL": "agent-plugins"
-      }
+      ]
     }
   }
 }

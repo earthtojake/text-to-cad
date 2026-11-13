@@ -36,18 +36,28 @@ Every command in this skill starts `cad +0.11.10`: it runs text-to-cad 0.11.10, 
 written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
 PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
 
-If `cad` is missing, or says it does not know `+0.11.10` (an older text-to-cad), or says 0.11.10 is not
-installed and could not be installed from this shell, install this release, outside the sandbox or
-with its permission, then run the command again:
+If `cad` is missing, or says it does not know `+0.11.10` (an older text-to-cad), install this release,
+outside the sandbox or with its permission, then run the command again:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.10
 ```
 
 On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.10`.
-It installs 0.11.10 and the `cad` command and changes nothing else. `cad +0.11.10 doctor --check` explains any
-other failure, changing nothing; `cad +0.11.10 doctor` repairs what it reports. Tell the person any next
-step it prints.
+It installs 0.11.10 and the `cad` command and changes nothing else.
+
+When a command fails, its exit code says why:
+
+- 3: it could not install or switch to 0.11.10 from this shell. Do what it says, outside
+  the sandbox or with its permission, then run the command again.
+- 4: this copy of the skill is older than the text-to-cad its channel is on now. Read the skill again
+  (the app may have a newer copy) or start a new chat. If the skill still names the same release, the
+  text-to-cad plugin in this app needs an update, in the app or by the install command: tell the person.
+- 5: the `cad` this shell found is not the `cad` command but another copy of text-to-cad. Run
+  `~/.local/bin/cad` (`%USERPROFILE%\.local\bin\cad.exe` on Windows) instead.
+
+`cad +0.11.10 doctor --check` explains any other failure, changing nothing; `cad +0.11.10 doctor` repairs what
+it reports. Tell the person any next step it prints.
 
 `cad +0.11.10 run render.py` sees `import bpy` and gives the script cad's blender integration: an
 environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)

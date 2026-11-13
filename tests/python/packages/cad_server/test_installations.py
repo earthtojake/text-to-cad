@@ -560,7 +560,7 @@ class ResolutionTests(Fixture):
 
     def test_the_shell_names_its_host(self) -> None:
         self.assertEqual(engine_host.shell({"CODEX_THREAD_ID": "t", "CLAUDECODE": "1"}), "codex")
-        self.assertEqual(engine_host.shell({"CLAUDECODE": "1"}), "claude code")
+        self.assertEqual(engine_host.shell({"CLAUDECODE": "1"}), "claude-code")  # the app's token, as telemetry says it
         self.assertIsNone(engine_host.shell({}))
         self.assertEqual(host.family({"host": "codex app-server"}), "codex")
         self.assertEqual(host.family({"host": "claude code"}), "claude code")

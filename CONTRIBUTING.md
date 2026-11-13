@@ -113,8 +113,8 @@ repository's own tooling. It installs the
 library, the server and the shim editable, the library with its `build123d` extra (OCP,
 build123d and the rest; the library's required dependency is numpy alone), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
-makes no base for it (`cad_server/_internal/base.py`), and nothing makes an environment ahead of need
-(not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
+makes no base for it (`cad_server/_internal/base.py`; an installed version makes its own when
+it is installed). The library comes with its `trimesh` extra too, so `cad
 <type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
 it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
 cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
@@ -131,21 +131,21 @@ dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
-Skills run the server as `cad` through `~/.local/bin/cad`, the proxy
-that runs the device's current installation (`<state>/installations/current`): the release `cad setup` or an update made current, from its folder
-(`<state>/releases/<VERSION>`), else the first installation a CAD app server (`cad-mcp`) or
-`cad doctor` registered on the device. Every installation registers itself and writes the
-proxy as its server starts, `cad doctor` runs or `cad setup` sets it up; a checkout's
-editable server registers nothing unless named (`CAD_INSTALLATION_VERSION`). A model script
-starts no server of its own environment: it reaches the current installation's engine, and on a
-device with none it says ``cad-server is not installed on this computer: install cad-server and run
-`cad doctor` once, then run this again``. To run your working copy, make it the current installation:
-`scripts/install/dev_install.py` makes a dev install of it current (see
-[Test In Agent Apps](#test-in-agent-apps)), as does `CAD_INSTALLATION_VERSION=<VERSION>-dev.0
-./.venv/bin/cad doctor`, run once. With another installation current, the checkout's `.venv` still
-runs models, each built in a worker of the `.venv`'s own Python on the checkout's library, while the
-current installation's engine (its server code, not the checkout's) serves them, and refuses a
-library whose worker contract it does not speak.
+Skills run the server as `cad` through `~/.local/bin/cad` (`cad_server/_internal/installations.py`),
+which reads only its first word. Every command a skill runs pins its release, `cad +<VERSION>[@<channel>]
+<verb>`, and the `cad` command runs exactly that version's own `cad` from
+`<state>/versions/<VERSION>`, installing it first through uvx where it is missing
+(`cad_server/_internal/pins.py`; exit codes in `cli_errors.REASONS`). A channel is who delivers a
+copy: none is the default channel, the install command's and a person's own; a store's copy
+names its own (`@claude`, `@codex`), stamped by the release. Each channel has one pointer
+(`<state>/default`, `<state>/channels/<name>`) naming the version it is on, and one routine moves
+it (`versions.move`). A command with no pin runs the default channel's version. A model script
+starts no server of its own environment: it reaches its version's engine, and on a device with
+none it says ``cad-server is not installed on this computer: install cad-server and run `cad doctor`
+once, then run this again``. To run your working copy, install it as a version:
+`scripts/install/dev_install.py` installs it as `<VERSION>-dev.<time>` and moves the default
+channel to it (see [Test In Agent Apps](#test-in-agent-apps)). A checkout's editable server, run
+as no version, keeps the layout of 0.11.10 and earlier: the flat door and `installations/current`.
 
 `packages/cad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
@@ -163,14 +163,13 @@ npm run build:packages
 ### The engine server
 
 Every build, export and snapshot runs in the engine server, a daemon: one per
-engine folder, the current installation's, started by the first command that needs it --
-whatever release that command is -- and running until `cad stop` or an update (no timer stops
-it). A checkout's `.venv` reaches the device's engine like any client, and starts the current
-installation's when none runs: to run a worktree's own engine, give it its own
-`CAD_ENGINE_DIR` and `CAD_STATE_DIR` (its own registry, so its own current installation), and
-register the worktree's `.venv` as that state folder's current installation
-(`CAD_INSTALLATION_VERSION=<VERSION>-dev.0 ./.venv/bin/cad doctor` with those set). Its door, a
-named pipe (on Windows, a port file), and lock live in `cad-engine`
+installed version, in that version's engine folder (`<engines>/<version>`), started by the first
+command of that version that needs it and running until `cad stop`, or until no channel is on its
+version and nothing is in flight (no timer stops it). Only the default channel's server also holds
+the flat door releases before 0.11.11 reach. A checkout's `.venv`, run as no version, reaches the
+flat door like any client of that layout: to run a worktree's own engine, give it its own
+`CAD_ENGINE_DIR` and `CAD_STATE_DIR`. The engine folder, its doors (named pipes; on Windows, port
+files) and locks live in `cad-engine`
 in `$XDG_RUNTIME_DIR`, else in the per-user temporary folder (on macOS the system's
 `/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cad-<uid>`
 (Windows: the temporary folder); `CAD_ENGINE_DIR` moves them, which gives a
@@ -196,8 +195,11 @@ tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
 hits), `CAD_ENGINE_BODIES=0` (no body replay), `CAD_ENGINE_MESH=processes|inline` and
 `CAD_VIEWER_WARM=0` (no engine warm-up at `cad viewer`'s launch). What the
 engine builds is written beside a project only as the files models declare or a command
-exports. Beside the person's settings, in the state folder, it keeps one record per model or
-opened file (`documents/<uuid>/document.json`: the script and function that build it, or
+exports. An installed version keeps what follows in its own folder: the records and settings in
+`versions/<VERSION>/data`, the caches in `versions/<VERSION>/data/cache`, its environments and
+bytecode in `versions/<VERSION>/code`. A process with no version (a checkout's, a test's) keeps them
+where releases before 0.11.11 did, as follows. Beside the person's settings, in the state folder, it
+keeps one record per model or opened file (`documents/<uuid>/document.json`: the script and function that build it, or
 the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's:
 `~/.cache/cad`) it keeps each model document's bytes as last built,
 `documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
@@ -279,11 +281,14 @@ Python it started with, so restart the app after a Python-only change. The
 app menu of every view says which build it shows: any build but the release's
 own reads `v<VERSION>-dev.<commit>` (`-dirty` when the checkout had uncommitted
 changes), the commit of the checkout the Viewer or the CAD app was built from.
-`--uninstall` removes a host's install. Its server names its install channel
-`dev` (`CAD_INSTALL_CHANNEL`), and a checkout's editable server counts as one
-too: neither is ever offered an update. To see the update button, run a server or
-a Viewer with `CAD_INSTALL_CHANNEL=claude-github` and a `versions.json` in its
-state directory (`CAD_STATE_DIR`) naming a newer `latest`.
+`--uninstall` removes a host's install. A development version, like a checkout's
+editable server, is never offered an update, and its telemetry reports the channel `dev`.
+The update button shows only on the default channel's version of a release, on a device
+where the install command ran (its receipt, `install-receipt.json`). To see it, set a
+release up from wheels on a private device (its own `CAD_STATE_DIR`, `CAD_ENGINE_DIR`,
+`CAD_CACHE_DIR` and `CAD_LAUNCHER_DIR`) with its own `cad setup`, which writes the receipt,
+and give it a version feed naming a newer `latest` (`CAD_API_URL` pointed at a local one).
+`scripts/test/rehearse-update.py` builds exactly that device, and presses the button.
 
 Keep one copy of the plugin per app. The script refuses to install where another
 copy would load beside it: the published plugin, this one installed through
@@ -613,8 +618,9 @@ major from 1.0 and, below 1.0, which the standard leaves to the project, the min
 | Installs itself on every device | a patch release | a patch or minor release |
 | Waits for the person's click | a minor or major release | a major release |
 
-With automatic updates on, the default, every device's engine installs a newer release that breaks
-nothing by itself and switches to it once idle, under agent threads that are running, with no click
+With automatic updates on, the default, every device the install command set up installs a newer
+release that breaks nothing by itself and moves to it after an hour of quiet, under agent threads that
+are open, with no click
 (`cad_server.auto_updates.takes`); a release that bumps the breaking slot waits for the person's click
 and reaches each device when its person updates. The release to 1.0 bumps the major, and waits like
 any. So choose the bump by what the release asks of people, not by its size. A change is breaking when
@@ -704,7 +710,9 @@ past `main`'s and stamps the derived metadata and every pin of the release's own
 (`sync-version.mjs`: package, plugin and lockfile versions, the four
 `pyproject.toml`s and their `cad==` pins, the plugin server configs'
 `cad-mcp==`, the installers' `cad-server==` fallback, and the `cad +<VERSION>` that
-starts every command in the skills). It works from `main`'s version, not the branch's, so running it twice
+starts every command in the skills). The installers' `ADD_SINCE`, the first release `--add` can
+install, is no stamp: it stays 0.11.11, the first release whose skills pin theirs.
+It works from `main`'s version, not the branch's, so running it twice
 changes nothing and running it again after `main` moves moves the bump with it;
 it refuses a branch that does not contain `main` yet, whose stamps would conflict.
 
@@ -740,7 +748,9 @@ green: that is the release. `Publish Release`, on the merge commit:
    release commit and publishes only if every job passes. No untested tree is
    published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
-   untouched release commit and checks it against the portal's package rules,
+   untouched release commit, every pin in its skills stamped with its channel
+   (`cad +<VERSION>@codex`) and its launcher started with `--channel codex`, and checks it
+   against the portal's package rules,
    so a package the portal would refuse stops the release before anything
    irreversible; the ZIP is kept as a workflow artifact
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py --check`
@@ -783,7 +793,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    sha256 for the GitHub Release to attach; a file PyPI holds that the run did not
    build stops the release.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
-   alone onto `latest` and `claude-plugin`, in one atomic push. Only now does
+   alone onto `latest` and `claude-plugin` (every pin in its skills stamped
+   `@claude`), in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
    header names the release; and the `v<VERSION>`
@@ -830,7 +841,8 @@ whose plugin did not change adds no commit. There are two copies:
   branch's root, Codex's manifest and config, Grok Build's manifest, and the
   Agent Plugins standard's `plugin.json` and `mcp.json`, with every skill.
 - `claude-plugin`, which claude.ai's directory listing tracks: every skill and
-  nothing else. `.claude-plugin/plugin.json` (main's, naming no MCP server and no
+  nothing else, every pin in it stamped with the directory's channel (`cad +<VERSION>@claude`).
+  `.claude-plugin/plugin.json` (main's, naming no MCP server and no
   hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and nothing another
   host reads. The directory refuses an MCP server that runs on the user's computer,
   and every file type but Markdown, text, JSON, YAML and PNG, JPEG, GIF, WebP or
@@ -871,42 +883,31 @@ What each store and installer reads:
 | Cursor, by hand | `latest` (`git clone --branch latest`) |
 | The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`text-to-cad`) |
 | claude.ai's directory | `claude-plugin` |
-| Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
-| OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
+| Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch. `main`'s text names no channel, so this copy is on the default channel |
+| OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release, its pins stamped `@codex` |
 
-Each plugin's CAD server startup config says where its installs come from, its
-install channel, in the server's environment (`CAD_INSTALL_CHANNEL`), and adds
-`CAD_AUTO_UPDATED=1` where something other than the person keeps the copy up to
-date: the store that reviewed it. The Viewer the
-server starts inherits both. The server also writes its channel down in the state
-directory for its uv installation (`install-channels.json`), which its skills'
-commands share, so a skill's Viewer and its commands report it too. The server reports the channel
-with telemetry and says the feed's new release only to a copy that is not
-auto-updated (a store's copy hears of a release once its store has moved an app's
-plugin ahead of the engine; `cad_server/_internal/channel.py`, `cad_server/updates.py`); it never
-decides by a channel's name, since its core may not know a host. They are
-environment, never flags: an install of `main` pins the last release, and a release
-ignores a variable it does not know but refuses a flag, so a new setting would
-stop every such server until the next release. Nothing works them out at
-runtime, so a plugin that ships somewhere new writes its own, and the telemetry
-receiver (`apps/api/src/events.mjs`) learns its channel;
-`test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
-hold each one:
+Who delivers a copy is its channel, and the copy's own text says so: every command its
+skills run names the channel in its pin (`cad +<VERSION>@<channel>`), and its MCP config
+starts the launcher with it (`cad-mcp --channel <channel>`). Our own text names none, so it
+is on the default channel. The software holds no list of channels and decides nothing by a
+channel's name: a new store is one more stamp in the builder that makes its copy. Only the
+default channel has an updater, and only on a device where the install command ran (its
+receipt, `cad_server/_internal/update.py`); a store's channel moves when the store delivers a
+newer copy, by that copy's first command or launcher (`cad_server/_internal/pins.py`). Telemetry
+reports the channel, and the agent app it detects, as two fields (`apps/api/README.md`).
+The channel is a flag, not a variable: a config runs the launcher of its own release
+(`cad-mcp==<VERSION>`), so no launcher meets a flag it does not know.
+`test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py` hold each copy:
 
-| Package | Server environment | Told of a release | Written by |
-| ------- | ------------------ | ----------------- | ---------- |
-| `claude.mcp.json` on `main` and `latest`, which Grok Build's manifest names (Claude Code's names none) | `claude-github` | yes | the checked-in file |
-| `codex.mcp.json` on `main` and `latest` | `codex-github` | yes | the checked-in file |
-| `gemini-extension.json` | `gemini-github` | yes | the checked-in file |
-| Claude Desktop's config as releases through 0.11.10 wrote it, which `cad setup` now takes out; the receiver keeps the channel for entries in the field | `claude-desktop` | yes | `cad_server/cli/setup.py` through 0.11.10 |
-| `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
-| `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
-| `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
-| the plugin folder's configs, which the install command points every app at | `claude-install`, `codex-install`, `cursor-install`, `gemini-install`, `agent-plugins` (through 0.11, as `latest`'s `-github`) | yes | `cad_server/_internal/plugin.py` |
-| `claude-plugin`'s `claude.mcp.json` through 0.11.10, which claude.ai's directory follows; its copy has had no server since, and the receiver keeps the channel for copies in the field | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` through 0.11.10 |
-| the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
-| a development install | `dev` | no | `dev_install.py` |
-| a process no plugin's server started: a skill's command, the Viewer a skill opens | none (`unknown`) | the Viewer: a skills-only install | nothing |
+| Copy | Channel | Updated by | Stamped by |
+| ---- | ------- | ---------- | ---------- |
+| `main` and `latest`, every manifest and config; the plugin folder the install command points every app at; a copy a person installs by hand; the Cursor Marketplace's (`main`) | default | the install command's updater, where it ran here; else the person, in the app | nothing: the text names no channel |
+| `claude-plugin`, which claude.ai's directory follows | `claude` | the directory | `plugin_branch.py` |
+| the OpenAI ZIP | `codex` | the directory | `plugin_zip.py` |
+| a development install | default (its telemetry says `dev`) | `dev_install.py`, run again | `dev_install.py` pins its own version name |
+
+`CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
+no longer written and are ignored where an older copy still sets them.
 
 A skill's own `cad` command never says a release is out: the same skill files
 ship in every plugin, so it cannot tell which one it came with. The CAD app and

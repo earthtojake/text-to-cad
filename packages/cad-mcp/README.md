@@ -8,8 +8,10 @@ It holds no tool, view or document: the server does. What it does on its own:
 
 - **Is one version on one channel.** Its version is its own package's release (a development install names
   its build in `CAD_INSTALLATION_VERSION`); its channel is `--channel NAME` in the app's server config that
-  starts it, none for the default channel (`cad-mcp --channel codex`). `CAD_AUTO_UPDATED`, which a config of
-  0.11.10 or earlier sets, is not read.
+  starts it, none for the default channel (`cad-mcp --channel codex`), as a store's builder writes it into the
+  copy that store delivers. Nothing in its environment names a channel: `CAD_INSTALL_CHANNEL` and
+  `CAD_AUTO_UPDATED`, which configs of 0.11.10 and earlier set, are not read. The server counts each session's
+  use under that channel and the app its `initialize` names.
 - **Makes its version ready as it starts**, in the background, outside any sandbox: installed where it is
   not, as the `cad` command installs one (`uvx --from cad-server==<version> cad setup --add --quiet`); then,
   where its channel's pointer in the state folder does not name it, that version's own `cad` run pinned to it

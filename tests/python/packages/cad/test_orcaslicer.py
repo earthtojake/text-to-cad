@@ -72,8 +72,16 @@ class OrcaSlicerPresets(unittest.TestCase):
         self.assertEqual((process["layer_height"], process["wall_loops"]), ("0.2", "3"))
         self.assertEqual(system, "0.20mm @Acme")
 
+    def inside(self) -> None:
+        """The test's folder made the current one, so a relative path to it is on its drive (Windows: the checkout
+        and the temporary folder can be on two drives, which no relative path joins); the folder before put back
+        first, before the folder goes."""
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.home)
+
     def test_relative_preset_file_resolves_an_absolute_index(self) -> None:
         profile_tree(self.root)
+        self.inside()
         found, _ = _presets.index([self.root])
         relative = os.path.relpath(self.root / "user/default/process/mine.json")
         process, system = _presets.merged(found, "process", relative)
@@ -82,6 +90,7 @@ class OrcaSlicerPresets(unittest.TestCase):
 
     def test_absolute_preset_file_resolves_a_relative_index(self) -> None:
         profile_tree(self.root)
+        self.inside()
         found, _ = _presets.index([Path(os.path.relpath(self.root))])
         process, _ = _presets.merged(found, "process", str(self.root / "user/default/process/mine.json"))
         self.assertEqual(process["layer_height"], "0.2")

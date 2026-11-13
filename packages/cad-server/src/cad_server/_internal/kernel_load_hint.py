@@ -123,3 +123,26 @@ def native_load_hint(
     if module == _KERNEL_MODULE:
         return SMART_APP_CONTROL_HINT
     return tuple(line.format(module=module) for line in NATIVE_MODULE_HINT)
+
+
+# Linux: the loader's word for a shared library the system lacks, which the kernel's OCP links against (a slim
+# container image has no OpenGL). The package names are those of Mesa's OpenGL, as the OCCT stills' own hint says.
+_MISSING_LIBRARY = re.compile(r"(lib[\w.+-]*\.so(?:\.\d+)*): cannot open shared object file")
+LIBGL_PACKAGES = "Debian, Ubuntu: sudo apt-get install libgl1; Fedora: sudo dnf install mesa-libGL"
+
+
+def system_library_hint(failure: BaseException | str, *, platform: str | None = None) -> tuple[str, ...] | None:
+    """One hint line for a CAD kernel that Linux could not load for want of a system library (``libGL.so.1`` on a
+    slim image): which library, and for OpenGL's the package that has it. None anywhere else. ``failure`` and
+    ``platform`` are read as ``kernel_load_hint`` reads them."""
+    if not (platform or sys.platform).startswith("linux"):
+        return None
+    found = _MISSING_LIBRARY.search(str(failure))
+    if found is None:
+        return None
+    library = found.group(1)
+    if library.startswith("libGL."):
+        return (f"hint: the CAD kernel needs Mesa's OpenGL library, {library}, which this system lacks "
+                f"({LIBGL_PACKAGES}).",)
+    return (f"hint: the CAD kernel needs the system library {library}, which this system lacks: install the "
+            "package that has it.",)

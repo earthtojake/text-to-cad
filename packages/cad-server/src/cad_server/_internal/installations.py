@@ -11,7 +11,7 @@ starts fine there. So an installation registers itself, and one command runs the
   when it registered (``registered``). The state folder's ``Folder`` (``cad_server.engine.registry``) writes
   it, as it writes everything there.
 - ``<state>/installations/current``, the version of the installation that is the device's for a client of
-  0.11.10 and earlier: its engine is the one such a client starts or attaches to. From 0.11.11 it is the mirror of
+  0.11.10 and earlier: its engine is the one such a client starts or attaches to. From the first pinned release it is the mirror of
   the default channel's pointer (``cad_server._internal.pointers.mirror``), written with it by every move of the
   default channel (``cad setup``, ``cad update``, the install command run again); a client of 0.11.10 or earlier
   that finds none -- no installation before it -- points it at itself once (``bootstrap``).

@@ -58,6 +58,13 @@
  * build failed, the server older than the library that asked it (`outdated`), earlier `export_error`. A model build's
  * `failed` from schema 10 counts the failures the system or the machine caused alone: a script that raised is in its
  * `count`, never `failed`. A schema before it sends none of these, and its rows are read, and keyed, as ever.
+ *
+ * Schema 11 (text-to-cad 0.11.11 on) describes an install with two fields: `channel`, who delivers the copy (the
+ * channel its commands are pinned to, `default` for none, `dev` for a development build), and `app`, the agent app
+ * running it, detected (`AGENT_APPS`). Both are open sets, checked by their shape and not by a list. A batch of
+ * schema 10 or earlier is translated on arrival (`translated`): its rows carry the new `channel` and `app`, worked
+ * out from the old combined channel and the MCP client's name, and the old channel as it was sent
+ * (`legacy_channel`). Every schema before it is still checked as it always was, and its rows keep their ids.
  */
 
 import { createHash } from 'node:crypto';
@@ -82,13 +89,31 @@ const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
 export const MAX_BYTES = 64 * 1024;
 
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
-// Where the install came from, as its plugin's startup command named it (`cad_server/_internal/channel.py`).
+// Schemas 2 to 10: where the install came from, as its plugin's startup command named it, a closed list.
 // `-github`: by hand from the repository, and through 0.11 the install command too; `-install`: the install
-// command. Within a schema, a new channel is an added word: every schema reads them all.
+// command. Every schema up to 10 reads them all; each is translated to schema 11's two fields (`translated`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-install',
   'codex-install', 'cursor-install', 'gemini-install', 'claude-desktop', 'claude-directory', 'openai-directory',
   'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
+// Schema 11's: who delivers the copy (a pin's channel as written, `default` for none) and the agent app running it.
+// Open sets, checked by their shape (`cad_server/_internal/pins.py` and `engine_host.py` make them).
+const CHANNEL_11 = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+const APP = /^[a-z0-9][a-z0-9._-]{0,39}$/;
+// The app an MCP client's name stands for, where the name is not the app's own: the same table as the server's
+// (`cad_server/_internal/engine_host.py`: `APPS`). Any other client's name is its own app, made a token (`appOfClient`).
+export const AGENT_APPS = {
+  'codex-mcp-client': 'codex', 'cursor-vscode': 'cursor', 'claude-code': 'claude-code', 'claude-ai': 'claude-desktop',
+};
+// Client names that are no MCP client: the browser viewer's page names itself (`cad-viewer`, `cadgen-viewer` before
+// 0.10), and a client that could not say sends `unknown`. They name no app.
+const NO_APP = new Set(['cad-viewer', 'cadgen-viewer', 'unknown']);
+// A schema 10 or earlier channel, as the delivery channel it was: a store's copy carries the store's channel, every
+// copy of ours or a person's own is the default channel's, and `dev` and `unknown` stay as they were.
+const LEGACY_CHANNELS = { 'claude-directory': 'claude', 'openai-directory': 'codex', dev: 'dev', unknown: 'unknown' };
+// And the app it names, by its prefix, where the batch's MCP client said nothing.
+const LEGACY_APPS = [[/^claude-desktop$/, 'claude-desktop'], [/^claude-/, 'claude-code'], [/^(?:codex-|openai-directory$)/, 'codex'],
+  [/^cursor-/, 'cursor'], [/^gemini-/, 'gemini']];
 // Who sends, and the formats an event counts: each schema's own (`SCHEMAS`), the later a superset.
 const PROCESSES = new Set(['app', 'viewer', 'daemon']);
 const PROCESSES_6 = new Set([...PROCESSES, 'cli']);
@@ -411,7 +436,38 @@ const SCHEMAS = new Map([
   [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
+  // Schema 10 with the install described by two fields: the delivery channel and the agent app, each checked by its
+  // shape. Every earlier schema's batch is translated to the two (`translated`).
+  [11, { fields: ['channel', 'app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
+    origin: batch => ({ channel: matches(batch.channel, CHANNEL_11, 'channel'), app: matches(batch.app, APP, 'app'),
+      legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
+    current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
 ]);
+
+/**
+ * The app an MCP client's name stands for (`AGENT_APPS`), else the name itself made a token: lower case, a run of
+ * anything else one `-`, at most 40 characters. `null` where it names nothing.
+ */
+export function appOfClient(name) {
+  if (typeof name !== 'string') return null;
+  const lowered = name.trim().toLowerCase();
+  if (Object.hasOwn(AGENT_APPS, lowered)) return AGENT_APPS[lowered];
+  if (NO_APP.has(lowered)) return null;
+  return lowered.replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 40) || null;
+}
+
+/**
+ * A schema 10 or earlier batch's install, as schema 11 describes it: the delivery channel its old channel was, the
+ * app its MCP client names (else the one the old channel names, else `unknown`), and the old channel as sent.
+ */
+export function translated(legacy, client) {
+  return {
+    channel: LEGACY_CHANNELS[legacy] ?? 'default',
+    app: appOfClient(client) ?? LEGACY_APPS.find(([prefix]) => prefix.test(legacy))?.[1] ?? 'unknown',
+    legacy_channel: legacy,
+  };
+}
 
 export function isUuid(value) {
   return typeof value === 'string' && UUID.test(value);
@@ -439,14 +495,18 @@ export function rowsOf(batch) {
   const client = batch.client ?? {};
   if (typeof client !== 'object' || Array.isArray(client)) fail('client is an object');
   only(client, ['name', 'version'], 'client');
+  const clientName = client.name === undefined ? null : token(client.name, 'client.name');
+  const origin = schema.origin(batch);
   const context = {
     install_id: batch.install,
     session_id: batch.session,
     version: token(batch.version, 'version', 32),
-    ...schema.origin(batch),
+    ...origin,
+    // Before schema 11 the channel said where the copy came from and, often, which app: read as the two it was.
+    ...(schema.current ? {} : translated(origin.channel, clientName)),
     platform: oneOf(batch.platform, PLATFORMS, 'platform'),
     arch: batch.arch === undefined ? null : token(batch.arch, 'arch', 16),
-    client: client.name === undefined ? null : token(client.name, 'client.name'),
+    client: clientName,
     client_version: client.version === undefined ? null : token(client.version, 'client.version', 32),
     presentation: batch.presentation === undefined ? null : oneOf(batch.presentation, PRESENTATIONS, 'presentation'),
   };
