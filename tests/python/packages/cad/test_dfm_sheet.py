@@ -867,6 +867,50 @@ class ModellingMistakeTest(unittest.TestCase):
                         self.assertAlmostEqual(found["flat_area_mm2"], square["flat_area_mm2"], delta=0.05)
                         self.assertIn("sheet.edge_break", {f.code for f in result.findings})
 
+    @staticmethod
+    def _sunk(size: tuple[float, float, float], top: list[tuple[float, float]], bottom: list[tuple[float, float]],
+              hole: float, rim: float) -> bd.Part:
+        """A plate with ``hole`` mm holes countersunk to ``rim`` mm from its top (at ``top``) and from below."""
+        with bd.BuildPart() as built:
+            bd.Box(*size)
+            for side, places in ((1, top), (-1, bottom)):
+                for x, y in places:
+                    with bd.Locations(bd.Pos(x, y, side * size[2] / 2) * bd.Rot(0 if side > 0 else 180, 0, 0)):
+                        bd.CounterSinkHole(radius=hole / 2, counter_sink_radius=rim / 2, depth=size[2])
+        return built.part
+
+    def test_a_countersink_in_the_unfolded_side_leaves_the_flat_its_through_hole(self) -> None:
+        # the skin a countersink is sunk into has the countersink's rim for a hole, and where that skin was the
+        # one unfolded the flat had it too, 10 mm for a 5 mm hole, with no finding. A plate sunk from both
+        # sides has one such whichever side unfolds, and so has a hole chamfered at both rims
+        for name, top, bottom, rim in (("sunk from both sides", [(-20, 0)], [(20, 0)], 10.0),
+                                       ("chamfered at both rims", [(0, 0)], [(0, 0)], 6.0)):
+            with self.subTest(part=name):
+                result = checked(self._sunk((80, 40, 3), top, bottom, 5.0, rim))
+                self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+                holes = result.measurements["holes"]["items"]
+                self.assertEqual([(hole["size_mm"], hole["countersink_diameter_mm"]) for hole in holes],
+                                 [(5.0, rim)] * len(holes))
+                part = result.measurements["parts"]["items"][0]
+                self.assertAlmostEqual(part["flat_area_mm2"], 3200 - len(holes) * math.pi * 2.5 ** 2, delta=0.1)
+                self.assertAlmostEqual(part["flat_material_fraction"], 1.0, places=2)
+
+    def test_what_countersinks_and_edge_breaks_cut_is_not_missing_from_the_flat(self) -> None:
+        # the flat's area was held against the part's volume, which countersinks and edge breaks cut after the
+        # blank: 24 countersinks in a 2 mm plate, or a 1 mm chamfer round a small 3 mm one, read 107% and 111%
+        # of the material, an error on a flat that was right (and ``unfold`` refused it)
+        grid = [(x, y) for x in range(-35, 36, 10) for y in (-12, 0, 12)]
+        sunk = self._sunk((80, 40, 2), grid, [], 3.2, 6.4)
+        levels = bd.Box(20, 10, 3).edges().group_by(bd.Axis.Z)
+        for name, part, area in (("countersinks", sunk, 3200 - len(grid) * math.pi * 1.6 ** 2),
+                                 ("chamfers", bd.chamfer(levels[0] + levels[-1], 1.0), 200.0)):
+            with self.subTest(part=name):
+                result = checked(part)
+                self.assertNotIn("sheet.flat_incomplete", {f.code for f in result.findings})
+                found = result.measurements["parts"]["items"][0]
+                self.assertAlmostEqual(found["flat_material_fraction"], 1.0, places=2)
+                self.assertAlmostEqual(sheet.unfold(part).area, area, delta=0.01)
+
     def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
         # two bends meeting with no flat between them: a joggle, unrolled one strip after the other
         jog = bent([("line", 40), ("bend", 90, 1.5), ("bend", -90, 1.5), ("line", 40)], 1.5, 40, "jog")
