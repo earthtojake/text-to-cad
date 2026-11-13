@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from cad.engine.places import cache_dir, state_dir
+from cad.engine.places import cache_dir, data_dir
 from cad_server.engine.registry import PICTURES as THUMBNAILS
 from cad_server.engine.registry import pictures
 
@@ -168,12 +168,13 @@ def _mtime(path: str) -> float | None:
 
 
 class RecentStore:
-    """Recents over the registry of the state folder ``root`` (``state_dir()`` by default)."""
+    """Recents over the registry of the data folder ``root`` (this process's by default, ``places.data_dir``:
+    its version's, else the state folder before 0.12)."""
 
     def __init__(self, root: Path | None = None) -> None:
         from cad_server.engine.registry import Folder, Registry
 
-        self.state = Folder(root or state_dir())
+        self.state = Folder(root or data_dir())
         self.registry = Registry(self.state, cache=cache_dir())
         self.root = self.state.root / "recents"
         self.thumbnails = self.state.path(THUMBNAILS)

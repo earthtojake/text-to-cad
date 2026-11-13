@@ -19,8 +19,8 @@ and the engine switched (``cad_server._internal.switch``) only once nothing has 
 underway. The update button, ``cad update`` and the install command work as ever and come first: a
 click while an automatic update gets ready makes it the click's, done at once.
 
-The setting is the person's, one for every CAD app and release: the ``updates`` section of their
-settings (``cad_server/settings.py``: ``settings.json`` in the state folder), ``{"automatic": false}``
+The setting is the person's, one for every CAD app of a version, which a new version imports: the ``updates`` section of their
+settings (``cad_server/settings.py``: ``settings.json`` in the version's data folder), ``{"automatic": false}``
 once they turn it off (``cad update auto off``, or the app menu's Automatic updates in the CAD Viewer
 and the CAD app), ``{"automatic": true}`` once they turn it on; no section is the default. An
 environment that turns the version check off (``CAD_UPDATE_CHECK=0``, CI) turns it off too, and no
@@ -28,7 +28,7 @@ click changes that (``reason``: ``environment``). A development install is never
 as it is never told of a release.
 
 An update that fails leaves the engine as it was, or brings the release before back (the switch's
-way back), and is not tried again in a loop: the last automatic attempt is kept in the state folder
+way back), and is not tried again in a loop: the last automatic attempt is kept in the data folder
 (``RECORD``: its release and when), and the same release is tried again only ``RETRY_SECONDS`` later;
 a newer release the feed names is tried at the next check. Offline, or a feed that cannot be read:
 nothing happens, and nothing waits on it.
@@ -53,7 +53,7 @@ SECTION = "updates"  # this module's part of the settings file
 KEY = "automatic"
 # Whether automatic updates are on for a person who never chose: the one place to flip it.
 DEFAULT = True
-# The last automatic attempt, in the state folder: its release, when it began, and why it failed.
+# The last automatic attempt, in the data folder: its release, when it began, and why it failed.
 RECORD = "update-automatic.json"
 # How long nothing may have run before the engine switches by itself.
 IDLE_SECONDS = 60.0
@@ -110,7 +110,7 @@ def enabled(*, path: Path | None = None) -> bool:
 
 
 def change(choice: Any, *, path: Path | None = None) -> dict[str, Any]:
-    """Keep the person's answer (``{"automatic": true | false}``) under the state folder's one lock,
+    """Keep the person's answer (``{"automatic": true | false}``) under the data folder's one lock,
     beside every other setting, and answer the setting as it now is (``read``). ``ValueError`` for
     anything else; ``OSError`` when the settings cannot be written."""
     if not isinstance(choice, dict) or set(choice) != {KEY} or not isinstance(choice[KEY], bool):
@@ -123,9 +123,10 @@ def change(choice: Any, *, path: Path | None = None) -> dict[str, Any]:
 
 
 def _record_path() -> Path:
-    from cad.engine.places import state_dir
+    """The last automatic attempt's record, in this process's data folder (``places.data_dir``)."""
+    from cad.engine.places import data_dir
 
-    return Path(state_dir()) / RECORD
+    return Path(data_dir()) / RECORD
 
 
 def attempted(*, path: Path | None = None) -> dict[str, Any] | None:

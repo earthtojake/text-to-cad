@@ -218,10 +218,12 @@ def registration(version: str, found: tuple[str, str, str] | None = None, folder
 
 def _forget_read() -> None:
     """The records changed in this process: the version its environment is registered as
-    (``cad.engine.places.registered``, read once per process) is read again."""
+    (``cad.engine.places.registered``, read once per process), and the version it belongs to
+    (``places.versioned``), are read again."""
     from cad.engine import places
 
     places._registered.cache_clear()
+    places._versioned.cache_clear()
 
 
 def _same_place(one: str, other: str) -> bool:

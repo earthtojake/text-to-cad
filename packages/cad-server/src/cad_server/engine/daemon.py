@@ -64,7 +64,8 @@ snapshot asks for is drawn by a render process of its own (``renders``), started
 picture, sent each new version of it at the picture that asks for it, gone with the daemon or under
 the memory cap.
 
-Its only files are the operating system's coordination, in its own folder, ``state_dir``: a lock,
+Its only files are the operating system's coordination, in its own folder (``places.engine_dir``: its
+version's, ``<engines>/<version>``; with no version the flat one before 0.12): a lock,
 and on POSIX its door, a named pipe (``door_path``), and the pipes of the connections being opened
 (``door``: no socket, so a sandbox that refuses sockets still reaches it); on Windows a localhost
 TCP port and a token, in a port file there. It removes them as it stops (``let_go``); those of one
@@ -98,7 +99,8 @@ from cad.engine import places as _places
 from cad.engine.door import DOOR_PROTOCOL
 from cad.engine.frames import failed_type
 from cad.engine.ids import canonical, file_id, is_id
-from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation, lock, lock_path, names, port_path, pycache)
+from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation, lock, lock_path, names, port_path, pycache,
+                               versioned)
 from cad_server.engine import display
 from cad_server.engine.services import SERVICES
 from cad_server.engine.supervisor import Gone, Process, Supervisor
@@ -182,7 +184,10 @@ PYCACHE_UNUSED_DAYS = 30
 def prune_bytecode() -> None:
     """The bytecode folders of installations no daemon started in ``PYCACHE_UNUSED_DAYS``, removed in
     the background, when the daemon caches its own (``bytecode``): never a caller's folder, which is
-    not the engine's to judge."""
+    not the engine's to judge. Only in the layout before 0.12, a daemon with no version's
+    (``places.versioned``): a version's bytecode is in its own code, and goes with the version."""
+    if versioned() is not None:
+        return
     ours = pycache()
     if ours is None or os.path.realpath(sys.pycache_prefix or "") != os.path.realpath(ours):
         return

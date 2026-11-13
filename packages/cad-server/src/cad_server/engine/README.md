@@ -327,7 +327,7 @@ meanwhile makes it the click's, done at once; `cad update` or the install comman
 and the automatic update is given up. Nothing is ready to switch while a person's update runs, none
 starts within ten minutes of a failed one (`RECALL_SECONDS`), and a release whose automatic attempt
 did not hold is not tried again by itself for a day (`auto_updates.RETRY_SECONDS`, the attempt kept
-as `update-automatic.json` in the state folder); a newer one is tried at the next tend. Offline, or
+as `update-automatic.json` in the data folder); a newer one is tried at the next tend. Offline, or
 with the setting off, nothing is read and nothing happens.
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
@@ -345,10 +345,11 @@ held by <name> (pid N): stop it, or start the server with another CAD_ENGINE_POR
 --port` for a port `--port` named).
 
 The token is made at the first engine's start and every start serves with it: the engine's record,
-`engines/engine.json` in the state folder, keeps the port it rolled to (`registry.Registry.engine`,
+`engines/engine.json` in the data folder (`places.data_dir`: a version's `versions/<version>/data`, the
+state folder for an engine with no version), keeps the port it rolled to (`registry.Registry.engine`,
 its own `registry.ENGINE_SCHEMA`), and the token is the user's one file beside it, `engines/token`,
-which every engine serves with, whatever its release (`registry.Registry.token`; both this user's
-alone, 0600), so a link outlives an update too. So a page link
+which the version's engine serves with, a new version importing the one before's (`registry.Registry.token`;
+both this user's alone, 0600), so a link outlives an update too. So a page link
 -- the `cad viewer` output, a model's `view:` line, the CAD app's card -- works across `cad
 stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
@@ -425,10 +426,11 @@ model itself: it makes environments with uv, and every process that loads the ke
 
 **The base** is the environment of the build123d integration alone: `cad[build123d]` at the engine's
 own release -- or the source tree, or the wheel, the installation was made from -- on the engine's own
-Python, made by uv at `base/<key>` in the cache folder, its files hard links into uv's cache; uv is
+Python, made by uv at `base/<key>` in the version's code (`base.folder`: `versions/<version>/code/base`; for
+an engine with no version, in the cache folder), its files hard links into uv's cache; uv is
 asked `--offline` first and goes to the network only for what its cache lacks, saying so first
-(`cad_server._internal.base`). One per installation, keyed by it (its environment, the version it
-runs as, its release and source), its Python and the architecture, so an update has a base of its
+(`cad_server._internal.base`). One per installation, keyed by it (the version it runs as, its release
+and source, and with no version its environment), its Python and the architecture, so an update has a base of its
 own. Its marker, `cad-env.json`, written last, makes it complete, so a later use reads the marker and
 resolves nothing; a lock beside it makes one process make it while another waits. An installation
 whose own environment carries the kernel (installed with the extra, `pip install
@@ -509,8 +511,7 @@ pulled in by a package that depends on it) adds that integration's extra, and uv
 saying so (`build123d came in through another package: resolving again with cad[build123d] 0.10.0,
 so cad's pins decide it`); its marker names the integrations it was made with (`integrations`).
 
-**One per distinct set, never changed once made.** It lives in the cache folder beside the base
-(`base/<key>`): its key digests the installation's base's inputs, the release among them, the spec
+**One per distinct set, never changed once made.** It lives beside the base (`base/<key>`, `base.folder`): its key digests the installation's base's inputs, the release among them, the spec
 (`Spec.keyed`: the integrations, the requirements normalized, each once and sorted -- a local path
 made absolute, against the working folder for `--with` and the script's folder for the header, a
 name as PEP 503 spells it, its extras sorted, its specifier without spaces -- the editable folders,
@@ -685,7 +686,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model**; what measures a manufacturing check (`measuring`, from `_measuring.py`, of the standard library alone, which `cad.engine` takes as it is imported) |
-| `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
+| `places.py` | where things are, for every process alike, with the standard library alone: the version a process belongs to (`versioned`) and its folders (`version_dir`, `code_dir`, `data_dir`, `cache_dir`), the layout before 0.12 a process with none keeps (`state_dir`, `legacy_cache_dir`), the engine folders and their door, lock and port file (`engines_dir`, `engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), what a robot file holds (`robot`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
 | `weights.py` | what a document weighs as its robot description weighs it, for `inspect`: the description's **Mass** rule over the engine's volumes, with no kernel -- each part's mass, its point masses, which is declared and which computed (`Weights.said`), and the description's refusal in its words |
@@ -693,7 +694,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
 | `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`; a file document's derived views, a board's, and a document's kept checks beside it), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
-| `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
+| `registry.py` | the registry of documents in the version's data folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands, the server's: the operations `export`, `snapshot` and `inspect` (each type's, `cad <type> <operation>`), and `serve`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
@@ -932,14 +933,14 @@ it imports are compiled from their bytes on disk, never from a `__pycache__` `.p
 build writes no bytecode of them: CPython takes a `.pyc` as current by the source's whole-second
 mtime and its size, so a same-length edit inside the second another tool compiled the file would
 otherwise run that tool's code. The libraries a worker loads are another matter: the daemon and
-its workers cache their bytecode under `pycache/<installation>` in the cache folder
-(`places.bytecode`, `PYTHONPYCACHEPREFIX`; one given is honoured, a caller's
+its workers cache their bytecode in the version's code, `code/pycache` (with no version, under
+`pycache/<installation>` in the cache folder; `places.bytecode`, `PYTHONPYCACHEPREFIX`; one given is honoured, a caller's
 `PYTHONDONTWRITEBYTECODE` is not, as the daemon serves every later client), never beside a
 library or a model. A uvx installation compiles nothing on install, so without it every worker's
 start compiled build123d and the pure-Python libraries it loads: measured on a fresh uvx
 environment of the wheel, a fresh daemon's first build of a one-body model took 5.2-6.2 s with
-none cached and 2.4-2.9 s cached. A folder no daemon started in 30 days goes
-(`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
+none cached and 2.4-2.9 s cached. A version's goes with the version; in the cache folder, a folder no
+daemon started in 30 days goes (`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
 The daemon's standby (**The engine server and its workers**) loads the kernel once the base exists:
 the first load of a fresh installation on macOS also waits on the system's first look at each native
 library, 43 s measured, which the standby pays while nobody waits. A build that waits
@@ -1646,7 +1647,9 @@ data, which Windows virtualizes for every process an app package starts (the Cla
 server, and the engine it starts), so a port file written there would reach no other app. 0.10.0's was
 there, and for one release the engine writes its port file there too (`daemon._mirror`), for a 0.10.0
 CAD app's server still running. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
-other's door.
+other's door. In it each installed version's engine has a folder of its own, `<version>` (`places.engine_dir`),
+made this user's alone with the one above it (`places.make_engine_dir`); its door, lock and port file directly
+in it are the flat ones of the layout before 0.12, an engine with no version's.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
   holds it open for reading, and for writing too, so it never reads as closed. A door nobody reads
@@ -1775,8 +1778,8 @@ or from a script one of whose functions has its name -- naming that declaration 
 one id is one document.
 
 **The registry.** One record per document the engine built, and per CAD file a page opened,
-`documents/<id>/document.json` in the user's state folder ([registry.py](registry.py); the
-distribution names the folder, `places.state_dir`): it points; a document's bytes
+`documents/<id>/document.json` in the version's data folder ([registry.py](registry.py); the
+distribution names the folder, `places.data_dir`: the state folder for an engine with no version): it points; a document's bytes
 are the cache's, in the cache folder (**The cache**).
 Every record has one shape, `{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?, revision, built, created?, facts?,
 program?, python?, with?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart
@@ -1855,7 +1858,8 @@ file's time on disk, a model's run), each row carrying both; a model's script is
 
 **The cache.** For every model and shape document -- never a file's, which is its own
 file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
-([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
+([cache.py](cache.py); `places.cache_dir`: a version's `versions/<version>/data/cache`; with no version
+`CAD_CACHE_DIR`, else
 `$XDG_CACHE_HOME/cad`, else `~/.cache/cad`, on Windows too, where 0.10.0 kept it in
 `%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its

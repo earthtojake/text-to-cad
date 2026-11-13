@@ -278,13 +278,14 @@ def _remove(found: dict[str, Any]) -> list[str]:
 
 
 def _bases_of(folder: Path) -> list[Path]:
-    """The bases made for the installation in ``folder`` (``base.MARKER`` naming it as theirs)."""
-    from cad.engine.places import cache_dir
+    """The bases made for the installation in ``folder`` (``base.MARKER`` naming it as theirs), a release
+    before 0.12's: in the cache folder before 0.12 (``places.legacy_cache_dir``)."""
+    from cad.engine.places import legacy_cache_dir
 
     found = []
     here = os.path.normcase(os.path.realpath(folder))
     try:
-        entries = list(os.scandir(Path(cache_dir()) / base.BASE))
+        entries = list(os.scandir(Path(legacy_cache_dir()) / base.BASE))
     except OSError:
         return []
     for entry in entries:

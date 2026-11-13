@@ -1,5 +1,6 @@
 """An exclusive lock between processes, held on a file of its own beside what it guards, and the
-state folder's one lock (``state``), which every change of a small file there holds."""
+data folder's one lock (``state``: a version's data folder, ``places.data_dir``, the state folder before
+0.12), which every change of a small file there holds."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-# The state folder's one lock: every read-change-write of a small file there -- the settings, the
+# The data folder's one lock: every read-change-write of a small file there -- the settings, the
 # install channels, the telemetry spool and the batches kept, the start of a telemetry sender --
 # holds it (``state``), so none needs a lock file of its own. Named as cadgen 0.7 names the
 # settings' lock, so a 0.7 still installed and this cadgen changing the settings exclude each other.
@@ -66,5 +67,5 @@ def exclusive(lock_path: Path, *, waiting: Callable[[], None] | None = None) -> 
 
 
 def state(folder: Path, *, waiting: Callable[[], None] | None = None) -> contextlib.AbstractContextManager[None]:
-    """Hold the state folder's one lock (``STATE_LOCK`` in ``folder``), waiting for any other holder."""
+    """Hold the data folder's one lock (``STATE_LOCK`` in ``folder``), waiting for any other holder."""
     return exclusive(folder / STATE_LOCK, waiting=waiting)

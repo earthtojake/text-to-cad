@@ -421,7 +421,7 @@ class Server:
             from cad_server.analytics import Recorder
             from cad_server.settings import FILE
 
-            # The settings beside the model library (the state directory, by default): shared by every process.
+            # The settings beside the model library (this version's data folder, by default): shared by its every process.
             path = Path(self._recents.root).parent / FILE if self._recents is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics

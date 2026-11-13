@@ -169,10 +169,12 @@ def environment() -> dict[str, str]:
 
 def _start() -> subprocess.Popen:
     """A daemon started, detached: its process, whose ``pid`` says whether the daemon that answers
-    is the one this process started (``_told_started``). It is the current installation's engine
-    (``places.engine``, read now), started with that installation's Python whatever release this client
-    is -- a client of another release is handed nothing of its own import path --; with none current,
-    the installation whose base this process runs in (``places.HOME``: ``cad run``'s). Where neither is,
+    is the one this process started (``_told_started``). It is the engine ``places.engine`` names, read
+    now -- this client's own version's, for a client with a version (it reaches that version's door alone,
+    ``places.engine_dir``); the current installation's for one with none --, started with that
+    installation's Python whatever release this client is -- a client of another release is handed nothing
+    of its own import path --; with none, the installation whose base this process runs in (``places.HOME``:
+    ``cad run``'s). Where neither is,
     nothing starts: the library never starts a server of its own environment, and says so in one line
     (``NOT_INSTALLED``, a ``ConnectionError``) -- every installation registers itself as it is set up.
     Started by its own installation (this process's environment, or its base's), the engine's folder is
@@ -228,7 +230,7 @@ def connect(*, start: bool = True, timeout: float = 60.0) -> Connection | None:
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     try:
-        places.engine_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
+        places.make_engine_dir()
     except PermissionError as error:
         raise _denied(f"making the engine's folder: {error.strerror or error}") from None
     refusal = places.folder_refusal(places.engine_dir())

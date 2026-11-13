@@ -3,7 +3,7 @@
 
 They are sent by default once a ``cad`` command has said so (``cad_server/analytics.py``). ``status`` (the
 default) says what is sent and why, and says that notice itself if no command has yet; ``on`` and ``off``
-keep the person's choice in the state directory, which every process of the server's reads: ``on`` sends what the
+keep the person's choice in this version's data folder, which every process of the server's reads: ``on`` sends what the
 default does, as the person's own answer, and ``off`` sends nothing. ``DO_NOT_TRACK=1`` or
 ``CAD_TELEMETRY=0`` in a process's environment turns it off for that process, and ``CAD_TELEMETRY=1``
 on, without changing the choice kept here.

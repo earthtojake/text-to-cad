@@ -28,7 +28,7 @@ ROUNDS = 8  # the most batches one sender sends: a spool past ``analytics.MAX_EV
 def start_if_due(path: Path | None = None, *, now: float | None = None,
                  spawn: Callable[[Path], Any] | None = None) -> bool:
     """Start the sender when the spool has waited longer than a window and none was started within one; whether
-    it was. Under the state folder's one lock, whose time is when the last sender was started: so two commands
+    it was. Under the data folder's one lock, whose time is when the last sender was started: so two commands
     at once start one, and a sender a window old -- done or stuck -- is followed by the next. Never raises,
     never waits on it."""
     try:

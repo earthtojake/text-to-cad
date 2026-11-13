@@ -50,7 +50,7 @@ AUTO_UPDATED_ENV = "CAD_AUTO_UPDATED"
 DEV = "dev"
 UNKNOWN = "unknown"
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
-# Where each installation's channel is written down, in the state directory, and how many installations
+# Where each installation's channel is written down, in the data folder, and how many installations
 # it keeps: the most recently written, as uv makes a new one for each release a plugin pins.
 RECORD = "install-channels.json"
 KEPT_INSTALLATIONS = 16
@@ -96,9 +96,10 @@ def channel() -> str:
 
 
 def _record_path() -> Path:
-    from cad.engine.places import state_dir
+    """The channels' record, in this process's data folder (``places.data_dir``)."""
+    from cad.engine.places import data_dir
 
-    return state_dir() / RECORD
+    return data_dir() / RECORD
 
 
 @functools.cache
@@ -143,7 +144,7 @@ def remember(value: str | None = None, *, path: Path | None = None) -> str | Non
         if _load(path).get(key) == value:  # as nearly every start finds it: no lock to wait on, nothing to write
             return value
         path.parent.mkdir(parents=True, exist_ok=True)
-        with state(path.parent):  # the state folder's one lock
+        with state(path.parent):  # the data folder's one lock
             kept = _load(path)
             if kept.get(key) == value:
                 return value

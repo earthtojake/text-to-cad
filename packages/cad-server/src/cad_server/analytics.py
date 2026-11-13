@@ -89,7 +89,7 @@ It is sent by default once the person has been told, and never after their no. S
    to the settings, and not inherited by the processes it starts for others (``for_others``): a detached
    viewer and the telemetry sender go by the settings.
 2. The person's choice, kept as the ``telemetry`` section of their settings (``cad_server/settings.py``:
-   ``settings.json`` in the state directory) and shared by every process: either app's menu,
+   ``settings.json`` in the data folder) and shared by every process: either app's menu,
    or ``cad telemetry on|off``. A yes sends all of
    the above; a no, nothing.
 3. Otherwise the default: all of the above, from the moment the person has been told -- one line,
@@ -118,7 +118,7 @@ on again starts a new install, so nothing links the two.
 Telemetry never gets in the way of CAD:
 
 - Nothing here raises into the process that counts. Every ``Recorder`` method is guarded: a failure
-  (an unreadable state directory, a broken receiver, a bug here) is logged at debug level, below
+  (an unreadable data folder, a broken receiver, a bug here) is logged at debug level, below
   what ``cad-mcp`` prints, so nothing reaches a host's or an agent's logs, and answered with a
   safe default: not sharing, nothing sent, nothing said.
 - No tool call, build or command waits on the network, and none needs it: offline, everything
@@ -132,7 +132,7 @@ Telemetry never gets in the way of CAD:
   makes a second copy the first one, never more counts. One the receiver read and refused
   (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
 
-The answer is changed only under the state folder's one lock (``settings.update_section``), so the processes
+The answer is changed only under the data folder's one lock (``settings.update_section``), so the processes
 answering, opting out or making the install's id at once never undo one another. A settings file
 that is there but cannot be read counts as no answer that can be kept ("unavailable"), never as no
 answer yet, and is never written back over.
@@ -180,7 +180,7 @@ PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 SCHEMA = 10
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
-# the answer: it lives in the person's state directory, not the install. Neither schema 4, 5 nor 6 raised it
+# the answer: it lives in the version's data folder, which a new version imports, not in its code. Neither schema 4, 5 nor 6 raised it
 # (nor ``NOTICE``): each says more of what was told already -- why a counted call, build or snapshot failed,
 # in a word of ours; one more format; one more of cadgen's processes sending what commands counted, which
 # the daemon sent before -- and a batch's random id and time link nothing its process's id did not. Nor schema 7:
@@ -662,7 +662,7 @@ _UNREAD = object()  # a process's first batch, before its first use: the answer 
 
 
 def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any] | None:
-    """Change the telemetry section under the state folder's one lock: what is kept, or ``None`` when it
+    """Change the telemetry section under the data folder's one lock: what is kept, or ``None`` when it
     could not be read or written -- and then this process stops asking (``_can_keep``)."""
     try:
         return update_section(SECTION, change, path=path)
@@ -774,7 +774,7 @@ _KEEPS: set[Path] = set()  # state files whose folder took a file in this proces
 
 def _can_keep(path: Path) -> bool:
     """Whether an answer could be written to ``path``, found by doing what a write does -- a file
-    beside it, and the state folder's one lock opened and held -- rather than by ``os.access``, which calls
+    beside it, and the data folder's one lock opened and held -- rather than by ``os.access``, which calls
     every folder writable on Windows. A folder that passed is not tried again in this process, one
     that refused is, every time it matters; once a write has failed after all, this process asks
     no more (``_UNKEPT``)."""
@@ -810,7 +810,7 @@ def status(*, path: Path | None = None, probe: bool = True, keep: bool = True,
     ``unavailable`` (nothing is sent, and nothing said: no answer could be kept). Sharing makes the
     install's id where it is missing -- but with ``keep`` false (``cad doctor --check``, which writes
     nothing), which says the id as it is, none. ``probe=False`` takes no answer that could be kept for
-    ``unavailable`` without trying the state directory (``_can_keep``): a sender's question, which
+    ``unavailable`` without trying the data folder (``_can_keep``): a sender's question, which
     either way sends nothing.
     """
     path = path or settings_path()
@@ -1373,7 +1373,7 @@ def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str,
     ``cad_server._internal.telemetry_send``), and only while sharing is on -- by this process's environment, or
     ``env``, the asker's (``status``): a sender takes a line only under that
     same answer, and a no deletes them all (``choose``). Past ``SPOOL_BYTES`` nothing more is kept. A local
-    write under the state folder's one lock, safe from any thread. Never raises."""
+    write under the data folder's one lock, safe from any thread. Never raises."""
     try:
         if not isinstance(counts, dict) or not any(counts.get(name) for name in ("builds", "snapshots", "features",
                                                                                   "crashes", "health")):
@@ -1390,7 +1390,7 @@ def spool(counts: dict[str, Any], *, path: Path | None = None, env: Mapping[str,
 
 def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict[str, Any]]:
     """What commands kept (``spool``), or exiting processes (``KEPT``, each line a ``batch``), taken whole
-    by one process: moved aside under the state folder's one lock, so no line is taken twice or lost to a process
+    by one process: moved aside under the data folder's one lock, so no line is taken twice or lost to a process
     appending meanwhile."""
     kept = path.with_name(name)
     if not kept.exists():
@@ -1416,7 +1416,7 @@ def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict
 
 
 def _keep(path: Path, name: str, entry: dict[str, Any]) -> bool:
-    """One line appended to the kept file ``name`` beside the settings, under the state folder's one lock: past
+    """One line appended to the kept file ``name`` beside the settings, under the data folder's one lock: past
     ``SPOOL_BYTES`` nothing more is kept. A local write, never the network."""
     line = json.dumps(entry, separators=(",", ":"))
     kept = path.with_name(name)

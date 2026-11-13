@@ -1,14 +1,15 @@
-"""The person's settings: one file, ``settings.json``, in the state directory beside the model
-library, so both CAD apps (``cad-mcp`` and ``cad viewer``) and every version of cadgen read
-the same answers -- nothing an install or an update replaces holds them. Deleting the state
-directory forgets them.
+"""The person's settings: one file, ``settings.json``, in the data folder of the version that reads them
+(``places.data_dir``: ``versions/<version>/data``; for a process with no version, the state folder itself, as
+before 0.12) beside its model library, so both CAD apps (``cad-mcp`` and ``cad viewer``) and every process of
+that version read the same answers -- nothing that version's code holds them. Each version keeps its own:
+a new one starts from the one it replaces. Deleting the data folder forgets them.
 
 The file is one JSON object with a section per feature, each owned by the module that uses it
 (``telemetry``: whether usage stats and crash reports are sent, and the install's random id,
 ``cad_server/analytics.py``; ``language``: the language a person chose for the CAD views,
 ``cad_server/language.py``; ``whats_new``: the releases whose What's new dialog the person has seen,
 ``{"seen": ["0.11"]}``, ``cad_server/whats_new.py``). A change reads,
-changes and writes its own section under the state folder's one lock (``update_section``,
+changes and writes its own section under the data folder's one lock (``update_section``,
 ``file_lock.state``), so two apps changing settings at once never undo each other, whichever
 sections they touch.
 """
@@ -27,9 +28,11 @@ FILE = "settings.json"
 
 
 def settings_path() -> Path:
-    from cad.engine.places import state_dir
+    """``settings.json`` in the data folder of the version this process belongs to (``places.data_dir``: the
+    state folder itself for a process with no version, as before 0.12)."""
+    from cad.engine.places import data_dir
 
-    return state_dir() / FILE
+    return data_dir() / FILE
 
 
 def _load(path: Path) -> dict[str, Any]:

@@ -5,7 +5,10 @@ The server's own clients find it by one rule (the library's ``cad.engine.places`
 reads it the same way:
 
 - **The engine folder** (``engine_dir``): the server's door (a named pipe; on Windows a port file) and
-  lock, named ``engine``, in a folder only this user can write (``folder_refusal``). A request is one JSON
+  lock, named ``engine``, in a folder only this user can write (``folder_refusal``): the flat one directly in
+  the engines' folder (``engines_dir``), which every server before 0.12 holds; a version's is
+  ``<engines>/<version>`` (``engine_dir(version)``), its data ``versions/<version>`` in the state folder
+  (``version_dir``) -- the library's rules (``cad.engine.places``), copied and held equal by a test. A request is one JSON
   line through the door, answered by JSON lines (``request``); the door is the one way to the server's
   HTTP endpoint and its token (``op: http``), which a loopback port alone could not vouch for.
 - **The current installation** (``current``): ``<state>/installations/current`` names the release whose
@@ -49,6 +52,9 @@ DAEMON_MODULE = "cad_server._internal.engine_daemon"
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.14", "--from")
 INSTALLATIONS = "installations"
 CURRENT = f"{INSTALLATIONS}/current"
+# The installed versions' folder in the state folder, and a version's name: a digit first.
+VERSIONS = "versions"
+VERSION = r"[0-9][0-9A-Za-z.+_-]*"
 # Switches that govern only the process they are set in: the server serves every later client, so it
 # goes by the person's saved choice, never by the switch of whichever client happened to start it.
 PER_PROCESS = ("DO_NOT_TRACK", "CAD_TELEMETRY")
@@ -81,10 +87,30 @@ def state_dir() -> Path:
     return _local_state() / "cad"
 
 
-def engine_dir() -> Path:
-    """Where the server's door and lock live: ``CAD_ENGINE_DIR``, else ``default_engine_dir``."""
+def version_dir(version: str) -> Path:
+    """Version ``version``'s folder, ``versions/<version>`` in the state folder. ``ValueError`` for a name that
+    is no version."""
+    import re
+
+    if not re.fullmatch(VERSION, version or ""):
+        raise ValueError(f"not a version: {version!r}")
+    return state_dir() / VERSIONS / version
+
+
+def engines_dir() -> Path:
+    """The engines' folder: ``CAD_ENGINE_DIR``, else ``default_engine_dir``; the flat door every server before
+    0.12 holds is in it directly, each version's engine in a folder of its own (``engine_dir``)."""
     override = os.environ.get("CAD_ENGINE_DIR")
     return Path(os.path.realpath(override if override else default_engine_dir()))
+
+
+def engine_dir(version: str | None = None) -> Path:
+    """Where a server's door and lock live: version ``version``'s folder in the engines' folder, else the
+    engines' folder itself, the flat door this transport reaches."""
+    if version is None:
+        return engines_dir()
+    version_dir(version)  # the same refusal of a name that is no version
+    return engines_dir() / version
 
 
 def default_engine_dir() -> str:

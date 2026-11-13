@@ -49,7 +49,7 @@ src/cad_server/
   jobs.py                # the viewer exports' admission, progress, waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
-  settings.py            # the person's settings: settings.json in the state directory
+  settings.py            # the person's settings: settings.json in the data folder
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen (settings'
                          #   whats_new), and whether a device was updated or is new
@@ -75,7 +75,7 @@ src/cad_server/
                          #   what earlier releases left behind (leftovers), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, the
-                         #   install channel, file locks (the state folder's one lock:
+                         #   install channel, file locks (the data folder's one lock:
                          #   `file_lock.state`), the CLI derivation, the one parser every
                          #   command reads its options by (cli_parser) and the one failure
                          #   contract every command fails by (cli_errors)
@@ -194,6 +194,14 @@ plugin itself. A model builds by running its script: `cad run model.py`, through
 the `cad` command, which runs the current installation, else the one registered last
 (`_internal/proxy.py`). The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
+
+An installed version keeps everything it reads and writes in its own folder, `versions/<version>` in
+the state folder: its data (`data/`: settings, Recents, the documents' records, the page token and
+port, the telemetry spool, the version feed's cache, and its caches under `data/cache/`) and its code
+(`code/`: its environments, the kernel's and `cad run`'s under `code/base/`, and their bytecode), and
+its engine's door in `<version>` in the engine folder; a process with no version (a checkout or a test
+under `CAD_STATE_DIR`, `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`, a release before 0.12) keeps the flat
+layout below, in the state and cache folders (`cad.engine.places`).
 
 The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
 place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and

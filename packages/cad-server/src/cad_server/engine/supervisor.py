@@ -301,6 +301,11 @@ class Process:
         else:
             python, own = service.environment, False
         env = dict(environment) if service.env == "lease" else dict(os.environ)
+        version = places.versioned()
+        if version is not None:
+            # A daemon with a version names it to every process it starts (``places.versioned``), whose
+            # folders are then its own whatever Python a lease names: a script's own reaches nobody else's.
+            env[places.INSTALLATION_ENV] = version
         if own:
             # The daemon's own environment: the engine it runs, its folder first on the path.
             root, path = places.engine_root(), env.get("PYTHONPATH", "")

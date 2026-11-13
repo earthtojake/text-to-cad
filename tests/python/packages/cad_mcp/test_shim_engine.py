@@ -204,5 +204,33 @@ class DoorTest(unittest.TestCase):
         accepting.join(timeout=30)
         self.assertEqual(handled, [{"token": token, "op": "status"}])
 
+
+class SameFoldersTest(unittest.TestCase):
+    """The transport's copy of the library's folder rules (``cad.engine.places``, which it does not import)
+    names the same folders: the state folder, a version's folder, the engines' folder and a version's engine
+    folder, overridden or not."""
+
+    def test_the_copies_name_the_same_folders(self) -> None:
+        from cad.engine import places
+
+        root = Path(tempfile.mkdtemp(prefix="shim-places-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        settings = [{"CAD_STATE_DIR": "", "CAD_ENGINE_DIR": "", "XDG_STATE_HOME": "", "XDG_RUNTIME_DIR": ""},
+                    {"CAD_STATE_DIR": str(root / "state"), "CAD_ENGINE_DIR": str(root / "engines")},
+                    {"CAD_STATE_DIR": "", "CAD_ENGINE_DIR": "", "XDG_STATE_HOME": str(root / "xdg")}]
+        for environment in settings:
+            with self.subTest(environment), mock.patch.dict(os.environ, environment):
+                self.assertEqual(engine.state_dir(), places.state_dir())
+                self.assertEqual(engine.default_engine_dir(), places.default_engine_dir())
+                self.assertEqual(engine.engines_dir(), places.engines_dir())
+                self.assertEqual(engine.engine_dir(), places.engines_dir(), "the flat door, which this transport reaches")
+                for version in ("0.12.0", "0.12.0-dev.20261113120000"):
+                    self.assertEqual(engine.version_dir(version), places.version_dir(version))
+                    self.assertEqual(engine.engine_dir(version), places.engine_dir(version))
+        for name in ("..", "../x", ""):
+            with self.subTest(name), self.assertRaises(ValueError):
+                engine.version_dir(name)
+
+
 if __name__ == "__main__":
     unittest.main()

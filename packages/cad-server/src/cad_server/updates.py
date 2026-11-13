@@ -6,7 +6,7 @@ At most once an hour, the server reads the version feed (``GET /v1/versions``, `
 
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
-set) or for a copy that is not told. The feed as last read is kept in the state directory
+set) or for a copy that is not told. The feed as last read is kept in the data folder
 (``versions.json``), where every process of the person's reads it. It says a release is out; the
 update moves to it when the person asks -- the update button in the CAD Viewer and the CAD app
 (``cad_server._internal.update``), ``cad update``, or the install command run again -- or, with
@@ -56,7 +56,7 @@ LOG = logging.getLogger("cad_server.updates")
 
 INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"  # installs or updates text-to-cad: macOS and Linux
 INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"  # the same, in Windows PowerShell
-FILE = "versions.json"  # the feed as last read, in the state directory
+FILE = "versions.json"  # the feed as last read, in the data folder
 CHECK_SECONDS = 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
@@ -96,9 +96,10 @@ def checking(*, asked: bool = False) -> bool:
 
 
 def _cache() -> Path:
-    from cad.engine.places import state_dir
+    """The feed's cache, in this process's data folder (``places.data_dir``)."""
+    from cad.engine.places import data_dir
 
-    return state_dir() / FILE
+    return data_dir() / FILE
 
 
 def _load(path: Path) -> dict[str, Any]:

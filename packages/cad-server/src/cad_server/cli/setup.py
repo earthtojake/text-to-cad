@@ -124,7 +124,7 @@ LOCK = "install.lock"
 # What text-to-cad keeps in the two folders ``--purge`` removes. A folder of that name that holds other things
 # and none of these is another program's that shares the name, and purge leaves it as it is (the engine's own
 # cache touches only its ``documents/``, ``engine/cache.py``).
-STATE_OURS = frozenset({"installations", "engines", "documents", "recents", "releases", "plugin", "settings.json",
+STATE_OURS = frozenset({"versions", "installations", "engines", "documents", "recents", "releases", "plugin", "settings.json",
                         "settings.lock", "plugin.lock", "versions.json", "install-channels.json", RECEIPT})
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
@@ -1024,7 +1024,7 @@ class Installer:
     def uninstall(self) -> int:
         providers = self.providers
         from cad_server._internal import installations
-        from cad.engine.places import cache_dir
+        from cad.engine.places import legacy_cache_dir
 
         receipt = self._receipt()
         apps = providers.detect(self.machine, folder=self.folder)
@@ -1058,7 +1058,7 @@ class Installer:
             if os.path.lexists(self.folder):
                 extra.append({"app": "plugin", "label": "plugin folder", "action": "remove",
                               "subject": providers.shown(str(self.folder), self.machine)})
-        state, cache = self._state(), Path(cache_dir())
+        state, cache = self._state(), Path(legacy_cache_dir())  # the versions' own caches are in the state folder
         if self.args.purge:
             extra.append({"app": "folders", "label": "folders", "action": "remove",
                           "subject": f"{providers.shown(state, self.machine)} and {providers.shown(cache, self.machine)}"})

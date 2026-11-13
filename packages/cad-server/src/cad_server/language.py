@@ -2,7 +2,7 @@
 ``/api/v1/settings``, which ``cad-mcp``'s views reach through its tunnel). By default a view infers
 it from its context -- the browser's languages, or its host's locale -- and this module keeps only
 the person's override: the ``language`` section of their settings (``cad_server/settings.py``:
-``settings.json`` in the state directory), so it is one choice for every CAD view -- every tab, both
+``settings.json`` in the data folder), so it is one choice for every CAD view -- every tab, both
 apps -- across reloads and restarts. Choosing Automatic removes it. A locale is named as the page
 names it (``zh-CN``), and a new one is a line of ``LOCALES`` beside its dictionary.
 """
@@ -36,7 +36,7 @@ def read(*, path: Path | None = None) -> dict[str, str | None]:
 
 
 def change(choice: Any, *, path: Path | None = None) -> dict[str, str | None]:
-    """Keep the person's language (``{"locale": "<one of LOCALES>"}``) under the state folder's one lock,
+    """Keep the person's language (``{"locale": "<one of LOCALES>"}``) under the data folder's one lock,
     beside every other setting, or forget it (``{"locale": null}``: Automatic), and answer it as it
     now is. Raises ``ValueError`` for anything else, and ``OSError`` when the settings cannot be
     written."""

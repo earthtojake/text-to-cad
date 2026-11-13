@@ -315,15 +315,15 @@ def engine_answers(top: str, door: str) -> bool:
 
 
 # Where the developer keeps what their own cadgen registers, which no test may write (every file has
-# folders of its own): the state folder (``cad_server.viewer.recents.state_dir``) and the ``cadgen``
-# command (``cad_server._internal.installations.proxy_path``), as this run's environment names them and
-# as the platform does where nothing names them; and the name this run's engines give their records
+# folders of its own): the state folder (``cad.engine.places.state_dir``, every version's data within)
+# and the ``cadgen`` command (``cad_server._internal.installations.proxy_path``), as this run's
+# environment names them and as the platform does where nothing names them; and the name this run's engines give their records
 # there (``places.NAME``: one engine a device, so one record).
 _PERSON_PLACES = (
     "import json, os\n"
     "from cad_server._internal.installations import proxy_path\n"
     "from cad.engine import places as engine\n"
-    "from cad_server.viewer.recents import state_dir\n"
+    "from cad.engine.places import state_dir\n"
     "places = [(str(state_dir()), proxy_path())]\n"
     "os.environ.pop('CAD_STATE_DIR', None)\n"
     "os.environ.pop('CAD_LAUNCHER_DIR', None)\n"

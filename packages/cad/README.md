@@ -195,7 +195,15 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    its imports use, and the packages it names), regenerable as well, those of the release before the
    current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
    folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
-   imports bpy: `homes/blender`), empty but for what the tool itself writes there. The code stays the only source of truth: a document is what its
+   imports bpy: `homes/blender`), empty but for what the tool itself writes there. That is the layout
+   before 0.12, which a process with no version keeps (a checkout or a test under `CAD_STATE_DIR`,
+   `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`; a release installed flat). An installed version keeps all of
+   its own in one folder, `versions/<version>` in the state folder: its data in `data/` (the settings,
+   Recents, the registry, the page token and port, and the caches above under `data/cache/`), its
+   environments and bytecode in `code/` (the base and each run's under `code/base/`, bytecode under
+   `code/pycache/`), and its door in `<version>` in the engine folder; the state folder itself holds only
+   the device's globals (the installations' records, the install receipt and lock, the plugin folder).
+   Which a process is, and so every path, is `cad.engine.places`' one rule (`versioned`). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file

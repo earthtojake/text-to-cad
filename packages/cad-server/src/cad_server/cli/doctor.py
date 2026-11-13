@@ -390,10 +390,10 @@ def _cache() -> str:
     from cad_server.engine.cli import cache_text
     from cad.engine.ids import is_id
     from cad_server.engine.registry import DOCUMENTS, RECORD
-    from cad.engine.places import cache_dir, state_dir
+    from cad.engine.places import cache_dir, data_dir
 
     try:
-        root, state = cache_dir(), state_dir()
+        root, state = cache_dir(), data_dir()
         count = size = 0
         for name in sorted(os.listdir(root / DOCUMENTS)) if (root / DOCUMENTS).is_dir() else []:
             if not is_id(name) or not (state / DOCUMENTS / name / RECORD).is_file():
@@ -410,20 +410,22 @@ def _cache() -> str:
 
 def _leftovers(gone=frozenset()):
     """What earlier releases left behind that none running now needs (``cad_server._internal.leftovers``):
-    the state and cache folders, and each class found in them -- read as if the installations whose prefixes
+    the state and cache folders of the layout before 0.12 (``places``: a version's own go with it), and each
+    class found in them -- read as if the installations whose prefixes
     are ``gone`` were no longer registered (``--prune``'s plan, before it removes them). What 0.8 and 0.7 kept
     outside what 0.10 moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for
     cadgen (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
     ``CAD_CACHE_DIR`` name them)."""
     from cad_server._internal import installations, leftovers
-    from cad.engine.places import (appdata_cache_dir, appdata_state_dir, cache_dir, earlier_cache_dir,
-                                   earlier_state_dir, engine_dir, state_dir)
+    from cad.engine.places import (appdata_cache_dir, appdata_state_dir, earlier_cache_dir, earlier_state_dir,
+                                   engines_dir, legacy_cache_dir, state_dir)
 
-    state, cache = state_dir(), cache_dir()
+    # The layout before 0.12 (``places``): its state and cache folders, and its flat engine folder.
+    state, cache = state_dir(), legacy_cache_dir()
     before, before_cache = earlier_state_dir(), earlier_cache_dir()
     prefixes = [record["prefix"] for record in installations.records() if record["prefix"] not in gone]
     return (state, cache, leftovers.engine_records(state),
-            leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
+            leftovers.bytecode_folders(cache, prefixes, engines_dir()), leftovers.unrecorded(state, cache),
             leftovers.earlier(before), leftovers.package_environments(cache), leftovers.seven(before, before_cache),
             leftovers.appdata(appdata_state_dir(), appdata_cache_dir()))
 

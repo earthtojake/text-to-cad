@@ -754,10 +754,8 @@ def key(installation: base.Installation, spec: Spec | list[str], prints: dict[st
 
 
 def where(installation: base.Installation, spec: Spec | list[str], prints: dict[str, str] | None = None) -> Path:
-    """The folder of the environment of ``spec``, made or not: beside the base."""
-    from cad.engine.places import cache_dir
-
-    return cache_dir() / base.BASE / key(installation, spec, prints)
+    """The folder of the environment of ``spec``, made or not: beside the base (``base.folder``)."""
+    return base.folder() / key(installation, spec, prints)
 
 
 # --- making it ---------------------------------------------------------------------------------------
