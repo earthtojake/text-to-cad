@@ -19,12 +19,17 @@ import signal
 import sys
 import threading
 
+from cad_mcp import engine
 from cad_mcp.browser import OPENED, deliver, transport_browser
 from cad_mcp.engine import EngineClient, hold
 from cad_mcp.host import MIME, TABS_EXTENSION, UI_EXTENSION, family, launcher
 from cad_mcp.protocol import Connection, RequestContext, RpcError, claim_stdin, claim_stdout
 
 LOG = logging.getLogger("cad_mcp")
+# How long the host's initialize waits for this transport's version to be ready (``engine.prepare``): within the
+# 30 seconds Codex gives a server to start. Past it -- a version being installed for the first time -- the
+# initialize is answered here, and the server's session opened at the host's next request.
+INITIALIZE_SECONDS = 20.0
 
 
 def initialize_params(params, launcher=None, holder=None, app=None):
@@ -34,12 +39,14 @@ def initialize_params(params, launcher=None, holder=None, app=None):
     process's hold (``Holder``), whose end ends the session, ``app``, the capability the session hands its
     views (``Proxy.app``), ``browser``: that this process opens the browser a text host's ``cad_show`` asks
     for (``browser.deliver``), and whether it can here, ``release``: the release this process is, which
-    the server's update button offers when it is newer than the server's own, and ``channel`` and
-    ``autoUpdated``: where its plugin came from, as its startup config says (``CAD_INSTALL_CHANNEL``,
-    ``CAD_AUTO_UPDATED``), which the server reports and writes down for its installation, ``claudeCode``:
+    the server's update button offers when it is newer than the server's own, ``pin``: this process's version
+    and delivery channel (``engine.PIN``: its ``--channel``, none for the default), which the session's events
+    carry, ``channel``: where its plugin came from, as its startup config says (``CAD_INSTALL_CHANNEL``), which
+    the server reports and writes down for its installation, ``claudeCode``:
     the ``CLAUDE_CODE_ENTRYPOINT`` Claude Code put in this process's environment, where it started it, and
     ``cards``: ``CAD_MCP_CARDS=1``, which keeps CAD's tools in such a session (the server's
-    ``host.claude_code``)."""
+    ``host.claude_code``). ``CAD_AUTO_UPDATED``, which a config of 0.11.10 or earlier sets, is not said: it decides
+    nothing (only the default channel has an updater)."""
     from cad_mcp import __version__
 
     params = copy.deepcopy(params)
@@ -57,8 +64,8 @@ def initialize_params(params, launcher=None, holder=None, app=None):
     params.setdefault("_meta", {})["dev.texttocad/transport"] = {
         "appDir": os.environ.get("CAD_MCP_APP_DIR", ""), "cwd": os.getcwd(), "launcher": launcher,
         "browser": transport_browser(), "release": __version__,
+        "pin": {"version": engine.PIN.version, "channel": engine.PIN.channel},
         **({"channel": channel} if channel else {}),
-        **({"autoUpdated": True} if str(os.environ.get("CAD_AUTO_UPDATED") or "").strip() == "1" else {}),
         **({"claudeCode": claude_code} if claude_code else {}),
         **({"cards": True} if str(os.environ.get("CAD_MCP_CARDS") or "").strip() == "1" else {}),
         **({"holder": holder} if holder else {}), **({"app": app} if app else {}),
@@ -67,12 +74,14 @@ def initialize_params(params, launcher=None, holder=None, app=None):
 
 
 class Holder:
-    """This transport's hold on the server (``engine.hold``): taken as the transport starts, starting the
-    server when none runs -- the current installation's, whatever release this transport is -- and kept
-    while the host runs, so a shell the host runs in a sandbox that cannot start a server always finds one.
-    Once the host has quit, and this process with it, the server runs on unheld until it is stopped or an
-    update replaces it. A server that goes while held (``cad stop``, a crash, an update's switch) is held
-    again at the host's next request, never at once: a stop is obeyed."""
+    """This transport's hold on the server (``engine.hold``): taken as the transport starts, once its version is
+    ready (``engine.prepare``), starting the server when none runs -- its own version's (a transport with no
+    version: the current installation's) -- and kept while the host runs, so a shell the host runs in a sandbox
+    that cannot start a server always finds one. A hold does not keep a version whose channel moved on: its
+    server stops once nothing is in flight, and the next call is told the thread is stale. Once the host has
+    quit, and this process with it, the server runs on unheld until it is stopped or an update replaces it. A
+    server that goes while held (``cad stop``, a crash, an update) is held again at the host's next request,
+    never at once: a stop is obeyed."""
 
     def __init__(self, host=lambda: None):
         self.host = host  # the host this transport serves, said with the hold (``host.family``)
@@ -186,6 +195,11 @@ class Proxy:
     def _post(self, message):
         with self.lock:
             session = (self.session, self.protocol) if self.session else None
+            pending = session is None and self.initialize is not None
+        if pending:
+            # The host's initialize was answered here while this transport's version was being made ready
+            # (``handle``): the server's session is opened now, with that initialize.
+            session = self._reopen(None)
         for attempt in (1, 2):
             try:
                 status, _headers, data = self._send(message, session)
@@ -210,10 +224,24 @@ class Proxy:
         if method == "initialize":
             params = initialize_params(params, self.launcher(), self.holder.ident if self.holder is not None else None,
                                        self.app)
+            if not engine.PIN.ready.wait(INITIALIZE_SECONDS):
+                # Its version is still being installed: the host is greeted here, inside its start window, and the
+                # server's session opened at its next request (``_post``), which waits for the version.
+                LOG.info("text-to-cad %s is being installed: the engine session opens at the next request",
+                         engine.PIN.version)
+                with self.lock:
+                    self.initialize = params
+                return _greeting(params)
             result, _session = self._open(context.request_id, params)
             with self.lock:
                 self.initialize = params
             return result
+        if method == "tools/call":
+            # A thread left open across its channel's update: its version is not its channel's any more, and the
+            # agent is told so in the call's answer (``engine.stale``), nothing run.
+            line = engine.stale()
+            if line is not None:
+                return {"content": [{"type": "text", "text": line}], "isError": True}
         result = self._post({"jsonrpc": "2.0", "id": context.request_id, "method": method, "params": params})
         # A text host's cad_show: the page the server names is opened here, never by the server, and the
         # server told whether it opened before the host is answered.
@@ -231,6 +259,8 @@ class Proxy:
         if method == "notifications/initialized":
             with self.lock:
                 self.initialized = True
+                if self.session is None:
+                    return  # the server's session is not open yet: it is told as it opens (``_reopen``)
         self._post({"jsonrpc": "2.0", "method": method, "params": params})
 
     def close(self):
@@ -245,13 +275,30 @@ class Proxy:
                 pass
 
 
+def _greeting(params):
+    """The host's initialize answered here, while this transport's version is installed (``Proxy.handle``): the
+    protocol it asked for, the capabilities every session of the server has, and the server's name. The server's
+    own answer -- its instructions among them -- is its session's, opened at the next request."""
+    from cad_mcp import __version__
+
+    asked = params.get("protocolVersion") if isinstance(params, dict) else None
+    return {"protocolVersion": asked if isinstance(asked, str) and asked else "2025-06-18",
+            "capabilities": {"tools": {"listChanged": False}, "resources": {"listChanged": False}},
+            "serverInfo": {"name": "cad", "title": "CAD", "version": engine.PIN.version or __version__}}
+
+
 def _leave(number, _frame):
     raise SystemExit(128 + number)
 
 
-def serve(argv=None):
-    """Serve the host on standard input and output until it closes them, or ends this process."""
+def serve(argv=None, channel=None):
+    """Serve the host on standard input and output until it closes them, or ends this process: on channel
+    ``channel`` (None: the default), this transport's version made ready in the background first
+    (``engine.prepare``), which every request to the server waits for."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cad-mcp: %(message)s")
+    pin = engine.configure(channel)
+    if pin.version is not None:
+        threading.Thread(target=engine.prepare, args=(pin,), name="cad-mcp-prepare", daemon=True).start()
     output = claim_stdout()
     requests = claim_stdin()
     # Which host started this process, read from its parents while the host starts to greet it.
@@ -284,15 +331,37 @@ def serve(argv=None):
     return 0
 
 
+USAGE = ("usage: cad-mcp [--channel NAME]\n\nServe CAD to an agent app over MCP (stdio). The app starts one process "
+         "per thread, from its plugin's startup config. --channel names the delivery channel of the plugin copy that "
+         "config belongs to (a store's), none for the default channel; it is the config's to say.\n")
+
+
+def arguments(args):
+    """``cad-mcp``'s arguments: the channel ``--channel NAME`` (or ``--channel=NAME``) names, None for none or
+    ``default``. ``ValueError`` saying what is wrong."""
+    channel, rest = None, list(args)
+    while rest:
+        word = rest.pop(0)
+        if word == "--channel" and rest:
+            channel = rest.pop(0)
+        elif word.startswith("--channel="):
+            channel = word.partition("=")[2]
+        else:
+            raise ValueError(f"unrecognized arguments: {word}")
+        engine.channel_name(channel)
+    return engine.channel_name(channel)
+
+
 def main(argv=None):
-    """``cad-mcp``: serve CAD to the agent app that started this process, over MCP on standard input
-    and output. There is nothing to configure: the app's plugin starts it."""
+    """``cad-mcp [--channel NAME]``: serve CAD to the agent app that started this process, over MCP on standard
+    input and output, as this package's version on that delivery channel. The app's plugin starts it."""
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
-        sys.stdout.write("usage: cad-mcp\n\nServe CAD to an agent app over MCP (stdio). The app starts one process "
-                         "per thread, from its plugin's startup config; there is nothing to configure.\n")
+        sys.stdout.write(USAGE)
         return 0
-    if args:
-        sys.stderr.write(f"cad-mcp: unrecognized arguments: {' '.join(args)}\n")
+    try:
+        channel = arguments(args)
+    except ValueError as error:
+        sys.stderr.write(f"cad-mcp: {error}\n")
         return 2
-    return serve()
+    return serve(channel=channel)

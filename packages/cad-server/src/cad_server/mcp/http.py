@@ -36,9 +36,19 @@ class Session:
     holder: str | None = None  # the name of the stdio server's hold it was opened under (``release``)
     released: bool = False  # that hold is gone: the session ends once nothing runs in it
     calls: int = 0  # an agent's tool calls in flight (``Sessions.working``)
+    # The delivery channel of the launcher that opened it (its ``pin``'s, ``cad_mcp``'s ``--channel``): None is the
+    # default channel, and every launcher of 0.11.10 and earlier, which says none.
+    channel: str | None = None
 
     def close(self):
         self.server.sidebar_views.close()
+
+    def described(self):
+        """What this session's events say of where they come from (``channel.describe``): its channel, and the
+        app its MCP handshake names."""
+        from cad_server._internal.channel import describe
+
+        return describe(self.channel, self.client)
 
 
 class Sessions:
@@ -122,7 +132,11 @@ class Sessions:
         client = client if isinstance(client, dict) else {}
         holder = options.get('holder')
         holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None
-        return Session(server, result['protocolVersion'], str(client.get('name', 'unknown')), holder=holder), result
+        pin = options.get('pin') if isinstance(options.get('pin'), dict) else {}
+        from cad.engine.places import CHANNEL
+        channel = pin.get('channel') if isinstance(pin.get('channel'), str) and CHANNEL.fullmatch(pin['channel']) else None
+        return Session(server, result['protocolVersion'], str(client.get('name', 'unknown')), holder=holder,
+                       channel=channel), result
 
     def handle(self, request, response):
         origin = request.header('origin')
@@ -191,6 +205,7 @@ class Sessions:
             if agent:
                 with self.lock:
                     session.calls += 1
+                self._used(session.channel)
             try:
                 meta = params.get('_meta') if isinstance(params.get('_meta'), dict) else {}
                 result = session.server.handle(method, params, RequestContext(request_id, meta))
@@ -208,6 +223,19 @@ class Sessions:
                 with self.lock:
                     session.active -= 1
                     session.touched = time.monotonic()
+
+    @staticmethod
+    def _used(channel):
+        """An agent's tool call on channel ``channel``: the channel marked used (``pointers.used``), by a version's
+        server alone."""
+        from cad.engine.places import versioned
+        if versioned() is None:
+            return
+        try:
+            from cad_server._internal import pointers
+            pointers.used(channel)
+        except Exception:  # noqa: BLE001 - a mark, never a reason a call fails
+            pass
 
     @staticmethod
     def _result(response, ident, result, headers=()):

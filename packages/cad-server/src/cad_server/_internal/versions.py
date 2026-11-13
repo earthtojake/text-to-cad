@@ -32,11 +32,17 @@ sandbox) -- it says so as a result (``Present.cannot``), never a traceback: the 
 channel's: stale, returned for the caller to say. Newer, or the channel's first use: the version made present,
 its first start (``first_start``: its data imported, ``cad_server._internal.imports``, and the proof it runs),
 then the pointer written -- the one write that is the update --, then every version no pointer names and nothing
-is connected to removed (``sweep``). A failure before the pointer is written changes no pointer and no other
-version. The default channel's first move on a device with the layout of 0.11.10 and earlier imports from that layout,
-and
-the sweep removes the layout's code, records and caches as soon as that is safe (``cad_server._internal.legacy``).
+is connected to removed (``sweep``), then what the version left held handed to the new one (``handover``: the flat
+door of 0.11.10 and earlier follows the default channel, and the pages' port goes to the new version's server where
+the old one's stopped). A failure before the pointer is written changes no pointer and no other version. The
+default channel's first move on a device with the layout of 0.11.10 and earlier imports from that layout, and the
+sweep removes the layout's code, records and caches as soon as that is safe (``cad_server._internal.legacy``).
 Whether the automatic updates are on plays no part: a newer version asked for is moved to.
+
+**Servers** (``endpoint``, ``ask``). Each version's server is reached through its own door alone,
+``<engines>/<version>``: asked whether work is in flight (``connected``), asked to stop (``stop_server``), started
+(``start_server``). Work in flight is what keeps a version: a build, a draw, an export, a request that serves, an
+agent's tool call. An app attached and idle, or a page open, does not.
 
 **Removal** (``remove``, ``sweep``). Garbage is a version no pointer names (nor the default channel's version as
 ``pointers.default`` resolves it, where it has no pointer). One is removed under the install lock: its server's
@@ -45,8 +51,12 @@ that runs is asked whether anything is connected to it (``connected``: a running
 as connected, and stays) and stopped when nothing is (``stop_server``); a folder a process still runs from
 stays; the folder renamed aside (``versions/.trash-*``), which a refusal (Windows: a file in use) turns into a
 skip, then removed. ``sweep`` does that for every such version, removes the layout of 0.11.10 and earlier once the
-default channel has left it and that is safe (``legacy.remove``), and clears what an earlier removal left: every
-move, the stop of a server that goes idle unnamed and ``cad doctor --prune`` call it.
+default channel has left it and that is safe (``legacy.remove``), and clears what an earlier removal left.
+
+Who removes a folder: every move, ``cad doctor --prune``, and every running server as it tends itself
+(``garbage``, then ``sweep`` sparing its own version). A server whose version no pointer names stops itself once
+nothing is in flight (``retiring``); it never removes its own folder, which it runs from: the next sweep of
+another version's server, of a move, or of ``cad doctor --prune`` does.
 """
 
 from __future__ import annotations
@@ -68,8 +78,9 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "LOCK", "Moved", "Present", "add", "add_command", "connected", "first_start", "folders",
-           "install_lock", "make_present", "move", "older", "order", "present", "proof", "remove", "serves", "stop_server", "sweep"]
+__all__ = ["CANNOT", "LOCK", "Moved", "Present", "add", "add_command", "ask", "connected", "endpoint", "first_start",
+           "flat", "folders", "garbage", "handover", "install_lock", "make_present", "move", "older", "order", "present",
+           "proof", "remove", "retiring", "serves", "serving", "start_server", "stop_server", "sweep"]
 
 # The device's install lock, in the state folder: every install, move and removal holds it (``cad setup``'s too).
 LOCK = "install.lock"
@@ -424,8 +435,46 @@ def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = 
             except OSError as error:
                 say("the record clients of 0.11.10 and earlier find the server by could not be written: "
                     f"{error.strerror or error}")
+        # The port the version left serves pages on, read before the sweep may stop it (``handover``). The layout
+        # of 0.11.10 and earlier is never asked: its server leaves by its own update or ``cad stop``.
+        port = serving(old) if old is not None and old != new and not legacy_left else None
         removed = sweep(told=say)
+        handover(channel, None if legacy_left else old, new, port, told=say)
         return Moved("moved", channel, new, old, None, made, imported, removed, said)
+
+
+def handover(channel: str | None, old: str | None, new: str, port: int | None, *,
+             told: Callable[[str], None] | None = None) -> bool:
+    """After channel ``channel`` moved from ``old`` to ``new`` and the sweep that followed: what the old version's
+    server held, handed to the new one's.
+
+    - The flat door of 0.11.10 and earlier follows the default channel's version (``flat``): each server running
+      asked to look again (``{"op": "bridge"}``), the one left first, so it lets go and the new one takes it.
+    - The pages' port: where ``old``'s server served pages on ``port`` and is gone now -- nothing was in flight, and
+      no other pointer names ``old`` --, ``new``'s server, started for it, serves on that port, with the page token
+      it imported from ``old``, so a page open on it reloads into ``new`` and a link from before still opens.
+      Where ``old``'s server still runs (busy, or another channel's), it keeps its port and pages, and ``new``
+      takes the next free port when it first serves (``daemon.bind``).
+
+    Whether the port was handed over. Nothing here fails a move: what did not happen is said."""
+    say = told or (lambda _line: None)
+    if channel is None:
+        if old is not None and serves(old):
+            ask(old, {"op": "bridge"})
+        if serves(new):
+            ask(new, {"op": "bridge"})
+    if port is None or old is None or serves(old):
+        return False
+    if not start_server(new):
+        say(f"text-to-cad {new}'s server did not start to serve on port {port}: it serves when it is next asked")
+        return False
+    answer = ask(new, {"op": "http", "port": port}, seconds=START_SECONDS)
+    if not isinstance(answer, dict) or "failed" in answer or not answer.get("url"):
+        why = (answer or {}).get("failed") or "it did not answer"
+        say(f"text-to-cad {new}'s server could not take port {port} from {old}'s: {why}")
+        return False
+    say(f"text-to-cad {new} serves pages on port {port}, as {old} did")
+    return True
 
 
 # --- removing one -----------------------------------------------------------------------------------------
@@ -444,16 +493,153 @@ def serves(name: str) -> bool:
     return False
 
 
+# --- a version's server, asked through its own door ----------------------------------------------------
+
+# How long a version's server is given to answer one question (``ask``), to stop once asked (``stop_server``),
+# and to answer at its door once started (``start_server``).
+ASK_SECONDS = 10.0
+STOP_SECONDS = 30.0
+START_SECONDS = 60.0
+
+
+def endpoint(name: str) -> places.Endpoint:
+    """Version ``name``'s server's door (on Windows its port file) and lock, in ``<engines>/<name>``: the one way
+    to it. Never the flat door of 0.11.10 and earlier, which only clients of those releases use."""
+    folder = places.engine_dir(name)
+    return places.Endpoint(folder / f"{places.NAME}.{'port' if places.WINDOWS else 'door'}",
+                           folder / f"{places.NAME}.lock")
+
+
+def ask(name: str, message: dict[str, Any], *, seconds: float = ASK_SECONDS) -> dict[str, Any] | None:
+    """``message`` asked of version ``name``'s running server through its own door (``endpoint``), nothing
+    started: its answer, or None when none answers there, or none comes within ``seconds``."""
+    from cad.engine import client
+
+    door = endpoint(name).address
+    answers: list[Any] = []
+
+    def asking() -> None:
+        try:
+            connection = client._connect(door)
+            if connection is not None:
+                answers.append(client._exchange(connection, message, address=door))
+        except (OSError, ValueError, ConnectionError, IndexError):
+            pass
+
+    thread = threading.Thread(target=asking, name="cad-ask", daemon=True)
+    thread.start()
+    thread.join(seconds)
+    return answers[0] if answers and isinstance(answers[0], dict) else None
+
+
 def connected(name: str) -> bool:
-    """Whether anything is connected to the running server of version ``name``: asked of the server where it can
-    answer; until then, and for a server that cannot say, True -- a server that runs keeps its version."""
-    return True
+    """Whether anything is connected to the running server of version ``name``: work in flight there -- a build,
+    a draw, an export, a request that serves, an agent's tool call (its ``working``) --, asked of it through its
+    own door. An attached but idle app (a CAD app's hold) and an open page are not. A server that cannot say --
+    it does not answer, or answers something else -- counts as connected: a server that runs keeps its version."""
+    answer = ask(name, {"op": "working"})
+    return not (isinstance(answer, dict) and answer.get("working") is False)
 
 
 def stop_server(name: str) -> bool:
-    """Version ``name``'s server stopped, nothing being connected to it (``connected``): whether it stopped and
-    let its lock go. A server that cannot be asked is not stopped: False."""
+    """Version ``name``'s server, asked through its own door to stop once nothing is in flight (``{"op": "stop",
+    "drain": true}``, the drain every release since 0.10 speaks), and waited for until its lock is free
+    (``STOP_SECONDS`` at most): whether it is gone. One that cannot be asked, or is not gone in time, is not
+    stopped: False."""
+    from cad.engine import client
+
+    if ask(name, {"op": "stop", "drain": True}) is None:
+        return False
+    try:
+        return client.wait_gone(timeout=STOP_SECONDS, endpoint=endpoint(name))
+    except ConnectionError:
+        return False
+
+
+def start_server(name: str, *, timeout: float = START_SECONDS) -> bool:
+    """Present version ``name``'s server started, as a client of that version starts it (``client._start``):
+    detached, its own Python, its name told (``places.INSTALLATION_ENV``), nothing of this process's import
+    path; whether it answers at its door within ``timeout``. One running already is not started again."""
+    from cad.engine import client
+
+    if ask(name, {"op": "pid"}) is not None:
+        return True
+    record = _alive(name)
+    if record is None or client._sandboxed():  # a shell whose sandbox refuses the port a server needs: none started
+        return False
+    folder = places.make_engine_dir(places.engine_dir(name))
+    env = {key: value for key, value in os.environ.items()
+           if key not in ("PYTHONPATH", "PYTHONHOME", "PYTHONPYCACHEPREFIX", "DO_NOT_TRACK", "CAD_TELEMETRY")}
+    env[places.INSTALLATION_ENV] = name
+    try:
+        process = subprocess.Popen([record["python"], "-P", "-m", "cad_server._internal.engine_daemon"],
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   env=env, cwd=str(folder if not places.WINDOWS else folder.parent),
+                                   **places.detached())
+    except OSError:
+        return False
+    # Reaped when it exits, however long after: the server outlives the request that started it.
+    threading.Thread(target=process.wait, name="cad-reap", daemon=True).start()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ask(name, {"op": "pid"}, seconds=2.0) is not None:
+            return True
+        if process.poll() not in (None, 0):
+            return False
+        time.sleep(0.05)
     return False
+
+
+def serving(name: str) -> int | None:
+    """The HTTP port version ``name``'s running server serves pages on, as its ``status`` says it; None while it
+    serves none, or does not answer."""
+    answer = ask(name, {"op": "status"})
+    found = answer.get("serving") if isinstance(answer, dict) else None
+    port = found.get("port") if isinstance(found, dict) else None
+    return port if type(port) is int and 0 < port < 65536 else None
+
+
+def flat(name: str | None, state: Path | None = None) -> bool:
+    """Whether version ``name``'s server holds the flat door of 0.11.10 and earlier (``places.engines_dir``'s own
+    ``engine.door``, on Windows ``engine.port``, and ``engine.lock``) beside its own, and answers every client of
+    those releases there: it is the default channel's version as a command with no pin resolves it
+    (``pointers.default``). A named channel's version never does, unless the default channel is on it too."""
+    from cad_server._internal import pointers
+
+    return name is not None and pointers.default(state).version == name
+
+
+def retiring(name: str, working: bool) -> bool:
+    """Whether version ``name``'s running server, with work in flight or not (``working``), stops now: no pointer
+    names its version, it is not the default channel's as resolved with no pointer, and nothing is in flight.
+    Decided under the install lock, never waited for: while a move or an install holds it (a pointer about to
+    name this version, among them), it is not decided now (False)."""
+    from cad_server._internal.file_lock import attempt
+
+    if working:
+        return False
+    try:
+        state = places.state_dir()
+        if not state.is_dir():
+            return False
+        with attempt(state / LOCK) as held:
+            return held and name not in _kept()
+    except OSError:
+        return False
+
+
+def garbage(spare: str | None = None) -> bool:
+    """Whether a ``sweep`` would find anything to do, read without the install lock: a present version folder no
+    pointer names (but ``spare``, the asker's own), a removal's leftovers, or the layout of 0.11.10 and earlier
+    once the default channel has left it. A running server asks it at each tending before it sweeps."""
+    from cad_server._internal import legacy, pointers
+
+    kept = _kept() | ({spare} if spare else set())
+    if any(name not in kept for name in folders()):
+        return True
+    if any(entry.startswith(TRASH) for entry in _names(places.versions_dir())):
+        return True
+    return pointers.read(None) is not None and legacy.removable()
 
 
 def _take(folder: Path) -> Any:
@@ -542,11 +728,12 @@ def _forget_records(folder: Path) -> None:
             installations.forget(record["version"])
 
 
-def sweep(*, told: Callable[[str], None] | None = None) -> dict[str, str]:
+def sweep(*, told: Callable[[str], None] | None = None, spare: str | None = None) -> dict[str, str]:
     """Every version no pointer names removed where nothing is connected to it (``remove``), and what an earlier
     removal left (``versions/.trash-*``, the engine folders of versions gone): what was done with each version
-    removal was tried on. The stop of a server that goes idle unnamed, every move and ``cad doctor --prune`` call
-    it."""
+    removal was tried on. Every move calls it, each running server as it tends itself (``spare``: its own
+    version, whose folder a process never removes while it runs from it) and ``cad doctor --prune``: so a server
+    that stopped itself, unnamed and idle, has its folder removed by the next of those."""
     from cad_server._internal import legacy, pointers
 
     say = told or (lambda _line: None)
@@ -555,7 +742,7 @@ def sweep(*, told: Callable[[str], None] | None = None) -> dict[str, str]:
         default = pointers.read(None)
         if default is not None and legacy.removable():
             legacy.remove(default, say)  # the default channel has left it: gone once that is safe
-        kept = _kept()
+        kept = _kept() | ({spare} if spare else set())
         for name in folders():
             if name not in kept:
                 done[name] = _remove(name, say)
@@ -565,7 +752,8 @@ def sweep(*, told: Callable[[str], None] | None = None) -> dict[str, str]:
                 shutil.rmtree(root / entry, ignore_errors=True)
         engines = places.engines_dir()
         for entry in _names(engines):
-            if places.VERSION.fullmatch(entry) and not os.path.lexists(root / entry) and (engines / entry).is_dir():
+            if (places.VERSION.fullmatch(entry) and entry != spare and not os.path.lexists(root / entry)
+                    and (engines / entry).is_dir()):
                 try:
                     held = _take(engines / entry)
                 except OSError:

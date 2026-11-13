@@ -30,9 +30,14 @@ installation no plugin's server ever ran from -- a skills-only install, or cad r
 ``unknown``. Which app runs a server is not a channel either: the MCP handshake says that
 (``clientInfo``), so a plugin several apps read names one channel.
 
-Whether a copy hears of a new release (``cad_server/updates.py``) is ``told``: not when something
-keeps it up to date, nor for a development install. So a plugin that ships somewhere new needs no
-release of cadgen: its startup config says it all.
+Whether a process hears of a new release (``cad_server/updates.py``) is ``told``: the default channel's
+version alone (a named channel's copy is updated by whoever delivers it), never a development install.
+``CAD_AUTO_UPDATED``, which a config of 0.11.10 or earlier set for a copy something else updates, is read for
+nothing now.
+
+The delivery channel of a pinned release (``cad +<version>@<channel>``, a launcher's ``--channel``) is another
+thing than this module's install channel: it is the request's (``places.channel``), and ``describe`` says it, with
+the app an event comes from, as telemetry will report the two.
 """
 
 from __future__ import annotations
@@ -158,11 +163,38 @@ def remember(value: str | None = None, *, path: Path | None = None) -> str | Non
         return None
 
 
-def auto_updated() -> bool:
-    """Whether this install's plugin said something other than the person keeps it up to date."""
-    return str(os.environ.get(AUTO_UPDATED_ENV) or "").strip() == "1"
-
-
 def told() -> bool:
-    """Whether this install hears of a new release: a copy nothing else updates, and not a development install."""
-    return not auto_updated() and channel() != DEV  # a record says ``dev`` only for a development install's own
+    """Whether this process hears of a new release: the default channel's version alone, the one channel with an
+    updater (a named channel's copy is updated by whoever delivers it), and never a development install. A process
+    with no version (as every one of 0.11.10 and earlier) is the default's. ``CAD_AUTO_UPDATED``, which a plugin
+    config of 0.11.10 or earlier still sets, decides nothing: which channel a version is on says it."""
+    return channel() != DEV and default_version()  # a record says ``dev`` only for a development install's own
+
+
+def default_version() -> bool:
+    """Whether this process's version (``places.versioned``) is the default channel's as a command with no pin
+    resolves it (``pointers.default``); a process with no version is. Never raises."""
+    from cad.engine.places import versioned
+
+    name = versioned()
+    if name is None:
+        return True
+    try:
+        from cad_server._internal import pointers
+
+        return pointers.default().version == name
+    except Exception:  # noqa: BLE001 - a state folder it cannot read: told, as before
+        return True
+
+
+def describe(channel: str | None = None, client: str | None = None, environ=None) -> dict[str, str]:
+    """Where an event comes from, as telemetry will say it (two fields): ``channel``, the delivery channel of the
+    request or session it counts (a request's ``channel``, a launcher's ``--channel``; none is ``default``), and
+    ``app``, the agent app running it -- detected, never told: from the MCP handshake's client name where there is
+    one (``client``), else from the markers an app sets in its shell (read from ``environ``: a command's own
+    environment, or a build request's ``env``), else ``unknown`` (``engine_host.app``, the host adapter's)."""
+    from cad.engine.places import CHANNEL, DEFAULT_CHANNEL
+    from cad_server._internal.engine_host import app
+
+    named = channel if isinstance(channel, str) and CHANNEL.fullmatch(channel) else DEFAULT_CHANNEL
+    return {"channel": named, "app": app(client, environ) or UNKNOWN}

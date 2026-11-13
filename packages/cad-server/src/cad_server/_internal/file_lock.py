@@ -66,6 +66,39 @@ def exclusive(lock_path: Path, *, waiting: Callable[[], None] | None = None) -> 
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def attempt(lock_path: Path) -> Iterator[bool]:
+    """``lock_path`` held exclusively if no one else holds it now, never waited for: yields whether it is held
+    (``exclusive``'s lock, on the same file)."""
+    with open(lock_path, "a+b") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def state(folder: Path, *, waiting: Callable[[], None] | None = None) -> contextlib.AbstractContextManager[None]:
     """Hold the data folder's one lock (``STATE_LOCK`` in ``folder``), waiting for any other holder."""
     return exclusive(folder / STATE_LOCK, waiting=waiting)

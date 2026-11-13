@@ -6,11 +6,26 @@ library alone, imported as `cad_mcp`.
 
 It holds no tool, view or document: the server does. What it does on its own:
 
-- **Reaches the server** the way every client does: through the server's door in its folder, which names
-  the server's HTTP endpoint and token. When none answers, it starts the current installation's server
-  (`installations/current` in the user's state folder), whatever release it is itself.
-- **Registers one first** on a computer with no installation current: the server its own environment
-  carries, else the server of its own release, installed by `uvx`.
+- **Is one version on one channel.** Its version is its own package's release (a development install names
+  its build in `CAD_INSTALLATION_VERSION`); its channel is `--channel NAME` in the app's server config that
+  starts it, none for the default channel (`cad-mcp --channel codex`). `CAD_AUTO_UPDATED`, which a config of
+  0.11.10 or earlier sets, is not read.
+- **Makes its version ready as it starts**, in the background, outside any sandbox: installed where it is
+  not, as the `cad` command installs one (`uvx --from cad-server==<version> cad setup --add --quiet`); then,
+  where its channel's pointer in the state folder does not name it, that version's own `cad` run pinned to it
+  (`cad +<version>[@<channel>] setup --add --quiet`), which moves the channel to it, or finds the channel past
+  it. The app's `initialize` waits for this at most 20 seconds, inside Codex's start window: past that it is
+  answered here and the server's session opened at the next request.
+- **Reaches its own version's server** alone, the way every client of that version does: through its door,
+  `<version>` in the engine folder, which names the server's HTTP endpoint and token, and starts that
+  version's server when none answers, never another's.
+- **Says a thread is stale**: once its channel's pointer names another version (an update moved the channel
+  while the app's thread stayed open), every tool call is answered with one line saying so, and to start a
+  new thread.
+- **From a source tree** (a checkout, which has no version) it reaches the server as every transport of 0.11.10
+  and earlier does: the flat door, the current installation's server (`installations/current`), and on a
+  computer with none, the one its environment carries registered first, else its own release's installed by
+  `uvx`.
 - **Holds the server** while the app runs, under a name its sessions are opened by, which end when the
   app quits.
 - **Opens the person's browser** where a text-only app's `cad_show` asks, in the app's own environment,

@@ -111,3 +111,16 @@ def shell(environ=None) -> str | None:
         if any(environ.get(variable) for variable in variables):
             return name
     return None
+
+
+# The apps an MCP handshake's client name (``clientInfo.name``) names, where it is not the app's own name.
+APPS = {"codex-mcp-client": "codex", "cursor-vscode": "cursor", "claude-code": "claude code", "claude-ai": "claude"}
+
+
+def app(client=None, environ=None) -> str | None:
+    """The agent app an event comes from, detected: the MCP handshake's client name where there is one (``client``:
+    ``APPS``, else the name as given), else the app whose shell this is (``shell``, from ``environ``), else None."""
+    name = str(client or "").strip().lower()[:64]
+    if name and name != "unknown":
+        return APPS.get(name, name)
+    return shell(environ)

@@ -1,22 +1,36 @@
-"""The device's CAD server, as the stdio transport reaches it: with the standard library alone.
+"""The CAD server of this transport's own version, as the stdio transport reaches it: with the standard library
+alone.
 
 The server's own clients find it by one rule (the library's ``cad.engine.places`` and
 ``cad.engine.client``, which this package does not import: an agent app installs it alone), and this
 reads it the same way:
 
+- **Its version and channel** (``Pin``, ``configure``): the version is this package's own release (a development
+  install names its build in ``CAD_INSTALLATION_VERSION``); the channel is the ``--channel`` its app's server
+  config gives it (none: the default channel). A source tree has no version (a checkout's tests, a development
+  checkout), and reaches the server as every client of 0.11.10 and earlier does (below).
+- **Its version made ready** (``prepare``, at start, in the background, outside any sandbox): installed where it
+  is not (``uvx --from cad-server==<version> cad setup --add``, the ``cad`` command's own way); then, where its
+  channel's pointer (``pointer``) does not name it, that version's own ``cad`` run pinned to it (``cad
+  +<version>[@<channel>] setup --add --quiet``), which moves the channel to it or says it is stale -- the one rule
+  every pinned command keeps, run by the version's own code, never this copy of it.
 - **The engine folder** (``engine_dir``): the server's door (a named pipe; on Windows a port file) and
-  lock, named ``engine``, in a folder only this user can write (``folder_refusal``): the flat one directly in
-  the engines' folder (``engines_dir``), which every server of 0.11.10 and earlier holds; a version's is
+  lock, named ``engine``, in a folder only this user can write (``folder_refusal``): a version's is
   ``<engines>/<version>`` (``engine_dir(version)``), its data ``versions/<version>`` in the state folder
-  (``version_dir``) -- the library's rules (``cad.engine.places``), copied and held equal by a test. A request is one JSON
-  line through the door, answered by JSON lines (``request``); the door is the one way to the server's
-  HTTP endpoint and its token (``op: http``), which a loopback port alone could not vouch for.
-- **The current installation** (``current``): ``<state>/installations/current`` names the release whose
-  server the device runs, and its record that release's Python. When no server answers, that one is
-  started (``connect``), whatever release this transport is.
-- **The first one** (``register``): on a device with no installation current, the server this
-  transport's environment carries registers itself -- a checkout's -- else the server of this
-  transport's own release is installed by uvx (``SERVER``) and registered, once.
+  (``version_dir``), its installed marker ``versions/<version>/code/cad-version.json`` (``version_record``); the
+  flat one directly in the engines' folder (``engines_dir``) is what every server of 0.11.10 and earlier holds,
+  and the default channel's version's server holds too, for their clients -- the library's rules
+  (``cad.engine.places``), copied and held equal by a test. A transport with a version reaches its own version's
+  door and no other. A request is one JSON line through the door, answered by JSON lines (``request``); the door
+  is the one way to the server's HTTP endpoint and its token (``op: http``), which a loopback port alone could not
+  vouch for.
+- **Starting it** (``_start``): with a version, that version's server, from its own Python; with none, the
+  current installation's (``<state>/installations/current`` and its record), whatever release this transport is,
+  and on a device with none, one registered first (``register``: the server this transport's environment
+  carries, else its own release's, installed by uvx).
+- **Stale** (``stale``): once its channel's pointer names another version, this transport's version is not its
+  channel's any more (an update moved the channel on while the app's thread stayed open): every tool call is
+  answered with one line that says so (``shim``).
 - **The hold** (``hold``): a connection the server keeps while it is open, under a name the transport's
   MCP sessions are opened by, which end when it drops.
 """
@@ -105,12 +119,206 @@ def engines_dir() -> Path:
 
 
 def engine_dir(version: str | None = None) -> Path:
-    """Where a server's door and lock live: version ``version``'s folder in the engines' folder, else the
-    engines' folder itself, the flat door this transport reaches."""
+    """Where a server's door and lock live: version ``version``'s folder in the engines' folder; with none named,
+    this transport's own version's (``PIN``), and for a transport with no version the engines' folder itself,
+    the flat door of 0.11.10 and earlier."""
+    version = version if version is not None else PIN.version
     if version is None:
         return engines_dir()
     version_dir(version)  # the same refusal of a name that is no version
     return engines_dir() / version
+
+
+# --- this transport's version and channel -------------------------------------------------------------
+
+# A delivery channel's name (the library's ``places.CHANNEL``); ``default`` is the default channel, none.
+CHANNEL = r"[a-z0-9][a-z0-9._-]{0,31}"
+DEFAULT_CHANNEL = "default"
+# The pointers in the state folder (the server's ``pointers``): the default channel's, and a named one's.
+DEFAULT_POINTER = "default"
+CHANNELS = "channels"
+# The installed marker of a version, its schema, and the variable a development install names its build by.
+VERSION_MARKER = "cad-version.json"
+VERSION_SCHEMA = "cad version/1"
+INSTALLATION_ENV = "CAD_INSTALLATION_VERSION"
+# A release's name, as the ``cad`` command tells one (the server's ``pins.RELEASED``): one the index has.
+RELEASED = r"[0-9.abcoprst]+"
+# The exit status of a pinned ``cad`` whose channel has moved past it (the server's ``cli_errors.REASONS``).
+STALE_EXIT = 4
+# The install command, and its form that installs one version and changes nothing else (the server's
+# ``versions.add_command``), for the line a transport says when it cannot install its version.
+INSTALL = "curl -fsSL https://texttocad.dev/install.sh | sh"
+INSTALL_WINDOWS = "irm https://www.texttocad.dev/install.ps1 | iex"
+# How long a version's install, and its own ``cad`` moving its channel, may take.
+PREPARE_SECONDS = 3600.0
+
+
+class Pin:
+    """This transport's version (None: a source tree, which has none) and channel (None: the default), set once
+    at start (``configure``), and what preparing it found (``prepare``): ``ready`` once done, ``failed`` the one
+    line saying why it cannot serve, ``stale`` the one line saying its channel has moved past it."""
+
+    def __init__(self, version: str | None = None, channel: str | None = None) -> None:
+        self.version = version
+        self.channel = channel
+        self.ready = threading.Event()
+        self.failed: str | None = None
+        self.stale: str | None = None
+        if version is None:
+            self.ready.set()
+
+    @property
+    def label(self) -> str:
+        return self.channel or DEFAULT_CHANNEL
+
+
+# With no version until ``configure``: the flat door and the current installation, as every client of 0.11.10.
+PIN = Pin()
+
+
+def channel_name(text: str | None) -> str | None:
+    """``text`` as a channel (None, or ``default``: the default channel), or ``ValueError`` saying the rule."""
+    import re
+
+    if text is None or text == DEFAULT_CHANNEL:
+        return None
+    if re.fullmatch(CHANNEL, text):
+        return text
+    raise ValueError(f"not a channel: {text!r} (a channel is a lower-case letter or digit, then up to 31 lower-case "
+                     "letters, digits, '.', '_' or '-')")
+
+
+def own_version() -> str | None:
+    """This transport's version: the build a development install names (``INSTALLATION_ENV``), else this package's
+    own release; None for a source tree (a checkout: its tests, its development), which has no version."""
+    import re
+
+    from cad_mcp import __version__, source_tree
+
+    named = os.environ.get(INSTALLATION_ENV, "").strip()
+    if re.fullmatch(VERSION, named):
+        return named
+    if source_tree() or not re.fullmatch(RELEASED, __version__):
+        return None
+    return __version__
+
+
+def configure(channel: str | None) -> Pin:
+    """This transport's pin: its version (``own_version``) and channel ``channel``, which it reaches the server
+    by from now on."""
+    global PIN
+    PIN = Pin(own_version(), channel_name(channel))
+    return PIN
+
+
+def pointer(channel: str | None = None) -> str | None:
+    """The version channel ``channel``'s pointer names (None: the default's), or None with none: the server's
+    ``pointers.read``, copied and held equal by a test."""
+    import re
+
+    inside = DEFAULT_POINTER if channel is None else f"{CHANNELS}/{channel}"
+    data = _read(state_dir() / inside)
+    text = data.decode("utf-8", "replace").strip() if data is not None else ""
+    return text if re.fullmatch(VERSION, text) else None
+
+
+def version_record(version: str) -> dict[str, Any] | None:
+    """Version ``version``'s installed marker (``versions/<version>/code/cad-version.json``) while its Python and
+    ``cad`` are there, else None: the library's ``places.version_record``, copied."""
+    try:
+        record = json.loads(_read(version_dir(version) / "code" / VERSION_MARKER) or b"null")
+    except ValueError:
+        return None
+    if (not isinstance(record, dict) or record.get("schema") != VERSION_SCHEMA or record.get("version") != version
+            or not all(isinstance(record.get(key), str) for key in ("python", "cad", "prefix"))):
+        return None
+    return record if os.path.isfile(record["python"]) and os.path.isfile(record["cad"]) else None
+
+
+def add_command(version: str, system: str | None = None) -> str:
+    """The install line that makes ``version`` present and changes nothing else (the server's
+    ``versions.add_command``)."""
+    if (system or os.name) == "nt":
+        return f"& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add {version}"
+    return f"{INSTALL} -s -- --add {version}"
+
+
+def stale_line(version: str, channel: str | None, now: str) -> str:
+    """What a transport whose channel moved past its version answers each tool call with: the server's
+    ``pins.stale``, in a thread's words."""
+    return (f"this CAD app is text-to-cad {version}, and its channel ({channel or DEFAULT_CHANNEL}) is on "
+            f"text-to-cad {now} now: start a new thread to use it")
+
+
+def stale() -> str | None:
+    """The line every tool call is answered with when this transport's channel has moved past its version
+    (``stale_line``), read now -- its pointer names another version -- or as preparing it found; else None."""
+    pin = PIN
+    if pin.version is None:
+        return None
+    if pin.stale is not None:
+        return pin.stale
+    now = pointer(pin.channel)
+    return stale_line(pin.version, pin.channel, now) if now is not None and now != pin.version else None
+
+
+def _cad_environment(version: str) -> dict[str, str]:
+    env = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
+    env[INSTALLATION_ENV] = version
+    return env
+
+
+def prepare(pin: Pin | None = None) -> Pin:
+    """This transport's version made ready to serve (see the module), once, in the background, as the app starts
+    it: ``pin.ready`` set when done, with ``failed`` or ``stale`` where it cannot serve. Nothing for a transport
+    with no version."""
+    import re
+
+    pin = pin or PIN
+    try:
+        if pin.version is None:
+            return pin
+        record = version_record(pin.version)
+        if record is None:
+            if not re.fullmatch(RELEASED, pin.version):
+                pin.failed = (f"text-to-cad {pin.version} is not installed, and it is no release: a development "
+                              "version is installed from its own checkout alone")
+                return pin
+            command = [*LAUNCHER, f"{SERVER}=={pin.version}", "cad", "setup", "--add", "--quiet"]
+            said = _run(command, os.environ.copy())
+            record = version_record(pin.version)
+            if record is None:
+                pin.failed = (f"text-to-cad {pin.version} is not installed, and it could not be installed here "
+                              f"({said or 'uvx failed'}): run {add_command(pin.version)}")
+                return pin
+        if pointer(pin.channel) == pin.version:
+            return pin
+        word = f"+{pin.version}" + (f"@{pin.channel}" if pin.channel else "")
+        code, said = _run_code([record["cad"], word, "setup", "--add", "--quiet"], _cad_environment(pin.version))
+        if code == STALE_EXIT:
+            pin.stale = stale_line(pin.version, pin.channel, pointer(pin.channel) or "a newer version")
+        elif code != 0:
+            pin.failed = said or f"text-to-cad {pin.version} could not be started for the {pin.label} channel"
+        return pin
+    finally:
+        pin.ready.set()
+
+
+def _run(command: list[str], env: dict[str, str]) -> str:
+    """``command`` run, quiet: the last line it said on stderr."""
+    return _run_code(command, env)[1]
+
+
+def _run_code(command: list[str], env: dict[str, str]) -> tuple[int, str]:
+    """``command`` run, quiet: its exit status (127 when it could not run) and the last line it said."""
+    try:
+        done = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", env=env, timeout=PREPARE_SECONDS, **_windowless())
+    except (OSError, subprocess.SubprocessError) as error:
+        return 127, f"{type(error).__name__}: {error}"
+    lines = [line.strip() for line in (done.stderr or "").splitlines() if line.strip()]
+    said = lines[-1] if lines else ""
+    return done.returncode, said.removeprefix("cad: ")
 
 
 def default_engine_dir() -> str:
@@ -497,8 +705,22 @@ def _same(one: str, other: str) -> bool:
 
 
 def _start() -> subprocess.Popen:
-    """The server started, detached: the current installation's, with its Python; on a device with none,
-    one registered first (``register``); and with none still, the one this environment carries, if any."""
+    """The server started, detached. With a version (``PIN``): that version's, from its own Python, told its name,
+    and never another version's -- ``ConnectionError`` while it is not installed. With none: the current
+    installation's, with its Python; on a device with none, one registered first (``register``); and with none
+    still, the one this environment carries, if any."""
+    if PIN.version is not None:
+        record = version_record(PIN.version)
+        if record is None:  # removed once its channel moved on: the thread is stale
+            raise ConnectionError(stale() or PIN.failed or f"text-to-cad {PIN.version} is not installed on this "
+                                                           f"computer: run {add_command(PIN.version)}")
+        env = {name: value for name, value in _cad_environment(PIN.version).items() if name not in PER_PROCESS}
+        env["PYTHONDONTWRITEBYTECODE"] = "1"  # its server keeps its bytecode in its own code once it runs
+        folder = engine_dir()
+        cwd = (str(folder) if folder.is_dir() else None) if not WINDOWS else (
+            str(folder.parent) if folder.parent.exists() else None)
+        return subprocess.Popen([record["python"], "-P", "-m", DAEMON_MODULE], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=cwd, **_detached())
     found = current()
     if found is None:
         register()
@@ -540,7 +762,11 @@ _STARTING = threading.Lock()
 
 def connect(*, start: bool = True, timeout: float = 60.0) -> Connection | None:
     """A connection to the server, started when ``start`` and none answers: by one thread of this process
-    at a time, a thread that waited for another's start taking the server it started."""
+    at a time, a thread that waited for another's start taking the server it started. With a version, once it is
+    ready (``prepare``), and ``ConnectionError`` saying why where it cannot serve."""
+    PIN.ready.wait()
+    if PIN.failed is not None:
+        raise ConnectionError(PIN.failed)
     found = _connect()
     if found is not None or not start:
         return found
@@ -620,6 +846,8 @@ def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
             message["host"] = named
         if holder:
             message["holder"] = holder
+        if PIN.channel:
+            message["channel"] = PIN.channel  # a named channel's, as every request of a pinned command says it
         if WINDOWS:
             message = {"token": port_path().read_text(encoding="utf-8").split()[1], **message}
         connection.writer.write((json.dumps(message) + "\n").encode())

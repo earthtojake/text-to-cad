@@ -1,7 +1,8 @@
 # cad-server
 
-The CAD server for text-to-cad, imported as `cad_server`: the computer's one daemon that builds, keeps and
-serves CAD documents; the CAD Viewer and the CAD app's MCP endpoint on its listener; the environment the
+The CAD server for text-to-cad, imported as `cad_server`: the daemon that builds, keeps and serves CAD
+documents, one per installed version in use (each reached through its own door; the default channel's also
+answers clients of 0.11.10 and earlier); the CAD Viewer and the CAD app's MCP endpoint on its listener; the environment the
 CAD kernel runs in; the installations and the one that is current; and the command that runs and
 installs them all.
 
@@ -234,6 +235,15 @@ channel's pointer (`default`, `channels/<name>` in the state folder:
 Recents, records, page token and port from the version it replaces at its first start (`_internal/imports.py`)
 and removes the versions no pointer names; the layout of 0.11.10 and earlier is imported from and, once the default
 channel has left it and that is safe, its code, records and caches removed (`_internal/legacy.py`).
+
+Each version in use runs its own server, reached through its own door alone, `<version>` in the engine folder,
+and only the default channel's also answers the flat door every client of 0.11.10 and earlier and every process
+with no version finds (`engine/daemon.py`'s `Bridge`, the only code for earlier releases). What moves each: a
+channel's move stops its old version's server once no pointer names that version and nothing is in flight on it
+-- a build, a draw, an export, an agent's tool call; never an idle app or an open page --, and the new version's
+serves on the old one's port with the page token it imported; a server whose version no pointer names stops
+itself once idle, and another server's sweep, the next move or `cad doctor --prune` removes its folder. `cad stop`
+and `cad status` act on one version's server: the pinned one, or the default's.
 
 The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
 place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and

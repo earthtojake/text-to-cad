@@ -5,6 +5,7 @@ how to install one. Nothing is started for real: ``Popen`` and ``run`` are stood
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
@@ -205,6 +206,202 @@ class DoorTest(unittest.TestCase):
         self.assertEqual(handled, [{"token": token, "op": "status"}])
 
 
+class PinTest(unittest.TestCase):
+    """A transport of a version reaches that version's server and no other: its ``--channel``, its version made
+    ready at start (installed where it is not, then its channel moved by that version's own ``cad``), and the line
+    every tool call answers once its channel moved past it. Nothing runs for real: ``run`` is stood in for."""
+
+    X, Y = "0.12.0", "0.12.1"
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="shim-pin-"))
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.state, self.engines = self.root / "state", self.root / "engines"
+        patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), "CAD_ENGINE_DIR": str(self.engines),
+                                               "CAD_INSTALLATION_VERSION": ""})
+        patched.start()
+        self.addCleanup(patched.stop)
+        pinned = mock.patch.object(engine, "PIN", engine.Pin())
+        pinned.start()
+        self.addCleanup(pinned.stop)
+        self.ran: list[list[str]] = []
+
+    def installed(self, version: str) -> dict:
+        """Version ``version`` present: its installed marker, its Python and ``cad`` there."""
+        code = self.state / "versions" / version / "code"
+        (code / "server" / "bin").mkdir(parents=True, exist_ok=True)
+        record = {"schema": "cad version/1", "version": version, "python": str(code / "server" / "bin" / "python"),
+                  "cad": str(code / "server" / "bin" / "cad"), "prefix": str(code / "server")}
+        for script in ("python", "cad"):
+            (code / "server" / "bin" / script).write_text("", encoding="utf-8")
+        (code / "cad-version.json").write_text(json.dumps(record), encoding="utf-8")
+        return record
+
+    def point(self, version: str, channel: str | None = None) -> None:
+        path = self.state / ("default" if channel is None else f"channels/{channel}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{version}\n", encoding="utf-8")
+
+    def run_as(self, answers):
+        """``subprocess.run`` stood in for: each command recorded, answered by ``answers(command)``: ``(code,
+        stderr)``."""
+        def run(command, **_kwargs):
+            self.ran.append(list(command))
+            code, said = answers(command)
+            return subprocess.CompletedProcess(command, code, "", said)
+
+        return mock.patch.object(subprocess, "run", run)
+
+    def pinned(self, channel: str | None = None) -> engine.Pin:
+        with mock.patch.object(engine, "own_version", return_value=self.X):
+            return engine.configure(channel)
+
+    def test_the_channel_is_an_argument_of_the_server_config(self) -> None:
+        from cad_mcp import shim
+
+        for args, expected in (([], None), (["--channel", "codex"], "codex"), (["--channel=codex"], "codex"),
+                               (["--channel", "default"], None)):
+            with self.subTest(args=args):
+                self.assertEqual(shim.arguments(args), expected)
+        for args in (["--channel", "Not a channel"], ["--channel"], ["--other"], ["--channel=@"]):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                shim.arguments(args)
+        with mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self.assertEqual(shim.main(["--channel", "Bad"]), 2)
+        self.assertIn("not a channel", err.getvalue())
+
+    def test_its_version_is_its_own_release_and_a_source_tree_has_none(self) -> None:
+        self.assertIsNone(engine.own_version(), "this checkout's transport: no version, the flat door")
+        with mock.patch.object(cad_mcp, "source_tree", return_value=False), \
+                mock.patch.object(cad_mcp, "_version", return_value=self.X):
+            self.assertEqual(engine.own_version(), self.X)
+        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": f"{self.X}-dev.20261113000000"}):
+            self.assertEqual(engine.own_version(), f"{self.X}-dev.20261113000000", "a development install's build")
+
+    def test_present_and_its_channel_on_it_nothing_runs(self) -> None:
+        self.installed(self.X)
+        self.point(self.X, "codex")
+        pin = self.pinned("codex")
+        with self.run_as(lambda command: self.fail(f"nothing runs: {command}")):
+            engine.prepare(pin)
+        self.assertTrue(pin.ready.is_set())
+        self.assertEqual((pin.failed, pin.stale, engine.stale()), (None, None, None))
+
+    def test_absent_it_is_installed_with_uvx_then_its_own_cad_moves_its_channel(self) -> None:
+        pin = self.pinned("codex")
+
+        def answers(command):
+            if command[0] == "uvx":
+                self.installed(self.X)
+                return 0, ""
+            self.point(self.X, "codex")
+            return 0, ""
+
+        with self.run_as(answers):
+            engine.prepare(pin)
+        record = engine.version_record(self.X)
+        self.assertEqual(self.ran, [[*engine.LAUNCHER, f"cad-server=={self.X}", "cad", "setup", "--add", "--quiet"],
+                                    [record["cad"], f"+{self.X}@codex", "setup", "--add", "--quiet"]])
+        self.assertEqual((pin.failed, pin.stale), (None, None))
+
+    def test_absent_and_not_installable_says_how_to_install_it(self) -> None:
+        pin = self.pinned()
+        with self.run_as(lambda command: (2, "error: Failed to fetch: dns error")):
+            engine.prepare(pin)
+        self.assertEqual(len(self.ran), 1)
+        self.assertIn("could not be installed here (error: Failed to fetch: dns error)", pin.failed)
+        self.assertTrue(pin.failed.endswith(engine.add_command(self.X)))
+        with self.assertRaises(ConnectionError) as said:
+            engine.connect()
+        self.assertEqual(str(said.exception), pin.failed)
+
+    def test_stale_at_start_and_once_its_channel_moves_on(self) -> None:
+        self.installed(self.X)
+        self.point(self.Y)
+        pin = self.pinned()
+        with self.run_as(lambda command: (engine.STALE_EXIT, "cad: this command is for text-to-cad 0.12.0, ...")):
+            engine.prepare(pin)
+        line = f"this CAD app is text-to-cad {self.X}, and its channel (default) is on text-to-cad {self.Y} now: " \
+               "start a new thread to use it"
+        self.assertEqual((pin.stale, engine.stale()), (line, line))
+        moving = self.pinned("codex")
+        self.point(self.X, "codex")
+        with self.run_as(lambda command: self.fail("on its channel's version: nothing runs")):
+            engine.prepare(moving)
+        self.assertIsNone(engine.stale())
+        self.point(self.Y, "codex")  # its channel updated while the thread stayed open
+        self.assertEqual(engine.stale(), line.replace("(default)", "(codex)"))
+
+    def test_a_stale_thread_s_tool_call_is_answered_with_the_line_and_nothing_is_sent(self) -> None:
+        from cad_mcp.protocol import RequestContext
+        from cad_mcp.shim import Proxy
+
+        self.installed(self.X)
+        self.point(self.Y)
+        self.pinned().ready.set()
+
+        class Client:
+            def call(self, *args, **kwargs):
+                raise AssertionError("nothing is sent")
+
+        answer = Proxy(client=Client()).handle("tools/call", {"name": "cad_show", "arguments": {}},
+                                               RequestContext(1, {}))
+        self.assertTrue(answer["isError"])
+        self.assertIn("start a new thread", answer["content"][0]["text"])
+
+    def test_an_initialize_while_its_version_installs_is_answered_and_the_session_opened_next(self) -> None:
+        from cad_mcp import shim
+        from cad_mcp.protocol import RequestContext
+
+        self.pinned()  # not ready: being installed
+        sent: list[str] = []
+
+        class Client:
+            def call(self, method, path, body=b"", headers=None, **_kwargs):
+                message = json.loads(body)
+                sent.append(message.get("method"))
+                if message.get("method") == "initialize":
+                    return 200, {"Mcp-Session-Id": "s1"}, json.dumps(
+                        {"jsonrpc": "2.0", "id": message["id"], "result": {"protocolVersion": "2025-06-18"}}).encode()
+                if "id" not in message:
+                    return 202, {}, b""
+                return 200, {}, json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": {"tools": []}}).encode()
+
+        proxy = shim.Proxy(client=Client())
+        with mock.patch.object(shim, "INITIALIZE_SECONDS", 0.01):
+            greeting = proxy.handle("initialize", {"protocolVersion": "2025-06-18"}, RequestContext(1, {}))
+        self.assertEqual((greeting["serverInfo"]["name"], greeting["serverInfo"]["version"]), ("cad", self.X))
+        proxy.notify("notifications/initialized", {})
+        self.assertEqual(sent, [], "nothing reaches the server before the version is ready")
+        engine.PIN.ready.set()
+        self.assertEqual(proxy.handle("tools/list", {}, RequestContext(2, {})), {"tools": []})
+        self.assertEqual(sent, ["initialize", "notifications/initialized", "tools/list"])
+
+    def test_it_reaches_its_own_version_s_door_and_starts_that_version_alone(self) -> None:
+        self.installed(self.Y)
+        other = self.root / "elsewhere"
+        (other / "bin").mkdir(parents=True)
+        (other / "bin" / "python").write_text("", encoding="utf-8")
+        (other / "bin" / "cad").write_text("", encoding="utf-8")
+        folder = self.state / "installations"
+        folder.mkdir(parents=True)
+        (folder / f"{self.Y}.json").write_text(json.dumps({"version": self.Y, "python": str(other / "bin" / "python"),
+                                                          "cad": str(other / "bin" / "cad"), "prefix": str(other)}),
+                                               encoding="utf-8")
+        (folder / "current").write_text(self.Y, encoding="utf-8")
+        self.pinned().ready.set()
+        self.assertEqual(engine.engine_dir(), self.engines.resolve() / self.X)
+        with self.assertRaises(ConnectionError) as said:
+            engine._start()  # not installed: never the current installation's, nor another version's
+        self.assertIn(f"text-to-cad {self.X} is not installed", str(said.exception))
+        record = self.installed(self.X)
+        with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen, self.assertRaises(Started):
+            engine._start()
+        [call] = popen.call_args_list
+        self.assertEqual(call.args[0][0], record["python"])
+        self.assertEqual(call.kwargs["env"]["CAD_INSTALLATION_VERSION"], self.X)
+
+
 class SameFoldersTest(unittest.TestCase):
     """The transport's copy of the library's folder rules (``cad.engine.places``, which it does not import)
     names the same folders: the state folder, a version's folder, the engines' folder and a version's engine
@@ -230,6 +427,34 @@ class SameFoldersTest(unittest.TestCase):
         for name in ("..", "../x", ""):
             with self.subTest(name), self.assertRaises(ValueError):
                 engine.version_dir(name)
+
+    def test_the_copies_of_the_server_s_rules_say_what_the_server_does(self) -> None:
+        from cad.engine import places
+        from cad_server._internal import cli_errors, pins, pointers, versions
+
+        self.assertEqual((engine.CHANNEL, engine.DEFAULT_CHANNEL), (places.CHANNEL.pattern, places.DEFAULT_CHANNEL))
+        self.assertEqual((engine.VERSION, engine.RELEASED), (places.VERSION.pattern, pins.RELEASED.pattern))
+        self.assertEqual((engine.VERSION_MARKER, engine.VERSION_SCHEMA), (places.VERSION_MARKER, places.VERSION_SCHEMA))
+        self.assertEqual((engine.INSTALLATION_ENV, engine.STALE_EXIT),
+                         (places.INSTALLATION_ENV, cli_errors.REASONS["stale_pin"]))
+        for system in ("posix", "nt"):
+            self.assertEqual(engine.add_command("0.12.0", system), versions.add_command("0.12.0", system))
+        root = Path(tempfile.mkdtemp(prefix="shim-rules-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(root)}):
+            for channel in (None, "codex"):
+                self.assertIsNone(engine.pointer(channel))
+                pointers.write(channel, "0.12.0", mirrored=False)
+                self.assertEqual(engine.pointer(channel), pointers.read(channel))
+            code = root / "versions" / "0.12.0" / "code"
+            (code / "bin").mkdir(parents=True)
+            for script in ("python", "cad"):
+                (code / "bin" / script).write_text("", encoding="utf-8")
+            marker = {"schema": places.VERSION_SCHEMA, "version": "0.12.0", "python": str(code / "bin" / "python"),
+                      "cad": str(code / "bin" / "cad"), "prefix": str(code)}
+            (code / places.VERSION_MARKER).write_text(json.dumps(marker), encoding="utf-8")
+            self.assertEqual(engine.version_record("0.12.0"), places.version_record("0.12.0"))
+            self.assertIsNone(engine.version_record("0.12.1"))
 
 
 if __name__ == "__main__":

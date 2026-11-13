@@ -36,7 +36,7 @@ from pathlib import Path
 from cad.engine import places
 
 __all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "Pointer", "channel_name", "default", "forget", "leaving",
-           "listing", "mirror", "named", "read", "write"]
+           "listing", "mirror", "named", "read", "used", "write"]
 
 # A named channel: a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. Safe as a
 # file's name on every system, and in a pin (``cad +<version>@<channel>``): the library's one rule
@@ -104,10 +104,39 @@ def forget(channel: str, state: Path | None = None) -> None:
     _folder(state).remove(_inside(channel))
 
 
+# When this process last marked each channel used (``used``), so a server busy with requests marks it once a
+# minute at most.
+USED_SECONDS = 60.0
+_used: dict[str, float] = {}
+
+
+def used(channel: object, state: Path | None = None) -> bool:
+    """Channel ``channel`` (a request's ``channel``: absent, None or ``default`` is the default channel) marked
+    used now: its pointer's file's time set to now, where it has one -- the time ``cad doctor`` shows as the
+    channel's last use. Made by a server as it takes a request, outside any sandbox; never a pointer made, nor
+    one written. At most once a ``USED_SECONDS`` per channel in a process; quiet. Whether it was marked."""
+    import time
+
+    try:
+        name = None if channel is None else channel_name(channel)
+    except ValueError:
+        return False
+    key = name or DEFAULT
+    now = time.monotonic()
+    if now - _used.get(key, -USED_SECONDS) < USED_SECONDS:
+        return False
+    _used[key] = now
+    try:
+        os.utime(_folder(state).path(_inside(name)))
+    except OSError:
+        return False
+    return True
+
+
 @dataclass(frozen=True)
 class Pointer:
     """A channel's pointer: its channel (None: the default), the version it names, and its file (whose time
-    is when the channel last moved)."""
+    is when the channel was last used, ``used``, or moved)."""
 
     channel: str | None
     version: str

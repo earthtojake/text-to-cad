@@ -1,10 +1,11 @@
 """CAD beside an agent's chat: the stdio transport an agent app starts, forwarding MCP to the device's CAD
 server over HTTP (``shim``).
 
-The standard library alone. It reads where the server is the way the server's own clients do -- the
-engine folder's door, the current installation in the state folder (``engine``) -- starts the current
-installation's server when none answers, and installs one, the release it belongs to, when the device has
-none. Everything CAD is, the server is: this process carries the host's requests to it and its answers
+The standard library alone. It is one version (its own release) on one delivery channel (``--channel``), and
+reaches that version's server the way the server's own clients do -- its door in the engine folder (``engine``)
+--, makes its version present and its channel on it as it starts, and starts that version's server when none
+answers. A source tree has no version, and reaches the current installation's, as every release of 0.11.10 and
+earlier. Everything CAD is, the server is: this process carries the host's requests to it and its answers
 back, opens the person's browser where a text host's ``cad_show`` asks, and tells the server which host
 started it.
 """
@@ -24,6 +25,12 @@ def __getattr__(name: str):
     if name == "__version__":
         return _version()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def source_tree() -> bool:
+    """Whether this package runs from a source tree (its ``pyproject.toml`` two levels up, ``src/cad_mcp``): a
+    checkout's, which has no version of its own on the device."""
+    return (_Path(__file__).resolve().parent.parent.parent / "pyproject.toml").is_file()
 
 
 @_cache

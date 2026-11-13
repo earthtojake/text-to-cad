@@ -426,12 +426,16 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     document out of memory, for the engine's cache to give back, only when nothing watches it (the
     engine's **Document lifetime**).
 
-20. **One engine serves the device; tabs select documents at `/<uuid>`.** *Every document.* It is the current
-    installation's: every client, whatever its release, attaches to it or starts it -- a client with
-    no installation registered starts none: the library never starts a server of its own environment
-    -- and only an
-    update moves it to another release -- one the person asks for, or an automatic patch update once
-    the engine is idle (law 18) -- on the same port with the same token (the engine's **Starting and
+20. **One engine per installed version in use; tabs select documents at `/<uuid>`.** *Every document.* A
+    process of a version reaches that version's engine alone, through its own door, and starts that one
+    where none answers; a process with no version (a person's own environment, a release of 0.11.10 or
+    earlier) reaches the default channel's version's engine, which alone holds the flat door those find --
+    a client with no installation registered starts none: the library never starts a server of its own
+    environment. Two channels on one version share its engine. An update of a channel replaces its old
+    version's engine with the new one's -- one the person asks for, or an automatic patch update once the
+    engine is idle (law 18) -- on the same port with the same token when nothing is in flight on the old
+    one and no other channel is on it; else the old one runs on as it is and the new one takes the next
+    free port. An engine no channel is on stops once nothing is in flight (the engine's **Starting and
     updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads
     share its authenticated HTTP listener. `serve` and `viewer` always start or reuse it, with no

@@ -568,5 +568,115 @@ class SetupAdd(Device):
             setup.main(["--add", "--only", "claude-code"])
 
 
+class ServerDecisions(Device):
+    """What the servers decide by, at the cheapest level: no server runs (``test_version_servers`` runs them)."""
+
+    def test_connected_means_work_in_flight_and_a_server_that_cannot_say_is_connected(self) -> None:
+        for answer, expected in (({"ok": True, "working": False}, False), ({"ok": True, "working": True}, True),
+                                 (None, True), ({"failed": "unknown request 'working'"}, True)):
+            with self.subTest(answer=answer), mock.patch.object(versions, "ask", return_value=answer) as asked:
+                self.assertEqual(versions.connected(X), expected)
+                asked.assert_called_once_with(X, {"op": "working"})
+
+    def test_an_unnamed_idle_server_retires_and_nothing_else_does(self) -> None:
+        for name in (X, Y, Z):
+            self.present(name)
+        pointers.write(None, Y, mirrored=False)
+        pointers.write("store", Z, mirrored=False)
+        self.assertTrue(versions.retiring(X, working=False))
+        self.assertFalse(versions.retiring(X, working=True), "work in flight keeps it")
+        self.assertFalse(versions.retiring(Y, working=False), "the default's")
+        self.assertFalse(versions.retiring(Z, working=False), "a named channel's")
+        held, release = threading.Event(), threading.Event()
+
+        def moving() -> None:
+            with versions.install_lock():
+                held.set()
+                release.wait(30)
+
+        mover = threading.Thread(target=moving)
+        mover.start()
+        held.wait(30)
+        try:
+            self.assertFalse(versions.retiring(X, working=False), "decided again once no move holds the lock")
+        finally:
+            release.set()
+            mover.join()
+        (self.state / "default").unlink()
+        self.assertTrue(versions.retiring(Y, working=False), "unnamed, and not the newest present")
+        pointers.forget("store")
+        self.assertFalse(versions.retiring(Z, working=False), "no pointer at all: the newest present is the default's")
+
+    def test_the_flat_door_is_the_default_channel_s_version_s_alone(self) -> None:
+        for name in (X, Y):
+            self.present(name)
+        pointers.write("store", Y, mirrored=False)
+        self.assertTrue(versions.flat(Y), "no pointer: the newest present is the default's")
+        pointers.write(None, X, mirrored=False)
+        self.assertEqual((versions.flat(X), versions.flat(Y), versions.flat(None)), (True, False, False))
+
+    def test_garbage_is_a_version_no_pointer_names_but_the_asker_s_own(self) -> None:
+        for name in (X, Y):
+            self.present(name)
+        pointers.write(None, Y, mirrored=False)
+        self.assertTrue(versions.garbage())
+        self.assertFalse(versions.garbage(spare=X), "a server never sweeps its own version")
+        with mock.patch.object(versions, "_remove", return_value="connected") as removing:
+            self.assertEqual(versions.sweep(spare=X), {})
+            removing.assert_not_called()
+
+    def test_a_handover_takes_the_port_only_from_a_server_that_went(self) -> None:
+        asked: list[tuple[str, dict]] = []
+
+        def ask(name, message, **_kwargs):
+            asked.append((name, message))
+            return {"ok": True, "url": "http://127.0.0.1:4000/", "port": 4000} if message.get("op") == "http" else {}
+
+        with mock.patch.object(versions, "ask", ask), mock.patch.object(versions, "start_server", return_value=True), \
+                mock.patch.object(versions, "serves", side_effect=lambda name: name == Y):
+            self.assertTrue(versions.handover(None, X, Y, 4000))
+            self.assertEqual(asked, [(Y, {"op": "bridge"}), (Y, {"op": "http", "port": 4000})])
+            asked.clear()
+            self.assertFalse(versions.handover("store", X, Y, None), "a server that served no pages: nothing")
+            self.assertEqual(asked, [], "and a named channel's move never asks about the flat door")
+        with mock.patch.object(versions, "ask", ask), mock.patch.object(versions, "serves", return_value=True):
+            asked.clear()
+            self.assertFalse(versions.handover(None, X, Y, 4000), "the old server still runs: it keeps its port")
+            self.assertEqual(asked, [(X, {"op": "bridge"}), (Y, {"op": "bridge"})], "the old one let go first")
+
+    def test_a_channel_s_use_is_its_pointer_s_time_and_nothing_is_made_for_it(self) -> None:
+        pointers.write("store", X, mirrored=False)
+        path = self.state / "channels" / "store"
+        os.utime(path, (1_000_000, 1_000_000))
+        with mock.patch.dict(pointers._used, clear=True):
+            self.assertTrue(pointers.used("store"))
+            self.assertGreater(path.stat().st_mtime, 1_000_000)
+            self.assertFalse(pointers.used("store"), "once a minute at most")
+            self.assertFalse(pointers.used(None), "the default channel has no pointer here: none is made")
+            self.assertFalse(pointers.used("../x"), "no channel")
+        self.assertFalse((self.state / "default").exists())
+
+    def test_a_pinned_command_s_stop_and_status_reach_its_own_version_alone(self) -> None:
+        from cad.engine import client
+
+        self.present(X)
+        places._versioned.cache_clear()
+        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": X}):
+            places._versioned.cache_clear()
+            self.assertEqual(places.endpoints(), [versions.endpoint(X)])
+            self.assertEqual(client.sweep(stop=True), {"stopped": [], "running": [], "removed": []})
+        places._versioned.cache_clear()
+        self.assertEqual(places.endpoints()[0].lock, self.engines / "engine.lock", "no version: the flat one")
+
+    def test_an_event_says_its_channel_and_the_app_it_came_from(self) -> None:
+        from cad_server._internal.channel import describe
+
+        self.assertEqual(describe("codex", "codex-mcp-client"), {"channel": "codex", "app": "codex"})
+        self.assertEqual(describe(None, "cursor-vscode", {}), {"channel": "default", "app": "cursor"})
+        self.assertEqual(describe("claude", None, {"CLAUDECODE": "1"}), {"channel": "claude", "app": "claude code"})
+        self.assertEqual(describe("Not A Channel", "some-host", {}), {"channel": "default", "app": "some-host"})
+        self.assertEqual(describe(None, None, {}), {"channel": "default", "app": "unknown"})
+
+
 if __name__ == "__main__":
     unittest.main()
