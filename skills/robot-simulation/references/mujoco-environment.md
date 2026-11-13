@@ -106,15 +106,15 @@ if __name__ == "__main__":
   Collision shapes, contact friction, the servo's reflected inertia, damping and dry friction,
   actuators and their gains are the MuJoCo function's. `condim`, solver settings and contact softness
   are the scene's.
-- **Check the signs in CAD first**: `cad model snapshot "$ID" tmp/closed.png --pose closed`. The
+- **Check the signs in CAD first**: `cad +0.11.10 model snapshot "$ID" tmp/closed.png --pose closed`. The
   writers copy the mechanism's signs; they cannot know which way is meant.
 
 ## The plain export
 
 ```bash
-cad run src/gripper.py
-cad model export "$ID" sim/gripper.xml
-cad mujoco check sim/gripper.xml
+cad +0.11.10 run src/gripper.py
+cad +0.11.10 model export "$ID" sim/gripper.xml
+cad +0.11.10 mujoco check sim/gripper.xml
 ```
 
 `$ID` is the gripper's `id:` line from the run. The export writes `sim/gripper.xml` and its meshes,
@@ -239,11 +239,11 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/gripper_mujoco.py
-cad mujoco check sim/scene.xml
+cad +0.11.10 run src/gripper_mujoco.py
+cad +0.11.10 mujoco check sim/scene.xml
 ```
 
-`cad run` sees the `mujoco` import and adds `cad[mujoco]`. The function's file replaces the plain
+`cad +0.11.10 run` sees the `mujoco` import and adds `cad[mujoco]`. The function's file replaces the plain
 export at the same path: it is the robot's file now, actuators and all.
 The run ends with what `save` checked of it:
 
@@ -295,7 +295,7 @@ replacing collisions, read `s.excludes`: a pair that no longer touches is still 
 exclude is between bodies, so it also stops every other part of those two bodies from colliding (a
 finger in a carriage's body against the palm the carriage runs in). `s.delete(exclude)` removes one.
 
-**Naming a part.** A part is its label path, as `cad model inspect` prints it (`gripper/left`); a
+**Naming a part.** A part is its label path, as `cad +0.11.10 model inspect` prints it (`gripper/left`); a
 last segment, or any trailing run of them, is enough where it names one part (`left`,
 `left_servo/case`). A label that names two is refused with their full paths, and one that names
 none with the parts there. A part placed several times (one servo in each joint) is named once per
@@ -319,7 +319,7 @@ the file with MuJoCo's own writer, copies every mesh and texture the spec names 
 it, so the folder travels, and removes the meshes its last save of that file wrote that it no
 longer names (never another file). It writes a `scene.xml` beside the file when there is none and
 the spec has no floor of its own (a floor, a light and the robot framed), and never writes over
-one. Then it checks the file as `cad mujoco check` does and prints each warning, what the model
+one. Then it checks the file as `cad +0.11.10 mujoco check` does and prints each warning, what the model
 collides as (`collisions:`), its contact excludes (`excludes:`) and `wrote <path>`
 ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)). A spec MuJoCo refuses is
 refused in MuJoCo's words, and nothing is written. A relative path is taken against the working
@@ -372,14 +372,14 @@ the defaults above its `<include>`, and leave the floor and light as written:
 - **Defaults go above the `<include>`.** A class the included file defines copies the top-level
   defaults that stand at the `<include>`. A `<geom solref>` written after it reaches the elements in
   no class (the floor), but none in the robot's classes, and every element of a generated robot is
-  in its class. `cad mujoco check` warns `defaults_after_include` where it is below.
+  in its class. `cad +0.11.10 mujoco check` warns `defaults_after_include` where it is below.
 - The option and `solref` lines clear `defaults_not_recommended`.
 - A key the model's mechanism states make has no `ctrl`, so every position actuator commands 0, the
   zero pose (`home`, exported with `--zero home`). A key that commands another pose is the robot's,
   `s.add_key(name=..., qpos=..., ctrl=...)` in its MuJoCo function, with a `ctrl` per actuator in
   actuator order.
 
-Check the scene after every edit (`cad mujoco check sim/scene.xml`). A scene
+Check the scene after every edit (`cad +0.11.10 mujoco check sim/scene.xml`). A scene
 that composes other models goes in code instead (below).
 
 ## The scene in code
@@ -439,7 +439,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/pick.py
+cad +0.11.10 run src/pick.py
 ```
 
 What each step does, and the traps:
@@ -458,7 +458,7 @@ What each step does, and the traps:
   and texture absolutely and clears the spec's own folders: load a robot made elsewhere through `spec()`
   too, never `MjSpec.from_file`: `save` refuses a scene that attached one, in MuJoCo's words (`Error
   opening file`) and naming `spec(path)`. A scene written another way that cannot find a mesh fails
-  `cad mujoco check` with `compile_failed`, in MuJoCo's words.
+  `cad +0.11.10 mujoco check` with `compile_failed`, in MuJoCo's words.
 - **`save` makes the folder travel.** It copies every file the scene names, the attached robots'
   included, into `sim/assets/` beside `sim/pick.xml` and names each there (two files of one name
   become two, the second `_2`), so the folder loads on another computer. A scene has a floor of its
@@ -489,7 +489,7 @@ its last link and a MuJoCo function of its own, and the gripper attached at that
 ## Check and show the scene
 
 ```bash
-cad mujoco check sim/pick.xml
+cad +0.11.10 mujoco check sim/pick.xml
 ```
 
 On the scene above it prints:
@@ -529,7 +529,7 @@ Then show it. No `cad` command draws an MJCF: the check above is your review, an
 shows the scene to the person:
 
 ```bash
-cad run mujoco-studio --model sim/pick.xml
+cad +0.11.10 run mujoco-studio --model sim/pick.xml
 ```
 
 MuJoCo Studio compiles and simulates the scene in the person's browser, reloading as `pick.xml`
@@ -547,7 +547,7 @@ is a modelling error, and no solver setting fixes one; tuning around it hides it
    Studio (rests still, slips, jitters, sinks into the floor, explodes).
 2. **One parameter at a time**, in the scene script for what the scene owns, in the robot's MuJoCo
    function for what it chooses, and in the model for what the geometry owns. Change one, run the
-   script, `cad mujoco check sim/pick.xml` after every write, run the same
+   script, `cad +0.11.10 mujoco check sim/pick.xml` after every write, run the same
    scenario, and keep the change or revert it.
 3. **Record** each kept change and the reason in a comment beside it in the script that made it.
 
@@ -597,7 +597,7 @@ it: change it in the MuJoCo function where contact is wrong, never to steady the
 ## What is not supported
 
 - Compiled models (`.mjb`) and packages (`.mjz`): the check reads the XML, as MuJoCo compiles it.
-- An MJCF in the CAD Viewer or the CAD app, or a still of one: it is MuJoCo's own file. `cad mujoco
+- An MJCF in the CAD Viewer or the CAD app, or a still of one: it is MuJoCo's own file. `cad +0.11.10 mujoco
   check` checks it, and MuJoCo Studio is where it is seen and where a simulation runs.
 - Converting between URDF and MJCF beyond what MuJoCo's own loader does with a URDF
   ([interoperability.md](interoperability.md#mjcf)). A robot with a CAD model is generated in each

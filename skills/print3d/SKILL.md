@@ -4,6 +4,7 @@ description: Prints a part - slices an `.stl`, `.3mf` or `.obj` into printer-rea
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
+  version: "0.11.10"
 ---
 
 # 3D printing
@@ -17,23 +18,28 @@ never starts a print.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Slice it to G-code** | `cad orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
+| **Slice it to G-code** | `cad +0.11.10 orcaslicer presets machine --match "<printer>"` | [Slice with OrcaSlicer](#slice-with-orcaslicer) |
 | **Print on a Bambu Lab printer** | The sliced `.gcode.3mf` | [Print on a Bambu Lab printer](#print-on-a-bambu-lab-printer) |
 | **Will this print?** | The cad skill's printing check ($cad) | Its manufacturing references |
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Every command in this skill starts `cad +0.11.10`: it runs text-to-cad 0.11.10, the release this skill was
+written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
+PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
+
+If `cad` is missing, or says it does not know `+0.11.10` (an older text-to-cad), or says 0.11.10 is not
+installed and could not be installed from this shell, install this release, outside the sandbox or
+with its permission, then run the command again:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
+curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.10
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
-person any next step `cad setup` prints.
+On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.10`.
+It installs 0.11.10 and the `cad` command and changes nothing else. `cad +0.11.10 doctor --check` explains any
+other failure, changing nothing; `cad +0.11.10 doctor` repairs what it reports. Tell the person any next
+step it prints.
 
 ## Slice with OrcaSlicer
 
@@ -57,7 +63,7 @@ Below, `<orca>` is that command.
 OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
 complete presets: it doesn't fill in a preset's parent settings, and it slices
 only with a process whose compatible printers name the printer.
-`cad orcaslicer` writes them from OrcaSlicer's presets, searching the person's
+`cad +0.11.10 orcaslicer` writes them from OrcaSlicer's presets, searching the person's
 own first, then OrcaSlicer's built-in profiles. It reads and writes preset
 files alone: it never runs OrcaSlicer, and works offline.
 
@@ -66,15 +72,15 @@ files alone: it never runs OrcaSlicer, and works offline.
    temperature can damage the printer.
 
    ```bash
-   cad orcaslicer presets machine --match "MK4S"
-   cad orcaslicer presets process --match "@MK4S 0.4"
-   cad orcaslicer presets filament --match "PLA @MK4S"
+   cad +0.11.10 orcaslicer presets machine --match "MK4S"
+   cad +0.11.10 orcaslicer presets process --match "@MK4S 0.4"
+   cad +0.11.10 orcaslicer presets filament --match "PLA @MK4S"
    ```
 
 2. Write the complete presets. It prints the files it wrote, as JSON:
 
    ```bash
-   cad orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
+   cad +0.11.10 orcaslicer complete --printer "Prusa MK4S 0.4 nozzle" \
      --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
      --out presets
    ```
@@ -95,7 +101,7 @@ files alone: it never runs OrcaSlicer, and works offline.
 
    This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
    sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad model export <id> part.3mf`, or `cad step export part.step part.3mf`).
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad +0.11.10 model export <id> part.3mf`, or `cad +0.11.10 step export part.step part.3mf`).
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
 
@@ -124,7 +130,7 @@ Connect is still in development, use Bambu Studio.
 | --- | --- |
 | A sliced `.gcode.3mf`, from OrcaSlicer's command line or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
 | A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad +0.11.10 model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
 ### Open a file in Bambu Connect
 

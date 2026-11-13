@@ -56,6 +56,8 @@ class PluginTreeTests(unittest.TestCase):
         self.assertNotIn("mcpServers", json.loads(directory[".claude-plugin/plugin.json"][1]))
         self.assertEqual(branch.type_errors(directory), [])
         self.assertEqual({path for path in directory if path.startswith("skills/")}, skills)
+        # Byte for byte main's: the skills' `cad +<VERSION>` pins are the release's in every copy.
+        self.assertEqual([path for path in skills if directory[path][1] != blobs[on_main[path][1]]], [])
 
     def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
         # The catalog lists the plugin at the root of the branch it is read from, so a marketplace

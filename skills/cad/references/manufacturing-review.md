@@ -14,8 +14,8 @@ same for every process: what the check reads, its result in full, the review and
 ## The check
 
 ```bash
-cad step dfm part.step --process sheet --material 5052 --thickness 2 --bend-radius 2
-cad stl dfm part.stl --process printing --technology sla --json
+cad +0.11.10 step dfm part.step --process sheet --material 5052 --thickness 2 --bend-radius 2
+cad +0.11.10 stl dfm part.stl --process printing --technology sla --json
 ```
 
 A model, a STEP or an xbf is measured exactly, and each finding names a face ref; a mesh (STL, 3MF,
@@ -110,8 +110,8 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
   `material_declared`: the material was read from the part; `several_solids`: one part of several
   solids, which a process makes as several parts -- fuse them or label each; `several_bodies`: several
   parts, every occurrence counted).
-- **See the place.** Resolve a finding's ref with `cad model inspect "$ID" 'plate/edge 17'` or
-  `cad step inspect part.step 'COMPOUND/face 7'`: the face's surface, radius, area and box. The
+- **See the place.** Resolve a finding's ref with `cad +0.11.10 model inspect "$ID" 'plate/edge 17'` or
+  `cad +0.11.10 step inspect part.step 'COMPOUND/face 7'`: the face's surface, radius, area and box. The
   figures behind it are `measurements.<family>`, items worst first; the process's reference names the families.
 - **Read what was not judged.** `--json` prints one line; `measurements.rules` holds `title`, `note`,
   `failed`, and `outcomes`, one per rule id (a rule's variants

@@ -55,24 +55,30 @@ class DevPluginTests(unittest.TestCase):
                         self.assertEqual(json.loads((plugin / grok["mcpServers"]).read_text(encoding="utf-8")),
                                          {"mcpServers": {"cad": server}})
 
-    def test_the_skills_never_send_the_agent_to_the_release_s_installer(self) -> None:
-        # The dev server runs the checkout's .venv, made the current installation, which the `cad` command
-        # the skills run runs; the release's installer would put the published release over it.
+    def test_the_skills_run_this_install_and_never_send_the_agent_to_the_release_s_installer(self) -> None:
+        # The dev server runs the checkout's .venv, registered as this install's version: every command a
+        # skill runs pins that name, and the release's installer would put the published release over it.
+        release = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CAD_LAUNCHER_DIR": ""}):
-            rewrites = dev_install.skill_rewrites()
+            rewrites = dev_install.skill_rewrites("1.2.3-dev.1")
             # Every rewrite matches text in the skills: one that matches nothing is dead.
-            documents = "".join(skill.read_text(encoding="utf-8") for skill in (REPO_ROOT / "skills").glob("*/SKILL.md"))
+            documents = "".join(path.read_text(encoding="utf-8") for path in (REPO_ROOT / "skills").rglob("*.md"))
             for released_text in rewrites:
                 self.assertIn(released_text, documents, "a rewrite that matches nothing in the skills")
             plugin = Path(scratch) / "claude"
             dev_install.assemble("claude", plugin, "1.2.3-dev.1", {"command": "x"}, rewrites=rewrites)
             note = f"This is a development install of {dev_install.REPO_ROOT}; do not run the install command here"
-            for skill in plugin.glob("skills/*/SKILL.md"):
-                text = skill.read_text(encoding="utf-8")
-                with self.subTest(skill=skill.parent.name):
-                    for command in dev_install.INSTALL_COMMANDS:
-                        self.assertNotIn(command, text)
-                    if "## Setup" in text:
+            docs = sorted(plugin.glob("skills/**/*.md"))
+            self.assertGreater(len(docs), len(list(plugin.glob("skills/*/SKILL.md"))), "the references are rewritten too")
+            for path in docs:
+                text = path.read_text(encoding="utf-8")
+                with self.subTest(path=str(path.relative_to(plugin))):
+                    self.assertNotIn(f"--add {release}", text)
+                    self.assertNotIn(f"cad +{release}", text)
+                    if path.name == "SKILL.md":
+                        self.assertIn('\n  version: "1.2.3-dev.1"\n---\n', text)
+                    if path.name == "SKILL.md" and "## Setup" in text:
+                        self.assertIn("`cad +1.2.3-dev.1 doctor --check`", text)
                         self.assertIn(f"```bash\n# {note}\n```\n", text)
                         self.assertIn(f"On Windows, in PowerShell: `{note}`.", text)
 
@@ -101,7 +107,7 @@ class DevPluginTests(unittest.TestCase):
         uvx = [*dev_install.LAUNCHER[:-1], "--with", str(library), dev_install.LAUNCHER[-1], str(wheel)]
         # The server's installation registers as this install's version, by its own python.
         run.assert_called_once_with(*uvx, "python", "-c", dev_install.REGISTER, "v", capture=True)
-        self.assertEqual(rewrites, dev_install.skill_rewrites())
+        self.assertEqual(rewrites, dev_install.skill_rewrites("v"))
         self.assertIsNone(page, "a wheel serves the page it was built with")
 
     def test_claude_desktop_gets_no_server_and_loses_the_one_an_earlier_install_wrote(self) -> None:

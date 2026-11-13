@@ -17,7 +17,7 @@ for unit in sch.part("U3"):                 # every unit placed of a part
     print(unit.value, unit.footprint, unit.mpn, unit.sheet)
 ```
 
-Run it with `cad run inspect_schematic.py`. The reader is the standard library alone (no KiCad):
+Run it with `cad +0.11.10 run inspect_schematic.py`. The reader is the standard library alone (no KiCad):
 sheets, symbols (reference, value, footprint, library id, fields, unit, the sheet it is on, its pins
 with number, name and electrical type), wires and buses, junctions, labels (local, global,
 hierarchical, and each power symbol's net), no-connects, and the nets they make, named as KiCad
@@ -26,7 +26,7 @@ sheet's path (`/Power/VBUS`); `sch.net("VBUS")` finds it by its bare name when o
 it. Positions are millimetres on each sheet's page, y down, as the file holds them. Each call reads
 the current files.
 
-`cad kicad_sch inspect board.kicad_sch [REF] --json` says the same in one look: sheets, parts, nets,
+`cad +0.11.10 kicad_sch inspect board.kicad_sch [REF] --json` says the same in one look: sheets, parts, nets,
 and what a reference names.
 
 ## References
@@ -45,8 +45,8 @@ the other:
 ## Look at it
 
 ```bash
-cad kicad_sch snapshot board.kicad_sch tmp/root.png
-cad kicad_sch snapshot board.kicad_sch tmp/power.png --sheet /Power/
+cad +0.11.10 kicad_sch snapshot board.kicad_sch tmp/root.png
+cad +0.11.10 kicad_sch snapshot board.kicad_sch tmp/power.png --sheet /Power/
 ```
 
 Each picture is one sheet, drawn from the file's own symbols, wires and labels in KiCad's
@@ -57,7 +57,7 @@ A number is never read off a picture: read it from `kicad_sch.read`.
 ## Check it
 
 ```bash
-cad kicad_sch erc board.kicad_sch --json
+cad +0.11.10 kicad_sch erc board.kicad_sch --json
 ```
 
 KiCad's electrical rules check (ERC) on the whole hierarchy, every finding with its sheet and where
@@ -99,7 +99,7 @@ libraries already loaded, as `kicad_pcb.edit` does a board ([SKILL.md](../SKILL.
 saved at the block's end when it changed it, left byte for byte when it changed nothing, nothing saved
 when it raises; a schematic not there yet is made, with its project. State the schematic you want, so a
 second run changes nothing: place a symbol only when its reference is not there yet. Run the script with
-`cad run schematic.py`.
+`cad +0.11.10 run schematic.py`.
 
 ```python
 from cad import kicad_sch
@@ -196,7 +196,7 @@ every property of the parent's that the child does not set (a lost one is ERC's 
 ## Draw it cleanly
 
 The netlist proves the connections; the picture proves a person can read them. Check both after each
-edit: `kicad_sch.read` or `cad kicad_sch inspect` for what connects, and a `cad kicad_sch snapshot` of
+edit: `kicad_sch.read` or `cad +0.11.10 kicad_sch inspect` for what connects, and a `cad +0.11.10 kicad_sch snapshot` of
 each sheet changed for how it reads, iterating on the picture until nothing overlaps or runs long.
 
 - Join buses and long runs with labels; wire local passives (pull-ups, decoupling, a filter) to their
@@ -221,7 +221,7 @@ Report the liberties taken: a symbol redrawn, a sheet split or merged, a choice 
 The board takes its parts and nets from the schematic's netlist:
 
 ```bash
-cad kicad_sch export board.kicad_sch --to netlist -o tmp
+cad +0.11.10 kicad_sch export board.kicad_sch --to netlist -o tmp
 ```
 
 writes `tmp/board.net`, the netlist [layout](layout.md)'s first step imports in a board's edit
@@ -267,4 +267,4 @@ A part on one and not the other, or a pin on another net, is a change the netlis
 carried, or one made on the board alone. The other exports: `--to pdf` (every sheet), `--to svg` (a
 file per sheet), `--to bom` (a CSV a line per value, footprint and `MPN`, its `Refs` in ranges such as
 `C103-C106`, for [review-assembly](review-assembly.md)). An assembler's BOM is the board's
-(`cad kicad_pcb export --to bom`: every designator, no ranges).
+(`cad +0.11.10 kicad_pcb export --to bom`: every designator, no ranges).

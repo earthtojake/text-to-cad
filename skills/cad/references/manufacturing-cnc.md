@@ -62,14 +62,14 @@ floor where it does not, each finding saying which; `--tools` moves the tool's):
   own stock and setups (`several_solids` says so): fuse what is one piece, export the rest
   as an assembly's parts.
 - The material and the process on the part: `part.material = metals.aluminum(process=machined())`
-  (`bd_materials.processes`); `cad model dfm "$ID"` then needs no `--process` or `--material`.
+  (`bd_materials.processes`); `cad +0.11.10 model dfm "$ID"` then needs no `--process` or `--material`.
 
 ## Check it
 
 ```bash
-cad model dfm "$ID" --process cnc --material aluminum
-cad step dfm plate.step --process cnc --material aluminum --axes 5 --tools 3,6,10
-cad step dfm shaft.step --process cnc --turning --material stainless
+cad +0.11.10 model dfm "$ID" --process cnc --material aluminum
+cad +0.11.10 step dfm plate.step --process cnc --material aluminum --axes 5 --tools 3,6,10
+cad +0.11.10 step dfm shaft.step --process cnc --turning --material stainless
 ```
 
 The options that change the verdicts:
@@ -185,7 +185,7 @@ The following numbers are illustrative inputs, not default process limits.
 `cnc.internal_corner_radius at plate/face 9: internal corner radius 0.5 mm is under the 1.5 mm
 minimum (...) (8 mm tall, a corner of the cavity at plate/face 7)`, from a check with
 `--tools 3,6,10`, and three more like it at `plate/face 11`, `13` and `15`. `plate/face 9` is the
-corner's own fillet (`refs[0]`), `plate/face 7` the pocket's floor; `cad model inspect "$ID"
+corner's own fillet (`refs[0]`), `plate/face 7` the pocket's floor; `cad +0.11.10 model inspect "$ID"
 'plate/face 9'` shows a cylinder of radius 0.5 mm 8 mm deep. Report the pocket's four corners as fail
 against the 3 mm tool, and propose a radius of at least 1.5 mm on each, or a smaller tool if the shop
 has one; reach and holder clearance remain checks of their own.

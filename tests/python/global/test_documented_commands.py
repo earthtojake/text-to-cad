@@ -70,6 +70,10 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
             continue  # an unbalanced quote is prose, not a command form
         argv: list[str] = []
         elided = False
+        # A skill's command pins its release first, `cad +<VERSION> <verb>` (the dispatcher takes it off
+        # before the command line sees it; test_skill_commands_pin_their_release.py holds the pin).
+        if tokens[1:2] and tokens[1].startswith("+"):
+            del tokens[1]
         for token in tokens[1:]:
             if token == ELISION:
                 elided = True

@@ -24,6 +24,8 @@ def section(name: str) -> str:
 
 # The CAD app's tools: not every host has them (Claude gets none), so a skill names them only on condition.
 APP_TOOLS = re.compile(r"`cad_(?:show|view|screenshot)`")
+# `cad viewer`, pinned to the skill's release as every command a skill runs is.
+VIEWER = re.compile(r"`?cad \+\S+ viewer")
 
 
 class ShowTheModelTest(unittest.TestCase):
@@ -33,7 +35,7 @@ class ShowTheModelTest(unittest.TestCase):
         text = section(SKILLS[0])
         self.assertIn("If your\ntools include `cad_show`", text)
         self.assertIn("Otherwise", text)
-        self.assertIn("`cad viewer", text)
+        self.assertRegex(text, r"`cad \+\S+ viewer")
         # Of the app's tools, only `cad_show` is named, and outside the section only beside `cad viewer` or as a
         # thing that already prints or refuses (never told to call alone).
         for path in sorted((REPO / "skills").rglob("*.md")):
@@ -42,7 +44,7 @@ class ShowTheModelTest(unittest.TestCase):
                     continue
                 with self.subTest(path=str(path.relative_to(REPO)), paragraph=paragraph[:80]):
                     self.assertNotRegex(paragraph, r"`cad_(?:view|screenshot)`")
-                    self.assertTrue("cad viewer" in paragraph or "If your\ntools include" in paragraph
+                    self.assertTrue(VIEWER.search(paragraph) or "If your\ntools include" in paragraph
                                     or re.search(r"`cad_show`\s+(?:print|alike|do not open)", paragraph), paragraph)
 
     def test_every_skill_that_shows_models_says_how_in_the_same_words(self) -> None:

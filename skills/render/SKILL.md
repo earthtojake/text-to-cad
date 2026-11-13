@@ -1,9 +1,10 @@
 ---
 name: render
-description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, loads it with cad.blender, lights and frames it in a bpy script that `cad run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
+description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, loads it with cad.blender, lights and frames it in a bpy script that `cad +0.11.10 run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
+  version: "0.11.10"
 ---
 
 # Renders for people
@@ -11,7 +12,7 @@ metadata:
 A render is a picture for a person: a hero image, a README picture, a post, a turntable, a film of
 a mechanism. The model goes to Blender as a GLB, loaded by `cad.blender.load`; the scene (camera,
 lights, world, engine, output) is an ordinary Python script that imports `bpy`, Blender as a
-Python module, and `cad run` runs it. Judge geometry with `cad model snapshot`, never with a
+Python module, and `cad +0.11.10 run` runs it. Judge geometry with `cad +0.11.10 model snapshot`, never with a
 render: a render's lens, light and depth of field make it a poor measure, so never read a
 dimension off one.
 
@@ -19,7 +20,7 @@ dimension off one.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **A still of a model** | Export a GLB, write a `render.py` that loads it, `cad run render.py`. | [The script](#the-script), [scene script](references/scene-script.md) |
+| **A still of a model** | Export a GLB, write a `render.py` that loads it, `cad +0.11.10 run render.py`. | [The script](#the-script), [scene script](references/scene-script.md) |
 | **Draft, then a final** | An EEVEE draft at 1080p, looked at, before Cycles. | [Draft then final](references/shots.md#draft-then-final) |
 | **A pose of a motion or a frame of an animation** | `model.play(name)` and the frame. | [Clips](#load-the-glb) |
 | **A turntable** | The camera on an empty that turns once. | [Turntables](references/shots.md#turntables) |
@@ -31,37 +32,42 @@ dimension off one.
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
-it is missing, install text-to-cad, outside a sandbox or with its permission:
+Every command in this skill starts `cad +0.11.10`: it runs text-to-cad 0.11.10, the release this skill was
+written for, and never another. Run it as written (`~/.local/bin/cad` where `cad` is not on your
+PATH; `cad.exe` on Windows). The first command after a new release installs it, once.
+
+If `cad` is missing, or says it does not know `+0.11.10` (an older text-to-cad), or says 0.11.10 is not
+installed and could not be installed from this shell, install this release, outside the sandbox or
+with its permission, then run the command again:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh
+curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.10
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
-person any next step `cad setup` prints.
+On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.10`.
+It installs 0.11.10 and the `cad` command and changes nothing else. `cad +0.11.10 doctor --check` explains any
+other failure, changing nothing; `cad +0.11.10 doctor` repairs what it reports. Tell the person any next
+step it prints.
 
-`cad run render.py` sees `import bpy` and gives the script cad's blender integration: an
+`cad +0.11.10 run render.py` sees `import bpy` and gives the script cad's blender integration: an
 environment on Python 3.13, the one Blender is built for, holding bpy 5.2.3 (Blender 5.2 LTS)
 beside cad, made the first time and kept. The script imports what it likes of cad and build123d
 beside bpy, so one script can build a model, export it and render it. Blender's own preferences,
 add-ons and extensions folders are cad's, never the person's, so their Blender settings never load
-into a run; every `cad run` shares them, so an extension or a preference one script installs or saves
+into a run; every `cad +0.11.10 run` shares them, so an extension or a preference one script installs or saves
 is there for the next, and a script that needs one sets it up itself. bpy has no build for Intel Macs
-or Linux on ARM, where `cad run` refuses such a script by name. A `--python` or a header's
+or Linux on ARM, where `cad +0.11.10 run` refuses such a script by name. A `--python` or a header's
 `requires-python` that leaves 3.13 out is refused the same way; one that admits it (`--python 3.13`)
 runs on the same environment as none. Nothing here starts the Blender app.
 
 ## Export the model
 
 ```bash
-cad model export "$ID" scene.glb --tolerance 0.02 --angle 5
+cad +0.11.10 model export "$ID" scene.glb --tolerance 0.02 --angle 5
 ```
 
 `ID` is the model's id (running its script prints it); a STEP or an xbf exports the same way
-(`cad step export part.step scene.glb --tolerance 0.02 --angle 5`). The GLB is in metres, Z up once
+(`cad +0.11.10 step export part.step scene.glb --tolerance 0.02 --angle 5`). The GLB is in metres, Z up once
 imported, with the assembly's tree as nested empties, a PBR material per look, and each motion
 and `animation()` as a clip. The viewer's mesh shows its facets in a path tracer or a close camera:
 `--tolerance` (mm, absolute) and `--angle` (degrees, 1 to 28.5) mesh this file finer, for it alone.
@@ -74,7 +80,7 @@ the GLB is a copy.
 ## The script
 
 ```python
-# render.py: cad run render.py
+# render.py: cad +0.11.10 run render.py
 import math
 from pathlib import Path
 
@@ -112,12 +118,12 @@ bpy.ops.render.render(write_still=True)
 ```
 
 ```bash
-cad run render.py
+cad +0.11.10 run render.py
 ```
 
 The script is the scene: a camera, lights and a world are added in Python, every run starts from
 an empty scene, and the outputs are wherever the script writes them. Arguments after the script's
-name reach it as `sys.argv[1:]` (`cad run render.py --final`). Lights, the world, colour
+name reach it as `sys.argv[1:]` (`cad +0.11.10 run render.py --final`). Lights, the world, colour
 management and a GPU are in [the scene script](references/scene-script.md).
 
 ## Load the GLB
@@ -194,11 +200,11 @@ draft in Cycles at 8 to 16 samples and set `scene.render.compositor_device = "CP
   `model.box` and the camera's location.
 - A part in the wrong pose is a GLB imported without `load`, or a clip's frame taken before
   `model.play`.
-- A render proves a picture, not a dimension: geometry is checked with `cad model snapshot`.
+- A render proves a picture, not a dimension: geometry is checked with `cad +0.11.10 model snapshot`.
 
 ## What to expect
 
-- The first `cad run` of a script that imports bpy downloads Blender's module once: about 262 MB
+- The first `cad +0.11.10 run` of a script that imports bpy downloads Blender's module once: about 262 MB
   on a Mac, 356 MB on Windows, 430 MB on Linux, and a Python 3.13 (65 MB). Later runs and other
   projects reuse it, and after an update of text-to-cad it is made again from what was downloaded.
 - The first `import bpy` after that takes 11 to 18 s; then about 1.3 s.

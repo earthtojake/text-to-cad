@@ -13,11 +13,11 @@ the world, colour, the engines and the GPU.
 ## Running it
 
 ```bash
-cad run render.py
-cad run render.py --final
+cad +0.11.10 run render.py
+cad +0.11.10 run render.py --final
 ```
 
-`cad run` runs the script with Python 3.13, bpy 5.2.3 and cad, so `from cad.blender import load`
+`cad +0.11.10 run` runs the script with Python 3.13, bpy 5.2.3 and cad, so `from cad.blender import load`
 imports, as does a module beside the script. Its arguments are `sys.argv[1:]`:
 
 ```python

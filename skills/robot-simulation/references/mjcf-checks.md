@@ -1,12 +1,12 @@
 # MJCF checks
 
-Every created or modified MJCF is checked with `cad mujoco check <file.xml>` before the task is reported complete. Check the file a consumer loads -- `scene.xml`, which includes or attaches the robot's -- and the robot's own file when it is used alone. A generated MJCF (`cad model export`) and a file a MuJoCo function or a scene script saved are checked the same way. The check compiles the model with MuJoCo's own compiler, the one reader that knows every rule of the format, and collects all findings in one pass (severity, code, the file); `--strict` fails on warnings and `--json` emits a machine-readable document.
+Every created or modified MJCF is checked with `cad +0.11.10 mujoco check <file.xml>` before the task is reported complete. Check the file a consumer loads -- `scene.xml`, which includes or attaches the robot's -- and the robot's own file when it is used alone. A generated MJCF (`cad +0.11.10 model export`) and a file a MuJoCo function or a scene script saved are checked the same way. The check compiles the model with MuJoCo's own compiler, the one reader that knows every rule of the format, and collects all findings in one pass (severity, code, the file); `--strict` fails on warnings and `--json` emits a machine-readable document.
 
-An MJCF is MuJoCo's own file: `cad` writes one and asks MuJoCo about one, and never draws or opens one. A person looks at it in MuJoCo Studio (`cad run mujoco-studio --model path/to/scene.xml`).
+An MJCF is MuJoCo's own file: `cad` writes one and asks MuJoCo about one, and never draws or opens one. A person looks at it in MuJoCo Studio (`cad +0.11.10 run mujoco-studio --model path/to/scene.xml`).
 
 ```bash
-cad mujoco check path/to/scene.xml
-cad mujoco check path/to/scene.xml --strict --json
+cad +0.11.10 mujoco check path/to/scene.xml
+cad +0.11.10 mujoco check path/to/scene.xml --strict --json
 ```
 
 ## Check model
@@ -21,7 +21,7 @@ A clean run exits 0 and its last line is `OK <file>: MuJoCo model '<model>', N b
 
 It always compiles: there is no mode without MuJoCo. `cad[mujoco]` is MuJoCo's headless core and Studio's web viewer (`mujoco-core` and `mujoco-studio`, about 20 MB, no window system); the `cad` command makes its environment once, the first time the check needs it, and reuses it after. In Python it is `cad.mujoco.check(path, strict=False)`, which answers the same result.
 
-`cad urdf validate` (or `sdf`, `srdf`) given an `.xml` says so: `robot.xml is not a urdf file: cad urdf takes .urdf (cad mujoco check takes .xml and .mjcf)`.
+`cad +0.11.10 urdf validate` (or `sdf`, `srdf`) given an `.xml` says so: `robot.xml is not a urdf file: cad +0.11.10 urdf takes .urdf (cad +0.11.10 mujoco check takes .xml and .mjcf)`.
 
 ## MuJoCo's compile
 
@@ -72,7 +72,7 @@ Read the rows where a function chose by a rule over many parts: a table says exa
 
 ## Looking at the model
 
-No `cad` command draws an MJCF. For a picture of the robot's kinematics, snapshot what it was generated from or beside: the CAD model (`cad model snapshot "$ID" out.png --pose home`) or the exported URDF (`cad urdf snapshot robot.urdf out.png --pose '{"elbow": 45}'`), which hold the same links and joints ([snapshots.md](snapshots.md)). For the model as MuJoCo compiles and simulates it -- contacts, dynamics, actuators -- the person opens it in MuJoCo Studio: `cad run mujoco-studio --model path/to/scene.xml`.
+No `cad` command draws an MJCF. For a picture of the robot's kinematics, snapshot what it was generated from or beside: the CAD model (`cad +0.11.10 model snapshot "$ID" out.png --pose home`) or the exported URDF (`cad +0.11.10 urdf snapshot robot.urdf out.png --pose '{"elbow": 45}'`), which hold the same links and joints ([snapshots.md](snapshots.md)). For the model as MuJoCo compiles and simulates it -- contacts, dynamics, actuators -- the person opens it in MuJoCo Studio: `cad +0.11.10 run mujoco-studio --model path/to/scene.xml`.
 
 ## When to stop
 

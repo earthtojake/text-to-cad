@@ -14,8 +14,8 @@ Usage:
 Checks that VERSION contains a valid canonical release version, that the four
 distributions (the library, the server, the shim and the alias) are that
 version and pin each other at it (`cad==<version>`), that it is not one PyPI will never take
-(scripts/release/unavailable-versions.txt), and that the one-line installer's
-scripts fall back to it. main is the source branch AND what installers clone,
+(scripts/release/unavailable-versions.txt), that the one-line installer's
+scripts fall back to it, and that every skill command pins it (`cad +<version>`). main is the source branch AND what installers clone,
 so a stale pin ships.
 With --incremented-from, also checks that the current version is greater than
 the version at REF (a commit, branch, or release tag -- `v0.5.0` or the bare
@@ -98,8 +98,36 @@ for script in scripts/install/install.sh scripts/install/install.ps1; do
     stale=1
   fi
 done
+# Every command a skill runs pins its release, `cad +<version> <verb>`, and the setup block installs it,
+# `--add <version>`: the skill text of a release runs that release.
+if [ -d skills ]; then
+  RELEASE='[0-9]+\.[0-9]+\.[0-9]+([0-9A-Za-z.+_-]*[0-9A-Za-z])?'
+  skill_pins="$(grep -rhoE --include='*.md' -- "(^|[^[:alnum:]_.-])cad \\+$RELEASE|(^|[^[:alnum:]_-])--add $RELEASE" skills |
+    sed -E 's/^[^c-]//' || true)"
+  if ! printf '%s\n' "$skill_pins" | grep -q '^cad +'; then
+    echo "no skill pins its commands (cad +$version)" >&2
+    stale=1
+  fi
+  while IFS= read -r pin; do
+    [ -n "$pin" ] || continue
+    if [ "${pin##* +}" != "$version" ] && [ "${pin##*--add }" != "$version" ]; then
+      echo "skills/ pins $pin; expected $version" >&2
+      stale=1
+    fi
+  done < <(printf '%s\n' "$skill_pins" | sort -u)
+  # And each SKILL.md's header says the release it is: `metadata.version: "<version>"`.
+  for skill in skills/*/SKILL.md; do
+    declared="$(awk 'NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit }
+      /^metadata:$/ { meta = 1; next } meta && /^  version: "/ { sub(/^  version: "/, ""); sub(/"$/, ""); print; exit }
+      meta && !/^  / { meta = 0 }' "$skill")"
+    if [ "$declared" != "$version" ]; then
+      echo "$skill's header says metadata.version ${declared:-(none)}; expected $version" >&2
+      stale=1
+    fi
+  done
+fi
 if [ "$stale" -ne 0 ]; then
   echo "Run node scripts/release/sync-version.mjs to stamp the pins from VERSION." >&2
   exit 1
 fi
-echo "The four distributions, their pins and the installer's fallback match VERSION ($version)."
+echo "The four distributions, their pins, the installer's fallback and the skills' pins match VERSION ($version)."

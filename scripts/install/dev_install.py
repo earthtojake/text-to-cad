@@ -177,14 +177,25 @@ def unregister(host: str) -> None:
         Path(path).unlink(missing_ok=True)
 
 
-def skill_rewrites() -> dict:
-    """What a development install changes in its skills' text, ``{release's: this install's}``: the
-    `cad` command's folder is CAD_LAUNCHER_DIR's, and the one-line installer (``INSTALL_COMMANDS``)
-    becomes a note that this is a development install. The skills name no version: the `cad` command
-    runs the current installation, which this install is made."""
+def skill_rewrites(version: str) -> dict:
+    """What a development install changes in its skills' text, ``{release's: this install's}``: every
+    command's pin, ``cad +<VERSION>``, names this install's `version` (the name it registers as), so
+    the skills run this checkout, and each SKILL.md header's `metadata.version` names it too; the setup
+    block's install commands, which would install the release (``--add <VERSION>``), become a note
+    that this is a development install; and the `cad` command's folder is CAD_LAUNCHER_DIR's."""
+    release = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     note = f"This is a development install of {REPO_ROOT}; do not run the install command here"
-    # The macOS and Linux command stands alone in a shell block: there the note is a comment.
-    rewrites = {INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note}
+    install, install_windows = INSTALL_COMMANDS
+    windows_script = install_windows.removeprefix("irm ").removesuffix(" | iex")
+    rewrites = {
+        # The macOS and Linux command stands alone in a shell block: there the note is a comment.
+        f"{install} -s -- --add {release}": f"# {note}",
+        f"& ([scriptblock]::Create((irm {windows_script}))) --add {release}": note,
+        f"cad +{release}": f"cad +{version}",
+        # The header's `metadata.version` names the build the copy is, as the pins do.
+        f'\nmetadata:\n  repository: earthtojake/text-to-cad\n  version: "{release}"\n':
+            f'\nmetadata:\n  repository: earthtojake/text-to-cad\n  version: "{version}"\n',
+    }
     if launcher_dir() != "~/.local/bin":
         rewrites["~/.local/bin"] = launcher_dir()
     return rewrites
@@ -194,7 +205,7 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
              rewrites: dict | None = None) -> dict:
     """Write the plugin `host` loads into `plugin_dir` and return its manifest.
 
-    The skills are copied with ``rewrites`` applied to each SKILL.md (:func:`skill_rewrites`), the
+    The skills are copied with ``rewrites`` applied to each Markdown file (:func:`skill_rewrites`), the
     host's manifest takes `version` (each install its own, so a host that caches by
     version takes this build) and names `server` alone: in a server config beside it, or, for
     Gemini, which keeps servers in the manifest itself, inline. Claude Code's names none, as the
@@ -203,7 +214,7 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
-    for skill in plugin_dir.glob("skills/*/SKILL.md"):
+    for skill in plugin_dir.glob("skills/**/*.md"):
         text = skill.read_text(encoding="utf-8")
         for released, ours in (rewrites or {}).items():
             text = text.replace(released, ours)
@@ -370,14 +381,14 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
             return server, {}, None
         server["env"][VERSION_ENV] = version
         register(host, [*uvx_from(wheel), "python"], version)
-        return server, skill_rewrites(), None
+        return server, skill_rewrites(version), None
     python = interpreter()
     # Codex keeps an earlier install's server running until it restarts, so its page stays too.
     page_dir = copy_page(host, args.build, version, prune=host != "codex")
     if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
         return server_entry(host, python, page_dir), {}, page_dir
     register(host, [python], version)
-    return server_entry(host, python, page_dir, version), skill_rewrites(), page_dir
+    return server_entry(host, python, page_dir, version), skill_rewrites(version), page_dir
 
 
 def dev_version() -> str:

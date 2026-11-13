@@ -23,7 +23,7 @@ skips such an edge (and fails when none is left); a chamfer fails on it. Shape
 equality compares native handles, so `edge in solid.edges()` is true only for the
 solid's own edge.
 
-A face or edge a person picked is named by a ref: `cad <type> inspect` says what it is
+A face or edge a person picked is named by a ref: `cad +0.11.10 <type> inspect` says what it is
 and which code made it, and the body picks the same element with build123d's
 selectors ([a picked element in a model's body](inspection-and-validation.md#a-picked-element-in-a-models-body)).
 
@@ -107,7 +107,7 @@ either way: the viewer draws them, and the GLB, the MJCF and the URDF all carry 
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
-with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
+with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad +0.11.10 <type> inspect` reports kilograms.
 There is no text-to-cad material class or adapter. A measured weight is declared beside the
 material, `mass(part, grams)` from `cad.build123d` ([kinematics](kinematics.md#declaring-for-a-simulator));
 a simulator's contact friction is a choice made for the simulation, not declared on the model.
@@ -156,7 +156,7 @@ appearance. STEP keeps name, density and colour. Native texture maps (every wood
 and CFRP in the catalogue, a finish such as `processes.mjf()`) are kept in XBF but not drawn
 yet: the viewer, snapshots and GLB/3MF export draw the part in its material's scalar look (the
 colour build123d's setter infers, metalness, roughness, transmission, ...) and name what they left out — a snapshot or
-export warns `PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`, and `cad xbf
+export warns `PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`, and `cad +0.11.10 xbf
 inspect` lists the parts under `textures`. Set the scalar values with `pbr.override(...)` when
 the look matters. OCCT snapshots keep their documented appearance approximations.
 

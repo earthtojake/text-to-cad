@@ -87,7 +87,8 @@ is `uv run` with the library pinned at the device's release and the integrations
 use, in an environment the engine makes per set (`cad_server._internal.extras`), a program's own
 folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
-sandbox, the command can), which runs the current installation, so no skill names a release. Every
+sandbox, the command can), and every command a skill runs pins the skill's release,
+`cad +<VERSION> <verb>`, which the release stamps (`sync-version.mjs`), so a skill runs its own release. Every
 requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):
 the three distributions are released in lockstep, one `VERSION`, and the server speaks only its own
 release's library (the worker contract), so the server pins the library at its own release. The release
@@ -205,8 +206,9 @@ which points both at the checkout.
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
 - Shared runtime comes from the **`cad-server` distribution**. A skill that uses it
-  runs the `cad` command, names no release, and says how to get the command in its
-  SKILL.md's setup block (the same in each); no skill installs the server or the library
+  runs the `cad` command, every command pinned to the skill's release (`cad +<VERSION> <verb>`,
+  stamped by the release script), and says how to get the command in its SKILL.md's setup block
+  (the same in each); no skill installs the server or the library
   any other way (no `requirements.txt` naming either), because a second installation
   is a second daemon. Skills do not vendor it, and ship no scripts (claude.ai's plugin
   directory refuses a program): what a skill would script is a `cad` command whose parser

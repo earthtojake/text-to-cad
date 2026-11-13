@@ -1,15 +1,15 @@
 # Snapshots
 
-`cad urdf snapshot` and `cad srdf snapshot` draw the robot to a PNG still, as the CAD Viewer shows
+`cad +0.11.10 urdf snapshot` and `cad +0.11.10 srdf snapshot` draw the robot to a PNG still, as the CAD Viewer shows
 it, rendered by OCCT. An MJCF has no snapshot: it is MuJoCo's own file, which no `cad` command
 draws ([an MJCF](#an-mjcf), below).
 
 ```bash
-cad urdf snapshot path/to/robot.urdf review.png
-cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
-cad srdf snapshot path/to/robot.srdf review.png
-cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
-cad srdf snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
+cad +0.11.10 urdf snapshot path/to/robot.urdf review.png
+cad +0.11.10 urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
+cad +0.11.10 srdf snapshot path/to/robot.srdf review.png
+cad +0.11.10 srdf snapshot path/to/robot.srdf review.png --pose arm/ready
+cad +0.11.10 srdf snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
 ```
 
 ## Poses
@@ -24,7 +24,7 @@ one colour of the Parts palette).
 - **URDF**: mimic joints and four-bar linkages are followed; a `<tcad:four_bar>` input is refused
   by name (an input follows its driver; [urdf-four-bar.md](urdf-four-bar.md)).
 - **SRDF**: hand it the `.srdf`: it draws the paired URDF's geometry, the same-folder `.urdf`
-  whose `<robot name>` matches, exactly as `cad srdf validate` pairs them. No match, or more than one,
+  whose `<robot name>` matches, exactly as `cad +0.11.10 srdf validate` pairs them. No match, or more than one,
   is refused before anything renders, naming the robot name it looked for and the `.urdf` files it
   found. The robot opens at every joint zero, then this SRDF's `home` group state if it declares
   one. `--pose` names a group state (`group/name`, or a name only one group has) or gives joint
@@ -51,20 +51,20 @@ rather than leaving the link out.
 
 No `cad` command draws a MuJoCo model's file. What to use in its place:
 
-- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad model snapshot
-  "$ID" out.png --pose home`) or the URDF exported beside it (`cad urdf snapshot robot.urdf out.png
+- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad +0.11.10 model snapshot
+  "$ID" out.png --pose home`) or the URDF exported beside it (`cad +0.11.10 urdf snapshot robot.urdf out.png
   --pose '{"elbow": 45}'`): the same links, joints and zero.
-- **What it collides as**: read `cad mujoco check` ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)):
+- **What it collides as**: read `cad +0.11.10 mujoco check` ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)):
   the collision geoms by kind and by body, and each contact exclude with how its two bodies stand at
   rest; `--json` has every geom's kind and size. A table says exactly what a MuJoCo function left
   colliding, which a picture of boxes inside meshes does not.
-- **The model as MuJoCo compiles and simulates it**: the person opens it in MuJoCo Studio (`cad run
+- **The model as MuJoCo compiles and simulates it**: the person opens it in MuJoCo Studio (`cad +0.11.10 run
   mujoco-studio --model path/to/scene.xml`).
 
 ## Display, camera and annotations
 
 A normal snapshot uses Solid mode, and every snapshot is light, whatever the viewer's theme. A
-robot file carries each part's colour and its material's name, not the material's look: a `cad model
+robot file carries each part's colour and its material's name, not the material's look: a `cad +0.11.10 model
 snapshot` draws a metal's sheen (its flat faces dark where they mirror the studio's dark side, so a
 grey arm shows black panels), while the URDF's still draws the same parts in their flat
 colours. The two compare by shape and pose, not by shading.
@@ -87,4 +87,4 @@ Link meshes are resolved relative to the description, so they must be present: a
 LFS pointer is not a mesh and fails the snapshot. Run `git lfs checkout <mesh dir>` first.
 
 OUT is written exactly as given and must be a `.png`; check the exit status before reading it. Use
-`cad urdf snapshot --help` (or `srdf`) for the complete current interface.
+`cad +0.11.10 urdf snapshot --help` (or `srdf`) for the complete current interface.

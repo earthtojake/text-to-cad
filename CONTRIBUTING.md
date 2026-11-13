@@ -521,7 +521,7 @@ on every push:
   `test_package_boundaries.py` hold the same law.
 
 Every pin of the release's own in the tree — the four `pyproject.toml`s, the plugin server
-configs and each skill's launch command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
+configs and every skill command's pin (`cad +<VERSION> <verb>`) — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
 bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
 skill pin equals `VERSION` — so a stale pin fails the `static` job's version check.
 
@@ -695,8 +695,8 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 past `main`'s and stamps the derived metadata and every pin of the release's own
 (`sync-version.mjs`: package, plugin and lockfile versions, the four
 `pyproject.toml`s and their `cad==` pins, the plugin server configs'
-`cad-mcp==`, the installers' `cad-server==` fallback); the skills name no
-release. It works from `main`'s version, not the branch's, so running it twice
+`cad-mcp==`, the installers' `cad-server==` fallback, and the `cad +<VERSION>` that
+starts every command in the skills). It works from `main`'s version, not the branch's, so running it twice
 changes nothing and running it again after `main` moves moves the bump with it;
 it refuses a branch that does not contain `main` yet, whose stamps would conflict.
 

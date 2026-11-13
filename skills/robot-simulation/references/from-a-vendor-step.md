@@ -1,7 +1,7 @@
 # A robot from its vendor STEP
 
 A vendor's STEP of a robot holds parts and their placements, but no mechanism. Exported as it is
-(`cad step export vendor/arm.step sim/arm.xml`), each of its top-level parts is a body welded to
+(`cad +0.11.10 step export vendor/arm.step sim/arm.xml`), each of its top-level parts is a body welded to
 the world. To get a robot that moves, write a model that reads the STEP, groups its parts into
 links, puts a joint at each hinge, and declares the hardware's facts: masses, stops and drive
 limits. Then export it as MJCF and URDF, and write its MuJoCo function: the collision shapes, joint
@@ -23,16 +23,16 @@ Vendor STEPs come in two kinds, and steps 2, 4 and 8 say what each needs:
 Convert the STEP once (quote a path with spaces in it), and read the xbf in the model's body:
 
 ```bash
-cad step export vendor/arm.step vendor/arm.xbf
-cad step inspect vendor/arm.step --query structure
-cad step snapshot vendor/arm.step tmp/as-drawn.png --camera right
+cad +0.11.10 step export vendor/arm.step vendor/arm.xbf
+cad +0.11.10 step inspect vendor/arm.step --query structure
+cad +0.11.10 step snapshot vendor/arm.step tmp/as-drawn.png --camera right
 ```
 
 The conversion takes seconds. `xbf.read(HERE / "../vendor/arm.xbf")` then hands the model a tree,
 and `leaves(tree, paths=True)` gives each part placed where it stands, with its path of labels
 (the `cad` skill's inspection reference, Opening geometry).
 `path[1]` is the top-level component (`Forearm v4:1`, `Servo v2:3`). `inspect --query structure`
-counts the parts; use a throwaway `cad run` script to print each leaf's path, volume, face count
+counts the parts; use a throwaway `cad +0.11.10 run` script to print each leaf's path, volume, face count
 and bounds once: it maps the STEP faster than reading the inspect output does. Look at the pose the
 vendor drew, too: it may be the controller's zero, or only a pose to ship it in (step 6).
 
@@ -221,14 +221,14 @@ the code). Say in the model's docstring which masses are listed and which estima
   weight on top.
 - **Boards and cables:** a weighed figure, or an assumed one written in a comment beside it.
 
-`cad model inspect "$ID"` weighs the result. Read its total against the hardware's: the listed
+`cad +0.11.10 model inspect "$ID"` weighs the result. Read its total against the hardware's: the listed
 servos, the printed parts and the rest, each once.
 
 ## 5. Stops and drive limits
 
 ```bash
-cad run src/arm.py
-cad model ranges "$ID"
+cad +0.11.10 run src/arm.py
+cad +0.11.10 model ranges "$ID"
 ```
 
 At its defaults (0.3 mm clearance, 1 degree steps), `ranges` takes tens of seconds for an arm of a
@@ -237,7 +237,7 @@ follows the parts' surface area and detail, not their count. A long sweep says e
 as it starts. The defaults stop each joint
 where its parts all but touch: write those stops. A larger `--clearance` only narrows a range (at
 1 mm a jaw can stop well short of closing), so keep the default. To ask again about one joint after
-a change, sweep it alone: `cad model ranges "$ID" --joint jaw`.
+a change, sweep it alone: `cad +0.11.10 model ranges "$ID" --joint jaw`.
 
 Each stop names the two parts that met one step past it, and they should be parts of neighbouring
 links. One that names a part of a link that is not a neighbour means a part is in the wrong link.
@@ -376,25 +376,25 @@ mechanism_state(arm, "upright", **upright)
 Check the signs on the model before exporting:
 
 ```bash
-cad model snapshot "$ID" tmp/upright.png --pose upright --camera right
-cad model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
+cad +0.11.10 model snapshot "$ID" tmp/upright.png --pose upright --camera right
+cad +0.11.10 model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
 ```
 
 ## 7. Export, validate, compare
 
 ```bash
-cad model export "$ID" sim/arm.xml          # --zero <state> only where step 6 re-zeroed
-cad model export "$ID" description/arm.urdf
-cad mujoco check sim/scene.xml
-cad urdf validate description/arm.urdf
-cad urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --camera right
+cad +0.11.10 model export "$ID" sim/arm.xml          # --zero <state> only where step 6 re-zeroed
+cad +0.11.10 model export "$ID" description/arm.urdf
+cad +0.11.10 mujoco check sim/scene.xml
+cad +0.11.10 urdf validate description/arm.urdf
+cad +0.11.10 urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --camera right
 ```
 
 `--pose` is in degrees, as for the model, though the files hold radians.
 
 Read each export's summary first: the links, the joints, the mass, the collisions. Both files come
 from one model, so the two summaries must name the same links and joints and the same mass, and
-`cad mujoco check` must count the same bodies and joints. Then compare the URDF snapshot with the
+`cad +0.11.10 mujoco check` must count the same bodies and joints. Then compare the URDF snapshot with the
 model's snapshot of step 6 at the same pose and camera: the robot must stand the same way and each
 joint must turn the same way. A difference is a bug in a writer, whatever the checks say. Report it,
 and do not ship around it. No `cad` command draws an MJCF; the person sees it in Studio (step 9).
@@ -407,7 +407,7 @@ a position actuator on every driven joint. It saves the robot's file where the p
 with its meshes in `assets/` beside it. [MuJoCo environment](mujoco-environment.md#the-mujoco-function)
 has each helper, what `save` does and MuJoCo 4.0.0's traps; read it before writing one.
 
-Name each part by its label path as `cad model inspect "$ID"` prints it (`base_link/screw`,
+Name each part by its label path as `cad +0.11.10 model inspect "$ID"` prints it (`base_link/screw`,
 `shoulder_servo/case`): a last segment is enough where it names one part, and a name that is
 ambiguous or names no part is refused with the parts there. Several parts of one label in one link
 (its screws) share one path, and `collisions` returns them all. A maker's assembly has a hundred
@@ -436,7 +436,7 @@ in the model wrote each joint's `actuatorfrcrange`. A coupled follower takes no 
 equality drives it.
 
 ```python
-# src/arm_mujoco.py: the simulator's choices. Run it: cad run src/arm_mujoco.py
+# src/arm_mujoco.py: the simulator's choices. Run it: cad +0.11.10 run src/arm_mujoco.py
 import mujoco
 from cad.mujoco import collisions, decompose, fit, save, spec
 
@@ -474,8 +474,8 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/arm_mujoco.py
-cad mujoco check sim/scene.xml
+cad +0.11.10 run src/arm_mujoco.py
+cad +0.11.10 mujoco check sim/scene.xml
 ```
 
 The run prints what `save` checked: each warning, then a `collisions:` line (the collision geoms by
@@ -483,7 +483,7 @@ kind and by body, and the moving bodies that collide as nothing) and an `exclude
 contact exclude and how its two bodies stand at rest). Read both against the lists above: every
 case a `box`, every printed part its hulls, nothing left on a link whose parts were all deleted by
 mistake, and no exclude between two bodies now apart that nobody meant (`s.delete(exclude)`).
-`cad mujoco check sim/arm.xml --json` has every geom's name, kind and size.
+`cad +0.11.10 mujoco check sim/arm.xml --json` has every geom's name, kind and size.
 
 Where step 6 re-zeroed, the spec counts from the same state: `spec(arm(), zero="<state>")`, as the
 export's `--zero` does. `inheritrange=True` takes each control range from the joint's range. A joint with no range (a
@@ -495,7 +495,7 @@ point for [tuning](mujoco-environment.md#tuning), not a datasheet value.
 `decomposed bracket: 16 hulls, the cap (max_hulls=16) in 8.1 s`. At the cap, CoACD merged hulls to
 fit, so some of them bridge a concave region. Whether that matters depends on what touches it: find
 out before you change anything. Move the joint whose parts enter the concave region through its
-range and ask MuJoCo what touches, from a throwaway script (`cad run tmp/touch.py`):
+range and ask MuJoCo what touches, from a throwaway script (`cad +0.11.10 run tmp/touch.py`):
 
 ```python
 import mujoco
@@ -510,7 +510,7 @@ for value in (joint.range[0], sum(joint.range) / 2, joint.range[1]):
     print(round(float(value), 3), [(m.geom(c.geom1).name, m.geom(c.geom2).name) for c in d.contact[:d.ncon]])
 ```
 
-A contact between two hulls at a pose where the parts clear each other in the CAD (`cad model
+A contact between two hulls at a pose where the parts clear each other in the CAD (`cad +0.11.10 model
 snapshot` at the same pose) is a hull bridging the gap. A pair of bodies the file excludes makes no
 contact at all, so read the `excludes` line first. The person can see the hulls themselves in
 Studio (step 9).
@@ -526,7 +526,7 @@ bridge its concave places, by a few millimetres on a link a few hundred millimet
 lower `threshold` or more hulls hardly changes that: the deepest bridge stays, and a fine threshold
 costs tens of times longer. So two links that clear each other by less than that beside a concave
 place (a wrist parked against the upper arm in the drawn pose) overlap at rest as hulls, and
-`cad mujoco check` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
+`cad +0.11.10 mujoco check` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
 the hardware's working range, exclude the pair in the function, by the links' body names
 (`s.add_exclude(bodyname1="wrist_link", bodyname2="upper_arm_link")`), with a comment saying the
 simulator lets them pass through each other: MuJoCo excludes bodies whole, not single geoms. Where
@@ -535,7 +535,7 @@ pair (`"cylinder"`, `"capsule"`), and check again until the warning is gone.
 
 ## 9. Studio
 
-Check that the robot holds its pose under gravity, from a throwaway script (`cad run tmp/hold.py`):
+Check that the robot holds its pose under gravity, from a throwaway script (`cad +0.11.10 run tmp/hold.py`):
 
 ```python
 import mujoco
@@ -553,5 +553,5 @@ an armature or a force bound to look at ([tuning](mujoco-environment.md#tuning))
 explodes is a model-health warning to clear first. Then open it for the person:
 
 ```bash
-cad run mujoco-studio --model sim/scene.xml
+cad +0.11.10 run mujoco-studio --model sim/scene.xml
 ```

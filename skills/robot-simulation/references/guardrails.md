@@ -125,7 +125,7 @@ A compact report:
 Validated: path/to/scene.xml
 Target consumer: MuJoCo 3.3
 Checks run:
-- cad mujoco check: passed with 2 warnings (inertia_from_visuals on two finger links)
+- cad +0.11.10 mujoco check: passed with 2 warnings (inertia_from_visuals on two finger links)
 - collisions and excludes: read against the model; 12 collision geoms, 5 excludes, all touching at rest
 - joint motion: base_yaw positive motion verified in the CAD model's snapshots; gripper joints skipped
 - MuJoCo Studio: URL given to the person, or explicit launch failure
@@ -136,4 +136,4 @@ Risks:
 - Actuator gains were not tuned against the hardware.
 ```
 
-A URDF or SRDF report has the same shape: `cad urdf validate` or `cad srdf validate`, `check_urdf`, the viewer sweep, MoveIt smoke tests, each run or skipped, and the assumptions (inferred TCP links, manual collision pairs, unverified planner behavior).
+A URDF or SRDF report has the same shape: `cad +0.11.10 urdf validate` or `cad +0.11.10 srdf validate`, `check_urdf`, the viewer sweep, MoveIt smoke tests, each run or skipped, and the assumptions (inferred TCP links, manual collision pairs, unverified planner behavior).

@@ -35,12 +35,16 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(out) as archive:
                 members = archive.namelist()
                 manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
+                # The skills byte for byte the checkout's: their `cad +<VERSION>` pins are the release's.
+                changed = [name for name in members if name.startswith("skills/") and not name.endswith("/")
+                           and archive.read(name) != (REPO_ROOT / name).read_bytes()]
         # The plugin is at the archive's root, each folder with an entry of its own: the
         # portal turned away a top-level folder without one as holding no plugin.
         names = {name for name in members if not name.endswith("/")}
         self.assertEqual({name for name in members if name.endswith("/")},
                          {f"{folder}/" for folder in plugin_zip.folders(names)})
         self.assertIn(".codex-plugin/", members)
+        self.assertEqual(changed, [])
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
         roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())
