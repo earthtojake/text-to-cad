@@ -5,8 +5,10 @@ turn and travel in along the step's arrow, so the clip run backward takes it apa
 the way a model makes one (``cad.build123d.animation``), on the instruction's own copy of the assembly
 handed over as its own document, so the model is untouched and any GLB viewer plays the file.
 
-The page holds that GLB and the steps, and needs no server: open it in a browser, turn the
-model, and go through the steps with Next and Back. Only three.js comes from the network, at the
+The page holds that GLB, the steps and the PDF's picture of each part, and needs no server: open
+it in a browser, turn the model, and go through the steps with Next and Back. It is drawn as the
+PDF is: line art (white faces, inked creases, a heavier outline round each part) on a camera with
+no perspective, the step's parts blue, its number big and its parts box over the model's corner. Only three.js comes from the network, at the
 version the viewer uses. If it cannot, the page says so.
 """
 
@@ -18,14 +20,15 @@ import re
 from pathlib import Path
 from typing import Any
 
-from cad._internal.work_instruction_guide import NOTICES, says
-from cad._internal.work_instruction_pages import FILL, _extent
+from cad._internal.work_instruction_guide import NOTICES, _chip_text, _kind, hardware, plain, says
+from cad._internal.work_instruction_pages import FILL, GUIDE_LINE, _extent, _group, parts
 from cad.work_instruction import ARROWS
 
 CLIP = "assemble"
 TURN = 1.8  # seconds a step has in the clip
 TRAVEL = 1.2  # of which its parts are moving
 REACH = 0.35  # how far they start from their place, of the assembly's diagonal
+HOLD = 0.8  # seconds the page shows a step's parts pulled apart before they go in
 THREE = "0.187.0"  # the viewer's (packages/ui)
 
 
@@ -58,19 +61,42 @@ def write_glb(wi, target: Path) -> None:
     cad.model.export(cad.model(wi.shape, name=re.sub(r"\W+", "_", f"{wi.source_name}_guide")), target)
 
 
+def _hardware(lines) -> list[dict[str, str]]:
+    return [{"kind": _kind(line.name), "text": _chip_text(line)} for line in lines]
+
+
 def steps(wi) -> list[dict[str, Any]]:
-    """What the page says at each step, as the guide's pages say it."""
+    """What the page says at each step, as the guide's pages say it: its parts box (each part's
+    picture and count, its screws by size, the tools it uses), then its notes and lines."""
+    index_of = {ref: index for index, (_name, refs, _steps) in enumerate(parts(wi)) for ref in refs}
     return [{"label": step.label, "title": step.title,
+             "parts": [{"count": len(refs), "name": plain(name), "picture": f"part-{index_of[refs[0]]}"}
+                       for name, refs in _group(step.units)],
+             "hardware": _hardware(hardware([step])),
+             "tools": list(dict.fromkeys(op.tool for op in step.ops if op.tool)),
              "notices": [{"careful": notice.caption != "NOTE", "text": f"{NOTICES[notice.caption]}: {notice.value}"}
                          for notice in step.notices],
-             "says": [{"kind": kind, "text": text} for kind, text in says(step, surfaces=False)]} for step in wi.steps]
+             "says": [{"kind": kind, "text": text} for kind, text in says(step, surfaces=False, need=False)]}
+            for step in wi.steps]
 
 
-def page(wi, glb: bytes) -> str:
-    """The page, whole: its steps and its GLB inside it."""
-    data = {"title": wi.title, "scope": wi.scope.value if wi.scope else "", "turn": TURN, "travel": TRAVEL,
-            "clip": CLIP, "steps": steps(wi)}
-    return (_PAGE.replace("__THREE__", THREE).replace("__FILL__", FILL)
+def need(wi) -> dict[str, Any]:
+    """What you need, as the PDF's first page lists it: each part, the screws by size, the tools."""
+    screws = hardware(wi.steps)
+    return {"parts": [{"count": len(refs), "name": plain(name), "picture": f"part-{index}"}
+                      for index, (name, refs, _steps) in enumerate(parts(wi))],
+            "hardware": _hardware(screws),
+            "tools": [{"name": tool, "use": " and ".join(line.name for line in screws if tool in line.tools)}
+                      for tool in wi.equipment()]}
+
+
+def page(wi, glb: bytes, pictures: dict | None = None) -> str:
+    """The page, whole: its steps, the PDF's picture of each part, and its GLB inside it."""
+    shown = {str(name): "data:image/png;base64," + base64.b64encode(Path(path).read_bytes()).decode("ascii")
+             for name, path in (pictures or {}).items() if str(name).startswith("part-")}
+    data = {"title": wi.title, "scope": wi.scope.value if wi.scope else "", "turn": TURN, "travel": TRAVEL, "hold": HOLD,
+            "clip": CLIP, "steps": steps(wi), "need": need(wi), "pictures": shown}
+    return (_PAGE.replace("__THREE__", THREE).replace("__FILL__", FILL).replace("__LINE__", GUIDE_LINE)
             .replace("__TITLE__", _escaped(wi.title))
             .replace("__DATA__", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
             .replace("__GLB__", base64.b64encode(glb).decode("ascii")))
@@ -88,47 +114,75 @@ _PAGE = r"""<!doctype html>
 <title>__TITLE__</title>
 <style>
 :root {
-  --paper: #f7f3ee; --ink: #1b1a18; --soft: #6b665e; --rule: #ddd6cb; --accent: #1f5fd6; --careful: #9a5b00;
-  --sans: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+  --paper: #ffffff; --ink: #111111; --soft: #555555; --faint: #d9d9d9; --wash: #f4f4f4; --open: #9a5b00;
+  --sans: Verdana, "DejaVu Sans", Geneva, sans-serif;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; background: var(--paper); color: var(--ink);
-  font: 16px/1.4 var(--sans); }
+  font: 15px/1.45 var(--sans); }
 #stage { position: relative; min-height: 0; touch-action: none; }
 canvas { display: block; width: 100%; height: 100%; outline: none; }
-#hint { position: absolute; left: 24px; bottom: 20px; color: var(--soft); font-size: 14px; pointer-events: none; }
-aside { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--rule); }
-header { padding: 28px 24px 16px; }
-h1 { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; }
+#hint { position: absolute; right: 24px; bottom: 20px; color: var(--soft); font-size: 13px; pointer-events: none; }
+#card { position: absolute; left: 24px; top: 20px; max-width: min(360px, calc(100% - 48px)); pointer-events: none; }
+#num { font-size: 88px; font-weight: 700; line-height: 0.9; letter-spacing: -0.03em; }
+#num:empty { display: none; }
+.box { margin-top: 10px; padding: 10px 12px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); }
+.box:empty { display: none; }
+.box h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.tiles { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.tile { width: 72px; }
+.tile img { display: block; width: 72px; height: 72px; object-fit: contain; }
+.tile b { display: block; font-size: 13px; }
+.tile span { display: block; color: var(--soft); font-size: 11px; line-height: 1.25; }
+.wide .tile { width: 96px; } .wide .tile img { width: 96px; height: 96px; }
+.row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; font-weight: 700; }
+.row svg { flex: none; width: 30px; height: 16px; }
+.row small { color: var(--soft); font-weight: 400; }
+aside { display: flex; flex-direction: column; min-height: 0; border-left: 1.5px solid var(--ink); }
+header { padding: 26px 24px 16px; }
+h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.1; text-transform: uppercase; letter-spacing: 0.01em; }
 header p { margin: 8px 0 0; color: var(--soft); }
-ol { flex: 1; margin: 0; padding: 0; overflow-y: auto; list-style: none; border-top: 1px solid var(--rule); }
-li { border-bottom: 1px solid var(--rule); }
-li > button { display: grid; grid-template-columns: 32px 1fr; width: 100%; padding: 12px 24px; border: 0; background: none;
-  color: var(--soft); font: inherit; text-align: left; cursor: pointer; }
-li > button b { font-weight: 600; }
+ol { flex: 1; margin: 0; padding: 0; overflow-y: auto; list-style: none; border-top: 1.5px solid var(--ink); }
+li { border-bottom: 1px solid var(--faint); }
+li > button { display: grid; grid-template-columns: 40px 1fr 20px; align-items: center; gap: 4px; width: 100%;
+  padding: 12px 24px; border: 0; background: none; color: var(--soft); font: inherit; text-align: left; cursor: pointer; }
+li > button b { font-size: 22px; font-weight: 700; line-height: 1; }
+li > button i { width: 18px; height: 18px; border: 1.5px solid var(--faint); border-radius: 3px; }
 li.done > button { color: var(--ink); }
-li.now > button { color: var(--ink); font-weight: 600; }
-li.now > button b { color: var(--accent); }
-.more { padding: 0 24px 14px 56px; font-size: 15px; }
+li.done > button i { border-color: var(--ink); background: var(--ink)
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E") center/14px no-repeat; }
+li.now { background: var(--wash); }
+li.now > button { color: var(--ink); }
+li.now > button i { border-color: var(--ink); }
+.more { padding: 0 24px 14px 68px; font-size: 14px; }
 .more p { margin: 4px 0; }
-.more .need, .more .small { color: var(--soft); }
-.more .small { font-size: 13px; }
-.more .careful, .more .open { color: var(--careful); }
-footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--rule); }
-footer button { height: 44px; border: 1px solid var(--ink); border-radius: 8px; background: none; color: var(--ink);
-  font: 600 16px var(--sans); cursor: pointer; }
-footer button:disabled { border-color: var(--rule); color: var(--rule); cursor: default; }
-footer #next { border-color: var(--accent); background: var(--accent); color: #fff; }
-footer #next:disabled { border-color: var(--rule); background: none; color: var(--rule); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.more .small { color: var(--soft); font-size: 12px; }
+.more .open { color: var(--open); }
+.notice { display: flex; gap: 10px; align-items: center; margin: 4px 0 8px; padding: 8px 10px;
+  border: 1.5px solid var(--ink); border-radius: 10px; }
+.notice svg { flex: none; width: 24px; height: 24px; }
+footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 16px 24px; border-top: 1.5px solid var(--ink); }
+footer button { height: 44px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); color: var(--ink);
+  font: 700 15px var(--sans); cursor: pointer; }
+footer button:disabled { border-color: var(--faint); color: var(--faint); cursor: default; }
+footer #next { background: var(--ink); color: var(--paper); }
+footer #next:disabled { border-color: var(--faint); background: var(--paper); color: var(--faint); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 #fail { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; color: var(--soft); text-align: center; }
 @media (max-width: 760px) {
-  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48vh minmax(0, 1fr); }
-  aside { border-left: 0; border-top: 1px solid var(--rule); }
-  header { padding: 16px 16px 12px; } h1 { font-size: 22px; }
-  li > button { padding: 12px 16px; } .more { padding: 0 16px 12px 48px; } footer { padding: 12px 16px; }
-  #hint { left: 16px; bottom: 10px; }
+  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 52vh minmax(0, 1fr); }
+  aside { border-left: 0; border-top: 1.5px solid var(--ink); }
+  header { padding: 14px 16px 10px; } h1 { font-size: 22px; }
+  #card { left: 12px; top: 10px; display: flex; align-items: flex-start; gap: 10px; max-width: calc(100% - 24px);
+    max-height: calc(100% - 36px); overflow: hidden; }
+  #num { font-size: 48px; }
+  .box { margin-top: 0; padding: 6px 8px; border-radius: 8px; } .box h2 { font-size: 12px; margin-bottom: 4px; }
+  .tiles { gap: 4px 8px; } .tile, .wide .tile { width: 40px; } .tile img, .wide .tile img { width: 40px; height: 40px; }
+  .tile b { font-size: 11px; } .tile span { display: none; }
+  .row { margin-top: 3px; gap: 6px; font-size: 11px; } .row svg { width: 24px; height: 13px; } .row small { display: none; }
+  li > button { padding: 12px 16px; } .more { padding: 0 16px 12px 60px; } footer { padding: 12px 16px; }
+  #hint { right: 16px; bottom: 10px; }
 }
 </style>
 <script type="importmap">
@@ -137,7 +191,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </script>
 </head>
 <body>
-<main id="stage"><div id="hint">Drag to turn it.</div><div id="fail"></div></main>
+<main id="stage"><div id="card"><div id="num"></div><div id="box" class="box"></div></div>
+  <div id="hint">Drag to turn it.</div><div id="fail"></div></main>
 <aside>
   <header><h1 id="title"></h1><p id="scope"></p></header>
   <ol id="steps"></ol>
@@ -152,29 +207,89 @@ $("title").textContent = data.title;
 $("scope").textContent = data.scope;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const last = data.steps.length - 1;
-const start = (index) => index * data.turn;
+// A millisecond in: the GLB keeps its times as 32-bit floats, and 5.4 so kept is a little after 5.4.
+const start = (index) => index * data.turn + 1e-3;
 const landed = (index) => start(index) + data.travel;
 
+// Small drawings, the PDF's: screws, nuts and washers side on, the tools by what their names say.
+const SVG = (body, box = "0 0 30 16") =>
+  `<svg viewBox="${box}" fill="white" stroke="#111" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const GLYPHS = {
+  screw: SVG('<rect x="1" y="3" width="6" height="10"/><rect x="7" y="5.5" width="21" height="5"/>' +
+             '<path d="M10 5.5l1.6 5M13 5.5l1.6 5M16 5.5l1.6 5M19 5.5l1.6 5M22 5.5l1.6 5M25 5.5l1.6 5" stroke-width="0.8"/>'),
+  nut: SVG('<path d="M15 1.5l6 3.5v6l-6 3.5-6-3.5v-6z"/><circle cx="15" cy="8" r="2.6"/>'),
+  washer: SVG('<circle cx="15" cy="8" r="6.5"/><circle cx="15" cy="8" r="2.8"/>'),
+};
+function toolGlyph(name) {
+  const lowered = name.toLowerCase();
+  if (/hex|allen/.test(lowered)) return SVG('<path d="M9 2v11h12" fill="none" stroke-width="3" stroke-linecap="round"/>');
+  if (/screwdriver/.test(lowered)) return SVG('<rect x="2" y="5" width="11" height="6" rx="2"/><path d="M13 8h15" stroke-width="2"/>');
+  if (/wrench|spanner/.test(lowered)) return SVG('<path d="M3 13L19 5" stroke-width="3" stroke-linecap="round"/><circle cx="22" cy="4" r="3.5"/>');
+  return SVG('<circle cx="15" cy="8" r="3" fill="#111"/>');
+}
+const SIGNS = {
+  careful: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5L22.5 21h-21z" fill="white" stroke="#111" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3" fill="#111"/></svg>',
+  tip: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="white" stroke="#111" stroke-width="1.8"/><path d="M12 11v6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.3" fill="#111"/></svg>',
+};
+
+function el(tag, className, text) {
+  const made = document.createElement(tag);
+  if (className) made.className = className;
+  if (text !== undefined) made.textContent = text;
+  return made;
+}
+
+// A parts box, as the PDF draws one: each part's picture and count, its screws by size, the tools.
+function partsBox(box, what, heading, named) {
+  box.replaceChildren();
+  box.classList.toggle("wide", named);
+  if (heading) box.append(el("h2", "", heading));
+  if (what.parts.length) {
+    const tiles = el("div", "tiles");
+    for (const part of what.parts) {
+      const tile = el("div", "tile");
+      tile.title = part.name;
+      const picture = data.pictures[part.picture];
+      if (picture) { const img = el("img"); img.src = picture; img.alt = part.name; tile.append(img); }
+      tile.append(el("b", "", `${part.count}x`));
+      if (named || !picture) tile.append(el("span", "", part.name));
+      tiles.append(tile);
+    }
+    box.append(tiles);
+  }
+  for (const line of what.hardware) {
+    const row = el("div", "row");
+    row.innerHTML = GLYPHS[line.kind];
+    row.append(el("span", "", line.text));
+    box.append(row);
+  }
+  for (const tool of what.tools) {
+    const row = el("div", "row");
+    const name = typeof tool === "string" ? tool : tool.name;
+    row.innerHTML = toolGlyph(name);
+    row.append(el("span", "", name));
+    if (tool.use) row.append(el("small", "", `for ${tool.use}`));
+    box.append(row);
+  }
+}
+
 function say(parent, kind, text) {
-  const line = document.createElement("p");
-  line.className = kind;
-  line.textContent = text;
-  parent.append(line);
+  parent.append(el("p", kind, text));
 }
 
 const rows = data.steps.map((step, index) => {
-  const row = document.createElement("li");
-  const button = document.createElement("button");
-  const number = document.createElement("b");
-  const words = document.createElement("span");
-  number.textContent = step.label;
-  words.textContent = step.title;
-  button.append(number, words);
+  const row = el("li");
+  const button = el("button");
+  button.append(el("b", "", step.label), el("span", "", step.title), el("i"));
   button.addEventListener("click", () => show(index));
-  const more = document.createElement("div");
-  more.className = "more";
+  const more = el("div", "more");
   more.hidden = true;
-  for (const notice of step.notices) say(more, notice.careful ? "careful" : "", notice.text);
+  for (const notice of step.notices) {
+    const line = el("div", "notice");
+    line.innerHTML = notice.careful ? SIGNS.careful : SIGNS.tip;
+    line.append(el("span", "", notice.text));
+    more.append(line);
+  }
   for (const line of step.says) say(more, line.kind, line.text);
   row.append(button, more);
   $("steps").append(row);
@@ -190,6 +305,9 @@ function mark() {
     row.lastChild.hidden = index !== now;
     if (index === now) row.scrollIntoView({ block: "nearest" });
   });
+  $("num").textContent = now < 0 ? "" : data.steps[now].label;
+  if (now < 0) partsBox($("box"), data.need, "What you need", true);
+  else partsBox($("box"), data.steps[now], "", false);
   $("back").disabled = now < 0;
   $("next").disabled = now >= last;
   $("next").textContent = now < 0 ? "Start" : "Next";
@@ -197,13 +315,14 @@ function mark() {
   glow(now);
 }
 
-// Runs the clip from one time to another, backward as well, and calls then when it gets there.
-function run(from, to, rate, then) {
+// Runs the clip from one time to another, backward as well, and calls then when it gets there;
+// first holding where it starts for wait seconds.
+function run(from, to, rate, then, wait = 0) {
   moving = null;
   if (calm) { seek(to); time = to; if (then) then(); return; }
   time = from;
   seek(from);
-  moving = { to, rate: Math.sign(to - from) * rate, then };
+  moving = { to, rate: Math.sign(to - from) * rate, then, wait };
 }
 
 function show(index) {
@@ -216,7 +335,8 @@ function go(index, then) {
   now = index;
   mark();
   const rest = () => { seek(index < 0 ? data.steps.length * data.turn : landed(index)); glow(now); if (then) then(); };
-  if (index === was + 1 || (index === was && index >= 0)) run(start(index), landed(index), 1, then);
+  // A step's parts wait pulled apart, as the PDF draws them, then go in.
+  if (index === was + 1 || (index === was && index >= 0)) run(start(index), landed(index), 1, then, data.hold);
   else if (index === was - 1) run(landed(was), start(was), 1.6, rest);  // its parts leave as they came
   else rest();
 }
@@ -241,46 +361,41 @@ addEventListener("keydown", (event) => {
 });
 mark();
 
+// The outline drawn round each part: its back faces pushed out a few pixels on the screen, in ink.
+const HULL_VERTEX = `
+uniform float thickness;
+uniform vec2 resolution;
+void main() {
+  vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec2 way = (projectionMatrix * vec4(normalize(normalMatrix * normal), 0.0)).xy;
+  float length2 = dot(way, way);
+  if (length2 > 1e-8) clip.xy += way * inversesqrt(length2) * thickness * clip.w * 2.0 / resolution;
+  gl_Position = clip;
+}`;
+const HULL_FRAGMENT = `void main() { gl_FragColor = vec4(0.067, 0.067, 0.067, 1.0); }`;
+
 try {
   const THREE = await import("three");
   const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
   const { GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js");
-  const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
+  const { LineSegments2 } = await import("three/addons/lines/LineSegments2.js");
+  const { LineSegmentsGeometry } = await import("three/addons/lines/LineSegmentsGeometry.js");
+  const { LineMaterial } = await import("three/addons/lines/LineMaterial.js");
 
   const stage = $("stage");
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0xffffff, 1);
   stage.prepend(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.5;
-  const camera = new THREE.PerspectiveCamera(28, 1, 0.001, 1000);
+  // One camera with no perspective, as the PDF's pictures are drawn.
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
   const bytes = Uint8Array.from(atob($("model").textContent.trim()), (c) => c.charCodeAt(0));
   const gltf = await new Promise((done, failed) => new GLTFLoader().parse(bytes.buffer, "", done, failed));
   scene.add(gltf.scene);
-
-  const box = new THREE.Box3().setFromObject(gltf.scene);
-  const middle = box.getCenter(new THREE.Vector3());
-  const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
-  camera.near = radius / 100;
-  camera.far = radius * 40;
-  controls.target.copy(middle);
-  const place = () => {
-    const distance = radius * 1.08 / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(camera.aspect, 1);
-    camera.position.copy(middle).add(new THREE.Vector3(1, 0.85, 1.2).normalize().multiplyScalar(distance));
-    camera.updateProjectionMatrix();
-  };
-  const size = () => {
-    renderer.setSize(stage.clientWidth, stage.clientHeight, false);
-    camera.aspect = stage.clientWidth / Math.max(stage.clientHeight, 1);
-    camera.updateProjectionMatrix();
-  };
-  size();
-  place();
-  new ResizeObserver(size).observe(stage);
 
   const clip = gltf.animations.find((found) => found.name === data.clip);
   const mixer = new THREE.AnimationMixer(gltf.scene);
@@ -289,6 +404,15 @@ try {
   action.paused = true;
   const end = data.steps.length * data.turn;
   seek = (at) => { action.time = Math.min(at, clip.duration - 1e-3); time = at; mixer.update(0); };
+  seek(end);
+
+  const box = new THREE.Box3().setFromObject(gltf.scene);
+  const middle = box.getCenter(new THREE.Vector3());
+  const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
+  controls.target.copy(middle);
+  camera.position.copy(middle).add(new THREE.Vector3(1, 0.85, 1.2).normalize().multiplyScalar(radius * 4));
+  camera.near = 0;
+  camera.far = radius * 8;
 
   // Which parts each step adds, read off the clip: the first time each part's scale is not zero.
   const added = data.steps.map(() => []);
@@ -305,26 +429,110 @@ try {
     const part = gltf.scene.getObjectByName(track.name.split(".")[0]);
     if (part && !timed.has(part)) { timed.add(part); added[0].push(part); }
   }
-  const blue = new THREE.Color("__FILL__");  // what a step adds, as the PDF's pictures show it
-  const lit = (part, on) => part.traverse((mesh) => {
+  // A first step's part that does not move is in no track: it is whatever no track reaches.
+  gltf.scene.traverse((mesh) => {
     if (!mesh.isMesh) return;
-    if (!mesh.userData.own) { mesh.material = mesh.material.clone(); mesh.userData.own = mesh.material.color.clone(); }
-    mesh.material.color.copy(on ? blue : mesh.userData.own);
+    for (let up = mesh; up; up = up.parent) if (timed.has(up)) return;
+    added[0].push(mesh);
   });
-  glow = (index) => added.forEach((parts, at) => parts.forEach((part) => lit(part, at === index)));
 
+  // A thin line from where each part starts to where it lands, from its leading face, as the PDF draws it.
+  const lineInk = new LineMaterial({ color: new THREE.Color("__LINE__"), linewidth: 2 });
+  const headInk = new THREE.MeshBasicMaterial({ color: new THREE.Color("__LINE__") });
+  const guides = added.map((parts, index) => {
+    const group = new THREE.Group();
+    for (const part of parts) {
+      seek(start(index));
+      const pulled = new THREE.Box3().setFromObject(part);
+      seek(landed(index));
+      const placed = new THREE.Box3().setFromObject(part);
+      if (pulled.isEmpty() || placed.isEmpty()) continue;
+      const from = pulled.getCenter(new THREE.Vector3());
+      const to = placed.getCenter(new THREE.Vector3());
+      const way = to.clone().sub(from);
+      if (way.length() < radius * 1e-3) continue;
+      way.normalize();
+      const size = placed.getSize(new THREE.Vector3());
+      const lead = way.clone().multiplyScalar(
+        0.5 * (Math.abs(way.x) * size.x + Math.abs(way.y) * size.y + Math.abs(way.z) * size.z));
+      from.add(lead);
+      to.add(lead);
+      const line = new LineSegments2(new LineSegmentsGeometry().setPositions([...from.toArray(), ...to.toArray()]), lineInk);
+      const head = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.018, radius * 0.06, 16), headInk);
+      head.position.copy(to).addScaledVector(way, -radius * 0.03);
+      head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), way);
+      group.add(line, head);
+    }
+    group.visible = false;
+    scene.add(group);
+    return group;
+  });
   seek(end);
+
+  // Line art: white faces, every crease inked, the outline round each part a little heavier.
+  const creaseInk = new LineMaterial({ color: 0x111111, linewidth: 1.5 });
+  const hullInk = new THREE.ShaderMaterial({
+    uniforms: { thickness: { value: 1.6 }, resolution: { value: new THREE.Vector2(1, 1) } },
+    vertexShader: HULL_VERTEX, fragmentShader: HULL_FRAGMENT, side: THREE.BackSide,
+  });
+  const meshes = [];
+  gltf.scene.traverse((mesh) => { if (mesh.isMesh) meshes.push(mesh); });
+  for (const mesh of meshes) {
+    if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
+    mesh.material = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1,
+                                                  polygonOffsetUnits: 1 });
+    const creases = new THREE.EdgesGeometry(mesh.geometry, 30);
+    mesh.add(new LineSegments2(new LineSegmentsGeometry().fromEdgesGeometry(creases), creaseInk));
+    mesh.add(new THREE.Mesh(mesh.geometry, hullInk));
+  }
+
+  // The model is framed in the room the step's card leaves it: below the card or beside it,
+  // whichever is bigger, so the card never covers it.
+  const size = () => {
+    const width = stage.clientWidth, height = Math.max(stage.clientHeight, 1);
+    renderer.setSize(width, height, false);
+    const card = $("card").getBoundingClientRect(), there = stage.getBoundingClientRect();
+    const right = card.right - there.left + 8, below = card.bottom - there.top + 8, foot = 28;
+    const rooms = [[0, below, width, height - foot], [right, 0, width, height - foot]]
+      .map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1, fits: Math.min(x1 - x0, y1 - y0) }));
+    const room = rooms[0].fits >= rooms[1].fits ? rooms[0] : rooms[1];
+    const scale = Math.max(room.fits, 40) / (radius * 2.2);  // pixels to a model unit
+    const x = (room.x0 + room.x1) / 2, y = (room.y0 + room.y1) / 2;
+    Object.assign(camera, { left: -x / scale, right: (width - x) / scale, top: y / scale, bottom: -(height - y) / scale });
+    camera.updateProjectionMatrix();
+    const pixels = renderer.getDrawingBufferSize(new THREE.Vector2());
+    for (const ink of [creaseInk, lineInk]) ink.resolution.set(width, height);
+    hullInk.uniforms.resolution.value.copy(pixels);
+    hullInk.uniforms.thickness.value = 1.6 * renderer.getPixelRatio();
+  };
+  size();
+  const watch = new ResizeObserver(size);
+  watch.observe(stage);
+  watch.observe($("card"));
+
+  const blue = new THREE.Color("__FILL__");  // what a step adds, as the PDF's pictures show it
+  const white = new THREE.Color(0xffffff);
+  const lit = (part, on) => part.traverse((mesh) => {
+    if (mesh.isMesh && mesh.material.isMeshBasicMaterial) mesh.material.color.copy(on ? blue : white);
+  });
+  glow = (index) => {
+    added.forEach((parts, at) => parts.forEach((part) => lit(part, at === index)));
+    guides.forEach((group, at) => { group.visible = at === index; });
+  };
+
   mark();
   let then = performance.now();
   renderer.setAnimationLoop((clock) => {
     const dt = Math.min((clock - then) / 1000, 0.05);
     then = clock;
-    if (moving) {
+    if (moving && moving.wait > 0) moving.wait -= dt;
+    else if (moving) {
       const next = time + moving.rate * dt;
       const there = moving.rate > 0 ? next >= moving.to : next <= moving.to;
       seek(there ? moving.to : next);
       if (there) { const done = moving.then; moving = null; if (done) done(); }
     }
+    if (now >= 0) guides[now].visible = time < landed(now) - 1e-3;  // the line goes once its parts are in
     controls.update();
     renderer.render(scene, camera);
   });

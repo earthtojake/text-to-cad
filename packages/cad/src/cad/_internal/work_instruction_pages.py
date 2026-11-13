@@ -1031,14 +1031,23 @@ def draw_page(ax, flow: _Flow, index: int, open_count: int) -> None:
         draw(ax)
 
 
-def write_pdf(wi, path: Path, *, open_items: list[str]) -> int:
-    """Lay out and write the instruction, whole or not at all (``pdf_pages``); returns the page count."""
-    from cad._internal.pdf_pages import matplotlib_pdf, write_pages
+def pictures_for(wi, folder: Path) -> dict[int | str, Path]:
+    """Every picture the instruction shows, drawn in ``folder``: the PDF's, which its 3D page shows too."""
+    from cad._internal.pdf_pages import matplotlib_pdf
 
     matplotlib_pdf("@work_instruction")  # a missing renderer is refused before any picture is drawn
     picture_plan(wi)  # refuses a mark on a part not yet installed, before any render
+    return render_pictures(wi, folder) if wi.pictures else {}
+
+
+def write_pdf(wi, path: Path, *, open_items: list[str], pictures: dict | None = None) -> int:
+    """Lay out and write the instruction, whole or not at all (``pdf_pages``); returns the page count.
+    ``pictures`` are those :func:`pictures_for` drew; without them it draws its own."""
+    from cad._internal.pdf_pages import write_pages
+
     with tempfile.TemporaryDirectory(prefix="cad-wi-") as folder:
-        pictures = render_pictures(wi, Path(folder)) if wi.pictures else {}
+        if pictures is None:
+            pictures = pictures_for(wi, Path(folder))
         flow = layout(wi, open_items, pictures)
         count = len(flow.pages)
         write_pages(path, [(flow.w, flow.h, lambda ax, index=index: draw_page(ax, flow, index, len(open_items)))

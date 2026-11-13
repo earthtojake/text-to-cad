@@ -1130,13 +1130,14 @@ class Instruction:
 # --- the decorator -----------------------------------------------------------
 
 
-def _write_player(wi: "Instruction", target: Path, folder: Path) -> dict[Path, Path]:
-    """A picture guide's GLB and page, written in ``folder``: {there: where each lands, beside the PDF}."""
+def _write_player(wi: "Instruction", target: Path, folder: Path, pictures: dict) -> dict[Path, Path]:
+    """A picture guide's GLB and page, written in ``folder``: {there: where each lands, beside the PDF}.
+    The page shows the PDF's ``pictures`` of each part."""
     from cad._internal.work_instruction_player import page, write_glb
 
     glb, html = folder / f"{target.stem}.glb", folder / f"{target.stem}.html"
     write_glb(wi, glb)
-    html.write_text(page(wi, glb.read_bytes()), encoding="utf-8")
+    html.write_text(page(wi, glb.read_bytes(), pictures), encoding="utf-8")
     target.parent.mkdir(parents=True, exist_ok=True)
     return {glb: target.with_suffix(".glb"), html: target.with_suffix(".html")}
 
@@ -1181,12 +1182,15 @@ def work_instruction(func: Callable[..., Any] | None = None, *, out: str | Path 
                     "state them or keep it a draft:\n  " + "\n  ".join(items)
                 )
             from cad._internal.atomic_replace import write_bytes_atomic
-            from cad._internal.work_instruction_pages import write_pdf
+            from cad._internal.work_instruction_pages import pictures_for, write_pdf
 
             written = [target]
             with tempfile.TemporaryDirectory(prefix="cad-wi-") as folder:
-                beside = _write_player(wi, target, Path(folder)) if wi.animated else {}
-                pages = write_pdf(wi, target, open_items=items)
+                drawn = Path(folder) / "pictures"
+                drawn.mkdir()
+                pictures = pictures_for(wi, drawn)  # drawn once: the PDF and its 3D page show the same
+                beside = _write_player(wi, target, Path(folder), pictures) if wi.animated else {}
+                pages = write_pdf(wi, target, open_items=items, pictures=pictures)
                 for staged, final in beside.items():  # only now: a failed run leaves earlier files as they were
                     write_bytes_atomic(final, staged.read_bytes())
                     written.append(final)

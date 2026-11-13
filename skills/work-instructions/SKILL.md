@@ -204,11 +204,14 @@ page, with a dot per step in the footer to show how far along the build is. It h
 tables, sign-offs or document numbers; those it was given print small in the
 footer. With `pictures=False` it is the table below with a done column.
 
-Beside the PDF, a picture guide writes `<name>.html` and `<name>.glb`
-(`animated=False` writes neither). The page is one file to open or send: the
-finished model, then Next and Back through the steps, or Play all, with the same
-words as the PDF. Each part arrives along its step's `arrow=`, and a step with
-none appears in place. The GLB is the same build as one animation, `assemble`, for
+So a picture guide has two outputs: the PDF to print, and beside it a 3D page,
+`<name>.html` with `<name>.glb` (`animated=False` writes neither). The page is one
+file to open or send, drawn like the PDF: the same line art on a camera with no
+perspective, the step's new parts in blue, its big number and parts box (the PDF's
+own picture of each part, its screws by size, its tools), What you need before the
+first step, and the same words and notes. It turns in your hands, and Next, Back or
+Play all go through the steps. Each part flies in along its step's `arrow=` with
+the PDF's thin line to its place, and a step with none appears in place. The GLB is the same build as one animation, `assemble`, for
 the viewer or anything that plays a GLB. Neither shows hardware the model does not
 carry.
 

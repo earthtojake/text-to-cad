@@ -1132,8 +1132,29 @@ class PlayerTests(_Assembly):
         clips = json.loads(glb[20:20 + size])["animations"]
         self.assertEqual([clip["name"] for clip in clips], ["assemble"])
         page = target.with_suffix(".html").read_text(encoding="utf-8")
-        for present in ("Bracket", "Fit the bracket", "You need: "):
+        for present in ("Bracket", "Fit the bracket", "What you need"):
             self.assertIn(present, page)
+
+    def test_the_page_shows_each_step_s_parts_box_with_the_pdf_s_pictures(self) -> None:
+        import json
+
+        from cad._internal.work_instruction_player import page
+
+        wi = self._guide(tools=["Mallet"])
+        wi.steps[1].fasten("M3×10 screw", qty=4, tool="Hex key 2.5")
+        picture = self.root / "part-1.png"
+        picture.write_bytes(b"png")
+        text = page(wi, b"glb", {"part-1": picture, 2: self.root / "unread.png"})
+        data = json.loads(re.search(r'id="guide">(.*?)</script>', text, re.S).group(1))
+        self.assertEqual(data["pictures"], {"part-1": "data:image/png;base64,cG5n"}, "a part's picture, inside the page")
+        bracket = data["steps"][1]
+        self.assertEqual(bracket["parts"], [{"count": 1, "name": "bracket", "picture": "part-1"}])
+        self.assertEqual(bracket["hardware"], [{"kind": "screw", "text": "4x  M3×10 screw"}])
+        self.assertEqual(bracket["tools"], ["Hex key 2.5"])
+        self.assertFalse([line for line in bracket["says"] if line["text"].startswith(("You need", "Hardware", "Tool"))],
+                         "the box says it")
+        self.assertEqual(data["need"]["tools"], [{"name": "Hex key 2.5", "use": "M3×10 screw"},
+                                                 {"name": "Mallet", "use": ""}])
 
     def test_a_guide_of_a_file_names_its_glb_s_document_plainly(self) -> None:
         from unittest import mock
