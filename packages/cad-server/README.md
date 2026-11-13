@@ -182,8 +182,10 @@ command, and nothing else (the install command's `--add <version>`, which a skil
 default channel has an updater (`_internal/update.py`, whose docstring is the contract between releases: an
 updater installs the new release by its own `cad setup --add` and runs its own `cad setup --engine-update`,
 nothing else), and only where the install command has run: `cad update` runs the newest release's `cad setup` that
-way, as the update button does (`--dry-run` reads the version feed, keeping nothing, and says the release it would
-install before the plan; with no receipt it says there is no install to update; with a channel's pin, that whoever
+way, as the update button does, and on a device already on the newest release this release's setup again, which
+gives an app a run left behind its text (the receipt's `behind`, which `cad doctor` names; the default version's
+server does it by itself too, once a day at most while idle) (`--dry-run` reads the version feed, keeping nothing,
+and says the release it would install before the plan; with no receipt it says there is no install to update; with a channel's pin, that whoever
 delivers the copy updates it); a pinned command newer than the default channel's version runs the same sequence,
 whatever the switch says; and `cad update auto on|off` turns automatic updates on or off (on by default: the
 default version's server installs a newer release that breaks nothing -- a patch release below 1.0, a patch or

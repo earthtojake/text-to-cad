@@ -42,6 +42,7 @@ class StateFolderTest(unittest.TestCase):
         state.mkdir()
         (state / "versions.json").write_text(json.dumps({"checked": 0, "feed": {"latest": "1.0.0"}, "dismissed": "1.0.0"}),
                                             encoding="utf-8")  # a field nothing reads, kept by an earlier write
+        (state / "install-receipt.json").write_text("{}", encoding="utf-8")  # the install command ran here: it reads the feed
         # A release's process (a checkout is a development build unless told the version it runs as).
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(state), "CAD_INSTALLATION_VERSION": "0.11.10",
                                           "CAD_UPDATE_CHECK": "", "CI": "",
@@ -55,7 +56,7 @@ class StateFolderTest(unittest.TestCase):
             self.assertTrue(telemetry_send.start_if_due(now=later, spawn=started.append))
             self.assertFalse(telemetry_send.start_if_due(now=later + 1, spawn=started.append), "one sender a window")
         self.assertEqual(sorted(path.name for path in state.iterdir()),
-                         ["settings.json", "settings.lock", "telemetry-spool.jsonl", "versions.json"])
+                         ["install-receipt.json", "settings.json", "settings.lock", "telemetry-spool.jsonl", "versions.json"])
         self.assertEqual(os.stat(state / "settings.lock").st_mtime, later, "the lock's time is the last sender's start")
         self.assertEqual(set(json.loads((state / "versions.json").read_text(encoding="utf-8"))), {"checked", "feed"})
         self.assertEqual(json.loads((state / "settings.json").read_text(encoding="utf-8"))["language"], {"locale": "ja"})

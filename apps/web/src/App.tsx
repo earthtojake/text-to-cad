@@ -9,9 +9,10 @@ import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { useUpdateRestart } from './host/useUpdateRestart.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
+import { movedPage } from './host/movedUpdate.js';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
-import { UpdateButton, reloadWhenClean, useAutomaticUpdates, useUpdate, type UpdateNotice } from '@cad/ui/update';
+import { UpdateButton, reloadWhenClean, useAutomaticUpdates, useUpdate, type UpdateNotice, type UpdateState } from '@cad/ui/update';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
@@ -151,7 +152,16 @@ export default function App({ client, server, tabStore, notice = null, language:
   // that its page followed the update through the restart (`followedUpdate`).
   const [followed] = useState(() => followedUpdate());
   useEffect(() => { forgetFollowedUpdate(); }, []);
-  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed });
+  // An update that ended with this page's server staying (another channel is on its version, or work is in flight
+  // there): the page goes to the same document on the new release's server, once nothing on it is unsaved; where that
+  // server named no address, the page stays, and `useUpdate` says the update is done.
+  const onMoved = useCallback((update: UpdateState) => {
+    const page = movedPage(update, window.location);
+    if (!page) return false;
+    reloadWhenClean(() => { window.location.assign(page); });
+    return true;
+  }, []);
+  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed, onMoved });
   const restarting = updater.phase.phase === 'restarting';
   useEffect(() => { if (restarting) noteFollowedUpdate(); }, [restarting]);
   // Through the restart the page asks on its own, whatever its other reads met: another start of the

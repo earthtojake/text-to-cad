@@ -51,6 +51,14 @@ export function lostNotice(say: (key: string, params?: Record<string, unknown>) 
   return say(LOST[presentation], { host: hostDisplayName(hostName) ?? say('cad.lost.thisApp') });
 }
 
+// What a card says once the update it started is done and its server stays (the update's `moved`: another channel is
+// on its version): the new release runs, but this thread's launcher belongs to the version before, so a new thread
+// uses it. No spinner waits on a server that does not go.
+export function updateMoved(say: (key: string, params?: Record<string, unknown>) => string,
+  update: { target?: string | null }): string {
+  return say('update.newThread', { version: update.target ?? '' });
+}
+
 // A card's What's new: none, and nothing read for it.
 const NO_WHATS_NEW = async () => null;
 
@@ -215,6 +223,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // The server stopped answering (its process has gone), or answers refusing this view (what it said):
   // the view keeps its model, and says so.
   const [lost, setLost] = useState<boolean | string>(false);
+  // The update this card started is done, and its server stays (another channel is on its version): this thread's
+  // launcher belongs to that version, so the card says to start a new thread for the new one (`updateMoved`).
+  const [moved, setMoved] = useState<string | null>(null);
   const shown = useRef<string | null>(null);
   // The pages the launches carried: the first one's, then each the agent's shows bring.
   const [pages, setPages] = useState<Pages>(() => withPage(new Map(), initial));
@@ -307,9 +318,18 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const [followed] = useState(followedUpdate);
   useEffect(() => { forgetFollowedUpdate(); }, []);
   const updater = useUpdate({ read: client.version, start: client.startUpdate }, initial.notice ?? null,
-    { followed, restartForSkills: true });
+    { followed, restartForSkills: true, onMoved: update => { setMoved(updateMoved(translator(locale), update)); return true; } });
   useNextRelease({ read: client.version, release: initial.version, watching: updater.phase.phase === 'restarting' || Boolean(lost),
     onNewRelease: loadNextRelease, onSameRelease: updater.settle });
+  // This thread's launcher belongs to the version the update left: once the default channel moved, every call through
+  // it is answered with its line that the thread is stale (`lost`, the server's own words, never the engine's
+  // release). The restart this card follows is over then -- whether the old server went or stays --: the update is
+  // done, and a new thread uses it. No spinner waits on an answer this thread cannot get.
+  const restarting = updater.phase.phase === 'restarting';
+  const target = updater.notice?.latest ?? null;
+  useEffect(() => {
+    if (restarting && typeof lost === 'string') updater.settle({ notice: null, update: { state: 'moved', target } });
+  }, [restarting, lost, target, updater.settle]);
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
@@ -330,7 +350,8 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}
-    overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
+    overlay={moved ? <Banner message={moved} />
+      : lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       whatsNew={presentation === 'tabs' && !lost && updater.phase.phase !== 'restarting' ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}

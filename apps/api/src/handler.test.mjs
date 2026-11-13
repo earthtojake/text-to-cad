@@ -309,6 +309,8 @@ test("an older batch's app is its MCP client's first, and the old channel's only
   for (const [client, sent, app] of [
     ['codex-mcp-client', 'claude-directory', 'codex'], // the directory's copy, run by Codex
     ['cursor-vscode', 'codex-install', 'cursor'], ['claude-code', 'cursor-github', 'claude-code'], ['claude-ai', 'claude-github', 'claude-desktop'],
+    ['gemini-cli', 'agent-plugins', 'gemini'], ['grok-build', 'agent-plugins', 'grok'], // as Gemini CLI and Grok Build call themselves
+    ['Visual-Studio-Code', 'agent-plugins', 'vscode'], // VS Code's name as an older sender carried it, its spaces made `-`
     ['Zed:Agent', 'agent-plugins', 'zed-agent'], // any other client is its own app, made a token
     ['unknown', 'gemini-install', 'gemini'], // a client that says nothing
     ['cad-viewer', 'codex-install', 'codex'], ['cadgen-viewer', 'claude-desktop', 'claude-desktop'], // the browser viewer's page names no app

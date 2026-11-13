@@ -171,6 +171,37 @@ class DefaultMove(Servers):
         self.assertTrue(versions.ask(X, {"op": "status"})["bridge"])
 
 
+class PortHandedToARunningServer(Servers):
+    def test_the_flat_door_asked_for_the_old_port_on_a_server_serving_another_takes_it_too_and_never_fails(self) -> None:
+        """0.11.10's switch helper asks the default's server, through the flat door, to serve on the port 0.11.10
+        served (``{"op": "http", "port": P}``) and stops it should the answer say ``failed``. A server that started
+        while 0.11.10 still held P serves on another, Q: it takes P too, the port pages were on, which is its own
+        from then on, and keeps Q; where P cannot be taken, it answers with where it serves."""
+        self.version(X)
+        self.assertEqual(versions.move(None, X).kind, "moved")
+        x = self.start(X)
+        other = free_port()
+        served = versions.ask(X, {"op": "http", "port": other}, seconds=WAIT)  # it serves Q: 0.11.10 held P
+        self.assertEqual(served["port"], other, served)
+        answer = self.old({"op": "http", "port": self.port}, start=False)
+        self.assertNotIn("failed", answer)
+        self.assertEqual((answer["port"], answer["token"]), (self.port, served["token"]), "P, with the same token")
+        self.assertTrue(answer["url"].endswith(f":{self.port}"), answer)
+        status = versions.ask(X, {"op": "status"})
+        self.assertEqual((status["pid"], status["serving"]["port"], status["serving"]["also"]), (x, self.port, [other]),
+                         "the same server: P its own now, as status says it and a later update hands it on")
+        for port in (self.port, other):
+            self.assertEqual(self.page(port, served["token"]), 200, f"a page open on {port} works")
+        # A port another program holds: answered with where it serves, never `failed` (0.11.10 would stop it).
+        taken = socket.socket()
+        self.addCleanup(taken.close)
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        held = self.old({"op": "http", "port": taken.getsockname()[1]}, start=False)
+        self.assertEqual((held.get("failed"), held["port"]), (None, self.port), held)
+        self.assertEqual(versions.ask(X, {"op": "pid"})["pid"], x, "still running")
+
+
 class Kept(Servers):
     def test_another_pointer_keeps_the_old_version_and_a_named_channel_never_holds_the_flat_door(self) -> None:
         for name in (X, Y, Z):

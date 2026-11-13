@@ -323,6 +323,7 @@ export default {
   "update.failed": "업데이트하지 못했습니다: {error}",
   "update.updated": "{version}(으)로 업데이트했습니다.",
   "update.updatedRestart": "{version}(으)로 업데이트했습니다. 새 스킬을 불러오려면 앱을 다시 시작하세요.",
+  "update.newThread": "{version}(으)로 업데이트했습니다. 사용하려면 새 스레드를 시작하세요.",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "확인",
   "whatsNew.title": "새로운 기능 (v{version})",

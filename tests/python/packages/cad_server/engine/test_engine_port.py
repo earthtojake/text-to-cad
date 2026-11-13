@@ -404,11 +404,16 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(rotated["port"], other)
         self.assertNotEqual(rotated["token"], first["token"])
         self.assertEqual(self.token(), rotated["token"])
-        # Refused while an engine runs, which keeps the token it started with -- before anything is asked.
-        refused = self.cli("server", "--rotate-token")
-        self.assertEqual(refused.returncode, 1)
-        self.assertIn("run cad stop first", refused.stderr)
-        self.assertEqual(self.token(), rotated["token"])
+        # While an engine runs, it takes the new token at once: every link and session before ends now, not at its
+        # next start, and the command says the engine runs on.
+        self.assertEqual(self.ask(other, f"/api/v1/server?token={rotated['token']}")[0], 200)
+        again = self.cli("server", "--rotate-token", "--yes")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertIn("in every version's server at once", again.stderr)
+        self.assertIn("already running", again.stderr)
+        self.assertNotEqual(self.token(), rotated["token"])
+        self.assertEqual(self.ask(other, f"/api/v1/server?token={rotated['token']}")[0], 403, "the token before: ended")
+        self.assertEqual(self.ask(other, f"/api/v1/server?token={self.token()}")[0], 200, "the new one, at once")
 
 
 class BuildBoundNoticeTest(unittest.TestCase):
@@ -428,6 +433,9 @@ class BuildBoundNoticeTest(unittest.TestCase):
             def handle(self, request: dict, send) -> None:
                 send({"log": "building"})
                 send({"ok": True})
+
+            def ended(self, request: dict) -> None:  # the quiet hour's stamp (``Daemon.ended``)
+                pass
 
         # Both transports' rule: on Windows a request carries the engine's token, as a client puts
         # it (``client._exchange``), and one without it is answered with nothing.

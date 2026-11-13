@@ -104,6 +104,7 @@ const APP = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 // (`cad_server/_internal/engine_host.py`: `APPS`). Any other client's name is its own app, made a token (`appOfClient`).
 export const AGENT_APPS = {
   'codex-mcp-client': 'codex', 'cursor-vscode': 'cursor', 'claude-code': 'claude-code', 'claude-ai': 'claude-desktop',
+  'gemini-cli': 'gemini', 'grok-build': 'grok', 'visual studio code': 'vscode', 'visual-studio-code': 'vscode',
 };
 // Client names that are no MCP client: the browser viewer's page names itself (`cad-viewer`, `cadgen-viewer` before
 // 0.10), and a client that could not say sends `unknown`. They name no app.

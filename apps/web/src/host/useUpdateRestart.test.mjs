@@ -68,6 +68,15 @@ test("the page's own engine saying its update failed ends the restart there", as
   assert.deepEqual([page.said.reloads, page.said.settled, page.queued.length], [0, [failed], 0], 'settled, and it stops asking');
 });
 
+test("the page's own engine saying its update is done and it stays ends the restart there, never a spinner", async (t) => {
+  // Another channel is on the old version: its server stays, and the new release serves on another port.
+  const moved = { instance: 'a', release: '0.10.1', update: { state: 'moved', target: '0.10.2', address: 'http://127.0.0.1:3246', link: 'l' } };
+  const page = await following(t, [{ instance: 'a', release: '0.10.1', update: { state: 'restarting' } }, moved]);
+  await page.advance();
+  await page.advance();
+  assert.deepEqual([page.said.reloads, page.said.settled, page.queued.length], [0, [moved], 0], 'settled, and it stops asking');
+});
+
 test('a page not restarting asks nothing', async (t) => {
   const idle = await following(t, [], { restarting: false });
   assert.deepEqual([idle.queued.length, idle.said.asked], [0, 0]);

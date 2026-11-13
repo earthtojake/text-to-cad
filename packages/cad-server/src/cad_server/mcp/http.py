@@ -110,6 +110,8 @@ class Sessions:
         client = client if isinstance(client, dict) else {}
         analytics = self.engine.analytics.of(channel, client.get('name'))
         app.analytics = analytics
+        # A session on a named channel has no updater: no notice, button or switch (``ViewerApp._updater``).
+        app.channel = channel
         app.consent_by = "app"
         # A fresh link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
         # the card's capability already reaches everything a link does.
@@ -128,7 +130,7 @@ class Sessions:
                         sidebar_views=SidebarViews(self.sidebar), viewer_url=viewer_url,
                         sync_document=self.engine.server.sync, warm=self.engine.server.warm,
                         in_browser=self.engine.server.in_page, browser_opened=self.engine.server.page_opening,
-                        engine_origin=self.engine.server.url)
+                        engine_origin=self.engine.server.url, updater=channel is None)
         result = server.handle('initialize', params, RequestContext(None, {}))
         holder = options.get('holder')
         holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None
@@ -214,6 +216,10 @@ class Sessions:
                 if agent:
                     with self.lock:
                         session.calls -= 1
+                    # The end of a command, which the quiet hour an automatic update waits for counts from.
+                    worked = getattr(self.engine, 'worked', None)
+                    if callable(worked):
+                        worked()
             return self._result(response, request_id, result)
         finally:
             if session:

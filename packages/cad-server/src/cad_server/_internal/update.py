@@ -75,6 +75,11 @@ IDLE_POLL_SECONDS = 1.0
 # How long an install of a release may take (uv's cache first; the network for what it lacks, the kernel's first
 # download among it).
 INSTALL_SECONDS = 1800.0
+# The apps behind (``catch_up``): how often the default version's server runs its setup again for them at most, how
+# long that run may take, and the record of its last one, in the version's data folder.
+CATCH_UP_SECONDS = 24 * 60 * 60.0
+CATCH_UP_BOUND = 1800.0
+CAUGHT_UP = "apps-caught-up.json"
 
 
 # --- the contract: install it, run its setup --------------------------------------------------------------------
@@ -140,29 +145,40 @@ def install(version: str) -> dict[str, Any]:
 
 
 def run_setup(record: dict[str, Any], *, frame: Callable[[str, str], None] | None = None,
-              args: tuple[str, ...] = ("--engine-update",)) -> tuple[int, str]:
+              args: tuple[str, ...] = ("--engine-update",), environ: dict[str, str] | None = None,
+              seconds: float | None = None) -> tuple[int, str]:
     """Step 2 of the contract: the setup of the release whose code marker is ``record``, ``cad setup
     --engine-update``, each progress frame it writes handed to ``frame`` (stage, detail) as it comes: its exit
     status, and the last line it said on standard error when it failed. Started in a session of its own, so it
-    outlives this process should its move stop this process's server."""
+    outlives this process should its move stop this process's server. ``environ``: variables over this process's
+    environment (``catch_up``'s PATH); ``seconds``: a bound, past which it is killed."""
     from cad.engine import places
 
     errors: list[str] = []
     with subprocess.Popen([record["cad"], "setup", *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-                          env={**environment(), "PYTHONUNBUFFERED": "1"}, **places.detached()) as process:
+                          env={**environment(), "PYTHONUNBUFFERED": "1", **(environ or {})},
+                          **places.detached()) as process:
+        bound = threading.Timer(seconds, process.kill) if seconds else None
+        if bound is not None:
+            bound.daemon = True
+            bound.start()
         reading = threading.Thread(target=lambda: errors.extend(process.stderr or ()), daemon=True)
         reading.start()
-        for line in process.stdout or ():
-            try:
-                said = json.loads(line)
-            except ValueError:
-                continue
-            found = said.get("progress") if isinstance(said, dict) else None
-            if frame is not None and isinstance(found, dict) and found.get("kind") == "update" \
-                    and found.get("stage") in STAGES:
-                frame(found["stage"], str(found.get("detail") or ""))
-        code = process.wait()
+        try:
+            for line in process.stdout or ():
+                try:
+                    said = json.loads(line)
+                except ValueError:
+                    continue
+                found = said.get("progress") if isinstance(said, dict) else None
+                if frame is not None and isinstance(found, dict) and found.get("kind") == "update" \
+                        and found.get("stage") in STAGES:
+                    frame(found["stage"], str(found.get("detail") or ""))
+            code = process.wait()
+        finally:
+            if bound is not None:
+                bound.cancel()
         reading.join(5)
     lines = [line.strip() for line in errors if line.strip()]
     return code, lines[-1] if lines else ""
@@ -186,12 +202,25 @@ class Update:
         self.urgent = threading.Event()
         # When the update last failed (monotonic).
         self.failed_at = float("-inf")
+        # The setup run again for the apps behind (``catch_up``), while it runs.
+        self.catching: threading.Thread | None = None
 
     def snapshot(self) -> dict[str, Any]:
-        """Where the update is: ``state`` (``idle``, ``working``, ``restarting``, ``failed``), the release it
-        moves to (``target``), its last progress frame and, failed, why."""
+        """Where the update is: ``state`` (``idle``, ``working``, ``restarting``, ``moved``, ``failed``), the release
+        it moves to (``target``), its last progress frame and, failed, why. ``moved``: the default channel moved to
+        ``target`` and this server stays (another channel is still on its version, or work is in flight here), so a
+        page that asked goes to the new default's server, at ``address`` (None where it could not be reached), with a
+        link signed with its token (``moved_token``)."""
         with self.lock:
-            return dict(self.state)
+            return {key: value for key, value in self.state.items() if key != "token"}
+
+    def moved_token(self) -> str | None:
+        """The page token of the server an update moved the default channel to (``snapshot``'s ``address``), which the
+        page's application signs a link with for a page going there (``viewer.http_app``): None where there is none.
+        Never in the update's state."""
+        with self.lock:
+            token = self.state.get("token") if self.state.get("state") == "moved" else None
+        return token if isinstance(token, str) and token else None
 
     def status(self) -> dict[str, Any]:
         """What the server's ``status`` says of its update (``cad status``): its state, its release, and an
@@ -284,8 +313,13 @@ class Update:
         if code != 0:
             self._failed(said or f"text-to-cad {target}'s setup failed (exit status {code})")
             return
+        moved = _moved(target)
         with self.lock:
-            self.state = {**self.state, "state": "restarting"}
+            if moved is None:  # this server goes: the new default's takes its port, and the page reloads into it
+                self.state = {**self.state, "state": "restarting"}
+            else:  # this server stays: the update is done here, and a page goes to the new default's server
+                self.state = {**self.state, "state": "moved", "progress": None, "address": moved.get("url"),
+                              "token": moved.get("token")}
 
     # --- the automatic update ------------------------------------------------------------------------------------
 
@@ -371,6 +405,67 @@ class Update:
                 with self.lock:
                     self.failed_at = time.monotonic()
 
+    # --- the apps behind -----------------------------------------------------------------------------------------
+
+    def catch_up(self, engine: Any) -> list[str] | None:
+        """The apps step run again, by the default version's server as it tends itself (``Daemon.tend``), for the apps
+        the receipt says are behind this version (``behind``: a step of its setup could not give them its text --
+        their command line missing from the PATH of the process that ran it, most often): this version's own ``cad
+        setup --engine-update``, as an update runs it (``run_setup``), which finds the default channel on it already
+        and does the apps step again, recording what it did in the receipt. Only where this server has an updater
+        (``channel.told``), once it has handled no command for ``auto_updates.IDLE_SECONDS`` and nothing is in flight
+        (as an automatic update waits), with no update running or getting ready and no ``cad setup`` holding the
+        install lock; at most once every ``CATCH_UP_SECONDS`` (``CAUGHT_UP``); in the background, bounded by
+        ``CATCH_UP_BOUND``, with the PATH of the last shell a build came from (``Daemon.shell_path``), where those
+        command lines are. The apps it runs it for, or None. Never raises; never waits on the network."""
+        from cad_server import auto_updates
+
+        try:
+            from cad.engine import places
+            from cad_server._internal.channel import told
+
+            name = places.versioned()
+            if name is None or not told():
+                return None
+            lagging = sorted(app for app, row in behind().items() if row.get("release") == name)
+            if not lagging:
+                return None
+            with self.lock:
+                if self.auto is not None or self.state["state"] in ("working", "restarting") \
+                        or (self.catching is not None and self.catching.is_alive()):
+                    return None
+            if getattr(engine, "draining", False) or engine.stopping.is_set() or engine.working():
+                return None
+            if not auto_updates.quiet(float(getattr(engine, "worked", 0.0) or 0.0), time.monotonic()):
+                return None
+            if auto_updates.installing():
+                return None
+            now = time.time()
+            last = _caught_up()
+            if last is not None and 0 <= now - last < CATCH_UP_SECONDS:
+                return None
+            record = places.version_record(name)
+            if record is None or not places.alive(record):
+                return None
+            _caught_up(now, lagging)
+            shell = getattr(engine, "shell_path", None)
+            with self.lock:
+                self.catching = threading.Thread(target=self._catch_up, args=(record, shell), name="cad-apps",
+                                                 daemon=True)
+                self.catching.start()
+            return lagging
+        except Exception:  # noqa: BLE001 - the server's tending never fails for the apps
+            return None
+
+    @staticmethod
+    def _catch_up(record: dict[str, Any], shell: str | None) -> None:
+        from cad_server._internal.providers import lasting
+
+        try:
+            run_setup(record, environ={"PATH": lasting(shell)} if shell else None, seconds=CATCH_UP_BOUND)
+        except Exception:  # noqa: BLE001 - said by the receipt it leaves, and tried again tomorrow
+            pass
+
     def _wait(self, engine: Any) -> bool:
         """Until the server is idle -- nothing in flight (``working``) and none ended (``worked``) for
         ``auto_updates.IDLE_SECONDS``, no drain, no ``cad setup`` holding the install lock -- or a click makes the
@@ -404,6 +499,80 @@ class Update:
                 self.state = {"state": "working", "target": auto.get("release"), "progress": auto.get("progress"),
                               "error": None}
                 return True
+
+
+_RECEIPT_READ: list[Any] = [None, {}]  # the receipt as ``behind`` last read it: its identity, and what it said
+
+
+def behind() -> dict[str, dict[str, Any]]:
+    """The apps the receipt records behind (``cli.setup.BEHIND``): each app's ``{release, why, at}``. Read again only
+    when the receipt changed since (one ``stat``): the server asks it as it tends itself. Nothing for a device with
+    no receipt, or one that cannot be read."""
+    from cad.engine.places import state_dir
+    from cad_server._internal.pointers import RECEIPT
+
+    path = state_dir() / RECEIPT
+    try:
+        found = os.stat(path)
+    except OSError:
+        return {}
+    seen = (str(path), found.st_mtime_ns, found.st_size)
+    if _RECEIPT_READ[0] == seen:
+        return _RECEIPT_READ[1]
+    try:
+        kept = json.loads(path.read_text(encoding="utf-8")).get("behind")
+        rows = {app: row for app, row in kept.items()
+                if isinstance(app, str) and isinstance(row, dict) and isinstance(row.get("release"), str)}
+    except (OSError, ValueError, AttributeError):
+        rows = {}
+    _RECEIPT_READ[0], _RECEIPT_READ[1] = seen, rows
+    return rows
+
+
+def _caught_up(now: float | None = None, apps: list[str] | None = None) -> float | None:
+    """When the default version's server last ran the apps step again (``catch_up``), from its record in this
+    version's data folder (``CAUGHT_UP``); with ``now``, that run kept as it begins. Never raises."""
+    from cad.engine.places import data_dir
+
+    path = data_dir() / CAUGHT_UP
+    if now is None:
+        try:
+            at = json.loads(path.read_text(encoding="utf-8")).get("at")
+        except (OSError, ValueError, AttributeError):
+            return None
+        return float(at) if isinstance(at, (int, float)) else None
+    from cad._internal.atomic_replace import write_bytes_atomic
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_bytes_atomic(path, (json.dumps({"at": now, "apps": apps or []}) + "\n").encode("utf-8"))
+    except OSError:
+        pass
+    return now
+
+
+def _moved(target: str) -> dict[str, Any] | None:
+    """After a setup that moved the default channel to ``target`` returned 0 with this server still running: where
+    the new default's server serves pages (``{"url", "token"}``), started for it where it does not run yet -- it
+    takes the next free port, this one still holding its own --; ``{}`` where it could not be started or asked (the
+    update is done all the same). None where this server is on its way out after all, or the update is no move of
+    its own: a process with no version, its own version still the default's, or its door closed (the move's drain:
+    the new default's server takes this one's port, and a page reloads into it there). Never raises."""
+    try:
+        from cad.engine.places import versioned
+        from cad_server._internal import pointers, versions
+
+        name = versioned()
+        if name is None or name == target or pointers.read(None) != target or not versions.serves(name):
+            return None
+        if not versions.start_server(target):
+            return {}
+        answer = versions.ask(target, {"op": "http"}, seconds=versions.START_SECONDS)
+        if not isinstance(answer, dict) or "failed" in answer or not isinstance(answer.get("url"), str):
+            return {}
+        return {"url": answer["url"], "token": answer.get("token") if isinstance(answer.get("token"), str) else None}
+    except Exception:  # noqa: BLE001 - the update is done: a page that cannot be sent on is told so
+        return {}
 
 
 def _discard(previous: str | None, target: str) -> None:

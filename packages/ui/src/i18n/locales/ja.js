@@ -323,6 +323,7 @@ export default {
   "update.failed": "アップデートできませんでした: {error}",
   "update.updated": "{version} にアップデートしました。",
   "update.updatedRestart": "{version} にアップデートしました。新しいスキルを読み込むには、アプリを再起動してください。",
+  "update.newThread": "{version} にアップデートしました。使うには新しいスレッドを開始してください。",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "OK",
   "whatsNew.title": "新機能（v{version}）",

@@ -209,6 +209,15 @@ class StatusTextTest(unittest.TestCase):
         self.assertIn("serving http://127.0.0.1:1: 0 documents opened by a page or a command", lines)
         self.assertEqual(sum(line.startswith("  live") for line in lines), 6, "the documents held, listed apart")
 
+    def test_a_port_handed_on_by_an_update_is_said_with_the_port_it_served_before(self) -> None:
+        from cad_server.engine.cli import status_text
+
+        text = status_text({"pid": 1, "up": 5, "cap": 4, "workers": [], "models": [],
+                            "serving": {"url": "http://127.0.0.1:3246", "port": 3246, "defaultPort": 3245,
+                                        "portSource": "handed", "also": [3300], "documents": []}})
+        self.assertIn("serving http://127.0.0.1:3246 (the port pages were on before the update), and on port 3300 too: "
+                      "0 documents opened by a page or a command", text.splitlines())
+
     def test_a_shape_handed_over_is_worded_as_one_with_no_script_to_rerun(self) -> None:
         from cad_server.engine.cli import status_text
 

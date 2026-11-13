@@ -817,6 +817,33 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual([(action["app"], action["ok"]) for action in self.receipt()["actions"]],
                          [("plugin", True), ("cursor", True), ("gemini", False)])
 
+    def test_an_app_left_behind_is_kept_in_the_receipt_named_by_doctor_and_given_its_text_by_cad_update(self) -> None:
+        """A run that could not give an app this release's text records it behind (its release, why, when); ``cad
+        doctor`` names it; ``cad update`` on a device already on the newest release runs this release's setup again,
+        which does the apps step again, says what it did, and takes the record out."""
+        from cad_server.cli import doctor
+        from cad_server.cli import update as update_command
+
+        command(self.bin, "gemini", "if args[:2] == ['extensions', 'link']:\n"
+                                    "    print('gemini: cannot reach its extensions folder', file=sys.stderr)\n"
+                                    "    sys.exit(1)\n")
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 1, out)
+        row = self.receipt()[setup.BEHIND]["gemini"]
+        self.assertEqual((row["release"], row["why"]), (RELEASE, "gemini: cannot reach its extensions folder"))
+        said = [line for line in doctor._apps() if ": behind " in line]
+        self.assertEqual(len(said), 1, said)
+        self.assertTrue(said[0].startswith(f"app      Gemini CLI: behind text-to-cad {RELEASE}: its setup could not give "
+                                           "it that release's text"), said[0])
+        self.assertIn("gemini: cannot reach its extensions folder; `cad update` gives it again", said[0])
+        command(self.bin, "gemini", "sys.exit(0)\n")  # found now: the agent's shell had it on its PATH
+        with mock.patch.object(updates, "newest", return_value=None):  # this is the newest release
+            code, out, _err = self._run(update_command.main, ())
+        self.assertEqual(code, 0, out)
+        self.assertIn("Gemini CLI: install the text-to-cad extension", out, "the apps step, again, said")
+        self.assertNotIn(setup.BEHIND, self.receipt())
+        self.assertEqual([line for line in doctor._apps() if ": behind " in line], [])
+
     def test_a_step_that_did_its_work_and_exited_non_zero_is_said_as_done_with_the_warning_quoted(self) -> None:
         # Gemini CLI links the extension, then exits 1 when its integrity store cannot be verified.
         command(self.bin, "gemini", """import os, pathlib

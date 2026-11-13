@@ -204,6 +204,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # The CAD app's notice (`cad_server/updates.py`), from the same feed; this page copies its prompt,
         # and nothing it does is kept: there is no answer to post. A process with no version is the default's.
         (self.tmp / "state").mkdir(exist_ok=True)
+        (self.tmp / "state" / "install-receipt.json").write_text("{}", encoding="utf-8")  # the install command ran here
         (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
                                                           encoding="utf-8")
         with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": RELEASE, "CI": "", "CAD_UPDATE_CHECK": ""}):
@@ -236,6 +237,8 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # The app menu's Automatic updates (`cad_server/auto_updates.py`): on by default, an answer kept in
         # the settings every CAD app reads, a change guarded as every change is, and an environment's off fixed.
         settings = "/api/v1/settings"
+        (self.tmp / "state").mkdir(exist_ok=True)
+        (self.tmp / "state" / "install-receipt.json").write_text("{}", encoding="utf-8")  # the install command ran here
         with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}):
             self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": True, "reason": "default"})
             # What a read answered, put back as it was, keeps the default a default.

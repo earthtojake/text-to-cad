@@ -134,6 +134,14 @@ def _making() -> Any:
     return making()
 
 
+def _listen_also(server: Any, host: str, port: int) -> Any:
+    """Another listener of the engine's one HTTP application, on ``port``, serving already
+    (``cad_server._internal.engine_host.listen_also``): the same application, page token and sessions."""
+    from cad_server._internal.engine_host import listen_also
+
+    return listen_also(server, host, port)
+
+
 def _automatic(daemon: Any) -> None:
     """The automatic update asked for as the daemon tends itself (``cad_server._internal.engine_host.automatic``):
     nothing but a look at the settings and the feed as last read, its work in the background."""
@@ -158,6 +166,8 @@ def _halt() -> None:
 
 # The engine's one listener and the application it serves (``serve.Server`` binds none of its own).
 HTTP_FACTORY: Callable[[Any, str, int], Any] = _application
+# Another listener of that application, on a port asked for while it serves on another (``Daemon.serve``).
+ALSO_FACTORY: Callable[[Any, str, int], Any] = _listen_also
 # Every process of the engine's that loads the kernel -- a model's worker, the standby, the documents
 # worker, the meshing and reading pools, the render processes -- runs in the installation's base, which
 # the library's modules that start them are told here (``places.kernel``): the library knows no installation.
@@ -257,6 +267,12 @@ def _note(said: str, denied: bool = False) -> None:
 # The requests that serve (``Daemon.serve``: the HTTP server bound on the first), each counted busy
 # while it is underway (``Daemon.handle``).
 SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
+# The requests that are no command's, which the quiet hour an automatic update waits for never counts
+# (``Daemon.ended``): whether work is in flight, who answers, the flat door looked at again, a page token read
+# again, an app's hold. Besides these, any request marked ``internal`` (what one server or updater asks another,
+# ``cad_server._internal.versions.ask``) and an ``http`` that names a port (an updater handing the pages' port on,
+# 0.11.10's among them) are not counted either.
+UNCOUNTED = frozenset({"working", "pid", "bridge", "token", "hold"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
 UNREADABLE = "cad.engine.build:Unreadable"
@@ -557,20 +573,87 @@ def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
     return pid, name, None
 
 
-def rotate_token() -> str | None:
-    """Replace the user's page token (``cad server --rotate-token``): every link shared before
-    stops working, whichever installation's engine served it. The new token; None where there is no
-    state folder to keep it in."""
-    import secrets
-
+def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None:
+    """Replace the user's page token (``cad server --rotate-token``): every link and browser session made before
+    stops working, whichever version's server served it, at once. The new token is written into this process's own
+    data first (an ``OSError`` there is the command's failure), then into every other place a server on this device
+    reads it from (``_token_homes``: each version's data, and the state folder that 0.11.10 and earlier and every
+    process with no version read); then every running server is told to take it now (``{"op": "token"}``,
+    ``Daemon.retoken``) -- each version's through its own door, and whoever holds the flat door of 0.11.10 and
+    earlier. A place that cannot be written, and a server that cannot be told (one of 0.11.10 or earlier, which
+    reads its token only as it starts), is said through ``told``. The new token; None where there is no state folder
+    to keep it in."""
     from cad_server.engine import registry
 
     held = registry.current()
     if held is None:
         return None
     token = secrets.token_urlsafe(32)
-    held.put_token(token)
+    name = versioned()
+    from cad_server._internal import imports
+
+    if name is None or imports.imported(name):  # a version not started yet writes nothing: it imports the new one
+        held.put_token(token)
+    for where, other in _token_homes(held):
+        try:
+            other.put_token(token)
+        except (OSError, ValueError) as error:
+            told(f"the page token in {where} could not be replaced ({getattr(error, 'strerror', None) or error}): "
+                 "a server that reads it there keeps the one before until it is replaced")
+    _tell_servers(told)
     return token
+
+
+def _token_homes(own: Any) -> list[tuple[str, Any]]:
+    """Every registry on this device a server reads the page token from but ``own``'s: each version's whose data is
+    imported (one not imported yet takes the token it imports), and the state folder's where it keeps one (0.11.10
+    and earlier, and every process with no version, read it there). ``(where, registry)``, each once."""
+    from cad_server.engine import registry
+
+    seen = {os.path.normcase(os.path.realpath(own.state.root))}
+    found: list[tuple[str, Any]] = []
+
+    def add(root: Path, where: str, *, kept_only: bool = False) -> None:
+        key = os.path.normcase(os.path.realpath(root))
+        if key in seen or (kept_only and not (root / registry.TOKEN).exists()):
+            return
+        seen.add(key)
+        found.append((where, registry.Registry(root)))
+
+    try:
+        from cad_server._internal import imports, versions
+
+        for name in versions.folders():
+            if imports.imported(name):
+                add(_places.data_dir(name), f"text-to-cad {name}'s data")
+    except Exception:  # noqa: BLE001 - a device whose versions cannot be listed: the rest is still done
+        pass
+    add(_places.state_dir(), "the state folder", kept_only=True)
+    return found
+
+
+def _tell_servers(told: Callable[[str], None]) -> None:
+    """Every running server asked to read its page token again (``Daemon.retoken``), each one that cannot be said
+    through ``told``: each version's through its own door, then whoever holds the flat door (a server of 0.11.10 or
+    earlier, which cannot take it before it restarts; or the default's, told already)."""
+    from cad_server._internal import versions
+
+    try:
+        names = versions.folders()
+    except Exception:  # noqa: BLE001 - nothing listed, nothing told: the flat door still is
+        names = []
+    for name in names:
+        if not versions.serves(name):
+            continue
+        answer = versions.ask(name, {"op": "token"})
+        if not (isinstance(answer, dict) and answer.get("ok")):
+            told(f"text-to-cad {name}'s server could not take the new token "
+                 f"({(answer or {}).get('failed') or 'it did not answer'}): it admits the one before until it stops "
+                 f"(`cad +{name} stop`)")
+    answer = versions.ask_flat({"op": "token"})
+    if isinstance(answer, dict) and not answer.get("ok"):
+        told("the server of 0.11.10 or earlier that runs still admits the token before until it stops (`cad stop`); "
+             "it reads the new one as it starts again")
 
 
 def _reportable(report: dict[str, Any]) -> bool:
@@ -622,7 +705,8 @@ class Daemon:
         self.last = time.monotonic()
         self.busy = 0
         self.busy_lock = threading.Lock()
-        # When the last build, draw, export or request that serves ended (monotonic): an automatic update
+        # When the last command ended (monotonic): a build, draw, export or request that serves, any other request
+        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``). An automatic update
         # switches only once nothing has run for a while (``cad_server._internal.update.Update._wait``).
         self.worked = self.last
         self.stopping = threading.Event()
@@ -639,6 +723,12 @@ class Daemon:
         self.address: Path | None = None
         self.address_id: tuple[int, int] | None = None
         self.server = None
+        # The listeners of the HTTP application beside the server's own (``serve``): a port asked for while it served
+        # on another -- the one an updater hands on, which pages were on --, and the one it served on before.
+        self.listeners: list[Any] = []
+        # The PATH of the last shell a build came from (its ``env``): where the agent apps' command lines are found,
+        # which a server started from an app's window often lacks (``cad_server._internal.update.Update.catch_up``).
+        self.shell_path: str | None = None
         self.token = secrets.token_hex(16) if WINDOWS else ""
         # Per model document a build made (its ``model_id``), the worker that built it last: the one
         # that holds its provenance (``provenance``). A file the build wrote is no key: it names no model.
@@ -673,6 +763,21 @@ class Daemon:
 
     def touch(self) -> None:
         self.last = time.monotonic()
+
+    def stamp(self) -> None:
+        """A command just ended (``worked``): the quiet hour an automatic update waits for starts again. Every
+        request through a door but the server's own asks (``ended``), and every agent's tool call (the CAD app's
+        ``mcp.http.Sessions``)."""
+        with self.busy_lock:
+            self.worked = time.monotonic()
+
+    def ended(self, request: dict[str, Any]) -> None:
+        """A request through a door answered: stamped (``stamp``) unless it is no command's -- one of ``UNCOUNTED``,
+        one marked ``internal``, or an ``http`` naming a port (an updater handing the pages' port on)."""
+        op = request.get("op")
+        if op in UNCOUNTED or request.get("internal") is True or (op == "http" and request.get("port")):
+            return
+        self.stamp()
 
     def stand(self) -> None:
         """At the daemon's start: each service's standby (``Supervisor.stand``) -- the workers', a worker
@@ -1014,8 +1119,14 @@ class Daemon:
                 self.server.leaving = self.models.leaving
                 self.server.delete = self.models.delete
                 self.server.retire = self.drain
+                application = getattr(self.server.http, "app", None)
+                if application is not None:
+                    application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
                 self.server.start()
                 started = True
+            elif request.get("port") and int(request["port"]) != self.server.port and request.get("op") == "http" \
+                    and not (request.get("host") and request["host"] != self.server.http.server_address[0]):
+                self._take_port(int(request["port"]))  # an updater handing the pages' port on
             elif ((request.get("port") and int(request["port"]) != self.server.port)
                   or (request.get("host") and request["host"] != self.server.http.server_address[0])):
                 raise ValueError("the installation's engine already serves another host/port; stop it before changing its bind")
@@ -1023,6 +1134,50 @@ class Daemon:
         if started:
             self.models.attach(server)  # the documents taken up from the cache before it ran: registered with it
         return server
+
+    def _take_port(self, port: int) -> None:
+        """Under ``serving``, the server serving pages on another port already: ``port`` taken too, a second listener
+        of the same application with the same page token, and made the server's own from now on -- what ``status``
+        says, the port the next start comes back to (the engine's record) and the one a later update hands on --,
+        the port it served on before kept as well, so a page open on either works. That is what an updater asks
+        (``{"op": "http", "port"}``: 0.11.10's switch helper through the flat door, ``versions.handover``, a
+        person's setup taking a server of 0.11.10's place): the port pages were on before the update, which they
+        reload into. Where ``port`` cannot be taken (another process holds it, 0.11.10's own server still among
+        them), the ask is answered with the address the server serves (never ``failed``: 0.11.10's helper would stop
+        the server for it). Any other request naming another port (``cad viewer --port``) is refused as before."""
+        server = self.server
+        host = server.http.server_address[0]
+        listener = next((each for each in self.listeners if each.server_address[1] == port), None)
+        if listener is None:
+            try:
+                if _answers(host, port):  # a listener on every interface lets a loopback bind through
+                    import errno
+
+                    raise OSError(errno.EADDRINUSE, os.strerror(errno.EADDRINUSE))
+                listener = ALSO_FACTORY(server, host, port)
+            except OSError as error:
+                print(f"cad: pages stay on port {server.port}: port {port} cannot be taken too "
+                      f"({error.strerror or error})", file=sys.stderr, flush=True)
+                return
+        else:
+            self.listeners.remove(listener)
+        from cad.engine.serve import reachable_host
+
+        self.listeners.append(server.http)
+        server.http, server.port = listener, port
+        server.url = f"http://{reachable_host(host)}:{port}"
+        default = getattr(getattr(listener, "app", None), "_default", None)
+        if default is not None:
+            default.port = port
+        self.port_source, self.port_because, self.port_notice = "handed", "", ""
+        from cad_server.engine import registry
+
+        held = registry.current()
+        if held is not None:
+            try:  # the port pages were on, which the next start comes back to: none kept for the default
+                held.put_engine(NAME, {} if port == default_port() else {"port": port})
+            except OSError:
+                pass
 
     def document(self, ident: str) -> tuple[dict[str, Any], bytes]:
         """What the document ``ident`` is while this engine holds it, as an export reads it, and the
@@ -1441,6 +1596,9 @@ class Daemon:
                 send(told["answer"])
                 self._counted(request, told, began)
                 return
+            shell = (request.get("env") or {}).get("PATH") if isinstance(request.get("env"), dict) else None
+            if isinstance(shell, str) and shell:
+                self.shell_path = shell
             with self.busy_lock:
                 self.busy += 1
             try:
@@ -1600,6 +1758,9 @@ class Daemon:
         elif op == "bridge":
             # The flat door of 0.11.10 and earlier looked at again (``Bridge``): after the default pointer moved.
             send({"ok": True, "flat": self.bridge.reconcile()})
+        elif op == "token":
+            # ``cad server --rotate-token`` (``rotate_token``): the page token read again, taken at once.
+            send(self.retoken())
         elif op == "stop":
             # ``drain``: an update's switch, which waits for what is in flight (``drain``); else at once.
             send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})
@@ -1609,6 +1770,27 @@ class Daemon:
                 self.stopping.set()
         else:
             send({"failed": f"unknown request {op!r}"})
+
+    def retoken(self) -> dict[str, Any]:
+        """The user's page token read again from this server's data (``{"op": "token"}``, which ``cad server
+        --rotate-token`` asks every running server once it has written the new one: ``rotate_token``) and taken at
+        once by its HTTP application, every listener of it: a link or a browser session signed with the one before
+        is refused from now on. A server serving nothing yet takes it as it binds (``bind``). ``ValueError`` for a
+        token there that cannot be read (``Registry.token``)."""
+        from cad_server.engine import registry
+
+        held = registry.current()
+        token = held.token() if held is not None else None
+        if not token:
+            return {"failed": "this server keeps no page token to read again"}
+        with self.serving:
+            server = self.server
+            if server is not None:
+                server.token = token
+                application = getattr(server.http, "app", None)
+                if application is not None:
+                    application.retoken(token)
+        return {"ok": True}
 
     def draw(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """A picture of a document (``{"op": "draw", "path", "still", "out"}``, a ``snapshot.Still``
@@ -1684,6 +1866,7 @@ class Daemon:
                                                              "portBecause": self.port_because,
                                                              "portNotice": self.port_notice,
                                                              "defaultPort": default_port(),
+                                                             "also": [each.server_address[1] for each in self.listeners],
                                                              "documents": self.server.listing(every=True),
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
@@ -1817,6 +2000,13 @@ class Daemon:
         _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
         display.stop()  # the Xvfb it started for their stills, if it did
+        for listener in self.listeners:  # the ports it serves pages on beside its own (``_take_port``)
+            try:
+                listener.shutdown()
+                listener.server_close()
+            except OSError:
+                pass
+        self.listeners = []
         if self.server is not None:
             self.server.stop()
 
@@ -1969,6 +2159,7 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOC
     except OSError as error:  # a failure: its words, and its type
         send({"failed": str(error), **failed_type(error)})
     finally:
+        daemon.ended(request)  # a command's end, for the quiet hour; the server's own asks are none
         if daemon.refusal is not None:
             daemon.stopping.set()  # its answer sent: the engine whose port is another's stops
 
@@ -2327,10 +2518,8 @@ def proof() -> int:
         let_go(held)
 
 
-def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool = False,
-         foreground: bool = False) -> int:
+def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server --port``);
-    ``rotate``: a new page token first (``--rotate-token``), refused while another engine runs;
     ``foreground`` (``cad server``): its HTTP server bound before anything else, so a port
     another process holds fails the command at once (``bind``). An engine a client starts binds
     on the first request that serves, which may name its own port (``cad viewer --port``)."""
@@ -2354,10 +2543,6 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
         _note_failure(f"the engine server cannot take its lock in {engine_dir()}", error)
         return 1
     if held is None:
-        if rotate:
-            print("cad: an engine server is running; run cad stop first, then cad server --rotate-token",
-                  file=sys.stderr)
-            return 1
         if foreground:  # ``cad server``: said, never a silent success that serves nothing it asked
             print("cad: the engine server is already running: `cad status` says where it "
                   "serves, `cad stop` stops it" + (f" (to serve on {port})" if port is not None else ""),
@@ -2366,15 +2551,6 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
         _front()  # a version's: the one up looks at the flat door again, for the client that started this
         return 0  # another daemon is up
     _first_start()
-    if rotate:
-        try:
-            if rotate_token() is None:
-                raise OSError("no state folder")
-        except OSError as error:
-            print(f"cad: cannot replace the page token: {error.strerror or error}", file=sys.stderr)
-            let_go(held)
-            return 1
-        print("cad: a new page token: every link shared before no longer works", file=sys.stderr)
     try:
         listener = _bind() if WINDOWS else None
         if listener is not None:

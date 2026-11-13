@@ -46,8 +46,12 @@ whose docstring is the contract between releases). In order, each step said as i
    that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be
    written changes no app that would point at it.
 7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take back; its
-   presence says the install command ran here, which is what gives the default channel its updater; and which
-   agents got which skills from which release (``skills``), since the Skills CLI keeps no versions.
+   presence says the install command ran here, which is what gives the default channel its updater; which
+   agents got which skills from which release (``skills``), since the Skills CLI keeps no versions; and each app a
+   step of 6 could not give this release's text (``behind``: the release, why, when), until a run gives it the text.
+   ``cad doctor`` names such an app, ``cad update`` (this release's setup again, when it is the newest) does the apps
+   step again, and so does the default version's server by itself, once a day at most while it is idle
+   (``cad_server._internal.update.Update.catch_up``).
 8. **Report.** Each app's copy as it is now, the server, the telemetry notice (``--no-telemetry`` turns it off, as
    ``cad telemetry off`` does), and the apps to restart; ``already up to date`` when a run found nothing to do and
    changed nothing. An agent whose folder lacks a skill the receipt says it got is a failure of the run.
@@ -107,6 +111,13 @@ from typing import Any
 DEFAULT_PROG = "cad setup"
 SCHEMA = 1
 RECEIPT = "install-receipt.json"
+# The receipt's record of the apps a run could not give this release's text (``Installer._behind``): per app, the
+# release it should have got, why it did not, and when. A later run that gives it the text takes it out. The default
+# version's server, as it tends itself, runs the apps step again for an app behind (``update.Update.catch_up``), and
+# ``cad doctor`` names it.
+BEHIND = "behind"
+# The steps that give an app this release's text: an app whose step of these fails is behind.
+GIVES = frozenset({"install", "update"})
 LOCK = "install.lock"  # ``cad_server._internal.versions.LOCK``: the device's install lock
 # What text-to-cad keeps in the two folders ``--purge`` removes. A folder of that name that holds other things
 # and none of these is another program's that shares the name, and purge leaves it as it is (the engine's own
@@ -1138,6 +1149,8 @@ class Installer:
         providers = self.providers
         failed = False
         work = [step for step in steps if step.changes]
+        # Per app given this release's text, None where it got it, else why not (``_behind``).
+        outcome: dict[str, str | None] = {}
         # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
         # written changes no app that would point at it.
         if self._write_plugin() is None:
@@ -1145,6 +1158,8 @@ class Installer:
             for step in [step for step in work if self._needs_folder(step)]:
                 self.say(f"{step.label}: {step.action} {step.subject}: not done, with no plugin folder")
                 work.remove(step)
+                if step.action in GIVES:
+                    outcome[step.app] = "the plugin folder could not be written"
         backed_up = self._backed_up(receipt)
         changed: set[str] = set()
         aside = self._aside()
@@ -1159,14 +1174,41 @@ class Installer:
                 changed.add(step.app)
             if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
                 self._record_skills(receipt, step, steps, records, changed)
+            if step.action in GIVES:
+                why = None if ok else _why(records)
+                for app in step.agents or [step.app]:  # one Skills CLI command gives every agent its skills
+                    if outcome.get(app) is None:  # a step "in the command above" never clears that command's failure
+                        outcome[app] = why
+        self._behind(receipt, steps, outcome)
         return failed, changed
+
+    def _behind(self, receipt: dict[str, Any], steps: list[Any], outcome: dict[str, str | None]) -> None:
+        """The receipt's record of the apps behind (``BEHIND``) brought up to this run: an app whose step to give it
+        this release's text failed (``outcome``: why) recorded with the release, why and when; one that got it, or
+        whose copy the plan left as it is (up to date, or a store's), taken out. An app this run did not plan for
+        (``--only``) keeps what it had."""
+        behind = {app: row for app, row in (receipt.get(BEHIND) or {}).items() if isinstance(row, dict)}
+        for step in steps:
+            if step.app not in outcome and step.action == "leave" and step.subject != self.providers.NEED_NODE:
+                behind.pop(step.app, None)
+        for app, why in outcome.items():
+            if why is None:
+                behind.pop(app, None)
+            else:
+                behind[app] = {"release": self.release, "why": why, "at": self.providers.stamp()}
+        if behind:
+            receipt[BEHIND] = behind
+        else:
+            receipt.pop(BEHIND, None)
 
     def _record(self, receipt: dict[str, Any], registered: dict[str, Any]) -> None:
         """Step 7: the receipt kept, with what this run did; written whenever none was here, since its presence
         says the install command ran here (the default channel's updater)."""
         providers = self.providers
         launcher = registered["launcher"]
-        if self.actions or self.stopped or launcher["written"] or self._receipt() is None:
+        kept = self._receipt()
+        if self.actions or self.stopped or launcher["written"] or kept is None \
+                or (kept or {}).get(BEHIND) != receipt.get(BEHIND):
             receipt.update({"release": self.release, "updated": providers.stamp()})
             receipt["actions"] = list(receipt.get("actions") or []) + self.actions
             if self.stopped:
@@ -1497,6 +1539,19 @@ class Installer:
             self.say(f"folders  removed {shown(folder, self.machine)}" if not folder.exists()
                      else f"folders  {shown(folder, self.machine)} could not be removed whole")
         return False
+
+
+def _why(records: list[dict[str, Any]]) -> str:
+    """Why an app's step failed, in one line, from what it did (``providers.apply``'s records): the last line the
+    failing command or edit said, else its exit status."""
+    for record in reversed(records):
+        if record.get("ok") is False:
+            lines = [line.strip() for line in str(record.get("output") or "").splitlines() if line.strip()]
+            if lines:
+                return lines[-1][:300]
+            if record.get("code") is not None:
+                return f"{Path(str((record.get('command') or ['it'])[0])).name} exited {record['code']}"
+    return "it failed"
 
 
 def refresh_copies(told: Any) -> tuple[bool, list[dict[str, Any]]]:

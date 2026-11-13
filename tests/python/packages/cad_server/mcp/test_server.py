@@ -64,6 +64,8 @@ def offer_an_update(test: unittest.TestCase) -> None:
     patched.start()
     test.addCleanup(patched.stop)
     (state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}), encoding="utf-8")
+    # The install command ran here (its receipt): a process with no version is the default's, which is told.
+    (state / "install-receipt.json").write_text("{}", encoding="utf-8")
 
 
 PAGE_TOOLS = ("cad_sync", "cad_capture_reply")

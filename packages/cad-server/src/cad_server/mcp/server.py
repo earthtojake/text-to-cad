@@ -228,18 +228,20 @@ _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, fr
 _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
-def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
+def _stamped(launch: dict[str, Any], updater: bool = True) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform,
     whether this computer has a file chooser for the home's Open, and the update notice as the
-    server last read it (``cad_server/updates.py``; a launch never waits on the feed)."""
+    server last read it (``cad_server/updates.py``; a launch never waits on the feed) -- none for a session with no
+    ``updater`` (a store's launcher's: ``Server.updater``)."""
     from cad_server import __version__, updates
     from cad_server._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
-    launch["notice"] = updates.notice()
-    updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch
+    launch["notice"] = updates.notice() if updater else None
+    if updater:
+        updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch
     return launch
 
 
@@ -342,8 +344,11 @@ class Server:
     def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
                  in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None,
-                 app_token: str | None = None) -> None:
+                 app_token: str | None = None, updater: bool = True) -> None:
         self.page = page or AppPage()
+        # Whether this session tells of an update (the launch's notice, a text app's line): not one a store's launcher
+        # opened (its ``--channel``), whatever version serves it -- whoever delivers that copy updates it.
+        self.updater = updater
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
         # the card reach (``_resource_meta``): where the host carries no tool call back, the card
         # reads the engine directly with its launch's link (``_reach``).
@@ -730,7 +735,7 @@ class Server:
         self._model = model
         if _reads_with_kernel(model):
             self.warm()  # the view's first document meshes on a pool already starting
-        return _stamped(launch)
+        return _stamped(launch, self.updater)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
         """The launch that shows the home: the models opened before, which come with it so its cards
@@ -744,7 +749,7 @@ class Server:
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
         if surface:
             launch["surface"] = surface
-        return _stamped(launch)
+        return _stamped(launch, self.updater)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
@@ -1049,7 +1054,7 @@ class Server:
     def _told(self, result: dict[str, Any]) -> dict[str, Any]:
         """A text-only app has no card for the update notice (``cad_server/updates.py``): this process's
         first result that can carry it does, as a line for the agent to pass on."""
-        if self._update_told:
+        if self._update_told or not self.updater:
             return result
         from cad_server import updates
 

@@ -37,6 +37,9 @@ class UpdatesTest(unittest.TestCase):
         seen = mock.patch.object(updates, "_seen", set())
         seen.start()
         self.addCleanup(seen.stop)
+        # The install command ran here (its receipt): the default channel, and a process with no version, has an
+        # updater, and is told of a release.
+        (self.tmp / "install-receipt.json").write_text("{}", encoding="utf-8")
 
     def environment(self, values: dict[str, str]) -> None:
         patched = mock.patch.dict(os.environ, values)
@@ -58,9 +61,13 @@ class UpdatesTest(unittest.TestCase):
         # Only the default channel has an updater: a version a named channel alone is on (a store's copy) is
         # never told, nor a development build -- a development version's name, or a source tree not told the
         # version it runs as. CAD_INSTALL_CHANNEL and CAD_AUTO_UPDATED, which configs of 0.11.10 and earlier set,
-        # decide nothing. A process with no version is the default's.
-        from cad_server._internal import channel
+        # decide nothing. A process with no version is the default's, on a device the install command set up.
+        from cad.engine import places
+        from cad_server._internal import channel, pointers
 
+        receipt = places.state_dir() / pointers.RECEIPT
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text("{}", encoding="utf-8")
         for values, source_tree, expected in (
             ({"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"}, False, True),
             ({"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": ""}, False, True),
@@ -71,8 +78,12 @@ class UpdatesTest(unittest.TestCase):
             with self.subTest(values=values, source_tree=source_tree), mock.patch.dict(os.environ, values), \
                     mock.patch("cad_server._internal.channel._source_tree", return_value=source_tree):
                 self.assertEqual(channel.told(), expected)
-        from cad.engine import places
-        from cad_server._internal import pointers
+        # No receipt: a person's own `pip install cad-server` or `uvx ... cad viewer`, which has no install to update.
+        receipt.unlink()
+        with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": "0.8.1"}), \
+                mock.patch("cad_server._internal.channel._source_tree", return_value=False):
+            self.assertIsNone(places.versioned())
+            self.assertFalse(channel.told())
 
         # A version is told where it is the default channel's on a device the install command set up (its receipt):
         # where it never ran, there is no install to update.

@@ -306,6 +306,10 @@ class CadApp:
         self.pick = available()
         self.host = host
         self.port = port
+        # The delivery channel of the CAD app session this app serves (``mcp.http.Sessions``: its launcher's
+        # ``--channel``), None for the default's and for the browser page: a session on a named channel has no
+        # updater, whatever this server's version is (``_updater``).
+        self.channel = None
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
         # never re-resolve at request time.
         self.dist_dir = os.path.abspath(dist_dir) if dist_dir else ""
@@ -629,10 +633,18 @@ class CadApp:
         where this server has no updater (``channel.told``: a named channel's version, a device the install
         command never set up, a development build), which a page shows no switch for."""
         from cad_server import auto_updates, language, whats_new
-        from cad_server._internal.channel import told
 
         return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None,
-                "whats_new": whats_new.read(), "updates": auto_updates.read() if told() else None}
+                "whats_new": whats_new.read(), "updates": auto_updates.read() if self._updater() else None}
+
+    def _updater(self) -> bool:
+        """Whether what this app serves has an updater: this server's (``channel.told``: the default channel's version,
+        on a device the install command set up, no development build), and for a CAD app session its launcher's
+        channel the default (``channel``): a session a store's launcher opened shows no update notice, button or
+        switch, whatever version serves it."""
+        from cad_server._internal.channel import told
+
+        return self.channel is None and told()
 
     def _change_settings(self, request) -> dict:
         """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
@@ -654,12 +666,10 @@ class CadApp:
         if "whats_new" in payload:
             whats_new.change(payload["whats_new"])
         if payload.get("updates") is not None:
-            from cad_server._internal.channel import told
-
             updates = payload["updates"]
             if type(updates) is not dict or not set(updates) <= {"automatic", "reason"}:
                 raise ValueError("an updates change is {\"automatic\": true or false}")
-            if not told():
+            if not self._updater():
                 raise ApiError(409, "this text-to-cad has no updater",
                                "only the default channel's version, set up by the install command, updates itself")
             # The app menu's Automatic updates: the person's setting, one for every CAD app. What a read
@@ -1313,8 +1323,17 @@ class CadApp:
         from cad_server import __version__, updates
         from cad_server._internal.update import UPDATE
 
+        if self.channel is not None:  # a store's session: no updater, whatever this server is
+            return {"notice": None, "release": __version__, "instance": INSTANCE, "update": None}
         updates.refresh()
-        return {"notice": updates.notice(), "release": __version__, "instance": INSTANCE, "update": UPDATE.snapshot()}
+        update = UPDATE.snapshot()
+        if update.get("state") == "moved":
+            token = UPDATE.moved_token()  # the page going to the new default's server carries a link for it
+            if token is not None:
+                from .engine_app import LINK_SECONDS, sign
+
+                update["link"] = sign(token, "link", LINK_SECONDS)
+        return {"notice": updates.notice(), "release": __version__, "instance": INSTANCE, "update": update}
 
     def _update(self) -> tuple[int, dict]:
         """``POST /api/v1/local/update``: the update button's click. The update starts in the background (or the
@@ -1329,6 +1348,10 @@ class CadApp:
 
             return 409, {"error": "no engine serves this page: nothing to update",
                          "hint": f"update with the install command: `{command()}`"}
+        if self.channel is not None:
+            return 409, {"error": "this text-to-cad has no updater",
+                         "hint": "only the default channel's version, set up by the install command, updates itself; "
+                                 "a store's copy is updated by its store"}
         UPDATE.start(server)
         return 202, self._version()
 

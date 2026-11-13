@@ -333,13 +333,27 @@ installs it by its own `cad setup --add` (uvx, as the `cad` command installs a v
    server stops once nothing is in flight there -- a build, a draw, an export, a request that serves, an agent's
    tool call; never an open page or an idle app --, and the new version's starts on its port with the page token
    it imported, holding the flat door too (`Bridge`). One busy stays where it is and stops by itself once idle (its
-   version no channel's now), and the new one takes the next free port;
+   version no channel's now), and the new one takes the next free port; so does one another channel is still on.
+   A server asked for `{"op": "http", "port": P}` while it serves pages on another port Q -- an updater handing the
+   pages' port on, 0.11.10's switch helper among them, to a server that started while 0.11.10 still held P -- takes
+   P too, a second listener of the same application and token, and P is its own from then on (what `status` says,
+   what its record keeps for the next start, the port a later update hands on), Q kept as well; where P cannot be
+   taken it answers with where it serves, never `failed`. Any other request naming another port (`cad viewer
+   --port`) is refused as before;
 2. writes the plugin folder from itself and brings our copies of it along (`cad_server._internal.providers`; an
    app that reads the folder in place needs nothing); a store's copy is its store's.
 
-Every page and card keeps its link through it, and reloads once its server answers with the new release. A
+Every page and card keeps its link through it, and reloads once its server answers with the new release. Where the
+server a click went through stays (another channel is on its version, or work is in flight there), the update ends
+there as `moved`, naming the new default's server's address (started for it) and a link for its token: the browser
+page goes to the same document there, and a CAD card, whose launcher belongs to the version before, says the update
+is done and to start a new thread. A CAD app session a store's launcher opened (its `--channel`) shows no update
+notice, button or switch, whatever version serves it. A
 failure before the pointer is written changes nothing; after it, both versions are there and the next move or
-sweep finishes; an app that fails keeps the text before and is done again by the next update. A move cut short
+sweep finishes; an app that fails keeps the text before, is recorded behind in the receipt (`behind`: its release,
+why, when) and named by `cad doctor`, and is done again by `cad update`, the next update, or the default version's
+server by itself once it is idle, at most once a day (`Update.catch_up`, with the PATH of the last shell a build
+came from). A move cut short
 after its pointer is finished by the next run of the same setup (the mirror written, the sweep). An updater of
 0.11.10 or earlier runs the same setup from the flat release folder it made, which makes the release present in
 `versions/` and runs it from there; that updater then drains its own server and has its helper start the new
@@ -364,7 +378,9 @@ migration guide. Such a release is installed at once, in the
 background -- its own `cad setup --add`, which makes it present, its kernel environment with it, and changes
 nothing else -- and its setup, which moves the default channel and gives the apps its text, waits until the default
 version's server has handled no command for an hour: nothing in flight (`Daemon.working`, asked each second) and
-none ended (`Daemon.worked`, where "the last command" is read) for `auto_updates.IDLE_SECONDS`, no drain, no `cad
+none ended (`Daemon.worked`, where "the last command" is read: stamped at the end of every request through a door
+but the servers' own asks -- one marked `internal`, `working`, `pid`, `bridge`, `token`, an app's hold, an `http`
+that names a port -- and of every agent's tool call) for `auto_updates.IDLE_SECONDS`, no drain, no `cad
 setup` holding the install lock. Until then the update's state stays `idle`, so no page shows it; from then it is
 `working` and `restarting` as a click's is, and every page and card follows it to the new release as they follow a
 click. A click meanwhile makes it the click's, done at once. Nothing is ready while a person's update runs, and a
@@ -396,9 +412,11 @@ both this user's alone, 0600), so a link outlives an update too. So a page link
 stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
-user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, with no
-engine running (it refuses while one runs) and once the person says yes (**Consent**, `--yes`), and
-every link and session made before stops working. `cad status` says the
+user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, once the person says yes
+(**Consent**, `--yes`), in every version's data on the device and the state folder 0.11.10 and earlier read, and
+tells every running server to take it at once (`{"op": "token"}`, `Daemon.retoken`): every link and session made
+before stops working now, in every server. One that cannot be told (a server of 0.11.10 or earlier) is said, and
+takes the new token as it starts again. `cad status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
 

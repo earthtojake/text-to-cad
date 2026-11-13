@@ -275,6 +275,10 @@ class HttpSessionsTest(unittest.TestCase):
             return json.loads(body)
 
         release = cad_server.__version__
+        # The install command ran here (its receipt): the engine, a process with no version, is the default's.
+        receipt = self.root / 'state' / 'install-receipt.json'
+        receipt.write_text('{}', encoding='utf-8')
+        self.addCleanup(receipt.unlink, missing_ok=True)
         self.assertEqual(version()['release'], release)
         with patch.object(cad_mcp, '_version', return_value='0.0.1'):
             self.proxy()  # an older release's server: no release is out

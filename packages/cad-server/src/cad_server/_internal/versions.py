@@ -654,8 +654,12 @@ def ask_flat(message: dict[str, Any], *, seconds: float = ASK_SECONDS) -> dict[s
 
 
 def _ask_at(door: Path, message: dict[str, Any], seconds: float) -> dict[str, Any] | None:
+    """``message`` asked at ``door``, marked ``internal``: what one server, updater or command asks another of the
+    device's servers is no command of the person's, which the quiet hour an automatic update waits for counts
+    (``daemon.Daemon.ended``); a server of 0.11.10 or earlier reads past the mark."""
     from cad.engine import client
 
+    message = {**message, "internal": True}
     answers: list[Any] = []
 
     def asking() -> None:

@@ -32,8 +32,8 @@ def _literal(name: str, opening: str, closing: str) -> str:
 class TheAppRuleIsOne(unittest.TestCase):
     def test_the_client_names_table_is_the_receiver_s(self) -> None:
         body = _literal("AGENT_APPS", "{", "}")
-        pairs = re.findall(r"""['"]?([A-Za-z0-9_.-]+)['"]?\s*:\s*['"]([^'"]+)['"]""", body)
-        self.assertEqual(dict(pairs), engine_host.APPS)
+        pairs = re.findall(r"""(?:['"]([^'"]+)['"]|([A-Za-z0-9_.-]+))\s*:\s*['"]([^'"]+)['"]""", body)
+        self.assertEqual({quoted or bare: app for quoted, bare, app in pairs}, engine_host.APPS)
         names = json.loads("[" + _literal("NO_APP", "[", "]").replace("'", '"') + "]")
         self.assertEqual(set(names), set(engine_host.NO_APP))
 
@@ -41,6 +41,9 @@ class TheAppRuleIsOne(unittest.TestCase):
         self.assertEqual(engine_host.app("Claude-AI"), "claude-desktop")
         self.assertEqual(engine_host.app("  Zed Editor (preview) "), "zed-editor-preview-")
         self.assertEqual(engine_host.app("__vscode"), "vscode")
+        # The names Gemini CLI, Grok Build and VS Code call themselves: their apps' canonical tokens.
+        self.assertEqual([engine_host.app(name) for name in ("gemini-cli", "Grok-Build", "Visual Studio Code")],
+                         ["gemini", "grok", "vscode"])
         self.assertEqual(engine_host.app("x" * 50), "x" * 40)
         # No client, the browser viewer, or a name with nothing left: the app whose shell markers are set, else none.
         for client in (None, "cad-viewer", "cadgen-viewer", "unknown", "!!!"):

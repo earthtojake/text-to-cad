@@ -318,6 +318,144 @@ class AutomaticTest(Fixture):
         self.assertEqual(self.job.automatic(self.engine), "1.1.1")
 
 
+class CatchUpTest(Fixture):
+    """An app a setup left behind (the receipt's ``behind``): the default version's server runs its own setup again
+    for it once it is idle, at most once a day, bounded, with the PATH of the last shell a build came from."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from cad.engine import places
+        from cad_server._internal import channel
+
+        self.version = "1.1.0"
+        self.command = str(self.root / "cad")
+        self.job, self.engine = update.Update(), Engine()
+        self.ran: list = []
+        for patch in (mock.patch.object(auto_updates, "IDLE_SECONDS", 0.3),
+                      mock.patch.object(places, "versioned", return_value=self.version),
+                      mock.patch.object(channel, "told", return_value=True),
+                      mock.patch.object(places, "version_record", return_value={"cad": self.command}),
+                      mock.patch.object(places, "alive", return_value=True),
+                      mock.patch.object(update, "run_setup",
+                                        side_effect=lambda record, **kwargs: self.ran.append((record, kwargs)) or (0, ""))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.engine.busy = False
+        self.engine.worked = time.monotonic() - 1.0  # quiet past the (shortened) hour
+        self.engine.shell_path = os.pathsep.join(["/agent/bin", "/usr/bin"])
+        self.behind({"gemini": {"release": self.version, "why": "gemini: command not found", "at": "2026-11-13T10:00:00Z"}})
+
+    def behind(self, rows: dict) -> None:
+        receipt = self.root / "state" / "install-receipt.json"
+        receipt.write_text(json.dumps({"schema": 1, "behind": rows}), encoding="utf-8")
+        update._RECEIPT_READ[0] = None  # a write within the same tick reads again
+
+    def caught_up(self) -> list:
+        thread = self.job.catching
+        if thread is not None:
+            thread.join(30)
+        return self.ran
+
+    def test_an_app_behind_is_given_the_text_again_once_the_server_is_idle_and_only_once_a_day(self) -> None:
+        self.assertEqual(self.job.catch_up(self.engine), ["gemini"])
+        (record, kwargs), = self.caught_up()
+        self.assertEqual(record["cad"], self.command, "this version's own setup, as an update runs it")
+        self.assertEqual(kwargs["seconds"], update.CATCH_UP_BOUND, "bounded")
+        self.assertEqual(kwargs["environ"]["PATH"].split(os.pathsep)[0], "/agent/bin",
+                         "where the agent's shell finds the apps' command lines")
+        self.assertIsNone(self.job.catch_up(self.engine), "at most once a day")
+        kept = json.loads((self.root / "state" / "versions" / self.version / "data" / update.CAUGHT_UP).read_text(encoding="utf-8"))
+        kept["at"] -= update.CATCH_UP_SECONDS + 1
+        (self.root / "state" / "versions" / self.version / "data" / update.CAUGHT_UP).write_text(json.dumps(kept), encoding="utf-8")
+        self.assertEqual(self.job.catch_up(self.engine), ["gemini"], "a day later, again")
+        self.assertEqual(len(self.caught_up()), 2)
+
+    def test_nothing_runs_while_work_goes_on_or_for_an_app_behind_another_release(self) -> None:
+        self.engine.worked = time.monotonic()  # a command just ended: not idle
+        self.assertIsNone(self.job.catch_up(self.engine))
+        self.engine.worked = time.monotonic() - 1.0
+        self.engine.busy = True
+        self.assertIsNone(self.job.catch_up(self.engine))
+        self.engine.busy = False
+        self.behind({"gemini": {"release": "1.0.9", "why": "x", "at": "2026-11-13T10:00:00Z"}})
+        self.assertIsNone(self.job.catch_up(self.engine), "behind an older release: this version's setup is not its")
+        self.behind({})
+        self.assertIsNone(self.job.catch_up(self.engine), "none behind")
+        self.assertEqual(self.caught_up(), [])
+
+
+class QuietHourTest(unittest.TestCase):
+    """The hour an automatic update waits for is an hour with no command (``Daemon.ended``, ``Daemon.stamp``): every
+    request through a door but the servers' own asks, and every agent's tool call, starts it again."""
+
+    def test_a_short_tool_call_or_a_cad_status_inside_the_hour_resets_it_and_the_servers_own_asks_do_not(self) -> None:
+        from cad_server.engine import daemon
+        from cad_server.mcp.http import Session, Sessions
+
+        engine = daemon.Daemon(cap=1)
+        self.addCleanup(engine.supervisor.stop)
+        clock = [10000.0]
+        quiet = lambda: auto_updates.quiet(engine.worked, clock[0])  # noqa: E731
+
+        def door(message: dict) -> None:
+            line = json.dumps({**message, "token": engine.token}) + "\n"
+            daemon._serve(engine, io.BytesIO(line.encode()), io.BytesIO())
+
+        fake_time = SimpleNamespace(monotonic=lambda: clock[0], time=time.time, sleep=time.sleep)
+        with mock.patch.object(daemon, "time", fake_time):
+            engine.worked = 0.0
+            for internal in ({"op": "status", "internal": True}, {"op": "working"}, {"op": "pid"}, {"op": "bridge"}):
+                door(internal)
+            self.assertEqual(engine.worked, 0.0, "a server's, an updater's or a sweep's ask is no command")
+            self.assertTrue(quiet())
+            door({"op": "status"})  # `cad status`
+            self.assertEqual(engine.worked, 10000.0)
+            clock[0] += auto_updates.IDLE_SECONDS - 1
+            self.assertFalse(quiet(), "within the hour of the last command")
+            door({"op": "models"})
+            clock[0] += auto_updates.IDLE_SECONDS - 1
+            self.assertFalse(quiet())
+            # An agent's tool call through the CAD app's HTTP sessions, a second long, building nothing.
+            sessions = Sessions(engine=SimpleNamespace(worked=engine.stamp))
+            server = SimpleNamespace(sidebar_views=SimpleNamespace(close=lambda: None),
+                                     handle=lambda method, params, context: {"content": []})
+            sessions.sessions["held"] = Session(server=server, protocol="2025-11-25", client="codex-mcp-client")  # type: ignore[arg-type]
+            sessions.handle(_Request({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                      "params": {"name": "cad_view", "arguments": {}}}, "held"), _Response())
+            self.assertEqual(engine.worked, clock[0], "the call's end")
+            clock[0] += auto_updates.IDLE_SECONDS
+            sessions.handle(_Request({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                                      "params": {"name": "cad_sync", "arguments": {}}}, "held"), _Response())
+            self.assertTrue(quiet(), "a card's own call is no command")
+
+
+class _Request:
+    """An MCP request as the HTTP layer hands it to ``Sessions.handle``: a POST of one JSON-RPC message."""
+
+    def __init__(self, message: dict, session: str) -> None:
+        self.raw_method = "POST"
+        self._body = json.dumps(message).encode()
+        self._headers = {"mcp-session-id": session, "content-type": "application/json",
+                         "accept": "application/json, text/event-stream"}
+
+    def header(self, name: str) -> str:
+        return self._headers.get(name, "")
+
+    def body(self) -> bytes:
+        return self._body
+
+
+class _Response:
+    def send_json(self, status: int, body: dict) -> None:
+        self.sent = (status, body)
+
+    def send_empty(self, status: int, headers=()) -> None:
+        self.sent = (status, None)
+
+    def send_bytes(self, status: int, data: bytes, kind: str, headers=()) -> None:
+        self.sent = (status, json.loads(data))
+
+
 class DaemonTest(unittest.TestCase):
     def test_the_engine_asks_as_it_tends_itself_and_says_where_its_update_is(self) -> None:
         from cad_server.engine import daemon

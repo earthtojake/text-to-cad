@@ -20,7 +20,7 @@ telemetry turned on says the channel ``dev``.
 
 **The updater** (``told``): only the default channel has one (a named channel's copy is updated by whoever
 delivers it), only where the install command has run (its receipt), and never for a development build. A
-process with no version (a person's own environment) is the default's.
+process with no version (a person's own environment) is the default's, on a device the install command set up.
 """
 
 from __future__ import annotations
@@ -92,18 +92,55 @@ def told() -> bool:
 def default_version() -> bool:
     """Whether this process's version (``places.versioned``) is the default channel's as a command with no pin
     resolves it (``pointers.default``) on a device the install command set up (its receipt); a process with no
-    version is. Never raises."""
+    version is the default's, but only on such a device too (a person's own ``pip install cad-server`` or ``uvx``
+    run on a device the install command never set up has no install to update). Never raises."""
     from cad.engine.places import state_dir, versioned
 
     name = versioned()
-    if name is None:
-        return True
     try:
         from cad_server._internal import pointers
 
-        return pointers.default().version == name and (state_dir() / pointers.RECEIPT).is_file()
+        receipt = (state_dir() / pointers.RECEIPT).is_file()
+        if name is None:
+            return receipt
+        return pointers.default().version == name and receipt
     except Exception:  # noqa: BLE001 - a state folder it cannot read: told, as before
         return True
+
+
+# How long a process keeps what ``own`` read of the pointers before reading them again.
+OWN_SECONDS = 60.0
+_OWN: list = [float("-inf"), None]  # when ``own`` last read the pointers (monotonic), and what it found
+
+
+def own() -> str | None:
+    """The delivery channel a version's own use counts under where nothing names one -- the browser viewer's page,
+    which no pin or launcher carries (``analytics.Recorder``'s process-level counts): the one named channel that is
+    on this process's version, when the default channel's pointer does not name it (a version only a store's copy is
+    on: claude.ai's directory copy, which is skills alone, has the browser as its one interface); else None, the
+    default. A process with no version, the default's version, a version two named channels share, or pointers that
+    cannot be read: None. Read at most once every ``OWN_SECONDS``. Never raises."""
+    import time
+
+    now = time.monotonic()
+    if now - _OWN[0] < OWN_SECONDS:
+        return _OWN[1]
+    found = None
+    try:
+        from cad.engine.places import versioned
+
+        name = versioned()
+        if name is not None:
+            from cad_server._internal import pointers
+
+            if pointers.read(None) != name:  # the default channel's pointer: none names nothing
+                on = {pointer.channel for pointer in pointers.listing() if pointer.channel and pointer.version == name}
+                found = next(iter(on)) if len(on) == 1 else None
+    except Exception:  # noqa: BLE001 - pointers that cannot be read now: the default, as before
+        LOG.debug("could not read which channel is on this version", exc_info=True)
+        found = None
+    _OWN[0], _OWN[1] = now, found
+    return found
 
 
 def describe(channel: str | None = None, client: str | None = None, environ=None) -> dict[str, str]:

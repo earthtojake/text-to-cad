@@ -291,6 +291,79 @@ class UpdateJobTest(Fixture):
             self.assertEqual(self.wait(job, "failed", "restarting")["error"], str(refused))
         self.assertEqual(len(self.runs()), 1, "a release that could not be installed runs no setup")
 
+    def test_an_update_after_which_this_server_stays_ends_moved_with_the_new_default_s_address(self) -> None:
+        """A store's channel is still on this server's version (or work is in flight here): the setup moves the default
+        channel and this server stays. The update ends -- no spinner waits on a server that does not go -- saying
+        where the new default's server serves (started for it), with a link for its token; one whose server goes (its
+        door closed by the move) restarts, as before, the new server taking its port."""
+        import secrets
+
+        from cad.engine import places
+        from cad_server._internal import pointers, versions
+        from cad_server.viewer.engine_app import standing
+
+        self.installed()
+        command = self.setup_script()
+        token = secrets.token_urlsafe(32)
+        answered = {"ok": True, "url": "http://127.0.0.1:3246", "port": 3246, "token": token}
+        for stays, expected in ((True, "moved"), (False, "restarting")):
+            job = update.Update()
+            with self.subTest(stays=stays), mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                    mock.patch.object(update, "install", return_value={"cad": command}), \
+                    mock.patch.object(places, "versioned", return_value="1.1.0"), \
+                    mock.patch.object(pointers, "read", return_value="1.2.0"), \
+                    mock.patch.object(versions, "serves", return_value=stays), \
+                    mock.patch.object(versions, "start_server", return_value=True) as started, \
+                    mock.patch.object(versions, "ask", return_value=answered):
+                job.start()
+                state = self.wait(job, "moved", "restarting", "failed")
+                self.assertEqual(state["state"], expected, state)
+                if stays:
+                    self.assertEqual((state["target"], state["address"], state["progress"]), ("1.2.0", answered["url"], None))
+                    self.assertNotIn("token", state, "the token never leaves the server in the update's state")
+                    self.assertEqual(job.moved_token(), token, "a link for it signed by the page's application")
+                    from cad_server.viewer.http_app import create_cad_app
+
+                    (self.root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+                    page = create_cad_app(host="127.0.0.1", port=0, dist_dir=str(self.root))
+                    with mock.patch.object(update, "UPDATE", job), mock.patch("cad_server.updates.refresh"):
+                        read = page._version()["update"]
+                    self.assertEqual((read["state"], read["address"]), ("moved", answered["url"]))
+                    self.assertEqual(standing(token, "link", read["link"]), "ok", "a link the new server admits")
+                    started.assert_called_once_with("1.2.0")
+                else:
+                    self.assertIsNone(job.moved_token())
+                    started.assert_not_called()
+
+
+
+class StoreSessionTest(Fixture):
+    def test_a_session_a_store_s_launcher_opened_has_no_update_notice_button_or_switch_whatever_serves_it(self) -> None:
+        """A CAD app session on a named channel (its launcher's ``--channel``) shows no update: its copy is updated by
+        whoever delivers it, even where the default channel shares the server's version."""
+        from cad_server.mcp import server as mcp_server
+        from cad_server.viewer.http_app import create_cad_app
+
+        self.installed()
+        (self.root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+        app = create_cad_app(host="127.0.0.1", port=0, dist_dir=str(self.root))
+        notice = {"latest": "1.2.0", "version": "1.1.0"}
+        with mock.patch("cad_server.updates.notice", return_value=notice), \
+                mock.patch("cad_server.updates.refresh", return_value=None), \
+                mock.patch("cad_server._internal.channel.told", return_value=True):
+            self.assertEqual(app._version()["notice"], notice, "the default's session, and the browser page")
+            self.assertIsNotNone(app.settings()["updates"])
+            app.channel = "codex"
+            self.assertEqual((app._version()["notice"], app._version()["update"]), (None, None))
+            self.assertIsNone(app.settings()["updates"], "no switch")
+            app.server = SimpleNamespace(retire=lambda then=None: None)
+            status, said = app._update()
+            self.assertEqual((status, said["error"]), (409, "this text-to-cad has no updater"))
+            self.assertIsNone(mcp_server._stamped({}, updater=False)["notice"], "no notice in its launches")
+            self.assertEqual(mcp_server._stamped({})["notice"], notice)
+            session = mcp_server.Server(updater=False)
+            self.assertEqual(session._told({"content": []}), {"content": []}, "no line for a text app")
+
 
 if __name__ == "__main__":
     unittest.main()

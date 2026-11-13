@@ -37,6 +37,21 @@ def http_factory(server, host, port):
         raise
 
 
+def listen_also(server, host, port):
+    """Another listener of the engine's one HTTP application (``daemon.Daemon._take_port``): the application of the
+    server's own listener, its page token and its sessions, bound on ``port`` and serving in a thread of its own.
+    ``OSError`` where the port cannot be bound."""
+    import threading
+
+    from cad_server.viewer.handler import CadHTTPServer, make_handler_class
+
+    app = server.http.app
+    listener = CadHTTPServer((host, port), make_handler_class(app), app)
+    listener.daemon_threads = True
+    threading.Thread(target=listener.serve_forever, name="cad-http-also", daemon=True).start()
+    return listener
+
+
 def kernel(make):
     """The environment the engine's kernel processes run in (``cad_server._internal.base.kernel``)."""
     from cad_server._internal.base import kernel as made
@@ -57,6 +72,7 @@ def automatic(daemon):
         from cad_server._internal.update import UPDATE
 
         UPDATE.automatic(daemon)
+        UPDATE.catch_up(daemon)  # the apps a setup left behind, given its text again once the server is idle
     except Exception:  # noqa: BLE001 - the engine's tending never fails for an update
         pass
 
@@ -97,9 +113,13 @@ def shell(environ=None) -> str | None:
 
 # The apps an MCP handshake's client name (``clientInfo.name``) names, where it is not the app's own name, as
 # telemetry's receiver reads them too (``AGENT_APPS``, held equal by a test). Any other name is the app itself,
-# made a token (``_token``).
+# made a token (``_token``). Each is a name the code meets already: Codex's and Cursor's MCP clients
+# (``cad_server.mcp.host``), Claude Code's and Claude Desktop's, and the names Gemini CLI, Grok Build and VS Code
+# call themselves, by which the CAD app's page names its host -- VS Code's also as a batch of schema 10 or earlier
+# carries it, its spaces made ``-`` (``analytics._token``).
 APPS = {"codex-mcp-client": "codex", "cursor-vscode": "cursor", "claude-code": "claude-code",
-        "claude-ai": "claude-desktop"}
+        "claude-ai": "claude-desktop", "gemini-cli": "gemini", "grok-build": "grok", "visual studio code": "vscode",
+        "visual-studio-code": "vscode"}
 # Client names that are no MCP client's and name no app: the browser viewer's page names itself (``cad-viewer``,
 # ``cadgen-viewer`` before 0.10), and a client that could not say is ``unknown``.
 NO_APP = frozenset({"cad-viewer", "cadgen-viewer", "unknown"})

@@ -150,7 +150,7 @@ def flat_server() -> str | None:
         try:
             connection = client._connect(address)
             if connection is not None:
-                answers.append(client._exchange(connection, {"op": "status"}, address=address))
+                answers.append(client._exchange(connection, {"op": "status", "internal": True}, address=address))
         except (OSError, ValueError, ConnectionError, IndexError):
             pass
 

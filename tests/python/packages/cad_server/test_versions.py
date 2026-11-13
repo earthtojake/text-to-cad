@@ -927,6 +927,105 @@ class TelemetryAcrossVersions(Device):
         self.assertEqual(kept, [row], "handed on whole, still saying who counted it")
 
 
+    def test_a_no_said_through_0_11_10_after_the_import_is_this_version_s_no_and_nothing_is_sent(self) -> None:
+        """The default stays on 0.11.10 (automatic updates off), a store's copy at a newer version imports its settings
+        with sharing on, and the person runs `cad telemetry off`, which 0.11.10 answers, writing the state folder's
+        settings alone: the version honours it from its next count or send, and sends nothing."""
+        import time
+
+        from cad_server import analytics
+
+        told = {"telemetry": {"choice": "on", "disclosure": 1, "by": "cli", "decidedAt": time.time() - 60, "id": "an-id",
+                              "notifiedAt": 1.0, "notice": 1}}
+        self.data(X, told)
+        self.assertTrue(self.sharing(X))
+        sent: list = []
+        kept = {"answer": [told["telemetry"]["decidedAt"], 1.0], "batch": {"schema": 11, "batch": "b"}}
+        (places.data_dir(X) / analytics.KEPT).write_text(json.dumps(kept) + "\n", encoding="utf-8")
+        with mock.patch.object(places, "versioned", return_value=X), \
+                mock.patch("cad_server._internal.channel._source_tree", return_value=False), \
+                mock.patch.dict(os.environ, {"CI": "", "DO_NOT_TRACK": "", "CAD_TELEMETRY": ""}):
+            recorder = analytics.Recorder(process="viewer", send=lambda payload: sent.append(payload) or True)
+            recorder.viewed()  # counted under the answer it imported
+            # 0.11.10's `cad telemetry off`: its own settings file, the state folder's, and nothing else.
+            device = {"telemetry": {"choice": "off", "disclosure": 1, "by": "cli", "decidedAt": time.time()}}
+            (self.state / "settings.json").write_text(json.dumps(device), encoding="utf-8")
+            recorder.flush()
+            recorder.close()
+        self.assertEqual(sent, [], "neither what it noted nor the batch it kept is sent")
+        self.assertFalse(self.sharing(X))
+        x = json.loads((places.data_dir(X) / "settings.json").read_text(encoding="utf-8"))["telemetry"]
+        self.assertEqual((x["choice"], "id" in x, x["forget"]), ("off", False, ["an-id"]), "its id owed a deletion")
+        self.assertFalse((places.data_dir(X) / analytics.KEPT).exists())
+        # A yes said in the version afterwards is newer than the device's no: its own, kept.
+        with mock.patch.object(places, "versioned", return_value=X):
+            analytics.choose(True, by="cli")
+        self.assertTrue(self.sharing(X))
+
+    def test_the_viewer_page_counts_under_the_one_named_channel_on_its_version_when_the_default_is_not_on_it(self) -> None:
+        from cad_server import analytics
+        from cad_server._internal import channel
+
+        self.data(X)
+        self.data(Y)
+        pointers.write("claude", X, mirrored=False)
+        pointers.write(None, Y)
+
+        def page_channel(name: str) -> str:
+            channel._OWN[0] = float("-inf")  # read the pointers again
+            with mock.patch.object(places, "versioned", return_value=name), \
+                    mock.patch("cad_server._internal.channel._source_tree", return_value=False), \
+                    mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": name}):
+                recorder = analytics.Recorder(process="viewer", send=lambda payload: True)
+                recorder.started(client={"name": "cad-viewer", "version": name}, presentation="browser")
+                return recorder._source()[1]
+
+        self.assertEqual(page_channel(X), "claude", "only claude.ai's copy is on it: the browser is its interface")
+        self.assertEqual(page_channel(Y), "default")
+        pointers.write(None, X)
+        self.assertEqual(page_channel(X), "default", "the default is on it too")
+        pointers.write(None, Y)
+        pointers.write("codex", X, mirrored=False)
+        self.assertEqual(page_channel(X), "default", "two named channels share it: none is told apart")
+
+
+class TokenRotatedEverywhere(Device):
+    def test_every_version_s_data_and_the_state_folder_take_the_new_token_and_every_running_server_is_told(self) -> None:
+        """``cad server --rotate-token`` acts on the device: every version a server reads the token from, and the state
+        folder 0.11.10 and earlier read it from, get the new one; each running server is told to take it at once,
+        and one that cannot be told is said."""
+        import secrets
+
+        from cad_server.engine import daemon
+
+        before = secrets.token_urlsafe(32)
+        for name in (X, Y):
+            self.data(name)
+            registry.Registry(places.data_dir(name)).put_token(before)
+        registry.Registry(self.state).put_token(before)
+        self.present(Z)  # never started: it imports the new token as it starts
+        self.serving(X)
+        self.serving(Y)
+        asked: list = []
+
+        def ask(name, message, **_kwargs):
+            asked.append((name, message))
+            return {"ok": True} if name == X else {"failed": "unknown request 'token'"}
+
+        said: list[str] = []
+        with mock.patch.object(versions, "ask", side_effect=ask), \
+                mock.patch.object(versions, "ask_flat", return_value={"failed": "unknown request 'token'"}), \
+                mock.patch.object(places, "versioned", return_value=X):
+            token = daemon.rotate_token(told=said.append)
+        self.assertNotEqual(token, before)
+        for root in (places.data_dir(X), places.data_dir(Y), self.state):
+            self.assertEqual(registry.Registry(root).token(), token, root)
+        self.assertFalse((places.data_dir(Z) / registry.TOKEN).exists(), "a version not started writes nothing")
+        self.assertEqual(asked, [(X, {"op": "token"}), (Y, {"op": "token"})], "each running server told")
+        self.assertTrue(any(line.startswith(f"text-to-cad {Y}'s server could not take the new token") for line in said), said)
+        self.assertTrue(any("0.11.10 or earlier" in line for line in said), said)
+
+
 class DoctorReadsEveryVersion(Device):
     """``cad doctor`` is the one command that reads every version and channel; ``--prune`` forgets the named channels
     unused for 30 days, never the default, and removes the versions then unnamed."""

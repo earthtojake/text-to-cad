@@ -286,7 +286,19 @@ def _apps() -> list[str]:
             lost = providers.skills_lost(agent, got, machine)
             lines.append(f"app      {providers.label(agent)}: {providers.skills_words(agent, got, machine)}"
                          + (f"; {', '.join(lost)} not there now: run the install command again" if lost else ""))
+    behind = receipt.get("behind") if isinstance(receipt, dict) else None
+    for app, row in behind.items() if isinstance(behind, dict) else ():
+        if isinstance(row, dict):
+            when = str(row.get("at") or "").replace("T", " ").rstrip("Z")[:16]
+            lines.append(f"app      {providers.label(app)}: {BEHIND} text-to-cad {row.get('release') or '?'}: its setup "
+                         f"could not give it that release's text" + (f" ({when})" if when else "")
+                         + f": {row.get('why') or 'it failed'}; `cad update` gives it again (the default version's "
+                           "server tries again by itself once a day while idle)")
     return lines
+
+
+# How a line of ``_apps`` says an app is behind (the receipt's ``behind``): a warning in the report.
+BEHIND = "behind"
 
 
 def _command_path_hint(path: str) -> str:
@@ -851,7 +863,7 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
         checks.append(_check("sharing", INFO, sharing))
     # The plugin folder, and each agent app's copy of the plugin: the release it pins and where it comes from.
     checks += [_line(line, OK if line.startswith("plugin") and ", written " in line else None) for line in _plugin()]
-    checks += [_line(line) for line in _apps()]
+    checks += [_line(line, WARNING if line.partition(": ")[2].startswith(BEHIND + " ") else None) for line in _apps()]
     # The version this installation runs as: a development install's own name, else its release.
     return own_version() or installed, checks
 

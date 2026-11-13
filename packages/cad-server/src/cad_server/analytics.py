@@ -826,6 +826,7 @@ def status(*, path: Path | None = None, probe: bool = True, keep: bool = True,
     either way sends nothing.
     """
     path = path or settings_path()
+    _heed_device(path)
     forced = _environment(env)
     kept = _read(path)
     if kept is None:  # there, but unreadable now: neither sent under nor said
@@ -937,6 +938,35 @@ def inherit_no(path: Path) -> bool:
     except Exception:  # noqa: BLE001 - an import never stops for telemetry
         LOG.debug("could not keep the device's no in %s", path, exc_info=True)
         return False
+
+
+# What a versioned process last saw of the device's settings file (``_heed_device``), by its own settings' path: the
+# file's modified time and size, so the file is read again only when it changed.
+_DEVICE_SEEN: dict[str, tuple[int, int]] = {}
+
+
+def _heed_device(path: Path) -> None:
+    """A versioned process's own settings (``path``) told the device's no whenever it is newer than their answer
+    (``inherit_no``): a no said where 0.11.10 and earlier keep it -- the state folder's settings, which their ``cad
+    telemetry off`` writes, and ``everywhere`` too -- after this version imported its settings, is this version's
+    no as well, from the next count or send on. Asked wherever an answer is read to count or send (``status``,
+    which every spool, batch and send reads first), cheaply: one ``stat`` of that file, read only when it changed
+    since this process last looked. Nothing for a process with no version (its settings are that file), nor for
+    settings not this process's own (a test's, a tool's). Never raises."""
+    try:
+        from cad.engine.places import state_dir, versioned
+        from cad_server.settings import FILE
+
+        if versioned() is None or not _own(path):
+            return
+        found = os.stat(state_dir() / FILE)
+    except Exception:  # noqa: BLE001 - no file there (nothing said there), or none that can be read now
+        return
+    seen, key = (found.st_mtime_ns, found.st_size), str(path)
+    if _DEVICE_SEEN.get(key) == seen:
+        return
+    _DEVICE_SEEN[key] = seen
+    inherit_no(path)
 
 
 def hand_on(source: Path, target: Path) -> int:
@@ -1752,15 +1782,15 @@ class Recorder:
 
     def _source(self) -> Source:
         """Who counts a use noted now: the session's this thread notes it for (``of``), else this process's own --
-        the default channel, and the app the client it was started for names (``started``; a page's own names
-        none)."""
+        the channel its version is on (``channel.own``: the one named channel on it where the default is not, else
+        the default), and the app the client it was started for names (``started``; a page's own names none)."""
         found = getattr(self._local, "source", None)
         if found is not None:
             return found
-        from cad_server._internal.channel import describe
+        from cad_server._internal.channel import describe, own
 
         client = self._context.get("client") or {}
-        described = describe(None, client.get("name"), {})
+        described = describe(own(), client.get("name"), {})
         return (None, described["channel"], described["app"])
 
     def _tally(self, key: Source | None = None) -> _Tally:

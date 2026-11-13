@@ -23,6 +23,16 @@ vi.mock('@cad/ui/cad-viewer', async original => {
   };
 });
 
+// Each view's sync, as the page made it: its handlers, through which a test says the server answered refusing.
+const syncs = vi.hoisted(() => ({ handlers: [] as { connection?: (connected: boolean, refused?: string) => void }[] }));
+vi.mock('./host/sync', async original => {
+  const real = await original<typeof import('./host/sync')>();
+  return { ...real, createViewSync: ((...args: Parameters<typeof real.createViewSync>) => {
+    syncs.handlers.push(args[2]);
+    return real.createViewSync(...args);
+  }) as typeof real.createViewSync };
+});
+
 // The toasts a view says (the real viewer's Toaster draws them): what this page asks it to say.
 vi.mock('sonner', async original => ({ ...await original<object>(), toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
@@ -555,5 +565,46 @@ it('a switch that fails and goes back ends the card\'s restart: the update offer
   // The engine the failed switch started again: the card's own release, its update failed (`Update.recall`).
   update = { state: 'failed', target: '0.9.0', error: "text-to-cad 0.9.0's engine did not start" };
   await findByRole('button', { name: 'Update to 0.9.0' }, { timeout: 3000 });
+  expect(reload).not.toHaveBeenCalled();
+});
+
+it('an update whose server stays (a store\'s channel is on its version) ends the card\'s restart: done, a new thread to use it, no spinner, no other app loaded', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1' };
+  const reload = vi.fn(async () => {});
+  vi.stubGlobal('__cadShell', { reload });
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+  let update: Record<string, unknown> = { state: 'restarting', target: '0.9.0' };
+  let said: typeof notice | null = notice;
+  server.answers['/api/v1/local/update'] = () => ({ notice: said, release: '0.8.1', update });
+  server.answers['/api/v1/server'] = () => ({ notice: said, release: '0.8.1', update });
+  const { findByRole, findByText, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
+  const button = await findByRole('button', { name: 'Update to 0.9.0' });
+  await act(async () => button.click());
+  await findByRole('status', { name: 'Restarting with 0.9.0' });
+  // The setup moved the default channel and this server stays: no longer the one that updates, its notice gone.
+  update = { state: 'moved', target: '0.9.0', address: 'http://127.0.0.1:3246', link: 'l' };
+  said = null;
+  await findByText('Updated to 0.9.0. Start a new thread to use it.', {}, { timeout: 3000 });
+  expect(queryByRole('status', { name: 'Restarting with 0.9.0' })).toBeNull();
+  expect(queryByRole('button', { name: 'Update to 0.9.0' })).toBeNull();
+  expect(reload).not.toHaveBeenCalled();
+});
+
+it('a card whose launcher is left behind by the update it started (every call answered that the thread is stale) ends its restart: done, a new thread', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1' };
+  const reload = vi.fn(async () => {});
+  vi.stubGlobal('__cadShell', { reload });
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+  server.answers['/api/v1/local/update'] = () => ({ notice, release: '0.8.1', update: { state: 'restarting', target: '0.9.0' } });
+  server.answers['/api/v1/server'] = () => new Promise(() => {});  // its launcher answers nothing of the engine now
+  const { findByRole, findByText, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
+  const button = await findByRole('button', { name: 'Update to 0.9.0' });
+  await act(async () => button.click());
+  await findByRole('status', { name: 'Restarting with 0.9.0' });
+  const stale = 'this is text-to-cad 0.8.1, and its channel (default) is on text-to-cad 0.9.0 now: start a new thread; '
+    + 'if a new thread says the same, run `cad update`';
+  await act(async () => { syncs.handlers.at(-1)?.connection?.(false, stale); });
+  await findByText('Updated to 0.9.0. Start a new thread to use it.');
+  expect(queryByRole('status', { name: 'Restarting with 0.9.0' })).toBeNull();
   expect(reload).not.toHaveBeenCalled();
 });

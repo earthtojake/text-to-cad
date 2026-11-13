@@ -214,6 +214,9 @@ class EngineApp:
         self._default = None
         self._mcp = None
         self.session_factory = session_factory
+        # Told as an agent's tool call ends (``mcp.http.Sessions``): the engine's daemon stamps the end of a command
+        # for the quiet hour an automatic update waits for (``daemon.Daemon.stamp``). Nothing for an app of its own.
+        self.worked = lambda: None
         from cad_server import __version__
         from cad_server.analytics import Recorder
         # Each sender's own recorder, so a batch says who sent it (``cad_server.analytics.PROCESSES``): the
@@ -260,6 +263,14 @@ class EngineApp:
 
     def endpoint(self):
         return {'ok': True, 'url': self.server.url, 'port': self.server.port, 'token': self.token}
+
+    def retoken(self, token):
+        """The user's page token replaced (``cad server --rotate-token``, ``daemon.Daemon.retoken``): taken at once,
+        by every listener of this application. A link or a browser session the one before signed is refused from now
+        on, and the session's cookie is another's name."""
+        with self.lock:
+            self.token = token
+            self.cookie = 'cad-' + _mac(token, 'cookie')[:12]
 
     def link(self):
         """A fresh link for a URL this engine prints or opens: good for ``LINK_SECONDS``."""

@@ -219,12 +219,17 @@ the launch's `_meta` first (`host/capability.ts`).
   (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
   fails says why in a toast, and the engine stays as it was; one whose switch fails brings
   the release before back, and the card, reading its own release again with the update failed
-  (`useUpdate`'s `settle`), says why in the same toast and offers the button again.
+  (`useUpdate`'s `settle`), says why in the same toast and offers the button again. The card's launcher belongs
+  to the version the update leaves: where every call through it answers that the thread is stale, or the engine
+  says the update is done and it stays (`moved`: another channel is still on its version), the restart ends and
+  the card says the update is done and to start a new thread (`updateMoved`) -- no spinner waits on an answer the
+  thread cannot get.
   A text client gets one line with its first `cad_show` result instead, naming the install
   command. Only the
   default channel's version, on a device where the install command has run, has an updater
   (`cad_server/_internal/channel.py`'s `told`): every other server's card shows no notice, no button
-  and no automatic-updates switch (its settings answer `updates` null). A store's copy is on the store's
+  and no automatic-updates switch (its settings answer `updates` null), and neither does a card whose launcher was
+  started with `--channel`, whatever version serves it (the session's channel, `ViewerApp._updater`). A store's copy is on the store's
   own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
   name -- and is updated by the store alone; the Cursor Marketplace reads the repository as it is, our
   own text, so its copy is on the default channel. The telemetry: the server
