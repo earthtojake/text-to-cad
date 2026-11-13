@@ -209,8 +209,10 @@ So a picture guide has two outputs: the PDF to print, and beside it a 3D page,
 file to open or send, drawn like the PDF: the same line art on a camera with no
 perspective, the step's new parts in blue, its big number and parts box (the PDF's
 own picture of each part, its screws by size, its tools), What you need before the
-first step, and the same words and notes. It turns in your hands, and Next, Back or
-Play all go through the steps. Each part flies in along its step's `arrow=` with
+first step, and the same words and notes. It opens in that line art (Hidden line) and
+switches to any of the CAD Viewer's display modes: Solid, Shaded, Parts, X-ray,
+Hidden line, Wireframe, with the step's parts blue in each. It turns in your hands,
+and Next, Back or Play all go through the steps. Each part flies in along its step's `arrow=` with
 the PDF's thin line to its place, and a step with none appears in place. The GLB is the same build as one animation, `assemble`, for
 the viewer or anything that plays a GLB. Neither shows hardware the model does not
 carry.

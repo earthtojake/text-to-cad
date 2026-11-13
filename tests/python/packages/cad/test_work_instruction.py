@@ -1135,6 +1135,17 @@ class PlayerTests(_Assembly):
         for present in ("Bracket", "Fit the bracket", "What you need"):
             self.assertIn(present, page)
 
+    def test_the_page_offers_the_viewer_s_display_modes_by_its_names(self) -> None:
+        from cad._internal.work_instruction_player import page
+
+        text = page(self._guide(), b"glb")
+        viewer = repo_path("packages/ui/src/renderers/kit/view-settings/DisplayModeOptions.js").read_text(encoding="utf-8")
+        modes = re.findall(r'value: "([\w-]+)", key: "[\w.-]+", label: "([^"]+)", title: "([^"]+)"', viewer)
+        self.assertEqual(len(modes), 6)
+        for value, label, title in modes:
+            self.assertIn(f'value: "{value}", label: "{label}", title: "{title}"', text, label)
+        self.assertIn('let mode = "hidden-line";', text, "it opens on the PDF's line art")
+
     def test_the_page_shows_each_step_s_parts_box_with_the_pdf_s_pictures(self) -> None:
         import json
 

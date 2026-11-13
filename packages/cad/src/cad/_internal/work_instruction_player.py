@@ -169,6 +169,12 @@ footer button:disabled { border-color: var(--faint); color: var(--faint); cursor
 footer #next { background: var(--ink); color: var(--paper); }
 footer #next:disabled { border-color: var(--faint); background: var(--paper); color: var(--faint); }
 button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+#modes { position: absolute; left: 24px; bottom: 14px; display: flex; gap: 4px; padding: 4px;
+  border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); }
+#modes button { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 9px; border: 0; border-radius: 7px;
+  background: none; color: var(--ink); font: 12px var(--sans); cursor: pointer; }
+#modes button svg { width: 18px; height: 18px; flex: none; }
+#modes button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
 #fail { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; color: var(--soft); text-align: center; }
 @media (max-width: 760px) {
   body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 52vh minmax(0, 1fr); }
@@ -182,7 +188,8 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .tile b { font-size: 11px; } .tile span { display: none; }
   .row { margin-top: 3px; gap: 6px; font-size: 11px; } .row svg { width: 24px; height: 13px; } .row small { display: none; }
   li > button { padding: 12px 16px; } .more { padding: 0 16px 12px 60px; } footer { padding: 12px 16px; }
-  #hint { right: 16px; bottom: 10px; }
+  #hint { display: none; }
+  #modes { left: 12px; bottom: 8px; } #modes button { padding: 0 7px; } #modes button span { display: none; }
 }
 </style>
 <script type="importmap">
@@ -192,6 +199,7 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 </head>
 <body>
 <main id="stage"><div id="card"><div id="num"></div><div id="box" class="box"></div></div>
+  <div id="modes" role="radiogroup" aria-label="Display"></div>
   <div id="hint">Drag to turn it.</div><div id="fail"></div></main>
 <aside>
   <header><h1 id="title"></h1><p id="scope"></p></header>
@@ -296,7 +304,53 @@ const rows = data.steps.map((step, index) => {
   return row;
 });
 
-let now = -1, time = 0, moving = null, playing = false, seek = () => {}, glow = () => {};
+let now = -1, time = 0, moving = null, playing = false, seek = () => {}, glow = () => {}, paint = () => {};
+
+// The CAD Viewer's display modes, by its names, words and icons: the same sphere drawn as each
+// mode draws a model. Hidden line is the PDF's line art, and the page opens on it.
+const SPHERE = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ` +
+  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const SHADE = '<path d="M12 3a9 9 0 0 1 0 18a1.35 9 0 0 0 0-18Z" fill="currentColor" fill-opacity="0.45" stroke="none"/>';
+const EQUATOR = "M3 12a9 3.5 0 0 0 18 0";
+const MODES = [
+  { value: "solid", label: "Solid", title: "Shaded surfaces with visible CAD edges",
+    icon: SPHERE(`${SHADE}<circle cx="12" cy="12" r="9"/><path d="${EQUATOR}"/>`) },
+  { value: "shaded", label: "Shaded", title: "Shaded surfaces, no edges",
+    icon: SPHERE(`<circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.12" stroke-opacity="0.45"/>${SHADE}`) },
+  { value: "parts", label: "Parts", title: "Each part its own colour, with visible CAD edges",
+    icon: SPHERE('<path d="M3 12a9 9 0 0 1 18 0a9 3.5 0 0 1-18 0Z" fill="currentColor" fill-opacity="0.5" stroke="none"/>' +
+      '<path d="M3 12a9 3.5 0 0 0 18 0a9 9 0 0 1-18 0Z" fill="currentColor" fill-opacity="0.15" stroke="none"/>' +
+      `<circle cx="12" cy="12" r="9"/><path d="${EQUATOR}"/>`) },
+  { value: "xray", label: "X-ray", title: "Transparent surfaces with visible and hidden CAD edges",
+    icon: SPHERE(`<circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.12"/><path d="${EQUATOR}"/>` +
+      '<path d="M3 12a9 3.5 0 0 1 18 0" stroke-dasharray="1.5 2" stroke-opacity="0.55"/>') },
+  { value: "hidden-line", label: "Hidden line", title: "Visible contours with obscured edges removed",
+    icon: SPHERE(`<circle cx="12" cy="12" r="9"/><path d="${EQUATOR}M12 3a3.5 9 0 0 0 0 18"/>`) },
+  { value: "wireframe", label: "Wireframe", title: "All CAD edges through the model",
+    icon: SPHERE(`<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a3.5 9 0 0 0 0 18M12 3a3.5 9 0 0 1 0 18${EQUATOR}"/>`) },
+];
+let mode = "hidden-line";
+try { const kept = localStorage.getItem("work-instruction-display"); if (MODES.some((m) => m.value === kept)) mode = kept; } catch {}
+const modeButtons = MODES.map((option) => {
+  const button = el("button");
+  button.setAttribute("role", "radio");
+  button.title = option.title;
+  button.setAttribute("aria-label", option.label);
+  button.innerHTML = option.icon;
+  button.append(el("span", "", option.label));
+  button.addEventListener("click", () => {
+    mode = option.value;
+    try { localStorage.setItem("work-instruction-display", mode); } catch {}
+    showMode();
+  });
+  $("modes").append(button);
+  return button;
+});
+function showMode() {
+  MODES.forEach((option, index) => modeButtons[index].setAttribute("aria-checked", String(option.value === mode)));
+  paint();
+}
+showMode();
 
 function mark() {
   rows.forEach((row, index) => {
@@ -381,6 +435,7 @@ try {
   const { LineSegments2 } = await import("three/addons/lines/LineSegments2.js");
   const { LineSegmentsGeometry } = await import("three/addons/lines/LineSegmentsGeometry.js");
   const { LineMaterial } = await import("three/addons/lines/LineMaterial.js");
+  const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
 
   const stage = $("stage");
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -469,21 +524,40 @@ try {
   });
   seek(end);
 
-  // Line art: white faces, every crease inked, the outline round each part a little heavier.
+  // Each mesh carries every look a mode needs: white paper (Hidden line), its own colour shaded
+  // (Solid, Shaded, Parts), glass (X-ray); its creases inked, and the outline round it a little
+  // heavier. A mode picks which show; X-ray and Wireframe draw the creases through the model.
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.9;
   const creaseInk = new LineMaterial({ color: 0x111111, linewidth: 1.5 });
+  const creaseNew = new LineMaterial({ color: new THREE.Color("__FILL__"), linewidth: 1.5 });
   const hullInk = new THREE.ShaderMaterial({
     uniforms: { thickness: { value: 1.6 }, resolution: { value: new THREE.Vector2(1, 1) } },
     vertexShader: HULL_VERTEX, fragmentShader: HULL_FRAGMENT, side: THREE.BackSide,
   });
+  // Parts' own colours: none blue (blue is what a step adds), none red, amber or green.
+  const PARTS = ["#c9b8e8", "#9fd3cc", "#ecb8cf", "#e3d3b4", "#b9a0c9", "#cfc9c0"].map((hex) => new THREE.Color(hex));
+  const owner = new Map();  // mesh -> { step, index }: the step that adds its part, and the part's place
+  let count = 0;
+  added.forEach((parts, step) => parts.forEach((part) => {
+    const index = count++;
+    part.traverse((mesh) => { if (mesh.isMesh && !owner.has(mesh)) owner.set(mesh, { step, index }); });
+  }));
   const meshes = [];
   gltf.scene.traverse((mesh) => { if (mesh.isMesh) meshes.push(mesh); });
+  const looks = new Map();
+  const behind = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
   for (const mesh of meshes) {
     if (!mesh.geometry.attributes.normal) mesh.geometry.computeVertexNormals();
-    mesh.material = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1,
-                                                  polygonOffsetUnits: 1 });
-    const creases = new THREE.EdgesGeometry(mesh.geometry, 30);
-    mesh.add(new LineSegments2(new LineSegmentsGeometry().fromEdgesGeometry(creases), creaseInk));
-    mesh.add(new THREE.Mesh(mesh.geometry, hullInk));
+    const own = mesh.material.color ? mesh.material.color.clone() : new THREE.Color(0xc8c8c8);
+    const creases = new LineSegments2(
+      new LineSegmentsGeometry().fromEdgesGeometry(new THREE.EdgesGeometry(mesh.geometry, 30)), creaseInk);
+    const hull = new THREE.Mesh(mesh.geometry, hullInk);
+    mesh.add(creases, hull);
+    looks.set(mesh, { own, creases, hull,
+      paper: new THREE.MeshBasicMaterial({ color: 0xffffff, ...behind }),
+      shade: new THREE.MeshStandardMaterial({ color: own, roughness: 0.6, metalness: 0, ...behind }),
+      glass: new THREE.MeshBasicMaterial({ color: own, transparent: true, opacity: 0.18, depthWrite: false }) });
   }
 
   // The model is framed in the room the step's card leaves it: below the card or beside it,
@@ -501,7 +575,7 @@ try {
     Object.assign(camera, { left: -x / scale, right: (width - x) / scale, top: y / scale, bottom: -(height - y) / scale });
     camera.updateProjectionMatrix();
     const pixels = renderer.getDrawingBufferSize(new THREE.Vector2());
-    for (const ink of [creaseInk, lineInk]) ink.resolution.set(width, height);
+    for (const ink of [creaseInk, creaseNew, lineInk]) ink.resolution.set(width, height);
     hullInk.uniforms.resolution.value.copy(pixels);
     hullInk.uniforms.thickness.value = 1.6 * renderer.getPixelRatio();
   };
@@ -510,13 +584,33 @@ try {
   watch.observe(stage);
   watch.observe($("card"));
 
-  const blue = new THREE.Color("__FILL__");  // what a step adds, as the PDF's pictures show it
+  const blue = new THREE.Color("__FILL__");  // what a step adds, as the PDF's pictures show it, in every mode
   const white = new THREE.Color(0xffffff);
-  const lit = (part, on) => part.traverse((mesh) => {
-    if (mesh.isMesh && mesh.material.isMeshBasicMaterial) mesh.material.color.copy(on ? blue : white);
-  });
+  paint = () => {
+    const through = mode === "xray" || mode === "wireframe";
+    creaseInk.depthTest = creaseNew.depthTest = !through;
+    for (const [mesh, look] of looks) {
+      const mine = owner.get(mesh);
+      const fresh = mine !== undefined && mine.step === now;
+      if (mode === "hidden-line") {
+        mesh.material = look.paper;
+        look.paper.color.copy(fresh ? blue : white);
+      } else if (mode === "xray" || mode === "wireframe") {
+        mesh.material = look.glass;
+        look.glass.color.copy(fresh ? blue : look.own);
+        look.glass.opacity = fresh ? 0.4 : 0.18;
+      } else {
+        mesh.material = look.shade;
+        look.shade.color.copy(fresh ? blue : mode === "parts" ? PARTS[(mine?.index ?? 0) % PARTS.length] : look.own);
+      }
+      mesh.material.visible = mode !== "wireframe";
+      look.creases.visible = mode !== "shaded";
+      look.creases.material = fresh && through ? creaseNew : creaseInk;
+      look.hull.visible = mode === "hidden-line" || mode === "solid" || mode === "parts";
+    }
+  };
   glow = (index) => {
-    added.forEach((parts, at) => parts.forEach((part) => lit(part, at === index)));
+    paint();
     guides.forEach((group, at) => { group.visible = at === index; });
   };
 
