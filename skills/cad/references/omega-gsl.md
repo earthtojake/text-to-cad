@@ -59,8 +59,8 @@ return min(skin, infill);
   lattice, 1)`): a sharp `min` leaves surfaces passing through each other where they cross.
 - The `lattice` package has the lattices: `lattice.solidify(tpms.gyroid([8, 8, 8]), 0, 1.0)` is a 1 mm gyroid
   sheet, `lattice.solidify(beam.octet([8, 8, 8]), 0.8)` octet struts of 0.8 mm radius; a `wall` that is a field
-  grades it. In omega-core 0.1.1 `beam.octet` meshes non-manifold where its struts meet, at any depth;
-  `beam.bcc` and the TPMS lattices mesh clean. A lattice cut by a body's outline leaves loose fragments (`cad stl dfm`: `several_solids`).
+  grades it. A strut lattice cut sharply by a shell or a box can go non-manifold where the cut just grazes
+  a strut; blended into its shell (`unionRound(shell, struts, 1)`) it meshes clean. A lattice cut by a body's outline leaves loose fragments (`cad stl dfm`: `several_solids`).
 - Two shapes that only touch, face to face, mesh as two bodies: overlap them.
 - A mesh holds no tolerance. A 6 mm bore comes out 5.989 to 6.011 mm (H7 is 6.000 to 6.012) and `thread.male`
   an M6 at 6.015 mm over the crests: bores, threads and fits are modelled in build123d.
