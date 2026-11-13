@@ -197,6 +197,14 @@ model that returns 2D geometry, a profile or a flat pattern, and a solid is refu
 ([2D profiles and DXF](references/2d-profiles-and-dxf.md)). An STL or 3MF for printing a part with fits takes
 `--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)); a
 GLB for another renderer takes `--tolerance MM --angle DEG` ([a GLB for another renderer](references/exports.md#a-glb-for-another-renderer)).
+Those options mesh a GLB, an STL or a 3MF and nothing else, so an export that takes them names
+only those files: a STEP, an xbf or a DXF among them refuses the whole export, nothing written.
+Write the other files in an export of their own:
+
+```bash
+cad model export "$ID" STEP/bracket.step GLB/bracket.glb
+cad model export "$ID" STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
+```
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `xbf.read`. A restart needs none: the
