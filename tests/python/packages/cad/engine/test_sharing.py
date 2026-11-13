@@ -30,6 +30,17 @@ def _nodes(shape):
     return found
 
 
+def _held(shape):
+    """The TShapes a compound holds, in order."""
+    from OCP.TopoDS import TopoDS_Iterator
+
+    held, parts = [], TopoDS_Iterator(shape.wrapped, False, False)
+    while parts.More():
+        held.append(parts.Value().TShape())
+        parts.Next()
+    return held
+
+
 class MemoCase(unittest.TestCase):
     def setUp(self) -> None:
         memo.install()
@@ -72,7 +83,11 @@ class PlacementTest(MemoCase):
             self.assertEqual([node.label for node in nodes], [node.label for node in sources])
             for node, source in zip(nodes, sources):
                 self.assertIsNot(node, source)
-                self.assertTrue(node.wrapped.TShape() == source.wrapped.TShape(), node.label)
+                if node.children and hasattr(bd.Shape, "_placed"):
+                    # build123d 0.14 rebuilds a placed assembly's compound from its children.
+                    self.assertTrue(_held(node) == [child.wrapped.TShape() for child in node.children], node.label)
+                else:
+                    self.assertTrue(node.wrapped.TShape() == source.wrapped.TShape(), node.label)
                 self.assertEqual(node.wrapped.Orientation(), source.wrapped.Orientation())
             self.assertEqual(tuple(nodes[2].color), tuple(sources[2].color))
         moved, located = placements[:2]
@@ -92,16 +107,23 @@ class PlacementTest(MemoCase):
 
 class CopyOnWriteTest(MemoCase):
     @staticmethod
-    def _model():
+    def _box():
         import build123d as bd
         from OCP.BRep import BRep_Builder
-        from OCP.ShapeFix import ShapeFix_Shape
         from OCP.TopoDS import TopoDS
 
         box = bd.Solid.make_box(1, 1, 1)
         builder = BRep_Builder()
         for edge in box.edges():  # what ShapeFix_Shape fixes in the shape it is given, in place
             builder.SameParameter(TopoDS.Edge(edge.wrapped), False)
+        return box
+
+    @classmethod
+    def _model(cls):
+        import build123d as bd
+        from OCP.ShapeFix import ShapeFix_Shape
+
+        box = cls._box()
         first = box.moved(bd.Location((5, 0, 0)))
         second = box.moved(bd.Location((10, 0, 0)))
         fixer = ShapeFix_Shape(first.wrapped)
@@ -123,6 +145,31 @@ class CopyOnWriteTest(MemoCase):
         self.assertTrue(first.wrapped.TShape() == second.wrapped.TShape())
         self.assertEqual(self._flags(fixed), {True}, "the fix ran")
         self.assertEqual(self._flags(second), {False}, "and left the other placement as it was")
+
+    def test_a_maker_given_any_node_of_a_placed_assembly_leaves_the_source_as_it_was(self) -> None:
+        import build123d as bd
+        from OCP.ShapeFix import ShapeFix_Shape
+
+        placements = {
+            "moved": lambda outer: outer.moved(bd.Location((5, 0, 0))),
+            "located": lambda outer: outer.located(bd.Location((5, 0, 0))),
+            "copy": copy.copy,
+            "deepcopy": copy.deepcopy,
+        }
+        for name, place in placements.items():
+            for depth in range(3):  # the assembly, the compound in it, the part in that
+                memo.clear()
+                for build in ("made", "served"):  # the second build's placement is the memo's hit
+                    with self.subTest(name, depth=depth, build=build), memo.run(None):
+                        box = self._box()
+                        source = bd.Compound(children=[bd.Compound(children=[box])])
+                        node = place(source)
+                        for _ in range(depth):
+                            node = node.children[0]
+                        fixer = ShapeFix_Shape(node.wrapped)
+                        fixer.Perform()
+                        self.assertEqual(self._flags(bd.Compound(fixer.Shape())), {True}, "the fix ran")
+                        self.assertEqual(self._flags(box), {False}, "and left the source as it was")
 
     def test_without_the_copy_the_fix_changes_every_placement(self) -> None:
         memo.clear()
