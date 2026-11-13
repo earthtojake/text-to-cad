@@ -9,6 +9,11 @@ shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations
 ``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
 ``doctor``, ``plugin``, ``viewer``, ``telemetry``).
 
+A command line may start with a pin, ``cad +<version>[@<channel>] ...``, as every command a skill runs does:
+the ``cad`` command runs the version it names, and that version reads it here before anything else
+(``cad_server._internal.pins``): a pin to another version is refused (exit 5), and the pin's channel is moved to
+this version where it is behind it, or the command refused as stale where it is ahead (exit 4).
+
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the
 console and module entry points cannot drift.
@@ -234,6 +239,20 @@ def _output_closed() -> int:
 def _main(argv: list[str]) -> int:
     _harden_std_stream_errors()
 
+    # A pinned command, `cad +<version>[@<channel>] ...`: the pin names this version, or nothing runs; its
+    # channel is this command's (`cad_server._internal.pins`, imported only for one: a command imports no more
+    # than it uses).
+    pin = None
+    if argv[:1] and argv[0].startswith("+"):
+        from cad_server._internal import pins
+        from cad_server._internal.cli_errors import Failure, wants_json, write
+
+        try:
+            pin, argv = pins.take(argv)
+            pins.check(pin)
+        except Failure as failure:
+            return write(failure, prog="cad", as_json=wants_json(argv))
+
     if not argv or argv[0] in {"-h", "--help"}:
         sys.stdout.write(_usage())
         return 0
@@ -241,12 +260,13 @@ def _main(argv: list[str]) -> int:
         return _main([*argv[1:], "--help"]) if argv[1:] else _main([])
 
     if argv[0] in {"-V", "--version"}:
-        # The installation's own version, as doctor's header says it: a development install's
-        # name (0.8.0-dev.<stamp>), so two installations are told apart; else the package's.
+        # The version this is: the installed version it belongs to, the name a pin names it by; else the
+        # installation's own version, as doctor's header says it: a development install's name
+        # (0.8.0-dev.<stamp>), so two installations are told apart; else the package's.
         from cad_server import __version__
-        from cad_server._internal.installations import own_version
+        from cad_server._internal import pins
 
-        sys.stdout.write(f"cad {own_version() or __version__}\n")
+        sys.stdout.write(f"cad {pins.own() or __version__}\n")
         return 0
 
     command, rest = argv[0], argv[1:]
@@ -266,6 +286,16 @@ def _main(argv: list[str]) -> int:
     from cad_server._internal.cli_errors import options
 
     helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
+    # The pin's channel made to run this version: equal, nothing; newer, or its first use, moved to it; older, the
+    # chat's copy of the skill is stale and nothing runs (`pins.apply`). Help reads no pointer.
+    if pin is not None and not helping:
+        from cad_server._internal import pins
+        from cad_server._internal.cli_errors import Failure, wants_json, write
+
+        try:
+            pins.apply(pin)
+        except Failure as failure:
+            return write(failure, prog="cad", as_json=wants_json(rest))
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:

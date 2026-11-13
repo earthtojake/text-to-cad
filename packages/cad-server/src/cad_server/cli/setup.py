@@ -77,10 +77,12 @@ the person's first build after the engine switched by itself) and stops there, n
 whole, once the engine is idle.
 
 ``--add [--quiet]`` installs this release and stops (``cad_server._internal.versions.add``): its folder,
-``versions/<release>``, made present -- its server and kernel environments --, and nothing else: no step above,
-no pointer, no app, no setting, no receipt. A skill's setup block and the install command's ``--add X`` run it
-(``uvx --from cad-server==X cad setup --add``). Exit 3 where this shell cannot install it (an agent's sandbox, no
-uv, no network), with the command to run outside it.
+``versions/<release>``, made present -- its server and kernel environments --, and the ``cad`` command written
+where it is missing or of an older revision, so a device whose first contact is a skill's setup step can run it;
+nothing else: no step above, no pointer, no app, no setting, no receipt. A skill's setup block and the install
+command's ``--add X`` run it, and the ``cad`` command does for a pinned version it lacks (``uvx --from
+cad-server==X cad setup --add --quiet``). Exit 3 where this shell cannot install it (an agent's sandbox, no uv, no
+network), with the command to run outside it.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
@@ -202,8 +204,9 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             # The engine's own run, for its update button (``cad_server._internal.update``): no switch, progress on stdout.
             parser.add_argument("--engine-update", action="store_true", help=argparse.SUPPRESS)
             parser.add_argument("--add", action="store_true",
-                                help="install this release in its own folder and stop: no app, no default, no "
-                                     "setting changed (a skill's setup block, and the install command's --add)")
+                                help="install this release in its own folder, and the cad command, and stop: no "
+                                     "app, no default, no setting changed (a skill's setup block, and the install "
+                                     "command's --add)")
             parser.add_argument("--quiet", action="store_true", help="with --add: say nothing unless it fails")
     parser.add_argument("--json", action="store_true",
                         help="print the plan and what was done as JSON on stdout (progress goes to stderr)")

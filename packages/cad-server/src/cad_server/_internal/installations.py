@@ -16,15 +16,23 @@ starts fine there. So an installation registers itself, and one command runs the
   install command run again) points it at the release it sets up, through the switch
   (``cad_server._internal.switch``); a client that finds none -- no installation before it -- points it
   at itself once (``bootstrap``).
-- ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
-  script that runs the current installation's interpreter with ``-m cad_server._internal.proxy`` (with
-  no current one, the one registered last), which runs that installation's ``cad``. Every version
-  writes the same file (``REVISION``), so the proxy is no installation's. On Windows it is
-  ``cad.exe``, the same logic in Python, run by a Python of its own beside it (``cad-launcher``): see
-  "the Windows command" below.
+- ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy -- the ``cad`` command --, a short
+  ``sh`` script every future version is run through, so what it does is small and kept stable. It reads only
+  the first argument. A pin, ``cad +<version>[@<channel>] ...``, runs that version's own ``cad`` (its code
+  marker, ``versions/<version>/code/cad-version.json``, names it) with the whole command line, which reads the pin
+  (``cad_server._internal.pins``); a version not installed is installed by its own release first (``uvx ...
+  --from cad-server==<version> cad setup --add --quiet``), unless its channel's pointer names a newer one already
+  (stale: said, nothing installed); and it never runs another version for a pin. With no pin, the default
+  channel's version (``pointers.default``'s rule): its pointer; else, where the install command has run, the
+  installation the layout of 0.11.10 and earlier names current, run as that layout's command ran it (``python -m
+  cad_server._internal.proxy``); else the newest version installed. Every version writes the same file
+  (``REVISION``), so the proxy is no installation's, and one of an earlier revision never replaces one of a later.
+  On Windows it is ``cad.exe``, the same logic in Python, run by a Python of its own beside it
+  (``cad-launcher``): see "the Windows command" below.
 
 The records and the proxy are written at install moments only: ``cad setup`` (the release it
-sets up), ``cad doctor``, the skills' one-time step, which says what it found, and the CAD app's
+sets up), ``cad setup --add`` (the proxy alone, ``versions.add``), ``cad doctor``, the skills' one-time step, which
+says what it found, and the CAD app's
 server (``cad-mcp``) as it starts (:func:`startup`), which the host does outside any sandbox:
 that one writes the proxy, and registers itself only where no installation is current. A folder
 either cannot write (a sandbox's) is skipped, silently by the server and said by ``doctor``. No
@@ -57,9 +65,10 @@ WINDOWS = os.name == "nt"
 # earlier, so an older installation's server starting never undoes a newer one's proxy. 8: its line with
 # no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII. 10: the cmd reads
 # the state folder in the user's own folder, out of the local application data (``cad.engine.places``).
-# 11: on Windows, cad.exe and a Python of its own in place of cad.cmd, a batch file (the sh is 9's).
+# 11: on Windows, cad.exe and a Python of its own in place of cad.cmd, a batch file (the sh is 9's). 12: the pin,
+# ``cad +<version>[@<channel>]``, and the versions in their own folders (``versions``, ``pointers``).
 MARK = "cad proxy: "
-REVISION = 11
+REVISION = 12
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -491,30 +500,104 @@ def bootstrap(version: str, folder=None) -> bool:
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cad command: runs the current installation of text-to-cad's server (cad_server._internal.proxy),
-# else the one registered last. Every release writes this same file (cad setup, cad doctor, the
-# CAD app's server).
+# The cad command. `cad +<version>[@<channel>] ...` runs that version of text-to-cad and no other: its own cad,
+# which reads the pin. A version not installed is installed first, by its own release, unless its channel is
+# on a newer one already. With no pin: the default channel's version. Every release with pinned commands writes this
+# same
+# file (cad setup, cad setup --add, cad doctor); a release whose revision is older never replaces it.
 if [ -n "$CAD_STATE_DIR" ]; then state=$CAD_STATE_DIR
 elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cad"
 else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cad"
 fi
-current=$(sed -n '1p' "$state/installations/current" 2>/dev/null)
-case $current in ''|*[!0-9A-Za-z.+_-]*) current= ;; esac
-if [ -n "$current" ]; then
-  record="$state/installations/$current.json"
-  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
-  console=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
-  [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
+say() {{ printf 'cad: %s\\n' "$1" >&2; exit "$2"; }}
+# Whether version $1 is installed: its code marker, written last, and the Python and cad it names (a key a line).
+present() {{
+  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/versions/$1/code/cad-version.json" 2>/dev/null)
+  cad=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/versions/$1/code/cad-version.json" 2>/dev/null)
+  [ -x "$python" ] && [ -f "$cad" ]
+}}
+# Version $1, as present found it, run with the arguments after it: a name of characters no release has (a
+# development build's) told to it, which its code cannot know; none told to a release.
+run() {{
+  case $1 in
+  *[!0-9.abcoprst]*) CAD_INSTALLATION_VERSION=$1; export CAD_INSTALLATION_VERSION ;;
+  *) unset CAD_INSTALLATION_VERSION ;;
+  esac
+  shift
+  exec "$python" "$cad" "$@"
+}}
+# Whether version $1's release numbers are below version $2's (a tie is not).
+older() {{
+  awk -v a="$1" -v b="$2" 'function n(v) {{ sub(/[^0-9.].*/, "", v); return v }}
+BEGIN {{ x = split(n(a), p, "."); y = split(n(b), q, ".")
+  for (i = 1; i <= x || i <= y; i++) {{ if (p[i] + 0 < q[i] + 0) exit 0; if (p[i] + 0 > q[i] + 0) exit 1 }}
+  exit 1 }}'
+}}
+# The version file $1 names on its first line (a pointer, installations/current), as now; else now is empty.
+named() {{
+  now=$(sed -n '1p' "$1" 2>/dev/null)
+  case $now in ''|[!0-9]*|*[!0-9A-Za-z.+_-]*) now= ;; esac
+}}
+# Version $1 installed by its own release (`cad setup --add`, run by uvx), then run with the arguments after it.
+install() {{
+  case $1 in *[!0-9.abcoprst]*) say "{development}" 3 ;; esac
+  uvx=$(command -v uvx 2>/dev/null)
+  for found in "$HOME/.local/bin/uvx" "$HOME/.cargo/bin/uvx"; do
+    [ -z "$uvx" ] && [ -x "$found" ] && uvx=$found
+  done
+  if [ -z "$uvx" ]; then
+    why="uv is not installed"
+  else
+    why=$(unset CAD_INSTALLATION_VERSION; "$uvx" --no-config --managed-python --python {python} \\
+      --from "{server}==$1" {command} setup --add --quiet </dev/null 2>&1) && present "$1" && run "$@"
+    why=$(printf '%s\\n' "$why" | sed '/^[[:space:]]*$/d' | tail -n 1)
+    [ -n "$why" ] || why="it said nothing"
+  fi
+  say "{not_installed}" 3
+}}
+case $1 in
++*)
+  version=${{1#+}}
+  channel=
+  case $version in *@*) channel=${{version#*@}}; version=${{version%%@*}} ;; esac
+  case $version in ''|[!0-9]*|*[!0-9A-Za-z.+_-]*) say "{bad_pin}" 2 ;; esac
+  case $1 in
+  *@*)
+    case $channel in default) channel= ;; ''|[!a-z0-9]*|*[!a-z0-9._-]*) say "{bad_channel}" 2 ;; esac
+    [ ${{#channel}} -le 32 ] || say "{bad_channel}" 2 ;;
+  esac
+  # Installed: its own cad reads the pin, and moves its channel to it, or says it is stale.
+  present "$version" && run "$version" "$@"
+  # Not installed: stale where its channel is on a newer version already, else installed.
+  if [ -n "$channel" ]; then named "$state/channels/$channel"; else named "$state/default"; fi
+  [ -n "$now" ] && older "$version" "$now" && say "{stale}" 4
+  install "$version" "$@"
+  ;;
+esac
+# No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
+# names
+# current where the install command has run here (its receipt), run as that layout's command ran it; else the
+# newest version installed.
+named "$state/default"
+if [ -n "$now" ]; then
+  present "$now" && run "$now" "$@"
+  install "$now" "$@"
 fi
-for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2>/dev/null); do
-  record="$state/installations/$name"
-  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
-  console=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
-  # Alive as ``alive`` says it: its python and its console script (an uninstalled server leaves the python).
-  [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
+if [ -f "$state/install-receipt.json" ]; then
+  named "$state/installations/current"
+  python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/installations/$now.json" 2>/dev/null)
+  cad=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$state/installations/$now.json" 2>/dev/null)
+  [ -n "$now" ] && [ -x "$python" ] && [ -f "$cad" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
+fi
+newest=
+for marker in "$state"/versions/*/code/cad-version.json; do
+  name=${{marker%/code/cad-version.json}}
+  name=${{name##*/}}
+  present "$name" || continue
+  if [ -z "$newest" ] || ! older "$name" "$newest"; then newest=$name; fi
 done
-echo "{server} is not installed: run \\`uvx --no-config --managed-python --python {python} --from {server} \\
-{command} doctor\\` once, outside any sandbox or with its permission" >&2
+[ -n "$newest" ] && present "$newest" && run "$newest" "$@"
+printf '%s\\n' '{refusal}' >&2
 exit 1
 """
 
@@ -539,42 +622,126 @@ _SHEBANG = f"#!<launcher_dir>\\{INTERPRETER}\\Scripts\\python.exe -I\n"
 ASIDE = ".old"
 
 _MAIN = '''# {mark}{revision}
-# The cad command on Windows (cad.exe): runs the current installation of text-to-cad's server
-# (cad_server._internal.proxy), else the one registered last. Every release writes this same file (cad
-# setup, cad doctor, the CAD app's server). The standard library alone: its Python has nothing else.
+# The cad command on Windows (cad.exe), as the sh is elsewhere: `cad +<version>[@<channel>] ...` runs that version
+# of text-to-cad and no other, its own cad, which reads the pin; a version not installed is installed first, by its
+# own release, unless its channel is on a newer one already. With no pin: the default channel's version. Every
+# release with pinned commands writes this same file; a release whose revision is older never replaces it. The standard
+# library alone: its Python has nothing else.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
+VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
+CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{{0,31}}")
+# The characters of a release's name: one installed from the index, and run with no name told.
+RELEASED = re.compile(r"[0-9.abcoprst]+")
+NAME = "CAD_INSTALLATION_VERSION"
+BAD_PIN, BAD_CHANNEL, STALE = {bad_pin!r}, {bad_channel!r}, {stale!r}
+NOT_INSTALLED, DEVELOPMENT = {not_installed!r}, {development!r}
 
-def python_of(folder, version):
-    """The python of installation ``version``, while it and its console script are there."""
+
+def say(words, code):
+    sys.stderr.write("cad: " + words + "\\n")
+    return code
+
+
+def named(path):
+    """The version file ``path`` names on its first line (a pointer, installations/current), or None."""
     try:
-        with open(os.path.join(folder, version + ".json"), encoding="utf-8") as handle:
-            record = json.load(handle)
-        python, console = record["python"], record["cad"]
+        with open(path, encoding="utf-8") as handle:
+            found = handle.readline().strip()
+    except (OSError, ValueError):
+        return None
+    return found if VERSION.fullmatch(found) else None
+
+
+def record(path):
+    """The Python and cad a version's code marker (or an installation's record) names, while both are there."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            found = json.load(handle)
+        python, cad = found["python"], found["cad"]
     except (OSError, ValueError, KeyError, TypeError):
         return None
-    if isinstance(python, str) and isinstance(console, str) and os.path.isfile(python) and os.path.isfile(console):
-        return python
+    if isinstance(python, str) and isinstance(cad, str) and os.path.isfile(python) and os.path.isfile(cad):
+        return python, cad
     return None
 
 
-def registered(folder):
-    """Every record's version, the one registered last first."""
-    def stamp(name):
-        try:
-            return os.path.getmtime(os.path.join(folder, name))
-        except OSError:
-            return 0.0
+def present(state, version):
+    """Whether version ``version`` is installed: its code marker's Python and cad, else None."""
+    return record(os.path.join(state, "versions", version, "code", "cad-version.json"))
 
-    try:
-        names = [name for name in os.listdir(folder) if name.endswith(".json")]
-    except OSError:
-        return []
-    return [name[:-5] for name in sorted(names, key=stamp, reverse=True)]
+
+def older(one, other):
+    """Whether version ``one``'s release numbers are below version ``other``'s (a tie is not)."""
+    def numbers(version):
+        return [int(part or 0) for part in re.match(r"[0-9.]*", version).group().split(".")]
+
+    first, second = numbers(one), numbers(other)
+    size = max(len(first), len(second))
+    return first + [0] * (size - len(first)) < second + [0] * (size - len(second))
+
+
+def wait(child):
+    while True:
+        try:
+            return child.wait()
+        except KeyboardInterrupt:  # Ctrl+C reaches the version too: it decides, this waits for it
+            continue
+
+
+def run(version, found, args):
+    """Version ``version``'s cad, as ``present`` found it, run with ``args``: a name of characters no release has
+    (a development build's) told to it, which its code cannot know; none told to a release."""
+    environment = dict(os.environ)
+    if RELEASED.fullmatch(version):
+        environment.pop(NAME, None)
+    else:
+        environment[NAME] = version
+    # The arguments as Windows gave them to this process, as a list: Python quotes them for the next.
+    return wait(subprocess.Popen([found[1], *args], env=environment))
+
+
+def uvx():
+    found = shutil.which("uvx")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    for folder in (os.path.join(home, ".local", "bin"), os.path.join(home, ".cargo", "bin")):
+        for name in ("uvx.exe", "uvx"):
+            if os.path.isfile(os.path.join(folder, name)):
+                return os.path.join(folder, name)
+    return None
+
+
+def install(state, version, args):
+    """Version ``version`` installed by its own release (`cad setup --add`, run by uvx), then run with ``args``."""
+    if not RELEASED.fullmatch(version):
+        return say(DEVELOPMENT % {{"version": version}}, 3)
+    command = uvx()
+    if command is None:
+        why = "uv is not installed"
+    else:
+        environment = dict(os.environ)
+        environment.pop(NAME, None)
+        try:
+            done = subprocess.run([command, "--no-config", "--managed-python", "--python", {python!r}, "--from",
+                                   {server!r} + "==" + version, {command!r}, "setup", "--add", "--quiet"],
+                                  env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+            said, code = done.stdout or "", done.returncode
+        except OSError as error:
+            said, code = str(error), 1
+        found = present(state, version) if code == 0 else None
+        if found:
+            return run(version, found, args)
+        lines = [line.strip() for line in said.splitlines() if line.strip()]
+        why = lines[-1] if lines else "it said nothing"
+    return say(NOT_INSTALLED % {{"version": version, "why": why}}, 3)
 
 
 def main():
@@ -582,29 +749,48 @@ def main():
     # application data an app package virtualizes.
     state = os.environ.get("CAD_STATE_DIR") or os.path.join(
         os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state"), "cad")
-    folder = os.path.join(state, "installations")
-    versions = []
+    args = sys.argv[1:]
+    if args and args[0].startswith("+"):
+        version, at, channel = args[0][1:].partition("@")
+        if not VERSION.fullmatch(version):
+            return say(BAD_PIN % {{"word": args[0]}}, 2)
+        if at and channel == "default":
+            channel = ""
+        elif at and not CHANNEL.fullmatch(channel):
+            return say(BAD_CHANNEL % {{"word": args[0]}}, 2)
+        # Installed: its own cad reads the pin, and moves its channel to it, or says it is stale.
+        found = present(state, version)
+        if found:
+            return run(version, found, args)
+        # Not installed: stale where its channel is on a newer version already, else installed.
+        now = named(os.path.join(state, "channels", channel) if channel else os.path.join(state, "default"))
+        if now and older(version, now):
+            return say(STALE % {{"version": version, "channel": channel or "default", "now": now}}, 4)
+        return install(state, version, args)
+    # No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
+    # names current where the install command has run here (its receipt), run as that layout's command ran it;
+    # else the newest version installed.
+    now = named(os.path.join(state, "default"))
+    if now:
+        found = present(state, now)
+        return run(now, found, args) if found else install(state, now, args)
+    if os.path.isfile(os.path.join(state, "install-receipt.json")):
+        now = named(os.path.join(state, "installations", "current"))
+        found = record(os.path.join(state, "installations", now + ".json")) if now else None
+        if found:
+            return wait(subprocess.Popen([found[0], "-P", "-m", "cad_server._internal.proxy", *args]))
     try:
-        with open(os.path.join(folder, "current"), encoding="utf-8") as handle:
-            current = handle.readline().strip()
-        if re.fullmatch(r"[0-9A-Za-z.+_-]+", current):
-            versions.append(current)
-    except (OSError, ValueError):
-        pass
-    for version in versions + registered(folder):
-        python = python_of(folder, version)
-        if python:
-            break
-    else:
-        sys.stderr.write({refusal!r} + "\\n")
-        return 1
-    # The arguments as Windows gave them to this process, as a list: Python quotes them for the next.
-    child = subprocess.Popen([python, "-P", "-m", "cad_server._internal.proxy", *sys.argv[1:]])
-    while True:
-        try:
-            return child.wait()
-        except KeyboardInterrupt:  # Ctrl+C reaches the installation too: it decides, this waits for it
-            continue
+        names = sorted(os.listdir(os.path.join(state, "versions")))
+    except OSError:
+        names = []
+    newest = None
+    for name in names:
+        if VERSION.fullmatch(name) and present(state, name) and (newest is None or not older(name, newest)):
+            newest = name
+    if newest:
+        return run(newest, present(state, newest), args)
+    sys.stderr.write({refusal!r} + "\\n")
+    return 1
 
 
 sys.exit(main())
@@ -612,10 +798,17 @@ sys.exit(main())
 
 
 def _main_text() -> str:
-    """The ``__main__.py`` of ``cad.exe``: the same from every version of this revision."""
+    """The ``__main__.py`` of ``cad.exe``: the same from every version of this revision. Its refusals are
+    ``cad_server._internal.pins``' words, the same as a version says them, filled in as it runs."""
+    from cad_server._internal import pins
+    from cad_server._internal.launch import COMMAND, PYTHON, SERVER
     from cad_server._internal.proxy import NONE_INSTALLED
 
-    return _MAIN.format(mark=MARK, revision=REVISION, refusal=NONE_INSTALLED)
+    return _MAIN.format(mark=MARK, revision=REVISION, refusal=NONE_INSTALLED, python=PYTHON, server=SERVER,
+                        command=COMMAND, bad_pin=pins.bad_pin("%(word)s"), bad_channel=pins.bad_channel("%(word)s"),
+                        stale=pins.stale("%(version)s", "%(channel)s", "%(now)s"),
+                        not_installed=pins.not_installed("%(version)s", "%(why)s", "nt"),
+                        development=pins.development("%(version)s"))
 
 
 def _archive() -> bytes:
@@ -867,9 +1060,25 @@ def script(windows: bool = WINDOWS) -> str:
     ``__main__.py`` (the file is ``executable``)."""
     if windows:
         return _main_text()
+    from cad_server._internal import pins
     from cad_server._internal.launch import COMMAND, PYTHON, SERVER
+    from cad_server._internal.proxy import NONE_INSTALLED
 
-    return _SH.format(mark=MARK, revision=REVISION, python=PYTHON, server=SERVER, command=COMMAND)
+    # Its refusals are ``pins``' words, the same as a version says them, said in double quotes with the
+    # script's variables where the version, channel, reason and word go.
+    words = {"bad_pin": pins.bad_pin("$1"), "bad_channel": pins.bad_channel("$1"),
+             "stale": pins.stale("$version", "${channel:-default}", "$now"),
+             "not_installed": pins.not_installed("$1", "$why", "posix"), "development": pins.development("$1")}
+    for text in words.values():
+        bare = text
+        for variable in ("${channel:-default}", "$version", "$now", "$why", "$1"):
+            bare = bare.replace(variable, "")
+        if set(bare) & set('"`$\\'):
+            raise ValueError(f"the cad command cannot say {text!r} in double quotes")
+    if "'" in NONE_INSTALLED:
+        raise ValueError("the cad command says its refusal in single quotes")
+    return _SH.format(mark=MARK, revision=REVISION, python=PYTHON, server=SERVER, command=COMMAND,
+                      refusal=NONE_INSTALLED, **words)
 
 
 def _revision_in(head: str) -> int | None:

@@ -1,6 +1,6 @@
 """Whose folders a process uses (``cad.engine.places``): a process of an installed version reads and writes
 under ``versions/<version>/`` and reaches its own engine folder; a process with no version -- this suite's
-own, under ``CAD_STATE_DIR``, ``CAD_ENGINE_DIR`` and ``CAD_CACHE_DIR`` -- keeps the layout before 0.12. Every
+own, under ``CAD_STATE_DIR``, ``CAD_ENGINE_DIR`` and ``CAD_CACHE_DIR`` -- keeps the layout of 0.11.10 and earlier. Every
 folder is a temporary device's; a version is faked by its code marker alone."""
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ class WhichVersionTest(Device):
     def test_a_process_has_a_version_by_its_name_its_code_folder_or_a_marker_naming_it(self) -> None:
         self.assertIsNone(places.versioned(), "a test's private device: no version")
         with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": X}):
-            self.assertIsNone(places.versioned(), "told a name no version holds: none, as before 0.12")
+            self.assertIsNone(places.versioned(), "told a name no version holds: none, as in 0.11.10 and earlier")
         self.installed()
         cases = [
             ("told its name", {"CAD_INSTALLATION_VERSION": X}, sys.prefix, X),
@@ -121,7 +121,7 @@ class PathTableTest(Device):
                 "engine": self.engines / X, "door": self.engines / X / "engine.door",
                 "lock": self.engines / X / "engine.lock", "failed": self.engines / X / "engine.failed",
                 "pycache": version / "code" / "pycache", "installation": X})
-            self.assertEqual(places.legacy_cache_dir(), self.cache, "CAD_CACHE_DIR names the layout before 0.12 alone")
+            self.assertEqual(places.legacy_cache_dir(), self.cache, "CAD_CACHE_DIR names the layout of 0.11.10 and earlier alone")
             self.assertEqual(places.engines_dir(), self.engines, "the flat door's folder")
             self.assertEqual(stat.S_IMODE((version / "code" / "pycache").stat().st_mode), 0o700)
         # Any version's folders by name, whatever this process is.
@@ -145,7 +145,7 @@ class StartTest(Device):
     """A client starts its own version's server, never the current installation's."""
 
     def current(self) -> dict:
-        """Another installation current, as before 0.12: what a process with no version starts."""
+        """Another installation current, as in 0.11.10 and earlier: what a process with no version starts."""
         prefix = self.root / "current"
         (prefix / "bin").mkdir(parents=True)
         for script in ("python", "cad"):

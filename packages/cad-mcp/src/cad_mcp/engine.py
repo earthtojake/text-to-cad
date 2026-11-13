@@ -6,7 +6,7 @@ reads it the same way:
 
 - **The engine folder** (``engine_dir``): the server's door (a named pipe; on Windows a port file) and
   lock, named ``engine``, in a folder only this user can write (``folder_refusal``): the flat one directly in
-  the engines' folder (``engines_dir``), which every server before 0.12 holds; a version's is
+  the engines' folder (``engines_dir``), which every server of 0.11.10 and earlier holds; a version's is
   ``<engines>/<version>`` (``engine_dir(version)``), its data ``versions/<version>`` in the state folder
   (``version_dir``) -- the library's rules (``cad.engine.places``), copied and held equal by a test. A request is one JSON
   line through the door, answered by JSON lines (``request``); the door is the one way to the server's
@@ -98,8 +98,8 @@ def version_dir(version: str) -> Path:
 
 
 def engines_dir() -> Path:
-    """The engines' folder: ``CAD_ENGINE_DIR``, else ``default_engine_dir``; the flat door every server before
-    0.12 holds is in it directly, each version's engine in a folder of its own (``engine_dir``)."""
+    """The engines' folder: ``CAD_ENGINE_DIR``, else ``default_engine_dir``; the flat door every server of 0.11.10 and
+    earlier holds is in it directly, each version's engine in a folder of its own (``engine_dir``)."""
     override = os.environ.get("CAD_ENGINE_DIR")
     return Path(os.path.realpath(override if override else default_engine_dir()))
 

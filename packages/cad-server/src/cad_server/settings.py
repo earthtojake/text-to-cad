@@ -1,6 +1,6 @@
 """The person's settings: one file, ``settings.json``, in the data folder of the version that reads them
-(``places.data_dir``: ``versions/<version>/data``; for a process with no version, the state folder itself, as
-before 0.12) beside its model library, so both CAD apps (``cad-mcp`` and ``cad viewer``) and every process of
+(``places.data_dir``: ``versions/<version>/data``; for a process with no version, the state folder itself, as in
+0.11.10 and earlier) beside its model library, so both CAD apps (``cad-mcp`` and ``cad viewer``) and every process of
 that version read the same answers -- nothing that version's code holds them. Each version keeps its own:
 a new one starts from the one it replaces. Deleting the data folder forgets them.
 
@@ -29,7 +29,7 @@ FILE = "settings.json"
 
 def settings_path() -> Path:
     """``settings.json`` in the data folder of the version this process belongs to (``places.data_dir``: the
-    state folder itself for a process with no version, as before 0.12)."""
+    state folder itself for a process with no version, as in 0.11.10 and earlier)."""
     from cad.engine.places import data_dir
 
     return data_dir() / FILE

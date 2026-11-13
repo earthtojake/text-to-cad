@@ -169,7 +169,7 @@ def _mtime(path: str) -> float | None:
 
 class RecentStore:
     """Recents over the registry of the data folder ``root`` (this process's by default, ``places.data_dir``:
-    its version's, else the state folder before 0.12)."""
+    its version's, else the state folder of 0.11.10 and earlier)."""
 
     def __init__(self, root: Path | None = None) -> None:
         from cad_server.engine.registry import Folder, Registry

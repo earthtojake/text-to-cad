@@ -686,7 +686,7 @@ answers (`base.Making.claim`, `mcp.server._first_report`).
 | `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model**; what measures a manufacturing check (`measuring`, from `_measuring.py`, of the standard library alone, which `cad.engine` takes as it is imported) |
-| `places.py` | where things are, for every process alike, with the standard library alone: the version a process belongs to (`versioned`) and its folders (`version_dir`, `code_dir`, `data_dir`, `cache_dir`), the layout before 0.12 a process with none keeps (`state_dir`, `legacy_cache_dir`), the engine folders and their door, lock and port file (`engines_dir`, `engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
+| `places.py` | where things are, for every process alike, with the standard library alone: the version a process belongs to (`versioned`) and its folders (`version_dir`, `code_dir`, `data_dir`, `cache_dir`), the layout of 0.11.10 and earlier a process with none keeps (`state_dir`, `legacy_cache_dir`), the engine folders and their door, lock and port file (`engines_dir`, `engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), what a robot file holds (`robot`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
 | `weights.py` | what a document weighs as its robot description weighs it, for `inspect`: the description's **Mass** rule over the engine's volumes, with no kernel -- each part's mass, its point masses, which is declared and which computed (`Weights.said`), and the description's refusal in its words |
@@ -856,8 +856,10 @@ sets the exit status, the same with `--json` and without: 2 for the command line
 command or an option it does not take, an argument missing or out of range, a file of another type, an
 input that is not there, a destructive command where no one can be asked and no `--yes` -- which fails
 the same way until the call changes; 1 for a failure of the work (a build, a render, an export, a tool,
-the engine out of reach, a mistake of ours, a destructive command the person said no to); 130 for an
-interrupt (Ctrl-C). A command's `--json` prints
+the engine out of reach, a mistake of ours, a destructive command the person said no to); 3 for a version
+this shell cannot install, or cannot move its channel to (an agent's sandbox, no uv, no network); 4 for a pin
+older than the version its channel is on now; 5 for a pin to another version than the one that read it; 130
+for an interrupt (Ctrl-C). A command's `--json` prints
 its answer as one JSON object on stdout, and every failure as one JSON document there too, so a caller
 reading stdout always finds an answer, with nothing else on stdout and no traceback (`--verbose`, where
 a command takes it, puts one on stderr):
@@ -870,8 +872,10 @@ a command takes it, puts one on stderr):
 option or argument the command line got wrong), `invalid_argument` (a value refused by name before
 anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
 there, a document the engine has no record of or does not hold), `confirmation_required` (with
-`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`,
-`engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
+`"userActionRequired": true` and `"next"`, the command with `--yes`), `bad_pin` (a first word `+...` that is
+no pin, `cad +<version>[@<channel>]`), exit 2; `declined`, `engine_unavailable`, `failed`, `internal_error`,
+exit 1; `cannot_install_here`, exit 3; `stale_pin`, exit 4; `other_version`, exit 5 (the package README's
+**The `cad` command**); `canceled`, exit 130. Without `--json` a
 failure is its words on stderr. A
 command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are
 read by the one parser, which takes no abbreviation of an option -- `--js` is no `--json` -- and suggests
@@ -1649,7 +1653,7 @@ there, and for one release the engine writes its port file there too (`daemon._m
 CAD app's server still running. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
 other's door. In it each installed version's engine has a folder of its own, `<version>` (`places.engine_dir`),
 made this user's alone with the one above it (`places.make_engine_dir`); its door, lock and port file directly
-in it are the flat ones of the layout before 0.12, an engine with no version's.
+in it are the flat ones of the layout of 0.11.10 and earlier, an engine with no version's.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
   holds it open for reading, and for writing too, so it never reads as closed. A door nobody reads

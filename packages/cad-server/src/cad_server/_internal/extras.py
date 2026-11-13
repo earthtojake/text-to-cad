@@ -255,11 +255,14 @@ def tell(given: list[str], script: str | None = None, named: list[str] | None = 
     option one word, ``--python=3.13``, a requirement as it is), and the ``script`` whose inline metadata
     ``named`` the rest. What a document it builds names to build it again (``contract.interpreter``,
     ``models.Models.register``): the command line's, and the header's but for a model that script defines,
-    whose header ``cad run`` reads again."""
-    from cad.engine.places import RUN_WITH
+    whose header ``cad run`` reads again. A named channel this command is on (``places.channel``) goes with them
+    (``channel``), so the program's own requests to the engine name it too."""
+    from cad.engine.places import DEFAULT_CHANNEL, RUN_WITH, channel
 
-    if given or named:
-        os.environ[RUN_WITH] = json.dumps({"with": list(given), "script": script, "header": list(named or ())})
+    on = channel()
+    if given or named or on != DEFAULT_CHANNEL:
+        told = {"with": list(given), "script": script, "header": list(named or ())}
+        os.environ[RUN_WITH] = json.dumps({**told, "channel": on} if on != DEFAULT_CHANNEL else told)
     else:
         os.environ.pop(RUN_WITH, None)
 

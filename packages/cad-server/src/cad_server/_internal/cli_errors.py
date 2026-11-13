@@ -4,9 +4,13 @@
 (``REASONS``): 2 for the command line and its input -- a command or an option the command does not take,
 an argument missing or out of range, a file of another document type, an input that is not there, a
 destructive command run where no one can be asked and no ``--yes`` given (``consent``) -- which fails the
-same way until the call changes; 1 for a failure of the work itself (a build, a render, a tool, the engine
-out of reach, a mistake of ours, a destructive command the person said no to); 3 for a release this shell
-cannot install (an agent's sandbox, no uv, no network: ``cad_server._internal.versions``); 130 for an interrupt.
+same way until the call changes -- a pin that is none (``cad +<version>[@<channel>]``, ``bad_pin``) among
+them; 1 for a failure of the work itself (a build, a render, a tool, the engine out of reach, a mistake of
+ours, a destructive command the person said no to); 3 for a version this shell cannot install, or cannot
+move its channel to (an agent's sandbox, no uv, no network: ``cad_server._internal.versions``); 4 for a pin
+older than the version its channel is on now (``stale_pin``: the chat's copy of the skill is older than the
+one installed); 5 for a pin to another version than the one that read it (``other_version``: a version
+never runs a command pinned to another, ``cad_server._internal.pins``); 130 for an interrupt.
 Under ``--json`` every failure is ONE JSON document on stdout,
 the result's channel, so a caller reading it always finds an answer, and nothing else is written there:
 ``{"ok": false, "error": <its words>, "reason": <a stable snake_case code>}``, with
@@ -43,14 +47,21 @@ REASONS: dict[str, int] = {
     "wrong_type": 2,             # a file of another document type, a model's id given to a file's type, a file given to model
     "not_found": 2,              # an input that is not there: a file, a document the engine has no record of or does not hold
     "confirmation_required": 2,  # a destructive command where no one can be asked, without --yes: nothing was changed
+    "bad_pin": 2,                # a first word `+...` that is no pin: no version after the +, or no channel after the @
     # The work.
     "declined": 1,               # the person answered no to a destructive command's question: nothing was changed
     "engine_unavailable": 1,     # the engine server could not be reached or started
     "failed": 1,                 # the work failed: a build, a render, an export, a tool it ran
     "internal_error": 1,         # a mistake in text-to-cad's own code
-    # A release this shell cannot install: no uv, no network for what uv's cache lacks, or a folder the system
-    # (an agent's sandbox) will not let it write. The one line says the command to run outside the sandbox.
+    # A version this shell cannot install, or cannot move its channel to: no uv, no network for what uv's cache
+    # lacks, or a folder the system (an agent's sandbox) will not let it write. The one line says what to run
+    # outside the sandbox.
     "cannot_install_here": 3,
+    # A pin older than the version its channel is on now: a chat whose copy of the skill an update left behind. The
+    # one line says which version the command is for, which the channel is on, and to read the skill again.
+    "stale_pin": 4,
+    # A pin to another version than the one that read it: run through the `cad` command, which runs that version.
+    "other_version": 5,
     # An interrupt (Ctrl-C).
     "canceled": 130,
 }

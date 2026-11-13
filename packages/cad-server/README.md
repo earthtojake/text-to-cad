@@ -65,15 +65,16 @@ src/cad_server/
                          #   program's run asks for, cad pinned with its integrations, its
                          #   packages and uv's options; scan: the integrations a program's
                          #   imports use, read without running it), the launch commands (launch), the
-                         #   installations' registry, which one is current, and the proxy it
-                         #   writes (installations: ~/.local/bin/cad, which the skills run;
-                         #   written by `cad doctor`, `cad setup` and a CAD app's first
-                         #   registration), the proxy (proxy), the releases an update
+                         #   installations' registry, which one is current, and the `cad` command
+                         #   (installations: ~/.local/bin/cad, which the skills run; written by
+                         #   `cad doctor`, `cad setup`, `cad setup --add` and a CAD app's first
+                         #   registration), a pin's reading by the version it names (pins), the
+                         #   module the command of 0.11.10 and earlier ran (proxy), the releases an update
                          #   installs (releases), the update the button starts (update) and its
                          #   switch (switch), the versions installed in their own folders and the
                          #   one routine that moves a channel between them (versions), the pointer
                          #   per channel (pointers), a version's first-start import (imports), the
-                         #   layout before 0.12 (legacy), the plugin folder every agent app is pointed at
+                         #   layout of 0.11.10 and earlier (legacy), the plugin folder every agent app is pointed at
                          #   (plugin), the agent apps setup reads and writes (providers),
                          #   what earlier releases left behind (leftovers), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
@@ -193,23 +194,45 @@ there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex,
 is the app's to deliver and update: every `cad setup` keeps it, adds nothing of ours beside it, and says
 how to switch (remove it in the app's own plugin manager, then run the install command again). An update writes the folder for the
 new release and brings the copies along, a person's or an automatic one; no agent app updates the
-plugin itself. A model builds by running its script: `cad run model.py`, through
-the `cad` command, which runs the current installation, else the one registered last
-(`_internal/proxy.py`). The CAD app an agent
+plugin itself. A model builds by running its script: `cad +<version> run model.py`, through
+the `cad` command. The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
+
+**The `cad` command** (`~/.local/bin/cad`, `cad.exe` on Windows: `_internal/installations.py`) is the one file
+every version is run through, written by `cad setup`, `cad setup --add` and `cad doctor`, and never replaced by a
+release whose revision of it is older. It reads only its first argument. A pin, `cad +<version>[@<channel>]
+<verb> ...` -- every command a skill runs carries its release's, and a copy a store delivers its channel too --
+runs that version's own `cad` with the whole command line, and never another version: one not installed is
+installed first by its own release (`uvx ... --from cad-server==<version> cad setup --add`), unless the channel's
+pointer names a newer version already. That version reads the pin (`_internal/pins.py`): equal to its channel's
+version, it runs; newer, or the channel's first use, it moves the channel to itself first (the default channel,
+where the install command has run here, by the updater); older, it refuses. With no pin, the command runs the
+default channel's version: its pointer; else, where the install command has run here, the installation the layout of
+0.11.10 and earlier names current; else the newest version installed. The channel a command is on is
+`cad.engine.places.channel()` -- `default` for a pin that names none, and for no pin --, which its requests to the
+server name and `cad run` hands its program. Each refusal is one line on stderr (from the version, one JSON
+document on stdout under `--json`), with its exit status: 2 `bad_pin`, a first word `+...` that is no pin or names
+no channel; 3 `cannot_install_here`, a version not installed that this shell could not install, with the line to
+run outside the sandbox (`curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add <version>`; in PowerShell
+`& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add <version>`), or one whose channel it
+could not move; 4 `stale_pin`, a pin older than the version its channel is on now -- the chat's copy of the skill
+is older than the one installed: read the skill again, or start a new chat; 5 `other_version`, a version's own
+`cad` given another version's pin. A `cad` command of 0.11.10 or earlier knows no pin: it says `+<version>` is an
+unknown command (exit 2).
 
 An installed version keeps everything it reads and writes in its own folder, `versions/<version>` in
 the state folder: its data (`data/`: settings, Recents, the documents' records, the page token and
 port, the telemetry spool, the version feed's cache, and its caches under `data/cache/`) and its code
 (`code/`: its environments, the kernel's and `cad run`'s under `code/base/`, and their bytecode), and
 its engine's door in `<version>` in the engine folder; a process with no version (a checkout or a test
-under `CAD_STATE_DIR`, `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`, a release before 0.12) keeps the flat
+under `CAD_STATE_DIR`, `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`, a release of 0.11.10 or earlier) keeps the flat
 layout below, in the state and cache folders (`cad.engine.places`). A version is made present whole --
 its server and kernel environments, then its code marker -- by `cad setup --add` (`_internal/versions.py`),
-which changes nothing else; each delivery channel's pointer (`default`, `channels/<name>` in the state folder:
+which writes the `cad` command where it is missing or of an older revision and changes nothing else; each delivery
+channel's pointer (`default`, `channels/<name>` in the state folder:
 `_internal/pointers.py`) names its version, moved by one routine that imports the new version's settings,
 Recents, records, page token and port from the version it replaces at its first start (`_internal/imports.py`)
-and removes the versions no pointer names; the layout before 0.12 is imported from and, once the default
+and removes the versions no pointer names; the layout of 0.11.10 and earlier is imported from and, once the default
 channel has left it and that is safe, its code, records and caches removed (`_internal/legacy.py`).
 
 The state folder is `cad` in the platform's place for state, the cache folder `cad` in its

@@ -278,8 +278,8 @@ def _remove(found: dict[str, Any]) -> list[str]:
 
 
 def _bases_of(folder: Path) -> list[Path]:
-    """The bases made for the installation in ``folder`` (``base.MARKER`` naming it as theirs), a release
-    before 0.12's: in the cache folder before 0.12 (``places.legacy_cache_dir``)."""
+    """The bases made for the installation in ``folder`` (``base.MARKER`` naming it as theirs), one of 0.11.10 or
+    earlier: in that layout's cache folder (``places.legacy_cache_dir``)."""
     from cad.engine.places import legacy_cache_dir
 
     found = []

@@ -9,11 +9,13 @@ user's own uv settings (an index, a cache policy) from resolving it differently,
 whatever interpreter a GUI app's PATH happens to find first.
 
 The skills cannot run ``uvx``: an agent's shell is often a sandbox, and uv writes its cache before
-it starts. So the installation registers itself and writes the proxy, ``~/.local/bin/cad``
-(``cad_server._internal.installations``), and every skill runs ``cad ...``, which runs the current
-installation (``cad_server._internal.proxy``): the same installation, so the server, every thread and
-every skill command share one daemon. Where no installation is registered, the command says the
-``uvx`` line that installs, registers and writes them (``cad doctor``).
+it starts. So each version is installed in its own folder and writes the proxy, ``~/.local/bin/cad``
+(``cad_server._internal.installations``), and every skill runs ``cad +<version> ...``, which runs that version
+and no other (``cad_server._internal.pins``): the same version, so every thread and every skill command of one
+release share its daemon. A version not installed, the command installs by this module's line for it
+(``launch_command``: ``uvx ... --from cad-server==<version> cad setup --add``) where the shell lets it; with no
+pin, it runs the default channel's version. Where nothing is installed, it says the ``uvx`` line that installs,
+registers and writes them (``cad doctor``).
 
 Error hints and ``cad doctor`` print these from here; the plugin's server configs carry the same
 strings, stamped by the release and held to these by a repository test.

@@ -33,7 +33,8 @@ channel's: stale, returned for the caller to say. Newer, or the channel's first 
 its first start (``first_start``: its data imported, ``cad_server._internal.imports``, and the proof it runs),
 then the pointer written -- the one write that is the update --, then every version no pointer names and nothing
 is connected to removed (``sweep``). A failure before the pointer is written changes no pointer and no other
-version. The default channel's first move on a device with the layout before 0.12 imports from that layout, and
+version. The default channel's first move on a device with the layout of 0.11.10 and earlier imports from that layout,
+and
 the sweep removes the layout's code, records and caches as soon as that is safe (``cad_server._internal.legacy``).
 Whether the automatic updates are on plays no part: a newer version asked for is moved to.
 
@@ -43,7 +44,7 @@ lock taken (the one its server takes to start, in ``<engines>/<version>``), so n
 that runs is asked whether anything is connected to it (``connected``: a running server that cannot say counts
 as connected, and stays) and stopped when nothing is (``stop_server``); a folder a process still runs from
 stays; the folder renamed aside (``versions/.trash-*``), which a refusal (Windows: a file in use) turns into a
-skip, then removed. ``sweep`` does that for every such version, removes the layout before 0.12 once the
+skip, then removed. ``sweep`` does that for every such version, removes the layout of 0.11.10 and earlier once the
 default channel has left it and that is safe (``legacy.remove``), and clears what an earlier removal left: every
 move, the stop of a server that goes idle unnamed and ``cad doctor --prune`` call it.
 """
@@ -252,7 +253,10 @@ def _make(name: str, say: Callable[[str], None]) -> dict[str, Any]:
     record = {"schema": places.VERSION_SCHEMA, "version": name, "python": str(base.interpreter(server)),
               "cad": str(releases.console(server)), "prefix": str(server), "release": probe.get("release"),
               "kernel": kernel, "source": source, "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
-    write_bytes_atomic(code / places.VERSION_MARKER, (json.dumps(record, indent=1, sort_keys=True) + "\n").encode())
+    # A key a line, its paths as they are (not escaped): the ``cad`` command's sh reads its ``python`` and ``cad``
+    # lines (``installations``).
+    write_bytes_atomic(code / places.VERSION_MARKER,
+                       (json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
     installations._forget_read()
     return record
 
@@ -418,7 +422,7 @@ def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = 
             try:
                 pointers.mirror(new)
             except OSError as error:
-                say("the record clients before 0.12 find the server by could not be written: "
+                say("the record clients of 0.11.10 and earlier find the server by could not be written: "
                     f"{error.strerror or error}")
         removed = sweep(told=say)
         return Moved("moved", channel, new, old, None, made, imported, removed, said)
@@ -527,7 +531,8 @@ def _remove(name: str, say: Callable[[str], None]) -> str:
 
 
 def _forget_records(folder: Path) -> None:
-    """The installation records (``installations/``, the mirror for clients before 0.12) naming an environment in
+    """The installation records (``installations/``, the mirror for clients of 0.11.10 and earlier) naming an
+    environment in
     ``folder``, a version's gone, removed."""
     from cad_server._internal import installations
 
@@ -592,10 +597,13 @@ def add_command(version: str, system: str | None = None) -> str:
 
 
 def add(*, quiet: bool = False, out: Any = None, err: Any = None) -> int:
-    """``cad setup --add [--quiet]``: this process's own version made present (``make_present``) and nothing
-    else -- no pointer, no app, no setting, no receipt --, said in one or two lines on ``out`` (each line of the
-    making on ``err`` unless ``quiet``). Exit 0 present; ``cli_errors.REASONS['cannot_install_here']`` when it
-    cannot be installed from this shell; 1 when it failed."""
+    """``cad setup --add [--quiet]``: this process's own version made present (``make_present``), and the ``cad``
+    command written where it is missing or of an older revision (``installations.write_proxy``: a later one, or a
+    file of that name not text-to-cad's, is left alone), and nothing else -- no pointer, no app, no setting, no
+    receipt --, said in one or two lines on ``out`` (each line of the making on ``err`` unless ``quiet``). A
+    failure is one line on ``err``: with ``quiet`` (the ``cad`` command's own run of it) its reason alone, which
+    that command says in its own line. Exit 0 present; ``cli_errors.REASONS['cannot_install_here']`` when it
+    cannot be installed from this shell; 1 when it failed, or the ``cad`` command could not be written."""
     import cad_server
     from cad_server._internal import installations
     from cad_server._internal.cli_errors import FAILED, REASONS
@@ -607,14 +615,22 @@ def add(*, quiet: bool = False, out: Any = None, err: Any = None) -> int:
                   f"({places.INSTALLATION_ENV})\n")
         return FAILED
     found = make_present(name, told=(lambda _line: None) if quiet else (lambda line: err.write(f"cad: {line}\n")))
-    if found.ok:
-        if not quiet:
-            out.write(f"text-to-cad {name} is {'installed now' if found.made else 'installed'}: "
-                      f"{places.version_dir(name)}\n")
-        return 0
-    if found.cannot is not None:
-        err.write(f"text-to-cad {name} is not installed, and could not be installed from this shell: {found.error}\n"
-                  f"Install it outside the sandbox, or with its permission: {add_command(name)}\n")
-        return REASONS["cannot_install_here"]
-    err.write(f"text-to-cad {name} could not be installed: {found.error}\n")
-    return FAILED
+    if not found.ok:
+        if quiet:
+            err.write(f"{found.error}\n")
+        elif found.cannot is not None:
+            from cad_server._internal import pins
+
+            err.write(f"cad: {pins.not_installed(name, found.error or found.cannot)}\n")
+        else:
+            err.write(f"text-to-cad {name} could not be installed: {found.error}\n")
+        return REASONS["cannot_install_here"] if found.cannot is not None else FAILED
+    path, status, error = installations.write_proxy()
+    if error is not None or status == installations.FOREIGN:
+        why = error or "a file of that name there is not text-to-cad's, and is left alone"
+        err.write(f"text-to-cad {name} is installed, but the cad command could not be written at {path}: {why}\n")
+        return FAILED
+    if not quiet:
+        out.write(f"text-to-cad {name} is {'installed now' if found.made else 'installed'}: "
+                  f"{places.version_dir(name)}\n")
+    return 0

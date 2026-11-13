@@ -13,23 +13,23 @@ A pointer is written whole (``registry.Folder``: beside it, then renamed over), 
 before or the one after (``write``); moving a channel to another version is ``versions.move``, which is the
 one writer of a pointer outside a test. ``listing`` says every pointer, ``named`` the versions they name.
 
-**The default channel's version** (``default``): its pointer; with none, the version the layout before 0.12
+**The default channel's version** (``default``): its pointer; with none, the version the layout of 0.11.10 and earlier
 names current (``installations/current``) where the install command has run here (its receipt,
 ``install-receipt.json``); else the newest version present. With no pointer that is a resolution, not a
-pointer: what ``versions.move`` leaves for the default channel is ``leaving``'s, the pointer or the layout
-before 0.12.
+pointer: what ``versions.move`` leaves for the default channel is ``leaving``'s, the pointer or the layout of 0.11.10
+and earlier.
 
-**The mirror for releases before 0.12.** Every client before 0.12 finds the device's server through
+**The mirror for 0.11.10 and earlier.** Every client of 0.11.10 and earlier finds the device's server through
 ``installations/current`` and the record it names (``cad_server._internal.installations``). So writing the
 default pointer writes them too (``mirror``): ``current`` names the default's version and its record the
-version's server environment, as its code marker says it (``places.version_record``). Only clients before 0.12
+version's server environment, as its code marker says it (``places.version_record``). Only clients of 0.11.10 and
+earlier
 read them.
 """
 
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,9 +39,10 @@ __all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "Pointer", "channel_name
            "listing", "mirror", "named", "read", "write"]
 
 # A named channel: a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. Safe as a
-# file's name on every system, and in a pin (``cad +<version>@<channel>``).
-CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
-DEFAULT = "default"
+# file's name on every system, and in a pin (``cad +<version>@<channel>``): the library's one rule
+# (``places.CHANNEL``), which the ``cad`` command's own text repeats (``installations``).
+CHANNEL = places.CHANNEL
+DEFAULT = places.DEFAULT_CHANNEL
 CHANNELS = "channels"
 # The install command's record of what it changed, whose presence says the install command ran here.
 RECEIPT = "install-receipt.json"
@@ -82,7 +83,7 @@ def read(channel: str | None = None, state: Path | None = None) -> str | None:
 
 def write(channel: str | None, version: str, state: Path | None = None, *, mirrored: bool = True) -> Path:
     """Channel ``channel``'s pointer (None: the default's) set to ``version``, landed whole: its file. Writing
-    the default's writes the mirror for releases before 0.12 too (``mirror``), after it, unless ``mirrored`` is
+    the default's writes the mirror for 0.11.10 and earlier too (``mirror``), after it, unless ``mirrored`` is
     false (``versions.move`` writes it itself, after the pointer, so it tells a failure of the one from the
     other): a mirror that cannot be written is ``OSError``, with the pointer moved. ``ValueError`` for a name
     that is no channel or no version."""
@@ -138,7 +139,7 @@ def named(state: Path | None = None) -> set[str]:
 class Default:
     """The default channel's version and where it was found (``source``): ``pointer``; ``current``, the
     version ``installations/current`` names where the install command has run here and no pointer is
-    (``legacy``: one of the layout before 0.12, not the mirror of a version); ``newest``, the newest version
+    (``legacy``: one of the layout of 0.11.10 and earlier, not the mirror of a version); ``newest``, the newest version
     present. ``version`` None with none of them."""
 
     version: str | None
@@ -148,7 +149,7 @@ class Default:
 
 def default(state: Path | None = None) -> Default:
     """The default channel's version, for a command with no pin: its pointer; with none, the version the
-    layout before 0.12 names current where the install command has run here (its receipt); else the newest
+    layout of 0.11.10 and earlier names current where the install command has run here (its receipt); else the newest
     version present (``versions.present``); else none."""
     found = read(None, state)
     if found is not None:
@@ -164,7 +165,7 @@ def default(state: Path | None = None) -> Default:
 
 def leaving(state: Path | None = None) -> Default:
     """What the default channel leaves at its next move (``versions.move``): its pointer's version; with no
-    pointer, the layout before 0.12 where the install command has run here and its ``current`` is not a
+    pointer, the layout of 0.11.10 and earlier where the install command has run here and its ``current`` is not a
     version's mirror (``legacy``); else nothing -- the channel's first use."""
     found = read(None, state)
     if found is not None:
@@ -176,7 +177,7 @@ def leaving(state: Path | None = None) -> Default:
 
 
 def _current(state: Path | None) -> tuple[str, bool] | None:
-    """The version ``installations/current`` names, and whether it is one of the layout before 0.12 (its
+    """The version ``installations/current`` names, and whether it is one of the layout of 0.11.10 and earlier (its
     record's environment outside ``versions/``), where the install command's receipt is here; else None."""
     from cad_server._internal import installations
 
@@ -197,7 +198,7 @@ def _in_versions(prefix: str, state: Path) -> bool:
 
 def mirror(version: str, state: Path | None = None) -> bool:
     """``installations/current`` and the record it names written for present version ``version`` (its code
-    marker's interpreter, console script and environment), so a client before 0.12 finds the default's
+    marker's interpreter, console script and environment), so a client of 0.11.10 or earlier finds the default's
     server: whether it was written (False: ``version`` is not present). ``OSError`` when it cannot be."""
     from cad_server._internal import installations
 

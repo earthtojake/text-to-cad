@@ -1,8 +1,8 @@
 """The server follows the library's folders (``cad.engine.places``): a process of an installed version keeps
 its settings, telemetry spool, feed cache, update record, channels, documents' records, Recents, page token
 and port in ``versions/<version>/data``, and its kernel and ``cad run`` environments in its code; a process
-with no version -- this suite's own, under ``CAD_STATE_DIR`` and ``CAD_CACHE_DIR`` -- keeps the layout
-before 0.12. A version is faked by its code marker in a temporary device; nothing is installed or started."""
+with no version -- this suite's own, under ``CAD_STATE_DIR`` and ``CAD_CACHE_DIR`` -- keeps the layout of 0.11.10 and
+earlier. A version is faked by its code marker in a temporary device; nothing is installed or started."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ class ServerFoldersTest(unittest.TestCase):
         self.assertTrue(written, "something was written")
         outside = [path for path in written if not path.startswith(f"versions{os.sep}{X}{os.sep}")]
         self.assertEqual(outside, [], "a version writes nothing of its own outside its folder")
-        self.assertFalse(self.cache.exists(), "nor in the cache folder before 0.12")
+        self.assertFalse(self.cache.exists(), "nor in the cache folder of 0.11.10 and earlier")
         for name in ("settings.json", "update-automatic.json", "install-channels.json", "engines/token",
                      "engines/engine.json"):
             self.assertTrue((self.version / "data" / name).is_file(), name)

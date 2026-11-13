@@ -14,6 +14,10 @@ engine and the same installation by the same rules, from the standard library al
 - **The installation** a process belongs to: its version (``versioned``, below), the version it runs as
   (``installation``), the base's marker naming the installation of a process that runs in the base
   (``HOME``), and the one whose engine a client starts when none answers (``engine``).
+- **The channel** a command is on (``channel``): the delivery channel its pin named (``cad
+  +<version>@<channel>``), told by the ``cad`` command as it reads the pin (``set_channel``) and carried by a
+  ``cad run`` to its program, else ``default``. A client names it to the engine in every request
+  (``cad.engine.client``).
 - **Starting a process** of the engine's: with no window on Windows (``windowless``), outliving its
   starter (``detached``), its bytecode kept in a folder of the engine's (``bytecode``), and on the Python
   of the environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's
@@ -31,11 +35,11 @@ device's globals (the ``cad`` command, the install lock and receipt, the plugin 
 and the engine it starts is its own version's, never another's (``engine``).
 
 A process with NO VERSION -- a checkout or a test under ``CAD_STATE_DIR``, ``CAD_ENGINE_DIR`` and
-``CAD_CACHE_DIR``; an installation of the layout before 0.12, flat in ``releases/<version>`` or made by uvx;
+``CAD_CACHE_DIR``; an installation of the layout of 0.11.10 and earlier, flat in ``releases/<version>`` or made by uvx;
 a development install's checkout no version's marker names -- keeps that layout, exactly: its data is the
 state folder itself (``data_dir`` is ``state_dir``), its caches, environments and bytecode the cache folder
-(``legacy_cache_dir``: ``CAD_CACHE_DIR``, else ``~/.cache/cad``), its engine folder the flat one every
-release before 0.12 finds (``engines_dir``), and the engine it starts the current installation's
+(``legacy_cache_dir``: ``CAD_CACHE_DIR``, else ``~/.cache/cad``), its engine folder the flat one every release of
+0.11.10 and earlier finds (``engines_dir``), and the engine it starts the current installation's
 (``installations/current``). ``CAD_CACHE_DIR`` names only that layout's cache: a process with a version
 keeps its caches in its own data.
 """
@@ -54,12 +58,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
+__all__ = ["BYTECODE", "CHANNEL", "DEFAULT_CHANNEL", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
-           "cache_dir", "code_dir", "current", "data_dir", "detached", "door_path", "earlier_cache_dir",
+           "cache_dir", "channel", "code_dir", "current", "data_dir", "detached", "door_path", "earlier_cache_dir",
            "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "engines_dir", "extras",
            "failure_path", "folder_refusal", "home", "installation", "kernel", "legacy_cache_dir", "lock", "lock_path",
-           "make_engine_dir", "port_path", "registered", "run_with", "state_dir", "version_dir", "version_record",
+           "make_engine_dir", "port_path", "registered", "run_with", "set_channel", "state_dir", "version_dir", "version_record",
            "versioned", "versions_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
@@ -85,7 +89,7 @@ BYTECODE = ("PYTHONPYCACHEPREFIX", "PYTHONDONTWRITEBYTECODE")
 # takes one.
 DISPLAY = "CAD_ENGINE_DISPLAY"
 XAUTHORITY = "CAD_ENGINE_XAUTHORITY"
-# The folder of the engine's bytecode: a version's in its code (``code_dir``); before 0.12 one folder per
+# The folder of the engine's bytecode: a version's in its code (``code_dir``); in 0.11.10 and earlier one folder per
 # installation in it in the cache folder (``bytecode_tag``).
 PYCACHE = "pycache"
 # The versions' folder in the state folder, and in each version's folder its code (disposable: its
@@ -100,6 +104,11 @@ VERSION_SCHEMA = "cad version/1"
 INSTALLATIONS = "installations"
 CURRENT = f"{INSTALLATIONS}/current"
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
+# A delivery channel's name (``cad +<version>@<channel>``; the server's pointers, ``cad_server._internal.pointers``,
+# name their files by it): a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. The
+# default channel, a pin that names none, is ``default``, never a name of this shape's file.
+CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
+DEFAULT_CHANNEL = "default"
 # The marker the server writes last in the environment it makes for the kernel (the base), naming the
 # installation it belongs to (``home``), and the marker's schema.
 MARKER = "cad-env.json"
@@ -148,7 +157,7 @@ def _appdata() -> Path:
 def state_dir() -> Path:
     """The device's CAD state folder (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's place for
     state (``_local_state``). It holds the device's globals -- the install lock and receipt, the plugin folder,
-    ``installations/``, ``releases/`` -- and the versions (``versions_dir``); before 0.12 it was every
+    ``installations/``, ``releases/`` -- and the versions (``versions_dir``); in 0.11.10 and earlier it was every
     version's data too, as it still is for a process with no version (``data_dir``)."""
     override = os.environ.get("CAD_STATE_DIR")
     if override:
@@ -158,7 +167,7 @@ def state_dir() -> Path:
 
 def versions_dir() -> Path:
     """The folder of the installed versions, ``versions`` in the state folder (not ``releases``, which the
-    updaters before 0.12 own and remove folders from)."""
+    updaters of 0.11.10 and earlier own and remove folders from)."""
     return state_dir() / VERSIONS
 
 
@@ -180,7 +189,7 @@ def data_dir(name: str | None = None) -> Path:
     """Where a version keeps what it reads and writes -- settings, the documents' records, Recents, the page
     token and port, the telemetry spool, the version feed's cache -- ``versions/<name>/data``. With no
     ``name``, this process's: its version's (``versioned``), else, for a process with no version, the state
-    folder itself, as before 0.12."""
+    folder itself, as in 0.11.10 and earlier."""
     name = name if name is not None else versioned()
     return version_dir(name) / DATA if name is not None else state_dir()
 
@@ -222,7 +231,7 @@ def earlier_state_dir() -> Path:
 
 
 def adopt_earlier() -> list[str]:
-    """What this release keeps of an earlier release's state folder moved into the layout before 0.12
+    """What this release keeps of an earlier release's state folder moved into the layout of 0.11.10 and earlier
     (``adopt``: the state folder and ``legacy_cache_dir``), where no state folder is named (``CAD_STATE_DIR``):
     what an installation's registration (``cad_server._internal.installations``), ``cad setup`` and ``cad
     doctor`` do before they write there. Each thing moves once: once that folder has it, the earlier one's
@@ -292,14 +301,14 @@ def cache_dir(name: str | None = None) -> Path:
     """Where a version caches what it can make again -- documents' bytes (``documents/<id>/document.xbf``),
     hulls, MJCF assets, integrations' homes --: ``versions/<name>/data/cache``, beside the records that
     point at it, which wiping it never loses. With no ``name``, this process's: its version's
-    (``versioned``), else, for a process with no version, the cache folder before 0.12
+    (``versioned``), else, for a process with no version, the cache folder of 0.11.10 and earlier
     (``legacy_cache_dir``)."""
     name = name if name is not None else versioned()
     return data_dir(name) / DATA_CACHE if name is not None else legacy_cache_dir()
 
 
 def legacy_cache_dir() -> Path:
-    """The cache folder before 0.12, which a process with no version still uses (``cache_dir``) and a
+    """The cache folder of 0.11.10 and earlier, which a process with no version still uses (``cache_dir``) and a
     version imports nothing from: the platform's cache location, which the system and the person treat as
     disposable. ``CAD_CACHE_DIR`` when set (a relative one made absolute once, and written back, so a worker
     after a ``chdir`` names the same folder), else ``$XDG_CACHE_HOME/cad`` when set, else ``~/.cache/cad`` --
@@ -338,8 +347,8 @@ def _cache_dir(name: str, appdata: bool) -> Path:
 
 def engines_dir() -> Path:
     """The engines' folder: ``CAD_ENGINE_DIR``, else ``default_engine_dir``. Each version's engine has a
-    folder of its own in it (``engine_dir``); in it directly is the flat door, lock and port file every
-    release before 0.12 finds, and every process with no version. Resolved once, here, for the client and
+    folder of its own in it (``engine_dir``); in it directly is the flat door, lock and port file every release of
+    0.11.10 and earlier finds, and every process with no version. Resolved once, here, for the client and
     the server alike (``os.path.realpath``): a ``..``, a symlink or a trailing slash in either spelling names
     the same door, lock and port file. It stays in the temporary (runtime) folder, never under the state
     folder: a sandboxed client must make its pipes there (``door.CLIENTS``), and a sandbox lets it write the
@@ -351,7 +360,7 @@ def engines_dir() -> Path:
 def engine_dir(name: str | None = None) -> Path:
     """Where an engine's door, lock and failure note live: version ``name``'s folder in the engines' folder,
     ``<engines>/<name>``. With no ``name``, this process's: its version's (``versioned``), else, for a
-    process with no version, the engines' folder itself, the flat door before 0.12 (``engines_dir``)."""
+    process with no version, the engines' folder itself, the flat door of 0.11.10 and earlier (``engines_dir``)."""
     name = name if name is not None else versioned()
     if name is None:
         return engines_dir()
@@ -604,6 +613,34 @@ def run_with() -> dict[str, Any]:
             "header": strings(found.get("header"))}
 
 
+# The channel this process's command was told it is on (``set_channel``), or None when nothing told it.
+_channel: str | None = None
+
+
+def set_channel(name: str | None) -> None:
+    """This process's command is on channel ``name`` (None, or ``default``: the default channel): the ``cad``
+    command's, as it reads a pin (``cad +<version>@<channel>``). ``ValueError`` for a name that is no channel."""
+    global _channel
+    if name is not None and name != DEFAULT_CHANNEL and not CHANNEL.fullmatch(name):
+        raise ValueError(f"not a channel: {name!r}")
+    _channel = name or DEFAULT_CHANNEL
+
+
+def channel() -> str:
+    """The delivery channel this command is on: the one its pin named, as the ``cad`` command told it
+    (``set_channel``); in a program ``cad run`` runs, the one that ``cad run`` was on, which it hands the
+    program in ``RUN_WITH`` (``channel``); else ``default`` -- for a pin that names none, a command with no pin,
+    and any other process. No list of channels is kept: a name of the channel's shape (``CHANNEL``) is one."""
+    if _channel is not None:
+        return _channel
+    try:
+        found = json.loads(os.environ.get(RUN_WITH) or "{}")
+    except ValueError:
+        return DEFAULT_CHANNEL
+    named = found.get("channel") if isinstance(found, dict) else None
+    return named if isinstance(named, str) and CHANNEL.fullmatch(named) else DEFAULT_CHANNEL
+
+
 def installation_record(data: bytes | None) -> dict[str, Any] | None:
     """An installation's record (``installations/<version>.json``) as its bytes hold it, or None for one
     that is no record: ``version``, the absolute paths of its ``python`` and its console script
@@ -723,7 +760,7 @@ def _home_prefix() -> str:
 def installation() -> str:
     """The version this installation runs as -- the one name its client, its daemon and its workers
     all go by (``status``, its bytecode): its version where it has one (``versioned``); else, with no
-    version, as before 0.12: ``CAD_INSTALLATION_VERSION`` when it names one (the ``cad`` command sets
+    version, as in 0.11.10 and earlier: ``CAD_INSTALLATION_VERSION`` when it names one (the ``cad`` command sets
     it for a development install, which reports its release's version), else the version this
     environment is registered as (``registered``: a dev environment's ``python model.py`` run directly),
     else the release declared beside this code (``previous.version``)."""
@@ -843,7 +880,7 @@ def pycache() -> str | None:
     """This installation's bytecode folder, made this user's alone and marked in use (its time); None where
     there is none to use. A version's is ``pycache`` in its code (``code_dir``), which goes with the version,
     each Python's files told apart by their names; with no version, this installation's folder under
-    ``pycache/`` in the cache folder before 0.12 (``bytecode_tag``), which the daemon prunes."""
+    ``pycache/`` in the cache folder of 0.11.10 and earlier (``bytecode_tag``), which the daemon prunes."""
     mine = versioned()
     root = code_dir(mine) if mine is not None else legacy_cache_dir() / PYCACHE
     folder = root / PYCACHE if mine is not None else root / bytecode_tag()

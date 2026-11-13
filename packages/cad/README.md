@@ -195,8 +195,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    its imports use, and the packages it names), regenerable as well, those of the release before the
    current kept as the way back (the engine's **Running a model**); and under `homes/` the private settings
    folders a run hands a tool that would otherwise read the person's own (Blender's, for a script that
-   imports bpy: `homes/blender`), empty but for what the tool itself writes there. That is the layout
-   before 0.12, which a process with no version keeps (a checkout or a test under `CAD_STATE_DIR`,
+   imports bpy: `homes/blender`), empty but for what the tool itself writes there. That is the layout of 0.11.10 and
+   earlier, which a process with no version keeps (a checkout or a test under `CAD_STATE_DIR`,
    `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`; a release installed flat). An installed version keeps all of
    its own in one folder, `versions/<version>` in the state folder: its data in `data/` (the settings,
    Recents, the registry, the page token and port, and the caches above under `data/cache/`), its

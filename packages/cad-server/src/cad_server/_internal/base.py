@@ -12,7 +12,8 @@ exists (``Making.made``), never before.
 - **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
   Python (the line ``cad_server._internal.launch.PYTHON`` names, for one uvx made), so the engine and the
-  base are one Python. uv makes it at ``base/<key>`` in the version's code (``folder``: before 0.12, and for a
+  base are one Python. uv makes it at ``base/<key>`` in the version's code (``folder``: in 0.11.10 and earlier, and
+  for a
   process with no version, in the cache folder), its files hard links into
   uv's cache (``LINK``). An installation whose own environment carries the kernel (installed with the
   extra: ``pip install 'cad[build123d]==<release>'``, a checkout's development environment) is its own base, and
@@ -262,8 +263,8 @@ def interpreter(env: Path) -> Path:
 
 def _inputs(installation: Installation) -> dict[str, Any]:
     """What makes the base, which its key digests and its marker holds. A version's environments are its
-    alone, in its own code (``folder``), so its installation's environment (``prefix``) is no input; before
-    0.12 every installation's were in one cache folder, told apart by it."""
+    alone, in its own code (``folder``), so its installation's environment (``prefix``) is no input; in 0.11.10 and
+    earlier every installation's were in one cache folder, told apart by it."""
     found = {"schema": SCHEMA, "installation": installation.name, "release": installation.release,
              "source": installation.source, "python": installation.python, "arch": installation.arch}
     if places.versioned() is None:
@@ -274,7 +275,7 @@ def _inputs(installation: Installation) -> dict[str, Any]:
 def folder() -> Path:
     """The folder the base and ``cad run``'s environments (``cad_server._internal.extras``) are made in, each
     ``<key>`` in it: ``base`` in this process's version's code (``places.code_dir``), which goes with the
-    version; with no version, ``base`` in the cache folder before 0.12 (``places.legacy_cache_dir``)."""
+    version; with no version, ``base`` in the cache folder of 0.11.10 and earlier (``places.legacy_cache_dir``)."""
     mine = places.versioned()
     return (places.code_dir(mine) if mine is not None else places.legacy_cache_dir()) / BASE
 

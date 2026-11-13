@@ -1,6 +1,6 @@
 """The registry: one self-describing record per document the engine knows, in the data folder of the
 version the engine is (``places.data_dir``: ``versions/<version>/data``; the state folder itself for an engine
-with no version, as before 0.12), called ``<state>`` here.
+with no version, as in 0.11.10 and earlier), called ``<state>`` here.
 
 ``<state>/documents/<id>/document.json`` is a document's record, one shape for every kind:
 ``{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?,
@@ -101,7 +101,7 @@ _LOCKS_LOCK = threading.Lock()
 
 def current() -> "Registry | None":
     """The registry of this process's data folder and its cache (``places.data_dir``, ``places.cache_dir``:
-    its version's, else the state and cache folders before 0.12), where they are now (``CAD_STATE_DIR`` and
+    its version's, else the state and cache folders of 0.11.10 and earlier), where they are now (``CAD_STATE_DIR`` and
     ``CAD_CACHE_DIR`` are read each time); ``FACTORY``'s where one is set."""
     if FACTORY is not None:
         return FACTORY()

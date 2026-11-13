@@ -410,7 +410,7 @@ def _cache() -> str:
 
 def _leftovers(gone=frozenset()):
     """What earlier releases left behind that none running now needs (``cad_server._internal.leftovers``):
-    the state and cache folders of the layout before 0.12 (``places``: a version's own go with it), and each
+    the state and cache folders of the layout of 0.11.10 and earlier (``places``: a version's own go with it), and each
     class found in them -- read as if the installations whose prefixes
     are ``gone`` were no longer registered (``--prune``'s plan, before it removes them). What 0.8 and 0.7 kept
     outside what 0.10 moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for
@@ -420,7 +420,7 @@ def _leftovers(gone=frozenset()):
     from cad.engine.places import (appdata_cache_dir, appdata_state_dir, earlier_cache_dir, earlier_state_dir,
                                    engines_dir, legacy_cache_dir, state_dir)
 
-    # The layout before 0.12 (``places``): its state and cache folders, and its flat engine folder.
+    # The layout of 0.11.10 and earlier (``places``): its state and cache folders, and its flat engine folder.
     state, cache = state_dir(), legacy_cache_dir()
     before, before_cache = earlier_state_dir(), earlier_cache_dir()
     prefixes = [record["prefix"] for record in installations.records() if record["prefix"] not in gone]

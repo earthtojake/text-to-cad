@@ -1,15 +1,16 @@
-"""The layout before 0.12, as the default channel's old version: what a version imports from where it has no
+"""The layout of 0.11.10 and earlier, as the default channel's old version: what a version imports from where it has no
 version to import from, and what goes once the default channel has left it and it is safe to remove.
 
-Before 0.12 every release on a device shared one data folder, the state folder itself, one cache folder
-(``places.legacy_cache_dir``), and kept its code flat in ``releases/<release>``. A version of 0.12 or later
+In 0.11.10 and earlier every release on a device shared one data folder, the state folder itself, one cache folder
+(``places.legacy_cache_dir``), and kept its code flat in ``releases/<release>``. A version in its own folder
 imports from it (``cad_server._internal.imports``: the same relative names as a version's ``data/``) and never
 writes it. The default channel's first move on a device with this layout imports from it; once the default
 channel has a pointer, the layout's bulk goes as soon as it is safe (``unsafe`` says why not yet): right after
 that move, and else at every ``versions.sweep`` (the next move, a server going idle, ``cad doctor --prune``).
 
 Safe means all of: the default's version has its data imported (its marker); it has started and its server
-runs (``versions.serves``); no server but that version's own holds the flat engine folder every client before 0.12
+runs (``versions.serves``); no server but that version's own holds the flat engine folder every client of 0.11.10 and
+earlier
 finds (``flat_server``: one started by uvx outside ``releases/`` among them); no process runs from the layout (``releases.running`` on its release folders and its
 kernel environments; on Windows, where that cannot be asked, a rename that the system refuses for a file in use
 keeps the folder). Nothing of an agent app's is read for it, and no record is kept: the layout's own folders are
@@ -17,13 +18,14 @@ the record.
 
 What ``remove`` removes, by name (``REMOVED``, ``CACHES``): each flat ``releases/<release>`` (renamed aside first)
 with its making's lock and its installation's record, and ``releases/`` once empty; the shared ``documents/``
-(the records) and ``recents/`` in the state folder; in the cache folder before 0.12 the kernel and ``cad run``
+(the records) and ``recents/`` in the state folder; in the cache folder of 0.11.10 and earlier the kernel and ``cad
+run``
 environments (``base``), compiled Python (``pycache``), documents' bytes (``documents``), ``hulls``, ``mjcf`` and
 ``homes``, and the cache folder once nothing else is in it.
 
-What it keeps, because a client before 0.12 may still read it and it is small, or it is the device's: the
-shared ``settings.json`` (a telemetry no is written there too), ``engines/`` (the page token and port where a
-client before 0.12 finds them), the other small files there (``settings.lock``, ``install-channels.json``,
+What it keeps, because a client of 0.11.10 or earlier may still read it and it is small, or it is the device's: the
+shared ``settings.json`` (a telemetry no is written there too), ``engines/`` (the page token and port where a client
+of 0.11.10 or earlier finds them), the other small files there (``settings.lock``, ``install-channels.json``,
 ``versions.json``, the telemetry spool, the updater's records), ``installations/`` (the mirror,
 ``pointers.mirror``), and every global file: the pointers, ``install.lock``, ``install-receipt.json``,
 ``install-aside/``, ``plugin/``, ``plugin.lock``, ``versions/``.
@@ -45,7 +47,8 @@ __all__ = ["CACHES", "IMPORTED", "REMOVED", "cache_root", "importable", "present
 IMPORTED = ("settings.json", "documents", "recents", "engines/token", "engines/engine.json", "telemetry-batches.jsonl")
 # What goes from the state folder, beside the flat release folders.
 REMOVED = ("documents", "recents")
-# What goes from the cache folder before 0.12: documents' bytes and their kept checks, convex hulls, MJCF assets,
+# What goes from the cache folder of 0.11.10 and earlier: documents' bytes and their kept checks, convex hulls, MJCF
+# assets,
 # integrations' homes, the kernel and ``cad run`` environments, compiled Python.
 CACHES = ("documents", "hulls", "mjcf", "homes", "base", "pycache")
 RELEASES = "releases"
@@ -101,12 +104,12 @@ def unsafe(version: str) -> str | None:
         return f"a server other than text-to-cad {version}'s holds the flat engine folder {places.engines_dir()}"
     for folder in (*(root() / RELEASES / name for name in _releases()), cache_root() / "base"):
         if folder.exists() and releases.running(folder):
-            return f"a process of a release before 0.12 still runs from {folder}"
+            return f"a process of 0.11.10 or earlier still runs from {folder}"
     return None
 
 
 def flat_server() -> str | None:
-    """The environment of the server that holds the flat engine folder every client before 0.12 finds
+    """The environment of the server that holds the flat engine folder every client of 0.11.10 and earlier finds
     (``places.engines_dir``: its ``engine.lock``, and its door, on Windows its port file), as it says it in its
     ``status`` (``prefix``), read and nothing started; ``""`` for one that holds the lock and does not answer or
     say; None when none holds it. The default version's own server holds it too, as the bridge."""
@@ -157,7 +160,7 @@ def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
         return True
     why = unsafe(version)
     if why is not None:
-        say(f"the code and caches of releases before 0.12 stay for now: {why}")
+        say(f"the code and caches of 0.11.10 and earlier stay for now: {why}")
         return False
     from cad_server._internal import installations
 
@@ -167,7 +170,7 @@ def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
     for name in _releases():
         path = folder / name
         if current is not None and installations._same_place(current["prefix"], path):
-            say(f"release {name} before 0.12 stays: it is current")
+            say(f"release {name} of 0.11.10 or earlier stays: it is current")
             complete = False
             continue
         if _gone(path, say):
@@ -189,7 +192,7 @@ def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
         complete = _gone(path, say) and complete
     _rmdir(cache_root())
     if complete:
-        say("removed the code, records and caches of releases before 0.12")
+        say("removed the code, records and caches of 0.11.10 and earlier")
     return complete
 
 

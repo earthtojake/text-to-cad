@@ -28,9 +28,10 @@ source's own ``MARKER``. Every format but the engine record's is this release's 
 is converted; the server's own migrations at its start (``identity.migrate``) run on the copy as on any data.
 
 **The source** (``source``): what the channel leaves (``versions.move`` names it) -- a version, where it is
-older and its data is imported; the layout before 0.12, for the default channel's first move on a device with it
+older and its data is imported; the layout of 0.11.10 and earlier, for the default channel's first move on a device
+with it
 --; for a channel's first use, or a start that names none, the highest older version present whose data is;
-failing that the layout before 0.12 (``cad_server._internal.legacy``), which ranks below every
+failing that the layout of 0.11.10 and earlier (``cad_server._internal.legacy``), which ranks below every
 version; failing that nothing, and the data starts empty. Never a newer version.
 
 **How**, under the version's import lock (``versions/<version>/import.lock``): any ``data.importing-*`` a crash
@@ -42,7 +43,7 @@ said in one line; the import never stops a start: the server's start (``cad_serv
 channel's move (``versions.move``) both call ``ensure``, the first before it serves anything.
 
 The marker, ``data/format.json``: ``{"schema", "version", "imported": {"kind": "version"|"legacy", "version"} or
-None, "at", "skipped"}``. The layout before 0.12 is removed only once the default channel's version has it
+None, "at", "skipped"}``. The layout of 0.11.10 and earlier is removed only once the default channel's version has it
 (``legacy.unsafe``).
 """
 
@@ -74,9 +75,9 @@ CACHE = "cache"
 
 @dataclass(frozen=True)
 class Source:
-    """What a version imports from: an older version's data (``kind`` ``version``), or the layout before 0.12
+    """What a version imports from: an older version's data (``kind`` ``version``), or the layout of 0.11.10 and earlier
     (``legacy``, its ``version`` the one its ``current`` named, if any), at ``root``, its document cache at
-    ``cache`` (a version's ``data/cache``, the layout's cache folder before 0.12)."""
+    ``cache`` (a version's ``data/cache``, the layout's cache folder of 0.11.10 and earlier)."""
 
     kind: str
     version: str | None
@@ -85,7 +86,7 @@ class Source:
 
     def words(self) -> str:
         if self.kind == "legacy":
-            return "the data of releases before 0.12"
+            return "the data of 0.11.10 and earlier"
         return f"text-to-cad {self.version}'s data"
 
 
@@ -120,9 +121,10 @@ def imported(name: str) -> bool:
 
 def source(name: str, leaving: str | None = None, *, legacy_left: bool = False) -> Source | None:
     """Where version ``name`` imports from (see the module): what its channel leaves -- ``leaving``, a version,
-    when it is older and imported; the layout before 0.12 when ``legacy_left`` (the default channel's first move
+    when it is older and imported; the layout of 0.11.10 and earlier when ``legacy_left`` (the default channel's first
+    move
     on a device with it) and it holds anything to import --; else the highest older version present whose data
-    is imported; else the layout before 0.12 where it holds anything to import; else None."""
+    is imported; else the layout of 0.11.10 and earlier where it holds anything to import; else None."""
     from cad_server._internal import installations, legacy, versions
 
     def older(other: str) -> bool:

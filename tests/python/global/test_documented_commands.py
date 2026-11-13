@@ -29,6 +29,7 @@ from tests.python.support.paths import PROJECTS, add_sources, repo_path
 add_sources()
 
 from cad_server import cli  # noqa: E402
+from cad_server._internal import pins  # noqa: E402
 
 SKILLS = Path(repo_path("skills"))
 
@@ -70,10 +71,8 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
             continue  # an unbalanced quote is prose, not a command form
         argv: list[str] = []
         elided = False
-        # A skill's command pins its release first, `cad +<VERSION> <verb>` (the dispatcher takes it off
-        # before the command line sees it; test_skill_commands_pin_their_release.py holds the pin).
-        if tokens[1:2] and tokens[1].startswith("+"):
-            del tokens[1]
+        # A skill's command pins its release first, `cad +<VERSION> <verb>`: kept, and read by the real
+        # parser's reading of a pin (`_split_command`); test_skill_commands_pin_their_release.py holds its value.
         for token in tokens[1:]:
             if token == ELISION:
                 elided = True
@@ -94,9 +93,10 @@ def _documented_forms() -> list[tuple[Path, list[str], bool]]:
 
 
 def _split_command(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The command this form dispatches to, exactly as `cli.main` picks it: a document type's operation
-    (`xbf export`) or a command."""
-    return cli.resolve(argv)
+    """The command this form dispatches to, exactly as `cli.main` picks it: its pin read first (`pins.take`,
+    which refuses one that is none), then a document type's operation (`xbf export`) or a command."""
+    _pin, rest = pins.take(argv)
+    return cli.resolve(rest)
 
 
 def _parse(name: str, rest: list[str]) -> None:
@@ -121,6 +121,16 @@ class DocumentedCommands(unittest.TestCase):
             [source for source, _, _ in forms if source.parts[0] == "packages"],
             "the package markdown sweep matched nothing",
         )
+
+    def test_every_documented_pin_is_one_the_cad_command_reads(self):
+        pinned = 0
+        for source, argv, _elided in _documented_forms():
+            if argv[0].startswith("+"):
+                pinned += 1
+                with self.subTest(source=str(source), form=" ".join(argv)):
+                    pin, _rest = pins.take(argv)  # a Failure, saying why, for one that is none
+                    self.assertIsNone(pin.channel, f"{source}: our own text names no channel ({argv[0]})")
+        self.assertGreater(pinned, 20, "the skills' commands pin their release")
 
     def test_every_documented_form_names_a_real_command(self):
         for source, argv, _elided in _documented_forms():

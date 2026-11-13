@@ -79,6 +79,7 @@ class Device(unittest.TestCase):
         self.wheels = self.root / "wheels"
         environment = {"CAD_STATE_DIR": str(self.state), "CAD_ENGINE_DIR": str(self.engines),
                        "CAD_CACHE_DIR": str(self.cache), "CAD_INSTALLATION_VERSION": "",
+                       "CAD_LAUNCHER_DIR": str(self.root / "bin"),
                        "CAD_UPDATE_FIND_LINKS": str(self.wheels)}
         self.uv = Uv()
         for patch in (mock.patch.dict(os.environ, environment), mock.patch.object(places, "HOME", None),
@@ -219,12 +220,16 @@ class MakingPresent(Device):
 
         out, err = io.StringIO(), io.StringIO()
         self.uv.fail = lambda step: (2, "error: dns error") if step[1] == "pip" else None
+        loud = io.StringIO()
         with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": X}):
             code = versions.add(quiet=True, out=out, err=err)
-        lines = err.getvalue().splitlines()
-        self.assertEqual((code, out.getvalue(), len(lines)), (3, "", 2))
-        self.assertIn(f"text-to-cad {X} is not installed, and could not be installed from this shell", lines[0])
-        self.assertTrue(lines[1].endswith(versions.add_command(X)))
+            self.assertEqual(versions.add(out=io.StringIO(), err=loud), 3)
+        (reason,) = err.getvalue().splitlines()  # the cad command's own run: the reason alone, said in its line
+        self.assertEqual((code, out.getvalue()), (3, ""))
+        self.assertIn("dns error", reason)
+        said = loud.getvalue().splitlines()[-1]  # a person's run: the one line, with the command to run
+        self.assertTrue(said.startswith(f"cad: text-to-cad {X} is not installed, and could not be installed from this shell ("))
+        self.assertTrue(said.endswith(versions.add_command(X)))
 
 
 class Pointers(Device):
@@ -512,7 +517,7 @@ class BeforeTwelve(Device):
         imports.ensure(X)
         self.assertIn("has not started", legacy.unsafe(X))
         self.serving(X)
-        flat = places.lock(self.engines / "engine.lock")  # a server before 0.12, started outside releases/
+        flat = places.lock(self.engines / "engine.lock")  # a server of 0.11.10 or earlier, started outside releases/
         self.assertIn("holds the flat engine folder", legacy.unsafe(X))
         self.assertFalse(legacy.remove(X))
         with mock.patch.object(legacy, "flat_server", return_value=str(places.code_dir(X) / "server")):
@@ -528,11 +533,27 @@ class BeforeTwelve(Device):
 
 
 class SetupAdd(Device):
+    def interpreter(self, folder: str) -> None:
+        home = self.root / "home"
+        home.mkdir(exist_ok=True)
+        (home / "python.exe").write_bytes(b"MZ")
+        Path(folder, "Scripts").mkdir(parents=True, exist_ok=True)
+        Path(folder, "Scripts", "python.exe").write_bytes(b"MZ")
+        Path(folder, "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.0\n", encoding="utf-8")
+
     def test_add_makes_this_version_present_and_changes_nothing_else(self) -> None:
         from cad_server.cli import setup
 
         dev = f"{X}-dev.20261113000000"
         out, err = io.StringIO(), io.StringIO()
+        # On Windows the cad command's Python, as uv makes it, without uv.
+        making = mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)
+        making.start()
+        self.addCleanup(making.stop)
+        command = Path(installations.proxy_path())
+        command.parent.mkdir()
+        if os.name != "nt":  # 0.11.10's, which knows no pin: replaced (on Windows, none: written)
+            command.write_text(f"#!/bin/sh\n# {installations.MARK}11\n", encoding="utf-8")
         with mock.patch.dict(os.environ, {"CAD_INSTALLATION_VERSION": dev}), \
                 mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
             self.assertEqual(setup.main(["--add"]), 0)
@@ -542,6 +563,7 @@ class SetupAdd(Device):
         self.assertTrue(any("-e" in step for step in self.uv.steps), "a development version from its checkout")
         self.assertEqual(sorted(os.listdir(self.state)), ["install.lock", "versions"],
                          "no pointer, no mirror, no receipt, no settings, no plugin folder")
+        self.assertEqual(installations.proxy_status(), installations.OK, "and the cad command, of this revision")
         with mock.patch.object(sys, "stderr", io.StringIO()), self.assertRaises(SystemExit):
             setup.main(["--add", "--only", "claude-code"])
 
