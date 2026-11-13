@@ -192,7 +192,7 @@ def _own() -> Installation:
 
 
 def server_source() -> str | None:
-    """Where this installation's server installs from again (``releases.make``): its source tree, the wheel
+    """Where this installation's server installs from again (``versions.make_present``): its source tree, the wheel
     it was installed from, or None, its release on the index (``_source``)."""
     import cad_server
 

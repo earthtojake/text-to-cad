@@ -1,11 +1,14 @@
 """The update's handshake between releases, frozen (``update_handshake.json``).
 
-Nothing on a device compares versions any more: an update is release A's engine running release B's
-code, and B's reading what A wrote. A's engine runs B's ``setup --engine-update`` and reads its
-progress frames; A's helper starts B's engine with B's Python by the daemon module's name, asks it
-``status`` and ``http``, stops it with ``stop`` (``drain``), and runs the release it leaves current's
-``plugin --refresh`` (the plugin folder following it); B reads the ``current`` file, the installation
-records, the release folders, the token and the switch's record that A wrote. And across the
+Nothing on a device compares versions any more: an update is release A's code running release B's, and B's
+reading what A wrote. From the first pinned release the handshake is the contract in
+``cad_server._internal.update``'s docstring (``contract``): A installs B by B's own ``cad setup --add --quiet``
+through uvx, then runs the ``cad`` B's code marker names (``versions/<version>/code/cad-version.json``) as ``setup
+--engine-update`` and reads its progress frames. An updater of 0.11.10 and earlier, frozen on devices, runs B's
+``setup --engine-update`` from the flat release folder it made and reads its frames; its helper starts B's engine
+with the Python the ``current`` mirror's record names, by the daemon module's name, asks it ``status`` and ``http``,
+stops it with ``stop`` (``drain``), and runs B's ``plugin --refresh``; B reads the ``current`` file, the installation
+records, the flat release folders and the token those releases wrote. And across the
 update, what A's pages and a host's kept card shell read of B's engine over HTTP (``http``): the
 page a tab is at (``/<id>``), the CAD app's module a kept shell imports (``/app``), and
 ``GET /api/v1/server``'s ``release`` and ``instance`` (with ``notice`` and ``update``), which a page
@@ -79,7 +82,7 @@ def http_surface() -> dict:
 
 def surface() -> dict:
     """The handshake as this source tree has it."""
-    from cad_server._internal import installations, releases, switch, update
+    from cad_server._internal import installations, releases, update
     from cad_server.cli import plugin as plugin_cli
     from cad_server.cli import setup as setup_cli
     from cad_server.cli import update as update_cli
@@ -111,7 +114,7 @@ def surface() -> dict:
     # What A writes and B reads.
     state = installations.state()
     root = Path(state.path(installations.FOLDER)).parent
-    folder = releases.where("9.9.9")
+    folder = releases.root() / "9.9.9"
     python, console = releases.base.interpreter(folder), releases.console(folder)
     python.parent.mkdir(parents=True, exist_ok=True)
     for path in (python, console):
@@ -120,17 +123,28 @@ def surface() -> dict:
     installations.point("9.9.9")
     record = json.loads((root / installations.FOLDER / "9.9.9.json").read_text(encoding="utf-8"))
     frame = progress.event("update", "build123d", job="9.9.9", detail="d", done=1, total=4)
-    # What the helper runs of the release it leaves current: its own plugin folder's refresh.
-    with mock.patch.object(subprocess, "run", side_effect=Started) as run:
+    # What an updater of 0.11.10 runs of the release it moved to once its helper started it: `plugin --refresh`.
+    refresh = ["plugin", "--refresh"]
+    plugin_cli.build_parser().parse_args(refresh[1:])
+    # The contract from the first pinned release on: B installed by its own `cad setup --add`, then its own setup.
+    from cad_server._internal import base
+
+    with mock.patch.object(base, "find_uv", return_value="uv"), mock.patch.dict(os.environ, {"CAD_UPDATE_FIND_LINKS": ""}):
+        install = update.install_command("9.9.9")
+    with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen:
         try:
-            switch.follow(told=lambda _line: None)
+            update.run_setup({"cad": "CAD"})
         except Started:
             pass
     return {
         "setup": {"command": "setup", "engine_update_flag": "--engine-update",
                   "flags": _flags(setup_cli.build_parser())},
         "update": {"command": "update", "flags": _flags(update_cli.build_parser())},
-        "plugin": {"arguments": run.call_args.args[0][1:], "flags": _flags(plugin_cli.build_parser())},
+        "plugin": {"arguments": refresh, "flags": _flags(plugin_cli.build_parser())},
+        "contract": {"install": install[install.index("--from"):], "setup": popen.call_args.args[0][1:],
+                     "marker": f"{places.VERSIONS}/<version>/{places.CODE}/{places.VERSION_MARKER}",
+                     "marker_keys": ["cad", "prefix", "python", "schema", "version"],
+                     "marker_schema": places.VERSION_SCHEMA},
         "progress": {"line": sorted({"progress": frame}), "frame": sorted(frame), "kind": frame["kind"],
                      "stages": list(update.STAGES)},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
@@ -148,8 +162,6 @@ def surface() -> dict:
             "release_marker": releases.MARKER,
             "release_schema": releases.SCHEMA,
             "release_command": console.relative_to(folder).as_posix(),
-            "switch_record": switch.RESULT,
-            "switch_log": switch.LOG,
         },
     }
 

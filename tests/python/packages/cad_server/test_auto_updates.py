@@ -1,7 +1,7 @@
 """Automatic updates (``cad_server/auto_updates.py``, ``cad_server._internal.update.Update.automatic``): the
-person's setting, the retry rule, and the engine's own update through the update's stand-ins -- a
-release's ``cad setup`` a script of the test's, the engine a stand-in with its work, its drain and its
-port, the switch's helper not started. The whole update with the real uv is test_update_end_to_end.py's."""
+person's setting, the retry rule, the hour of quiet, and the server's own update through the update's stand-ins --
+the release's install stood in for, its ``cad setup`` a script of the test's, the server a stand-in with its work
+and its drain. The whole update with the real uv is test_update_end_to_end.py's."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 from cad_server import auto_updates  # noqa: E402
-from cad_server._internal import installations, releases, switch, update  # noqa: E402
+from cad_server._internal import update  # noqa: E402
 
 DAY = auto_updates.RETRY_SECONDS
 
@@ -42,16 +42,8 @@ class Fixture(unittest.TestCase):
         patched.start()
         self.addCleanup(patched.stop)
         (self.root / "state").mkdir()
-
-    def release(self, version: str) -> None:
-        """A release's folder, made as ``releases.make`` makes one, and registered."""
-        folder = releases.where(version)
-        python, console = releases.base.interpreter(folder), releases.console(folder)
-        python.parent.mkdir(parents=True)
-        for path in (python, console):
-            path.write_text("", encoding="utf-8")
-        (folder / releases.MARKER).write_text(json.dumps({"schema": releases.SCHEMA, "version": version}), encoding="utf-8")
-        installations.register(version, (str(console), str(python), str(folder)))
+        # The install command ran here: the default channel has an updater.
+        (self.root / "state" / "install-receipt.json").write_text('{"schema": 1}', encoding="utf-8")
 
 
 class SettingTest(Fixture):
@@ -100,7 +92,8 @@ class RetryTest(Fixture):
         self.assertTrue(auto_updates.due("1.3.0", kept, now + 1), "a newer release the feed names: at once")
         self.assertTrue(auto_updates.due("1.2.0", kept, now - 10), "a clock set back counts as long ago")
 
-    def test_idle_means_nothing_has_run_for_a_minute(self) -> None:
+    def test_idle_means_no_command_for_an_hour(self) -> None:
+        self.assertEqual(auto_updates.IDLE_SECONDS, 3600, "the one number: an hour with no command")
         self.assertFalse(auto_updates.quiet(100.0, 100.0 + auto_updates.IDLE_SECONDS - 0.1))
         self.assertTrue(auto_updates.quiet(100.0, 100.0 + auto_updates.IDLE_SECONDS))
 
@@ -159,42 +152,46 @@ class Engine:
 class AutomaticTest(Fixture):
     def setUp(self) -> None:
         super().setUp()
-        self.release("1.1.0")
-        installations.point("1.1.0")
         self.log = self.root / "setup.log"
         self.command = self.setup_script(0)
         self.notice = {"latest": "1.1.1", "version": "1.1.0"}
+        self.installs: list[str] = []
+        self.refused: Exception | None = None
+
+        def install(version: str) -> dict:
+            self.installs.append(version)
+            if self.refused is not None:
+                raise self.refused
+            return {"cad": self.command}
+
         for patch in (mock.patch.object(auto_updates, "IDLE_SECONDS", 0.3),
                       mock.patch.object(update, "IDLE_POLL_SECONDS", 0.02),
                       mock.patch("cad_server.updates.notice", side_effect=lambda: self.notice),
                       mock.patch("cad_server.updates.refresh", return_value=None),
-                      mock.patch.object(releases, "make", side_effect=lambda version, told=None: {"cad": self.command})):
+                      mock.patch.object(update, "install", side_effect=install)):
             patch.start()
             self.addCleanup(patch.stop)
-        self.spawned = mock.patch.object(switch, "spawn").start()
-        self.addCleanup(mock.patch.stopall)
         self.job, self.engine = update.Update(), Engine()
         self.addCleanup(self.stop)
 
     def stop(self) -> None:
-        """The engine stopped: an automatic update still waiting gives up, before the next test's settings."""
+        """The server stopped: an automatic update still waiting gives up, before the next test's settings."""
         self.engine.stopping.set()
         thread = self.job.thread
         if thread is not None:
             thread.join(30)
 
     def setup_script(self, code: int) -> str:
-        """A release's ``cad setup --engine-update``: each run's ``PREPARE_ENV`` kept in the log, an apps
-        frame on stdout for a whole run, and ``code``."""
-        frame = {"progress": {"kind": "update", "stage": "apps", "job": "1.1.1", "outputs": [], "detail": "",
-                              "done": 2, "total": 4, "elapsedMs": 0}}
+        """A release's ``cad setup --engine-update``: each run kept in the log, a restart frame on stdout, and
+        ``code``."""
+        frame = {"progress": {"kind": "update", "stage": "restart", "job": "1.1.1", "outputs": [], "detail": "",
+                              "done": 3, "total": 4, "elapsedMs": 0}}
         script = self.root / f"setup-{code}.py"
         script.write_text(
-            "import json, os, sys\n"
-            f"prepare = os.environ.get({update.PREPARE_ENV!r}, '')\n"
-            f"open({str(self.log)!r}, 'a', encoding='utf-8').write(json.dumps([sys.argv[1:], prepare]) + '\\n')\n"
-            f"if not prepare: print({json.dumps(frame)!r}, flush=True)\n"
-            f"if {code}: print('the CAD kernel environment needs the network once', file=sys.stderr)\n"
+            "import json, sys\n"
+            f"open({str(self.log)!r}, 'a', encoding='utf-8').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            f"print({json.dumps(frame)!r}, flush=True)\n"
+            f"if {code}: print('the apps could not be reached', file=sys.stderr)\n"
             f"sys.exit({code})\n", encoding="utf-8")
         if os.name == "nt":
             command = self.root / f"cad-{code}.cmd"
@@ -217,68 +214,61 @@ class AutomaticTest(Fixture):
     def waiting(self) -> bool:
         return (self.job.status()["automatic"] or {}).get("state") == "waiting"
 
-    def test_it_gets_ready_at_once_and_switches_only_once_nothing_has_run_for_a_while(self) -> None:
+    def test_it_installs_at_once_and_runs_the_release_s_setup_only_once_nothing_has_run_for_a_while(self) -> None:
         self.assertEqual(self.job.automatic(self.engine), "1.1.1")
-        self.until(self.waiting, "the release installed and its base made")
-        self.assertEqual(self.runs(), [[["setup", "--engine-update"], "1"]], "its first half alone: no app changed")
-        self.assertEqual(self.job.snapshot()["state"], "idle", "no page shows an update until it switches")
+        self.until(self.waiting, "the release installed")
+        self.assertEqual((self.installs, self.runs()), (["1.1.1"], []), "installed alone: no app changed, no move")
+        self.assertEqual(self.job.snapshot()["state"], "idle", "no page shows an update until its setup runs")
         self.assertEqual(auto_updates.attempted()["release"], "1.1.1")
         self.assertIsNone(self.job.automatic(self.engine), "one at a time")
-        # Busy well past the idle window: it waits.
+        # Busy well past the idle window: it waits. ``Daemon.working`` is the command in flight, asked each poll.
         asked = self.engine.asked
         self.until(lambda: self.engine.asked > asked + 3 * auto_updates.IDLE_SECONDS / update.IDLE_POLL_SECONDS,
-                   "the engine asked while it works")
-        self.assertEqual((self.engine.drained, self.waiting()), ([], True))
-        # The work ends: once nothing has run for the window, the apps and the switch, as a click's.
+                   "the server asked while it works")
+        self.assertEqual((self.runs(), self.waiting()), ([], True))
+        # The work ends (``Daemon.worked``, the last command's end): once nothing has run for the window, its setup.
         self.engine.busy, self.engine.worked = False, time.monotonic()
-        self.until(lambda: self.job.snapshot()["state"] == "restarting", "the switch")
-        self.assertEqual(self.runs()[1], [["setup", "--engine-update"], ""], "its whole setup: the apps' plugins")
+        self.until(lambda: self.job.snapshot()["state"] == "restarting", "the release's setup")
+        self.assertEqual(self.runs(), [["setup", "--engine-update"]], "its whole setup, the one argument")
         self.assertEqual(self.job.snapshot()["target"], "1.1.1")
         self.assertIsNone(self.job.status()["automatic"])
-        # It says it is restarting a moment before it asks for the drain: await the ask, never race it.
-        self.until(lambda: self.engine.drained, "the drain asked")
-        (then,) = self.engine.drained
-        then()  # drained: its helper starts
-        self.spawned.assert_called_once_with("1.1.1", port=4567, previous="1.1.0")
-        self.assertIsNone(self.job.automatic(self.engine), "a switch underway")
+        self.assertIsNone(self.job.automatic(self.engine), "an update underway")
 
     def test_a_click_while_it_gets_ready_makes_it_the_click_s_at_once(self) -> None:
         self.job.automatic(self.engine)
         self.until(self.waiting, "ready")
         with mock.patch("cad_server.updates.newest", side_effect=AssertionError("the click joins it: no feed read")):
-            started = self.job.start(SimpleNamespace(port=4567, retire=self.engine.drain))
+            started = self.job.start(SimpleNamespace(port=4567))
         self.assertEqual((started["state"], started["target"]), ("working", "1.1.1"))
-        self.until(lambda: self.job.snapshot()["state"] == "restarting", "the switch, though the engine is busy")
-        self.until(lambda: self.engine.drained, "the drain asked")
-        self.assertEqual(len(self.engine.drained), 1, "the drain still waits for what is in flight")
+        self.until(lambda: self.job.snapshot()["state"] == "restarting", "its setup, though the server is busy")
+        self.assertEqual(self.runs(), [["setup", "--engine-update"]])
 
     def test_a_failure_says_nothing_and_that_release_is_not_tried_again_for_a_day(self) -> None:
-        self.command = self.setup_script(1)
+        from cad_server._internal import base
+
+        self.refused = base.Refused("the CAD kernel environment needs the network once")
         self.job.automatic(self.engine)
         self.until(lambda: self.job.status()["automatic"] is None, "the attempt over")
         self.assertEqual(self.job.snapshot()["state"], "idle", "no page was following it: nothing is said")
         self.assertEqual(auto_updates.attempted()["error"], "the CAD kernel environment needs the network once")
         self.assertIsNone(self.job.automatic(self.engine), "not again in a loop")
-        self.assertEqual(len(self.runs()), 1)
-        self.notice = {"latest": "1.1.2", "version": "1.1.0"}
-        self.command = self.setup_script(0)
+        self.assertEqual(self.installs, ["1.1.1"])
+        self.notice, self.refused = {"latest": "1.1.2", "version": "1.1.0"}, None
         self.assertEqual(self.job.automatic(self.engine), "1.1.2", "a newer release the feed names: at once")
         self.until(self.waiting, "ready")
         self.assertIn("text-to-cad 1.1.2 installed, switching once idle", auto_updates.describe(self.job.status()))
 
-    def test_a_switch_that_failed_is_kept_as_the_automatic_attempt_s_and_nothing_starts_for_a_while(self) -> None:
-        auto_updates.attempt("1.1.1")
-        switch._record({"from": "1.1.0", "to": "1.1.1", "port": 4567, "ok": False, "error": "it exited with code 3"})
-        self.job.recall()
-        self.assertEqual(auto_updates.attempted()["error"], "it exited with code 3")
-        self.notice = {"latest": "1.1.2", "version": "1.1.0"}
-        self.assertIsNone(self.job.automatic(self.engine), "a failure recalled: nothing for ten minutes")
-        self.job.failed_at -= update.RECALL_SECONDS
-        self.assertEqual(self.job.automatic(self.engine), "1.1.2")
+    def test_a_setup_that_fails_is_kept_as_the_attempt_s_failure(self) -> None:
+        self.command = self.setup_script(1)
+        self.engine.busy = False
+        self.job.automatic(self.engine)
+        self.until(lambda: (auto_updates.attempted() or {}).get("error"), "its setup failed, kept as the attempt's")
+        self.assertEqual(auto_updates.attempted()["error"], "the apps could not be reached")
+        self.assertEqual(self.job.snapshot()["state"], "failed")
+        self.assertIsNone(self.job.automatic(self.engine), "not again for a day")
 
     def test_nothing_starts_when_it_is_off_nothing_is_newer_or_another_update_is_underway(self) -> None:
-        from cad_server._internal.file_lock import exclusive
-        from cad_server.cli.setup import LOCK
+        from cad_server._internal import versions
 
         auto_updates.change({"automatic": False})
         self.assertIsNone(self.job.automatic(self.engine))
@@ -289,27 +279,30 @@ class AutomaticTest(Fixture):
         self.assertIsNone(self.job.automatic(self.engine), "nothing newer: offline, or the feed unread")
         self.notice = notice
         self.engine.draining = True
-        self.assertIsNone(self.job.automatic(self.engine), "a drain: another update's switch")
+        self.assertIsNone(self.job.automatic(self.engine), "a drain: the server retiring")
         self.engine.draining = False
-        with exclusive(self.root / "state" / LOCK):
+        with versions.install_lock():
             self.assertTrue(auto_updates.installing())
             self.assertIsNone(self.job.automatic(self.engine), "the install command or `cad update` running")
         self.assertFalse(auto_updates.installing())
-        self.assertEqual(self.runs(), [])
+        receipt = self.root / "state" / "install-receipt.json"
+        receipt.unlink()
+        self.assertIsNone(self.job.automatic(self.engine), "no install command ran here: no updater")
+        self.assertEqual((self.installs, self.runs()), ([], []))
         self.assertIsNone(auto_updates.attempted(), "nothing was tried")
 
     def test_a_release_that_bumps_the_breaking_part_is_never_started_by_itself(self) -> None:
         for version, latest in (("1.1.0", "2.0.0"), ("0.11.0", "0.12.0"), ("0.11.0", "1.0.0")):
             self.notice = {"latest": latest, "version": version}
             self.assertIsNone(self.job.automatic(self.engine), latest)
-        self.assertEqual(self.runs(), [])
+        self.assertEqual(self.installs, [])
         self.assertIsNone(auto_updates.attempted(), "nothing was tried")
         self.assertEqual(self.job.status()["automatic"], None)
 
     def test_from_1_0_a_minor_release_is_started_by_itself(self) -> None:
         self.notice = {"latest": "1.2.0", "version": "1.1.0"}
         self.assertEqual(self.job.automatic(self.engine), "1.2.0")
-        self.until(self.waiting, "the release installed and its base made")
+        self.until(self.waiting, "the release installed")
         self.assertEqual(auto_updates.attempted()["release"], "1.2.0")
 
     def test_turned_off_while_it_waits_it_is_given_up_and_goes_on_when_turned_on(self) -> None:
@@ -317,7 +310,7 @@ class AutomaticTest(Fixture):
         self.until(self.waiting, "ready")
         auto_updates.change({"automatic": False})
         self.until(lambda: self.job.status()["automatic"] is None, "given up")
-        self.assertEqual((self.engine.drained, auto_updates.attempted()), ([], None))
+        self.assertEqual((self.runs(), auto_updates.attempted()), ([], None))
         auto_updates.change({"automatic": True})
         self.assertEqual(self.job.automatic(self.engine), "1.1.1")
 

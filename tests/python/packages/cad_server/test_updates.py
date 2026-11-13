@@ -72,11 +72,20 @@ class UpdatesTest(unittest.TestCase):
         from cad.engine import places
         from cad_server._internal import pointers
 
+        # A version is told where it is the default channel's on a device the install command set up (its receipt):
+        # where it never ran, there is no install to update.
+        receipt = places.state_dir() / pointers.RECEIPT
         with mock.patch.dict(os.environ, {"CAD_INSTALL_CHANNEL": ""}), \
                 mock.patch("cad_server._internal.channel._source_tree", return_value=False), \
                 mock.patch.object(places, "versioned", return_value="0.12.1"):
-            for default, expected in (("0.12.1", True), ("0.12.2", False), (None, False)):
-                with self.subTest(default=default), mock.patch.object(
+            for default, installed, expected in (("0.12.1", True, True), ("0.12.2", True, False), (None, True, False),
+                                                 ("0.12.1", False, False)):
+                if installed:
+                    receipt.parent.mkdir(parents=True, exist_ok=True)
+                    receipt.write_text("{}", encoding="utf-8")
+                else:
+                    receipt.unlink(missing_ok=True)
+                with self.subTest(default=default, installed=installed), mock.patch.object(
                         pointers, "default", return_value=pointers.Default(default, "pointer" if default else None)):
                     self.assertEqual(channel.told(), expected)
 

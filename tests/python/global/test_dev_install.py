@@ -93,20 +93,21 @@ class DevPluginTests(unittest.TestCase):
                                     for name in ("cad", "cad_server", "cad_mcp"))
             for path in (library, wheel, shim):
                 path.write_bytes(b"")
-            with mock.patch.object(dev_install, "build_wheel", return_value=wheel), \
-                    mock.patch.object(dev_install, "dev_root", return_value=Path(scratch)), \
-                    mock.patch.object(dev_install, "run", return_value="/state/installations/v.json\n") as run:
-                server, rewrites, page = dev_install.runtime("codex", argparse.Namespace(wheel=True, build=False), "v")
-                # Its record is kept, for --uninstall to take out.
-                self.assertEqual(json.loads((Path(scratch) / "installations.json").read_text(encoding="utf-8")),
-                                 {"v": "/state/installations/v.json"})
-        # The app starts the shim's wheel; the server's, with the library's beside it, is registered.
+            said = '{"version": "v", "before": "0.11.10"}\n'
+            with mock.patch.object(dev_install, "build_wheel", return_value=wheel) as building, \
+                    mock.patch.object(dev_install, "run", return_value=said) as run:
+                args = argparse.Namespace(wheel=True, build=False)
+                server, rewrites, page = dev_install.runtime("codex", args, "v")
+                dev_install.runtime("claude", args, "v")
+            building.assert_called_once()  # one build a run, for every host it installs
+        # The app starts the shim's wheel; the server's, with the library's beside it, is the version.
         self.assertEqual((server["args"], server["env"]),
                          ([*dev_install.LAUNCHER[1:], str(shim), "cad-mcp"],
                           {"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": "v"}))
         uvx = [*dev_install.LAUNCHER[:-1], "--with", str(library), dev_install.LAUNCHER[-1], str(wheel)]
-        # The server's installation registers as this install's version, by its own python.
-        run.assert_called_once_with(*uvx, "python", "-c", dev_install.REGISTER, "v", capture=True)
+        # The server's installation is installed as this install's version, and the default channel moved to it, by
+        # its own python.
+        run.assert_called_with(*uvx, "python", "-c", dev_install.INSTALL_VERSION, "v", capture=True)
         self.assertEqual(rewrites, dev_install.skill_rewrites("v"))
         self.assertIsNone(page, "a wheel serves the page it was built with")
 

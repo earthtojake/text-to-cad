@@ -4,10 +4,12 @@
 #
 # It finds uv, or installs it with uv's own installer, then runs `cad setup` from the newest
 # release of text-to-cad's server through uvx: text-to-cad set up or updated in every agent app on this machine,
-# with nothing asked. Run it again to update; with --uninstall it runs `cad uninstall` instead.
+# with nothing asked. Run it again to update; with --uninstall it runs `cad uninstall` instead; with
+# --add X it installs release X alone (`cad setup --add`), which a skill's setup block asks for.
 # For its options, run it as a script block:
 #
 #   & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --help
+#   & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add X.Y.Z
 #
 # Everything happens inside Install-TextToCad, called on the last line: a download cut short runs
 # nothing, and a failure returns instead of closing the window.
@@ -18,6 +20,8 @@ function Install-TextToCad {
     $CadVersion = "0.11.10"
     # The first release whose `cad uninstall` asks before it destroys, and takes --yes for an answer.
     $ConsentSince = '0.11.0'
+    # The first release that installs itself alone, `cad setup --add`: the first whose skills pin their release.
+    $AddSince = '0.11.11'
     $VersionFeed = 'https://api.texttocad.dev/v1/versions'
     $Releases = 'https://github.com/earthtojake/text-to-cad/releases/download'
 
@@ -27,12 +31,16 @@ function Install-TextToCad {
         Write-Host ''
         Write-Host '  irm https://www.texttocad.dev/install.ps1 | iex'
         Write-Host '  & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --dry-run'
+        Write-Host '  & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add X.Y.Z'
         Write-Host ''
-        Write-Host 'Options (all but --version, --from and --uninstall go to `cad setup`, or to `cad uninstall`):'
+        Write-Host 'Options (all but --version, --from, --add and --uninstall go to `cad setup`, or to `cad uninstall`):'
         Write-Host '  --dry-run          print the plan and stop: nothing is changed'
         Write-Host '  --only APP[,APP]   only these apps: claude, claude-desktop, codex, cursor, grok, gemini, or'
         Write-Host '                     the agents the skills go to through the Skills CLI (cad setup --help)'
-        Write-Host '  --uninstall        take text-to-cad out again: runs cad uninstall (with --purge, its state and caches too)'
+        Write-Host '  --uninstall        take text-to-cad out again: runs cad uninstall (with --purge, everything)'
+        Write-Host '  --add X.Y.Z        install release X.Y.Z alone, and the cad command, and change nothing else: no app,'
+        Write-Host '                     no other release, no setting (`cad setup --add`, which a skill''s setup block asks'
+        Write-Host '                     for). It reads no version feed and installs exactly X.Y.Z; it takes no other option'
         Write-Host '  --no-telemetry     turn telemetry off'
         Write-Host "  --version X.Y.Z    install that release (default: the newest, from $VersionFeed,"
         Write-Host "                     never older than this script's own, $CadVersion)"
@@ -80,6 +88,7 @@ function Install-TextToCad {
     # argument goes to it, in order.
     $version = $null
     $from = $null
+    $add = $null
     $verb = 'setup'
     $rest = @()
     for ($index = 0; $index -lt $args.Count; $index++) {
@@ -106,18 +115,65 @@ function Install-TextToCad {
         }
         if ($argument.StartsWith('--from=')) { $from = $argument.Substring(7); continue }
         if ($argument -eq '--uninstall') { $verb = 'uninstall'; continue }
+        if ($argument -eq '--add') {
+            if ($index + 1 -ge $args.Count -or -not [string]$args[$index + 1]) {
+                Write-Host "error: --add needs a release, as in --add $CadVersion" -ForegroundColor Red
+                return
+            }
+            $index++
+            $add = [string]$args[$index]
+            continue
+        }
+        if ($argument.StartsWith('--add=')) {
+            $add = $argument.Substring(6)
+            if (-not $add) {
+                Write-Host "error: --add needs a release, as in --add $CadVersion" -ForegroundColor Red
+                return
+            }
+            continue
+        }
         $rest += $argument
+    }
+
+    if ($add) {
+        # Exactly that release, alone: no feed read, no newer one taken, nothing else asked of it.
+        $refusal = $null
+        if ($verb -ne 'setup') { $refusal = '--add installs a release; it does not go with --uninstall' }
+        elseif ($version) { $refusal = '--add names its release; it does not go with --version' }
+        elseif ($rest.Count) { $refusal = "--add takes no other option: $($rest -join ' ')" }
+        elseif ($add -like '*-dev.*') {
+            $refusal = "$add is a development version: it is installed from its own checkout alone (scripts/install/dev_install.py)"
+        }
+        elseif ($add -notmatch '^[0-9][0-9A-Za-z.+-]*$') { $refusal = "not a release: $add" }
+        elseif (-not $from -and -not $env:CAD_INSTALL_FROM -and (Test-Older $add $AddSince)) {
+            $refusal = "$add installs no release alone (the first that does is $AddSince): run this without --add"
+        }
+        if ($refusal) {
+            Write-Host "error: $refusal" -ForegroundColor Red
+            return
+        }
+        $version = $add
+        $rest = @('--add')
     }
 
     if (-not $from -and $env:CAD_INSTALL_FROM) { $from = $env:CAD_INSTALL_FROM }
     if ($from) {
-        # A build named outright (a wheel, a folder, a requirement): uvx takes it as it is, nothing refreshed.
+        # A build named outright (a wheel, a folder, a requirement): uvx takes it as it is, nothing refreshed. With
+        # --add, it must be that release's: a wheel's file name says its version.
+        $leaf = Split-Path $from -Leaf
+        if ($add -and ($leaf -like 'cad_server-*.whl' -or $leaf -like 'cad-server==*') -and
+                -not ($leaf -like "cad_server-$add-*.whl" -or $leaf -eq "cad-server==$add")) {
+            Write-Host "error: --from $from is not text-to-cad $add" -ForegroundColor Red
+            return
+        }
         $requirement = $from
         $refresh = @()
-        $version = $from
+        $version = if ($add) { $add } else { $from }
         $origin = 'as --from asked'
     } else {
-        if ($version) {
+        if ($add) {
+            $origin = 'as --add asked'
+        } elseif ($version) {
             $origin = 'as --version asked'
         } else {
             # An older Windows PowerShell may not offer TLS 1.2 on its own.

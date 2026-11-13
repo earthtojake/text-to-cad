@@ -10,13 +10,14 @@ major one below it (0.11.3 to 0.12.0 or 1.0.0) -- so it waits for the person's c
 ``cad update``, the install command. The release process holds a release to that (the release check
 refuses a migration guide in a release this takes).
 
-With automatic updates on -- the default (``DEFAULT``) -- the device's engine reads the version feed
-once an hour (``cad_server/updates.py``) and, when it names a newer release that it takes, updates
-to it with no click (``cad_server._internal.update.Update.automatic``): the release is installed and its
-CAD kernel environment made at once, in the background, and the agent apps' plugins are moved to it
-and the engine switched (``cad_server._internal.switch``) only once nothing has run for a minute
-(``IDLE_SECONDS``): no build, draw, export or agent's call in flight, no switch or other update
-underway. The update button, ``cad update`` and the install command work as ever and come first: a
+With automatic updates on -- the default (``DEFAULT``) -- the default channel's version's server, on a device
+where the install command has run, reads the version feed once an hour (``cad_server/updates.py``) and, when it
+names a newer release that it takes, updates to it with no click (``cad_server._internal.update.Update.automatic``):
+the release is installed, its CAD kernel environment with it, at once, in the background, and its setup -- which
+moves the default channel to it and gives the agent apps its text -- runs only once the server has handled no
+command for an hour (``IDLE_SECONDS``): no build, draw, export, request that serves or agent's call in flight
+(``Daemon.working``) and none ended (``Daemon.worked``), no other update underway. So an update rarely lands under
+a chat that is working. The update button, ``cad update`` and the install command act at once and come first: a
 click while an automatic update gets ready makes it the click's, done at once.
 
 The setting is the person's, one for every CAD app of a version, which a new version imports: the ``updates`` section of their
@@ -27,8 +28,8 @@ environment that turns the version check off (``CAD_UPDATE_CHECK=0``, CI) turns 
 click changes that (``reason``: ``environment``). A development install is never updated by itself,
 as it is never told of a release.
 
-An update that fails leaves the engine as it was, or brings the release before back (the switch's
-way back), and is not tried again in a loop: the last automatic attempt is kept in the data folder
+An update that fails leaves the device working, on the version it was on or on the new one
+(``cad_server._internal.update``), and is not tried again in a loop: the last automatic attempt is kept in the data folder
 (``RECORD``: its release and when), and the same release is tried again only ``RETRY_SECONDS`` later;
 a newer release the feed names is tried at the next check. Offline, or a feed that cannot be read:
 nothing happens, and nothing waits on it.
@@ -55,8 +56,9 @@ KEY = "automatic"
 DEFAULT = True
 # The last automatic attempt, in the data folder: its release, when it began, and why it failed.
 RECORD = "update-automatic.json"
-# How long nothing may have run before the engine switches by itself.
-IDLE_SECONDS = 60.0
+# How long the default version's server must have handled no command before an automatic update runs the new
+# release's setup: the one number, read by ``cad_server._internal.update.Update._wait``.
+IDLE_SECONDS = 60 * 60.0
 # How long before the same release is tried again by itself once an attempt of it did not hold.
 RETRY_SECONDS = 24 * 60 * 60
 _OFF = ("0", "off", "false", "no")

@@ -165,7 +165,8 @@ def remember(value: str | None = None, *, path: Path | None = None) -> str | Non
 
 def told() -> bool:
     """Whether this process hears of a new release: the default channel's version alone, the one channel with an
-    updater (a named channel's copy is updated by whoever delivers it), and never a development install. A process
+    updater (a named channel's copy is updated by whoever delivers it), on a device where the install command has
+    run (its receipt: where it has not, there is no install to update), and never a development install. A process
     with no version (as every one of 0.11.10 and earlier) is the default's. ``CAD_AUTO_UPDATED``, which a plugin
     config of 0.11.10 or earlier still sets, decides nothing: which channel a version is on says it."""
     return channel() != DEV and default_version()  # a record says ``dev`` only for a development install's own
@@ -173,8 +174,9 @@ def told() -> bool:
 
 def default_version() -> bool:
     """Whether this process's version (``places.versioned``) is the default channel's as a command with no pin
-    resolves it (``pointers.default``); a process with no version is. Never raises."""
-    from cad.engine.places import versioned
+    resolves it (``pointers.default``) on a device the install command set up (its receipt); a process with no
+    version is. Never raises."""
+    from cad.engine.places import state_dir, versioned
 
     name = versioned()
     if name is None:
@@ -182,7 +184,7 @@ def default_version() -> bool:
     try:
         from cad_server._internal import pointers
 
-        return pointers.default().version == name
+        return pointers.default().version == name and (state_dir() / pointers.RECEIPT).is_file()
     except Exception:  # noqa: BLE001 - a state folder it cannot read: told, as before
         return True
 

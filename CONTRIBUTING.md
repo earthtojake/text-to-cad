@@ -229,11 +229,13 @@ Claude Code and Gemini CLI at a folder written from the checkout, in a home of t
 wherever their commands are installed.
 
 Test the skills the way users get them: as the plugin, with CAD's server. One
-script installs this checkout into an agent app, and running it again replaces
-that install with the current checkout:
+script installs this checkout into the agent apps you name, and running it again replaces
+that install with the current checkout. Name every app you will test in one run: each run is
+a version of its own, and moving the device to it leaves an app installed by an earlier run
+with skills pinned to a version the device has left (they say so: install that app again).
 
 ```bash
-scripts/install/dev_install.py claude
+scripts/install/dev_install.py claude codex cursor
 ```
 
 | Host | What it installs |
@@ -255,16 +257,22 @@ npx skills add . -g -a <agent>
 A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
 `cad-mcp` run by this checkout's `.venv` (`CAD_PYTHON` overrides it), serving
 a copy of the `apps/mcp` page built for that install (`--no-build` reuses the last
-build). That `.venv` is registered as that install's version (`<VERSION>-dev.<time>`)
-and the proxy the copied skills run is written (the server
-registers it again at each start, told the version by `CAD_INSTALLATION_VERSION`;
-`--uninstall` takes the record out). The install is made the device's current installation, so the
-engine every app and the agent's scripts reach is this checkout's, started afresh by the next client
-once the one running stops (`cad stop`); the last dev install made is the current one. With `--wheel`, the checkout's
-wheel is built as the release builds it (`bundle.sh`, then `uv build`), the
-server runs it through `uvx --from <wheel>` and that installation is the one
-registered as the install's version: exactly what users get, each build its own
-installation. Install again to see a skill or page edit. A page that changed under a
+build). That `.venv` is installed as a version of its own, `<VERSION>-dev.<time>`
+(`versions/<name>` in the state folder, whose code marker names the `.venv`: nothing is
+copied), the device's default channel is moved to it -- its data imported from the version it
+replaces, the server's port handed over -- and the `cad` command is written; every command in the
+copied skills pins that name (`cad +<VERSION>-dev.<time> ...`), and the server is told it by
+`CAD_INSTALLATION_VERSION`. So every app, the agent's scripts and a terminal's `cad` reach this
+checkout's server. With `--wheel`, the checkout's wheels are built as the release builds them
+(`bundle.sh`, then `uv build`), the server runs them through `uvx --from <wheel>` and that
+installation is the version: exactly what users get, each build its own. To go back to the
+published release, run the install command (`curl -fsSL https://texttocad.dev/install.sh | sh`;
+on Windows `irm https://www.texttocad.dev/install.ps1 | iex`): it installs the release, moves the
+default channel to it from the development version (a person's install goes back from one; no
+pinned command does), gives every app its plugin, takes the development plugin out of each as a
+second copy, and removes the development version. What the checkout recorded (Recents,
+settings) stays behind with it: a release never imports from a newer version. `--uninstall` takes
+the named apps' installs out alone. Install again to see a skill or page edit. A page that changed under a
 running app would change its URI, and hosts drop the frames already showing it,
 which is why each install serves its own copy. A running server keeps the
 Python it started with, so restart the app after a Python-only change. The

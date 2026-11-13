@@ -58,8 +58,8 @@ src/cad_server/
                          #   and the release an update moves to
   auto_updates.py        # automatic updates: the person's setting (on by default), the
                          #   releases they take by Semantic Versioning (takes: patch below 1.0,
-                         #   patch or minor from 1.0), the idle and retry rules the engine's own
-                         #   update keeps
+                         #   patch or minor from 1.0), the hour of quiet and the retry rule the
+                         #   default version's own update keeps
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base: the installation's base,
                          #   cad[build123d], made by uv on first need; extras: the one a
@@ -70,9 +70,9 @@ src/cad_server/
                          #   (installations: ~/.local/bin/cad, which the skills run; written by
                          #   `cad doctor`, `cad setup`, `cad setup --add` and a CAD app's first
                          #   registration), a pin's reading by the version it names (pins), the
-                         #   module the command of 0.11.10 and earlier ran (proxy), the releases an update
-                         #   installs (releases), the update the button starts (update) and its
-                         #   switch (switch), the versions installed in their own folders and the
+                         #   module the command of 0.11.10 and earlier ran (proxy), the flat release
+                         #   folders of 0.11.10 and earlier (releases), the updater and the contract
+                         #   between releases (update), the versions installed in their own folders and the
                          #   one routine that moves a channel between them (versions), the pointer
                          #   per channel (pointers), a version's first-start import (imports), the
                          #   layout of 0.11.10 and earlier (legacy), the plugin folder every agent app is pointed at
@@ -155,25 +155,36 @@ as one document, each check's name, status and detail) and what earlier releases
 left behind that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine
 records of an older format, the bytecode of installations no longer registered, cache folders no record
 names, the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among
-them; none written in the last seven days; and the release folders but the current one and the one
-before, a release an update failed to move to among them, `_internal/releases.py`); `cad run` a program exactly as `uv run` runs it -- uv run's
+them; none written in the last seven days; and every version no channel is on, `versions.sweep`); `cad run` a
+program exactly as `uv run` runs it -- uv run's
 options, a script's `# /// script` header, a project -- with cad pinned at this release and the
 integrations its imports use (`_internal/extras.py`, `_internal/scan.py`, by the library's registry), in an
 environment the engine makes, its own folder last on its path, and a command an integration declares
 (`kicad-cli`) with that integration, through its `_command` module, headless; `cad requirement [INTEGRATION ...]` the
 exact requirement a Python of a program's own installs this release's cad by
 (`cad[build123d]==<release>`); `cad viewer` the engine page launcher;
-`cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets
-up or updates text-to-cad in every agent app it finds, each by its own command
-(`_internal/providers.py`), installs its release's folder -- and no environment for models: each is
-made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
-`cad setup`, as the update button does (`--dry-run` reads the version feed, keeping nothing, and says the
-release it would install before the plan), and `cad update auto on|off` turns automatic updates on or off
-(on by default: the engine installs a newer release that breaks nothing -- a patch release below 1.0, a
-patch or minor release from 1.0 -- in the background and switches to it once idle; one that may break
-something waits for the update button or `cad update`);
-`cad uninstall` takes text-to-cad out, asked first as every command that destroys is (`cad delete`, `cad
-doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`);
+`cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, makes its
+release present in its own folder, moves the default channel to it (its data imported, the pointer, the mirror for
+0.11.10 and earlier, every version no pointer names removed, the server's port handed to its server -- a server of
+0.11.10 or earlier drained first), then sets it up in every agent app it finds, each by its own command
+(`_internal/providers.py`), and keeps its receipt, which is what gives the default channel an updater; it leaves a
+store's copy, and every named channel, alone; `cad setup --add` makes its release present and writes the `cad`
+command, and nothing else (the install command's `--add <version>`, which a skill's setup block names). Only the
+default channel has an updater (`_internal/update.py`, whose docstring is the contract between releases: an
+updater installs the new release by its own `cad setup --add` and runs its own `cad setup --engine-update`,
+nothing else), and only where the install command has run: `cad update` runs the newest release's `cad setup` that
+way, as the update button does (`--dry-run` reads the version feed, keeping nothing, and says the release it would
+install before the plan; with no receipt it says there is no install to update; with a channel's pin, that whoever
+delivers the copy updates it); a pinned command newer than the default channel's version runs the same sequence,
+whatever the switch says; and `cad update auto on|off` turns automatic updates on or off (on by default: the
+default version's server installs a newer release that breaks nothing -- a patch release below 1.0, a patch or
+minor release from 1.0 -- in the background and runs its setup once it has handled no command for an hour; one that
+may break something waits for the update button or `cad update`);
+`cad uninstall` takes out what the install command put here -- our plugin copies, the plugin folder, the default
+channel and its version unless a store's channel is on it, the receipt, and the `cad` command unless a store's copy
+still runs it (said, with which) --, and `--purge` everything; asked first as every command that destroys is (`cad
+delete`, `cad doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
+`_internal/consent.py`);
 `cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
@@ -185,8 +196,8 @@ The plugin every agent app gets is one folder, `plugin` in the state folder, whi
 from its own copy of the plugin (`_runtime/plugin`: each host's manifest, its config for the CAD app's
 server, and the skills, byte for byte as they were released) with every version this distribution's
 (`_internal/plugin.py`). It is written again in place -- each file renamed over, never a symlink --
-at a registration of the current installation, by `cad setup` before it points the apps at it, and by
-the release left current after every switch of the engine (`cad plugin --refresh`). Each app takes it
+by `cad setup` before it points the apps at it -- every update runs the new release's setup --, and by `cad plugin
+--refresh`, which the updater of 0.11.10 and earlier runs once the release it moved to serves. Each app takes it
 the way it takes a local plugin (`_internal/providers.py`): a local catalog that Claude Code reads in
 place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
 skills copied by the Skills CLI for the agents without a plugin. Claude gets the skills alone: `cad setup`
@@ -194,8 +205,8 @@ writes no CAD server into Claude Desktop's config, and takes out the one release
 there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex, the Cursor Marketplace)
 is the app's to deliver and update: every `cad setup` keeps it, adds nothing of ours beside it, and says
 how to switch (remove it in the app's own plugin manager, then run the install command again). An update writes the folder for the
-new release and brings the copies along, a person's or an automatic one; no agent app updates the
-plugin itself. A model builds by running its script: `cad +<version> run model.py`, through
+new release and brings our copies along, a person's or an automatic one; a store's copy, and the version its
+channel is on, are its store's to update. A model builds by running its script: `cad +<version> run model.py`, through
 the `cad` command. The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 

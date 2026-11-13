@@ -10,12 +10,11 @@ starts fine there. So an installation registers itself, and one command runs the
   paths of its ``python`` and of its console script (``cad``), its environment (``prefix``) and
   when it registered (``registered``). The state folder's ``Folder`` (``cad_server.engine.registry``) writes
   it, as it writes everything there.
-- ``<state>/installations/current``, the version of the installation that is the device's: its
-  engine is the one every client starts or attaches to (``cad.engine.client``), whatever its own
-  release, and the ``cad`` command runs it. ``cad setup`` (and so ``cad update`` and the
-  install command run again) points it at the release it sets up, through the switch
-  (``cad_server._internal.switch``); a client that finds none -- no installation before it -- points it
-  at itself once (``bootstrap``).
+- ``<state>/installations/current``, the version of the installation that is the device's for a client of
+  0.11.10 and earlier: its engine is the one such a client starts or attaches to. From 0.11.11 it is the mirror of
+  the default channel's pointer (``cad_server._internal.pointers.mirror``), written with it by every move of the
+  default channel (``cad setup``, ``cad update``, the install command run again); a client of 0.11.10 or earlier
+  that finds none -- no installation before it -- points it at itself once (``bootstrap``).
 - ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy -- the ``cad`` command --, a short
   ``sh`` script every future version is run through, so what it does is small and kept stable. It reads only
   the first argument. A pin, ``cad +<version>[@<channel>] ...``, runs that version's own ``cad`` (its code

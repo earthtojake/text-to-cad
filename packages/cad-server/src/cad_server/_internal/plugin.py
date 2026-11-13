@@ -21,10 +21,9 @@ local-directory marketplace) and Gemini CLI (a linked extension) read the folder
 regenerated folder is what their next session reads; Codex and Cursor keep copies of it, which the
 installer refreshes, and Codex drops a symlink without a word.
 
-The folder follows the release that is current. It is written at a registration of the current
-installation (``installations.setup``), by ``cad setup`` before the apps are pointed at it, and after
-every switch of the device's engine, by the release then current (``cad plugin``, run by
-``cad_server._internal.switch``); ``cad plugin`` prints its path.
+The folder follows the default channel's version. It is written by ``cad setup`` before the apps are pointed at
+it -- every update runs the new release's setup -- and by ``cad plugin --refresh``, which the updater of 0.11.10
+and earlier runs once the release it moved to serves; ``cad plugin`` prints its path.
 
 Nothing here imports the packages at module scope, so a test reads this file by its path: what it
 borrows -- the one atomic rename, the state folder, the lock, this release's version and its bundled

@@ -1,116 +1,95 @@
-"""``cad setup``: text-to-cad set up, or brought up to date, in every agent app on this machine,
-as this release; ``cad update`` (``cad_server.cli.update``) runs the newest release's; and ``cad
-uninstall`` (``cad_server.cli.uninstall``, this module's uninstall path with a parser of its own) takes it
-out again.
+"""``cad setup``: text-to-cad installed, or brought up to date, on this machine as this release -- the default
+channel moved to it and every agent app given its text --; ``cad update`` (``cad_server.cli.update``) runs the newest
+release's; and ``cad uninstall`` (``cad_server.cli.uninstall``, this module's uninstall path with a parser of its
+own) takes it out again.
 
 The install command runs it (``cad_server.updates.INSTALL``: ``curl -fsSL https://texttocad.dev/install.sh |
 sh``; on Windows ``INSTALL_WINDOWS``, ``irm https://www.texttocad.dev/install.ps1 | iex``) after finding or
-installing uv: the newest release's server (``cad-server``), run through ``uvx``. Running it again
-is the update, and ``cad update`` and the update button take the same steps. Each app's plugin pins the
-release its CAD app's transport runs (``cad-mcp==X``), which attaches to the device's engine, the
-current installation's
-(``cad_server._internal.installations``), whatever release it is. In order, each step said as it runs:
+installing uv: the newest release's server (``cad-server``), run through ``uvx``. Running it again is the update,
+and ``cad update``, the update button and the automatic update take the same steps (``cad_server._internal.update``,
+whose docstring is the contract between releases). In order, each step said as it runs:
 
-1. **Its release's folder.** A release from the index (or the wheel it was installed from) sets itself
-   up from ``<state>/releases/<release>`` (``cad_server._internal.releases``): run from anywhere else --
-   uvx's environment, as the install command runs it --, it makes that folder with uv, from uv's cache
-   where it holds it, and runs the same command from there. A development install or a source tree
-   sets itself up where it is.
-2. **Plan.** Under a lock in the state folder, every agent app is read from its own files, no app's command run
-   (``cad_server._internal.providers``), and the plan printed: per app, ``install``, ``update``, ``remove duplicate``,
-   ``remove server`` or ``leave``, with each
-   command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
-   3245); and build123d, the CAD kernel, and whether it is made. ``--dry-run`` stops there and writes
-   nothing. Nothing is asked.
-3. **0.8's server.** Where 0.8 is installed -- an installation's record in 0.8's own state folder
-   whose Python and console script are still there (``cad_server._internal.installations.earlier``) --
-   that installation's own stop, ``cadgen stop``, is run, with its telemetry off (``NO_TELEMETRY``), and
-   what it did is said: no process of this release asks 0.8's server anything, whether it runs or what
-   uses it. A stop that fails is said, and the run goes on. With 0.8's server stopped, this release's
-   engine takes the port as it would on a computer that never had 0.8; a 0.8 server that still holds the
-   port (an app not yet restarted started it again) keeps it, and this release's serves on the next free
-   port and says so. On Windows 0.10.0's installations, kept in the local application data
-   (``installations.appdata``), are stopped the same way, by 0.10.0's own ``cad stop``: this release keeps
-   its folders in the user's own (``cad.engine.places``), and moves what 0.10.0 kept there into them first.
-4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
-   ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
-   becomes the current one. First, once per device, whether it was updated or is a new person's, for
-   What's new (``cad_server/whats_new.py``), while the records of the releases before are there.
-5. **build123d.** The environment the engine's own kernel processes start from, ``cad[build123d]`` at
-   this release (``cad_server._internal.base``), is said in the plan and never made here: it is made on
-   first need (the first build, or a view or operation that needs the kernel), from uv's cache where it
-   holds it. Nothing is installed at setup, nor after an update the person asks for; an automatic update's
-   first half (``PREPARE_ENV``, below) is the one run that makes it, before the engine switches by itself.
-6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
-   (``cad_server._internal.plugin``), and each app is pointed at it by its own command, the way it keeps
-   a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one
-   keeps a copy of it, which gets it again for this release. Claude gets no CAD server: the one releases
-   through 0.11.10 wrote into Claude Desktop's config is taken out, written atomically with a ``.bak``
-   beside it. Every second copy goes, an earlier release's from the repository on GitHub among them; a
-   plugin directory's copy (a store's: claude.ai's directory, the Cursor Marketplace) is the app's to
-   deliver and update, and stays, with nothing of ours beside it (``providers``). The agents with no plugin that
-   the Skills CLI knows get the skills, copied from the folder into the skills folder that CLI keeps for each
-   (``~/.agents/skills`` for most) by one ``npx skills add`` (Node needed); an app with a plugin never does.
-   A command that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
-   would point at it.
-7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take
-   back; and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from
-   which release (``skills``), since that CLI keeps no versions: the next run adds them again for an
-   agent that got them from another release or has lost one of them.
-8. **The switch.** The device's engine moves to this release (``cad_server._internal.switch.handover``):
-   one running drains -- nothing in flight -- and this release's takes its place on the same port, with
-   the same token, or the release before's comes back should it fail, and with it its plugin folder and
-   the apps' copies of it (its own ``cad plugin --refresh``); with none running, ``current`` points at
-   this release and the next client starts its engine.
-9. **Report.** Each app's copy as it is now, the Skills CLI agents' among them, the engine, the telemetry notice
-   (``--no-telemetry`` turns it off, as ``cad telemetry off`` does), and the apps to restart to
-   load what this run installed or updated; ``already up to date`` when a run found nothing to do
-   and changed nothing. An agent whose folder lacks a skill the receipt says it got is a failure of
-   the run, said on its line: the exit status is then 1.
+1. **This release present.** Run from anywhere but its own folder -- uvx's environment, as the install command runs
+   it, or the flat ``releases/<release>`` an updater of 0.11.10 or earlier made --, a release makes itself present
+   in ``versions/<release>`` (``cad_server._internal.versions.make_present``: its server and kernel environments,
+   from uv's cache where it holds them) and runs the same command from there. A development install, named
+   (``CAD_INSTALLATION_VERSION``), or a source tree sets itself up where it is.
+2. **Plan.** Under the device's install lock (``versions.install_lock``), every agent app is read from its own files,
+   no app's command run (``cad_server._internal.providers``), and the plan printed: per app, ``install``,
+   ``update``, ``remove duplicate``, ``remove server`` or ``leave``, with each command it runs and each file it
+   edits; what serves the server's port (``CAD_ENGINE_PORT``, else 3245); and build123d, the CAD kernel.
+   ``--dry-run`` stops there and writes nothing. Nothing is asked.
+3. **0.8's server.** Where 0.8 is installed -- an installation's record in 0.8's own state folder whose Python and
+   console script are still there (``cad_server._internal.installations.earlier``) -- that installation's own stop,
+   ``cadgen stop``, is run, with its telemetry off (``NO_TELEMETRY``), and what it did is said. On Windows 0.10.0's
+   installations, kept in the local application data (``installations.appdata``), are stopped the same way.
+4. **The cad command.** ``~/.local/bin/cad`` written where it is missing or of an older revision
+   (``installations.write_proxy``). First, once per device, whether it was updated or is a new person's, for
+   What's new (``cad_server/whats_new.py``).
+5. **The default channel.** Moved to this release (``versions.move``): its data imported from the version it
+   replaces (or from the layout of 0.11.10 and earlier), the pointer written, the mirror those releases' clients
+   read, every version no pointer names removed where nothing is connected to it, and the server's port handed to
+   this release's server where the old one stopped. Where a server of 0.11.10 or earlier holds the flat door
+   (``legacy``), this run -- the install command, ``cad update`` -- asks it to drain, waits for it, and starts this
+   release's server on its port with the page token it imported, so pages open on it reload into this release;
+   then that layout's code and caches go (``legacy.remove``). A source tree that is no version moves nothing. A
+   move that fails changes no pointer and ends the run, before any app is changed.
+6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release (``cad_server._internal.plugin``),
+   and each app is pointed at it by its own command, the way it keeps a local plugin
+   (``cad_server._internal.providers``): one reads the folder in place, one links it, one keeps a copy of it, which
+   gets it again for this release. Claude gets no CAD server: the one releases through 0.11.10 wrote into Claude
+   Desktop's config is taken out, written atomically with a ``.bak`` beside it. Every second copy goes, an earlier
+   release's from the repository on GitHub among them; a plugin directory's copy (a store's: claude.ai's
+   directory, the Cursor Marketplace, a store in another app) is the app's to deliver and update, and stays,
+   with nothing of ours beside it, as do the named channels' pointers and versions. The agents with no plugin that
+   the Skills CLI knows get the skills, copied from the folder by one ``npx skills add`` (Node needed). A command
+   that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be
+   written changes no app that would point at it.
+7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take back; its
+   presence says the install command ran here, which is what gives the default channel its updater; and which
+   agents got which skills from which release (``skills``), since the Skills CLI keeps no versions.
+8. **Report.** Each app's copy as it is now, the server, the telemetry notice (``--no-telemetry`` turns it off, as
+   ``cad telemetry off`` does), and the apps to restart; ``already up to date`` when a run found nothing to do and
+   changed nothing. An agent whose folder lacks a skill the receipt says it got is a failure of the run.
 
-``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
-steps 2, 4, 6 and 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
-each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr. An automatic update
-runs it first with ``CAD_UPDATE_PREPARE=1`` in its environment, which registers the release, makes its CAD
-kernel environment (step 5's, the one no other setup makes: left to its first need, it would be made under
-the person's first build after the engine switched by itself) and stops there, no app changed; and again,
-whole, once the engine is idle.
+``--engine-update`` is an updater's run of it (``cad_server._internal.update``): steps 1, 2, 4, 5, 6 and 7, each
+stage a progress frame on stdout (``{"progress": ...}``, written for as long as someone reads it) and its words on
+stderr. Its exit status is 0 once the default channel moved, an app that failed said on stderr; 1 when it did not.
+Two updaters run it: this release's and later ones', and 0.11.10's and earlier ones' (the legacy caller), which run
+it from the flat ``releases/<release>`` they made -- with ``CAD_UPDATE_PREPARE=1`` first for an automatic update,
+which stops after step 1 (``PREPARE_ENV``) --, then drain their own server and have their helper start this
+release's through the ``installations/current`` mirror and the flat door it holds (``daemon.Bridge``). So
+``--engine-update`` never stops a server of 0.11.10 or earlier: their updater does.
 
-``--add [--quiet]`` installs this release and stops (``cad_server._internal.versions.add``): its folder,
-``versions/<release>``, made present -- its server and kernel environments --, and the ``cad`` command written
-where it is missing or of an older revision, so a device whose first contact is a skill's setup step can run it;
-nothing else: no step above, no pointer, no app, no setting, no receipt. A skill's setup block and the install
-command's ``--add X`` run it, and the ``cad`` command does for a pinned version it lacks (``uvx --from
-cad-server==X cad setup --add --quiet``). Exit 3 where this shell cannot install it (an agent's sandbox, no uv, no
-network), with the command to run outside it.
+``--add [--quiet]`` installs this release and stops (``cad_server._internal.versions.add``): ``versions/<release>``
+made present and the ``cad`` command written where it is missing or of an older revision; nothing else: no pointer,
+no app, no setting, no receipt. A skill's setup block and the install command's ``--add X`` run it, and the ``cad``
+command does for a pinned version it lacks. Exit 3 where this shell cannot install it, with the command to run
+outside it.
 
-``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
-plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
-Cursor's copy deleted, the skills removed by ``npx skills remove``, Claude Desktop's server an earlier release
-wrote taken out; a store's copy an earlier release removed is not put back, and a line says where to install
-it from again; with no receipt, every copy of text-to-cad found
-but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the engine (``cad
-stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
-removes the state and cache folders. ``--only`` limits either to some apps (and then leaves the
-command, the engine, the releases and the plugin folder alone). ``cad setup`` asks nothing: the plan is
-printed and done -- installing is what was asked. ``cad uninstall`` destroys, so after its plan it asks
-(``cad_server._internal.consent``): at a terminal ``Take text-to-cad out as planned? (y/N)``, and where no
-one can be asked it changes nothing without ``--yes`` (``confirmation_required``, exit 2); the install
-command's ``--uninstall`` passes ``--yes``, the person's own word. ``--dry-run`` prints either plan alone.
+``cad uninstall`` takes back what the install command put here and nothing else: our plugin copies the receipt
+says were made, newest first (the catalog removed with its plugin, the extension uninstalled, Cursor's copy deleted,
+the skills removed by ``npx skills remove``, Claude Desktop's server an earlier release wrote taken out; with no
+receipt, every copy of ours found); the plugin folder; the default pointer and the mirror; the default channel's
+version, its server stopped, unless another pointer names it; the layout of 0.11.10 and earlier; and the receipt.
+A named channel's pointer, version and data stay -- a store delivered them -- and so does the ``cad`` command while
+one is there, with a line saying which channel still uses it and to remove that plugin in its app. ``--purge``
+removes everything: every version and channel, the state and cache folders, and the ``cad`` command. ``--only``
+limits it to some apps (and then leaves the command, the versions and the plugin folder alone). ``cad setup`` asks
+nothing: the plan is printed and done -- installing is what was asked. ``cad uninstall`` destroys, so after its plan
+it asks (``cad_server._internal.consent``): at a terminal ``Take text-to-cad out as planned? (y/N)``, and where no
+one can be asked it changes nothing without ``--yes`` (``confirmation_required``, exit 2); the install command's
+``--uninstall`` passes ``--yes``, the person's own word. ``--dry-run`` prints either plan alone.
 
-Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad``
-command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy (a
-plugin directory's, an administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
+Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad`` command that is not
+text-to-cad's, editing a config that is not plain JSON, removing a store's copy (a plugin directory's, an
+administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
 
-The first install never runs inside a Windows app package (an MSIX app's shell, the Claude desktop
-app's among them): it installs nothing and says so (``installations.packaged``). What such a process
-creates under ``AppData`` Windows keeps inside that app's package, where no terminal and no other app
-finds it, and the first install is the one that may make uv install its Python there. An update, with an
-installation current already -- its Python installed outside --, runs there as anywhere. ``--dry-run``
-says it before the plan.
+The first install never runs inside a Windows app package (an MSIX app's shell, the Claude desktop app's among
+them): it installs nothing and says so (``installations.packaged``). ``--dry-run`` says it before the plan.
 
-Exit status: 0 done, or nothing to do; 1 a step failed, an agent lacks its skills, or nothing was installed
-inside an app package; 2 bad arguments; 3 ``--add`` could not install from this shell.
+Exit status: 0 done, or nothing to do; 1 a step failed, an agent lacks its skills, or nothing was installed inside
+an app package; 2 bad arguments; 3 this release could not be installed from this shell.
 """
 
 from __future__ import annotations
@@ -144,14 +123,17 @@ EARLIER_SERVER = "cadgen"
 STOP_SECONDS = 60.0
 # How long setup waits for the device's engine to say what it serves: a wedged engine never wedges setup.
 ASK_SECONDS = 5.0
-# An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): named here, so the
-# command's import costs nothing more.
+# Set by the updater of 0.11.10 and earlier for an automatic update's first run of ``--engine-update``: this release
+# made present, and nothing else (the legacy caller; this release's own updater installs by ``--add`` instead).
 PREPARE_ENV = "CAD_UPDATE_PREPARE"
+# How long this run waits for a server of 0.11.10 or earlier to drain, its work in flight running to its end, before
+# this release's server takes its port: as long as that release's own switch waited.
+DRAIN_SECONDS = 3600.0
 
 
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
     """``cad setup``'s parser, or with ``uninstall`` ``cad uninstall``'s, or with ``update``
-    ``cad update``'s (``cad_server.cli.update``): setup's options, and the switch helper's own."""
+    ``cad update``'s (``cad_server.cli.update``): setup's options."""
     from cad_server._internal.cli_parser import parser as command_parser
     from cad_server._internal.providers import APPS, SKILLS_AGENTS
     from cad_server.updates import INSTALL, INSTALL_WINDOWS
@@ -160,27 +142,28 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
         parser = command_parser(
             prog=prog,
             allow_abbrev=False,
-            description="Take text-to-cad out of every agent app on this machine: what earlier `cad setup` runs "
-                        "did (their receipt), newest first, or with no receipt every copy of text-to-cad found; the "
-                        "cad command when it is text-to-cad's own; this installation's engine stopped.",
+            description="Take out what the install command put on this machine: our copies of the plugin in every "
+                        "agent app (with no receipt, every copy of ours found), the default channel and its version, "
+                        "its server stopped; the cad command when no store's copy still uses it. A copy a store "
+                        "delivered stays, with its version; --purge removes everything.",
         )
     elif update:
         parser = command_parser(
             prog=prog,
             allow_abbrev=False,
-            description="Install the newest release of text-to-cad and set it up in every agent app on this machine, "
-                        "as the update button does: its release folder, each app's own command, and "
-                        "the engine switched to it. With the version feed out of reach, this release's setup.",
+            description="Install the newest release of text-to-cad and run its setup, as the update button does: the "
+                        "default channel moved to it, its server on the same port, and every agent app given its "
+                        "text. With the version feed out of reach, or this the newest, this release's setup.",
             epilog=f"The install command does the same: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
     else:
         parser = command_parser(
             prog=prog,
             allow_abbrev=False,
-            description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
-                        "date there: its release folder, each app's own command, second copies removed, and "
-                        "the engine switched to this release. `cad update` "
-                        "runs the newest release's; `cad uninstall` takes it out.",
+            description="Set up text-to-cad on this machine as this release, or bring it up to date: this release "
+                        "installed in its own folder, the default channel moved to it, and every agent app given "
+                        "its text, second copies removed. `cad update` runs the newest release's; `cad uninstall` "
+                        "takes it out.",
             epilog=f"The install command runs this with the newest release: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
     parser.add_argument("--dry-run", action="store_true", help="print the plan and stop: nothing is changed")
@@ -190,18 +173,15 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
     if uninstall:
         from cad_server._internal.consent import add_yes
 
-        parser.add_argument("--purge", action="store_true", help="remove text-to-cad's state and cache folders too")
+        parser.add_argument("--purge", action="store_true",
+                            help="remove everything: every version and channel, a store's among them, and "
+                                 "text-to-cad's state and cache folders")
         add_yes(parser, "take it out as planned")
     else:
         parser.add_argument("--no-telemetry", action="store_true",
                             help="turn telemetry off, as `cad telemetry off` does")
-        if update:
-            # The switch's helper (``cad_server._internal.switch``), which the engine starts as it drains.
-            parser.add_argument("--switch", metavar="RELEASE", default=None, help=argparse.SUPPRESS)
-            parser.add_argument("--port", type=int, default=None, help=argparse.SUPPRESS)
-            parser.add_argument("--previous", default=None, help=argparse.SUPPRESS)
-        else:
-            # The engine's own run, for its update button (``cad_server._internal.update``): no switch, progress on stdout.
+        if not update:
+            # An updater's run (``cad_server._internal.update``, and 0.11.10's): progress frames on stdout.
             parser.add_argument("--engine-update", action="store_true", help=argparse.SUPPRESS)
             parser.add_argument("--add", action="store_true",
                                 help="install this release in its own folder, and the cad command, and stop: no "
@@ -243,34 +223,71 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
     except ValueError as error:
         parser.error(str(error))
     port, source = (named, "CAD_ENGINE_PORT") if named is not None else (default_port(), "default")
+    if getattr(args, "engine_update", False):
+        # An updater's run outlives the server that reads its output when its move stops that server: whatever is
+        # written after that, by this module or any other, is for no one, and never ends the run.
+        streams = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = Unread(sys.stdout), Unread(sys.stderr)
+        try:
+            return Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]), prog).install()
+        finally:
+            sys.stdout, sys.stderr = streams
     installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]), prog)
     installer.update = update
     return installer.uninstall() if uninstall else installer.install()
+
+
+class Unread:
+    """A stream whose reader may go (``--engine-update``'s, read by the updater whose server the run stops): written
+    as long as it is read, and quietly not once it is not."""
+
+    def __init__(self, stream: Any) -> None:
+        self.stream = stream
+        self.gone = False
+
+    def write(self, text: str) -> int:
+        if not self.gone:
+            try:
+                return self.stream.write(text)
+            except (OSError, ValueError):
+                self.gone = True
+        return len(text)
+
+    def flush(self) -> None:
+        if not self.gone:
+            try:
+                self.stream.flush()
+            except (OSError, ValueError):
+                self.gone = True
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.stream, name)
 
 
 # --- the engine on the port, as the engine says it of itself -----------------------------------------
 
 
 def running_engine() -> dict[str, Any] | None:
-    """The device's engine's ``status``, asked read-only through its door and bounded (``ASK_SECONDS``), or
-    None when none runs: one with no HTTP port yet (``serving`` empty: a command started it, and no page has
-    asked for one) runs all the same."""
-    import threading
+    """The ``status`` of the server the default channel runs now, asked read-only at the flat door and bounded
+    (``ASK_SECONDS``), or None when none runs there: the default version's server holds that door (``daemon.Bridge``),
+    and a server of 0.11.10 or earlier holds it as its own. One with no HTTP port yet (``serving`` empty: a command
+    started it, and no page has asked for one) runs all the same."""
+    from cad_server._internal import versions
 
-    from cad.engine import client
+    answer = versions.ask_flat({"op": "status"}, seconds=ASK_SECONDS)
+    return answer if isinstance(answer, dict) and answer.get("ok") else None
 
-    answers: list[Any] = []
 
-    def ask() -> None:
-        try:
-            answers.append(client.request({"op": "status"}, start=False))
-        except (OSError, ValueError):
-            pass
+def legacy_server(status: dict[str, Any] | None) -> bool:
+    """Whether the server ``status`` describes runs from no version's folder: one of 0.11.10 or earlier (or a source
+    tree's), which holds the flat door as its own."""
+    from cad.engine import places
 
-    asking = threading.Thread(target=ask, daemon=True)
-    asking.start()
-    asking.join(ASK_SECONDS)
-    return answers[0] if answers and isinstance(answers[0], dict) and answers[0].get("ok") else None
+    prefix = (status or {}).get("prefix")
+    if not isinstance(prefix, str) or not prefix:
+        return False
+    inside = os.path.normcase(os.path.realpath(places.versions_dir())).rstrip(os.sep) + os.sep
+    return not os.path.normcase(os.path.realpath(prefix)).startswith(inside)
 
 
 def serving_words(status: dict[str, Any]) -> str:
@@ -349,12 +366,21 @@ class Installer:
         self.fed = False
         # Whether this run asked Claude Code's listing (``providers.read_for``), so reads it again the same way.
         self.listed = False
+        # Whether the progress frames' reader has gone (``stage``).
+        self.unread = False
+        # Whether this run moved the default channel (``_move``).
+        self.moved = False
+        # Whether this is a pinned command's run (``update_own``), which never goes back from a development install.
+        self.pinned = False
 
     # --- saying -----------------------------------------------------------------------------
 
     def say(self, line: str = "") -> None:
-        self.out.write(line + "\n")
-        self.out.flush()
+        try:
+            self.out.write(line + "\n")
+            self.out.flush()
+        except (OSError, ValueError):
+            pass  # an updater's run whose updater has gone: what it says is for no one now
 
     def _failed(self, words: str) -> int:
         """A run that stops before its plan, said already in its lines: exit 1, and under ``--json`` its one
@@ -373,53 +399,77 @@ class Installer:
         from cad_server._internal.update import STAGES
         from cad.engine.progress import event
 
+        if self.unread:
+            return
         frame = event("update", stage, job=self.release, detail=detail, done=STAGES.index(stage), total=len(STAGES))
-        sys.stdout.write(json.dumps({"progress": frame}) + "\n")
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(json.dumps({"progress": frame}) + "\n")
+            sys.stdout.flush()
+        except (OSError, ValueError):
+            # The updater that read them is gone (its server stopped by this run's move): no one reads them now.
+            self.unread = True
 
-    # --- its release's folder -----------------------------------------------------------------
+    # --- this release present --------------------------------------------------------------------
 
-    def _home(self) -> Path | None:
-        """The release folder this run sets itself up from (``releases.where``): None for an installation
-        that sets itself up where it is -- a development install or a source tree (one that names its
-        version, ``installations.NAME_ENV``, or imports the server from outside its environment)."""
-        from cad_server._internal import installations, releases
+    def _home(self) -> str | None:
+        """The version this run makes present and sets itself up from (``versions/<release>``): None for one that
+        sets itself up where it is -- a process of a version already (its own code), a development install named
+        (``installations.NAME_ENV``), a source tree, a name that is no release."""
+        from cad.engine import places
+        from cad_server._internal import installations
 
-        if os.environ.get(installations.NAME_ENV) or installations.editable() \
+        if places.versioned() is not None or os.environ.get(installations.NAME_ENV) or installations.editable() \
                 or not installations.RELEASE.fullmatch(self.release):
             return None
-        return releases.where(self.release)
+        return self.release
 
     def _relocated(self) -> int | None:
-        """Step 1: run from anywhere but its release's folder, that folder made (from uv's cache where it
-        holds it) and this command run again from there, its exit status returned; None when this run is
-        already there (or sets itself up where it is)."""
-        from cad_server._internal import base, releases
+        """Step 1: run from anywhere but this release's own folder, this release made present
+        (``versions.make_present``, from uv's cache where it holds it) and this command run again from there, its
+        exit status returned; None when this run is already there (or sets itself up where it is). An updater of
+        0.11.10 or earlier's first run (``PREPARE_ENV``) stops once it is present."""
+        from cad.engine import places
+        from cad_server._internal import versions
+        from cad_server._internal.cli_errors import REASONS
 
-        home = self._home()
-        if home is None or os.path.normcase(os.path.realpath(home)) == os.path.normcase(os.path.realpath(sys.prefix)):
-            return None
-        try:
-            made = releases.make(self.release, source=base.server_source(),
-                                 told=lambda line: self.say(f"release  {line}"))
-        except base.Refused as refused:
-            self.say(f"release  {refused}")
+        name = self._home()
+        if name is None:
+            return 0 if self._prepare() else None
+        self.stage("install", f"text-to-cad {name}")
+        found = versions.make_present(name, told=lambda line: self.say(f"version  {line}"))
+        if not found.ok:
+            self.say(f"version  {found.error}")
             from cad_server.updates import command
 
             self.say(f"Once that is fixed, run the install command again: {command()}")
-            return self._failed(f"cad-server {self.release}'s release folder was not made: {refused}")
-        run = [made["cad"], "setup", *self.argv]
-        self.say(f"release  cad-server {self.release} in {self.providers.shown(str(home), self.machine)}")
+            failed = self._failed(f"text-to-cad {name} could not be installed: {found.error}")
+            return REASONS["cannot_install_here"] if found.cannot is not None and not self.args.json else failed
+        self.stage("build123d", f"cad[build123d] {name}")
+        if self._prepare():
+            return 0
+        assert found.record is not None
+        run = [found.record["cad"], "setup", *self.argv]
+        self.say(f"version  text-to-cad {name} in {self.providers.shown(str(places.version_dir(name)), self.machine)}")
         # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
         # person's, holding a uvx and a `cad` of its own. The release's run is given the person's PATH
         # (``providers.lasting``), so what it writes into the apps' configs and says of the `cad` command is theirs.
-        environment = {**os.environ, "PATH": self.providers.lasting(os.environ.get("PATH", os.defpath))}
+        environment = {key: value for key, value in os.environ.items() if key != PREPARE_ENV}
+        environment["PATH"] = self.providers.lasting(os.environ.get("PATH", os.defpath))
         if os.name == "nt":
             return subprocess.call(run, env=environment)
-        sys.stdout.flush()
-        sys.stderr.flush()
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except (OSError, ValueError):
+            pass
         os.execve(run[0], run, environment)
         return 1  # not reached
+
+    def _prepare(self) -> bool:
+        """Whether this is an updater of 0.11.10 or earlier's first run, ``--engine-update`` with ``PREPARE_ENV``
+        (an automatic update getting ready while that release's server works): this release made present is all it
+        asks, so the run stops there."""
+        return self.engine_update and os.environ.get(PREPARE_ENV) == "1"
 
     def _plan_lines(self, title: str, apps: dict[str, Any], steps: list[Any], extra: list[dict[str, Any]]) -> None:
         """The plan, a line per step: the app, the action, what it acts on; under it each command it
@@ -540,8 +590,9 @@ class Installer:
         return rows
 
     def _engine(self, earlier: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        """What serves the engine's port, asked read-only, and what this run does about it: the device's
-        engine is switched to this release (``_switch``); another program on the port is said, and what
+        """What serves the engine's port, asked read-only, and what this run does about it: the default channel's
+        server is handed to this release's (``_move``: the old version's where nothing is in flight there, one of
+        0.11.10 or earlier drained, ``_take_over``); another program on the port is said, and what
         the engine does about it -- once ``earlier``'s stops (0.8's servers) are done, when there are any."""
         port = self.port
         row: dict[str, Any] = {"app": "engine", "label": "engine", "action": "leave"}
@@ -563,7 +614,8 @@ class Installer:
         if isinstance(prefix, str) and os.path.normcase(os.path.realpath(prefix)) == \
                 os.path.normcase(os.path.realpath(sys.prefix)):
             return {**row, "subject": f"{who}: this installation's"}
-        return {**row, "action": "switch", "subject": f"{who}: drains, then cad-server {self.release}'s takes its place"}
+        return {**row, "action": "switch", "subject": f"{who}: drains, then cad-server {self.release}'s takes its place"
+                                                      " once nothing is in flight there"}
 
     def _kernel(self) -> dict[str, Any] | None:
         """The CAD kernel environment, the base the engine's own kernel processes start from
@@ -587,55 +639,15 @@ class Installer:
 
     def _as_set_up(self, installation: Any) -> Any:
         """``installation`` as the run that sets it up will be: a dry run stops short of step 1, so run from
-        anywhere but its release's folder (uvx's environment) it says what it would do from there. The base's
-        folder is keyed by the environment it belongs to (``base.where``) and by that environment's Python."""
+        anywhere but this release's own folder (uvx's environment) it says what it would do from there."""
         import dataclasses
 
-        from cad_server._internal import releases
+        from cad.engine import places
 
-        home = self._home()
-        if home is None or os.path.normcase(os.path.realpath(home)) == os.path.normcase(os.path.realpath(sys.prefix)):
+        name = self._home()
+        if name is None:
             return installation
-        return dataclasses.replace(installation, prefix=str(home),
-                                   python=releases.python_version(home) or installation.python)
-
-    def _prepare_kernel(self) -> bool:
-        """An automatic update's first half only (``PREPARE_ENV``): this release's CAD kernel environment
-        made now, each line uv's work says as it goes, so that the engine switching to it by itself leaves
-        no making for the person's first build. Every other run leaves it to its first need (``_kernel``).
-        Nothing to make for an installation that carries the kernel itself; False, said in its line, when
-        it cannot be made -- the update then stays where it was."""
-        from cad_server._internal import base
-
-        self.stage("build123d", f"cad[{base.EXTRA}] {self.release}")
-        try:
-            base.ensure(told=lambda line: self.say(f"build123d {line}"))
-        except (base.Refused, OSError) as refused:
-            self.say(f"build123d {refused}")
-            return False
-        return True
-
-    def _switch(self) -> tuple[bool, dict[str, Any] | None]:
-        """Step 8: the device's engine moved to this release (``switch.handover``), said in its lines:
-        ``(failed, what the switch did or None when there was nothing to do)``."""
-        from cad_server._internal import installations, switch
-
-        version = installations.own_version()
-        if not version:
-            return False, None
-        try:
-            done = switch.handover(version, told=lambda line: self.say(f"engine   {line}"))
-        except (OSError, ValueError, ConnectionError) as error:
-            self.say(f"engine   the switch to cad-server {version} could not run: {error}")
-            return True, None
-        if done is None:
-            return False, None
-        if done.get("ok"):
-            self.say(f"engine   {switch.moved(done)}")
-            return False, done
-        self.say(f"engine   the switch to cad-server {version} failed: {done.get('error')}"
-                 + ("; the release before runs again" if done.get("restored") else ""))
-        return True, done
+        return dataclasses.replace(installation, prefix=str(places.code_dir(name) / "server"))
 
     def _stop_earlier(self, row: dict[str, Any]) -> None:
         """Step 3: a 0.8 installation's server stopped by its own ``cadgen stop`` (``stop_earlier``), and what
@@ -657,8 +669,9 @@ class Installer:
     # --- the cad command -------------------------------------------------------------------
 
     def _register(self) -> dict[str, Any]:
-        """This installation registered and the proxy written: what ``cad doctor`` and the CAD app's
-        server do (``installations.setup``)."""
+        """Step 4: the ``cad`` command written where it is missing or of an older revision
+        (``installations.write_proxy``), said; and once per device, What's new settled. Nothing is registered: the
+        records 0.11.10 and earlier read are the mirror the default channel's move writes."""
         from cad_server import whats_new
         from cad_server._internal import installations
         from cad_server.cli.doctor import _command_path_hint
@@ -667,18 +680,8 @@ class Installer:
         # Whether this device was updated or is a new person's, decided once while the records of the
         # releases before are still there (``cad_server/whats_new.py``): its What's new, or none.
         whats_new.settle(release=whats_new.minor(version))
-        if version:
-            (record, recorded, record_error), (proxy, before, proxy_error) = installations.setup(version)
-        else:
-            record, recorded, record_error = None, None, None
-            proxy, before, proxy_error = installations.proxy_path(), installations.proxy_status(), None
-            self.say("server   not registered: a source tree registers only as a version it is named "
-                     f"({installations.NAME_ENV})")
-        if record_error:
-            self.say(f"server   {record} cannot be written here ({record_error}): run this outside any sandbox")
-        elif recorded == installations.REGISTERED:
-            self.say(f"server   registered {version} ({self.providers.shown(record, self.machine)})")
-        wrote = bool(version) and not proxy_error and before in (installations.MISSING, installations.STALE)
+        proxy, before, proxy_error = installations.write_proxy()
+        wrote = not proxy_error and before in (installations.MISSING, installations.STALE)
         where = self.providers.shown(proxy, self.machine)
         if proxy_error:
             self.say(f"command  {where} cannot be written here ({proxy_error})")
@@ -686,9 +689,86 @@ class Installer:
             self.say(f"command  {where} written{_command_path_hint(proxy)}")
         elif before == installations.FOREIGN:
             self.say(f"command  {where} is not text-to-cad's, left alone: remove it to run cad by it")
-        return {"registered": record if recorded and not record_error else None,
-                "record_written": recorded == installations.REGISTERED,
+        return {"registered": None, "record_written": False,
                 "launcher": {"path": proxy, "status": before, "written": wrote, "error": proxy_error}}
+
+    # --- the default channel -----------------------------------------------------------------------------------
+
+    def _move(self, before: dict[str, Any] | None) -> tuple[bool, Any]:
+        """Step 5: the default channel moved to this run's version (``versions.move``), said in its lines; then,
+        where a server of 0.11.10 or earlier held the flat door as this run began (``before``, ``legacy_server``)
+        and this is no updater's run, its port handed to this version's server (``_take_over``). ``(failed, what
+        the move did, or None for a process that is no version)``."""
+        from cad.engine import places
+        from cad_server._internal import versions
+
+        name = places.versioned()
+        if name is None:
+            self.say("default  left as it is: this cad-server is a source tree that runs as no version "
+                     "(scripts/install/dev_install.py installs a checkout as one)")
+            return False, None
+        self.stage("restart", f"text-to-cad {name}")
+        try:
+            # A person's install goes back from a development install (``dev_install.py``) to a release.
+            moved = versions.move(None, name, told=lambda line: self.say(f"default  {line}"),
+                                  from_development=not self.engine_update and not self.pinned)
+        except (OSError, ValueError) as error:
+            self.say(f"default  the default channel could not be moved to text-to-cad {name}: {error}")
+            return True, None
+        if moved.kind == "same":
+            self.say(f"default  text-to-cad {name}, as before")
+        elif moved.kind == "moved":
+            self.say(f"default  text-to-cad {name}" + (f" (was {moved.old})" if moved.old else ""))
+            self.moved = True
+        elif moved.kind == "stale":
+            self.say(f"default  the default channel is on text-to-cad {moved.old}, newer than this release: nothing "
+                     "changed (going back to an older release is not supported)")
+            return True, moved
+        else:
+            self.say(f"default  the default channel stays where it was: {moved.error}")
+            return True, moved
+        if before is not None and not self.engine_update and legacy_server(before):
+            self._take_over(name, before)
+        return False, moved
+
+    def _take_over(self, name: str, before: dict[str, Any]) -> None:
+        """A server of 0.11.10 or earlier, which held the flat door as this run began (``before``, its ``status``),
+        asked to drain -- ``{"op": "stop", "drain": true}``, which every release since 0.10 speaks -- and waited for
+        while its work in flight ends (``DRAIN_SECONDS`` at most); then version ``name``'s server started, holding
+        that door now (``daemon.Bridge``), on the port the old one served pages on, with the page token it imported,
+        so a page open on it reloads into this version and every link still opens; then the layout of 0.11.10 and
+        earlier removed, now that nothing of it runs (``versions.sweep``, ``legacy.remove``). What did not happen is
+        said, and fails nothing: the next command starts this version's server, on the next free port."""
+        from cad.engine import client
+        from cad_server._internal import versions
+
+        serving = before.get("serving")
+        port = serving.get("port") if isinstance(serving, dict) else None
+        old = before.get("installation") or before.get("version") or "0.11.10 or earlier"
+        self.say(f"engine   cad-server {old}'s server (pid {before.get('pid')}) drains once nothing is in flight, "
+                 f"then text-to-cad {name}'s takes its place" + (f" on port {port}" if port else ""))
+        if versions.ask_flat({"op": "stop", "drain": True}) is None:
+            self.say(f"engine   cad-server {old}'s server did not answer: it keeps running until it stops")
+            return
+        try:
+            gone = client.wait_gone(timeout=DRAIN_SECONDS, endpoint=versions.flat_endpoint())
+        except ConnectionError:
+            gone = False
+        if not gone:
+            self.say(f"engine   cad-server {old}'s server is still busy: it stops once its work ends")
+            return
+        if not versions.start_server(name):
+            self.say(f"engine   text-to-cad {name}'s server did not start: the next command starts it")
+            return
+        versions.ask(name, {"op": "bridge"})
+        if port:
+            answer = versions.ask(name, {"op": "http", "port": port}, seconds=versions.START_SECONDS)
+            if not isinstance(answer, dict) or "failed" in answer or not answer.get("url"):
+                why = (answer or {}).get("failed") or "it did not answer"
+                self.say(f"engine   text-to-cad {name}'s server could not take port {port}: {why}")
+            else:
+                self.say(f"engine   text-to-cad {name} serves pages on port {port}, as cad-server {old} did")
+        versions.sweep(told=lambda line: self.say(f"default  {line}"))
 
     def _done(self, step: Any) -> str | None:
         """What the app ``step`` installs this release in has of it now, read again, when a command of the step
@@ -880,15 +960,14 @@ class Installer:
         receipt["skills"] = got
 
     def refresh(self, told: Any) -> tuple[bool, list[dict[str, Any]]]:
-        """After the plugin folder was written again (``cad plugin --refresh``, which a switch runs): the
+        """After the plugin folder was written again (``cad plugin --refresh``, which the updater of 0.11.10 and
+        earlier runs once its helper has started this release's server): the
         copies the apps keep of it brought to it (``providers.refresh_plan``), under the installer's lock, the receipt kept. ``(ok, the steps run)``."""
-        from cad_server._internal.file_lock import exclusive
+        from cad_server._internal import versions
 
         providers = self.providers
-        state = self._state()
-        state.mkdir(parents=True, exist_ok=True)
         failed, changed = False, set()
-        with exclusive(state / LOCK, waiting=lambda: told("waiting for another cad setup or uninstall to finish")):
+        with versions.install_lock(waiting=lambda: told("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
             apps, steps, self.listed = providers.read_for(
                 lambda apps: providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
@@ -913,7 +992,7 @@ class Installer:
         return not failed, [step.data() for step in steps]
 
     def install(self) -> int:
-        from cad_server._internal import installations
+        from cad_server._internal import installations, versions
 
         providers = self.providers
         where = f"engine port {self.port}" if self.port else "engine on any free port"
@@ -925,34 +1004,26 @@ class Installer:
                      f"a terminal of its own (Windows Terminal or PowerShell), not from an app's: {command()}")
             if not self.args.dry_run:
                 return self._failed(f"Not installed: {installations.packaged_words(package)}")
-        if not self.args.dry_run and not self.engine_update:
-            relocated = self._relocated()
-            if relocated is not None:
-                return relocated
         if self.args.dry_run:
             apps = providers.detect(self.machine, folder=self.folder)
             steps = providers.plan(apps, release=self.release, folder=self.folder,
                                    only=self.only, machine=self.machine, skills=(self._receipt() or {}).get("skills"))
             kernel = self._kernel()
-            home = self._home()
-            release = ([{"app": "release", "label": "release", "action": "make",
-                         "subject": f"cad-server {self.release} in {providers.shown(str(home), self.machine)}, once"}]
-                       if home is not None and not os.path.isdir(home) else [])
             earlier = self._earlier()
-            extra = [*release, self._plugin_row(), *map(self._public, earlier), self._public(self._engine(earlier)),
-                     *([kernel] if kernel else [])]
+            extra = [*self._version_rows(), self._plugin_row(), *map(self._public, earlier),
+                     self._public(self._engine(earlier)), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
+        relocated = self._relocated()
+        if relocated is not None:
+            return relocated
         from cad.engine.places import adopt_earlier
-        from cad_server._internal.file_lock import exclusive
 
         # What this release keeps of 0.8's state folder, moved into its own first: the person's settings,
         # the documents' records and Recents, and the receipt.
         adopt_earlier()
-        state = self._state()
-        state.mkdir(parents=True, exist_ok=True)
-        with exclusive(state / LOCK, waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
+        with versions.install_lock(waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
             apps, steps, self.listed = providers.read_for(
                 lambda apps: providers.plan(apps, release=self.release, folder=self.folder,
@@ -961,68 +1032,35 @@ class Installer:
                 self.machine, folder=self.folder)
             self.fed = providers.feeds(apps, self.only or providers.APPS)
             earlier = self._earlier() if not self.engine_update else []
+            before = running_engine() if not self.engine_update else None
             engine = self._engine(earlier) if not self.engine_update else {
-                "app": "engine", "label": "engine", "action": "leave", "subject": "this engine's own update"}
+                "app": "engine", "label": "engine", "action": "leave", "subject": "an updater's run"}
             kernel = self._kernel()
-            extra = [self._plugin_row(), *map(self._public, earlier), self._public(engine), *([kernel] if kernel else [])]
+            extra = [*self._version_rows(), self._plugin_row(), *map(self._public, earlier), self._public(engine),
+                     *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
-            work = [step for step in steps if step.changes]
             for row in earlier:
                 self._stop_earlier(row)
             registered = self._register()
-            # An app whose command fails fails the run, and the rest goes on: the switch among it.
-            failed = False
-            if self.engine_update and os.environ.get(PREPARE_ENV) == "1":
-                # An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): this release
-                # registered and its CAD kernel environment made now, so the first build after the engine
-                # switches by itself waits on nothing; its apps and the switch once the engine is idle.
-                return 0 if self._prepare_kernel() else 1
+            failed, moved = self._move(before)
+            if failed:
+                # The default channel stays where it was, and so does every app: their text runs the version
+                # the channel is on.
+                if self.engine_update:
+                    return 1
+                from cad_server.updates import command
+
+                self.say(f"Nothing else was changed. Once that is fixed, run the install command again: {command()}")
+                return self._result(steps, extra, None, [], 1)
             self.stage("apps")
-            # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
-            # written changes no app that would point at it.
-            if self._write_plugin() is None:
-                failed = True
-                for step in [step for step in work if self._needs_folder(step)]:
-                    self.say(f"{step.label}: {step.action} {step.subject}: not done, with no plugin folder")
-                    work.remove(step)
-            backed_up = self._backed_up(receipt)
-            changed: set[str] = set()
-            aside = self._aside()
-            for step in work:
-                self.say(f"{step.label}: {step.action} {step.subject}")
-                ok, records = providers.apply(step, self.machine, say=lambda line: self.say(f"  {line}"),
-                                              aside=aside, backed_up=backed_up, done=self._done)
-                self.actions += records
-                failed = failed or not ok
-                # A plugin installed or updated loads in the app's next session; a config, as the app opens.
-                if ok and records and providers.needs_restart(step):
-                    changed.add(step.app)
-                if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
-                    self._record_skills(receipt, step, steps, records, changed)
-            launcher = registered["launcher"]
-            if self.actions or self.stopped or registered["record_written"] or launcher["written"]:
-                receipt.update({"release": self.release, "updated": providers.stamp()})
-                receipt["actions"] = list(receipt.get("actions") or []) + self.actions
-                if self.stopped:
-                    receipt["stopped"] = list(receipt.get("stopped") or []) + self.stopped
-                if launcher["written"]:
-                    receipt["launcher"] = {"path": launcher["path"], "written": True, "at": providers.stamp()}
-                self._keep(receipt)
-            switched = None
-            if not self.engine_update:
-                switch_failed, switched = self._switch()
-                failed = failed or switch_failed
+            failed, changed = self._apps(receipt, steps)
+            self._record(receipt, registered)
             # An agent left without the skills for want of Node is not up to date, though nothing was done.
-            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or switched
+            if not (self.actions or self.stopped or registered["launcher"]["written"] or self.moved
                     or any(step.subject == providers.NEED_NODE for step in steps)):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
-        if switched is not None and switched.get("restored"):
-            # The release before runs again: its plugin folder, and the apps' copies of it, come back with
-            # it -- its own `cad plugin --refresh`, once this run's lock is let go.
-            from cad_server._internal import switch
-
-            switch.follow(told=lambda line: self.say(f"plugin   {line}"))
         if self.engine_update:
+            # The default channel moved: an app that failed is said on stderr, and done again by the next update.
             return 0
         verified = self._verify()
         self._telemetry_into(verified)
@@ -1036,6 +1074,101 @@ class Installer:
                      f"command again: {command()}")
         return self._result(steps, extra, verified, restart, 1 if failed else 0)
 
+    def update_own(self) -> Any:
+        """A pinned command's update of the default channel to this process's version
+        (``cad_server._internal.pins.update_default``): steps 4 to 7 -- the ``cad`` command, the move, the apps, the
+        receipt -- with no plan and no report, each line said on stderr, and no server of 0.11.10 or earlier asked
+        to stop (that release's own updater, or the install command, does). What the move did
+        (``versions.Moved``), or None for a process that is no version."""
+        from cad_server._internal import versions
+
+        providers = self.providers
+        self.pinned = True
+        with versions.install_lock(waiting=lambda: self.say("waiting for another install of text-to-cad to finish")):
+            receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
+            _apps, steps, self.listed = providers.read_for(
+                lambda apps: providers.plan(apps, release=self.release, folder=self.folder, only=self.only,
+                                            machine=self.machine, skills=receipt.get("skills")),
+                self.machine, folder=self.folder)
+            self.fed = providers.feeds(_apps, providers.APPS)
+            registered = self._register()
+            failed, moved = self._move(None)
+            if failed or moved is None:
+                return moved
+            self._apps(receipt, steps)
+            self._record(receipt, registered)
+            return moved
+
+    def _version_rows(self) -> list[dict[str, Any]]:
+        """The plan's rows for steps 1 and 5: this release made present, where it is not; and the default
+        channel, moved to it or on it already."""
+        from cad.engine import places
+        from cad_server._internal import pointers
+
+        rows: list[dict[str, Any]] = []
+        name = self._home() or places.versioned()
+        if name is None:
+            return rows
+        where = self.providers.shown(str(places.version_dir(name)), self.machine)
+        if places.version_record(name) is None:
+            rows.append({"app": "version", "label": "version", "action": "install",
+                         "subject": f"text-to-cad {name} in {where}, once"})
+        try:
+            leaving = pointers.leaving()
+        except OSError:
+            leaving = pointers.Default(None, None)
+        if leaving.version == name and leaving.source == "pointer":
+            rows.append({"app": "default", "label": "default", "action": "leave", "subject": f"text-to-cad {name}"})
+        else:
+            was = ("" if leaving.version is None else
+                   f" (from {leaving.version}" + (", of 0.11.10 or earlier: its data imported, its code and caches "
+                                                 "removed once nothing runs from them)" if leaving.legacy else ")"))
+            rows.append({"app": "default", "label": "default", "action": "move", "subject": f"text-to-cad {name}{was}"})
+        return rows
+
+    def _apps(self, receipt: dict[str, Any], steps: list[Any]) -> tuple[bool, set[str]]:
+        """Step 6: the plugin folder written from this release, then each app's step of the plan (``steps``) that
+        changes something, said as it runs. ``(failed, the apps and agents to restart)``."""
+        providers = self.providers
+        failed = False
+        work = [step for step in steps if step.changes]
+        # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
+        # written changes no app that would point at it.
+        if self._write_plugin() is None:
+            failed = True
+            for step in [step for step in work if self._needs_folder(step)]:
+                self.say(f"{step.label}: {step.action} {step.subject}: not done, with no plugin folder")
+                work.remove(step)
+        backed_up = self._backed_up(receipt)
+        changed: set[str] = set()
+        aside = self._aside()
+        for step in work:
+            self.say(f"{step.label}: {step.action} {step.subject}")
+            ok, records = providers.apply(step, self.machine, say=lambda line: self.say(f"  {line}"),
+                                          aside=aside, backed_up=backed_up, done=self._done)
+            self.actions += records
+            failed = failed or not ok
+            # A plugin installed or updated loads in the app's next session; a config, as the app opens.
+            if ok and records and providers.needs_restart(step):
+                changed.add(step.app)
+            if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
+                self._record_skills(receipt, step, steps, records, changed)
+        return failed, changed
+
+    def _record(self, receipt: dict[str, Any], registered: dict[str, Any]) -> None:
+        """Step 7: the receipt kept, with what this run did; written whenever none was here, since its presence
+        says the install command ran here (the default channel's updater)."""
+        providers = self.providers
+        launcher = registered["launcher"]
+        if self.actions or self.stopped or launcher["written"] or self._receipt() is None:
+            receipt.update({"release": self.release, "updated": providers.stamp()})
+            receipt["actions"] = list(receipt.get("actions") or []) + self.actions
+            if self.stopped:
+                receipt["stopped"] = list(receipt.get("stopped") or []) + self.stopped
+            if launcher["written"]:
+                receipt["launcher"] = {"path": launcher["path"], "written": True, "at": providers.stamp()}
+            self._keep(receipt)
+
     def _telemetry_into(self, verified: dict[str, Any]) -> None:
         try:
             verified["telemetry"] = self._telemetry()
@@ -1046,7 +1179,8 @@ class Installer:
 
     def uninstall(self) -> int:
         providers = self.providers
-        from cad_server._internal import installations
+        from cad.engine import places
+        from cad_server._internal import installations, pointers, versions
         from cad.engine.places import legacy_cache_dir
 
         receipt = self._receipt()
@@ -1063,16 +1197,38 @@ class Installer:
         if status == installations.MISSING and earlier is not None:
             proxy = earlier
         whole = not self.only
-        launcher = whole and ours
+        purge = bool(self.args.purge)
+        # The named channels: a store delivered each, and each stays (``--purge`` aside), with its version.
+        channels = [pointer for pointer in pointers.listing() if pointer.channel is not None]
+        default = pointers.read(None)
+        kept_by = {pointer.version: pointer.channel for pointer in channels}
+        launcher = whole and ours and (purge or not channels)
         if launcher:
             extra.append({"app": "command", "label": "command", "action": "remove",
                           "subject": f"{providers.shown(proxy, self.machine)} (text-to-cad's)"})
+        elif whole and ours:
+            extra.append({"app": "command", "label": "command", "action": "leave",
+                          "subject": f"{providers.shown(proxy, self.machine)}: {self._still_used(channels)}"})
         elif whole and status == installations.FOREIGN:
             extra.append({"app": "command", "label": "command", "action": "leave",
                           "subject": f"{providers.shown(proxy, self.machine)}: not text-to-cad's"})
         if whole:
             extra.append({"app": "engine", "label": "engine", "action": "stop",
-                          "subject": "the engine (`cad stop`)"})
+                          "subject": "the default channel's server (`cad stop`)" if not purge
+                          else "every version's server"})
+            if default is not None:
+                extra.append({"app": "default", "label": "default", "action": "remove",
+                              "subject": f"the default channel (on text-to-cad {default}) and the record clients of "
+                                         "0.11.10 and earlier read"})
+                if default in kept_by and not purge:
+                    extra.append({"app": "version", "label": "version", "action": "leave",
+                                  "subject": f"text-to-cad {default}: the {kept_by[default]} channel is on it"})
+            for name in (versions.folders() if purge else [default] if default and default not in kept_by else []):
+                extra.append({"app": "version", "label": "version", "action": "remove",
+                              "subject": providers.shown(str(places.version_dir(name)), self.machine)})
+            for pointer in channels if not purge else ():
+                extra.append({"app": "channel", "label": "channel", "action": "leave",
+                              "subject": f"{pointer.channel}, on text-to-cad {pointer.version}: its store delivered it"})
             from cad_server._internal import releases
 
             if releases.listing():
@@ -1082,7 +1238,7 @@ class Installer:
                 extra.append({"app": "plugin", "label": "plugin folder", "action": "remove",
                               "subject": providers.shown(str(self.folder), self.machine)})
         state, cache = self._state(), Path(legacy_cache_dir())  # the versions' own caches are in the state folder
-        if self.args.purge:
+        if purge:
             extra.append({"app": "folders", "label": "folders", "action": "remove",
                           "subject": f"{providers.shown(state, self.machine)} and {providers.shown(cache, self.machine)}"})
         title = ("text-to-cad: cad uninstall takes back what earlier runs did, newest first:" if receipt else
@@ -1099,18 +1255,17 @@ class Installer:
 
         try:
             confirm("taking text-to-cad out" + (f" of {', '.join(self.only)}" if self.only else " of this computer")
-                    + (" and removing its state and cache folders" if self.args.purge else ""),
+                    + (" and removing its state and cache folders" if purge else ""),
                     "Take text-to-cad out as planned?", yes=bool(self.args.yes), as_json=bool(self.args.json),
                     command=retry(self.prog, self.argv),
-                    preview=["This cannot be undone: --purge removes text-to-cad's state folder (your settings, the "
-                             "documents' records, Recents) and its cache folder."] if self.args.purge else [])
+                    preview=["This cannot be undone: --purge removes every installed version of text-to-cad, a "
+                             "store's among them, and its state folder (your settings, the documents' records, "
+                             "Recents) and its cache folder."] if purge else [])
         except Failure as failure:
             return write(failure, prog=self.prog, as_json=bool(self.args.json))
         failed, changed = False, set()
-        from cad_server._internal.file_lock import exclusive
-
         state.mkdir(parents=True, exist_ok=True)
-        with exclusive(state / LOCK, waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
+        with versions.install_lock(waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
             for step in steps:
                 if not step.changes:
                     continue
@@ -1124,8 +1279,11 @@ class Installer:
                     changed.update(step.agents)
             if launcher:
                 failed = self._remove_command(proxy) or failed
+            elif whole and ours:
+                self.say(f"command  {providers.shown(proxy, self.machine)} stays: {self._still_used(channels)}")
             if whole:
                 failed = self._stop() or failed
+                failed = self._remove_versions(default, kept_by, purge) or failed
                 failed = self._remove_releases() or failed
                 failed = self._remove_plugin() or failed
             if receipt is not None:
@@ -1138,10 +1296,55 @@ class Installer:
                                          if agent not in self.only}
                     receipt["updated"] = providers.stamp()
                     self._keep(receipt)
-        if self.args.purge:
+        if purge:
             self._purge(state, cache)
         restart = self._restart(apps, changed, "Next, restart to unload it:")
         return self._result(steps, extra, None, restart, 1 if failed else 0)
+
+    @staticmethod
+    def _still_used(channels: list[Any]) -> str:
+        """Why the ``cad`` command stays: which channels' copies still run it, and what to do."""
+        named = ", ".join(f"{pointer.channel} (text-to-cad {pointer.version})" for pointer in channels)
+        return (f"the copy of the plugin the {named} channel{'s' if len(channels) != 1 else ''} delivered still "
+                f"use{'' if len(channels) != 1 else 's'} it; remove that plugin in its app, then run `cad uninstall` "
+                "again (or `cad uninstall --purge` to remove everything)")
+
+    def _remove_versions(self, default: str | None, kept_by: dict[str, str | None], purge: bool) -> bool:
+        """The default channel taken out: its pointer, the mirror 0.11.10 and earlier read (``installations/current``
+        and the records naming a version), and its version -- its server stopped first -- unless a named channel is
+        on it; with ``purge``, every version, each server stopped. Run under the install lock. True when a version
+        could not be removed whole (on Windows, the folder this command runs from)."""
+        from cad.engine import client, places
+        from cad_server._internal import installations, pointers, versions
+
+        failed = False
+        names = versions.folders() if purge else [default] if default and default not in kept_by else []
+        self._folder().remove(pointers.DEFAULT)
+        for record in installations.records():
+            inside = os.path.normcase(os.path.realpath(places.versions_dir())).rstrip(os.sep) + os.sep
+            if os.path.normcase(os.path.realpath(record["prefix"])).startswith(inside) \
+                    or (default is not None and record["version"] == default):
+                installations.forget(record["version"])
+        if installations.current_version() in (*names, default):
+            installations.state().remove(installations.CURRENT)
+        for name in names:
+            if versions.serves(name) and versions.ask(name, {"op": "stop"}) is not None:
+                try:
+                    client.wait_gone(timeout=versions.STOP_SECONDS, endpoint=versions.endpoint(name))
+                except ConnectionError:
+                    pass
+            done = versions.remove_now(name, told=lambda line: self.say(f"version  {line}"))
+            if done != "removed":
+                failed = True
+                self.say(f"version  {places.version_dir(name)} could not be removed whole ({done}): remove it "
+                         "once this command ends")
+            else:
+                self.actions.append({"app": "version", "action": "remove", "kind": "remove",
+                                     "path": str(places.version_dir(name)), "ok": True,
+                                     "at": self.providers.stamp()})
+        if default is not None:
+            self.say("default  removed the default channel" + (f" (on text-to-cad {default})" if default else ""))
+        return failed
 
     def _remove_command(self, proxy: str) -> bool:
         """The cad command removed, with its Python on Windows (``installations.remove_proxy``): True when it

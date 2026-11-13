@@ -12,14 +12,14 @@ releases left behind that none running now needs (``cad_server._internal.leftove
 format, the bytecode of installations no longer registered, cache folders no record names, environments
 of models' packages unused for a week), and
 cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``
-removes those records, the release folders but the current release's and the one before's (one an update
-failed to move to among them: ``releases.kept``), the launchers earlier releases published beside the proxy (0.8's ``cadgen``
+removes those records, every version no pointer names and the layout of 0.11.10 and earlier once that is safe
+(``versions.sweep``), the launchers earlier releases published beside the proxy (0.8's ``cadgen``
 proxy, ``cadgen-<version>``, ``cadgen-python-<version>``: ``installations.prune_legacy``) and those leftovers, but
 any written in the last seven days, a line for each kind; ``--all-versions`` with it removes 0.7's
 however recently written. Nothing is removed without ``--prune``.
 
-It says what the device runs, comparing nothing: the current installation, the release folders on
-disk (``cad_server._internal.releases``), the last update's switch, the engine running and its release,
+It says what the device runs, comparing nothing: the current installation, the flat release folders of
+0.11.10 and earlier on disk (``cad_server._internal.releases``), the engine running and its release,
 the plugin folder every app's plugin comes from (``cad_server._internal.plugin``) and each agent app's
 copy of the plugin: the release it pins and where it comes from -- the folder read in place, linked, or
 copied, and when (``cad_server._internal.providers``) --, and the agents the Skills CLI copied the
@@ -104,9 +104,9 @@ def _server(start: bool = True, answered: list | None = None) -> tuple[str, str]
 
 
 def _current() -> list[str]:
-    """What the device runs, comparing nothing: the current installation, the release folders on disk
-    and the last update's switch (``cad_server._internal.switch``)."""
-    from cad_server._internal import installations, releases, switch
+    """What the device runs, comparing nothing: the current installation and the flat release folders of 0.11.10
+    and earlier on disk, which go with that layout (``cad_server._internal.legacy``)."""
+    from cad_server._internal import installations, releases
 
     lines = []
     try:
@@ -121,19 +121,11 @@ def _current() -> list[str]:
         found = releases.listing()
         if found:
             current = (record or {}).get("version") or named
-            kept = releases.kept(current) if current else {release["version"] for release in found}
             said = ", ".join(release["version"] + ("" if release["complete"] else " (incomplete)")
-                             + (" (current)" if release["version"] == current else
-                                " (the release before)" if release["version"] in kept else
-                                " (cad doctor --prune removes it)")
+                             + (" (current)" if release["version"] == current else "")
                              for release in found)
-            lines.append(f"releases {said} in {_home(str(releases.root()))}")
-        last = switch.last()
-        if last is not None:
-            how = (f"to cad-server {last.get('to')}" + (f" from {last.get('from')}" if last.get("from") else "")
-                   + (f", {last['gapMs']} ms without an engine" if last.get("gapMs") is not None else ""))
-            lines.append(f"update   {last.get('at')}: switched {how}" if last.get("ok")
-                         else f"update   {last.get('at')}: the switch {how} failed: {last.get('error')}")
+            lines.append(f"releases {said} in {_home(str(releases.root()))}: of 0.11.10 or earlier, removed once "
+                         "nothing runs from them")
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         lines.append(f"current  unknown ({type(error).__name__}: {error})")
     return lines
@@ -487,7 +479,7 @@ def _prune_plan(all_versions: bool = False) -> list[str]:
     consent for (``cad_server._internal.consent``). The leftovers are read as they will be once the records
     and release folders it removes first are gone (``_leftovers``' ``gone``): the bytecode of an installation
     it takes out is among them."""
-    from cad_server._internal import installations, leftovers, releases
+    from cad_server._internal import installations, leftovers
     from cad_server._internal.leftovers import count
 
     lines = []
@@ -495,13 +487,8 @@ def _prune_plan(all_versions: bool = False) -> list[str]:
     dangling = [record for record in records if not installations.alive(record)]
     if dangling:
         lines.append(f"{count(len(dangling), 'installation record', 'installation records')} whose interpreter is gone")
+    # The flat release folders of 0.11.10 and earlier go with that layout (``legacy.remove``), never here.
     folders: list[dict] = []
-    if installations.current_version():
-        kept = releases.kept()
-        folders = [found for found in releases.listing() if found["version"] not in kept]
-        if folders:
-            lines.append(f"{count(len(folders), 'release folder', 'release folders')} but the current release's and "
-                         f"the one before's: {', '.join(found['version'] for found in folders)}")
     legacy = installations.legacy_launchers()
     if legacy:
         lines.append(f"{count(len(legacy), 'launcher', 'launchers')} earlier releases published beside the cad command: "
@@ -572,8 +559,8 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument(
         "--prune",
         action="store_true",
-        help="Remove the record of every registered installation whose interpreter is gone, every release folder "
-             "but the current release's and the one before's, the per-version launchers earlier builds published "
+        help="Remove the record of every registered installation whose interpreter is gone, every installed version "
+             "no channel is on and the layout of 0.11.10 and earlier once nothing runs from it, the per-version launchers earlier builds published "
              "beside the cad command, engine records of an older format, the bytecode folders of installations no "
              "longer registered, cache folders with no record, environments of models' packages and cadgen 0.7's "
              "store and state files (none written or used in the last 7 days), and exit: listed, with how many of "
@@ -657,12 +644,13 @@ def _prune(args, prog: str) -> int:
     lines += [f"removed {path}" for path in removed]
     if not removed:
         lines.append("no registered installation has lost its interpreter")
-    # And the release folders but the current one's and the one before's (``releases.kept``): one an update
-    # failed to move to among them, its failure still recorded. None while no installation is current.
-    from cad_server._internal import releases
+    # And every version no pointer names, and the layout of 0.11.10 and earlier once it is safe (``versions.sweep``).
+    from cad_server._internal import versions
 
-    if installations.current_version():
-        lines += [f"removed {path}" for path in releases.collect(releases.kept())]
+    try:
+        lines += [f"{verdict} text-to-cad {name}" for name, verdict in versions.sweep().items()]
+    except OSError as error:
+        lines.append(f"the versions could not be looked at: {error}")
     # And the launchers earlier releases published beside the cad command: 0.8's proxy among them.
     lines += [f"removed {path}, a launcher the cad command replaces" for path in installations.prune_legacy()]
     # And what no cadgen needs any more: old engine records, bytecode, cache folders no record names.
@@ -706,7 +694,7 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
               _check("install", INFO, str(location))]
     # Its record and the command the skills run it by (`cad_server._internal.installations`).
     checks += [_line(line, status) for status, line in _setup(check)]
-    # What the device runs: the current installation, the release folders, the last switch.
+    # What the device runs: the current installation, and the flat release folders of 0.11.10 and earlier.
     checks += [_line(line) for line in _current()]
     # The engine's document cache: what it keeps, until a person deletes it.
     cache = _cache()

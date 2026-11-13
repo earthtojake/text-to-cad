@@ -414,6 +414,57 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
 
+  # The update every device on 0.11.10 or earlier makes into this build, rehearsed with the real releases from PyPI on
+  # a device of its own (scripts/test/rehearse-update.py): this tree published as two later releases (wheels uv reads
+  # beside the index, a local version feed), then 0.11.10's automatic update, its update button and its `cad update`,
+  # each with a second update on top by the new server's own button, and the updates killed before the import is
+  # marked, before the pointer is written, after it, and during the removal of the version left. Then 0.11.0, the
+  # oldest release that updates itself, by its button and by itself. Each checks the default pointer, the mirror, the
+  # same port and page token, Recents and a document opening, the old layout removed and the files its clients read
+  # kept, and the flat door answering a 0.11.10 client. Before a release ships (a full run), nightly, and on a change
+  # to the installers or the rehearsal: about 8 minutes a system (the two automatic updates wait out their release's
+  # own 30-second tend and minute of quiet), the cost of the one migration every device makes unattended.
+  update-rehearsal:
+    name: update rehearsal (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        timeout-minutes: 5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@v10.3.3
+
+      # The rehearsal builds this tree's wheels and reads its own helpers: the library and the server, no kernel.
+      - name: Install the library and the server alone
+        timeout-minutes: 5
+        run: python -m pip install --editable ./packages/cad --editable ./packages/cad-server
+
+      - name: From 0.11.10, every path and every interruption
+        timeout-minutes: 30
+        run: python scripts/test/rehearse-update.py all
+
+      - name: From 0.11.0, the oldest release that updates itself
+        timeout-minutes: 15
+        run: |
+          python scripts/test/rehearse-update.py button --old 0.11.0
+          python scripts/test/rehearse-update.py automatic --old 0.11.0
+
   # ---- integration: each with what it drives installed -------------------------------------------
 
   # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
@@ -824,6 +875,7 @@ jobs:
       - packages-floor
       - install-linux
       - install-windows
+      - update-rehearsal
       - fea
       - blender
       - kicad

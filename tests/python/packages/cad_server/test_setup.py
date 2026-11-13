@@ -6,7 +6,7 @@ The verb runs against a temporary home: its state, cache and ``cad`` command fol
 fake app commands on a PATH of their own, Claude Desktop's config file named by
 ``CLAUDE_DESKTOP_CONFIG``, and a plugin of the test's own that the plugin folder is written from
 (``cad_server._internal.plugin``). The engine is never asked: what serves the port, 0.8's ``cadgen stop``,
-this release's ``cad stop``, the switch and the plugin folder following it are stood in for, as is the
+and this release's ``cad stop`` are stood in for, as is the
 telemetry choice, so nothing here reaches the network or the developer's own engine, settings and
 apps. Every run is at a terminal that would answer no, and asks it nothing.
 """
@@ -37,7 +37,7 @@ add_repo_path("packages/cad/src")
 import cad_server  # noqa: E402
 from cad_server import analytics  # noqa: E402
 from cad_server import cli, updates  # noqa: E402
-from cad_server._internal import installations, plugin, providers, releases, switch  # noqa: E402
+from cad_server._internal import installations, plugin, providers, releases, versions  # noqa: E402
 from cad_server._internal.launch import LAUNCHER  # noqa: E402
 from cad_server.cli import setup, stop, telemetry, uninstall  # noqa: E402
 
@@ -182,9 +182,6 @@ class Fixture(unittest.TestCase):
                       mock.patch.object(setup, "running_engine", side_effect=lambda: self.serving),
                       mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
                       mock.patch.object(setup, "stop_earlier", return_value=(True, [], "")),
-                      mock.patch.object(switch, "handover", return_value=None),
-                      # The release now current's own `cad plugin --refresh`, a process of its own.
-                      mock.patch.object(switch, "follow", return_value=True),
                       mock.patch.object(plugin, "source", return_value=self.plugin_source),
                       mock.patch.object(analytics, "notify", return_value=False),
                       mock.patch.object(telemetry, "describe", return_value="off: your choice"),
@@ -294,11 +291,30 @@ class TheCommand(Fixture):
                     mock.patch.object(updates, "_get", return_value=feed), mock.patch.object(updates, "_seen", set()):
                 return self._run(update.main, argv)
 
+        # Where the install command never ran there is no install to update: said, nothing read or changed.
+        code, out, err = run("--dry-run", feed={"latest": "99.0.0"})
+        self.assertEqual((code, out), (1, ""))
+        self.assertEqual(err, "cad update: there is no install of text-to-cad here to update: the install command "
+                              f"installs one, {updates.command()}\n")
+        self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / setup.RECEIPT).write_text('{"schema": 1}', encoding="utf-8")
+        # A store's copy, a named channel's command: whoever delivers it updates it.
+        from cad.engine import places
+
+        places.set_channel("claude")
+        try:
+            code, out, err = run(feed={"latest": "99.0.0"})
+        finally:
+            places.set_channel(None)
+        self.assertEqual((code, out), (1, ""))
+        self.assertEqual(err, "cad update: the claude channel's copy of text-to-cad is updated by whoever delivers it "
+                              "(its store or app), not by cad update\n")
         code, out, _err = run("--dry-run", feed={"latest": "99.0.0"})
         self.assertEqual(code, 0)
         lines = out.splitlines()
-        self.assertEqual(lines[0], f"cad update: would install text-to-cad 99.0.0 (this is {RELEASE}), then set it up in "
-                                   "every agent app here, as its own setup plans it; this release's plan of it:")
+        self.assertEqual(lines[0], f"cad update: would install text-to-cad 99.0.0 (this is {RELEASE}), then run its "
+                                   "setup, which moves the default channel to it and sets it up in every agent app "
+                                   "here; this release's plan of it:")
         self.assertTrue(lines[1].startswith(f"text-to-cad {RELEASE} for this machine"), out)
         self.assertIn("Dry run: nothing was changed.", out)
         code, out, _err = run("--dry-run", feed=None)
@@ -404,30 +420,26 @@ class TheCommand(Fixture):
         post.assert_not_called()
 
     def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
-        """The install command runs ``cad setup`` from uvx's environment: a real run moves to its release's
-        folder first, and the base is keyed by that folder; a dry run stays, and says the same folder."""
+        """The install command runs ``cad setup`` from uvx's environment: a real run makes this release present in
+        ``versions/<release>`` and moves there first, and the base is keyed by its server environment; a dry run
+        stays, says the same folder, and plans the version's install and the default channel's move."""
+        from cad.engine import places
         from cad_server._internal import base
 
-        home = releases.where(RELEASE)
         uvx = dataclasses.replace(base.Installation.here(), prefix=str(self.root / "uvx-env"), python="3.14.6",
                                   kernel=False)
         kernel = re.compile(r"build123d +leave +.+, made on first need in (.+)\n")
-
-        def said() -> Path:
-            with mock.patch.object(base.Installation, "here", return_value=uvx), \
-                    mock.patch.object(setup.Installer, "_home", return_value=home):
-                code, out, _err = self.run_setup("--dry-run")
-            self.assertEqual(code, 0, out)
-            return Path(str(kernel.search(out).group(1)).replace("~", str(self.home), 1))
-
-        self.assertEqual(said(), base.where(dataclasses.replace(uvx, prefix=str(home))))
-        self.assertNotEqual(said(), base.where(uvx), "not the folder of the environment it runs from")
-        # A release folder made earlier runs the Python it runs, asked of it.
-        with mock.patch.object(releases, "python_version", return_value="3.14.2"):
-            self.assertEqual(said(), base.where(dataclasses.replace(uvx, prefix=str(home), python="3.14.2")))
-        with mock.patch.object(base, "interpreter", return_value=Path(sys.executable)):
-            self.assertEqual(releases.python_version(home), platform.python_version())
-        self.assertIsNone(releases.python_version(self.root / "none"), "no Python there")
+        server = places.code_dir(RELEASE) / "server"
+        with mock.patch.object(base.Installation, "here", return_value=uvx), \
+                mock.patch.object(setup.Installer, "_home", return_value=RELEASE):
+            code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        found = Path(str(kernel.search(out).group(1)).replace("~", str(self.home), 1))
+        self.assertEqual(found, base.where(dataclasses.replace(uvx, prefix=str(server))))
+        self.assertNotEqual(found, base.where(uvx), "not the folder of the environment it runs from")
+        where = re.escape(providers.shown(str(places.version_dir(RELEASE)), self.machine))
+        self.assertRegex(out, rf"\n  version +install +text-to-cad {re.escape(RELEASE)} in {where}, once\n")
+        self.assertRegex(out, rf"\n  default +move +text-to-cad {re.escape(RELEASE)}\n")
 
     def test_a_first_install_inside_a_windows_app_package_installs_nothing_and_says_where_to_run_it(self) -> None:
         """An MSIX app's shell (the Claude desktop app's) has what it writes under AppData -- uv's Python, on a
@@ -623,96 +635,152 @@ class InstallUpdateAndUninstall(Fixture):
         self.serving = {**self.serving, "serving": {"port": PORT}}
         self.assertIn(f"verify   engine: cad-server {RELEASE} running, on port {PORT}\n", self.run_setup()[1])
 
-    def test_the_switch_comes_last_and_says_what_it_did(self) -> None:
+    def as_version(self, moved: "versions.Moved | None" = None):
+        """This run as a version's own process (``places.versioned``, which a version's code says by its folder), its
+        move of the default channel stood in for by ``moved`` (by default: moved from 0.0.1)."""
+        from cad.engine import places
+
+        moved = moved or versions.Moved("moved", None, RELEASE, "0.0.1")
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(places, "versioned", return_value=RELEASE))
+        stack.enter_context(mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}))
+        stack.enter_context(mock.patch.object(versions, "move", return_value=moved))
+        return stack
+
+    def test_the_default_channel_moves_before_any_app_and_a_failed_move_changes_no_app(self) -> None:
         self.cursor()
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": 412}
+        with self.as_version():
             code, out, _err = self.run_setup()
-            self.assertEqual(code, 0, out)
-            switch.handover.assert_called_once_with(RELEASE, told=mock.ANY)
-            self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation (412 ms without an engine)", out)
-            self.assertEqual(out.count("is the current installation"), 1, "one line says it")
-            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": None}
-            self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation\n", self.run_setup()[1])
-            switch.handover.return_value = {"from": None, "to": RELEASE, "ok": True, "gapMs": None}
-            self.assertIn(f"engine   cad-server {RELEASE} is the current installation\n", self.run_setup()[1])
-            self.assertLess(out.index("Cursor: install"), out.index("is the current installation"),
-                            "the apps first, then the switch")
-            switch.follow.assert_not_called()
-            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": False, "error": "no hello",
-                                            "restored": True}
+            versions.move.assert_called_once_with(None, RELEASE, told=mock.ANY, from_development=True)
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"default  text-to-cad {RELEASE} (was 0.0.1)\n", out)
+        self.assertLess(out.index("default  text-to-cad"), out.index("Cursor: install"),
+                        "the move, then the apps: no app's text runs a version the channel is not on")
+        self.assertTrue((self.state / setup.RECEIPT).is_file(), "the receipt: the install command ran here")
+        target = self.cursor()
+        shutil.rmtree(target)
+        failed = versions.Moved("failed", None, RELEASE, "0.0.1", "text-to-cad 9.9.9 in /x does not run: no module")
+        with self.as_version(failed):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
-        self.assertIn(f"engine   the switch to cad-server {RELEASE} failed: no hello; the release before runs again", out)
-        # The release before's plugin folder, and the apps' copies of it, come back with it.
-        switch.follow.assert_called_once_with(told=mock.ANY)
+        self.assertIn("default  the default channel stays where it was: text-to-cad 9.9.9 in /x does not run", out)
+        self.assertIn("Nothing else was changed. Once that is fixed, run the install command again", out)
+        self.assertNotIn("Cursor: install", out)
+        self.assertFalse(target.exists(), "no app was changed")
+        stale = versions.Moved("stale", None, RELEASE, "99.0.0")
+        with self.as_version(stale):
+            code, out, _err = self.run_setup()
+        self.assertEqual(code, 1, out)
+        self.assertIn("default  the default channel is on text-to-cad 99.0.0, newer than this release: nothing "
+                      "changed (going back to an older release is not supported)", out)
+        # A source tree run as no version moves nothing, and sets the apps up all the same.
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+            code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertIn("default  left as it is: this cad-server is a source tree that runs as no version", out)
+        self.assertFalse((self.state / "default").exists())
 
-    def test_a_release_sets_itself_up_from_its_own_folder(self) -> None:
-        """Run from uvx's environment (the install command), a release makes its folder in the state
-        folder and runs the same command from there, with the person's PATH: uvx's environment, which
-        uvx puts first on PATH and uv's cache keeps (its uvx and its `cad`), is not theirs. A dry run only
-        plans it."""
-        made = {"cad": str(self.root / "release-bin" / "cad")}
+    def test_a_server_of_0_11_10_or_earlier_is_drained_and_this_version_takes_its_port(self) -> None:
+        """The install command or ``cad update`` run on a device whose flat door a server of 0.11.10 or earlier holds:
+        once the default channel moved, that server drains, and this version's starts, holding the flat door, on its
+        port with the token it imported; then the layout of those releases goes. An updater's run never asks it: that
+        release's own updater drains it."""
+        self.serving = {"ok": True, "pid": 9, "version": "0.11.10", "installation": "0.11.10",
+                        "prefix": str(self.state / "releases" / "0.11.10"), "serving": {"port": 4321}}
+        asked: list[tuple] = []
+
+        def ask(name, message, **_kwargs):
+            asked.append((name, message))
+            return {"ok": True, "url": "http://127.0.0.1:4321/"} if message.get("op") == "http" else {"ok": True}
+
+        from cad.engine import client
+
+        with self.as_version(versions.Moved("moved", None, RELEASE, "0.11.10")), \
+                mock.patch.object(versions, "ask_flat", side_effect=lambda message, **_kw: asked.append(("flat", message)) or {"ok": True}), \
+                mock.patch.object(versions, "ask", side_effect=ask), \
+                mock.patch.object(versions, "start_server", return_value=True) as started, \
+                mock.patch.object(versions, "sweep", return_value={}) as swept, \
+                mock.patch.object(client, "wait_gone", return_value=True):
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            self.assertEqual(asked, [("flat", {"op": "stop", "drain": True}), (RELEASE, {"op": "bridge"}),
+                                     (RELEASE, {"op": "http", "port": 4321})])
+            started.assert_called_once_with(RELEASE)
+            swept.assert_called_once()
+            self.assertIn(f"engine   text-to-cad {RELEASE} serves pages on port 4321, as cad-server 0.11.10 did", out)
+            asked.clear()
+            code, out, _err = self.run_setup("--engine-update")
+            self.assertEqual((code, asked), (0, []), "an updater's run: the old release's updater drains it")
+
+    def test_a_release_makes_itself_present_and_sets_itself_up_from_there(self) -> None:
+        """Run from uvx's environment (the install command) or a flat folder an updater of 0.11.10 made, a release
+        makes itself present in ``versions/<release>`` and runs the same command from there, with the person's
+        PATH: uvx's environment, which uvx puts first on PATH and uv's cache keeps (its uvx and its `cad`), is not
+        theirs. One that cannot be installed from this shell exits 3."""
+        record = {"cad": str(self.root / "version-bin" / "cad"), "python": sys.executable, "prefix": sys.prefix}
         cached = self.root / "uv" / "archive-v0" / "M-XQ" / "bin"
-        with mock.patch.object(installations, "editable", return_value=False), \
+        with mock.patch.object(setup.Installer, "_home", return_value=RELEASE), \
                 mock.patch.dict(os.environ, {installations.NAME_ENV: "",
                                              "PATH": os.pathsep.join((str(cached), str(self.bin)))}), \
-                mock.patch.object(releases, "make", return_value=made) as make, \
+                mock.patch.object(versions, "make_present", return_value=versions.Present(RELEASE, record, made=True)) \
+                as made, \
                 mock.patch.object(setup.os, "execve", side_effect=SystemExit(0)) as execve, \
                 mock.patch("subprocess.call", return_value=0) as call:
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
-            where = providers.shown(str(releases.where(RELEASE)), self.machine)
-            self.assertRegex(out, rf"\n  release\s+make\s+cad-server {re.escape(RELEASE)} in {re.escape(where)}, once\n")
-            make.assert_not_called()
+            made.assert_not_called()
             code, out, _err = self.run_setup("--only", "claude")
-        self.assertEqual(code, 0, out)
-        make.assert_called_once_with(RELEASE, source=mock.ANY, told=mock.ANY)
-        run = [made["cad"], "setup", "--only", "claude"]
-        if os.name == "nt":
-            call.assert_called_once_with(run, env=mock.ANY)
-            environment = call.call_args.kwargs["env"]
-        else:
-            execve.assert_called_once_with(made["cad"], run, mock.ANY)
-            environment = execve.call_args.args[2]
-        self.assertEqual(environment["PATH"], str(self.bin))
-        self.assertEqual(environment["CAD_STATE_DIR"], str(self.state), "the rest of the environment goes along")
+            self.assertEqual(code, 0, out)
+            made.assert_called_once_with(RELEASE, told=mock.ANY)
+            run = [record["cad"], "setup", "--only", "claude"]
+            if os.name == "nt":
+                call.assert_called_once_with(run, env=mock.ANY)
+                environment = call.call_args.kwargs["env"]
+            else:
+                execve.assert_called_once_with(record["cad"], run, mock.ANY)
+                environment = execve.call_args.args[2]
+            self.assertEqual(environment["PATH"], str(self.bin))
+            self.assertEqual(environment["CAD_STATE_DIR"], str(self.state), "the rest of the environment goes along")
+            made.return_value = versions.Present(RELEASE, None, cannot="network", error="uv could not reach the index")
+            code, out, _err = self.run_setup()
+        self.assertEqual(code, 3, out)
+        self.assertIn("version  uv could not reach the index", out)
 
-    def test_the_engine_s_own_run_says_its_stages_on_stdout_and_switches_nothing(self) -> None:
+    def test_an_updater_s_run_says_its_stages_on_stdout_and_an_app_s_failure_does_not_fail_it(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+        with self.as_version():
             code, out, err = self.run_setup("--engine-update")
-        self.assertEqual(code, 0, err + out)  # an app's failure is said, and the engine still moves on
+        self.assertEqual(code, 0, err + out)  # the channel moved: an app's failure is said, done again next update
         frames = [json.loads(line)["progress"] for line in out.splitlines()]
-        self.assertEqual([(frame["kind"], frame["stage"]) for frame in frames], [("update", "apps")])
+        self.assertEqual([(frame["kind"], frame["stage"]) for frame in frames], [("update", "restart"), ("update", "apps")])
         self.assertIn("Gemini CLI: install the text-to-cad extension", err)
-        switch.handover.assert_not_called()
+        with self.as_version(versions.Moved("failed", None, RELEASE, "0.0.1", "no")):
+            code, out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 1, "the channel did not move: the updater's server stays as it was")
+        # Its reader gone -- the move stopped the updater's server --, it writes no more frames and goes on.
+        class Gone(io.StringIO):
+            def write(self, text: str) -> int:
+                raise BrokenPipeError(32, "Broken pipe")
 
-    def test_an_automatic_update_s_first_half_makes_the_kernel_and_stops_before_the_apps(self) -> None:
-        # `CAD_UPDATE_PREPARE=1` (`cad_server._internal.update.PREPARE_ENV`): the release registered and its
-        # CAD kernel environment made -- the one making no other setup does -- while the engine works;
-        # nothing of the apps, the plugin folder or the engine changes.
-        from cad_server._internal import base
+        with self.as_version(), contextlib.redirect_stdout(Gone()), contextlib.redirect_stderr(Gone()):
+            self.assertEqual(setup.main(["--engine-update"]), 0)
 
+    def test_an_updater_of_0_11_10_s_first_run_makes_this_release_present_and_stops(self) -> None:
+        # `CAD_UPDATE_PREPARE=1` (`setup.PREPARE_ENV`), from the flat `releases/<release>` that updater made: this
+        # release made present while that release's server works; nothing of the apps, the plugin folder or the
+        # default channel changes. Its second run does the rest.
+        record = {"cad": str(self.root / "version-bin" / "cad"), "python": sys.executable, "prefix": sys.prefix}
         command(self.bin, "gemini", "sys.exit(0)\n")
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}), \
-                mock.patch.object(base, "ensure") as ensured:
+        with mock.patch.object(setup.Installer, "_home", return_value=RELEASE), \
+                mock.patch.dict(os.environ, {installations.NAME_ENV: "", setup.PREPARE_ENV: "1"}), \
+                mock.patch.object(versions, "make_present", return_value=versions.Present(RELEASE, record)) as made, \
+                mock.patch.object(setup.os, "execve", side_effect=AssertionError("no run from there")):
             code, out, err = self.run_setup("--engine-update")
         self.assertEqual(code, 0, err + out)
-        ensured.assert_called_once()
-        self.assertEqual([json.loads(line)["progress"]["stage"] for line in out.splitlines()], ["build123d"],
-                         "the kernel's stage, and no apps stage")
-        self.assertNotIn("Gemini CLI: install the text-to-cad extension\n", err)
-        self.assertFalse((plugin.folder() / plugin.MANIFEST).exists(), "the plugin folder is the apps': written at the second half")
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()] \
-            if (self.bin / "calls.jsonl").exists() else []
-        self.assertNotIn(["gemini", "extensions", "link", str(plugin.folder())], calls, "no app is pointed at anything")
-        switch.handover.assert_not_called()
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}), \
-                mock.patch.object(base, "ensure", side_effect=base.Refused("uv could not reach the index")):
-            code, _out, err = self.run_setup("--engine-update")
-        self.assertEqual(code, 1, "a kernel that cannot be made keeps the engine where it is")
-        self.assertIn("build123d uv could not reach the index", err)
+        made.assert_called_once()
+        self.assertEqual([json.loads(line)["progress"]["stage"] for line in out.splitlines()], ["install", "build123d"])
+        self.assertFalse((plugin.folder() / plugin.MANIFEST).exists(), "the plugin folder is the apps': the second run's")
+        self.assertFalse((self.state / "default").exists())
 
     def test_the_cad_kernel_environment_is_said_in_the_plan_and_never_made_at_setup(self) -> None:
         from cad_server._internal import base
@@ -834,8 +902,8 @@ sys.exit(0)
         self.assertFalse((self.state / setup.RECEIPT).exists())
         stop.main.assert_called_once_with([])
         self.cache.mkdir(parents=True, exist_ok=True)
-        # The release folders go with an uninstall, with their records and the current one.
-        folder = releases.where(RELEASE)
+        # The flat release folders of 0.11.10 and earlier go with an uninstall, with their records and the current one.
+        folder = releases.root() / RELEASE
         (folder / "bin").mkdir(parents=True)
         for name in ("cad", "python"):
             (folder / "bin" / name).write_text("", encoding="utf-8")
@@ -890,9 +958,10 @@ sys.exit(0)
                                                                                       return_value=True):
                     code = uninstall.main(["--purge"])
                 self.assertEqual(code, 1)
-                self.assertTrue(err.getvalue().endswith("This cannot be undone: --purge removes text-to-cad's state "
-                                                        "folder (your settings, the documents' records, Recents) and "
-                                                        "its cache folder.\nTake text-to-cad out as planned? (y/N) "
+                self.assertTrue(err.getvalue().endswith("This cannot be undone: --purge removes every installed version "
+                                                        "of text-to-cad, a store's among them, and its state folder "
+                                                        "(your settings, the documents' records, Recents) and its "
+                                                        "cache folder.\nTake text-to-cad out as planned? (y/N) "
                                                         "cad uninstall: nothing was changed\n"), err.getvalue())
         self.assertEqual((self.snapshot(), sorted(path.name for path in self.state.iterdir())), before)
         self.assertTrue(proxy.is_file())
@@ -1217,6 +1286,112 @@ class TheOneLineInstaller(unittest.TestCase):
             done, given = run("--help")
             self.assertEqual((done.returncode, given), (0, []))
             self.assertIn(f"releases/download/v{VERSION}/install.sh", done.stdout)
+
+
+    @POSIX
+    def test_install_sh_add_installs_exactly_that_release_alone_and_reads_no_feed(self) -> None:
+        """``--add X`` -- the skills' setup block's ``curl ... | sh -s -- --add X`` -- runs ``cad setup --add`` of
+        exactly X: no version feed read, never widened to the newest, and any other option refused."""
+        with temporary_directory(prefix="install-add-") as scratch:
+            root = Path(scratch)
+            fakes = root / "bin"
+            fakes.mkdir()
+            (fakes / "uvx").write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$FAKE_ARGS"\n', encoding="utf-8")
+            (fakes / "curl").write_text('#!/bin/sh\ntouch "$FEED_READ"\nprintf \'{"latest":"9.9.9"}\'\n', encoding="utf-8")
+            for fake in fakes.iterdir():
+                fake.chmod(0o755)
+            arguments, read = root / "arguments", root / "feed-read"
+            environment = {"PATH": f"{fakes}:/usr/bin:/bin", "HOME": str(root), "FAKE_ARGS": str(arguments),
+                           "FEED_READ": str(read)}
+
+            def run(*argv: str, piped: bool = False, **extra: str) -> tuple[subprocess.CompletedProcess, list[str]]:
+                arguments.unlink(missing_ok=True)
+                command = ["/bin/sh", "-s", "--", *argv] if piped else ["/bin/sh", str(INSTALL_SH), *argv]
+                done = subprocess.run(command, env={**environment, **extra}, capture_output=True, text=True,
+                                      input=INSTALL_SH.read_text(encoding="utf-8") if piped else None,
+                                      stdin=None if piped else subprocess.DEVNULL)
+                return done, arguments.read_text(encoding="utf-8").splitlines() if arguments.exists() else []
+
+            head = [*LAUNCHER[1:-1], "--refresh-package", "cad-server", "--refresh-package", "cad", "--from"]
+            for argv, piped in ((("--add", "0.11.11"), True), (("--add=0.12.3",), False)):
+                done, given = run(*argv, piped=piped)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                release = argv[-1].removeprefix("--add=")
+                self.assertEqual(given, [*head, f"cad-server=={release}", "cad", "setup", "--add"])
+                self.assertIn(f"text-to-cad: {release} (as --add asked)", done.stderr)
+            self.assertFalse(read.exists(), "no version feed read for --add")
+            # A wheel named outright, for testing a build: that release's, or refused.
+            done, given = run("--add", "9.9.9", "--from", "/builds/cad_server-9.9.9-py3-none-any.whl")
+            self.assertEqual(given, [*LAUNCHER[1:-1], "--from", "/builds/cad_server-9.9.9-py3-none-any.whl", "cad",
+                                     "setup", "--add"])
+            for argv, words in ((("--add",), "--add needs a release"), (("--add", ""), "--add needs a release"),
+                                (("--add", "9.9.9", "--dry-run"), "--add takes no other option: --dry-run"),
+                                (("--add", "9.9.9", "--only", "claude"), "--add takes no other option"),
+                                (("--uninstall", "--add", "9.9.9"), "it does not go with --uninstall"),
+                                (("--add", "9.9.9", "--version", "9.9.8"), "it does not go with --version"),
+                                (("--add", "9.9.9;true"), "not a release"),
+                                (("--add", "0.11.11-dev.20261113000000"), "is a development version"),
+                                (("--add", "0.11.10"), "installs no release alone (the first that does is 0.11.11)"),
+                                (("--add", "9.9.9", "--from", "/b/cad_server-9.9.8-py3-none-any.whl"),
+                                 "is not text-to-cad 9.9.9")):
+                with self.subTest(argv=argv):
+                    done, given = run(*argv)
+                    self.assertEqual((done.returncode, given), (1, []), done.stderr)
+                    self.assertIn(words, done.stderr)
+            self.assertFalse(read.exists())
+
+    def test_install_ps1_add_installs_exactly_that_release_alone(self) -> None:
+        """The same for Windows' installer, as the skills' setup block runs it: ``& ([scriptblock]::Create((irm
+        .../install.ps1))) --add X``, the script's ``$args`` handed to its function. Its words are held here; where
+        PowerShell is installed (Windows, and the Linux runners), the script block is run with a fake uvx."""
+        text = INSTALL_PS1.read_text(encoding="utf-8").replace("\r\n", "\n")
+        self.assertEqual(re.findall(r"^\s*\$AddSince = '([^']*)'$", text, re.M), ["0.11.11"])
+        self.assertIn("if ($argument -eq '--add') {", text)
+        self.assertIn("$rest = @('--add')", text)
+        sh_text = INSTALL_SH.read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r'^ADD_SINCE="([^"]*)"$', sh_text, re.M), ["0.11.11"], "the two scripts agree")
+        pwsh = shutil.which("pwsh")
+        if not pwsh:
+            return
+        with temporary_directory(prefix="install-ps1-") as scratch:
+            root = Path(scratch)
+            fakes = root / "bin"
+            fakes.mkdir()
+            arguments = root / "arguments"
+            logger = fakes / "uvx.py"
+            logger.write_text("import sys\nopen(sys.argv[1], 'w').write('\\n'.join(sys.argv[2:]) + '\\n')\n",
+                              encoding="utf-8")
+            if os.name == "nt":
+                (fakes / "uvx.cmd").write_text(f'@"{sys.executable}" "{logger}" "{arguments}" %*\r\n', encoding="utf-8")
+            else:
+                uvx = fakes / "uvx"
+                uvx.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{logger}" "{arguments}" "$@"\n', encoding="utf-8")
+                uvx.chmod(0o755)
+            path = str(INSTALL_PS1).replace("'", "''")
+
+            def run(*argv: str) -> tuple[subprocess.CompletedProcess, list[str]]:
+                arguments.unlink(missing_ok=True)
+                # As the setup block types them: bare words (a word that starts with -- is the script's to read).
+                words = " ".join(argv)
+                script = f"& ([scriptblock]::Create((Get-Content -Raw '{path}'))) {words}"
+                done = subprocess.run([pwsh, "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
+                                      text=True, timeout=120, env={**os.environ, "PATH": os.pathsep.join(
+                                          (str(fakes), os.environ.get("PATH", ""))), "CAD_INSTALL_FROM": ""})
+                return done, arguments.read_text(encoding="utf-8").splitlines() if arguments.exists() else []
+
+            done, given = run("--add", "0.11.11")
+            self.assertEqual(given, [*LAUNCHER[1:-1], "--refresh-package", "cad-server", "--refresh-package", "cad",
+                                     "--from", "cad-server==0.11.11", "cad", "setup", "--add"], done.stdout + done.stderr)
+            self.assertIn("text-to-cad: 0.11.11 (as --add asked)", done.stdout)
+            for argv, words in ((("--add",), "--add needs a release"),
+                                (("--add", "0.11.11", "--dry-run"), "--add takes no other option: --dry-run"),
+                                (("--uninstall", "--add", "0.11.11"), "it does not go with --uninstall"),
+                                (("--add", "0.11.11-dev.1"), "is a development version"),
+                                (("--add", "0.11.10"), "installs no release alone")):
+                with self.subTest(argv=argv):
+                    done, given = run(*argv)
+                    self.assertEqual(given, [], done.stdout + done.stderr)
+                    self.assertIn(words, done.stdout + done.stderr)
 
 
 if __name__ == "__main__":

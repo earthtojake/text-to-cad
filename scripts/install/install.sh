@@ -5,7 +5,8 @@
 #
 # It finds uv, or installs it with uv's own installer, then runs `cad setup` from the newest
 # release of text-to-cad's server through uvx: text-to-cad set up or updated in every agent app on this machine,
-# with nothing asked. Run it again to update; with --uninstall it runs `cad uninstall` instead.
+# with nothing asked. Run it again to update; with --uninstall it runs `cad uninstall` instead; with
+# --add X it installs release X alone (`cad setup --add`), which a skill's setup block asks for.
 # Run with --help for its options; they go after `sh -s --` when piped.
 # Everything happens inside main, called on the last line, so a download cut short runs nothing.
 
@@ -15,6 +16,8 @@ set -eu
 CAD_VERSION="0.11.10"
 # The first release whose `cad uninstall` asks before it destroys, and takes --yes for an answer.
 CONSENT_SINCE="0.11.0"
+# The first release that installs itself alone, `cad setup --add`: the first whose skills pin their release.
+ADD_SINCE="0.11.11"
 VERSION_FEED="https://api.texttocad.dev/v1/versions"
 RELEASES="https://github.com/earthtojake/text-to-cad/releases/download"
 
@@ -34,12 +37,16 @@ prints its plan and carries it out, asking nothing; --dry-run prints the plan al
 
   curl -fsSL https://texttocad.dev/install.sh | sh
   curl -fsSL https://texttocad.dev/install.sh | sh -s -- --dry-run
+  curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add X.Y.Z
 
-Options (all but --version, --from and --uninstall go to \`cad setup\`, or to \`cad uninstall\`):
+Options (all but --version, --from, --add and --uninstall go to \`cad setup\`, or to \`cad uninstall\`):
   --dry-run          print the plan and stop: nothing is changed
   --only APP[,APP]   only these apps: claude, claude-desktop, codex, cursor, grok, gemini, or
                      the agents the skills go to through the Skills CLI (cad setup --help)
-  --uninstall        take text-to-cad out again: runs cad uninstall (with --purge, its state and caches too)
+  --uninstall        take text-to-cad out again: runs cad uninstall (with --purge, everything)
+  --add X.Y.Z        install release X.Y.Z alone, and the cad command, and change nothing else: no app,
+                     no other release, no setting (\`cad setup --add\`, which a skill's setup block asks
+                     for). It reads no version feed and installs exactly X.Y.Z; it takes no other option
   --no-telemetry     turn telemetry off
   --version X.Y.Z    install that release (default: the newest, from $VERSION_FEED,
                      never older than this script's own, $CAD_VERSION)
@@ -130,6 +137,7 @@ release() {
 main() {
   version=""
   from=""
+  add=""
   verb=setup
   # --version picks the release and --uninstall the verb; every other argument goes to it, in order.
   count=$#
@@ -163,21 +171,58 @@ main() {
       --uninstall)
         verb=uninstall
         ;;
+      --add)
+        [ "$count" -gt 0 ] || die "--add needs a release, as in --add $CAD_VERSION"
+        add=$1
+        shift
+        count=$((count - 1))
+        [ -n "$add" ] || die "--add needs a release, as in --add $CAD_VERSION"
+        ;;
+      --add=*)
+        add=${argument#--add=}
+        [ -n "$add" ] || die "--add needs a release, as in --add $CAD_VERSION"
+        ;;
       *)
         set -- "$@" "$argument"
         ;;
     esac
   done
 
+  if [ -n "$add" ]; then
+    # Exactly that release, alone: no feed read, no newer one taken, nothing else asked of it.
+    [ "$verb" = setup ] || die "--add installs a release; it does not go with --uninstall"
+    [ -z "$version" ] || die "--add names its release; it does not go with --version"
+    [ "$#" -eq 0 ] || die "--add takes no other option: $*"
+    case $add in
+      *-dev.*) die "$add is a development version: it is installed from its own checkout alone (scripts/install/dev_install.py)" ;;
+    esac
+    release "$add" || die "not a release: $add"
+    # A build named outright (--from, CAD_INSTALL_FROM) is taken as this one.
+    if [ -z "$from" ] && [ -z "${CAD_INSTALL_FROM:-}" ] && older "$add" "$ADD_SINCE"; then
+      die "$add installs no release alone (the first that does is $ADD_SINCE): run this without --add"
+    fi
+    version=$add
+    set -- --add
+  fi
+
   [ -n "$from" ] || from=${CAD_INSTALL_FROM:-}
   if [ -n "$from" ]; then
-    # A build named outright (a wheel, a folder, a requirement): uvx takes it as it is, nothing refreshed.
+    # A build named outright (a wheel, a folder, a requirement): uvx takes it as it is, nothing refreshed. With
+    # --add, it must be that release's: a wheel's file name says its version.
+    if [ -n "$add" ]; then
+      case ${from##*/} in
+        cad_server-"$add"-*.whl | cad-server=="$add") ;;
+        cad_server-*.whl | cad-server==*) die "--from $from is not text-to-cad $add" ;;
+      esac
+    fi
     requirement=$from
     refresh=""
-    version=$from
+    version=${add:-$from}
     origin="as --from asked"
   else
-    if [ -n "$version" ]; then
+    if [ -n "$add" ]; then
+      origin="as --add asked"
+    elif [ -n "$version" ]; then
       origin="as --version asked"
     else
       version=$(latest)

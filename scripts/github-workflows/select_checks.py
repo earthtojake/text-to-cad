@@ -202,6 +202,8 @@ RULES: tuple[Rule, ...] = (
     # release, a full run.
     Rule((".github/workflows/install-linux.yml", ".github/workflows/install-windows.yml", "scripts/install/**"),
          select(flags=["installer"])),
+    # The update rehearsal (test.yml's update-rehearsal): a real 0.11.10 updating into this tree's build.
+    Rule(("scripts/test/rehearse-update.py",), select(flags=["installer"]), final=True),
     # The one-line installers: the docs site serves copies of them, and the setup suite reads both.
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1"),
          select(flags=["docs"], packages=[f"{PACKAGES_SUITE}/cad_server/test_setup.py"])),

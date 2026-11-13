@@ -300,42 +300,33 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-An update moves the device to another release in one step: the update button in the CAD Viewer and
-the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad update`, or the install
-command run again (both `cad setup`), or the engine itself, when automatic updates are on (below). Each
-installs the release in a folder
-of its own, `<state>/releases/<release>` (`cad_server._internal.releases`: made by uv, from its cache
-where it holds it) -- and makes no environment for it: that release's base, and every environment a
-script's run asks for, is made on first need, from uv's cache (**Running a model**) --, writes the plugin folder every
-agent app is pointed at, `<state>/plugin`, from that release (`cad_server._internal.plugin`: in place,
-each file renamed over), brings the apps' copies of it along (`cad_server._internal.providers`; an app
-that reads the folder in place needs nothing), and then switches (`cad_server._internal.switch`):
+An update moves the default channel to a newer release: the update button in the CAD Viewer and the CAD app (`POST
+/api/v1/local/update`, `cad_server._internal.update`), `cad update`, the install command run again, a pinned
+command newer than the default channel's version, or the default version's server itself, when automatic updates
+are on (below). Only the default channel has an updater, and only where the install command has run (its receipt).
+Every updater does one thing to the new release (the contract, `cad_server._internal.update`'s docstring): it
+installs it by its own `cad setup --add` (uvx, as the `cad` command installs a version it lacks) and runs its own
+`cad setup --engine-update`, handing it nothing else. That release's setup (`cad_server.cli.setup`) then:
 
-1. The engine drains (`Daemon.drain`): once no build, draw, export or agent's MCP call is in flight --
-   open pages and held sessions do not count, nor a manufacturing check, whose checks process holds
-   nothing of anyone's and whose caller is told to run it again (`api.Stopped`) --, its door and its HTTP
-   listener close, and it exits.
-2. A process that is not that engine -- the button's helper, `cad update --switch`, which the
-   engine starts detached as it exits; else `cad setup` itself -- waits for it to be gone, points
-   `current` at the release under the engine's lock (so no client starts the release before in the
-   gap), starts that release's engine on the same port, with the same token, and checks that it
-   answers from that release's folder.
-3. Should it not, `current` goes back, and the release before's engine starts again on that port.
+1. moves the default channel to itself (`cad_server._internal.versions.move`): its data imported from the version it
+   replaces at its first start, the pointer written -- the one write that is the update --, the mirror for 0.11.10
+   and earlier, and every version no pointer names removed where nothing is in flight on it. The old version's
+   server stops once nothing is in flight there -- a build, a draw, an export, a request that serves, an agent's
+   tool call; never an open page or an idle app --, and the new version's starts on its port with the page token
+   it imported, holding the flat door too (`Bridge`). One busy stays where it is and stops by itself once idle (its
+   version no channel's now), and the new one takes the next free port;
+2. writes the plugin folder from itself and brings our copies of it along (`cad_server._internal.providers`; an
+   app that reads the folder in place needs nothing); a store's copy is its store's.
 
-Every page and card keeps its link through it, and reloads once its engine answers with the new
-release. The release before's folder stays -- a process of it may still run, and it is the way back
---; the others go at the next switch, once nothing runs from them (`releases.collect`). A switch that
-went back leaves the release it failed to move to for nothing: its folder goes once the release
-before's engine answers again and nothing runs from it (`releases.discard`: by the switch, else by that
-engine as it tends itself, after a `cad update` run from that folder has ended), its failure kept in
-`update.json` and an automatic update's attempt, so it is not tried again by itself any sooner; `cad
-doctor --prune` removes every release folder but the current one and the one before (`releases.kept`:
-the release the last switch to it came from, else the newest older one). After the
-switch, held or gone back, the release left current writes the plugin folder again (its own `cad
-plugin --refresh`, `switch.follow`): nothing changes when that release's setup already wrote it, and a
-switch that went back puts the release before's plugin back, the apps' copies with it. What a switch
-did, and how long no engine served (`gapMs`), is `update.json` in the state folder, and the helper's
-lines `update.log`.
+Every page and card keeps its link through it, and reloads once its server answers with the new release. A
+failure before the pointer is written changes nothing; after it, both versions are there and the next move or
+sweep finishes; an app that fails keeps the text before and is done again by the next update. A move cut short
+after its pointer is finished by the next run of the same setup (the mirror written, the sweep). An updater of
+0.11.10 or earlier runs the same setup from the flat release folder it made, which makes the release present in
+`versions/` and runs it from there; that updater then drains its own server and has its helper start the new
+release's through the mirror and the flat door, on the same port. The flat folders, and every other part of
+the layout of 0.11.10 and earlier, go once the default channel has left it and nothing runs from it
+(`cad_server._internal.legacy`).
 
 **An automatic update never interrupts.** With automatic updates on -- the person's setting, on by
 default (`cad_server.auto_updates`: the `updates` section of `settings.json`, `cad update auto`, the app
@@ -351,19 +342,16 @@ guide, so it waits for a click, the update button offering it as ever, and `cad 
 The release process holds a release to that: one the engine takes may add, and may move a library name
 whose earlier spelling stays its alias, but renames or removes nothing else, and never comes with a
 migration guide. Such a release is installed at once, in the
-background -- its folder, and its own `cad setup --engine-update` with `CAD_UPDATE_PREPARE=1`, which
-registers it and makes its base and stops there, so nothing of the apps or the engine changes -- and
-the rest, its setup whole (the apps' plugins) and the switch above, waits until the engine is idle:
-nothing in flight (`Daemon.working`) and none ended (`Daemon.worked`) for a minute
-(`auto_updates.IDLE_SECONDS`), no drain, no `cad setup` holding the install lock. Until then the
-update's state stays `idle`, so no page shows it; from then it is `working` and `restarting` as a
-click's is, and every page and card follows it to the new release as they follow a click. A click
-meanwhile makes it the click's, done at once; `cad update` or the install command drains the engine,
-and the automatic update is given up. Nothing is ready to switch while a person's update runs, none
-starts within ten minutes of a failed one (`RECALL_SECONDS`), and a release whose automatic attempt
-did not hold is not tried again by itself for a day (`auto_updates.RETRY_SECONDS`, the attempt kept
-as `update-automatic.json` in the data folder); a newer one is tried at the next tend. Offline, or
-with the setting off, nothing is read and nothing happens.
+background -- its own `cad setup --add`, which makes it present, its kernel environment with it, and changes
+nothing else -- and its setup, which moves the default channel and gives the apps its text, waits until the default
+version's server has handled no command for an hour: nothing in flight (`Daemon.working`, asked each second) and
+none ended (`Daemon.worked`, where "the last command" is read) for `auto_updates.IDLE_SECONDS`, no drain, no `cad
+setup` holding the install lock. Until then the update's state stays `idle`, so no page shows it; from then it is
+`working` and `restarting` as a click's is, and every page and card follows it to the new release as they follow a
+click. A click meanwhile makes it the click's, done at once. Nothing is ready while a person's update runs, and a
+release whose automatic attempt did not hold is not tried again by itself for a day
+(`auto_updates.RETRY_SECONDS`, the attempt kept as `update-automatic.json` in the data folder); a newer one is
+tried at the next tend. Offline, or with the setting off, nothing is read and nothing happens.
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below, and `cad setup` stops
@@ -571,11 +559,11 @@ Python, once the environment is made for one `--python` named.
 
 **Its releases.** Environments are tied to their release, cad being pinned in each. Making one
 removes the environments of releases older than the one before the current -- the current
-release's and the one before's stay, the way back, as `releases/` keeps the release before
-(`extras.kept`: the release the last switch came from, else the newest older one) -- and the one an
+release's and the one before's stay (`extras.kept`: the newest older one); a version keeps its own in its own code
+folder, which goes with it -- and the one an
 edit to its local packages superseded, but one a process runs from (`releases.running`: named on a
 process's command line, as written or by a link to it), which a later making removes
-(`extras._collect`; the bases are their releases', `releases.collect`). The environments of other
+(`extras._collect`; the bases are their versions', `versions.remove`). The environments of other
 sets stay, one per set a program named: `cad doctor` reports those unused for a week (each use marks
 its marker), `cad doctor --prune` removes them (`leftovers.package_environments`). After an update,
 a new release's environments are made as its runs ask for them, from uv's cache.
@@ -660,8 +648,8 @@ which the distribution makes as `places.KERNEL`): a model's worker but one in it
 the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
 processes start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is
 made on first need**, never ahead of it: nothing makes it at install time (`cad setup`, `cad doctor` and an
-update the person asks for leave it alone; an automatic update makes its release's before it switches, so the
-first build after a switch nobody asked for waits on nothing: **An automatic update never
+update the person asks for leave it alone; a version made present makes its own, so the first build after an
+update nobody asked for waits on nothing: **An automatic update never
 interrupts**, under **Architecture**), and the engine starts and serves with none made -- pages, the home, documents
 held in the cache, `status`. The first thing that needs it makes it: a `cad run` of a script whose
 environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
@@ -683,8 +671,8 @@ of an index lags a release by minutes) (`base.PASSING`) -- is made again on the 
 minutes after it (`RETRY_SECONDS`); any other -- a denial, a Python uv cannot use, a base whose Python does
 not run, no uv -- until something that could change it does: a
 `cad run` that asks the engine for the base (`{"op": "base"}` always makes it again; the failure names
-`cad run -c "import build123d"` for it), a base another process made, or the engine's restart (an update's
-switch among them). Its crash is reported once per making that failed, with its cause, however many calls it
+`cad run -c "import build123d"` for it), a base another process made, or the engine's restart (an update
+among them). Its crash is reported once per making that failed, with its cause, however many calls it
 answers (`base.Making.claim`, `mcp.server._first_report`).
 
 ## Layout
@@ -1533,8 +1521,8 @@ the daemon's. A new service's large outputs go by path, a file on disk its calle
 answers in frames; today's children keep their bulk in frames as they always have (a drained
 document's xbf, a version's meshes sent to a render process, a picture). Not services: the build's
 STEP reader (the worker's own child for one build), the meshing and reading pools (the library's,
-which run with no daemon too) and the processes that outlive the engine (the telemetry sender, an
-update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's
+which run with no daemon too) and the processes that outlive the engine (the telemetry sender, a new release's
+setup an update runs). A known limit: the meshing and reading pools' memory, and the STEP reader's
 and its helpers', count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
 machine, below; 2.3 GB parsing a 354 MB STEP).
 

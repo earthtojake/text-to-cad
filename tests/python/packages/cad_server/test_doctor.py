@@ -361,48 +361,27 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]],
                          out.splitlines()[1:])
 
-    def test_prune_removes_a_release_folder_but_the_current_one_and_the_one_before(self) -> None:
-        # An update to 1.2.0 that failed and went back left its folder: --prune takes it, and its failure stays.
-        from cad_server import auto_updates
-        from cad_server._internal import base, installations, releases, switch
+    def test_prune_removes_every_version_no_channel_is_on(self) -> None:
+        # The flat folders of 0.11.10 and earlier are that layout's to remove once nothing runs from them
+        # (``legacy.remove``); --prune sweeps (``versions.sweep``): every version no pointer names.
+        from cad_server._internal import versions
 
-        for version in ("1.0.0", "1.1.0", "1.2.0"):
-            folder = releases.where(version)
-            python, command = base.interpreter(folder), releases.console(folder)
-            python.parent.mkdir(parents=True)
-            for path in (python, command):
-                path.write_text("", encoding="utf-8")
-            (folder / releases.MARKER).write_text('{"schema": "%s", "version": "%s"}' % (releases.SCHEMA, version),
-                                                  encoding="utf-8")
-        installations.point("1.1.0")
-        switch._record({"from": "1.1.0", "to": "1.2.0", "ok": False, "error": "its engine exited 3",
-                        "at": "2026-11-03T21:00:00+0000"})
-        auto_updates.attempt("1.2.0", error="its engine exited 3", now=1000.0)
-        out = _run(["--no-server"])[1]
-        self.assertIn("  releases 1.0.0 (the release before), 1.1.0 (current), 1.2.0 (cad doctor --prune removes it) "
-                      f"in {releases.root()}\n", out)
-        self.assertTrue(releases.where("1.2.0").is_dir(), "nothing is removed without --prune")
-        # What it asks a yes for names the folder, with how many, as its help says it removes them.
-        self.assertIn("1 release folder but the current release's and the one before's: 1.2.0", doctor._prune_plan())
         with redirect_stdout(io.StringIO()) as helped, self.assertRaises(SystemExit):
             doctor.main(["--help"])
-        self.assertIn("every release folder but the current release's and the one before's",
-                      " ".join(helped.getvalue().split()))
-        with mock.patch.object(releases, "running", return_value=False):
+        self.assertIn("every installed version no channel is on", " ".join(helped.getvalue().split()))
+        with mock.patch.object(versions, "sweep", return_value={"1.2.0": "removed"}) as swept:
             code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
-        self.assertIn(f"removed {releases.where('1.2.0')}\n", out)
-        self.assertEqual([release["version"] for release in releases.listing()], ["1.0.0", "1.1.0"])
-        self.assertEqual((switch.last()["to"], switch.last()["ok"]), ("1.2.0", False), "the failure stays recorded")
-        self.assertEqual(auto_updates.attempted()["error"], "its engine exited 3")
+        swept.assert_called_once_with()
+        self.assertIn("removed text-to-cad 1.2.0\n", out)
 
     def test_the_report_says_what_the_device_runs(self) -> None:
-        from cad_server._internal import installations, releases, switch
+        from cad_server._internal import installations, releases
 
         from cad_server._internal import base
 
         for version in ("1.0.0", "1.1.0"):
-            folder = releases.where(version)
+            folder = releases.root() / version
             python, command = base.interpreter(folder), releases.console(folder)  # bin/, or Windows' Scripts/
             python.parent.mkdir(parents=True)
             for path in (python, command):
@@ -411,13 +390,11 @@ class DoctorTests(unittest.TestCase):
                                                   encoding="utf-8")
             installations.register(version, (str(command), str(python), str(folder)))
         installations.point("1.1.0")
-        switch._record({"from": "1.0.0", "to": "1.1.0", "ok": True, "gapMs": 640, "at": "2026-10-31T09:00:00+0000"})
         code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0, out)
-        self.assertIn(f"  current  cad-server 1.1.0 ({releases.where('1.1.0')})\n", out)
-        self.assertIn(f"  releases 1.0.0 (the release before), 1.1.0 (current) in {releases.root()}\n", out)
-        self.assertIn("  update   2026-10-31T09:00:00+0000: switched to cad-server 1.1.0 from 1.0.0, 640 ms without an "
-                      "engine\n", out)
+        self.assertIn(f"  current  cad-server 1.1.0 ({releases.root() / '1.1.0'})\n", out)
+        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}: of 0.11.10 or earlier, removed once "
+                      "nothing runs from them\n", out)
         # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
         # the CAD kernel to the current one's.
         self.assertIn("registry cad-server 1.1.0 is the current installation: this one registers nothing", out)

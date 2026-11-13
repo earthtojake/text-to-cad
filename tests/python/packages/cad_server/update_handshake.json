@@ -1,4 +1,27 @@
 {
+ "contract": {
+  "install": [
+   "--from",
+   "cad-server==9.9.9",
+   "cad",
+   "setup",
+   "--add",
+   "--quiet"
+  ],
+  "setup": [
+   "setup",
+   "--engine-update"
+  ],
+  "marker": "versions/<version>/code/cad-version.json",
+  "marker_keys": [
+   "cad",
+   "prefix",
+   "python",
+   "schema",
+   "version"
+  ],
+  "marker_schema": "cad version/1"
+ },
  "daemon": {
   "arguments": [
    "-P",
@@ -25,8 +48,6 @@
   "release_marker": "cad-release.json",
   "release_schema": "cad release/1",
   "releases": "releases",
-  "switch_log": "update.log",
-  "switch_record": "update.json",
   "token": "engines/token"
  },
  "http": {
@@ -71,6 +92,18 @@
    "ok": true
   }
  },
+ "plugin": {
+  "arguments": [
+   "plugin",
+   "--refresh"
+  ],
+  "flags": [
+   "--help",
+   "--json",
+   "--refresh",
+   "-h"
+  ]
+ },
  "progress": {
   "frame": [
    "detail",
@@ -89,8 +122,8 @@
   "stages": [
    "install",
    "build123d",
-   "apps",
-   "restart"
+   "restart",
+   "apps"
   ]
  },
  "setup": {
@@ -108,18 +141,6 @@
    "-h"
   ]
  },
- "plugin": {
-  "arguments": [
-   "plugin",
-   "--refresh"
-  ],
-  "flags": [
-   "--help",
-   "--json",
-   "--refresh",
-   "-h"
-  ]
- },
  "update": {
   "command": "update",
   "flags": [
@@ -128,9 +149,6 @@
    "--json",
    "--no-telemetry",
    "--only",
-   "--port",
-   "--previous",
-   "--switch",
    "-h"
   ]
  }

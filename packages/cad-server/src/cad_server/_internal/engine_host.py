@@ -15,18 +15,11 @@ import os
 
 
 def http_factory(server, host, port):
-    from cad_server._internal.update import UPDATE
     from cad_server.viewer.engine_app import EngineApp
     from cad_server.viewer.handler import CadHTTPServer, make_handler_class
 
     from cad_server.mcp.http import Sessions
 
-    # An update whose switch failed moments ago started this release's engine again: said as failed to the
-    # page that followed it through the restart (``cad_server._internal.update.Update.recall``).
-    try:
-        UPDATE.recall()
-    except Exception:  # noqa: BLE001 - a note for the page, never a reason the engine does not serve
-        pass
     # Open in's apps, looked for in the background as the server starts, with no command
     # (``cad_server._internal.apps``): a page's first menu reads them, never looks for them.
     from cad_server._internal.apps import DETECTED
@@ -59,18 +52,7 @@ def making():
 
 
 def automatic(daemon):
-    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``);
-    first, the folder of a release a switch failed to move to, removed once nothing runs from it
-    (``cad_server._internal.releases.discard``): a ``cad update`` whose switch went back ran from it until it
-    ended."""
-    try:
-        from cad_server._internal import releases
-
-        failed = releases.failed()
-        if failed is not None:
-            releases.discard(failed)
-    except Exception:  # noqa: BLE001 - the engine's tending never fails for a folder
-        pass
+    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``)."""
     try:
         from cad_server._internal.update import UPDATE
 

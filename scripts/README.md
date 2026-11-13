@@ -117,6 +117,13 @@ where those files ship, so these scripts are what produces them.
   packaged CAD app over stdio and a manufacturing check of a built part for each process
   (the checks' measuring modules, loaded from the wheel). Called by `test.yml` and
   `release-publish.yml`.
+- `rehearse-update.py` — the update every device on 0.11.10 or earlier makes into this tree's build:
+  installs a real 0.11.10 (or `--old RELEASE`) from PyPI on a device of its own (its own home, state,
+  engine, cache and `cad` command folders), publishes this tree as two later releases through a folder of
+  wheels and a local version feed, and drives 0.11.10's automatic update, update button and `cad update`
+  into it, each followed by a second update, and the updates killed at each point of the move; it checks
+  the pointer, the mirror, the port and page token, Recents, the old layout's removal and the flat door.
+  Needs uv and the network. Called by `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`'s `viewer-e2e` job.

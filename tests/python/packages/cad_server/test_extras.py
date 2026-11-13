@@ -270,11 +270,8 @@ class NamingTest(unittest.TestCase):
         for name, release, given in (("held", "0.8.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
                                      ("before", "0.9.0", ["pandas"]), ("base", "0.8.0", None)):
             made(name, release, given)
-        with mock.patch("cad_server._internal.switch.last", return_value=None):
-            keep = extras.kept(folder, "0.10.0")
-        self.assertEqual(keep, {"0.10.0", "0.9.0"}, "the current release and the one before it: the way back")
-        with mock.patch("cad_server._internal.switch.last", return_value={"from": "0.8.0", "to": "0.10.0", "ok": True}):
-            self.assertEqual(extras.kept(folder, "0.10.0"), {"0.10.0", "0.8.0"}, "the release the update came from")
+        keep = extras.kept(folder, "0.10.0")
+        self.assertEqual(keep, {"0.10.0", "0.9.0"}, "the current release and the one before it")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
             self.assertEqual(sorted(extras._collect(folder, keep, made=now, spec=extras.Spec(requirements=("/w/gears",)),
                                                     inputs={"release": "0.10.0"})),

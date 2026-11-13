@@ -17,8 +17,9 @@ runs another version for it. So the version that reads a pin is the one it names
    before 0.12 -- moves nothing). The channel's pointer (``pointers``) read, no lock taken: equal, the command
    runs; older than the pin's version, the pin is stale (``stale_pin``, exit 4: the chat's copy of the skill is
    older than the one installed); newer, or the channel's first use, the channel moved (``versions.move``) -- the
-   default channel, where the install command has run here (its receipt), by the updater (``update_default``),
-   so the install command's other copies get the matching text -- and then the command runs. A move this shell
+   default channel, where the install command has run here (its receipt), by the updater's own sequence
+   (``update_default``: the move and the apps step), so the install command's other copies get the matching text,
+   whatever the automatic-update switch says -- and then the command runs. A move this shell
    cannot make (a sandbox that will not let it write the state folder) is ``cannot_install_here`` (exit 3).
 
 Help, ``--version`` and a read-only report (``cad doctor --check``) do no work and read no pointer.
@@ -193,14 +194,40 @@ def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
 
 
 def update_default(version: str, *, told: Callable[[str], None] | None = None):
-    """The default channel updated to ``version`` now, as the updater does it: a pin newer than the default
-    channel's version on a device where the install command has run (its receipt), whatever the automatic-update
-    switch says -- a pin is an explicit request for its version. So far the move alone (``versions.move``); the
-    updater adds its apps step (the install command's own copies of the plugin given the new text). What the move
-    did (``versions.Moved``)."""
-    from cad_server._internal import versions
+    """The default channel updated to ``version`` now, by the updater's own sequence (``cad_server._internal.update``):
+    a pin newer than the default channel's version on a device where the install command has run (its receipt),
+    whatever the automatic-update switch says -- a pin is an explicit request for its version, and the switch
+    governs background updates alone. Run by ``version`` itself (the pinned command's own process, present
+    already): the ``cad`` command, the move (``versions.move``), and the apps step, so the install command's other
+    copies of the plugin get the matching text too; a store's copy is left alone. Each line is said to ``told``
+    (else on stderr); an app that fails is said and fails nothing. What the move did (``versions.Moved``)."""
+    import argparse
+    import sys
 
-    return versions.move(None, version, told=told)
+    from cad_server._internal import versions
+    from cad_server.cli import setup
+
+    if own() != version or not released(version):
+        # Only a version runs its own setup, and a development version's apps step is its checkout's to run
+        # (scripts/install/dev_install.py): the channel moved alone.
+        return versions.move(None, version, told=told)
+
+    class Said:
+        def write(self, text: str) -> None:
+            for line in text.splitlines():
+                if line.strip():
+                    (told or (lambda words: print(f"cad: {words}", file=sys.stderr, flush=True)))(line.rstrip())
+
+        def flush(self) -> None:
+            pass
+
+    args = argparse.Namespace(dry_run=False, json=False, only=None, no_telemetry=False, engine_update=False)
+    installer = setup.Installer(args, [], 0, "default", [], "cad")
+    installer.out = Said()
+    moved = installer.update_own()
+    if moved is None:  # a source tree that is no version: the move alone
+        return versions.move(None, version, told=told)
+    return moved
 
 
 def released(version: str) -> bool:

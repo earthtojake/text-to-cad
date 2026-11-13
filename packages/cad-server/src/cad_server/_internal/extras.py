@@ -1034,20 +1034,12 @@ def _releases(folder: Path) -> set[str]:
 
 
 def kept(folder: Path, current: str) -> set[str]:
-    """The releases whose environments of models' packages stay: the current one, and the one before it --
-    the release the last update switched from, where that switch went to ``current``
-    (``cad_server._internal.switch.last``), else the newest of the environments' releases older than
-    ``current`` (as PEP 440 orders them) -- the way back, as ``releases.collect`` keeps it."""
+    """The releases whose environments of models' packages stay: the current one, and the one before it, the
+    newest of the environments' releases older than ``current`` (as PEP 440 orders them). A version keeps its own
+    environments in its own code folder, so beside the current one there are only those of the layout of 0.11.10
+    and earlier, which go with that layout (``cad_server._internal.legacy``)."""
     from cad.engine.contract import _order
 
-    try:
-        from cad_server._internal.switch import last
-
-        switched = last() or {}
-    except Exception:  # noqa: BLE001 - no record: the order of the releases says the one before
-        switched = {}
-    if switched.get("to") == current and switched.get("ok") and isinstance(switched.get("from"), str):
-        return {current, switched["from"]}
     mine = _order(current)
     older = [(_order(release), release) for release in _releases(folder) if release != current]
     older = [(order, release) for order, release in older if order is not None and mine is not None and order < mine]
@@ -1060,7 +1052,7 @@ def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec 
     current one and the one before it) removed, those whose Python is gone (``base.marked``: dead, no way
     back), and those the one just ``made`` supersedes -- of its installation's base (``inputs``) and ``spec``,
     a local package since edited --, but one a process runs from (``releases.running``), which goes at a later
-    making: the paths removed. The bases are their releases' to remove (``releases.collect``)."""
+    making: the paths removed. The bases are their versions' to remove (``versions.remove``)."""
     from cad_server._internal.releases import running
 
     removed = []

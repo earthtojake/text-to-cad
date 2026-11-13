@@ -78,9 +78,10 @@ from typing import Any
 from cad.engine import places
 from cad_server._internal import base
 
-__all__ = ["CANNOT", "LOCK", "Moved", "Present", "add", "add_command", "ask", "connected", "endpoint", "first_start",
-           "flat", "folders", "garbage", "handover", "install_lock", "make_present", "move", "older", "order", "present",
-           "proof", "remove", "retiring", "serves", "serving", "start_server", "stop_server", "sweep"]
+__all__ = ["CANNOT", "LOCK", "Moved", "Present", "add", "add_command", "ask", "ask_flat", "connected", "development",
+           "endpoint", "first_start", "flat", "flat_endpoint", "folders", "garbage", "handover", "install_lock",
+           "make_present", "move", "older", "order", "present", "proof", "remove", "remove_now", "retiring", "serves", "serving",
+           "start_server", "stop_server", "sweep"]
 
 # The device's install lock, in the state folder: every install, move and removal holds it (``cad setup``'s too).
 LOCK = "install.lock"
@@ -311,16 +312,16 @@ def _server(env: Path, name: str) -> dict[str, Any] | None:
     return None
 
 
-def _probe(name: str) -> dict[str, Any]:
-    """Version ``name``'s server environment asked, in a process of its Python (``PROBE``), nothing written
-    there: its version, release, installation and kernel environment's folder as it works them out. ``Refused``
-    when it does not run, or says it is another version."""
+def _probe(name: str, python: str | None = None) -> dict[str, Any]:
+    """Version ``name``'s server environment asked, in a process of its Python (``PROBE``; ``python``, else the one
+    in its ``code/server``), nothing written there: its version, release, installation and kernel environment's
+    folder as it works them out. ``Refused`` when it does not run, or says it is another version."""
     server = places.code_dir(name) / SERVER
     environment = {key: value for key, value in os.environ.items() if not key.startswith("PYTHON")}
     environment[places.INSTALLATION_ENV] = name
     said = ""
     try:
-        done = subprocess.run([str(base.interpreter(server)), "-B", "-I", "-c", PROBE], env=environment,
+        done = subprocess.run([python or str(base.interpreter(server)), "-B", "-I", "-c", PROBE], env=environment,
                               stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                               errors="replace", timeout=120, **places.windowless())
         said = (done.stderr or done.stdout).strip()
@@ -334,8 +335,32 @@ def _probe(name: str) -> dict[str, Any]:
 
 
 def proof(name: str) -> dict[str, Any]:
-    """That present version ``name`` runs (``_probe``): what its own Python says of it. ``Refused`` when not."""
-    return _probe(name)
+    """That present version ``name`` runs (``_probe``, by the Python its code marker names): what its own Python says
+    of it. ``Refused`` when not."""
+    found = places.version_record(name)
+    return _probe(name, found["python"] if found is not None else None)
+
+
+def development(name: str, python: str, cad: str, prefix: str) -> dict[str, Any]:
+    """A development version, ``name`` (``<release>-dev.<stamp>``), whose code is a checkout's environment elsewhere
+    (``prefix``, its ``python`` and ``cad``): its code marker written in ``versions/<name>/code`` naming that
+    environment, which carries the kernel itself, so nothing is made and nothing of the checkout is copied
+    (``scripts/install/dev_install.py``). Its record. ``ValueError`` for a name that is no development version."""
+    from cad._internal.atomic_replace import write_bytes_atomic
+    from cad_server._internal import installations
+
+    if DEVELOPMENT.fullmatch(name or "") is None:
+        raise ValueError(f"not a development version: {name!r}")
+    code = places.code_dir(name)
+    with install_lock():
+        for folder in (places.versions_dir(), places.version_dir(name), code):
+            _private(folder)
+        record = {"schema": places.VERSION_SCHEMA, "version": name, "python": python, "cad": cad, "prefix": prefix,
+                  "release": None, "kernel": None, "source": prefix, "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        write_bytes_atomic(code / places.VERSION_MARKER,
+                           (json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
+        installations._forget_read()
+    return record
 
 
 def _kernel(name: str, probe: dict[str, Any], say: Callable[[str], None]) -> str | None:
@@ -394,9 +419,12 @@ class Moved:
         return self.kind in ("same", "moved")
 
 
-def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = None) -> Moved:
+def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = None,
+         from_development: bool = False) -> Moved:
     """Channel ``channel`` (None: the default) moved to version ``new`` (see the module): what was done
-    (``Moved``). ``ValueError`` for a name that is no channel or no version."""
+    (``Moved``). ``from_development``: a release may replace a development version newer than it (``cad setup``,
+    a person's install command, going back from ``scripts/install/dev_install.py``); nothing else moves a channel
+    to an older version. ``ValueError`` for a name that is no channel or no version."""
     from cad_server._internal import legacy, pointers
 
     said: list[str] = []
@@ -413,8 +441,11 @@ def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = 
         old = (pointers.leaving().version if channel is None else pointers.read(channel))
         legacy_left = first_default and legacy.present()
         if old == new and not first_default:
+            if channel is None:
+                _repair(new, say)  # what a move cut short after its pointer left: the mirror, the sweep
             return Moved("same", channel, new, old, said=said)
-        if old is not None and older(new, old):
+        if old is not None and older(new, old) and not (
+                from_development and DEVELOPMENT.fullmatch(old) and not DEVELOPMENT.fullmatch(new)):
             return Moved("stale", channel, new, old, said=said)
         made = make_present(new, told=say)
         if not made.ok:
@@ -441,6 +472,23 @@ def move(channel: str | None, new: str, *, told: Callable[[str], None] | None = 
         removed = sweep(told=say)
         handover(channel, None if legacy_left else old, new, port, told=say)
         return Moved("moved", channel, new, old, None, made, imported, removed, said)
+
+
+def _repair(name: str, say: Callable[[str], None]) -> None:
+    """The default channel on ``name`` already, as a move that was cut short after its pointer leaves it: the mirror
+    for 0.11.10 and earlier written where it names another version, and the sweep it did not reach. Quiet when there
+    is nothing to do."""
+    from cad_server._internal import installations, pointers
+
+    if installations.current_version() != name:
+        try:
+            pointers.mirror(name)
+        except OSError as error:
+            say("the record clients of 0.11.10 and earlier find the server by could not be written: "
+                f"{error.strerror or error}")
+            return
+    if garbage():
+        sweep(told=say)
 
 
 def handover(channel: str | None, old: str | None, new: str, port: int | None, *,
@@ -513,9 +561,26 @@ def endpoint(name: str) -> places.Endpoint:
 def ask(name: str, message: dict[str, Any], *, seconds: float = ASK_SECONDS) -> dict[str, Any] | None:
     """``message`` asked of version ``name``'s running server through its own door (``endpoint``), nothing
     started: its answer, or None when none answers there, or none comes within ``seconds``."""
+    return _ask_at(endpoint(name).address, message, seconds)
+
+
+def flat_endpoint() -> places.Endpoint:
+    """The flat door of 0.11.10 and earlier and its lock, in the engines' folder itself: held by the default
+    version's server beside its own (``daemon.Bridge``), or by a server of those releases as its own."""
+    folder = places.engines_dir()
+    return places.Endpoint(folder / f"{places.NAME}.{'port' if places.WINDOWS else 'door'}",
+                           folder / f"{places.NAME}.lock")
+
+
+def ask_flat(message: dict[str, Any], *, seconds: float = ASK_SECONDS) -> dict[str, Any] | None:
+    """``message`` asked of whichever server holds the flat door (``flat_endpoint``), nothing started: its answer,
+    or None."""
+    return _ask_at(flat_endpoint().address, message, seconds)
+
+
+def _ask_at(door: Path, message: dict[str, Any], seconds: float) -> dict[str, Any] | None:
     from cad.engine import client
 
-    door = endpoint(name).address
     answers: list[Any] = []
 
     def asking() -> None:
@@ -662,13 +727,17 @@ def _drop(held: Any, folder: Path) -> None:
 
 
 def _kept(state: Path | None = None) -> set[str]:
-    """The versions no removal takes: those a pointer names, and the default channel's as it resolves with no
-    pointer (``pointers.default``: the one a command with no pin runs)."""
-    from cad_server._internal import pointers
+    """The versions no removal takes: those a pointer names, the default channel's as it resolves with no pointer
+    (``pointers.default``: the one a command with no pin runs), and the one the mirror for 0.11.10 and earlier names
+    (``installations/current``): it follows the default pointer, and names another version only while a move that
+    could not write it has left it behind, when a client of those releases still starts that version."""
+    from cad_server._internal import installations, pointers
 
     found = pointers.named(state)
     default = pointers.default(state).version
-    return found | ({default} if default else set())
+    mirrored = installations.current_version(pointers._folder(state))
+    mirrored = mirrored if mirrored and places.version_record(mirrored, _root(state)) is not None else None
+    return found | ({default} if default else set()) | ({mirrored} if mirrored else set())
 
 
 def remove(name: str, *, told: Callable[[str], None] | None = None) -> str:
@@ -714,6 +783,41 @@ def _remove(name: str, say: Callable[[str], None]) -> str:
     _forget_records(folder)
     say(f"removed text-to-cad {name}, which nothing uses now")
     return "removed"
+
+
+def remove_now(name: str, *, told: Callable[[str], None] | None = None) -> str:
+    """Version ``name``'s folder removed at a person's word (``cad uninstall``), whatever names it: under the install
+    lock, its server's lock taken (its server stopped by the caller first; one that still runs keeps it:
+    ``connected``), the folder renamed aside and removed -- though this process runs from it, as ``cad uninstall``
+    typed in a terminal does: nothing is imported from it after --, and the records naming it forgotten. ``removed``,
+    ``absent``, ``connected`` or ``refused`` (the system refused the rename: on Windows, a file in use)."""
+    say = told or (lambda _line: None)
+    with install_lock():
+        folder = places.version_dir(name)
+        if not os.path.lexists(folder):
+            return "absent"
+        engine = places.engine_dir(name)
+        try:
+            held = _take(engine)
+        except OSError as error:
+            say(f"text-to-cad {name}'s server's lock cannot be taken ({error.strerror or error})")
+            return "refused"
+        if held is None:
+            return "connected"
+        try:
+            aside = places.versions_dir() / f"{TRASH}{name}-{os.getpid()}-{os.urandom(4).hex()}"
+            try:
+                os.rename(folder, aside)
+            except OSError as error:
+                say(f"text-to-cad {name} could not be removed: {error.strerror or error}")
+                return "refused"
+        finally:
+            _drop(held, engine)
+        shutil.rmtree(engine, ignore_errors=True)
+        shutil.rmtree(aside, ignore_errors=True)
+        _forget_records(folder)
+        say(f"removed text-to-cad {name}")
+        return "removed"
 
 
 def _forget_records(folder: Path) -> None:
