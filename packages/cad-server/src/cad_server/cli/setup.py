@@ -17,7 +17,8 @@ current installation's
    where it holds it, and runs the same command from there. A development install or a source tree
    sets itself up where it is.
 2. **Plan.** Under a lock in the state folder, every agent app is read from its own files, no app's command run
-   (``cad_server._internal.providers``), and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
+   (``cad_server._internal.providers``), and the plan printed: per app, ``install``, ``update``, ``remove duplicate``,
+   ``remove server`` or ``leave``, with each
    command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
    3245); and build123d, the CAD kernel, and whether it is made. ``--dry-run`` stops there and writes
    nothing. Nothing is asked.
@@ -43,10 +44,11 @@ current installation's
 6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
    (``cad_server._internal.plugin``), and each app is pointed at it by its own command, the way it keeps
    a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one
-   keeps a copy of it, which gets it again for this release; Claude Desktop's config gets CAD's server,
-   this release's, written atomically with a ``.bak`` beside it; every second copy goes, an earlier
-   release's from the repository on GitHub among them, and a plugin directory's, which this run replaces
-   with ours, unless no command here removes it (``providers``). The agents with no plugin that
+   keeps a copy of it, which gets it again for this release. Claude gets no CAD server: the one releases
+   through 0.11.10 wrote into Claude Desktop's config is taken out, written atomically with a ``.bak``
+   beside it. Every second copy goes, an earlier release's from the repository on GitHub among them; a
+   plugin directory's copy (a store's: claude.ai's directory, the Cursor Marketplace) is the app's to
+   deliver and update, and stays, with nothing of ours beside it (``providers``). The agents with no plugin that
    the Skills CLI knows get the skills, copied from the folder into the skills folder that CLI keeps for each
    (``~/.agents/skills`` for most) by one ``npx skills add`` (Node needed); an app with a plugin never does.
    A command that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
@@ -76,8 +78,9 @@ whole, once the engine is idle.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
-Cursor's copy deleted, the skills removed by ``npx skills remove``; a store's copy it removed is not put
-back, and a line says where to install it from again; with no receipt, every copy of text-to-cad found
+Cursor's copy deleted, the skills removed by ``npx skills remove``, Claude Desktop's server an earlier release
+wrote taken out; a store's copy an earlier release removed is not put back, and a line says where to install
+it from again; with no receipt, every copy of text-to-cad found
 but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the engine (``cad
 stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
 removes the state and cache folders. ``--only`` limits either to some apps (and then leaves the
@@ -88,8 +91,8 @@ one can be asked it changes nothing without ``--yes`` (``confirmation_required``
 command's ``--uninstall`` passes ``--yes``, the person's own word. ``--dry-run`` prints either plan alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad``
-command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy no
-command of the app's removes (an administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
+command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy (a
+plugin directory's, an administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
 
 The first install never runs inside a Windows app package (an MSIX app's shell, the Claude desktop
 app's among them): it installs nothing and says so (``installations.packaged``). What such a process
@@ -132,8 +135,6 @@ EARLIER_SERVER = "cadgen"
 STOP_SECONDS = 60.0
 # How long setup waits for the device's engine to say what it serves: a wedged engine never wedges setup.
 ASK_SECONDS = 5.0
-# The server's install channel in Claude Desktop's config (``cad_server._internal.channel``).
-DESKTOP_CHANNEL = "claude-desktop"
 # An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): named here, so the
 # command's import costs nothing more.
 PREPARE_ENV = "CAD_UPDATE_PREPARE"
@@ -168,8 +169,8 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             prog=prog,
             allow_abbrev=False,
             description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
-                        "date there: its release folder, each app's own command, Claude Desktop's "
-                        "config, second copies removed, and the engine switched to this release. `cad update` "
+                        "date there: its release folder, each app's own command, second copies removed, and "
+                        "the engine switched to this release. `cad update` "
                         "runs the newest release's; `cad uninstall` takes it out.",
             epilog=f"The install command runs this with the newest release: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
@@ -462,16 +463,6 @@ class Installer:
     def _aside(self) -> Path:
         return self._state() / ASIDE / self.providers.stamp().replace(":", "")
 
-    def _desktop_entry(self) -> dict[str, Any] | None:
-        """CAD's server for Claude Desktop's chat: the plugins' exact command, uvx by its absolute path."""
-        from cad_server._internal.launch import LAUNCHER, SHIM, SHIM_COMMAND
-
-        uvx = self.providers.uvx(self.machine)
-        if uvx is None:
-            return None
-        return {"command": uvx, "args": [*LAUNCHER[1:], f"{SHIM}=={self.release}", SHIM_COMMAND],
-                "env": {"CAD_INSTALL_CHANNEL": DESKTOP_CHANNEL}}
-
     # --- the receipt ----------------------------------------------------------------------------
 
     def _folder(self):
@@ -708,9 +699,15 @@ class Installer:
             if not app.present or (self.only and name not in self.only):
                 continue
             ours, stores = app.ours(), app.stores()
-            if ours is not None:
+            if name == "claude-desktop":
+                # Claude gets no CAD server: an earlier release's entry still there is said, never a failure.
+                found = {"verdict": "server", "release": ours.version} if ours is not None else {"verdict": "none"}
+                said = (f"CAD's server text-to-cad {ours.version or '?'} is still in its config" if ours is not None
+                        else f"{app.unreadable}: left alone" if app.unreadable
+                        else f"no CAD server: Claude gets the skills alone, through {providers.LABELS['claude']}'s plugin")
+            elif ours is not None:
                 found = {"verdict": "ok", "release": ours.version}
-                said = f"text-to-cad {ours.version or '?'}" if name == "claude-desktop" else ours.words(self.machine)
+                said = ours.words(self.machine)
                 origin = ours.origin(self.machine)
                 said += f", {origin}" if origin else ""
             elif stores:
@@ -861,8 +858,7 @@ class Installer:
 
     def refresh(self, told: Any) -> tuple[bool, list[dict[str, Any]]]:
         """After the plugin folder was written again (``cad plugin --refresh``, which a switch runs): the
-        copies the apps keep of it brought to it, and Claude Desktop's server moved to this release
-        (``providers.refresh_plan``), under the installer's lock, the receipt kept. ``(ok, the steps run)``."""
+        copies the apps keep of it brought to it (``providers.refresh_plan``), under the installer's lock, the receipt kept. ``(ok, the steps run)``."""
         from cad_server._internal.file_lock import exclusive
 
         providers = self.providers
@@ -873,7 +869,7 @@ class Installer:
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
             apps, steps, self.listed = providers.read_for(
                 lambda apps: providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
-                                                    skills=receipt.get("skills"), desktop_entry=self._desktop_entry()),
+                                                    skills=receipt.get("skills")),
                 self.machine, folder=self.folder)
             backed_up = self._backed_up(receipt)
             for step in steps:
@@ -912,7 +908,7 @@ class Installer:
                 return relocated
         if self.args.dry_run:
             apps = providers.detect(self.machine, folder=self.folder)
-            steps = providers.plan(apps, release=self.release, folder=self.folder, desktop_entry=self._desktop_entry(),
+            steps = providers.plan(apps, release=self.release, folder=self.folder,
                                    only=self.only, machine=self.machine, skills=(self._receipt() or {}).get("skills"))
             kernel = self._kernel()
             home = self._home()
@@ -937,7 +933,7 @@ class Installer:
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
             apps, steps, self.listed = providers.read_for(
                 lambda apps: providers.plan(apps, release=self.release, folder=self.folder,
-                                            desktop_entry=self._desktop_entry(), only=self.only, machine=self.machine,
+                                            only=self.only, machine=self.machine,
                                             skills=receipt.get("skills")),
                 self.machine, folder=self.folder)
             self.fed = providers.feeds(apps, self.only or providers.APPS)

@@ -35,7 +35,7 @@ irm https://www.texttocad.dev/install.ps1 | iex
 It installs uv if it is missing, then sets up text-to-cad in every agent app on
 your computer with each app's own commands (the plugin, which brings the skills
 and CAD's MCP server, or for an agent without a plugin the skills alone; Claude
-Code gets the skills, and Claude Desktop the server, for its Chat and Code tabs),
+gets the skills alone and shows models in your browser),
 registers the `cad` command, and moves CAD's server to the new release. Run
 it again to update everything, or click CAD's update button when it shows one; it
 lists the apps to restart.

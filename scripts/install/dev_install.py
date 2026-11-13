@@ -7,8 +7,10 @@ apps/mcp build. That .venv is registered as this install's version (<version>-de
 made the current installation, and the `cad` command is written (~/.local/bin/cad), which the
 skills run, so the server and the agent's scripts share this checkout's installation and warm
 daemon -- and every worktree has its own. With --wheel, the checkout's wheels are built as the release builds them, the
-server runs them through uvx and that installation is the one registered: the shape users get. Claude Desktop's chat takes servers, not plugins, so it
-gets that server alone. Run it again after a change; --uninstall takes the install out. For an agent without plugins,
+server runs them through uvx and that installation is the one registered: the shape users get. Claude gets no CAD
+server, as from the release: Claude Code's plugin is the skills alone (Cursor and Grok Build, which load it, read
+their own manifests, which name the server), and `claude-desktop` only takes out the server an earlier development
+install wrote into Claude Desktop's config. Run it again after a change; --uninstall takes the install out. For an agent without plugins,
 install the skills alone from the checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
 
 One copy per app: a host that already loads another copy (the published plugin, this one through
@@ -23,7 +25,7 @@ setup` reads the apps with too.
     scripts/install/dev_install.py cursor              # Cursor, without Claude Code
     scripts/install/dev_install.py grok                # Grok Build, without Claude Code
     scripts/install/dev_install.py gemini              # Gemini CLI
-    scripts/install/dev_install.py claude-desktop      # Claude Desktop's chat: the server alone
+    scripts/install/dev_install.py claude-desktop      # Claude Desktop: an earlier install's server taken out
     scripts/install/dev_install.py <host> --wheel        # this checkout's wheels, run through uvx
     scripts/install/dev_install.py <host> --uninstall
 
@@ -195,7 +197,8 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
     The skills are copied with ``rewrites`` applied to each SKILL.md (:func:`skill_rewrites`), the
     host's manifest takes `version` (each install its own, so a host that caches by
     version takes this build) and names `server` alone: in a server config beside it, or, for
-    Gemini, which keeps servers in the manifest itself, inline.
+    Gemini, which keeps servers in the manifest itself, inline. Claude Code's names none, as the
+    release's: Cursor's and Grok Build's manifests beside it name the server for the apps that load it.
     """
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
@@ -211,23 +214,38 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
         manifest["mcpServers"] = {"cad": server}
         write_json(plugin_dir / "gemini-extension.json", manifest)
         return manifest
+    if host == "claude":
+        # Claude Code gets the skills alone; Cursor and Grok Build load its plugins and read their own
+        # manifests first, which keep the server.
+        for fed, servers_file in ((".cursor-plugin", "cursor.mcp.json"), (".grok-plugin", "claude.mcp.json")):
+            _manifest(root, plugin_dir, fed, version, servers_file)
+            write_json(plugin_dir / servers_file, {"mcpServers": {"cad": server}})
+        return _manifest(root, plugin_dir, ".claude-plugin", version)
     manifest_dir = {"codex": ".codex-plugin", "cursor": ".cursor-plugin"}.get(host, ".claude-plugin")
     servers_file = "codex.mcp.json" if host == "codex" else "claude.mcp.json"
+    write_json(plugin_dir / servers_file, {"mcpServers": {"cad": server}})
+    return _manifest(root, plugin_dir, manifest_dir, version, servers_file)
+
+
+def _manifest(root: Path, plugin_dir: Path, manifest_dir: str, version: str, servers_file: str | None = None) -> dict:
+    """One host's manifest written into `plugin_dir` with `version`, naming `servers_file` (none: no server),
+    with its own files beside it."""
     manifest = json.loads((root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
     manifest["version"] = version
-    manifest["mcpServers"] = f"./{servers_file}"
-    (plugin_dir / manifest_dir).mkdir(parents=True)
+    manifest.pop("mcpServers", None)
+    if servers_file:
+        manifest["mcpServers"] = f"./{servers_file}"
+    (plugin_dir / manifest_dir).mkdir(parents=True, exist_ok=True)
     # The manifest's own files (icons), beside it; never a marketplace catalog.
     for path in (root / manifest_dir).iterdir():
         if path.is_file() and path.name not in ("plugin.json", "marketplace.json"):
             shutil.copy2(path, plugin_dir / manifest_dir / path.name)
-    if host == "cursor" and manifest.get("logo"):
+    if manifest_dir == ".cursor-plugin" and manifest.get("logo"):
         # Cursor's logo is a path inside the plugin; ours is the Claude icon.
         logo = plugin_dir / manifest["logo"]
         logo.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / manifest["logo"], logo)
     write_json(plugin_dir / manifest_dir / "plugin.json", manifest)
-    write_json(plugin_dir / servers_file, {"mcpServers": {"cad": server}})
     return manifest
 
 
@@ -565,24 +583,21 @@ def desktop_config() -> Path:
 
 
 def install_claude_desktop(args: argparse.Namespace) -> str:
+    """Claude gets no CAD server, as from the release (``providers._plan_desktop``): installing and uninstalling
+    alike take out the `cad-dev` server an earlier development install wrote, the rest of the config kept, its
+    .bak beside it, and add nothing. A config that is not plain JSON is left alone."""
     path = desktop_config()
-    text = path.read_text(encoding="utf-8").strip() if path.exists() else ""
-    config = json.loads(text) if text else {}
-    servers = config.setdefault("mcpServers", {})
-    if args.uninstall:
-        servers.pop(DESKTOP_SERVER, None)
-        write_json(path, config)
-        shutil.rmtree(dev_root("claude-desktop"), ignore_errors=True)
-        return f"Removed {DESKTOP_SERVER} from {path}. Restart Claude Desktop to drop it."
-    others = [key for key, entry in servers.items()
-              if key != DESKTOP_SERVER and providers.runs_cadgen(entry)]
-    if others:
-        raise Refused(f"{path} already runs CAD's server as {', '.join(others)}; remove that entry first: "
-                      "two servers means every tool twice.")
-    servers[DESKTOP_SERVER] = runtime("claude-desktop", args, time.strftime("%Y%m%d%H%M%S"))[0]
-    write_json(path, config)
-    return (f"Added {DESKTOP_SERVER} to {path}. Restart Claude Desktop (or Developer > Reload MCP "
-            "Configuration) to load it.")
+    shutil.rmtree(dev_root("claude-desktop"), ignore_errors=True)
+    try:
+        text = path.read_text(encoding="utf-8").strip() if path.exists() else ""
+        servers = (json.loads(text) if text else {}).get("mcpServers")
+    except (OSError, ValueError, AttributeError) as error:
+        raise Refused(f"{path} cannot be read ({error}); left alone") from error
+    if not isinstance(servers, dict) or DESKTOP_SERVER not in servers:
+        return "Claude Desktop gets no CAD server: Claude gets the skills alone, through Claude Code's plugin."
+    providers.edit_servers(path, remove=[DESKTOP_SERVER])
+    return (f"Removed {DESKTOP_SERVER} from {path} (its .bak beside it): Claude gets the skills alone, through "
+            "Claude Code's plugin. Claude Desktop drops the server when it next starts.")
 
 
 def main(argv: list[str] | None = None) -> int:

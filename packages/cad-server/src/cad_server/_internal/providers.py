@@ -9,7 +9,8 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
 
 - **Claude Code**: the folder added as a local-directory marketplace and its plugin installed,
   ``text-to-cad@text-to-cad``, through ``claude plugin``: the skills alone, since Claude's manifest names
-  no server (a server Claude Code starts gets no card it can use: its terminal draws none, and the
+  no server. Claude gets no CAD server on any route, Claude Desktop included: its MCP Apps support is too
+  flaky to build on (a server Claude Code starts gets no card it can use: its terminal draws none, and the
   desktop app's Code tab refuses their calls). Its sessions read the folder in place, so a
   folder written again is what the next session reads, with no command; its cached copy, which
   ``claude plugin list`` reports and Cursor and Grok Build may read, is brought along by ``claude
@@ -20,14 +21,13 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
   added by ``claude mcp add`` for the user or for a project (``~/.claude.json``), removed by
   ``claude mcp remove`` (a project's in its folder). A store's copy keeps its server, which lists no
   tools when Claude Code starts it (``cad_server.mcp.host.claude_code``).
-- **Claude Desktop** (its chat, and the Code tab, which offers the app's own servers to Claude Code's
-  sessions and draws their cards): CAD's server alone, ``mcpServers.cad`` in its config file, run by
-  ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH: the person's uvx
-  (on PATH, else where uv's installer or Homebrew puts it), never one uv keeps in its cache or a release
-  folder holds (``transient``), which go from under it.
-  A switch of the engine moves it to the release it leaves current, back as much as forward
-  (``refresh_plan``). The app reads the file only as it starts, so it is quit and reopened after a
-  change (``RESTART``); no developer mode is needed.
+- **Claude Desktop**: nothing is installed. Releases through 0.11.10 wrote CAD's server into its config
+  file, ``mcpServers.cad``; every run takes that entry out where it runs text-to-cad (``_plan_desktop``:
+  ours is the ``cad`` key, as the uninstall and the duplicate check read it), in one atomic write that
+  keeps the rest of the file and a ``.bak`` beside it, and leaves a config it cannot read, or a ``cad``
+  that is another server's, alone. A server someone added under another key is theirs and stays: the
+  server still serves a host that starts it. ``cad uninstall`` still takes back an entry a receipt says an
+  earlier release wrote (``touched``).
 - **Codex**: the same local marketplace through its own ``plugin`` command (the app bundles a CLI of
   its own). Codex copies a local marketplace's plugin when it is added and never again by itself, so
   every update adds it again; a running session keeps the copy it started with.
@@ -66,28 +66,35 @@ Amp, Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed there), is the Skill
 that uses it is here: Codex and Gemini CLI then list those skills beside their plugin's, which the plan
 says.
 
-A store's copy (claude.ai's directory, the app directory of Codex's maker, the Cursor Marketplace) is a
-second copy too: the install command, and ``cad setup`` with it, is the person's ask for this release,
-so the plan removes it with the app's own command and installs ours in its place -- Codex's by
-``codex plugin remove`` (the store's catalog stays), Claude Code's in the user scope by ``claude plugin
-uninstall``. The receipt records each one removed (``store``), ``cad doctor`` says so, and ``cad
-uninstall`` does not put it back: it says to install it from the directory again. A store's copy no
-command here removes (``held_by``) is reported and keeps ours out, since the app would load both and
-every skill twice: Claude Code's in the ``managed`` scope, which an administrator manages, or the
-``synced`` one, which claude.ai syncs; and the Cursor Marketplace's, which Cursor has no command to
-uninstall and keeps in its own app data by the Marketplace's id, so a folder removed here would come
-back. The refresh after a switch (``refresh_plan``) removes nothing and leaves an app with a store's
-copy alone: one that comes back is removed at the next ``cad setup`` (the install command, ``cad
-update``, the update button).
+A store's copy (claude.ai's directory, OpenAI's plugin directory in Codex, the Cursor Marketplace) is
+delivered and updated by the app it came through, and no run of ``cad setup`` -- the install command, an
+update, the update button, an automatic one -- removes it: it is reported, kept, and keeps ours out, since
+the app would load both and every skill twice (``App.held``, ``_held``); ours, where the app has it too,
+goes (``_against_stores``). Its line says that removing it in the app's own plugin manager and running the
+install command again installs ours. Who else holds one (``held_by``): Claude Code's in the ``managed``
+scope, which an administrator manages; the copies claude.ai syncs from a person's account, which Claude Code
+records nowhere but in their own manifests (``plugins/synced/<bucket>/manifest.json``, ``_synced``: not a
+scope); and the Cursor Marketplace's, which Cursor has no command to uninstall and keeps in its own app data
+by the Marketplace's id. A copy claude.ai syncs feeds neither Cursor nor Grok Build, which read only what
+``installed_plugins.json`` records (``feeds``). Codex records no plugin installed from OpenAI's directory on the
+person's account in its config, and loads one only while signed in, the server listing it: its own listing
+(``codex plugin list --json``) naming it installed and enabled from such a catalog is the evidence that it has
+one (``_codex_listed``), as a config entry is for a copy from a Git catalog; ``openai-bundled`` and
+``openai-primary-runtime`` are no such catalog (``CODEX_NOT_STORES``). Its plugin cache's folder with Codex's
+mark of a remote install (``CODEX_REMOTE_MARK``) is weak evidence, since it outlives a sign-out
+(``_codex_cached``): ours is installed and kept all the same, and a line says how to keep one copy. Releases through 0.11.10 removed a directory's copy at the install command; the receipts
+they wrote still say so (``store``), and ``cad uninstall`` and ``cad doctor`` read them (``replaced``).
 
 Reading what an app has never runs the app (``detect``): each app's command writes its own files as it
 starts -- ``claude`` its ``~/.claude.json`` and backups, ``grok`` its ``~/.grok/docs`` and logs, ``gemini`` its
 ``~/.gemini``, ``codex`` its ``~/.codex/tmp`` -- and creates its folder where there was none, so a dry run, or
 a plan that leaves an app alone, would change a person's home. Each app's own files say what it has. An app's
-command runs where a step installs, updates or removes with it (``apply``), and two questions alone are asked of
-one, neither in a home: Claude Code's listing, once a real run is about to change it (``read_for``), for what
-only that says (a copy claude.ai syncs); and Codex's version, between two ``codex`` commands neither of whose
-files says it, in a folder that is thrown away (``codex_cli``).
+command runs where a step installs, updates or removes with it (``apply``), and three questions alone are asked
+of one: Claude Code's listing, once a real run is about to change it (``read_for``), for what its records may not
+say (a copy claude.ai syncs is also read from its manifest, ``_synced``); Codex's listing, in a real run where
+its plugin cache alone says it has OpenAI's directory's copy, bounded (``CODEX_LIST_SECONDS``); and Codex's
+version, between two ``codex`` commands neither of whose files says it, in a folder that is thrown away
+(``codex_cli``).
 
 Nothing here imports the packages, and the file parses on any Python 3 the development installer may
 run on. Every path comes from a :class:`Machine` -- its home, its environment, its platform and how it
@@ -134,17 +141,28 @@ SKILLS = ("cad", "engineering-drawing", "fea", "pcb", "print3d", "render", "robo
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
                   "urdf")
-# Claude Desktop's server key, and the variable its server is told its install channel by.
+# The key releases through 0.11.10 wrote CAD's server under in Claude Desktop's config, which every run now
+# takes out where it runs text-to-cad (Claude gets the skills alone).
 DESKTOP_KEY = "cad"
 # A checkout's development install (its installer): its catalog, and the file it marks its Cursor copy with.
 DEV_MARKETPLACE = "earthtojake-dev"
 DEV_MARK = ".text-to-cad-dev"
-# Stores: Claude Code's official catalog, which claude.ai's directory installs from, and the scopes
-# claude.ai syncs or an administrator manages (who holds each: no command of the person's removes it);
-# Codex's maker's directory catalogs; the Cursor Marketplace's cache.
+# Stores: Claude Code's official catalog, which claude.ai's directory installs from, and the scope an
+# administrator manages (who holds it: no command of the person's removes it); who holds a copy claude.ai
+# syncs from a person's account, which is no scope (``_synced``); Codex's maker's directory catalogs; the
+# Cursor Marketplace's cache.
 CLAUDE_STORES = frozenset({"claude-plugins-official"})
-CLAUDE_STORE_SCOPES = {"managed": "an administrator manages it", "synced": "claude.ai syncs it"}
+CLAUDE_STORE_SCOPES = {"managed": "an administrator manages it"}
+CLAUDE_SYNCED = "claude.ai syncs it from your account"
 CODEX_STORE_PREFIX = "openai-"
+# Catalogs of Codex's maker's that are no directory a person installs this plugin from.
+CODEX_NOT_STORES = frozenset({"openai-bundled", "openai-primary-runtime"})
+# The file Codex writes beside a copy it installed from its maker's directory on the person's account
+# (``cache/<catalog>/<plugin>/``): ``{schema_version, remote_plugin_id}``.
+CODEX_REMOTE_MARK = ".codex-remote-plugin-install.json"
+# How long Codex's own listing (``codex plugin list --json``, which asks its maker's server) may take: past it,
+# what it would have said is unknown, never a failure.
+CODEX_LIST_SECONDS = 15
 CURSOR_STORE = "the Cursor Marketplace"
 
 APPS = ("claude", "claude-desktop", "codex", "cursor", "grok", "gemini")
@@ -159,7 +177,7 @@ INVENTORIED = frozenset({"claude", "claude-desktop", "codex", "cursor", "gemini"
 # What a person does for an app to pick up a changed plugin: never done for them.
 RESTART = {
     "claude": "Claude Code: start a new session (a running one keeps the plugin it started with)",
-    "claude-desktop": "Claude Desktop: quit and reopen it to load CAD's server (it reads its config only as it starts)",
+    "claude-desktop": "Claude Desktop: quit and reopen it (it reads its config only as it starts)",
     "codex": "Codex: restart the app, and any terminal or IDE session (a running one keeps the copy it started with)",
     "cursor": "Cursor: reload the window",
     "grok": "Grok Build: start a new session",
@@ -169,12 +187,10 @@ RESTART = {
 
 def needs_restart(step: "Step") -> bool:
     """Whether ``step`` done takes the app's restart to work (``RESTART``): a plugin installed or updated,
-    whose skills load in the app's next session, and Claude Desktop gaining CAD's server. A new pin of Claude
-    Desktop's server is not one: the server it runs keeps working with the newer engine, and the app takes
-    the pin at its next start."""
-    if step.app not in APPS or step.action not in ("install", "update"):
-        return False
-    return step.app != "claude-desktop" or step.action == "install"
+    whose skills load in the app's next session. Claude Desktop's old server taken out at setup is not one:
+    the one it runs keeps working until the app next starts, and then it is gone (an uninstall still names
+    it: ``cad_server.cli.setup``)."""
+    return step.app in APPS and step.app != "claude-desktop" and step.action in ("install", "update")
 
 
 def restart(name: str, machine: Optional["Machine"] = None) -> str:
@@ -182,7 +198,7 @@ def restart(name: str, machine: Optional["Machine"] = None) -> str:
     platform: on Windows, Claude Desktop keeps running in the system tray when its window closes."""
     if name == "claude-desktop" and _machine(machine).windows:
         return ("Claude Desktop: quit it from its icon in the system tray (closing its window leaves it running), "
-                "then reopen it to load CAD's server")
+                "then reopen it")
     return RESTART[name]
 
 
@@ -797,8 +813,8 @@ class Copy:
     path: Optional[str] = None
     detail: str = ""
     ours: bool = False  # the copy the release installs: from the plugin folder (Grok Build: the catalog on `latest`)
-    store: bool = False  # a store's: removed and replaced by ours, unless it is held
-    held_by: str = ""  # a store's copy no command here removes: who holds it ("an administrator manages it")
+    store: bool = False  # a store's: kept, reported, and nothing of ours beside it (``App.held``)
+    held_by: str = ""  # who else holds a store's copy, when not the person alone ("an administrator manages it")
     removable: bool = True  # False: another scope's (a project's), reported and left
     entry: Optional[Dict[str, Any]] = None  # a server's entry, as its config holds it
     project: Optional[str] = None  # a server Claude Code keeps for one project (``~/.claude.json``'s ``projects``)
@@ -840,6 +856,9 @@ class App:
     copies: List[Copy] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
     marketplaces: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Codex: a copy of its maker's directory that only its plugin cache says it has (``_codex_cached``): weak
+    # evidence, which never removes ours or keeps it out.
+    cached: List[Copy] = field(default_factory=list)
     config: Optional[str] = None
     unreadable: Optional[str] = None  # a config file this cannot edit, and why
 
@@ -854,8 +873,8 @@ class App:
         return [copy for copy in self.copies if copy.store]
 
     def held(self) -> List[Copy]:
-        """The store's copies no command here removes: reported, and nothing of ours added beside them."""
-        return [copy for copy in self.copies if copy.store and copy.held_by]
+        """The store's copies: kept and reported, and nothing of ours added beside them."""
+        return [copy for copy in self.copies if copy.store]
 
 
 @dataclass
@@ -872,7 +891,6 @@ class Step:
     note: str = ""  # how it is done, when not by a command of its own ("in the same edit")
     cwd: Optional[str] = None  # where its commands run, when that matters (a project's server)
     agents: List[str] = field(default_factory=list)  # the Skills CLI agents its command adds the skills for
-    store: str = ""  # the store's copy it removes, as a person reads it: the receipt records it
 
     @property
     def label(self) -> str:
@@ -937,8 +955,8 @@ def _stamp(path: Path) -> Optional[str]:
 
 def _detect_claude(machine: Machine, folder: Optional[Path] = None, listed: bool = False) -> App:
     """Claude Code's copies, from the records it keeps (``installed_plugins.json``, ``known_marketplaces.json``),
-    no command run; with ``listed``, from its own listing, which also knows the copies claude.ai syncs and only
-    runs where a command of it runs anyway (``read_for``)."""
+    no command run; with ``listed``, from its own listing, which only runs where a command of it runs anyway
+    (``read_for``). The copies claude.ai syncs are read from their manifests either way (``_synced``)."""
     app = App("claude", command=find_cli("claude", machine))
     config = claude_dir(machine)
     if app.command:
@@ -980,7 +998,8 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None, listed: bool
         market = identifier.split("@", 1)[1] if "@" in identifier else ""
         scope = plugin.get("scope") or "user"
         held_by = CLAUDE_STORE_SCOPES.get(scope, "")
-        store = market in CLAUDE_STORES or bool(held_by)
+        # A project's copy of the directory's loads in that project alone: another scope's, as any other is.
+        store = (market in CLAUDE_STORES and scope in ("user", "managed")) or bool(held_by)
         ours = market == MARKETPLACE and scope == "user"
         if held_by or (scope != "user" and not store):
             detail = f"{scope} scope"
@@ -1001,6 +1020,8 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None, listed: bool
         app.copies.append(Copy("claude", "plugin", identifier, version=plugin.get("version"),
                                path=plugin.get("installPath"), detail=detail, store=store, held_by=held_by,
                                removable=scope == "user"))
+    app.copies += [copy for copy in _synced(config)
+                   if not any(same_path(copy.path, other.path) for other in app.copies)]
     servers, _problem = _json(claude_json(machine))
     if isinstance(servers, dict):
         _servers(app, servers.get("mcpServers"), claude_json(machine))
@@ -1018,6 +1039,77 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None, listed: bool
     return app
 
 
+def _synced(config: Path) -> List[Copy]:
+    """The copies of text-to-cad claude.ai syncs into Claude Code from a person's account: recorded nowhere but
+    in their own manifests (``plugins/synced/<bucket>/manifest.json``: ``name``, ``version``,
+    ``marketplaceName``, ``installationPreference``, ``marketplaceKind``), in no scope, and removed by no
+    command here."""
+    found = []
+    folder = config / "plugins" / "synced"
+    for manifest in sorted(folder.glob("*/manifest.json")) if folder.is_dir() else []:
+        data, _problem = _json(manifest)
+        if not isinstance(data, dict) or data.get("name") != PLUGIN:
+            continue
+        market = data.get("marketplaceName") if isinstance(data.get("marketplaceName"), str) else ""
+        found.append(Copy("claude", "plugin", f"{PLUGIN}@{market}" if market else PLUGIN,
+                          version=_manifest_version(manifest.parent, ".claude-plugin/plugin.json")
+                          or (data.get("version") if isinstance(data.get("version"), str) else None),
+                          path=str(manifest.parent), detail="claude.ai's directory's, synced from your account",
+                          store=True, held_by=CLAUDE_SYNCED, removable=False))
+    return found
+
+
+def _codex_store(market: str) -> bool:
+    """Whether a catalog is a directory of Codex's maker a person installs this plugin from."""
+    return market.startswith(CODEX_STORE_PREFIX) and market not in CODEX_NOT_STORES
+
+
+def _codex_listed(app: App, machine: Machine) -> None:
+    """Codex's own listing (``codex plugin list --json``): the one strong evidence of a copy installed from its
+    maker's directory on the person's account, which its config does not record -- named ``installed`` and
+    ``enabled`` from such a catalog (``_codex_store``). It needs the network and a sign-in, so it is asked
+    only where a real run reads the apps (``read_for``), bounded (``CODEX_LIST_SECONDS``); a listing that fails,
+    times out, says something else or names no such copy leaves what is known as it was."""
+    if not app.command or any(copy.store for copy in app.copies):
+        return
+    ran = machine.run([app.command, "plugin", "list", "--json"], CODEX_LIST_SECONDS)
+    text = ran.out if ran.ok else ""
+    try:
+        listing = json.loads(text[text.index("{"):]) if "{" in text else None
+    except ValueError:
+        listing = None
+    entries = listing.get("installed") if isinstance(listing, dict) else None
+    for entry in entries if isinstance(entries, list) else []:
+        market = entry.get("marketplaceName") if isinstance(entry, dict) else None
+        if (entry.get("name") if isinstance(entry, dict) else None) != PLUGIN or not isinstance(market, str) \
+                or not _codex_store(market) or entry.get("installed") is not True or entry.get("enabled") is not True:
+            continue
+        cache = _codex_cache(codex_home(machine), market)
+        version = entry.get("version") if isinstance(entry.get("version"), str) else cache.name if cache else None
+        app.copies.append(Copy("codex", "plugin", f"{PLUGIN}@{market}", version=version,
+                               path=str(cache) if cache else None,
+                               detail="its app directory's, on your OpenAI account", store=True, removable=False))
+        app.cached = []
+        return
+
+
+def _codex_cached(app: App, home: Path) -> None:
+    """A copy Codex installed from its maker's directory on the person's account, as its plugin cache alone
+    says (``cache/<catalog>/<plugin>/`` with ``CODEX_REMOTE_MARK`` beside its versions, the newest the one): weak
+    evidence, since a cache folder outlives a sign-out, an account switch or an API key, and Codex then loads
+    no such copy. It never removes ours or keeps it out (``_codex_line``)."""
+    if any(copy.store for copy in app.copies):
+        return
+    cache = home / "plugins" / "cache"
+    for mark in sorted(cache.glob(f"*/{PLUGIN}/{CODEX_REMOTE_MARK}")) if cache.is_dir() else []:
+        market = mark.parent.parent.name
+        found = _codex_cache(home, market)
+        if market in CODEX_NOT_STORES or market == MARKETPLACE or found is None:
+            continue
+        app.cached.append(Copy("codex", "plugin", f"{PLUGIN}@{market}", version=found.name, path=str(found),
+                               detail="OpenAI's directory's, in Codex's plugin cache"))
+
+
 def _codex_cache(home: Path, market: str) -> Optional[Path]:
     """Codex's copy of a catalog's plugin: its newest version's folder in the plugin cache."""
     cache = home / "plugins" / "cache" / market / PLUGIN
@@ -1025,7 +1117,10 @@ def _codex_cache(home: Path, market: str) -> Optional[Path]:
     return max(versions, key=lambda path: version_key(path.name)) if versions else None
 
 
-def _detect_codex(machine: Machine, folder: Optional[Path] = None) -> App:
+def _detect_codex(machine: Machine, folder: Optional[Path] = None, listed: bool = False) -> App:
+    """Codex's copies, from its config and its plugin cache, no command run; with ``listed``, also from its own
+    listing (``_codex_listed``), which only a real run asks, and only where the cache alone says it has its
+    maker's directory's copy (``read_for``)."""
     app = App("codex", command=codex_cli(machine))
     home = codex_home(machine)
     if app.command:
@@ -1049,7 +1144,7 @@ def _detect_codex(machine: Machine, folder: Optional[Path] = None) -> App:
         if identifier.split("@")[0] != PLUGIN or "@" not in identifier:
             continue
         market = identifier.split("@", 1)[1]
-        store = market.startswith(CODEX_STORE_PREFIX)
+        store = _codex_store(market)
         ours = market == MARKETPLACE
         enabled = not isinstance(entry, dict) or entry.get("enabled", True) is not False
         detail = "its app directory's" if store else "" if ours else _catalog_detail(market, app.marketplaces)
@@ -1060,6 +1155,9 @@ def _detect_codex(machine: Machine, folder: Optional[Path] = None) -> App:
                                store=store, ours=ours, path=str(cache) if cache else None,
                                source=(app.marketplaces.get(MARKETPLACE) or {}).get("path") if ours else None,
                                via="copied" if ours else "", when=_stamp(cache) if ours and cache else None))
+    _codex_cached(app, home)
+    if listed and app.cached:
+        _codex_listed(app, machine)
     _servers(app, data.get("mcp_servers"), config)
     _loose(app, machine)
     return app
@@ -1237,9 +1335,10 @@ DETECTORS: Dict[str, Callable[..., App]] = {
 
 
 def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS, *, folder: Any = None,
-           listed: bool = False) -> Dict[str, App]:
+           listed: bool = False, codex_listed: bool = False) -> Dict[str, App]:
     """Every app in ``apps``: whether it is here, and every copy of the plugin it loads, from each app's own
-    files, no app's command run (the module; ``listed``: Claude Code's listing too, ``read_for``). Ours is the
+    files, no app's command run (the module; ``listed``: Claude Code's listing too, ``codex_listed``: Codex's,
+    ``read_for``). Ours is the
     one from the plugin ``folder`` (``cad_server._internal.plugin``): Claude Code's and Codex's plugin from its
     catalog (``MARKETPLACE``, wherever that points: the plan points it at ``folder``), Gemini CLI's
     extension linked to it, Cursor's copy of it; Claude Desktop's server; Grok Build's install of
@@ -1250,6 +1349,7 @@ def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS, *, fol
     for name in apps:
         try:
             found[name] = (_detect_claude(machine, folder, listed=True) if listed and name == "claude"
+                           else _detect_codex(machine, folder, listed=True) if codex_listed and name == "codex"
                            else DETECTORS[name](machine, folder))
         except OSError as error:
             found[name] = App(name, present=True, unreadable=f"its files could not be read ({type(error).__name__}: "
@@ -1261,11 +1361,17 @@ def read_for(make: Callable[[Mapping[str, App]], List[Step]], machine: Optional[
              folder: Any = None) -> Tuple[Dict[str, App], List[Step], bool]:
     """A real run's read of the apps and ``make``'s plan of them: ``(apps, steps, whether Claude Code was
     listed)``. Read from their files (``detect``); where that plan changes Claude Code, whose command is about to
-    run anyway, its listing is asked as well, for the copies only that knows of (a copy claude.ai syncs keeps
-    ours out), and the plan made again."""
+    run anyway, its listing is asked as well, for what its records may not say, and the plan made again. Where
+    Codex's plugin cache alone says it has its maker's directory's copy (``App.cached``), Codex's listing is
+    asked too, bounded (``_codex_listed``): the one strong evidence of that copy. A person's run and an automatic
+    update's alike ask it: nothing waits on that run, and a listing that cannot answer leaves the weak case."""
     machine = _machine(machine)
     apps = detect(machine, folder=folder)
     steps = make(apps)
+    codex = apps.get("codex")
+    if codex is not None and codex.cached and codex.command:
+        apps.update(detect(machine, ["codex"], folder=folder, codex_listed=True))
+        steps = make(apps)
     if not apps["claude"].command or not any(step.app == "claude" and step.changes for step in steps):
         return apps, steps, False
     apps.update(detect(machine, ["claude"], folder=folder, listed=True))
@@ -1307,11 +1413,9 @@ def _removal(app: App, copy: Copy, machine: Machine, action: str = "remove dupli
     if copy.kind == "server" and app.id in ("claude-desktop", "cursor"):
         return Step(app.id, action, words, edit={"op": "servers", "path": copy.path, "remove": [copy.name]})
     if copy.kind == "server" and app.id == "claude":
-        # Claude Code gets CAD from its plugin's skills, and the desktop app's Code tab its server from Claude
-        # Desktop's config: a server Claude Code starts itself gets no card it can use there.
+        # Claude Code gets CAD from its plugin's skills alone: Claude gets no CAD server on any route.
         if action == "remove duplicate":
-            action, words = "remove server", (f"{words}: Claude Code takes CAD from the plugin's skills, and its "
-                                              "Code tab the server from Claude Desktop's config")
+            action, words = "remove server", f"{words}: Claude Code gets text-to-cad as the plugin's skills alone"
         if not app.command:
             return _leave(app, f"{words}: no claude command here to remove it with; remove it in {app.label}")
         if copy.project is None:
@@ -1359,45 +1463,47 @@ def _github_catalog(app: App) -> List[Step]:
                  [[app.command, "plugin", "marketplace", "remove", GITHUB_MARKETPLACE]])]
 
 
-# Where a store's copy the install command replaced came from, to install it from again.
+# Where a store's copy an earlier release's install command replaced came from, to install it from again
+# (``replaced``: the receipts releases through 0.11.10 wrote).
 DIRECTORIES = {"claude": "claude.ai's plugin directory", "codex": "Codex's plugin directory"}
 
 
 def _duplicates(app: App, machine: Machine, *, everything: bool = False) -> List[Step]:
-    """Steps for every copy but ours (``everything``: ours too, and then never a store's): removed --
-    a store's too, which the install command replaces with ours --, or, another scope's, reported. A
-    store's copy no command here removes is :func:`_held`'s."""
+    """Steps for every copy but ours (``everything``: ours too) and a store's, which :func:`_held` reports:
+    removed, or, another scope's, reported."""
     steps = []
     for copy in app.copies:
-        if copy.held_by or (copy.ours and not everything) or (copy.store and everything):
+        if copy.store or (copy.ours and not everything):
             continue
         if not copy.removable:
             steps.append(_leave(app, f"{copy.words(machine)}: another scope's, left alone; remove it there if "
                                      "skills show twice"))
             continue
-        step = _removal(app, copy, machine)
-        if copy.store and step.changes:
-            step.store = step.subject
-            step.subject += ": the directory's copy, replaced by this release's, as the install command asks"
-            if app.id == "codex":
-                step.subject += " (the directory's listing trails the releases)"
-        steps.append(step)
+        steps.append(_removal(app, copy, machine))
     return steps
 
 
 def _held(app: App, machine: Machine, *, served: bool = False) -> List[Step]:
-    """The store's copies no command here removes, reported: nothing of ours is added beside them (the app
-    would load both), and where one is Cursor's, the person removes it there (``served``: Cursor loads the
-    Claude Code plugin anyway)."""
+    """The store's copies, kept and reported: the app delivers and updates each, and nothing of ours is added
+    beside them (the app would load both). Where one is Cursor's, the person removes it there (``served``:
+    Cursor loads the Claude Code plugin anyway)."""
     steps = []
     for copy in app.held():
-        said = f"{copy.words(machine)}: {copy.held_by}, so it stays"
-        if app.id == "cursor":
+        words = copy.words(machine)
+        if copy.held_by == CLAUDE_STORE_SCOPES["managed"]:
+            said = (f"{words}: {copy.held_by}, so it stays, and ours is not added beside it "
+                    f"({app.label} would load both)")
+        elif app.id == "cursor":
+            said = f"{words}: the Marketplace's copy, which the Marketplace updates, so it stays"
             said += (f"; {app.label} loads the {LABELS['claude']} plugin too, so uninstall this one in {app.label}"
-                     if served else f", and ours is not added beside it; uninstall it in {app.label}, then run the "
-                                    "install command again")
+                     if served else f", and ours is not added beside it; for ours, uninstall it in {app.label}, then "
+                                    "run the install command again")
         else:
-            said += f", and ours is not added beside it ({app.label} would load both)"
+            where = "your claude.ai account's plugins" if copy.held_by == CLAUDE_SYNCED \
+                else f"{app.label}'s own plugin manager"
+            said = (f"{words}: the directory's copy, which the directory updates, so it stays, and ours is not added "
+                    f"beside it ({app.label} would load both); for ours, remove it in {where} and run the install "
+                    "command again")
         steps.append(_leave(app, said))
     return steps
 
@@ -1413,9 +1519,9 @@ def _point(cli: str, market: Optional[Dict[str, Any]], folder: Path) -> List[Lis
 
 
 def _against_stores(app: App, machine: Machine) -> Tuple[List[Step], bool]:
-    """Second copies removed, a store's among them, and the store's copies no command here removes
-    reported: ``(steps, whether one of those is here)``, in which case ours goes too and nothing of ours is
-    added beside it."""
+    """Second copies removed and the store's copies reported: ``(steps, whether a store's copy is here)``,
+    in which case ours goes too, as it always has beside a copy no command here removes, and nothing of ours
+    is added beside it."""
     steps = _held(app, machine) + _duplicates(app, machine)
     if app.held():
         ours = app.ours()
@@ -1452,7 +1558,7 @@ def _plan_codex(app: App, release: str, machine: Machine, folder: Optional[Path]
     steps, stored = _against_stores(app, machine)
     if stored or folder is None:
         return steps
-    steps += _github_catalog(app)
+    steps += _github_catalog(app) + _codex_line(app, machine)
     here, ours = shown(folder, machine), app.ours()
     if not app.command:
         return steps + [_leave(app, f"no codex command on this PATH to add {here} to Codex with")]
@@ -1467,6 +1573,14 @@ def _plan_codex(app: App, release: str, machine: Machine, folder: Optional[Path]
     if ours is not None:
         return steps + [Step(app.id, "update", f"{PLUGIN_ID}, a copy of {here}", commands)]
     return steps + [Step(app.id, "install", f"{PLUGIN_ID}, a copy of {here}", commands)]
+
+
+def _codex_line(app: App, machine: Machine) -> List[Step]:
+    """The line for a copy of Codex's maker's directory that only its plugin cache says it has: ours is installed
+    and kept all the same, and the person told how to keep one copy."""
+    return [_leave(app, f"{copy.words(machine)}: Codex's cache also holds OpenAI's directory copy, which Codex loads "
+                        "only while you are signed in; if the skills show twice, remove one copy")
+            for copy in app.cached[:1]]
 
 
 def _served(app: App, machine: Machine) -> List[Step]:
@@ -1540,46 +1654,19 @@ def _plan_gemini(app: App, release: str, machine: Machine, folder: Optional[Path
                          [[app.command, "extensions", "link", str(folder), "--consent"]])]
 
 
-def _wanted(entry: Any, desktop_entry: Dict[str, Any]) -> Dict[str, Any]:
-    """``desktop_entry`` as it replaces ``entry``: the environment someone added to the entry kept
-    (a ``CAD_ENGINE_PORT``, say), the release's own variables over it."""
-    kept = entry.get("env") if isinstance(entry, dict) and isinstance(entry.get("env"), dict) else {}
-    return {**desktop_entry, "env": {**kept, **(desktop_entry.get("env") or {})}}
-
-
-def _plan_desktop(app: App, release: str, machine: Machine, desktop_entry: Optional[Dict[str, Any]] = None,
-                  **_: Any) -> List[Step]:
-    """Claude Desktop's config: ``mcpServers.cad`` set to ``desktop_entry``, this release's server,
-    where it has none or one that runs an older release (its pin, ``cad-mcp==X`` or an earlier
-    release's ``cadgen==X``, is what uvx runs) or differs otherwise (its uvx); one that pins a newer release
-    is left alone. Every other entry that runs text-to-cad is taken out, in the same write of the file (one
-    ``.bak``)."""
+def _plan_desktop(app: App, release: str, machine: Machine, **_: Any) -> List[Step]:
+    """Claude Desktop: no CAD server. Ours, ``mcpServers.cad`` running text-to-cad, which releases through
+    0.11.10 wrote, is taken out, the rest of the file kept as it was and its ``.bak`` beside it. A ``cad`` that
+    is another server's, and a server someone added under another key, stay: the server still serves a host
+    that starts it."""
+    ours = app.ours()
+    if ours is None:
+        return []
     path = app.config or str(desktop_config(machine))
-    others = [copy for copy in app.copies if not copy.ours]
-    remove = [copy.name for copy in others]
-    where = f"mcpServers.{DESKTOP_KEY} in {shown(path, machine)}"
-    ours, steps, change = app.ours(), [], None
-    if app.notes:  # mcpServers.cad is another server's
-        steps.append(_leave(app, f"{app.notes[0]}: left alone; add CAD's server by hand"))
-    elif desktop_entry is None:
-        steps.append(_leave(app, "no uvx found to run CAD's server with: install uv, then run this again"))
-    elif ours is None:
-        change = Step(app.id, "install", f"{where}: text-to-cad {release}")
-    elif ours.entry == _wanted(ours.entry, desktop_entry):
-        steps.append(_leave(app, f"{where}: text-to-cad {release}, up to date"))
-    elif is_release(ours.version) and version_key(ours.version) > version_key(release):
-        steps.append(_leave(app, f"{where}: text-to-cad {ours.version}, newer than {release}, left alone"))
-    else:
-        change = Step(app.id, "update", f"{where}: text-to-cad {ours.version or '?'} -> {release}")
-    if change is not None:
-        entry = _wanted(ours.entry, desktop_entry) if ours is not None else desktop_entry
-        change.edit = {"op": "servers", "path": path, "set": {DESKTOP_KEY: entry}, "remove": remove}
-        return [Step(app.id, "remove duplicate", copy.words(machine), note="in the same edit") for copy in others] \
-            + steps + [change]
-    if remove:
-        steps.insert(0, Step(app.id, "remove duplicate", ", ".join(copy.words(machine) for copy in others),
-                             edit={"op": "servers", "path": path, "remove": remove}))
-    return steps
+    return [Step(app.id, "remove server", f"mcpServers.{DESKTOP_KEY} in {shown(path, machine)} (text-to-cad "
+                                          f"{ours.version or '?'}): Claude gets text-to-cad as skills alone, through "
+                                          f"{LABELS['claude']}'s plugin",
+                 edit={"op": "servers", "path": path, "remove": [DESKTOP_KEY]})]
 
 
 PLANNERS: Dict[str, Callable[..., List[Step]]] = {
@@ -1590,11 +1677,15 @@ PLANNERS: Dict[str, Callable[..., List[Step]]] = {
 
 def feeds(apps: Mapping[str, App], selected: Iterable[str]) -> bool:
     """Whether Claude Code has the plugin after this run, so that Cursor and Grok Build load it: it
-    has ours or a store's now, or it is selected and has the command that installs it."""
+    has ours or a store's now that its ``installed_plugins.json`` records, or it is selected, has the command
+    that installs ours and no store's copy keeps ours out. Cursor reads that file alone and Grok Build each
+    ``installPath`` in it: a copy claude.ai syncs (``_synced``), which it does not record, feeds neither."""
     claude = apps.get("claude")
     if claude is None or not claude.present:
         return False
-    return claude.ours() is not None or bool(claude.stores()) or ("claude" in selected and bool(claude.command))
+    recorded = [copy for copy in claude.stores() if copy.held_by != CLAUDE_SYNCED]
+    return claude.ours() is not None or bool(recorded) \
+        or ("claude" in selected and bool(claude.command) and not claude.held())
 
 
 def _once(steps: List[Step]) -> List[Step]:
@@ -1675,13 +1766,12 @@ def _shared_note(apps: Mapping[str, App], steps: List[Step], machine: Machine) -
     return notes
 
 
-def plan(apps: Mapping[str, App], *, release: str, folder: Any = None, desktop_entry: Optional[Dict[str, Any]] = None,
-         only: Optional[Sequence[str]] = None, machine: Optional[Machine] = None,
-         skills: Optional[Mapping[str, Any]] = None) -> List[Step]:
+def plan(apps: Mapping[str, App], *, release: str, folder: Any = None, only: Optional[Sequence[str]] = None,
+         machine: Optional[Machine] = None, skills: Optional[Mapping[str, Any]] = None) -> List[Step]:
     """What to do for every selected app that is here, in ``APPS`` order, to give it this release's
     plugin from the plugin ``folder``: each app's duplicates taken out before its copy is installed or
-    updated, so two copies never load at once; then the skills for the Skills CLI agents here
-    (``skills``: the receipt's record of them)."""
+    updated, so two copies never load at once, and a store's copy kept, with nothing of ours beside it;
+    then the skills for the Skills CLI agents here (``skills``: the receipt's record of them)."""
     machine = _machine(machine)
     folder = Path(folder) if folder is not None else None
     selected = [name for name in APPS if not only or name in only]
@@ -1694,45 +1784,26 @@ def plan(apps: Mapping[str, App], *, release: str, folder: Any = None, desktop_e
         if app.unreadable:
             steps.append(_leave(app, f"{app.unreadable}: nothing is changed there"))
             continue
-        steps += PLANNERS[name](app, release, machine, folder=folder, fed=fed and name in FED_BY,
-                                desktop_entry=desktop_entry)
+        steps += PLANNERS[name](app, release, machine, folder=folder, fed=fed and name in FED_BY)
     steps += _plan_skills(release, machine, [agent for agent in SKILLS_AGENTS if not only or agent in only], skills,
                           folder)
     return _once(steps) + _shared_note(apps, steps, machine)
 
 
-def _follow_desktop(app: App, release: str, machine: Machine, desktop_entry: Optional[Dict[str, Any]]) -> List[Step]:
-    """Claude Desktop's server, ours, set to ``desktop_entry`` (``release``'s) where it differs: the release a
-    switch left current, ahead of the one in the config as much as behind it (a switch that went back)."""
-    ours = app.ours()
-    if ours is None or desktop_entry is None or app.notes or ours.entry == _wanted(ours.entry, desktop_entry):
-        return []
-    path = app.config or str(desktop_config(machine))
-    return [Step(app.id, "update", f"mcpServers.{DESKTOP_KEY} in {shown(path, machine)}: text-to-cad "
-                                   f"{ours.version or '?'} -> {release}",
-                 edit={"op": "servers", "path": path, "set": {DESKTOP_KEY: _wanted(ours.entry, desktop_entry)},
-                       "remove": []})]
-
-
 def refresh_plan(apps: Mapping[str, App], *, release: str, folder: Any, machine: Optional[Machine] = None,
-                 skills: Optional[Mapping[str, Any]] = None,
-                 desktop_entry: Optional[Dict[str, Any]] = None) -> List[Step]:
+                 skills: Optional[Mapping[str, Any]] = None) -> List[Step]:
     """After the plugin ``folder`` was written again for ``release``: the copies apps keep of it brought to
     it, and nothing installed anew or taken out -- Claude Code's cached copy (``claude plugin update``),
-    Claude Desktop's server (``desktop_entry``, this release's), Codex's (added again), Cursor's (copied
-    again) and the skills the Skills CLI copied for the agents the receipt names (``skills``). Claude Code
-    and Gemini CLI read the folder itself. An app with a store's copy is left as it is: the next ``cad
-    setup`` removes it."""
+    Codex's (added again), Cursor's (copied again) and the skills the Skills CLI copied for the agents the
+    receipt names (``skills``). Claude Code and Gemini CLI read the folder itself. An app with a store's copy
+    is left as it is, as every run leaves it."""
     machine = _machine(machine)
     folder = Path(folder)
     steps: List[Step] = []
-    for name in ("claude", "claude-desktop", "codex", "cursor"):
+    for name in ("claude", "codex", "cursor"):
         app = apps.get(name)
         ours = app.ours() if app is not None and app.present and not app.unreadable else None
-        if ours is None or app.stores():
-            continue
-        if name == "claude-desktop":
-            steps += _follow_desktop(app, release, machine, desktop_entry)
+        if ours is None or app.held():
             continue
         if name != "cursor" and not _points(app.marketplaces.get(MARKETPLACE), folder):
             continue  # pointed elsewhere: `cad setup` points it here
@@ -1757,6 +1828,13 @@ def touched(receipt: Optional[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
         name, argv = action["app"], action.get("command") or []
         if action.get("kind") == "edit" and action.get("path"):
             entry = found.setdefault(name, {})
+            if name == "claude-desktop" and DESKTOP_KEY in (action.get("removed") or []) \
+                    and DESKTOP_KEY not in (action.get("set") or {}):
+                # A later run took the server out (Claude gets the skills alone): nothing of the installer's is
+                # left there to take back.
+                entry.pop("edit", None)
+                entry.pop("installed", None)
+                continue
             edit = entry.setdefault("edit", {"path": action["path"], "backup": action.get("backup"),
                                              "created": bool(action.get("created"))})
             edit["sha256"] = action.get("sha256")
@@ -1819,8 +1897,9 @@ def uninstall_plan(apps: Mapping[str, App], receipt: Optional[Mapping[str, Any]]
     """The removals: with a receipt, what it says the installer did, in reverse -- each app's copy from
     the plugin ``folder`` taken out the way it was put in (Claude Code's and Codex's plugin and the
     folder's catalog, Gemini CLI's linked extension, Cursor's copy), and an earlier release's from the
-    repository on GitHub; without one, every copy found but a store's. A store's copy the installer
-    removed is not put back: a line says so, and where to install it from again."""
+    repository on GitHub, and Claude Desktop's server an earlier release wrote; without one, every copy found
+    but a store's. A store's copy an earlier release's installer removed (its receipt's ``store``) is not put
+    back: a line says so, and where to install it from again."""
     machine = _machine(machine)
     folder = Path(folder) if folder is not None else None
     steps: List[Step] = []
@@ -1875,8 +1954,8 @@ def uninstall_plan(apps: Mapping[str, App], receipt: Optional[Mapping[str, Any]]
                               edit={"op": "restore", **edit}))
     for gone in replaced(receipt):
         if not only or gone["app"] in only:
-            steps.append(Step(gone["app"], "leave", f"{gone['store']}: the directory's copy, which cad setup removed, "
-                                                    "is not put back; install it from "
+            steps.append(Step(gone["app"], "leave", f"{gone['store']}: the directory's copy, which an earlier cad "
+                                                    "setup removed, is not put back; install it from "
                                                     f"{DIRECTORIES.get(gone['app'], 'the directory')} again to get it back"))
     return steps
 
@@ -2098,7 +2177,7 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
     1 when its integrity store cannot be verified), and the step goes on; None, a failure."""
     machine = _machine(machine)
     records: List[Dict[str, Any]] = []
-    base = {"app": step.app, "action": step.action, **({"store": step.store} if step.store else {})}
+    base = {"app": step.app, "action": step.action}
     for argv in step.commands:
         say(f"$ {command_text(argv, machine)}" + (f"   (in {shown(step.cwd, machine)})" if step.cwd else ""))
         ran = machine.run(argv, cwd=step.cwd)

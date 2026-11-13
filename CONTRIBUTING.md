@@ -238,12 +238,12 @@ scripts/install/dev_install.py claude
 
 | Host | What it installs |
 | ---- | ---------------- |
-| `claude` | Claude Code's plugin, which Cursor and Grok Build also load |
+| `claude` | Claude Code's plugin, the skills alone; Cursor and Grok Build also load it, and read their own manifests in it, which name the server |
 | `codex` | the Codex plugin, shared by the app, the CLI and the IDE extension; `--restart` quits and reopens the app |
 | `cursor` | a local Cursor plugin, for Cursor without Claude Code |
 | `grok` | Grok Build's plugin, for Grok without Claude Code |
 | `gemini` | a linked Gemini CLI extension |
-| `claude-desktop` | a `cad-dev` server in Claude Desktop's chat, which takes servers, not plugins |
+| `claude-desktop` | nothing: Claude gets no CAD server, so it takes out the `cad-dev` server an earlier development install wrote into Claude Desktop's config |
 
 For an agent without plugins, install the skills alone from the checkout with the
 Skills CLI, the way users get them, and run it again after a change:
@@ -286,9 +286,6 @@ before testing, and reinstall it afterwards.
 Where the server's output goes:
 
 - Codex: its log database, `~/.codex/logs_2.sqlite` (lines starting `MCP server stderr`)
-- Claude Code: `claude mcp list` shows whether the server connected
-- Claude Desktop: `~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's
-  developer tools (Developer Mode, then Cmd+Option+I) inspect a card's frame
 - Cursor: `mcp-server-plugin-*` logs under `~/Library/Application Support/Cursor/logs/`
 - Gemini CLI: `gemini mcp list` shows whether the server connected
 
@@ -340,7 +337,7 @@ Canonical source directories are:
   `cad_server.viewer` (in `packages/cad-server`), and its built `dist/` ships inside the
   server's wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
-- `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Claude Desktop). Its
+- `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Cursor). Its
   server is the engine's MCP endpoint (`cad_server/mcp` in `packages/cad-server`), which
   `cad-mcp` (`packages/cad-mcp`) carries a host's requests to, and its one-file
   build ships inside the server's wheel as `cad_server/_runtime/mcp` — built at
@@ -813,19 +810,33 @@ directory would hold its workflows, lockfile and binaries for a reviewer. `main`
 also has a release's pins from the merge on, before PyPI has the wheel. So
 installers follow branches only `Publish Release` writes, once the release is on
 PyPI: one commit per release whose tree is only the plugin
-(`scripts/release/plugin_branch.py`) — `.claude-plugin/plugin.json` and
-`icon.png`, `.cursor-plugin/plugin.json`, `gemini-extension.json`, the MCP
-configs the manifests name, `skills/`, `LICENSE` and `README.md`, with each
-README link to a file outside that tree pointed at the release commit on GitHub.
-A release whose plugin did not change adds no commit. There are two copies:
+(`scripts/release/plugin_branch.py`): the manifests and icon, the MCP configs
+the manifests name, `skills/`, `LICENSE` and `README.md`, with each README link
+to a file outside that tree pointed at the release commit on GitHub. A release
+whose plugin did not change adds no commit. There are two copies:
 
-- `latest`, the newest release, which every install command names. It also
-  carries the marketplace catalog, listing the plugin at the branch's root,
-  Codex's manifest and config, and the Agent Plugins standard's `plugin.json`
-  and `mcp.json`.
-- `claude-plugin`, which claude.ai's directory listing tracks. Its
-  `claude.mcp.json` names the directory as its channel and marks its copies
-  auto-updated (below).
+- `latest`, the newest release, which every install command names: every host's
+  manifest and MCP config (`.claude-plugin/plugin.json` and `icon.png`,
+  `.cursor-plugin/plugin.json`, `gemini-extension.json`, `claude.mcp.json`,
+  `cursor.mcp.json`), the marketplace catalog, listing the plugin at the
+  branch's root, Codex's manifest and config, Grok Build's manifest, and the
+  Agent Plugins standard's `plugin.json` and `mcp.json`, with every skill.
+- `claude-plugin`, which claude.ai's directory listing tracks: every skill and
+  nothing else. `.claude-plugin/plugin.json` (main's, naming no MCP server and no
+  hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and nothing another
+  host reads. The directory refuses an MCP server that runs on the user's computer,
+  and every file type but Markdown, text, JSON, YAML and PNG, JPEG, GIF, WebP or
+  ICO images, from an organization it has not verified, so the builder checks
+  each file of this copy against that rule and fails `--check`, and with it the
+  release's "Check the plugin trees" step, on any other: a program or anything
+  starting with `#!`, text that is not UTF-8 or holds a NUL byte, a `hooks.json`,
+  `.mcp.json`, `.lsp.json` or `monitors.json`, a package manager's
+  configuration, or anything in `.claude-plugin/` but `plugin.json` and images.
+  A `LICENSE` with no extension counts as text. No skill is left out to pass:
+  a refused file anywhere in `skills/` fails the build, so a skill ships no
+  script, and what one would script is a `cad` command (print3d's complete
+  OrcaSlicer presets are `cad orcaslicer`, the library's `orcaslicer`
+  integration).
 
 **Installs always work from `main`; `latest` is the preferred install.** A
 command that names no branch installs `main` as it is, so `main` keeps every
@@ -876,15 +887,15 @@ hold each one:
 
 | Package | Server environment | Told of a release | Written by |
 | ------- | ------------------ | ----------------- | ---------- |
-| `claude.mcp.json` on `main` and `latest` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
+| `claude.mcp.json` on `main` and `latest`, which Grok Build's manifest names (Claude Code's names none) | `claude-github` | yes | the checked-in file |
 | `codex.mcp.json` on `main` and `latest` | `codex-github` | yes | the checked-in file |
 | `gemini-extension.json` | `gemini-github` | yes | the checked-in file |
-| `docs/install.md`'s Claude Desktop config, and the one the install command writes | `claude-desktop` | yes | `docs/install.md`; `cad_server/cli/setup.py` |
+| Claude Desktop's config as releases through 0.11.10 wrote it, which `cad setup` now takes out; the receiver keeps the channel for entries in the field | `claude-desktop` | yes | `cad_server/cli/setup.py` through 0.11.10 |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
 | the plugin folder's configs, which the install command points every app at | `claude-install`, `codex-install`, `cursor-install`, `gemini-install`, `agent-plugins` (through 0.11, as `latest`'s `-github`) | yes | `cad_server/_internal/plugin.py` |
-| `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
+| `claude-plugin`'s `claude.mcp.json` through 0.11.10, which claude.ai's directory follows; its copy has had no server since, and the receiver keeps the channel for copies in the field | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` through 0.11.10 |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
 | a process no plugin's server started: a skill's command, the Viewer a skill opens | none (`unknown`) | the Viewer: a skills-only install | nothing |
@@ -897,9 +908,8 @@ the Viewer say it.
 cloned before `latest` existed, is no longer written; it stays at 0.7.14 until it
 is deleted. claude.ai's listing stays on `claude-plugin` while a reviewer has the
 plugin, since the portal refuses a tracked-branch change then. Moving it to
-`latest` afterwards gives directory installs `latest`'s `claude.mcp.json`: the
-`claude-github` channel, not marked auto-updated, so they would be told of each
-release and counted as GitHub installs.
+`latest` would hand the directory every other host's manifest and MCP config,
+which it refuses from an organization it has not verified.
 
 ### Submitting the plugin to OpenAI
 

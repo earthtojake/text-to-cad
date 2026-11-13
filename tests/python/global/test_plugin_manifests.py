@@ -258,15 +258,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cad-mcp=={version}")
 
-    def test_claude_code_gets_the_skills_alone_and_claude_s_config_keeps_the_server(self) -> None:
-        # Every plugin ships the skills with CAD's server but Claude Code's: a server Claude Code starts gets
-        # no card it can use (its terminal draws none; the desktop app's Code tab refuses their calls), so its
-        # manifest on main, and on latest, names none, and the Code tab takes CAD's server from Claude
-        # Desktop's own config. claude.mcp.json stays: Grok Build's manifest names it, and claude.ai's
-        # directory's copy names it (scripts/release/plugin_branch.py), whose server lists no tools under
-        # Claude Code. It is Codex's command without its startup timeout, which Claude's config has no field
-        # for. Never a root .mcp.json, which Claude Code would read, and would offer to anyone who opens this
-        # repository as a project.
+    def test_claude_code_gets_the_skills_alone_and_grok_build_keeps_claude_mcp_json(self) -> None:
+        # Every plugin ships the skills with CAD's server but Claude Code's: Claude gets no CAD server on any
+        # route (a server Claude Code starts gets no card it can use: its terminal draws none, the desktop app's
+        # Code tab refuses their calls), so its manifest on main, and on latest, names none. claude.mcp.json
+        # stays: Grok Build's manifest names it (claude.ai's directory's copy carries neither,
+        # scripts/release/plugin_branch.py). It is Codex's command without its startup
+        # timeout, which Claude's config has no field for. Never a root .mcp.json, which Claude Code would read,
+        # and would offer to anyone who opens this repository as a project.
         self.assertNotIn("mcpServers", load_json(CLAUDE_PLUGIN_PATH))
         self.assertEqual(load_json(GROK_PLUGIN_PATH).get("mcpServers"), "./claude.mcp.json")
         self.assertFalse((REPO_ROOT / ".mcp.json").exists())
@@ -350,9 +349,6 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
-        # So does the Claude Desktop config the install page has a person write by hand.
-        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
-        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", page)
 
     def test_every_plugin_on_main_names_its_own_channel(self) -> None:
         # Each plugin's startup config names where its installs come from, in its server's
@@ -371,20 +367,19 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
                 for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
-        page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
-        said["docs/install.md"] = json.loads(re.search(r'"env": (\{"CAD_INSTALL_CHANNEL"[^}]*\})', page).group(1))
         self.assertEqual(said, {
             "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
             "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-marketplace", "CAD_AUTO_UPDATED": "1"},
             "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
             "gemini-extension.json": {"CAD_INSTALL_CHANNEL": "gemini-github"},
-            "docs/install.md": {"CAD_INSTALL_CHANNEL": "claude-desktop"},
         })
-        # Every channel any package names is one the analytics receiver takes.
+        # Every channel any package names is one the analytics receiver takes; and `claude-directory` and
+        # `claude-desktop`, which claude.ai's directory's copies and Claude Desktop's entries through 0.11.10 still
+        # send though Claude now gets no server.
         receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")
-        named = {env["CAD_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "cursor-github",
-                                                                           "openai-directory", "dev"} \
+        named = {env["CAD_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "claude-desktop",
+                                                                           "cursor-github", "openai-directory", "dev"} \
             | set(FOLDER_CHANNELS.values())
         for channel in sorted(named):
             with self.subTest(channel=channel):

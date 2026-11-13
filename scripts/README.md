@@ -190,8 +190,10 @@ where those files ship, so these scripts are what produces them.
   README with outside links pinned to the release commit), checks it against
   claude.ai's file rules, and with `--commit` commits it on `REF` and prints the
   commit. The `latest` copy adds the marketplace catalog and Codex's manifest
-  and config; the `directory` copy names claude.ai's directory
-  as its channel. Called by `release-publish.yml`, whose `branches` job pushes
+  and config; the `directory` copy is Claude's manifest and the skills alone, no
+  MCP server, every file one of the types claude.ai's directory accepts from an
+  unverified organization (any other fails `--check`). Called by
+  `release-publish.yml`, whose `branches` job pushes
   the `latest` copy to `latest` and the `directory` copy to `claude-plugin`,
   together; tested by `tests/python/global/test_plugin_branch.py`.
 - `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and
@@ -270,7 +272,8 @@ where those files ship, so these scripts are what produces them.
   taken at install, assembled under `tmp/<host>-dev`), made the current installation the
   skills' `cad` command runs, with the install command in their setup a note that it is a
   development install; `--wheel` builds the checkout's wheel and
-  runs both through `uvx --from <wheel>`; the server alone for `claude-desktop`. Refuses a host where another copy of the plugin, or this
+  runs both through `uvx --from <wheel>`; for `claude-desktop`, nothing but an earlier dev install's server taken
+  out (Claude gets no CAD server; Claude Code's manifest names none). Refuses a host where another copy of the plugin, or this
   repository's skills installed loose, would load. Developer step in
   `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and loose-skill check are
   tested by `tests/python/global/test_dev_install.py`.

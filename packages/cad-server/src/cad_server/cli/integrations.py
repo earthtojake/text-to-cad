@@ -1,4 +1,4 @@
-"""``cad <integration> <operation> FILE``: an integration's operations on a file of its tool's own.
+"""``cad <integration> <operation> [FILE]``: an integration's operations on its tool's own files.
 
 A document type is a file cad shows; its commands are ``cad <type> <operation>``
 (``cad_server.cli.document_types``). Some files are a tool's own and no document type: cad writes one and
@@ -6,9 +6,12 @@ asks the tool about it, and the tool's own app shows it (a MuJoCo model, which M
 cad does with such a file is the integration's operation (``cad.registry``: an integration's ``operations``
 and the ``files`` they take), one to one with ``cad.<integration>.<operation>``: ``cad mujoco check
 robot.xml`` is ``cad.mujoco.check``. A file that has a document type has its operations there, never here.
+Where the tool's own files are found by name in its own folders, an operation takes the names and no FILE:
+OrcaSlicer's presets (``cad orcaslicer presets machine``, ``cad orcaslicer complete --printer ...``).
 
 An operation's options are its function's signature (``cad_server._internal.cli_from_function``). It runs
-in this process where this environment holds the integration (a checkout's), else in the integration's
+in this process where this environment holds the integration (a checkout's; always, for an integration with no
+extra, whose code is the library's own), else in the integration's
 environment (``cad[<integration>]`` at this installation's release, made on first need:
 ``cad_server._internal.integration_env``), through the library's runner of one operation.
 """
@@ -109,7 +112,8 @@ OPERATIONS: dict[tuple[str, str], Callable[[list[str], str], int]] = {
 
 def integration_usage(integration: str) -> str:
     """``cad <integration> --help``: the integration and its operations, from the registry."""
-    return (f"usage: cad {integration} <operation> FILE [options]\n\n{integration_help(integration)}\n\n"
+    file = " FILE" if INTEGRATIONS[integration].files else ""
+    return (f"usage: cad {integration} <operation>{file} [options]\n\n{integration_help(integration)}\n\n"
             f"Run 'cad {integration} <operation> --help' for an operation's options.\n")
 
 

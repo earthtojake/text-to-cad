@@ -56,15 +56,19 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
   shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
   MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
-  MuJoCo Studio shows it.
+  MuJoCo Studio shows it; an OrcaSlicer preset is the orcaslicer integration's to write complete, and
+  OrcaSlicer reads it.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `orcaslicer`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
-  for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
-  kind: in-process, separate process, or both. An integration has operations of its own only on a file of its
-  tool's that is no document type (`cad mujoco check robot.xml`, `cad.mujoco.check`): a closed set too,
-  `check` today, answering findings as a type's check does.
+  for it needs, where it needs any (`orcaslicer`'s code is the standard library alone, so it has none); our
+  code for it -- helpers that take its objects, producers and operations; and a process kind: in-process,
+  separate process, or both. An integration has operations of its own only on its tool's own files that are
+  no document type: one file it checks (`cad mujoco check robot.xml`, `cad.mujoco.check`), or the files the
+  tool keeps in its own folders, named as the tool names them (`cad orcaslicer presets machine`, `cad
+  orcaslicer complete`, `cad.orcaslicer.complete`): a closed set too, `check`, answering findings as a type's
+  check does, `presets`, answering names, and `complete`, answering the files it wrote.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -89,7 +93,8 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
-check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a 3D
+check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); OrcaSlicer's
+presets written complete for its command line (`cad.orcaslicer`); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every
@@ -472,8 +477,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
     integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
-    process kind, the operations it has on a file of its tool's own that is no document type, with the
-    suffixes they take (`mujoco`: `check` on `.xml` and `.mjcf`), and, for an external program, its probe (the program, the oldest version our code supports, the
+    process kind, the operations it has on its tool's own files that are no document type, with the
+    suffixes those on one file take (`mujoco`: `check` on `.xml` and `.mjcf`; `orcaslicer`'s `presets` and
+    `complete` take preset names and no file), and, for an external program our code runs, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -497,8 +503,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     registers for the types they make; it re-exports nothing of the tool (`import build123d as bd` stays
     build123d's), and imports only its own extra's dependencies. Every extra, every `cad.<name>` namespace
     and every `cad/<name>/` package is a registered integration or document type. cad supports a tool only
-    where cad's own code calls it: a tool only the agent runs, a remote service, or a desktop app the person
-    uses is no integration.
+    where cad's own code calls it, or makes a file the tool needs and cannot make itself (`orcaslicer`: a
+    complete preset, which OrcaSlicer's command line reads and the agent runs): a tool only the agent runs
+    with nothing of ours between, a remote service, or a desktop app the person uses is no integration.
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
 
@@ -509,8 +516,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     type per document type; a return none takes fails loudly, naming the types the document is made of and
     the integration that would add more.
 
-27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> <file>` for a
-    tool's own file.** *Every document.* `export` and `snapshot` are shared by every
+27. **The CLI is `cad <document_type> <operation> <file>`, and `cad <integration> <operation> [<file>]` for a
+    tool's own files.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
     for what it does -- `dfm` a 3D type's manufacturing check, `interference` a B-rep type's check that no two
     parts share volume, `solve` a B-rep type's stress study, `ranges` a
@@ -526,11 +533,17 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     command: what cad does with it is its tool's integration's operation, `cad <integration> <operation>
     <file>`, one to one with `cad.<integration>.<operation>` (`cad mujoco check robot.xml`: a MuJoCo
     model, which MuJoCo Studio shows). The noun is still the file, named by the tool that owns its format.
+    Where the tool keeps its files in its own folders and a person knows them by the names the tool shows,
+    never by a path, the operation takes those names and no file: OrcaSlicer's presets, which `cad
+    orcaslicer presets machine` lists and `cad orcaslicer complete --printer … --process … --filament …`
+    writes complete for OrcaSlicer's command line. The noun is still the tool's own files.
     A name is a type's or an integration's, never both; an operation lives in one place, so a file that
     has a document type has its operations there and its integration has none for it (no `cad kicad drc`
     beside `cad kicad_pcb drc`); and an integration is never a way to name the means of a type's
     operation (`cad stl dfm` is trimesh's and nobody says so). An integration's operations are a closed
-    set too (`check`, answering findings as a type's check does).
+    set too: `check` takes one file and answers findings as a type's check does; `presets` answers the
+    names of a tool's presets of one kind; `complete` writes chosen presets complete and, as `export`
+    does, says the files it wrote.
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
     --help` groups the commands: the document types, the integrations with operations of their own, the rest. The commands that are no document's -- setup, update,
     uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
@@ -542,7 +555,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     installation on first need, as `cad run` makes a program's -- run as a subprocess, the library's
     runner of one operation (`cad._internal.operation`; the server's `_internal/integration_env.py`).
     No module of the server imports an integration's code: the runner does, in whichever process
-    runs it. A function of the library called where its integration is missing says which extra to
+    runs it. An integration with no extra (`orcaslicer`, the standard library alone) is held by every
+    environment the library is in, so its operations always run in the command's own process: no
+    environment made, no engine asked. A function of the library called where its integration is missing says which extra to
     add, or to run the script with `cad run`. A command line an integration's extra installs
     (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
     and the integration's `_command` module runs the environment's own command there, headless in
@@ -557,8 +572,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     them, and each can say what. `cad <type> <operation>` (and an integration's own `cad <integration>
     <operation>`) runs a tool for a reason the tool's own line lacks: one result shape (law 27's
     findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
-    output path), parity with the viewer (the same check, the same export), or a fact the tool does not
-    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile).
+    output path), parity with the viewer (the same check, the same export), a fact the tool does not
+    report (what a MuJoCo model collides as, which `cad mujoco check` says beside MuJoCo's own compile), or
+    a file the tool's own line needs and cannot make (a complete OrcaSlicer preset, every parent merged in,
+    which `cad orcaslicer complete` writes and OrcaSlicer's command line then slices with, run as it is).
     A helper of an integration's (`cad.<integration>.<name>`) takes the tool's objects for a reason of
     the same kind: it ties them to our documents (a part found by its label path), does what the tool
     leaves undone (a spec saved with its files, so the folder travels), or reports what it does not.

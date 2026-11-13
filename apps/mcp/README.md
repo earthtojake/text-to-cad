@@ -27,7 +27,7 @@ terminal UI show none and are served as text clients.
   view on updates too. A conditional server result cannot promise host-side tab reuse. A host that declares tabs does what
   Codex does: it starts one `cad-mcp` shim per thread. Each connects to a separate
   engine session, so an unnamed view belongs to that thread.
-- **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
+- **Inline (Cursor, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
@@ -42,9 +42,8 @@ terminal UI show none and are served as text clients.
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
-  newer card retires the older ones. The Claude app's Code tab draws the card of Claude Desktop's own
-  server and carries its calls; a server Claude Code starts there gets cards whose calls it refuses, so
-  that server lists no tools ([Claude: where the card comes from](#claude-where-the-card-comes-from)).
+  newer card retires the older ones. Claude is set up with no CAD server, on any route; a Claude host
+  that starts one anyway is served, as below ([Claude: no CAD server](#claude-no-cad-server)).
 
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
@@ -85,20 +84,20 @@ at initialize, Claude Code's among them, for an agent that has not loaded the ca
 source text: to build a shape, wrap the shape in a decorated function and run its script. The web
 viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
-## Claude: where the card comes from
+## Claude: no CAD server
+
+Decided 2026-11-13: Claude gets text-to-cad as skills alone, on every install route, the install
+command's and by hand: its MCP Apps support was too flaky to build on. A model is shown by the
+skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
-| Claude Desktop, Chat tab | `mcpServers.cad` in `claude_desktop_config.json`, which `cad setup` writes wherever Claude Desktop is | yes |
-| Claude Desktop, Code tab | the same entry: the desktop app starts it and offers it to the Claude Code session | yes |
-| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) still names one, which lists no tools when Claude Code starts it | none: the skills' `cad viewer` link, in the browser pane or the browser |
+| Claude Desktop (Chat and Code tabs) | none: `cad setup` writes no entry in `claude_desktop_config.json`, and takes out the `mcpServers.cad` releases through 0.11.10 wrote there (the rest of the file kept, a `.bak` beside it) | none |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) carries the skills alone too; its copies through 0.11.10 name one, which lists no tools when Claude Code starts it | none |
 | Claude Code in a terminal | none | it draws none |
 
-Claude Desktop reads its config only when it starts: once `cad setup` first gives it CAD's server,
-quit and reopen it (setup's last lines say so; on Windows, quit it from the system tray). A new pin
-needs no restart: the server it runs keeps working with the newer engine. No developer mode is needed.
-
-What decides it, measured:
+The server still serves a Claude host that starts it: a config someone wrote by hand, or an older
+entry until Claude Desktop next starts. What was measured of those hosts, for whoever revisits this:
 
 - **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
   and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
@@ -117,16 +116,14 @@ What decides it, measured:
   terminal, `sdk-cli` headless, `claude-desktop` in the Code tab, with `CLAUDECODE=1`); the
   `cad-mcp` processes the desktop app starts have neither (measured 2026-11-09). `cad-mcp` passes it
   with the host's `initialize` (`claudeCode`), and the server lists no tools for that session
-  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill, the `cad` command
-  and the desktop config. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the
-  Claude Code path.
+  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill and the `cad`
+  command. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the Claude Code path.
 
-Decided 2026-11-09: Claude Code gets the skills from the plugin, and CAD's card from Claude
-Desktop's config. To undo it once flag 1824765482 is on: name `./claude.mcp.json` in
-`.claude-plugin/plugin.json` again, drop `CLAUDE_SERVER` from `scripts/release/plugin_branch.py`
-(the directory's copy is then main's), drop the `remove server` step for Claude Code in
-`cad_server/_internal/providers.py`'s `_removal`, and drop `host.claude_code`. Then decide which one
-server the Code tab gets: with both, it lists CAD twice.
+To give Claude a server again: Claude Desktop's step (`cad_server/_internal/providers.py`'s
+`_plan_desktop`, which takes the entry out) would write it, and for Claude Code, once flag 1824765482
+is on, `.claude-plugin/plugin.json` would name `./claude.mcp.json` (claude.ai's directory's copy stays
+the skills alone: `scripts/release/plugin_branch.py` fails a server in it), `_removal` would keep a
+`claude mcp add` server, and `host.claude_code` would go. With both, the Code tab lists CAD twice.
 
 ## Cursor: where the card's capability comes from
 
@@ -514,7 +511,6 @@ npm run build:mcp                             # packages, then this app
 npm --prefix apps/mcp run typecheck          # tsc over src/ (the Vite build checks no types)
 npm --prefix apps/mcp run test               # jsdom units
 scripts/install/dev_install.py codex --restart  # run it in the Codex app
-scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then restart it)
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,

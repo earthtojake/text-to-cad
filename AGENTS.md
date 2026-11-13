@@ -106,7 +106,7 @@ which points both at the checkout.
 - `skills/`: agent skills and their references/scripts. They ship byte for byte in the server's
   wheel (`cad_server/_runtime/plugin`, with the plugin manifests), from which the server writes the
   plugin folder (`<state>/plugin`) that `cad setup` points every agent app at.
-- `.claude-plugin/` (the skills alone: Claude Code takes CAD's server from Claude Desktop's config),
+- `.claude-plugin/` (the skills alone: Claude gets no CAD server, on any route),
   `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `gemini-extension.json`, and the
   [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
@@ -126,7 +126,7 @@ which points both at the checkout.
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in
-  Codex, cards in Claude Desktop (its server is `cad-mcp`).
+  Codex, cards in Cursor (its server is `cad-mcp`; Claude gets none).
 - `packages/` ([README](packages/README.md)): the published distributions and the shared JS
   packages. `packages/cad` ([README](packages/cad/README.md)) is the library: the
   engine's library half (`cad/engine`: models built into documents, and the XBF, STEP, GLB, STL,
@@ -208,12 +208,13 @@ which points both at the checkout.
   runs the `cad` command, names no release, and says how to get the command in its
   SKILL.md's setup block (the same in each); no skill installs the server or the library
   any other way (no `requirements.txt` naming either), because a second installation
-  is a second daemon. Skills do not vendor it: a skill script is a thin entrypoint whose
-  parser and behaviour live in `cad_server.cli`. The server draws every snapshot with
-  OCCT, so no skill has a browser step. The server carries the JavaScript it serves too
-  (the CAD Viewer client, the CAD app page), so a skill ships no runtime of its own. Not every
-  skill needs the server (print3d never
-  runs it); do not add the dependency to a skill that never invokes it.
+  is a second daemon. Skills do not vendor it, and ship no scripts (claude.ai's plugin
+  directory refuses a program): what a skill would script is a `cad` command whose parser
+  and behaviour live in `cad_server.cli` (print3d's presets are `cad orcaslicer`). The
+  server draws every snapshot with OCCT, so no skill has a browser step. The server carries
+  the JavaScript it serves too (the CAD Viewer client, the CAD app page), so a skill ships no
+  runtime of its own. Every skill runs `cad` today; one that never invokes it carries no
+  setup block.
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:
   generate small fixtures in fresh temporary directories or use tiny test-owned

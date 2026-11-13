@@ -979,8 +979,8 @@ class ClaudeCodeSessionTest(_Session):
         self.assertEqual(self.tools(), [])
         self.assertIn("cad skill", self.initialized["instructions"])
         self.assertIn("`cad viewer`", self.initialized["instructions"])
-        # A Code tab missing Claude Desktop's own server, whose card works there: what makes it appear.
-        self.assertIn("run `cad setup` and ask the user to quit and reopen Claude Desktop", self.initialized["instructions"])
+        # Claude gets no CAD server: nothing sends the agent to set one up.
+        self.assertNotIn("cad setup", self.initialized["instructions"])
         with self.assertRaises(RpcError):
             self.call("cad_show", {"source": self.bracket})
 

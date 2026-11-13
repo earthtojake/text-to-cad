@@ -69,11 +69,14 @@ class Refused(Failed, Failure):
 
 def carries(integration: Integrations) -> bool:
     """Whether this process's environment holds ``integration``'s modules (found, none loaded): each one's, for
-    several."""
+    several. An integration with no extra (orcaslicer's: the standard library alone) is the library's own code,
+    which every environment that runs the library holds."""
     import importlib.util
 
     from cad.registry import INTEGRATIONS
 
+    if not any(INTEGRATIONS[name].extra for name in _names(integration)):
+        return True
     modules = tuple(module for name in _names(integration) for module in INTEGRATIONS[name].modules)
     try:
         return bool(modules) and all(importlib.util.find_spec(name) is not None for name in modules)

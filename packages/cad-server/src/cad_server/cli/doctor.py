@@ -157,8 +157,9 @@ def _plugin() -> list[str]:
 def _apps() -> list[str]:
     """Each agent app's copy of the plugin, the release it pins and where it comes from -- the plugin folder
     read in place, linked or copied, and when -- as the app says it (``cad_server._internal.providers``),
-    comparing nothing; and, as the receipt says, the store's copies ``cad setup`` replaced with ours and
-    the agents the Skills CLI copied the skills for."""
+    comparing nothing; Claude Desktop's server an earlier release wrote, which the next ``cad setup`` takes
+    out; and, as the receipt says, the store's copies an earlier release's ``cad setup`` replaced with ours
+    and the agents the Skills CLI copied the skills for."""
     try:
         import json
 
@@ -174,10 +175,12 @@ def _apps() -> list[str]:
         if not app.present:
             continue
         ours, stores = app.ours(), app.stores()
-        if ours is not None:
+        if ours is not None and name == "claude-desktop":
+            lines.append(f"app      {app.label}: CAD's server text-to-cad {ours.version or '?'}, which an earlier "
+                         "release wrote; the next `cad setup` takes it out (Claude gets the skills alone)")
+        elif ours is not None:
             origin = ours.origin(machine)
-            lines.append(f"app      {app.label}: " + (f"text-to-cad {ours.version or '?'}" if name == "claude-desktop"
-                                                     else ours.words(machine)) + (f", {origin}" if origin else ""))
+            lines.append(f"app      {app.label}: {ours.words(machine)}" + (f", {origin}" if origin else ""))
         elif stores:
             lines.append(f"app      {app.label}: {stores[0].words(machine)}, which its store updates")
     try:
@@ -187,7 +190,7 @@ def _apps() -> list[str]:
         receipt, skills = None, None
     for gone in providers.replaced(receipt if isinstance(receipt, dict) else None):
         lines.append(f"app      {providers.label(gone['app'])}: {gone['store']}: the directory's copy, replaced by "
-                     "cad setup"
+                     "an earlier release's cad setup"
                      + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))
     for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
         if agent in providers.SKILLS_AGENTS and isinstance(got, dict):

@@ -11,8 +11,7 @@ root in a source tree). Three things change on the way (``tree``): every version
 distribution's, the catalog is a local one of its own (``MARKETPLACE``), and each host's CAD server
 is the line the installer gives that host: ``uvx ... --from cad-mcp==<version> cad-mcp``, told
 the install channel of the install command (``CHANNELS``). Claude Code's manifest names no server: Claude
-Code gets the skills, and the Code tab of the desktop app gets CAD's server from Claude Desktop's own config
-(``providers``). ``claude.mcp.json`` stays for Grok Build's manifest, which names it, and for the store's
+gets the skills alone, on every route (``providers``). ``claude.mcp.json`` stays for Grok Build's manifest, which names it, and for the store's
 copy (``scripts/release/plugin_branch.py``). There is no root ``.mcp.json``: Claude Code would read it.
 
 It is a stable path, regenerated in place (``write``): a file that differs is written to a hidden

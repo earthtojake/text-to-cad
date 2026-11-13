@@ -114,7 +114,8 @@ Windows `irm https://www.texttocad.dev/install.ps1 | iex`) runs the script the d
 site serves over HTTPS, as you, with no sudo and nothing asked: it installs uv with
 uv's own installer when uv is missing, and runs the newest release of the server, `cad-server`, from PyPI
 through uvx, which installs the plugin in each agent app with that app's own
-command and edits Claude Desktop's config (keeping a `.bak`). To read the script
+command, and takes out of Claude Desktop's config the CAD server earlier releases wrote there
+(keeping a `.bak`). To read the script
 first, or to keep to one release, take the copy attached to that release on GitHub
 and check it against the release's `SHA256SUMS`.
 

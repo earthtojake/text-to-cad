@@ -450,7 +450,7 @@ class DoctorTests(unittest.TestCase):
             "gemini": App("Gemini CLI", providers.Copy("gemini", "extension", "text-to-cad", version="1.1.0", ours=True,
                                                        source=folder, via="linked")),
             "grok": App("Grok Build", None, present=False)}
-        # The receipt: the app directory's copy `cad setup` replaced, and the skills it copied.
+        # The receipt: the app directory's copy an earlier release's `cad setup` replaced, and the skills it copied.
         replaced = {"app": "codex", "action": "remove duplicate", "kind": "command", "ok": True, "at": "2026-10-31T02:39:00Z",
                     "command": ["codex", "plugin", "remove", "text-to-cad@openai-curated"],
                     "store": "text-to-cad@openai-curated (its app directory's)"}
@@ -465,12 +465,14 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
         self.assertEqual(lines, [
             f"app      Claude Code: text-to-cad@text-to-cad 1.1.0, reads {folder} in place",
-            "app      Claude Desktop: text-to-cad 1.1.0",
+            # Claude gets the skills alone: the server an earlier release wrote is said, and that setup takes it out.
+            "app      Claude Desktop: CAD's server text-to-cad 1.1.0, which an earlier release wrote; the next "
+            "`cad setup` takes it out (Claude gets the skills alone)",
             f"app      Codex: text-to-cad@text-to-cad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
             "app      Cursor: /c/text-to-cad (the Cursor Marketplace's), which its store updates",
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
-            "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by cad setup "
-            "(2026-10-31 02:39)",
+            "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by an "
+            "earlier release's cad setup (2026-10-31 02:39)",
             # The folder the Skills CLI keeps for it, read again: the skill gone since is said.
             f"app      Windsurf: the skills of text-to-cad 1.1.0, copied into {windsurf} by the Skills CLI "
             "(2026-10-31 02:40); cad not there now: run the install command again"])

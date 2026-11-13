@@ -97,7 +97,6 @@ HEAVY_POLICY = {
 }
 # Skill suites that need nothing installed: they read their skill's files.
 LIGHT_SKILL_TESTS = (
-    f"{SKILL_SUITES}/print3d",
     f"{SKILL_SUITES}/render",
     f"{SKILL_SUITES}/sendcutsend",
 )

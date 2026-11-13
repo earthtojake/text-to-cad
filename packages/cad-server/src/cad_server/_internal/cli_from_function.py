@@ -10,9 +10,9 @@ an argument-parsing framework:
 
 * Parameters before ``*`` become positionals — optional (``nargs="?"``) when
   they carry a default.
-* Keyword-only parameters become ``--kebab-case`` flags; ``bool`` becomes
-  ``store_true`` (and must default to ``False``, since a flag can only turn
-  something on).
+* Keyword-only parameters become ``--kebab-case`` flags, required where they
+  have no default; ``bool`` becomes ``store_true`` (and must default to
+  ``False``, since a flag can only turn something on).
 * The allowed annotation set is ``str, int, float, bool, Path``, a ``Literal`` of
   strings -- an enumeration, whose values are the flag's ``choices``, so a value
   outside them is the parser's usage error, naming the flag -- and ``X | None``
@@ -253,10 +253,12 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                 parser.add_argument(flag, action="store_true", help=help_text)
                 continue
             # An enumeration's values are its choices, which its usage shows in place of a metavar.
+            # A keyword with no default is a flag the command line must give: argparse's usage error names it.
             parser.add_argument(
                 flag,
                 type=base,
                 default=None if parameter.default is parameter.empty else parameter.default,
+                required=parameter.default is parameter.empty,
                 **({"choices": choices} if choices is not None else {"metavar": metavars[name]}),
                 help=help_text,
             )

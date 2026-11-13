@@ -301,12 +301,12 @@ class UpdateEndToEndTest(unittest.TestCase):
 
     def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
         # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
-        # release folder and sets it up from there. Claude Desktop's folder is there: its config gets CAD's
-        # server, A's, which the update moves to B's (an app updated with no app's command, no network).
+        # release folder and sets it up from there. Cursor's folder is there: it gets a copy of the plugin folder,
+        # A's, which the update copies again for B (an app updated with no app's command, no network).
         release(A, self.wheels)
         machine = providers.Machine(Path(self.env["HOME"]), self.env, platform=sys.platform, bundled={})
-        desktop = providers.desktop_config(machine)
-        desktop.parent.mkdir(parents=True)
+        (machine.home / ".cursor").mkdir(parents=True)
+        cursor = providers.cursor_plugins(machine) / "text-to-cad" / ".cursor-plugin" / "plugin.json"
         uv, boot = base.find_uv(), self.work / "uvx"
         made = self.run_here([uv, "venv", "--no-project", "--python", sys.executable, boot])
         self.assertEqual(made.returncode, 0, made.stderr)
@@ -319,8 +319,8 @@ class UpdateEndToEndTest(unittest.TestCase):
         set_up = self.run_here([command(boot), "setup"], timeout=600)
         self.assertEqual(set_up.returncode, 0, set_up.stdout + set_up.stderr)
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), A)
-        self.assertTrue(desktop.is_file(), set_up.stdout + set_up.stderr)
-        self.assertIn(f"cad-mcp=={A}", desktop.read_text(encoding="utf-8"))
+        self.assertTrue(cursor.is_file(), set_up.stdout + set_up.stderr)
+        self.assertEqual(json.loads(cursor.read_text(encoding="utf-8"))["version"], A)
         # The plugin folder every app is pointed at, A's.
         folder = self.work / "state" / plugin.FOLDER
         self.assertEqual(json.loads((folder / plugin.MANIFEST).read_text(encoding="utf-8"))["version"], A)
@@ -387,7 +387,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
             self.assertTrue((self.release(version) / "cad-release.json").is_file(), version)
-        self.assertIn(f"cad-mcp=={B}", desktop.read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(cursor.read_text(encoding="utf-8"))["version"], B)
         proxy = self.work / "bin" / ("cad.exe" if WINDOWS else "cad")  # the cad command runs current
         self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
         # The plugin folder is B's, written by B's setup; the helper, once B's engine answered, had B write it

@@ -748,6 +748,13 @@ cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no 
                                              refuses or warns of, the model-health checks, what collides
                                              as what and the contact excludes; in cad[mujoco]'s
                                              environment (made first) where this one holds no mujoco
+cad orcaslicer presets KIND [--match TEXT] [--profiles DIR] [--json]
+                                             the OrcaSlicer presets of one kind (machine, process,
+                                             filament) a person can select, by name: an integration's
+                                             operation on its tool's own files, found by name
+cad orcaslicer complete --printer P --process P --filament F [--out DIR] [--profiles DIR] [--json]
+                                             those presets written complete for OrcaSlicer's command
+                                             line, and the files it wrote; always in this process
 cad model|xbf|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
 cad model|xbf|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
@@ -1020,8 +1027,9 @@ The words are the library README's (**Definitions**, laws 23 to 28); this is how
 `Operation` with the integration it needs -- `decorator`, `reader` and `wire`) and `INTEGRATIONS` (each
 an `Integration`: `name`, `extra`, `process`, the `commands` its extra installs, for an external program
 its `Probe` -- the program, the minimum version, the install hint and the variable that names it outright
--- and, only for a file of its tool's that is no document type, its `operations` and the `files` they
-take: `mujoco`'s `check` on `.xml` and `.mjcf`). `by_extension` and
+-- and, only for its tool's own files that are no document type, its `operations` and the `files` those on
+one file take (`FILE_OPERATIONS`): `mujoco`'s `check` on `.xml` and `.mjcf`; `orcaslicer`'s `presets` and
+`complete`, on presets found by name, take none). `by_extension` and
 `type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
 file route sends, the catalog's extensions, the snapshot packets' inputs, the routes each kind
 answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
@@ -1321,6 +1329,17 @@ stand at `qpos0` (`mj_geomDistance`). It runs in the command's own process where
 in the environment of `cad[mujoco]` at the installation's release, made once by the engine (`mujoco-core`
 and `mujoco-studio`, about 20 MB: the compiler and the bindings, and Studio's web viewer, no GL). A
 MuJoCo function's `save` says the same of the file it wrote.
+
+**OrcaSlicer's presets.** OrcaSlicer keeps a preset as its differences from a parent (`inherits`), and its
+command line neither fills the parent in nor reads compatibility conditions. The `orcaslicer` integration's two
+operations take preset names, not a file (`cli/integrations.py`): `cad orcaslicer presets KIND` lists the
+selectable presets of one kind, and `cad orcaslicer complete` writes a printer, a process and each filament
+merged with every parent, the process and filaments naming the printer as compatible, as `printer.json`,
+`process.json` and `filament-N.json` (`cad.orcaslicer._presets`: the folders given first, then the person's own,
+the Flathub build's and the app's profiles; of several vendors' presets of one name, the one that lists the
+printer, else the nearest). Every preset is resolved before a file is written. The integration has no extra:
+its code is the standard library alone, so `integration_env.carries` holds it everywhere and the command runs
+it in its own process, asking the engine nothing. OrcaSlicer itself is never run.
 
 **A part's convex hulls.** `cad.mujoco.decompose(spec, part, max_hulls=16, threshold=None)` replaces a part's
 collision in a MuJoCo function's spec with the convex hulls CoACD cuts its mesh into, the `coacd` integration's

@@ -59,16 +59,15 @@ checksum. It:
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
    one an earlier release installed from GitHub. A copy from a plugin directory
-   (claude.ai's, Codex's) is a duplicate too: running the install command asks for
-   this release, so it is removed with the app's own command and this release's
-   installed in its place. A copy the app has no command of yours to remove (one an
-   administrator manages or claude.ai syncs in Claude Code, the Cursor Marketplace's)
-   is reported and kept, and that app gets nothing beside it. The agents without a
-   plugin get the skills alone, copied from the folder through the Skills CLI
-   ([Other Agents](#other-agents)). Claude Desktop's config gets CAD's server for this
-   release, with a `.bak` of the file kept beside it. A CAD server added to Claude Code
-   with `claude mcp add`, for you or for one project, is removed: Claude Code gets the
-   skills from the plugin, and the Code tab gets CAD's server from Claude Desktop's config.
+   (claude.ai's, Codex's, the Cursor Marketplace) is that app's to deliver and update:
+   it is kept, and that app gets nothing beside it; its line says how to switch to
+   this release's (remove it in the app's own plugin manager, then run the install
+   command again). So is one an administrator manages or claude.ai syncs in Claude
+   Code. The agents without a plugin get the skills alone, copied from the folder
+   through the Skills CLI ([Other Agents](#other-agents)). Claude gets the skills
+   alone, no CAD server: the one releases through 0.11.10 wrote into Claude Desktop's
+   config is taken out, the rest of the file kept and a `.bak` of it beside it, and so
+   is a CAD server added to Claude Code with `claude mcp add`, for you or for one project.
 9. Writes a receipt of everything it changed in text-to-cad's state folder.
 10. Moves your computer's CAD server to this release: a running server finishes
     what it is doing (a build, an export), stops, and this release's takes its place
@@ -76,9 +75,7 @@ checksum. It:
     should it not start, the release before comes back. With none running, the next
     CAD session starts this release's.
 11. Says what each app has now, and ends with the apps to restart to load what it
-    installed or updated ("Next, restart to load it:"). Claude Desktop reads its config
-    only when it starts: once a run first gives it CAD's server, quit and reopen it (on
-    Windows, from its icon in the system tray: closing its window leaves it running). An agent whose skills folder lacks one of the skills it
+    installed or updated ("Next, restart to load it:"). An agent whose skills folder lacks one of the skills it
     was given fails the run: its line says which, and the command exits 1.
 
 It asks nothing on the way: it carries out the plan it prints, so a dry run is how
@@ -98,8 +95,8 @@ the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsur
 `--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what
 the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
 store's, removes the `cad` command and stops the server. A plugin directory's copy that
-the install command replaced is not put back: install it from the directory again to
-get it back. `--purge` with it also removes text-to-cad's state and cache folders.
+the install command of a release through 0.11.10 replaced is not put back: install it
+from the directory again to get it back. `--purge` with it also removes text-to-cad's state and cache folders.
 Asking for it is the yes: the install command passes `--yes` to `cad uninstall`. Run
 `cad uninstall` yourself and it prints the same plan and asks before it changes
 anything (`Take text-to-cad out as planned? (y/N)`); where nothing can ask (a script,
@@ -143,12 +140,12 @@ another release. Each app takes it the way it takes a local plugin:
 
 | App | What it gets | After an update |
 | --- | --- | --- |
-| Claude Code | the skills: the folder added as a local catalog, `text-to-cad`, and its plugin installed, `text-to-cad@text-to-cad`; Claude Code reads the folder in place. The plugin starts no server for Claude Code, and a CAD server added with `claude mcp add` is removed. A copy from claude.ai's directory is uninstalled first (`claude plugin uninstall`); one an administrator manages, or claude.ai syncs, is kept, and nothing is added beside it | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
-| Codex | the same catalog and plugin; Codex copies the plugin when it is added. On a Mac, ChatGPT.app bundles Codex's command (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), so with that app installed Codex counts as present even with no `codex` command; with a `codex` command too (npm's, say), the install command uses the newer of the two. A copy from Codex's plugin directory is removed first (`codex plugin remove`), its catalog kept | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
+| Claude Code | the skills: the folder added as a local catalog, `text-to-cad`, and its plugin installed, `text-to-cad@text-to-cad`; Claude Code reads the folder in place. The plugin starts no server for Claude Code, and a CAD server added with `claude mcp add` is removed. A copy from claude.ai's directory, or one an administrator manages or claude.ai syncs, is kept, and nothing is added beside it | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
+| Codex | the same catalog and plugin; Codex copies the plugin when it is added. On a Mac, ChatGPT.app bundles Codex's command (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), so with that app installed Codex counts as present even with no `codex` command; with a `codex` command too (npm's, say), the install command uses the newer of the two. A copy from Codex's plugin directory, as Codex's own listing names it, is kept, and nothing is added beside it; one only Codex's plugin cache holds (Codex loads it only while you are signed in) gets this release's beside it, and a line says to remove one copy if the skills show twice | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
 | Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
 | Cursor | the plugin loaded with Claude Code's, CAD's server included (Cursor reads its own manifest first); without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy from the Cursor Marketplace is kept, since Cursor has no command to uninstall it, and without Claude Code nothing is added beside it: uninstall it in Cursor, then run the install command again | the update copies the folder again |
 | Grok Build | the plugin loaded with Claude Code's, CAD's server included (Grok reads its own manifest first); without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
-| Claude Desktop | CAD's server in its config, run by your own `uvx` at its full path: the viewer cards in its Chat tab and in its Code tab, where Claude Code runs | the update moves the server to the new release, which Claude Desktop takes at its next start; the server it runs meanwhile keeps working |
+| Claude Desktop | nothing: its Code tab runs Claude Code, which loads the plugin's skills. The CAD server releases through 0.11.10 wrote into its config is taken out | nothing to do |
 | Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
 
 The folder and the copies move with each update, yours or an automatic one
@@ -171,7 +168,7 @@ folder too.
    300 s); a restart resumes the download.
 
 The plugin for your agent app brings the skills and CAD's viewer, a local server
-(`cad-mcp`). For an agent without a plugin, install the skills alone. Install
+(`cad-mcp`); Claude's brings the skills alone, and shows models in your browser. For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
 The runtime supports Python 3.13+; the launch commands use uv-managed Python 3.14.
@@ -190,9 +187,8 @@ server share it. Earlier releases stay in uv's cache until you run `uv cache pru
 
 ### Claude Code
 
-The plugin gives Claude Code the skills. It starts no CAD server: in Claude
-Desktop's Code tab the viewer cards come from Claude Desktop's own config
-([Claude Desktop](#claude-desktop)), and Claude Code in a terminal shows none.
+The plugin gives Claude Code the skills alone: Claude gets no CAD server, in a
+terminal or in Claude Desktop's Code tab.
 
 ```bash
 claude plugin marketplace add earthtojake/text-to-cad#latest
@@ -200,10 +196,10 @@ claude plugin install text-to-cad@earthtojake
 ```
 
 Asking it to show a model gives you a link that opens the model in your browser,
-or in the desktop app's browser pane; with Claude Desktop's CAD server set up, the
-Code tab shows it as a viewer card in the conversation.
+or in the desktop app's browser pane.
 
-The copy from claude.ai's plugin directory still names CAD's server. When Claude
+The copy from claude.ai's plugin directory carries the skills alone too. Copies
+from it through 0.11.10 name CAD's server: when Claude
 Code starts it, it offers no tools, since the Code tab refuses the calls its cards
 make; set `CAD_MCP_CARDS=1` in the server's environment to keep them, for testing.
 
@@ -223,37 +219,17 @@ claude plugin marketplace remove earthtojake
 
 ### Claude Desktop
 
-Use this setup for CAD's viewer cards in Claude Desktop: its **Chat** tab, and its
-**Code** tab, where Claude Code runs and which offers Claude Desktop's own servers
-to it. No developer mode is needed. The install command writes this entry wherever
-Claude Desktop is installed.
+text-to-cad sets up nothing in Claude Desktop: its Code tab runs Claude Code, which
+loads the plugin's skills ([Claude Code](#claude-code)), and models open in your
+browser. Its Chat tab gets no CAD server.
 
-CAD shows models in the chat: ask Claude to show one and it appears as a viewer
-card you can orbit, add to your prompt, and open full size; Claude can read what
-you selected and see what you see. It runs locally through uv: add the server to
-Claude Desktop's config (Settings > Developer > Edit Config, or
-`~/Library/Application Support/Claude/claude_desktop_config.json` on a Mac), then
-quit and reopen the app: it reads the file only when it starts. The first card after
-a start can take about 20 seconds to connect. If Claude Desktop cannot find `uvx`,
-give its full path (`which uvx`).
-
-```json
-{
-  "mcpServers": {
-    "cad": {
-      "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.10", "cad-mcp"],
-      "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
-    }
-  }
-}
-```
-
-The config pins a release in `args`, and uvx keeps the version it first
-downloads. To update, change that version to the
-[latest release](https://pypi.org/project/cad-mcp/), then quit and reopen Claude Desktop.
-The install command writes this entry, with uvx's full path, and moves its release
-to the new one each time it updates, which Claude Desktop takes at its next start.
+Releases through 0.11.10 added CAD's server to its config, as `cad` under
+`mcpServers`. The install command, and every update, takes that entry out, keeps the
+rest of the file as it was and a `.bak` of it beside it, and leaves a config it cannot
+read alone. The server Claude Desktop runs keeps working until it next starts. To take
+it out by hand, remove `cad` from `mcpServers` in its config (Settings > Developer >
+Edit Config, or `~/Library/Application Support/Claude/claude_desktop_config.json` on a
+Mac), then quit and reopen the app.
 
 ### Codex
 
@@ -267,10 +243,12 @@ In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 drives, and *Open with CAD* for model files.
 
 Codex's plugin directory lists text-to-cad too, but for now its listing trails
-the releases, so install it from the marketplace. The install command replaces a
-copy from the directory with the release's; installing from the directory alone
-also works, since the plugin's server sets everything up on its first start. A copy
-from the directory and one from the marketplace would load side by side: keep one.
+the releases, so install it from the marketplace. The install command keeps a copy
+from the directory, which the directory updates, and adds nothing beside it: to get
+the release's instead, remove it in Codex's plugin manager, then run the install
+command again. Installing from the directory alone also works, since the plugin's
+server sets everything up on its first start. A copy from the directory and one from
+the marketplace would load side by side: keep one.
 
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
 Marketplace), then restart Codex:
@@ -461,7 +439,7 @@ An update writes the plugin folder again for the new release
 ([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
 read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
 the skills alone) get it again. Should the new release's server not start, the release
-before comes back, and its plugin and Claude Desktop's server with it; the CAD Viewer page
+before comes back, and its plugin with it; the CAD Viewer page
 you clicked in says the update failed, and offers it again.
 
 Your computer runs one CAD server, the current release's, whatever release each

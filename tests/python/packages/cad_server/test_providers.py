@@ -33,8 +33,8 @@ RELEASE = "1.2.3"
 ID = providers.PLUGIN_ID
 NPX = ["--prefer-offline", "-y", "skills@latest"]
 
-# What Claude Code and Grok Build keep on disk of the state the emulator holds for them, as each writes it
-# (a copy claude.ai syncs is in Claude Code's listing alone): what `providers.detect` reads.
+# What Claude Code and Grok Build keep on disk of the state the emulator holds for them, as each writes it:
+# what `providers.detect` reads.
 RECORDS = r'''
 def write_records(world, home):
     claude = world.get("claude")
@@ -43,8 +43,7 @@ def write_records(world, home):
         folder.mkdir(parents=True, exist_ok=True)
         table = {}
         for plugin in claude["plugins"]:
-            if plugin.get("scope") != "synced":
-                table.setdefault(plugin["id"], []).append({key: value for key, value in plugin.items() if key != "id"})
+            table.setdefault(plugin["id"], []).append({key: value for key, value in plugin.items() if key != "id"})
         (folder / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": table}), encoding="utf-8")
         known = {}
         for market in claude["marketplaces"]:
@@ -183,6 +182,16 @@ if tool == "claude":
         done()
 elif tool == "codex":
     state = world.setdefault("codex", {})
+    if args == ["plugin", "list", "--json"]:
+        # Codex's own listing, as the test sets it: canned JSON, a failure, or no answer at all.
+        listing = world.get("codex_list", {"installed": [], "available": []})
+        if listing == "hang":
+            import time
+            time.sleep(20)
+        if listing == "fail":
+            refuse("Not signed in")
+        print(json.dumps(listing))
+        sys.exit(0)
     if args == ["--version"]:
         # As the real one does: into CODEX_HOME, which it creates, even to say its version.
         arg0 = Path(os.environ.get("CODEX_HOME") or home / ".codex") / "tmp" / "arg0"
@@ -371,7 +380,7 @@ class Home:
 
     def plan(self, **options) -> list:
         return providers.plan(self.detect(), release=options.pop("release", RELEASE), folder=self.folder,
-                              machine=self.machine, desktop_entry=options.pop("desktop_entry", ENTRY), **options)
+                              machine=self.machine, **options)
 
     def apply(self, steps: list, **options) -> list:
         records = []
@@ -405,6 +414,7 @@ class Home:
         return path
 
 
+# Claude Desktop's server as releases through 0.11.10 wrote it.
 ENTRY = {"command": "/bin/uvx", "args": ["--no-config", "--managed-python", "--python", "3.14", "--from",
                                           f"cad-mcp=={RELEASE}", "cad-mcp"],
          "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
@@ -435,14 +445,14 @@ class DetectionAndPlan(Fixture):
         self.assertEqual([name for name, app in apps.items() if app.present], [])
         self.assertEqual(home.plan(), [])
 
-    def test_every_app_is_pointed_at_the_plugin_folder_its_own_way_and_claude_desktop_gets_its_server(self) -> None:
+    def test_every_app_is_pointed_at_the_plugin_folder_its_own_way_and_claude_desktop_gets_nothing(self) -> None:
         home = self.make(("claude", "codex", "gemini", "grok"))
         home.desktop.parent.mkdir(parents=True)
         (home.home / ".cursor").mkdir()
         folder = str(home.folder)
         steps = home.plan(only=["claude-desktop", "codex", "cursor", "grok", "gemini"])
-        self.assertEqual(actions(steps), [("claude-desktop", "install"), ("codex", "install"), ("cursor", "install"),
-                                          ("grok", "install"), ("gemini", "install")])
+        self.assertEqual(actions(steps), [("codex", "install"), ("cursor", "install"), ("grok", "install"),
+                                          ("gemini", "install")])
         found = commands(steps)
         # Codex copies a local catalog's plugin; Gemini CLI links the folder, which it reads in place.
         self.assertEqual(found["codex"], [["plugin", "marketplace", "add", folder], ["plugin", "add", ID]])
@@ -450,16 +460,18 @@ class DetectionAndPlan(Fixture):
         self.assertEqual(found["grok"], [["plugin", "install", "earthtojake/text-to-cad@latest", "--trust"],
                                          ["plugin", "enable", "text-to-cad"]])
         # Cursor gets a copy, real files, in its local plugins folder.
-        self.assertEqual(steps[2].edit, {"op": "copy", "from": folder, "path": str(home.cursor)})
-        self.assertEqual(steps[0].edit, {"op": "servers", "path": str(home.desktop), "set": {"cad": ENTRY}, "remove": []})
+        self.assertEqual(steps[1].edit, {"op": "copy", "from": folder, "path": str(home.cursor)})
         # Claude Code reads a local catalog in place; its plugin feeds Cursor and Grok Build, so theirs are not added.
+        # Claude gets the skills alone: nothing is written into Claude Desktop's config.
         steps = home.plan()
-        self.assertEqual(actions(steps)[:2], [("claude", "install"), ("claude-desktop", "install")])
+        self.assertEqual(actions(steps)[:2], [("claude", "install"), ("codex", "install")])
+        home.apply(steps)
+        self.assertFalse(home.desktop.exists())
         self.assertEqual(commands(steps)["claude"], [["plugin", "marketplace", "add", folder], ["plugin", "install", ID]])
         served = [step.subject for step in steps if step.app in ("cursor", "grok")]
         self.assertEqual(served, ["served by the Claude Code plugin"] * 2)
 
-    def test_second_copies_are_found_and_removed_a_store_s_among_them(self) -> None:
+    def test_second_copies_are_found_and_removed_and_a_store_s_kept(self) -> None:
         home = self.make(("claude", "codex", "grok"))
         home.set(claude={"plugins": [{"id": "text-to-cad@earthtojake-dev", "version": "1.2.3-dev.1", "scope": "user"},
                                      {"id": "text-to-cad@earthtojake", "version": "1.2.2", "scope": "project"}],
@@ -490,31 +502,26 @@ class DetectionAndPlan(Fixture):
         self.assertIn(("remove duplicate", f"loose skill {providers.shown(loose, home.machine)} (installed loose)"),
                       by_app["claude"])
         self.assertTrue(any(action == "leave" and "another scope's" in subject for action, subject in by_app["claude"]))
-        # The app directory's copy is a second copy too: the install command replaces it with ours, by
-        # Codex's own command, and its catalog, the store's, stays.
-        self.assertEqual([action for action, _subject in by_app["codex"]], ["remove duplicate", "remove duplicate",
-                                                                            "install"])
-        (directory,) = [step for step in steps if step.store]
-        self.assertEqual((directory.app, [argv[1:] for argv in directory.commands], directory.store),
-                         ("codex", [["plugin", "remove", "text-to-cad@openai-curated"]],
-                          "text-to-cad@openai-curated (its app directory's)"))
-        self.assertIn("replaced by this release's, as the install command asks", directory.subject)
-        self.assertIn("the directory's listing trails the releases", directory.subject)
-        self.assertEqual(commands(steps)["codex"][-2:], [["plugin", "marketplace", "add", str(home.folder)],
-                                                         ["plugin", "add", ID]])
+        # The app directory's copy is Codex's to deliver and update: kept, said, and nothing of ours added beside
+        # it; the server added by hand goes.
+        self.assertEqual([action for action, _subject in by_app["codex"]], ["leave", "remove duplicate"])
+        self.assertIn("text-to-cad@openai-curated (its app directory's): the directory's copy, which the directory "
+                      "updates, so it stays, and ours is not added beside it", by_app["codex"][0][1])
+        self.assertIn("remove it in Codex's own plugin manager and run the install command again", by_app["codex"][0][1])
+        self.assertNotIn(["plugin", "remove", "text-to-cad@openai-curated"], commands(steps)["codex"])
         # Cursor and Grok Build are served by Claude Code's plugin: their own copies go; the Cursor
         # Marketplace's, which no command uninstalls, is left for the person to uninstall in Cursor.
         self.assertEqual([action for action, _subject in by_app["cursor"]],
                          ["leave", "leave", "remove duplicate"])
-        self.assertIn("Cursor has no command to uninstall it", by_app["cursor"][1][1])
+        self.assertIn("the Marketplace's copy, which the Marketplace updates", by_app["cursor"][1][1])
         self.assertIn("uninstall this one in Cursor", by_app["cursor"][1][1])
         self.assertEqual(by_app["grok"], [("leave", "served by the Claude Code plugin"),
                                           ("remove duplicate", "text-to-cad 1.2.3 (from /checkout)")])
 
     def test_claude_code_loses_every_cad_server_it_starts_itself_and_keeps_the_rest(self) -> None:
-        # Claude Code takes CAD from the plugin's skills: a CAD server someone added with `claude mcp add`, for
-        # the user or for one project, goes, by Claude Code's own command (a project's run in that project);
-        # another server stays, and so does Claude Desktop's own CAD server.
+        # Claude Code takes CAD from the plugin's skills alone: a CAD server someone added with `claude mcp add`,
+        # for the user or for one project, goes, by Claude Code's own command (a project's run in that project);
+        # another server stays, and Claude Desktop gets none.
         home = self.make(("claude",))
         project, gone = home.root / "project", home.root / "deleted"
         project.mkdir()
@@ -530,58 +537,175 @@ class DetectionAndPlan(Fixture):
         self.assertEqual([([argv[1:] for argv in step.commands], step.cwd) for step in removals],
                          [([["mcp", "remove", "--scope", "user", "cad"]], None),
                           ([["mcp", "remove", "--scope", "local", "text-to-cad"]], str(project))])
-        self.assertTrue(all("Code tab the server from Claude Desktop's config" in step.subject for step in removals))
+        self.assertTrue(all("Claude Code gets text-to-cad as the plugin's skills alone" in step.subject
+                            for step in removals))
         self.assertIn(("claude", "leave"), actions(steps))  # the deleted project's: Claude Code never starts it
-        self.assertIn(("claude-desktop", "install"), actions(steps))
+        self.assertNotIn("claude-desktop", [step.app for step in steps])
         home.apply(steps)
         left = json.loads((home.home / ".claude.json").read_text(encoding="utf-8"))
         self.assertEqual(left["mcpServers"], {"other": other})
         self.assertEqual(left["projects"][str(project)]["mcpServers"], {"other": other})
-        self.assertEqual(json.loads(home.desktop.read_text(encoding="utf-8"))["mcpServers"], {"cad": ENTRY})
+        self.assertFalse(home.desktop.exists())
         self.assertEqual([copy.name for copy in home.detect()["claude"].copies if copy.kind == "server"], ["cad"])
 
-    def test_claude_code_s_directory_copy_is_replaced_and_one_held_by_its_scope_keeps_ours_out(self) -> None:
+    def test_claude_code_s_directory_copy_is_kept_and_keeps_ours_out(self) -> None:
         home = self.make(("claude",))
         official = "text-to-cad@claude-plugins-official"
 
-        def plan_for(scope: str) -> list:
-            home.set(claude={"plugins": [{"id": official, "version": "1.2.2", "scope": scope}], "marketplaces": []})
+        def plan_for(scope: str, *, ours: bool = False) -> list:
+            plugins = [{"id": official, "version": "1.2.2", "scope": scope}]
+            markets = []
+            if ours:
+                plugins.append({"id": ID, "version": RELEASE, "scope": "user"})
+                markets.append({"name": providers.MARKETPLACE, "source": "directory", "path": str(home.folder)})
+            home.set(claude={"plugins": plugins, "marketplaces": markets})
             return providers.read_for(lambda apps: providers.plan(apps, release=RELEASE, folder=home.folder,
-                                                                  machine=home.machine, desktop_entry=ENTRY,
-                                                                  only=["claude", "cursor"]),
+                                                                  machine=home.machine, only=["claude", "cursor"]),
                                       home.machine, folder=home.folder)[1]
 
-        # Another scope's copy (a project's) is left as any other is, and ours is installed.
+        # Another scope's copy (a project's) loads in that project alone: left as any other is, and ours installed.
         steps = plan_for("project")
         self.assertEqual(actions(steps), [("claude", "leave"), ("claude", "install")])
         self.assertIn("another scope's", steps[0].subject)
-        # One an administrator manages, or claude.ai syncs, no command of the person's removes: it is
-        # reported, and nothing of ours is added beside it (Claude Code installs and loads both).
         (home.home / ".cursor").mkdir()
-        for scope, who in (("managed", "an administrator manages it"), ("synced", "claude.ai syncs it")):
-            steps = plan_for(scope)
-            self.assertEqual(actions(steps), [("claude", "leave"), ("cursor", "leave")], scope)
-            self.assertIn(f"{official} 1.2.2 ({scope} scope): {who}, so it stays, and ours is not added beside it",
-                          steps[0].subject)
-            self.assertEqual(steps[1].subject, "served by the Claude Code plugin")
-        # The user scope's, claude.ai's directory's, goes for ours; the receipt records it.
+        # One an administrator manages: reported, and nothing of ours added beside it (Claude Code loads both).
+        steps = plan_for("managed")
+        self.assertEqual(actions(steps), [("claude", "leave"), ("cursor", "leave")])
+        self.assertIn(f"{official} 1.2.2 (managed scope): an administrator manages it, so it stays, and ours is not "
+                      "added beside it", steps[0].subject)
+        self.assertEqual(steps[1].subject, "served by the Claude Code plugin")
+        # The user scope's, claude.ai's directory's, is the directory's to update: kept, nothing run, and the line
+        # says how to get ours instead.
         steps = plan_for("user")
-        self.assertEqual(actions(steps), [("claude", "remove duplicate"), ("claude", "install"), ("cursor", "leave")])
-        self.assertEqual([argv[1:] for argv in steps[0].commands], [["plugin", "uninstall", official]])
-        self.assertEqual(steps[0].store, f"{official} 1.2.2 (claude.ai's directory's)")
-        records = home.apply(steps)
-        self.assertEqual([record.get("store") for record in records if record["action"] == "remove duplicate"],
-                         [steps[0].store])
-        self.assertEqual([copy.name for copy in home.detect()["claude"].copies], [ID])
-        # An uninstall takes ours out and does not put the directory's back: it says where it came from.
-        receipt = {"actions": records}
-        self.assertEqual([(gone["app"], gone["store"]) for gone in providers.replaced(receipt)],
-                         [("claude", steps[0].store)])
+        self.assertEqual(actions(steps), [("claude", "leave"), ("cursor", "leave")])
+        self.assertEqual(steps[0].subject, f"{official} 1.2.2 (claude.ai's directory's): the directory's copy, which "
+                                           "the directory updates, so it stays, and ours is not added beside it (Claude "
+                                           "Code would load both); for ours, remove it in Claude Code's own plugin "
+                                           "manager and run the install command again")
+        self.assertFalse(any(step.commands for step in steps))
+        # Ours beside it, as main always had it beside a copy no command here removes, goes: the app would load both.
+        steps = plan_for("user", ours=True)
+        self.assertEqual(actions(steps), [("claude", "leave"), ("claude", "remove duplicate"), ("cursor", "leave")])
+        self.assertEqual(commands(steps)["claude"], [["plugin", "uninstall", ID],
+                                                     ["plugin", "marketplace", "remove", providers.MARKETPLACE]])
+
+    def synced(self, home: Home) -> None:
+        """A copy claude.ai syncs into Claude Code from the person's account: its manifest alone, no install record."""
+        synced = home.home / ".claude" / "plugins" / "synced" / "bucket"
+        synced.mkdir(parents=True)
+        (synced / "manifest.json").write_text(json.dumps({
+            "name": "text-to-cad", "version": "1.2.2", "marketplaceName": "claude-plugins-official",
+            "installationPreference": "available", "marketplaceKind": "official"}), encoding="utf-8")
+
+    def test_a_copy_claude_ai_syncs_is_kept_by_every_run_and_keeps_ours_out_of_claude_code(self) -> None:
+        # Recorded nowhere but in its manifest and in no scope: the install and every update (a refresh after a
+        # switch among them) keep it and add nothing of ours beside it in Claude Code.
+        home = self.make(("claude",))
+        self.synced(home)
+        apps = home.detect()
+        self.assertEqual([(copy.name, copy.version, copy.store) for copy in apps["claude"].copies],
+                         [("text-to-cad@claude-plugins-official", "1.2.2", True)])
+        steps = home.plan(only=["claude"])
+        self.assertEqual(actions(steps), [("claude", "leave")])
+        self.assertIn("claude.ai syncs it from your account", steps[0].subject + apps["claude"].copies[0].held_by)
+        self.assertIn("remove it in your claude.ai account's plugins and run the install command again", steps[0].subject)
+        self.assertEqual(providers.refresh_plan(apps, release=RELEASE, folder=home.folder, machine=home.machine), [])
+        # Ours, installed beside it by an earlier run, goes: Claude Code would load both.
+        home.set(claude={"plugins": [{"id": ID, "version": RELEASE, "scope": "user"}],
+                         "marketplaces": [{"name": "text-to-cad", "source": "directory", "path": str(home.folder)}]})
+        steps = home.plan(only=["claude"])
+        self.assertEqual(actions(steps), [("claude", "leave"), ("claude", "remove duplicate")])
+        self.assertEqual(commands(steps)["claude"][0], ["plugin", "uninstall", ID])
+
+    def test_a_copy_claude_ai_syncs_feeds_neither_cursor_nor_grok_build(self) -> None:
+        # Cursor reads Claude Code's installed_plugins.json alone, and Grok Build each installPath in it: a synced copy
+        # is in neither, so Cursor gets its own copy, and keeps it, as on a device with no Claude Code.
+        home = self.make(("claude",))
+        self.synced(home)
+        (home.home / ".cursor").mkdir()
+        self.assertFalse(providers.feeds(home.detect(), providers.APPS))
+        steps = home.plan()
+        self.assertEqual(actions(steps), [("claude", "leave"), ("cursor", "install")])
+        home.apply(steps)
+        steps = home.plan()
+        self.assertEqual(actions(steps), [("claude", "leave"), ("cursor", "leave")])
+        self.assertIn(f"{RELEASE}, a copy of", steps[1].subject)
+
+    def codex_plan(self, home: Home) -> list:
+        return providers.read_for(lambda apps: providers.plan(apps, release=RELEASE, folder=home.folder,
+                                                              machine=home.machine, only=["codex"]),
+                                  home.machine, folder=home.folder)[1]
+
+    def remote(self, home: Home, market: str = "openai-curated", marked: bool = True) -> None:
+        """What a copy Codex installed from its maker's directory on the account leaves in its plugin cache."""
+        folder = home.home / ".codex" / "plugins" / "cache" / market / "text-to-cad"
+        (folder / "1.2.2").mkdir(parents=True)
+        if marked:
+            (folder / providers.CODEX_REMOTE_MARK).write_text(json.dumps(
+                {"schema_version": 1, "remote_plugin_id": "plugin_123"}), encoding="utf-8")
+
+    @staticmethod
+    def listing(market: str = "openai-curated", **entry) -> dict:
+        return {"installed": [{"pluginId": f"text-to-cad@{market}", "name": "text-to-cad", "marketplaceName": market,
+                               "version": "1.2.2", "installed": True, "enabled": True,
+                               "source": {"source": "remote", "id": "plugin_123"}, **entry}], "available": []}
+
+    def test_codex_s_listing_is_the_strong_evidence_of_its_directory_s_copy_and_ours_goes(self) -> None:
+        home = self.make(("codex",))
+        home.apply(self.codex_plan(home))  # ours, installed
+        self.remote(home)
+        home.set(codex_list=self.listing())
+        steps = self.codex_plan(home)
+        self.assertEqual(actions(steps), [("codex", "leave"), ("codex", "remove duplicate")])
+        self.assertIn("text-to-cad@openai-curated 1.2.2 (its app directory's, on your OpenAI account): the "
+                      "directory's copy, which the directory updates, so it stays", steps[0].subject)
+        self.assertEqual(commands(steps)["codex"][0], ["plugin", "remove", ID])
+        self.assertIn(["codex", "plugin", "list", "--json"], home.calls())
+
+    def test_codex_s_cache_alone_is_weak_evidence_that_never_removes_ours_and_never_keeps_it_out(self) -> None:
+        home = self.make(("codex",))
+        self.remote(home)
+        line = ("Codex's cache also holds OpenAI's directory copy, which Codex loads only while you are signed in; if "
+                "the skills show twice, remove one copy")
+        # The listing fails (no sign-in), says nothing of it, names it disabled, or never answers: ours is installed,
+        # and a line says so.
+        for said in ("fail", {"installed": [], "available": []}, self.listing(enabled=False), "hang"):
+            with self.subTest(listing=said), mock.patch.object(providers, "CODEX_LIST_SECONDS", 2):
+                home.set(codex_list=said)
+                steps = self.codex_plan(home)
+                self.assertEqual(actions(steps), [("codex", "leave"), ("codex", "install")])
+                self.assertIn(line, steps[0].subject)
+        # With ours there, it is kept, and nothing is removed.
+        home.apply(steps)
+        home.set(codex_list="fail")
+        steps = self.codex_plan(home)
+        self.assertEqual(actions(steps), [("codex", "leave"), ("codex", "leave")])
+        self.assertFalse(any(step.commands or step.edit for step in steps))
+
+    def test_a_cache_folder_without_codex_s_mark_or_from_openai_s_own_catalogs_is_no_evidence(self) -> None:
+        home = self.make(("codex",))
+        self.remote(home, marked=False)
+        for market in sorted(providers.CODEX_NOT_STORES):
+            self.remote(home, market)
+        home.set(codex_list={"installed": [self.listing(market)["installed"][0]
+                                           for market in sorted(providers.CODEX_NOT_STORES)], "available": []})
+        apps = home.detect()
+        self.assertEqual((apps["codex"].copies, apps["codex"].cached), ([], []))
+        steps = self.codex_plan(home)
+        self.assertEqual(actions(steps), [("codex", "install")])
+        self.assertNotIn(["codex", "plugin", "list", "--json"], home.calls(), "no weak evidence: Codex not asked")
+
+    def test_a_receipt_that_says_an_earlier_release_replaced_a_directory_s_copy_still_reads(self) -> None:
+        # Releases through 0.11.10 removed a directory's copy at the install command and recorded it (`store`): an
+        # uninstall does not put it back, and says where it came from.
+        home = self.make(("claude",))
+        gone = "text-to-cad@claude-plugins-official 1.2.2 (claude.ai's directory's)"
+        receipt = {"actions": [{"app": "claude", "action": "remove duplicate", "kind": "command", "ok": True,
+                                "store": gone, "at": "2026-10-31T02:39:00Z"}]}
+        self.assertEqual(providers.replaced(receipt), [{"app": "claude", "store": gone, "at": "2026-10-31T02:39:00Z"}])
         undo = providers.uninstall_plan(home.detect(), receipt, machine=home.machine, folder=home.folder)
-        self.assertEqual(actions(undo), [("claude", "remove"), ("claude", "leave")])
-        self.assertIn("is not put back; install it from claude.ai's plugin directory again", undo[1].subject)
-        home.apply(undo)
-        self.assertEqual(home.detect()["claude"].copies, [])
+        self.assertEqual(actions(undo), [("claude", "leave")])
+        self.assertIn("is not put back; install it from claude.ai's plugin directory again", undo[0].subject)
 
     def test_without_claude_code_the_cursor_marketplace_s_copy_keeps_ours_out(self) -> None:
         # Cursor keeps a Marketplace install in its own app data and has no command to uninstall it.
@@ -589,8 +713,9 @@ class DetectionAndPlan(Fixture):
         (home.home / ".cursor" / "plugins" / "cache" / "earthtojake" / "text-to-cad" / "0123abc").mkdir(parents=True)
         (step,) = home.plan()
         self.assertEqual((step.app, step.action), ("cursor", "leave"))
-        self.assertIn("(the Cursor Marketplace's): Cursor has no command to uninstall it, so it stays, and ours is not "
-                      "added beside it; uninstall it in Cursor, then run the install command again", step.subject)
+        self.assertIn("(the Cursor Marketplace's): the Marketplace's copy, which the Marketplace updates, so it stays, "
+                      "and ours is not added beside it; for ours, uninstall it in Cursor, then run the install command "
+                      "again", step.subject)
 
     def test_an_earlier_release_s_copies_from_github_give_way_to_the_folder_s(self) -> None:
         home = self.make(("claude", "codex", "gemini"))
@@ -721,16 +846,16 @@ class DetectionAndPlan(Fixture):
         self.assertEqual(len(home.calls()), made, "reading what they have now runs nothing either")
         # Nothing to do for any of them: a real run reads and leaves them, and runs none.
         apps, steps, listed = providers.read_for(lambda apps: providers.plan(apps, release=RELEASE, folder=home.folder,
-                                                                             machine=home.machine, desktop_entry=ENTRY),
+                                                                             machine=home.machine),
                                                  home.machine, folder=home.folder)
         self.assertFalse(listed)
-        self.assertEqual({step.action for step in steps if step.app != "claude-desktop"}, {"leave"})
+        self.assertEqual({step.action for step in steps}, {"leave"})
         self.assertEqual(len(home.calls()), made)
         # A new release, for an app that reads the folder in place too, is a command of Claude Code's: its listing is
         # asked first, and is what the plan is made from.
         home.release("1.2.4")
         apps, steps, listed = providers.read_for(lambda apps: providers.plan(apps, release="1.2.4", folder=home.folder,
-                                                                             machine=home.machine, desktop_entry=ENTRY),
+                                                                             machine=home.machine),
                                                  home.machine, folder=home.folder)
         self.assertTrue(listed)
         self.assertEqual(home.calls()[made:], [["claude", "plugin", "list", "--json"],
@@ -756,10 +881,10 @@ class DetectionAndPlan(Fixture):
         grok = home.detect()["grok"]
         self.assertEqual([(copy.version, copy.ours, copy.detail) for copy in grok.copies], [("1.0.0", False, "from /co")])
 
-    def test_claude_desktop_runs_the_person_s_uvx_never_one_that_goes_from_under_it(self) -> None:
+    def test_the_person_s_uvx_is_found_never_one_that_goes_from_under_it(self) -> None:
         # The install command's `cad setup` runs with uvx's own environment first on PATH (uv's cache's,
         # which `uv cache clean` removes), a release folder holds a uvx (an update removes the folder), and so
-        # may this process's own environment: Claude Desktop's entry names the person's uvx past all three.
+        # may this process's own environment: the person's uvx is found past all three.
         home = self.make()
         cached = self.root / "uv" / "archive-v0" / "M-XQ" / "bin"
         release = self.root / "state" / "releases" / RELEASE
@@ -783,8 +908,8 @@ class DetectionAndPlan(Fixture):
         self.assertEqual(providers.uvx(home.machine), str(installed))
 
     def test_an_engine_a_gui_app_started_finds_uvx_where_uv_s_installer_or_homebrew_put_it(self) -> None:
-        # An app opened from the Dock, and the engine it starts, have none of the person's PATH: Claude
-        # Desktop's entry still gets a uvx that stays, from uv's installer's folders, else Homebrew's.
+        # An app opened from the Dock, and the engine it starts, have none of the person's PATH: a uvx that
+        # stays is still found, in uv's installer's folders, else Homebrew's.
         home = self.make()
         home.machine.environ.pop("XDG_DATA_HOME", None)
         home.machine.environ["PATH"] = str(self.root / "usr-bin")
@@ -811,56 +936,92 @@ class DetectionAndPlan(Fixture):
 class ApplyReadBackAndTakeBack(Fixture):
     def test_an_install_applied_is_up_to_date_on_the_next_run_and_its_receipt_takes_it_back(self) -> None:
         home = self.make(("claude", "codex", "gemini"))
-        original = {"mcpServers": {"cad-dev": {"command": "/venv/bin/python", "args": ["-m", "cad_server.cli", "mcp"]},
-                                   "other": {"command": "node", "args": ["server.js"]}}, "preferences": {"x": 1}}
-        home.desktop.parent.mkdir(parents=True)
-        home.desktop.write_text(json.dumps(original, indent=1) + "\n", encoding="utf-8")
-        before = home.desktop.read_bytes()
         (home.home / ".cursor").mkdir()
         steps = home.plan(only=["claude", "claude-desktop", "codex", "gemini"])
-        self.assertEqual(actions(steps), [("claude", "install"), ("claude-desktop", "remove duplicate"),
-                                          ("claude-desktop", "install"), ("codex", "install"), ("gemini", "install")])
+        self.assertEqual(actions(steps), [("claude", "install"), ("codex", "install"), ("gemini", "install")])
         records = home.apply(steps, backed_up=set())
-        # Claude Desktop: one write, ours set and the development server taken out, the rest as it was.
-        config = json.loads(home.desktop.read_text(encoding="utf-8"))
-        self.assertEqual(config["mcpServers"], {"other": original["mcpServers"]["other"], "cad": ENTRY})
-        self.assertEqual(config["preferences"], {"x": 1})
-        self.assertEqual(home.desktop.with_name(home.desktop.name + ".bak").read_bytes(), before)
         # The next run finds every copy current and changes nothing.
         calls = len(home.calls())
         self.assertEqual({step.action for step in home.plan(only=["claude", "claude-desktop", "codex", "gemini"])},
                          {"leave"})
         self.assertEqual([call for call in home.calls()[calls:] if call in home.changing_calls()], [])
-        # The receipt's replay takes back what was done, newest first: Claude Desktop's file restored
-        # whole from its .bak, each plugin and the folder's catalog it added removed.
+        # The receipt's replay takes back what was done, newest first: each plugin and the folder's catalog it
+        # added removed.
         undo = providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine, folder=home.folder)
-        self.assertEqual(actions(undo), [("gemini", "remove"), ("codex", "remove"), ("claude-desktop", "remove"),
-                                         ("claude", "remove")])
+        self.assertEqual(actions(undo), [("gemini", "remove"), ("codex", "remove"), ("claude", "remove")])
         self.assertEqual(commands(undo)["claude"], [["plugin", "uninstall", ID],
                                                     ["plugin", "marketplace", "remove", providers.MARKETPLACE]])
         home.apply(undo)
-        self.assertEqual(home.desktop.read_bytes(), before)
         apps = home.detect()
         self.assertEqual([copy.name for name in ("claude", "codex", "gemini") for copy in apps[name].copies], [])
         self.assertEqual(apps["claude"].marketplaces, {})
         self.assertNotIn(providers.MARKETPLACE, apps["codex"].marketplaces)
 
-    def test_a_config_changed_since_loses_only_our_server(self) -> None:
+
+class ClaudeDesktop(Fixture):
+    """Claude gets no CAD server: releases through 0.11.10 wrote one into Claude Desktop's config, which every run
+    takes out, and an uninstall still takes back as its receipt says."""
+
+    def earlier_install(self, home: Home, config: dict | None) -> dict:
+        """Claude Desktop's config with the server an earlier release wrote, and the receipt record it wrote."""
+        home.desktop.parent.mkdir(parents=True, exist_ok=True)
+        if config is not None:
+            home.desktop.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        done = providers.edit_servers(home.desktop, set_entries={"cad": ENTRY})
+        return {"app": "claude-desktop", "action": "install", "kind": "edit", **done, "ok": True}
+
+    def test_setup_takes_ours_out_and_leaves_the_rest_of_the_file_as_it_was(self) -> None:
+        home = self.make()
+        mine = {"command": "node", "args": ["server.js"], "env": {"TOKEN": "x"}}
+        hand = {"command": "uvx", "args": ["--from", "cad-mcp==1.2.2", "cad-mcp"]}  # added by hand, under its own key
+        earlier = self.earlier_install(home, {"mcpServers": {"mine": mine, "text-to-cad": hand},
+                                              "preferences": {"x": 1, "list": [1, 2]}, "globalShortcut": "Cmd+K"})
+        before = home.desktop.read_bytes()
+        (step,) = home.plan()
+        self.assertEqual((step.app, step.action), ("claude-desktop", "remove server"))
+        self.assertEqual(step.subject, f"mcpServers.cad in {providers.shown(home.desktop, home.machine)} (text-to-cad "
+                                       f"{RELEASE}): Claude gets text-to-cad as skills alone, through Claude Code's plugin")
+        self.assertEqual(step.edit, {"op": "servers", "path": str(home.desktop), "remove": ["cad"]})
+        self.assertFalse(providers.needs_restart(step))
+        records = home.apply([step], backed_up=set())
+        # Every other key and server as it was, byte for byte (Claude Desktop writes its config two-space indented),
+        # the file as it was beside it.
+        self.assertEqual(home.desktop.read_text(encoding="utf-8"), json.dumps(
+            {"mcpServers": {"mine": mine, "text-to-cad": hand}, "preferences": {"x": 1, "list": [1, 2]},
+             "globalShortcut": "Cmd+K"}, indent=2) + "\n")
+        self.assertEqual(home.desktop.with_name(home.desktop.name + ".bak").read_bytes(), before)
+        # Nothing to do the next time; and an uninstall has nothing of ours left to take back there.
+        self.assertEqual(home.plan(), [])
+        undo = providers.uninstall_plan(home.detect(), {"actions": [earlier, *records]}, machine=home.machine)
+        self.assertEqual(actions(undo), [])
+
+    def test_a_config_that_is_unreadable_or_whose_cad_is_another_server_s_is_left_alone(self) -> None:
         home = self.make()
         home.desktop.parent.mkdir(parents=True)
-        home.desktop.write_text('{"mcpServers": {}}', encoding="utf-8")
-        (step,) = home.plan()
-        records = home.apply([step], backed_up=set())
+        for text in ('{\n  // a comment\n  "mcpServers": {"cad": {"command": "uvx", "args": ["cad-mcp"]}}\n}\n',
+                     '{"mcpServers": {"cad": {"command": "node", "args": ["other.js"]}}}'):
+            home.desktop.write_text(text, encoding="utf-8")
+            steps = home.plan()
+            self.assertFalse(any(step.changes for step in steps), steps)
+            home.apply(steps)
+            self.assertEqual(home.desktop.read_text(encoding="utf-8"), text)
+
+    def test_an_uninstall_takes_back_the_server_an_earlier_release_wrote(self) -> None:
+        home = self.make()
+        # A config changed since loses only our server.
+        record = self.earlier_install(home, {"mcpServers": {}})
         config = json.loads(home.desktop.read_text(encoding="utf-8"))
         config["mcpServers"]["mine"] = {"command": "node"}
         home.desktop.write_text(json.dumps(config), encoding="utf-8")
-        home.apply(providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine))
+        undo = providers.uninstall_plan(home.detect(), {"actions": [record]}, machine=home.machine)
+        self.assertEqual(actions(undo), [("claude-desktop", "remove")])
+        home.apply(undo)
         self.assertEqual(json.loads(home.desktop.read_text(encoding="utf-8")), {"mcpServers": {"mine": {"command": "node"}}})
         # A file the installer made goes whole.
         home.desktop.unlink()
-        records = home.apply(home.plan(), backed_up=set())
-        self.assertTrue(records[0]["created"])
-        home.apply(providers.uninstall_plan(home.detect(), {"actions": records}, machine=home.machine))
+        record = self.earlier_install(home, None)
+        self.assertTrue(record["created"])
+        home.apply(providers.uninstall_plan(home.detect(), {"actions": [record]}, machine=home.machine))
         self.assertFalse(home.desktop.exists())
 
     def test_a_config_that_is_not_plain_json_is_never_rewritten(self) -> None:

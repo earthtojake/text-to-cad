@@ -228,7 +228,14 @@ class Fixture(unittest.TestCase):
                                 encoding="utf-8")
         return self.desktop.read_bytes()
 
+    def cursor(self) -> Path:
+        """Cursor here, with no Claude Code to feed it: the app that gets a copy of the plugin folder and runs no
+        command. Where its copy goes."""
+        (self.home / ".cursor").mkdir(exist_ok=True)
+        return providers.cursor_plugins(self.machine) / "text-to-cad"
+
     def entry(self, release: str = RELEASE) -> dict:
+        """Claude Desktop's server as releases through 0.11.10 wrote it."""
         return {"command": os.path.abspath(self.machine.which("uvx")),
                 "args": [*LAUNCHER[1:], f"cad-mcp=={release}", "cad-mcp"],
                 "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
@@ -339,7 +346,7 @@ class TheCommand(Fixture):
 
     def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
         self.claude_with_a_development_install()
-        self.desktop_with({"other": {"command": "node", "args": ["server.js"]}})
+        self.desktop_with({"cad": self.entry("0.0.1"), "other": {"command": "node", "args": ["server.js"]}})
         (self.home / ".cursor").mkdir()
         earlier = self.earlier_installation()
         before = self.snapshot()
@@ -354,7 +361,9 @@ class TheCommand(Fixture):
         folder = providers.shown(plugin.folder(), self.machine)
         self.assertIn(["Claude Code", "install", f"text-to-cad@text-to-cad, which reads {folder} in place"], rows)
         where = providers.shown(self.desktop, self.machine)
-        self.assertIn(["Claude Desktop", "install", f"mcpServers.cad in {where}: text-to-cad {RELEASE}"], rows)
+        self.assertIn(["Claude Desktop", "remove server", f"mcpServers.cad in {where} (text-to-cad 0.0.1): Claude gets "
+                                                          "text-to-cad as skills alone, through Claude Code's plugin"],
+                      rows)
         self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
         self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
         self.assertIn(["0.8", "stop", f"cadgen 0.8.4's server, if it runs: "
@@ -466,50 +475,55 @@ class TheCommand(Fixture):
         self.assertEqual(call.args[0]["cad"], record["cad"])
         self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
 
-    def test_claude_desktop_gaining_cad_s_server_ends_the_run_telling_the_person_to_reopen_it(self) -> None:
-        # Claude Desktop reads its config only as it starts, its Code tab's card included: the run that gave it
-        # CAD's server says so last. A run that changed nothing says nothing, and nor does one that only moved
-        # the server's pin: the server it runs keeps working with the newer engine.
-        self.desktop_with({})
+    def test_claude_desktop_s_server_from_an_earlier_release_is_taken_out_and_nothing_added(self) -> None:
+        # Claude gets the skills alone: the install command and every update take out the server releases through
+        # 0.11.10 wrote, keep every other key and server and a .bak, ask no restart (the server Claude Desktop runs
+        # keeps working until it next starts), and write nothing where there was none.
+        mine = {"command": "node", "args": ["server.js"]}
+        original = self.desktop_with({"other": mine, "cad": self.entry("0.0.1")})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        self.assertTrue(out.rstrip("\n").endswith(f"Next, restart to load it:\n  {providers.restart('claude-desktop')}"), out)
-        self.assertIn("quit and reopen it to load CAD's server", providers.RESTART["claude-desktop"])
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
+        where = providers.shown(self.desktop, self.machine)
+        self.assertIn(f"Claude Desktop: remove server mcpServers.cad in {where} (text-to-cad 0.0.1): Claude gets "
+                      "text-to-cad as skills alone, through Claude Code's plugin", out)
+        self.assertEqual(self.desktop.read_text(encoding="utf-8"),
+                         json.dumps({"mcpServers": {"other": mine}, "preferences": {"keep": True}}, indent=2) + "\n")
+        self.assertEqual(self.desktop.with_name(self.desktop.name + ".bak").read_bytes(), original)
+        self.assertIn("verify   Claude Desktop: no CAD server: Claude gets the skills alone, through Claude Code's plugin",
+                      out)
         self.assertNotIn("restart to load it", out)
-        self.desktop_with({"cad": self.entry("0.0.1")})
+        written = self.desktop.read_bytes()
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        self.assertEqual(json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"], self.entry())
-        self.assertNotIn("restart to load it", out)
-        # On Windows, closing its window leaves it running in the tray: the line says to quit it there.
+        self.assertNotIn("Claude Desktop: remove", out)
+        self.assertEqual(self.desktop.read_bytes(), written)
+        # An uninstall still names it: on Windows, closing its window leaves it running in the tray.
         self.assertIn("system tray", providers.restart("claude-desktop", providers.Machine(self.home, {}, platform="win32")))
 
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
-        self.desktop_with({})
+        target = self.cursor()
         code, out, err = self.run_setup("--dry-run", "--json")
         self.assertEqual(code, 0)
         document = json.loads(out)
         self.assertEqual(set(document), {"schema", "plan", "actions", "stopped", "verified", "restart"})
         self.assertEqual((document["schema"], document["actions"], document["verified"]), (1, [], None))
         self.assertEqual([(row["app"], row["action"]) for row in document["plan"]],
-                         [("claude-desktop", "install"), ("plugin", "write"), ("engine", "leave")])
-        self.assertEqual(document["plan"][0]["edit"]["set"], {"cad": self.entry()})
+                         [("cursor", "install"), ("plugin", "write"), ("engine", "leave")])
+        self.assertEqual(document["plan"][0]["edit"], {"op": "copy", "from": str(plugin.folder()), "path": str(target)})
         self.assertIn("Dry run", err)
         code, out, _err = self.run_setup("--json")
         self.assertEqual(code, 0)
         document = json.loads(out)
         self.assertEqual([(action["app"], action["kind"], action["ok"]) for action in document["actions"]],
-                         [("plugin", "plugin", True), ("claude-desktop", "edit", True)])
-        self.assertEqual(document["verified"]["apps"]["claude-desktop"], {"verdict": "ok", "release": RELEASE})
+                         [("plugin", "plugin", True), ("cursor", "copy", True)])
+        self.assertEqual(document["verified"]["apps"]["cursor"], {"verdict": "ok", "release": RELEASE})
         self.assertEqual(document["verified"]["telemetry"], "off: your choice")
-        self.assertEqual(document["restart"], [providers.restart("claude-desktop")])
+        self.assertEqual(document["restart"], [providers.restart("cursor")])
 
 
 class InstallUpdateAndUninstall(Fixture):
     def test_an_install_stops_0_8_s_server_by_its_own_stop_registers_keeps_a_receipt_and_the_next_run_changes_nothing(self) -> None:
-        original = self.desktop_with({"other": {"command": "node"}})
+        target = self.cursor()
         earlier = self.earlier_installation()
         self.held = "another cad-server (python3.14, pid 4242)"  # 0.8's server on the port, as the system names it
         stopped = ["/tmp/cadgen-engine/0123456789ab.door"]
@@ -525,20 +539,18 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if the stop above does "
                       "not free it, the engine serves on the next free port, and says so", out)
         self.assertIn("0.8      stopped cadgen 0.8.4's server (its own `cadgen stop`)", out)
-        config = json.loads(self.desktop.read_text(encoding="utf-8"))
-        self.assertEqual(config["mcpServers"], {"other": {"command": "node"}, "cad": self.entry()})
-        self.assertEqual(self.desktop.with_name(self.desktop.name + ".bak").read_bytes(), original)
+        self.assertTrue((target / ".cursor-plugin" / "plugin.json").is_file())
         proxy = Path(installations.proxy_path())
         self.assertEqual(installations.proxy_status(str(proxy)), installations.OK)
         receipt = self.receipt()
         self.assertEqual((receipt["schema"], receipt["release"]), (1, RELEASE))
         self.assertEqual([(action["app"], action["action"], action["kind"]) for action in receipt["actions"]],
-                         [("plugin", "write", "plugin"), ("claude-desktop", "install", "edit")])
+                         [("plugin", "write", "plugin"), ("cursor", "install", "copy")])
         self.assertEqual([(found["release"], found["servers"]) for found in receipt["stopped"]], [("0.8.4", stopped)])
         self.assertEqual(receipt["launcher"]["path"], str(proxy))
-        self.assertIn("verify   Claude Desktop: text-to-cad " + RELEASE, out)
+        self.assertIn(f"verify   Cursor: {providers.shown(str(target), self.machine)}, a copy of", out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
-        self.assertIn(providers.restart("claude-desktop"), out)
+        self.assertIn(providers.restart("cursor"), out)
         # Run again: nothing to do and nothing written; 0.8's own stop runs again, and stops nothing.
         setup.stop_earlier.side_effect = None
         before = self.snapshot()
@@ -553,26 +565,8 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual({path: found for path, found in self.snapshot().items() if not path.endswith(setup.LOCK)},
                          {path: found for path, found in before.items() if not path.endswith(setup.LOCK)})
 
-    def test_claude_desktop_s_server_moves_to_this_release_and_a_newer_one_is_left_alone(self) -> None:
-        older = {**self.entry("0.0.1"), "env": {"CAD_INSTALL_CHANNEL": "claude-desktop", "CAD_ENGINE_PORT": "4000"}}
-        self.desktop_with({"cad": older})
-        where = providers.shown(self.desktop, self.machine)
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertRegex(out, rf"Claude Desktop +update +mcpServers\.cad in {re.escape(where)}: text-to-cad 0\.0\.1 -> {RELEASE}")
-        # The pin is what uvx runs: it moves to this release, and the environment someone added stays.
-        cad = json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"]
-        self.assertEqual(cad, {**self.entry(), "env": older["env"]})
-        # A new pin takes no restart: the server the app runs keeps working with the newer engine.
-        self.assertNotIn(providers.restart("claude-desktop"), out)
-        written = self.desktop_with({"cad": self.entry("99.0.0")})
-        code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"mcpServers.cad in {where}: text-to-cad 99.0.0, newer than {RELEASE}, left alone", out)
-        self.assertEqual(self.desktop.read_bytes(), written)
-
     def test_a_0_8_stop_that_fails_is_said_and_the_apps_are_installed(self) -> None:
-        self.desktop_with({})
+        target = self.cursor()
         self.earlier_installation()
         gone = self.earlier_installation("0.8.3")
         os.remove(gone["cadgen"])  # uv's cache cleaned of it: nothing of 0.8.3 is left to run
@@ -583,7 +577,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual([call.args[0]["version"] for call in setup.stop_earlier.call_args_list], ["0.8.4"])
         self.assertIn("0.8      cadgen 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
         self.assertNotIn("0.8.3", out)
-        self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
+        self.assertTrue(target.is_dir())
         self.assertEqual(self.receipt()["stopped"], [])
 
     def test_another_program_on_the_port_is_said_with_what_the_engine_does(self) -> None:
@@ -630,7 +624,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn(f"verify   engine: cad-server {RELEASE} running, on port {PORT}\n", self.run_setup()[1])
 
     def test_the_switch_comes_last_and_says_what_it_did(self) -> None:
-        self.desktop_with({})
+        self.cursor()
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
             switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": 412}
             code, out, _err = self.run_setup()
@@ -642,7 +636,7 @@ class InstallUpdateAndUninstall(Fixture):
             self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation\n", self.run_setup()[1])
             switch.handover.return_value = {"from": None, "to": RELEASE, "ok": True, "gapMs": None}
             self.assertIn(f"engine   cad-server {RELEASE} is the current installation\n", self.run_setup()[1])
-            self.assertLess(out.index("Claude Desktop: install"), out.index("is the current installation"),
+            self.assertLess(out.index("Cursor: install"), out.index("is the current installation"),
                             "the apps first, then the switch")
             switch.follow.assert_not_called()
             switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": False, "error": "no hello",
@@ -746,15 +740,15 @@ class InstallUpdateAndUninstall(Fixture):
 
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
-        self.desktop_with({})
+        target = self.cursor()
         code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
         self.assertIn("Gemini CLI: install the text-to-cad extension", out)
         self.assertIn("  failed: exit status 1", out)
         self.assertIn(f"run the install command again: {updates.command()}", out)
-        self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
+        self.assertTrue(target.is_dir())
         self.assertEqual([(action["app"], action["ok"]) for action in self.receipt()["actions"]],
-                         [("plugin", True), ("claude-desktop", True), ("gemini", False)])
+                         [("plugin", True), ("cursor", True), ("gemini", False)])
 
     def test_a_step_that_did_its_work_and_exited_non_zero_is_said_as_done_with_the_warning_quoted(self) -> None:
         # Gemini CLI links the extension, then exits 1 when its integrity store cannot be verified.
@@ -811,7 +805,7 @@ sys.exit(0)
 
     def test_a_folder_that_cannot_be_written_points_no_app_at_it(self) -> None:
         command(self.bin, "claude", CLAUDE_EMPTY)
-        self.desktop_with({})
+        self.desktop_with({"cad": self.entry("0.0.1")})
         with mock.patch.object(plugin, "source", side_effect=plugin.Missing("no plugin in this installation")):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
@@ -820,21 +814,22 @@ sys.exit(0)
         self.assertIn("not done, with no plugin folder", out)
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertFalse([call for call in calls if call[1:3] == ["plugin", "marketplace"] and call[3] == "add"])
-        self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"], "Claude Desktop needs none")
+        self.assertNotIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"],
+                         "taking Claude Desktop's server out needs no folder")
 
     def test_uninstall_takes_back_what_the_receipt_says_and_purge_removes_the_folders(self) -> None:
-        original = self.desktop_with({"other": {"command": "node"}})
+        target = self.cursor()
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
             self.assertEqual(self.run_setup()[0], 0)
         proxy = Path(installations.proxy_path())
         self.assertTrue(proxy.is_file())
         code, out, _err = self.run_uninstall("--dry-run")
         self.assertEqual(code, 0)
-        self.assertIn("Claude Desktop  remove", out)
+        self.assertRegex(out, r"Cursor +remove")
         self.assertTrue(proxy.is_file())
         code, out, _err = self.run_uninstall()
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.desktop.read_bytes(), original)
+        self.assertFalse(target.exists())
         self.assertFalse(proxy.exists())
         self.assertFalse((self.state / setup.RECEIPT).exists())
         stop.main.assert_called_once_with([])
@@ -994,7 +989,7 @@ sys.exit(0)
         command(self.bin, "npx", NPX)
         for mark in (".codeium/windsurf", ".config/goose"):
             (self.home / mark).mkdir(parents=True)
-        self.desktop_with({})
+        self.cursor()
         code, out, _err = self.run_setup("--dry-run", "--only", "windsurf")
         self.assertEqual(code, 0, out)
         rows = [line.split()[0] for line in out.splitlines() if line.startswith("  ") and not line.startswith("    ")]
@@ -1049,28 +1044,6 @@ class ThePluginCommand(Fixture):
         self.assertEqual(json.loads(out)["refreshed"], None, "the folder did not change: nothing to bring along")
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual([call for call in calls[count:] if call != ["codex", "--version"]], [])
-
-    def test_refresh_brings_claude_desktop_s_server_back_with_a_switch_that_went_back(self) -> None:
-        # A newer release's setup moved the folder and Claude Desktop's server to it, and its engine never
-        # started: the release left current writes the folder again, and the server goes back with it.
-        from cad_server.cli import plugin as plugin_cli
-
-        before = self.desktop_with({})
-        self.assertEqual(self.run_setup()[0], 0)
-        backup = self.desktop.with_name(self.desktop.name + ".bak")
-        self.assertEqual(backup.read_bytes(), before)
-        config = json.loads(self.desktop.read_text(encoding="utf-8"))
-        config["mcpServers"]["cad"] = self.entry("99.0.0")
-        self.desktop.write_text(json.dumps(config), encoding="utf-8")
-        manifest = plugin.folder() / plugin.MANIFEST
-        manifest.write_text(json.dumps({"name": "text-to-cad", "version": "99.0.0"}), encoding="utf-8")
-        code, _out, err = self._run(plugin_cli.main, ("--refresh",))
-        self.assertEqual(code, 0, err)
-        self.assertIn(f"Claude Desktop: update mcpServers.cad in {providers.shown(self.desktop, self.machine)}: "
-                      f"text-to-cad 99.0.0 -> {RELEASE}", err)
-        self.assertEqual(json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"], self.entry())
-        self.assertEqual(backup.read_bytes(), before, "the first .bak, which an uninstall restores, is kept")
-        self.assertEqual(self.receipt()["actions"][-1]["app"], "claude-desktop")
 
 
 class ZeroEightsOwnStop(unittest.TestCase):

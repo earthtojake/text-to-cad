@@ -21,8 +21,10 @@ spec.loader.exec_module(dev_install)
 
 
 class DevPluginTests(unittest.TestCase):
-    def test_every_plugin_host_gets_the_skills_and_this_checkouts_server(self) -> None:
-        manifests = {"claude": ".claude-plugin/plugin.json", "codex": ".codex-plugin/plugin.json",
+    def test_every_plugin_host_gets_the_skills_and_this_checkouts_server_but_claude(self) -> None:
+        # Claude gets no CAD server, as from the release: Claude Code's manifest names none, and Cursor's and Grok
+        # Build's beside it, which those apps read first where they load Claude Code's plugins, name the server.
+        manifests = {"claude": ".cursor-plugin/plugin.json", "codex": ".codex-plugin/plugin.json",
                      "cursor": ".cursor-plugin/plugin.json", "grok": ".claude-plugin/plugin.json",
                      "gemini": "gemini-extension.json"}
         skills = sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md"))
@@ -45,6 +47,13 @@ class DevPluginTests(unittest.TestCase):
                     for icon in (manifest.get("logo"), manifest.get("interface", {}).get("logo")):
                         if icon:
                             self.assertTrue((plugin / icon).is_file(), icon)
+                    if host == "claude":
+                        claude = json.loads((plugin / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
+                        self.assertNotIn("mcpServers", claude)
+                        self.assertEqual(claude["version"], "1.2.3-dev.1")
+                        grok = json.loads((plugin / ".grok-plugin/plugin.json").read_text(encoding="utf-8"))
+                        self.assertEqual(json.loads((plugin / grok["mcpServers"]).read_text(encoding="utf-8")),
+                                         {"mcpServers": {"cad": server}})
 
     def test_the_skills_never_send_the_agent_to_the_release_s_installer(self) -> None:
         # The dev server runs the checkout's .venv, made the current installation, which the `cad` command
@@ -94,6 +103,22 @@ class DevPluginTests(unittest.TestCase):
         run.assert_called_once_with(*uvx, "python", "-c", dev_install.REGISTER, "v", capture=True)
         self.assertEqual(rewrites, dev_install.skill_rewrites())
         self.assertIsNone(page, "a wheel serves the page it was built with")
+
+    def test_claude_desktop_gets_no_server_and_loses_the_one_an_earlier_install_wrote(self) -> None:
+        import argparse
+
+        with tempfile.TemporaryDirectory() as scratch:
+            config = Path(scratch) / "claude_desktop_config.json"
+            mine = {"command": "node", "args": ["server.js"]}
+            config.write_text(json.dumps({"mcpServers": {"cad-dev": {"command": "/venv/bin/python"}, "mine": mine},
+                                          "preferences": {"x": 1}}, indent=2) + "\n", encoding="utf-8")
+            with mock.patch.object(dev_install, "desktop_config", return_value=config), \
+                    mock.patch.object(dev_install, "dev_root", return_value=Path(scratch) / "dev"):
+                for uninstall in (False, True):
+                    said = dev_install.install_claude_desktop(argparse.Namespace(uninstall=uninstall))
+                    self.assertIn("Claude gets the skills alone", said)
+                    self.assertEqual(json.loads(config.read_text(encoding="utf-8")),
+                                     {"mcpServers": {"mine": mine}, "preferences": {"x": 1}})
 
     def test_this_scripts_launcher_and_install_command_are_the_servers(self) -> None:
         import sys

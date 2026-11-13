@@ -135,7 +135,12 @@ one. `cad mujoco check MODEL.xml [--strict]` is the `mujoco` integration's opera
 <integration> <operation> FILE`, `cli/integrations.py`): MuJoCo's own compiler, what it refuses or warns
 of, the model-health checks, what the model collides as and its contact excludes, run in this process where
 its environment holds mujoco, else in the environment of `cad[mujoco]` the engine makes once; `cad run
-mujoco-studio --model MODEL.xml` shows the person the model in MuJoCo Studio. `cad serve`,
+mujoco-studio --model MODEL.xml` shows the person the model in MuJoCo Studio. OrcaSlicer's presets are no
+document type either: `cad orcaslicer presets KIND [--match TEXT]` lists those a person can select, and `cad
+orcaslicer complete --printer P --process P --filament F [--out DIR]` writes them complete, every parent merged
+in and the printer named as compatible, for OrcaSlicer's own command line (the `orcaslicer` integration's two
+operations, which take preset names and no FILE). Its code is the library's, the standard library alone, so
+they always run in this process: no engine, no environment made. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the
 integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's
@@ -179,7 +184,11 @@ at a registration of the current installation, by `cad setup` before it points t
 the release left current after every switch of the engine (`cad plugin --refresh`). Each app takes it
 the way it takes a local plugin (`_internal/providers.py`): a local catalog that Claude Code reads in
 place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
-skills copied by the Skills CLI for the agents without a plugin. An update writes the folder for the
+skills copied by the Skills CLI for the agents without a plugin. Claude gets the skills alone: `cad setup`
+writes no CAD server into Claude Desktop's config, and takes out the one releases through 0.11.10 wrote
+there. A copy an app got from a store (claude.ai's directory, OpenAI's in Codex, the Cursor Marketplace)
+is the app's to deliver and update: every `cad setup` keeps it, adds nothing of ours beside it, and says
+how to switch (remove it in the app's own plugin manager, then run the install command again). An update writes the folder for the
 new release and brings the copies along, a person's or an automatic one; no agent app updates the
 plugin itself. A model builds by running its script: `cad run model.py`, through
 the `cad` command, which runs the current installation, else the one registered last

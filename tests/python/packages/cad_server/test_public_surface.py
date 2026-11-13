@@ -42,6 +42,10 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
     # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
     "mujoco check": ("cad.mujoco", "check"),
+    # The orcaslicer integration's presets, found by name in OrcaSlicer's own folders, listed and written complete:
+    # standard library alone, so always run here.
+    "orcaslicer presets": ("cad.orcaslicer", "presets"),
+    "orcaslicer complete": ("cad.orcaslicer", "complete"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),

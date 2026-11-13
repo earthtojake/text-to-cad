@@ -74,8 +74,9 @@ Choose and record the STEP origin explicitly: `--user-origin XxYmm`, `--grid-ori
 exported outline, holes and thickness and a known connector location before designing against
 it. Use `--board-only` only for a deliberately bare-board export and state that limitation.
 
-The STEP is an ordinary foreign CAD file; it is not the PCB's source. View it with `cad_show`
-or `cad viewer`, and use `cad step export mechanical/board.step mechanical/board.glb` (or STL,
+The STEP is an ordinary foreign CAD file; it is not the PCB's source. Show it as any file
+([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else
+`cad viewer`), and use `cad step export mechanical/board.step mechanical/board.glb` (or STL,
 3MF) for requested meshes. A text-to-cad model can use `step.read` to fit an enclosure around it.
 Check geometry and millimetre scale after conversion. Re-export after native board edits;
 do not copy STEP changes back into the PCB by guessing at their meaning.

@@ -514,8 +514,8 @@ jobs:
 
   # The plugin alone, one commit per release, onto the branches installers follow
   # (scripts/release/plugin_branch.py): `latest`, which every install command names, and
-  # `claude-plugin`, which claude.ai's directory follows and whose copy names that directory as
-  # its channel. Publish Release is these branches' only writer.
+  # `claude-plugin`, which claude.ai's directory follows: the skills alone, in the file types it
+  # accepts. Publish Release is these branches' only writer.
   #
   # TODO: the directory's listing stays on `claude-plugin` while a reviewer has the plugin.
   branches:

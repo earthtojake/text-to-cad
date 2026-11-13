@@ -8,21 +8,23 @@ wheel. So installers follow branches that only Publish Release writes, once the 
 PyPI: one commit per release whose tree is only the plugin -- the manifests and the icon, the
 MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a file outside
 that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install branches").
-Two copies, differing in what they carry and the channel each config names:
+Two copies, differing in what they carry:
 
-- `latest`: the newest release, which every documented install command names. The copy also
-  carries the marketplace catalog, which lists the plugin at the root of the branch it is read
-  from, Codex's manifest and config, Grok Build's manifest, and the Agent Plugins standard's.
-  Claude's manifest there is main's: it names no server, so Claude Code gets the skills alone.
-- `directory` (pushed to `claude-plugin`): claude.ai's plugin directory, which updates its
-  copies. Its files are what the directory reviewed: Claude's manifest names `claude.mcp.json`
-  (`CLAUDE_SERVER`), whose server lists no tools when Claude Code starts it.
+- `latest`: the newest release, which every documented install command names. Every host's
+  manifest and MCP config, the marketplace catalog, which lists the plugin at the root of the
+  branch it is read from, Codex's manifest and config, Grok Build's manifest, and the Agent
+  Plugins standard's. Claude's manifest there is main's: it names no server, so Claude Code gets
+  the skills alone.
+- `directory` (pushed to `claude-plugin`): claude.ai's plugin directory. Claude's manifest and
+  icon, `skills/`, `LICENSE` and the README: the skills alone, no MCP server and no hooks, and
+  only the file types the directory accepts from an organization it has not verified
+  (`type_errors`): another file type anywhere in it fails the build. It holds every skill.
 
 Each MCP config names the channel its installs come from in its server's environment,
-`CAD_INSTALL_CHANNEL`, and `CAD_AUTO_UPDATED=1` where a store keeps the copy up to
-date (`COPIES`; the server's `_internal/channel.py`). A config the copy does not override keeps
-main's: on `main` the Claude config names `claude-github`, and the Cursor one the Cursor
-Marketplace, which reads `main`.
+`CAD_INSTALL_CHANNEL` (`COPIES`; the server's `_internal/channel.py`). A config the copy does
+not override keeps main's: on `main` the Claude config names `claude-github`, and the Cursor
+one the Cursor Marketplace, which reads `main` and keeps its copies up to date
+(`CAD_AUTO_UPDATED=1`), which `latest`'s Cursor config, cloned by hand, is not.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -48,9 +50,12 @@ from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
+ICON = ".claude-plugin/icon.png"
 CATALOG = ".claude-plugin/marketplace.json"
-FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "gemini-extension.json", "claude.mcp.json",
+FILES = (MANIFEST, ICON, ".cursor-plugin/plugin.json", "gemini-extension.json", "claude.mcp.json",
          "cursor.mcp.json", "LICENSE")
+# claude.ai's directory: Claude's manifest and icon beside the skills, and nothing another host reads.
+DIRECTORY_FILES = (MANIFEST, ICON, "LICENSE")
 # What Claude Code's and Codex's marketplaces read besides: the catalog, and Codex's manifest and config.
 MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.png", "codex.mcp.json")
 # The Agent Plugins standard's manifest and server config (agent-plugins.org), which VS Code reads before
@@ -58,22 +63,20 @@ MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.p
 STANDARD_FILES = ("plugin.json", "mcp.json")
 # Grok Build's manifest, which it reads before Claude's: Claude's names no server, Grok's names claude.mcp.json.
 GROK_FILES = (".grok-plugin/plugin.json",)
-# What the directory's copy of Claude's manifest names as its server config: main's names none.
-CLAUDE_SERVER = "./claude.mcp.json"
 
 
 class Copy(NamedTuple):
     files: tuple[str, ...]
-    # Each config's channel, and whether a store keeps its copies up to date (`CAD_AUTO_UPDATED`).
-    channels: dict[str, tuple[str, bool]]
-    # Whether Claude's manifest names CAD's server (`CLAUDE_SERVER`), as the directory's copy does.
-    claude_server: bool = False
+    # Each config's channel, where the copy's differs from main's.
+    channels: dict[str, str]
+    # Whether the copy holds only what claude.ai's directory accepts from an organization it has not
+    # verified: the skills alone, in the file types `type_errors` allows.
+    skills_only: bool = False
 
 
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
-    "directory": Copy(FILES, {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)},
-                      claude_server=True),
+    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES, {"cursor.mcp.json": "cursor-github"}),
+    "directory": Copy(DIRECTORY_FILES, {}, skills_only=True),
 }
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -89,6 +92,20 @@ IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")
 # is not a URL, an anchor or a root path.
 LINK = re.compile(r'(?P<open>\]\(|(?:src|href)=")'
                   r'(?P<target>(?![a-zA-Z][a-zA-Z0-9+.-]*:|#|/)[^)"\s#]+)(?P<fragment>#[^)"\s]*)?')
+# What claude.ai's directory accepts from an organization it has not verified: Markdown, text, JSON and
+# YAML, saved as UTF-8 with no NUL byte and not starting with #!, and these images, each by its content
+# whatever its name. A `LICENSE` is text with no extension.
+TEXT_SUFFIXES = (".md", ".markdown", ".txt", ".json", ".yaml", ".yml")
+TEXT_NAMES = ("LICENSE",)
+IMAGES = {".png": (b"\x89PNG\r\n\x1a\n",), ".jpg": (b"\xff\xd8\xff",), ".jpeg": (b"\xff\xd8\xff",),
+          ".gif": (b"GIF87a", b"GIF89a"), ".ico": (b"\x00\x00\x01\x00",), ".webp": ()}
+# Files it refuses by name: configs Claude Code reads beside the manifest, and package managers'.
+HOST_CONFIGS = {"hooks.json", ".mcp.json", ".lsp.json", "monitors.json"}
+PACKAGE_CONFIGS = {"package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-workspace.yaml", "pnpm-lock.yaml",
+                   "yarn.lock", ".yarnrc.yml", ".npmrc", "bun.lock", "deno.json", "deno.jsonc", "composer.json",
+                   "requirements.txt", "constraints.txt", "uv.lock", "pyproject.toml", "Pipfile"}
+# What the directory's copy of Claude's manifest must not name: it carries the skills alone.
+NOT_SKILLS = ("mcpServers", "hooks", "lspServers")
 
 
 def git(root: Path, *args: str, stdin: bytes | None = None, env: dict | None = None) -> bytes:
@@ -138,9 +155,9 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
     return LINK.sub(point, text)
 
 
-def with_channel(path: str, data: bytes, channel: str, auto_updated: bool, errors: list[str]) -> bytes:
-    """An MCP config whose one `cad-mcp` server names `channel` as its install channel, and
-    says whether something else keeps the copy up to date."""
+def with_channel(path: str, data: bytes, channel: str, errors: list[str]) -> bytes:
+    """An MCP config whose one `cad-mcp` server names `channel` as its install channel, and not
+    `CAD_AUTO_UPDATED`: no copy this script builds is kept up to date by a store."""
     try:
         config = json.loads(data)
         servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
@@ -152,8 +169,45 @@ def with_channel(path: str, data: bytes, channel: str, auto_updated: bool, error
         return data
     env = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": channel}
     env.pop("CAD_AUTO_UPDATED", None)
-    servers[0]["env"] = {**env, **({"CAD_AUTO_UPDATED": "1"} if auto_updated else {})}
+    servers[0]["env"] = env
     return json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
+
+
+def type_error(path: str, data: bytes) -> str | None:
+    """Why claude.ai's directory refuses this file from an organization it has not verified, or None."""
+    parts = path.split("/")
+    name = parts[-1]
+    suffix = "." + name.rsplit(".", 1)[1].lower() if "." in name.lstrip(".") else ""
+    if name in HOST_CONFIGS:
+        return "a hooks, MCP, LSP or monitors config; the directory's copy carries the skills alone"
+    if name in PACKAGE_CONFIGS or (name.startswith("requirements") and suffix == ".txt"):
+        return "a package manager's configuration"
+    if ".claude-plugin" in parts[1:-1] or any(parts[i:i + 2] == [".claude", "skills"] for i in range(len(parts) - 1)):
+        return "a .claude-plugin or .claude/skills folder that is not the plugin's own"
+    if parts[0] == ".claude-plugin" and name != "plugin.json" and suffix not in IMAGES:
+        return "only plugin.json and images go in .claude-plugin/"
+    if "egress" in parts[:-1] and suffix in (".json", ".yaml", ".yml"):
+        return "JSON or YAML in an egress/ folder"
+    if suffix in IMAGES:
+        webp = data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+        return None if (webp if suffix == ".webp" else data.startswith(IMAGES[suffix])) else f"not the {suffix} image its name says"
+    if suffix not in TEXT_SUFFIXES and name not in TEXT_NAMES:
+        return "not Markdown, text, JSON, YAML or a PNG, JPEG, GIF, WebP or ICO image"
+    if data.startswith(b"#!"):
+        return "starts with #!, a program"
+    if b"\0" in data:
+        return "has a NUL byte"
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return "not UTF-8"
+    return None
+
+
+def type_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
+    """Each file of a skills-only copy that claude.ai's directory refuses from an unverified organization."""
+    return [f"{path}: {reason}" for path, (_mode, data) in sorted(tree.items())
+            if (reason := type_error(path, data))]
 
 
 def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
@@ -177,7 +231,7 @@ def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
 
 def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """A copy's tree as path -> (git mode, bytes), what breaks the directory's rules, and the manifest."""
-    files, channels, claude_server = COPIES[copy]
+    files, channels, skills_only = COPIES[copy]
     entries = tracked(root)
     chosen = {path: entry for path, entry in entries.items()
               if path in files or path.startswith(DIRECTORIES)}
@@ -186,24 +240,25 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
         return {}, errors + [f"{README} is not tracked"], {}
     blobs = read_blobs(root, sorted({blob for _, blob in [*chosen.values(), entries[README]]}))
     tree = {path: (mode, blobs[blob]) for path, (mode, blob) in chosen.items()}
-    for path, (channel, auto_updated) in channels.items():
+    for path, channel in channels.items():
         if path in tree:
-            tree[path] = (tree[path][0], with_channel(path, tree[path][1], channel, auto_updated, errors))
+            tree[path] = (tree[path][0], with_channel(path, tree[path][1], channel, errors))
     try:
         manifest = json.loads(tree[MANIFEST][1]) if MANIFEST in tree else {}
     except ValueError as error:
         return tree, errors + [f"{MANIFEST}: {error}"], {}
-    if claude_server and MANIFEST in tree:
-        manifest["mcpServers"] = CLAUDE_SERVER
-        tree[MANIFEST] = (tree[MANIFEST][0], (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    text = blobs[entries[README][1]].decode("utf-8")
+    if skills_only:
+        errors += [f"{MANIFEST} names `{field}`; this copy carries the skills alone" for field in NOT_SKILLS
+                   if field in manifest]
     repository = manifest.get("repository")
     if not isinstance(repository, str) or not repository.startswith("https://github.com/"):
         return tree, errors + [f"{MANIFEST}: `repository` must be the plugin's https://github.com/ URL"], manifest
     url = repository.removesuffix("/").removesuffix(".git")
     head = git(root, "rev-parse", "HEAD").decode().strip()
-    text = readme_for_tree(blobs[entries[README][1]].decode("utf-8"), set(tree), set(entries), url, head, errors)
+    text = readme_for_tree(text, set(tree), set(entries), url, head, errors)
     tree[README] = ("100644", text.encode("utf-8"))
-    return tree, errors + rule_errors(tree), manifest
+    return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest
 
 
 def commit(root: Path, tree: dict[str, tuple[str, bytes]], parent: str | None, message: str) -> str:

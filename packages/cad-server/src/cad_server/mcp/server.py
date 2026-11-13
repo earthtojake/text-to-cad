@@ -53,8 +53,9 @@ evidence that this host shows none.
 Apps without advertising them (the reference host, ``basic-host``, is one).
 
 A session Claude Code started -- its terminal, or the desktop app's Code tab running it -- lists no
-tools at all (``host.claude_code``): there CAD is the cad skill and the ``cad`` command, and the Code
-tab's card comes from Claude Desktop's own config, whose server Claude Code does not start.
+tools at all (``host.claude_code``): there CAD is the cad skill and the ``cad`` command, and a model
+is shown in the browser. Claude is set up with no CAD server on any route; one someone added by hand
+(Claude Desktop's config) is served as any other host's.
 ``CAD_MCP_CARDS=1`` in the transport's environment keeps the tools, for testing.
 """
 
@@ -152,10 +153,8 @@ TEXT_INSTRUCTIONS = (
 # A session Claude Code started (``host.claude_code``): CAD lists no tools there and says how to use CAD instead.
 CLAUDE_CODE_INSTRUCTIONS = (
     "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. " + COMMANDS
-    + " In the Claude desktop app's Code tab, CAD's inline card comes from Claude Desktop's own config: show models "
-    "with its cad_show where it is listed; where it is not, run `cad setup` and ask the user to quit and reopen "
-    "Claude Desktop. Elsewhere, and meanwhile, give the user the `cad viewer` link, which opens in the app's browser "
-    "pane or their browser."
+    + " To show a model, give the user the `cad viewer` link, which opens in the app's browser pane or their "
+    "browser."
 )
 
 _ICON_SVG = (

@@ -30,35 +30,32 @@ def git(root: Path, *args: str) -> str:
 
 class PluginTreeTests(unittest.TestCase):
     def test_this_repository_builds_trees_of_only_the_plugin(self) -> None:
-        plugin = {".claude-plugin", ".cursor-plugin", "gemini-extension.json", "claude.mcp.json", "cursor.mcp.json",
-                  "skills", "LICENSE", "README.md"}
-        directory, errors, _manifest = branch.build(REPO_ROOT, "directory")
-        self.assertEqual(errors, [])
-        self.assertEqual({path.split("/")[0] for path in directory}, plugin)
-        self.assertEqual({path for path in directory if path.startswith(".claude-plugin/")},
-                         {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
-        self.assertEqual({path for path in directory if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
-        # The latest copy adds what Claude Code's and Codex's marketplaces read, Grok Build's manifest, and the
-        # Agent Plugins standard's manifest and server config.
+        on_main = branch.tracked(REPO_ROOT)
+        skills = {path for path in on_main if path.startswith("skills/")}
+        blobs = branch.read_blobs(REPO_ROOT, sorted({blob for _mode, blob in on_main.values()}))
+        # latest: every host's manifest and config, the marketplace catalog, Codex's, Grok Build's and the Agent
+        # Plugins standard's, and every skill; each file main's, but the README and latest's Cursor config.
         install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
-        self.assertEqual(set(install) - set(directory), {".claude-plugin/marketplace.json", ".codex-plugin/plugin.json",
-                                                         ".codex-plugin/logo.png", "codex.mcp.json", "plugin.json",
-                                                         "mcp.json", ".grok-plugin/plugin.json"})
-
-    def test_claude_code_gets_cad_s_server_from_the_directory_s_copy_alone(self) -> None:
-        # Claude Code gets the skills alone from main and latest; the directory's copy, which claude.ai reviewed,
-        # keeps the manifest naming claude.mcp.json, and that server lists no tools when Claude Code starts it.
-        # Grok Build reads its own manifest before Claude's: it keeps the server everywhere it is installed from.
-        named = {}
-        for copy in ("latest", "directory"):
-            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
-            self.assertEqual(errors, [])
-            manifests = {path: json.loads(tree[path][1]).get("mcpServers")
-                         for path in (".claude-plugin/plugin.json", ".grok-plugin/plugin.json") if path in tree}
-            named[copy] = manifests
-        self.assertEqual(named, {"latest": {".claude-plugin/plugin.json": None, ".grok-plugin/plugin.json": "./claude.mcp.json"},
-                                 "directory": {".claude-plugin/plugin.json": "./claude.mcp.json"}})
+        self.assertEqual(set(install), {*branch.FILES, *branch.MARKETPLACE_FILES, *branch.STANDARD_FILES,
+                                        *branch.GROK_FILES, "README.md", *skills})
+        self.assertEqual([path for path, (_mode, data) in sorted(install.items()) if data != blobs[on_main[path][1]]],
+                         ["README.md", "cursor.mcp.json"])
+        # Claude Code gets the skills alone from latest; Grok Build reads its own manifest first, naming the server.
+        self.assertEqual({path: json.loads(install[path][1]).get("mcpServers")
+                          for path in (".claude-plugin/plugin.json", ".grok-plugin/plugin.json")},
+                         {".claude-plugin/plugin.json": None, ".grok-plugin/plugin.json": "./claude.mcp.json"})
+        # claude.ai's directory: Claude's manifest (main's, naming no server) and icon, LICENSE, the README and
+        # every skill, no other host's manifest or config, and every file a type the directory accepts from an
+        # organization it has not verified.
+        directory, errors, _manifest = branch.build(REPO_ROOT, "directory")
+        self.assertEqual(errors, [])
+        self.assertEqual({path for path in directory if not path.startswith("skills/")},
+                         {".claude-plugin/plugin.json", ".claude-plugin/icon.png", "LICENSE", "README.md"})
+        self.assertEqual(directory[".claude-plugin/plugin.json"][1], blobs[on_main[".claude-plugin/plugin.json"][1]])
+        self.assertNotIn("mcpServers", json.loads(directory[".claude-plugin/plugin.json"][1]))
+        self.assertEqual(branch.type_errors(directory), [])
+        self.assertEqual({path for path in directory if path.startswith("skills/")}, skills)
 
     def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
         # The catalog lists the plugin at the root of the branch it is read from, so a marketplace
@@ -92,30 +89,20 @@ class PluginTreeTests(unittest.TestCase):
                 self.assertEqual(missing, [])
 
     def test_each_config_names_the_channel_its_installs_come_from(self) -> None:
-        # claude.ai's directory follows claude-plugin and updates its copies. Every other installer
-        # follows latest, where the configs keep main's channels but Cursor's: main's names the
-        # Cursor Marketplace, which reads main, and a Cursor install by hand clones the branch.
-        # The server's environment is the plugin's say (the server's _internal/channel.py).
-        said = {}
-        for copy in ("latest", "directory"):
-            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
-            self.assertEqual(errors, [])
-            said[copy] = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
-                          for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "mcp.json",
-                                       "gemini-extension.json")
-                          if path in tree}
-        gemini = {"CAD_INSTALL_CHANNEL": "gemini-github"}
-        self.assertEqual(said["latest"], {
+        # Every installer but claude.ai's directory, whose copy has no server, follows latest, where the configs
+        # keep main's channels but Cursor's: main's names the Cursor Marketplace, which reads main and updates
+        # its copies, and a Cursor install by hand clones the branch. The server's environment is the plugin's
+        # say (the server's _internal/channel.py).
+        tree, errors, _manifest = branch.build(REPO_ROOT, "latest")
+        self.assertEqual(errors, [])
+        said = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
+                for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "mcp.json", "gemini-extension.json")}
+        self.assertEqual(said, {
             "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CAD_INSTALL_CHANNEL": "codex-github"},
             "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-github"},
             "mcp.json": {"CAD_INSTALL_CHANNEL": "agent-plugins"},
-            "gemini-extension.json": gemini,
-        })
-        self.assertEqual(said["directory"], {
-            "claude.mcp.json": {"CAD_INSTALL_CHANNEL": "claude-directory", "CAD_AUTO_UPDATED": "1"},
-            "cursor.mcp.json": {"CAD_INSTALL_CHANNEL": "cursor-github"},
-            "gemini-extension.json": gemini,
+            "gemini-extension.json": {"CAD_INSTALL_CHANNEL": "gemini-github"},
         })
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
@@ -141,6 +128,21 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual([error.split(":")[0] for error in errors],
                          ["skills/a/big.md", "skills/a/favicon.ico", "skills/a/link", "skills/a/model.step"])
 
+    def test_the_directory_copy_refuses_every_file_type_but_text_and_images(self) -> None:
+        # claude.ai's directory accepts from an organization it has not verified Markdown, text, JSON, YAML and
+        # PNG, JPEG, GIF, WebP or ICO images, by content: nothing starting with #!, nothing but UTF-8 with no NUL
+        # byte, no config Claude Code would read beside the manifest, no package manager's, and nothing in
+        # .claude-plugin/ but plugin.json and images.
+        allowed = {".claude-plugin/plugin.json": b"{}", ".claude-plugin/icon.png": PNG, "LICENSE": b"MIT\n",
+                   "skills/a/SKILL.md": b"# A\n", "skills/a/LICENSE": b"MIT\n", "skills/a/agents/openai.yaml": b"a: 1\n",
+                   "skills/a/notes.txt": "café\n".encode()}
+        refused = {"skills/a/run.py": b"print(1)\n", "skills/a/run.md": b"#!/bin/sh\necho\n", ".mcp.json": b"{}",
+                   ".claude-plugin/marketplace.json": b"{}", "skills/a/package.json": b"{}", "skills/a/x.json": b"{\0}",
+                   "skills/a/latin.md": "café".encode("latin-1"), "skills/a/fake.png": b"not a png",
+                   "skills/a/hooks/hooks.json": b"{}"}
+        errors = branch.type_errors({path: ("100644", data) for path, data in {**allowed, **refused}.items()})
+        self.assertEqual([error.split(": ")[0] for error in errors], sorted(refused))
+
     def test_commits_build_on_the_branch_and_an_unchanged_tree_adds_none(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
@@ -151,24 +153,25 @@ class PluginTreeTests(unittest.TestCase):
             files = {".claude-plugin/plugin.json": json.dumps(manifest), ".claude-plugin/icon.png": PNG,
                      ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
                      "gemini-extension.json": "{}", "claude.mcp.json": SERVERS, "cursor.mcp.json": SERVERS, "LICENSE": "MIT\n",
-                     "skills/s/SKILL.md": "one\n",
-                     "README.md": "[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n", "CONTRIBUTING.md": "x\n",
-                     "apps/web.js": "x\n"}
+                     "skills/s/SKILL.md": "one\n", "skills/p/SKILL.md": "prints\n",
+                     "README.md": "[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n",
+                     "CONTRIBUTING.md": "x\n", "apps/web.js": "x\n"}
             for path, content in files.items():
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_bytes(content if isinstance(content, bytes) else content.encode())
             git(root, "add", "-A")
             git(root, "commit", "-q", "-m", "one")
 
+            # Every skill, and nothing another host reads.
             tree, errors, _manifest = branch.build(root, "directory")
             self.assertEqual(errors, [])
             first = branch.commit(root, tree, None, "demo 1.0.0")
             self.assertEqual(git(root, "ls-tree", "-r", "--name-only", first).split(),
-                             [".claude-plugin/icon.png", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json",
-                              "LICENSE", "README.md", "claude.mcp.json", "cursor.mcp.json", "gemini-extension.json",
-                              "skills/s/SKILL.md"])
-            self.assertIn(f"[c](https://github.com/o/demo/blob/{git(root, 'rev-parse', 'HEAD')}/CONTRIBUTING.md)",
-                          git(root, "show", f"{first}:README.md"))
+                             [".claude-plugin/icon.png", ".claude-plugin/plugin.json", "LICENSE", "README.md",
+                              "skills/p/SKILL.md", "skills/s/SKILL.md"])
+            self.assertEqual(git(root, "show", f"{first}:README.md"),
+                             f"[s](skills/s/SKILL.md) [c](https://github.com/o/demo/blob/{git(root, 'rev-parse', 'HEAD')}"
+                             "/CONTRIBUTING.md)")
             self.assertEqual(branch.commit(root, tree, first, "demo 1.0.0"), first)
 
             (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
@@ -176,6 +179,24 @@ class PluginTreeTests(unittest.TestCase):
             second = branch.commit(root, branch.build(root, "directory")[0], first, "demo 1.0.1")
             self.assertEqual(git(root, "rev-parse", f"{second}^"), first)
             self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), "two")
+
+            # A file the directory refuses, in a skill, fails the build: no skill is left out to make it pass.
+            (root / "skills/p/scripts").mkdir()
+            (root / "skills/p/scripts/go.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "a script")
+            tree, errors, _manifest = branch.build(root, "directory")
+            self.assertIn("skills/p/scripts/go.py", tree)
+            self.assertEqual([error.split(": ")[0] for error in errors], ["skills/p/scripts/go.py"])
+            git(root, "rm", "-q", "-r", "skills/p/scripts")
+            git(root, "commit", "-q", "-m", "no script")
+
+            # A server or hooks in Claude's manifest fails the directory's copy, which carries the skills alone.
+            (root / ".claude-plugin/plugin.json").write_text(json.dumps({**manifest, "mcpServers": "./claude.mcp.json"}),
+                                                                encoding="utf-8")
+            git(root, "commit", "-q", "-am", "three")
+            self.assertIn(".claude-plugin/plugin.json names `mcpServers`; this copy carries the skills alone",
+                          branch.build(root, "directory")[1])
 
 
 if __name__ == "__main__":

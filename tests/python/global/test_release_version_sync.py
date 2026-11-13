@@ -151,9 +151,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
             for page in ("README.md", "apps/docs/src/lib/content.ts", "apps/docs/src/app/privacy-policy/page.tsx",
                          "apps/docs/src/app/terms-of-service/page.tsx"):
                 self.assertNotRegex(repo_path(page).read_text(encoding="utf-8"), r"(?<![\w.-])(cadgen|cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?)==", page)
-            # And the install page's Claude Desktop config and the installer it says the command runs.
+            # And the installer the install page says the command runs.
             page = (root / "docs/install.md").read_text(encoding="utf-8")
-            self.assertIn('"--from", "cad-mcp==9.9.9", "cad-mcp"', page)
             self.assertIn("--from cad-server==9.9.9 cad setup", page)
 
     def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:

@@ -3,9 +3,9 @@
 Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
 (``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). An
-integration's, for a file of its tool's own that is no document type, which cad checks and never shows:
-``cad <integration> <operation> <file>`` (``cad_server.cli.integrations``: ``cad mujoco check``), only for
-the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
+integration's, for its tool's own files, which are no document type, which cad checks or writes and never
+shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
+``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the engine's process control (``serve``, ``status``, ``stop``,
 ``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
 ``doctor``, ``plugin``, ``viewer``, ``telemetry``).
 
@@ -71,7 +71,7 @@ TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}
 INTEGRATION_COMMANDS: dict[str, str] = {name: f"cad_server.cli.{name}" for name, entry in INTEGRATIONS.items()
                                         if entry.operations}
 
-_USAGE_HEAD = ("usage: cad <document_type> <operation> FILE [args...] | cad <integration> <operation> FILE [args...]\n"
+_USAGE_HEAD = ("usage: cad <document_type> <operation> FILE [args...] | cad <integration> <operation> [FILE] [args...]\n"
                "       | cad <command> [args...]\n\n")
 _USAGE_TAIL = (
     "\nRun 'cad <document_type> --help' for a type's operations ('cad <integration> --help' for an\n"
@@ -98,17 +98,25 @@ def _type_lines() -> str:
 
 
 def _integration_lines() -> str:
-    """The integrations with operations of their own, each with them and the files they take (``cad.registry``)."""
+    """The integrations with operations of their own, each with them and the files they take, or, for one whose
+    tool's files are found by name in its own folders, that tool (``cad.registry``)."""
     width = max(len(name) for name in INTEGRATION_COMMANDS)
-    return "\n".join(f"  {name.ljust(width)}  {', '.join(INTEGRATIONS[name].operation_names)}  "
-                     f"{INTEGRATIONS[name].operations[0].summary.split(':')[0]}: {', '.join(INTEGRATIONS[name].files)}"
+    ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in INTEGRATION_COMMANDS}
+    ops_width = max(len(text) for text in ops.values())
+
+    def takes(entry) -> str:
+        if entry.files:
+            return f"{entry.operations[0].summary.split(':')[0]}: {', '.join(entry.files)}"
+        return f"found by name in {entry.summary.split(',')[0]}'s own folders"
+
+    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {takes(INTEGRATIONS[name])}"
                      for name in INTEGRATION_COMMANDS) + "\n"
 
 
 def _usage() -> str:
     return (_USAGE_HEAD + "document types, the files cad shows (cad <type> <operation> FILE):\n" + _type_lines()
-            + "\nintegrations, for a tool's own file cad checks and does not show (cad <integration> <operation> "
-              "FILE):\n" + _integration_lines()
+            + "\nintegrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
+              "<operation> [FILE]):\n" + _integration_lines()
             + "\ncommands:\n" + _command_lines(_COMMANDS) + _USAGE_TAIL)
 
 
