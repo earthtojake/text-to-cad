@@ -117,13 +117,16 @@ where those files ship, so these scripts are what produces them.
   packaged CAD app over stdio and a manufacturing check of a built part for each process
   (the checks' measuring modules, loaded from the wheel). Called by `test.yml` and
   `release-publish.yml`.
-- `rehearse-update.py` — the update every device on 0.11.10 or earlier makes into this tree's build:
-  installs a real 0.11.10 (or `--old RELEASE`) from PyPI on a device of its own (its own home, state,
-  engine, cache and `cad` command folders), publishes this tree as two later releases through a folder of
-  wheels and a local version feed, and drives 0.11.10's automatic update, update button and `cad update`
-  into it, each followed by a second update, and the updates killed at each point of the move; it checks
-  the pointer, the mirror, the port and page token, Recents, the old layout's removal and the flat door.
-  Needs uv and the network. Called by `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
+- `rehearse-update.py [SCENARIO ...] [--old RELEASE]` — rehearses, on private devices (each its own home,
+  state, engine, cache and `cad` command folders), every update a device makes into this build and out of
+  it: 0.11.10's automatic update, update button, `cad update` and the install command run again, each
+  followed by a second update; updates killed at each point of the move; this build updating itself by
+  its own automatic path; work in flight during an update; this build's server running before 0.11.10
+  switches; an app an update could not reach; and 0.10.4. It installs the real releases from PyPI,
+  builds this tree as later releases with a 40-second quiet period, and never names a port: servers take
+  3245 where it is free, else a port of the device's own as their default. It checks the pointer, the
+  mirror, the port and page token, Recents, the old layout's removal and the flat door. Needs uv and the
+  network. Called by `test.yml`'s `update-rehearsal` job on Linux, macOS and Windows.
 - `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`'s `viewer-e2e` job.
@@ -202,7 +205,11 @@ where those files ship, so these scripts are what produces them.
   and config; the `directory` copy is Claude's manifest and the skills alone, every
   command they run pinned to the `claude` channel (`cad +<VERSION>@claude`), no
   MCP server, every file one of the types claude.ai's directory accepts from an
-  unverified organization (any other fails `--check`). Called by
+  unverified organization (any other fails `--check`). It also installs by the
+  `uvx` command rather than the install script, in each skill's setup block and in
+  the README's Quickstart, leaves out the manifest's four listing links, and holds no
+  pipe-to-shell download; each substitution fails `--check` when what it replaces is
+  not there exactly once (`CONTRIBUTING.md`, "The install branches"). Called by
   `release-publish.yml`, whose `branches` job pushes
   the `latest` copy to `latest` and the `directory` copy to `claude-plugin`,
   together; tested by `tests/python/global/test_plugin_branch.py`.

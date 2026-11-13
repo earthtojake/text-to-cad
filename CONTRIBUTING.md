@@ -284,7 +284,9 @@ changes), the commit of the checkout the Viewer or the CAD app was built from.
 `--uninstall` removes a host's install. A development version, like a checkout's
 editable server, is never offered an update, and its telemetry reports the channel `dev`.
 The update button shows only on the default channel's version of a release, on a device
-where the install command ran (its receipt, `install-receipt.json`). To see it, set a
+where the install command ran (its receipt, `install-receipt.json`), and only in a session
+of the default channel; a server with no version (a person's own `pip install cad-server`)
+shows it only on such a device too (`cad_server/_internal/channel.py`). To see it, set a
 release up from wheels on a private device (its own `CAD_STATE_DIR`, `CAD_ENGINE_DIR`,
 `CAD_CACHE_DIR` and `CAD_LAUNCHER_DIR`) with its own `cad setup`, which writes the receipt,
 and give it a version feed naming a newer `latest` (`CAD_API_URL` pointed at a local one).
@@ -794,7 +796,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    build stops the release.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
    alone onto `latest` and `claude-plugin` (every pin in its skills stamped
-   `@claude`), in one atomic push. Only now does
+   `@claude`, and its install line the `uvx` command: [The install
+   branches](#the-install-branches)), in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
    header names the release; and the `v<VERSION>`
@@ -842,9 +845,13 @@ whose plugin did not change adds no commit. There are two copies:
   Agent Plugins standard's `plugin.json` and `mcp.json`, with every skill.
 - `claude-plugin`, which claude.ai's directory listing tracks: every skill and
   nothing else, every pin in it stamped with the directory's channel (`cad +<VERSION>@claude`).
-  `.claude-plugin/plugin.json` (main's, naming no MCP server and no
+  `.claude-plugin/plugin.json` (main's less four listing links, naming no MCP server and no
   hooks) and `icon.png`, `skills/`, `LICENSE` and `README.md`, and nothing another
-  host reads. The directory refuses an MCP server that runs on the user's computer,
+  host reads. The directory flags a download piped to a shell (`curl ... | sh`) as an
+  install-time risk, so this copy installs by the `uvx` command the server runs for a
+  version it lacks (`uvx --no-config --managed-python --python 3.14 --from
+  cad-server==<VERSION> cad setup --add`), the same on every system, and holds no
+  pipe-to-shell download anywhere (the table below says what differs). The directory refuses an MCP server that runs on the user's computer,
   and every file type but Markdown, text, JSON, YAML and PNG, JPEG, GIF, WebP or
   ICO images, from an organization it has not verified, so the builder checks
   each file of this copy against that rule and fails `--check`, and with it the
@@ -897,14 +904,27 @@ newer copy, by that copy's first command or launcher (`cad_server/_internal/pins
 reports the channel, and the agent app it detects, as two fields (`apps/api/README.md`).
 The channel is a flag, not a variable: a config runs the launcher of its own release
 (`cad-mcp==<VERSION>`), so no launcher meets a flag it does not know.
-`test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py` hold each copy:
+`test_plugin_manifests.py`, `test_plugin_branch.py`, `test_plugin_zip.py` and
+`test_plugin_folder.py` hold each copy:
 
 | Copy | Channel | Updated by | Stamped by |
 | ---- | ------- | ---------- | ---------- |
-| `main` and `latest`, every manifest and config; the plugin folder the install command points every app at; a copy a person installs by hand; the Cursor Marketplace's (`main`) | default | the install command's updater, where it ran here; else the person, in the app | nothing: the text names no channel |
+| `main` and `latest`, every manifest and config; the plugin folder the install command points every app at; a copy a person installs by hand | default | the install command's updater, where it ran here; else the person, in the app | nothing: the text names no channel |
+| the Cursor Marketplace's, which reads `main` | default | the Marketplace: the install command keeps it and never changes it, so after an update its chats may say they are out of date until the Marketplace reads `main` again | nothing |
 | `claude-plugin`, which claude.ai's directory follows | `claude` | the directory | `plugin_branch.py` |
 | the OpenAI ZIP | `codex` | the directory | `plugin_zip.py` |
 | a development install | default (its telemetry says `dev`) | `dev_install.py`, run again | `dev_install.py` pins its own version name |
+
+What each built copy changes from `main`'s text, each change a strict substitution that fails
+the build when what it replaces is not there exactly once:
+
+| | `latest` and the plugin folder | the OpenAI ZIP | `claude-plugin` |
+| --- | --- | --- | --- |
+| Pins | as `main` | `@codex` | `@claude` |
+| Launcher | as `main` | `cad-mcp --channel codex` in `.mcp.json` | none: no MCP config |
+| Setup block's install line | the install script, `curl ... \| sh -s -- --add <VERSION>`, and the Windows sentence | as `main` | `uvx ... --from cad-server==<VERSION> cad setup --add`; no Windows sentence |
+| README's install section | `latest`'s: the two one-liners and what they do (the plugin folder has no README) | no README | the `uvx` command and one paragraph |
+| `.claude-plugin/plugin.json` | as `main` | not shipped | without `documentationUrl`, `privacyPolicyUrl`, `supportUrl` and `termsOfServiceUrl`, which the directory's validation does not know; the README links the same pages |
 
 `CAD_INSTALL_CHANNEL` and `CAD_AUTO_UPDATED`, which the configs of 0.11.10 and earlier set, are
 no longer written and are ignored where an older copy still sets them.
@@ -933,9 +953,8 @@ first ZIP, one top-level `cad/` folder with no directory entry of its own, as
 holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
 archived as `.mcp.json`, and the archived manifest points there. That config
-names `openai-directory` as its install channel, auto-updated, in the server's
-`env`; the portal's acceptance of `env` is confirmed at the first upload that
-carries it.
+starts the launcher with its channel as an argument, `cad-mcp --channel codex`, and
+sets no environment.
 
 For each release, a person with the access below:
 
@@ -970,12 +989,16 @@ The server's hourly version check reads `api.texttocad.dev/v1/versions`
 index lists, the index uv resolves every pin through, so the feed names a
 release the moment it can be installed (Vercel's edge keeps a reply an hour, which
 `Publish Release` purges once the install branches carry the release), and no release
-deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The install
-branches" above): a store's copy (the Claude or OpenAI directory, the Cursor
-Marketplace) and Gemini's extension never check and are never told, since their
-store or Gemini updates them. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every
-change to `apps/api` on `main`) needs the project's PostHog settings in Vercel, which
-`/v1/health` checks (`apps/api/README.md`).
+deploys it. The install command reads it too, for the release to install. Only the
+default channel's version reads it, and only on a device where the install command ran
+(its receipt, `cad_server/_internal/channel.py`): a store's copy on its own channel, and
+a copy installed by hand on a device the install command never set up, never check and
+are never told. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`,
+on every change to `apps/api` on `main`) needs the project's PostHog settings in Vercel,
+which `/v1/health` checks (`apps/api/README.md`). A release that sends a new telemetry
+schema carries the receiver that reads it, deployed by its merge: until that deploy is
+live, the receiver answers the new schema's batches "try later" (503) and the senders keep
+them, so check that `Deploy API` succeeded after the merge.
 
 ### Resuming and republishing
 

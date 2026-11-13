@@ -100,9 +100,9 @@ release's library (the worker contract), so the server pins the library at its o
 stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. Each installed
 version has its own folder, data and server (`<state>/versions/<version>`); each channel is on one
-version (its pointer), a command with no pin runs the default channel's, a version a channel left is
-removed once nothing is in flight there, what it wrote carried into the version that channel moved to
-(one installed and never used stays for `cad doctor --prune`), and every command acts on one version,
+version (its pointer), a command with no pin runs the default channel's, a version no channel is on
+any more is removed once nothing is in flight there, what it wrote carried first into the version its
+channel moved to (one installed and never used stays for `cad doctor --prune`), and every command acts on one version,
 `cad doctor` alone reading them all. The default channel's server also holds the door and `installations/current` that
 releases before 0.11.11 reach ([CONTRIBUTING.md, "Development
 dependencies"](CONTRIBUTING.md#development-dependencies)).
@@ -121,7 +121,8 @@ which installs the checkout as a development version and moves the default chann
   [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
   `skills/` directly. Installers take it from the `latest` branch, and claude.ai's directory
-  from `claude-plugin` (the skills alone, pinned `@claude`), which
+  from `claude-plugin` (the skills alone, pinned `@claude`, installing by `uvx` rather than the
+  install script), which
   `scripts/release/plugin_branch.py` builds from this tree at each release.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
@@ -220,7 +221,7 @@ which installs the checkout as a development version and moves the default chann
   stamped by the release script), and says how to get the command in its SKILL.md's setup block
   (the same in each); no skill installs the server or the library
   any other way (no `requirements.txt` naming either), because a second installation
-  is a second daemon. Skills do not vendor it, and ship no scripts (claude.ai's plugin
+  is one the skill's pins never name. Skills do not vendor it, and ship no scripts (claude.ai's plugin
   directory refuses a program): what a skill would script is a `cad` command whose parser
   and behaviour live in `cad_server.cli` (print3d's presets are `cad orcaslicer`). The
   server draws every snapshot with OCCT, so no skill has a browser step. The server carries

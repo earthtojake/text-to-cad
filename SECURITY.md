@@ -60,10 +60,11 @@ credentials, all made from one token:
 
 A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
-an upgrade. `cad server --rotate-token`, with every server stopped
-(`cad stop`), replaces the token once you say yes (it asks; `--yes` where it
-cannot), and with it every link and every session made before. Behind the
-credentials:
+an upgrade. `cad server --rotate-token` replaces the token once you say yes (it
+asks; `--yes` where it cannot), and with it every link and every session made
+before: it writes the new token into every installed version, and every running
+server takes it at once. A server of 0.11.10 or earlier reads its token only as it
+starts, so it takes the new one when it restarts. Behind the credentials:
 
 - A Host check refuses DNS rebinding.
 - A request the cookie alone admits must come from the server's own pages or
@@ -120,7 +121,9 @@ through uvx, which installs the plugin in each agent app with that app's own
 command, and takes out of Claude Desktop's config the CAD server earlier releases wrote there
 (keeping a `.bak`). To read the script
 first, or to keep to one release, take the copy attached to that release on GitHub
-and check it against the release's `SHA256SUMS`.
+and check it against the release's `SHA256SUMS`. The skills of claude.ai's directory
+copy install with no script: `uvx --from cad-server==<release> cad setup --add`
+installs that release from PyPI and writes the `cad` command, and changes nothing else.
 
 ### What we treat as a vulnerability
 

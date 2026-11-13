@@ -61,9 +61,12 @@ checksum. It:
    automatic-update choices among them), Recents, the documents' records, and the port
    and token of CAD's page links. A CAD server that is running finishes what it is doing
    (a build, an export), stops, and this release's takes its place on the same port, so
-   every open page and card keeps its link and reloads itself. With none running, the
-   next CAD session starts this release's. The release before is removed once nothing
-   is running on it. Should this step fail, nothing has changed, and no app is touched.
+   every open page and card keeps its link and reloads itself. Where a plugin directory's
+   copy is still on the release before, that release's server stays, and this release's
+   serves on the next free port ([After an update](#after-an-update)). With none running,
+   the next CAD session starts this release's. The release before is removed once no
+   channel is on it and no work is in flight there, after what it wrote since is carried
+   over. Should this step fail, nothing has changed, and no app is touched.
 8. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
@@ -216,7 +219,10 @@ or in the desktop app's browser pane.
 
 The copy from claude.ai's plugin directory carries the skills alone too. It runs the
 release the directory last delivered, beside the install command's
-([Releases side by side](#releases-side-by-side)), and the directory updates it. Copies
+([Releases side by side](#releases-side-by-side)), and the directory updates it. Where
+the `cad` command is missing, its skills install it with uv rather than the install script;
+for this release that is
+`uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup --add`. Copies
 from it through 0.11.10 name CAD's server: when Claude
 Code starts it, it offers no tools, since the Code tab refuses the calls its cards
 make; set `CAD_MCP_CARDS=1` in the server's environment to keep them, for testing.
@@ -299,6 +305,12 @@ git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad ~
 Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. Teams
 can import the repository instead, under **Dashboard → Plugins & MCPs → Team
 Marketplaces**.
+
+The Cursor Marketplace lists text-to-cad too. Its copy reads this repository's `main`,
+so it runs on the default channel, but the Marketplace updates it: the install command
+keeps it and never changes it. After an update, its chats may say they are out of date
+until the Marketplace reads the repository again. To use the install command's copy
+instead, uninstall it in Cursor, then run the install command again.
 
 To update, pull the latest release, then restart Cursor:
 
@@ -421,8 +433,8 @@ so the number says which kind a release is: before 1.0, a patch release, like 0.
 0.11.1; from 1.0, a patch or minor release, like 1.4.2 to 1.4.3 or 1.5.0. Once an hour the
 CAD server checks whether a newer release is out, and when it is one of those, it
 installs it in the background at once. It then waits until text-to-cad has had nothing
-to do for an hour (no build, picture, export or agent's request), so an update rarely
-lands while an agent is working. Then it moves your computer to the new release and
+to do for an hour (no command of any kind: no `cad` command, build, picture, export or
+agent's tool call), so an update rarely lands while an agent is working. Then it moves your computer to the new release and
 updates text-to-cad in every agent app on your computer, as the install command does.
 Should an update fail, your computer stays on the release it ran, and that release is
 not tried again by itself for a day; a newer one is tried when it comes out. With no
@@ -458,27 +470,47 @@ An update writes the plugin folder again for the new release
 ([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
 read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
 the skills alone) get it again. Should the new release fail before your computer has
-moved to it, nothing has changed, and the page you clicked in says the update failed.
+moved to it, your computer stays on the release it ran, the release the update
+downloaded stays for the next try, and the page you clicked in says the update failed.
+
+An app the update could not give the new release's text to (most often because its
+command was not on the server's `PATH`) keeps its copy of the release before. The
+receipt records it, `cad doctor` names it and why, and the server tries again by
+itself at most once a day, while nothing else is happening. `cad update`, run in a
+terminal where the app's command is found, gives it the text now.
 
 Only what the install command set up updates itself; the receipt it writes is what says
 so. A copy from a plugin directory (claude.ai's, Codex's) is updated by its store: CAD
-shows no update button for it, and `cad update` there says its store updates it. On a
-computer where the install command never ran, `cad update` says there is nothing to
-update and names the install command.
+shows no update button or automatic-updates switch in its chats, and `cad update` there
+says its store updates it. The Cursor Marketplace's copy reads this repository's `main`,
+so it is on the default channel, but the Marketplace updates it, not the install
+command. On a computer where the install command never ran, `cad update` says there is
+nothing to update and names the install command.
 
 ### After an update
 
 - A CAD page open in your browser, or a CAD card, loses the server for about a second,
   then reloads into the new release at the same address. Links you shared keep working.
-- A Codex or Cursor chat that was open when the update came says it is out of date:
-  start a new chat.
-- A chat that was open in any app may say its commands are for the release before: read
-  the skill again; if it still names the release before, the app's copy of the plugin is
-  behind: run `cad update` (with no release named), or update the plugin in the app it
-  came from, then start a new chat.
+- Where the release before stays, because a plugin directory's copy is still on it or
+  work was in flight there, its server keeps the address. A page that started the update
+  goes to the new release's server at its own address, and a CAD card says "Updated to
+  <release>. Start a new thread to use it."
+- After an update from 0.11.10, the new release's server serves the old port too where
+  it is free, and `cad status` lists every port it serves. Where 0.11.10's server still
+  held the old port, nothing takes it when that server stops: reopen a page that was open
+  there.
+- A Codex, Cursor, Gemini or Grok Build chat that was open when the update came says its
+  CAD server is out of date: start a new chat. If a new chat says the same, run `cad update`,
+  or for a plugin directory's copy update the plugin in the app it came from.
+- A chat that was open in any app may say its commands are for the release before. Read
+  the skill again; if it still names the release before, run `cad update` (with no release
+  named), or for a plugin directory's copy update the plugin in the app it came from, then
+  read the skill again or start a new chat.
 - A copy of the plugin you installed yourself, with an app's own plugin commands rather
-  than the install command, says it has fallen behind until you update it in that app
-  ([App by app](#app-by-app)).
+  than the install command, says the same until you update it in that app
+  ([App by app](#app-by-app)), or until `cad update` replaces it with the install
+  command's. The Cursor Marketplace's copy says it until the Marketplace reads the
+  repository again; `cad update` does not change it.
 
 ### Releases side by side
 
@@ -495,11 +527,18 @@ once: the default channel's and a store's, each with its own server. A `cad` com
 type with no release runs the default channel's release, and so do `cad status` and
 `cad stop`: each acts on one release.
 
-A release no channel is on any more is removed as soon as nothing is running on it,
-once what it wrote that the channel's new release lacks (documents, Recents, settings) is
-carried over. A release installed and never used, like an update waiting to run, stays
-until `cad doctor --prune`. Going back to a release before 0.11.11 by hand is not
-supported, and the install command refuses `--version` with one on a computer that runs
+A release a channel has left is removed once no channel is on it and no work is in flight
+there (an open page or an idle chat does not keep it), after what it wrote that the
+channel's new release lacks (documents, Recents, settings) is carried over. A release
+installed and never used, like an update waiting to run, is kept: `cad doctor --prune`
+removes it, and an update that downloads a newer release removes the one it downloaded
+before.
+
+Each release keeps its own settings, and a new one starts with a copy of the settings
+of the release it replaces. Turning telemetry off is the exception: a no, said through
+any release, even an older one later, holds in every release on your computer.
+
+Going back to a release before 0.11.11 by hand is not supported, and the install command refuses `--version` with one on a computer that runs
 0.11.11 or later.
 
 To find out a release is out, text-to-cad fetches `api.texttocad.dev/v1/versions` at
@@ -525,14 +564,15 @@ step, and an agent with the CAD skill can follow it.
 
 Run `cad doctor`. It lists every release installed and every channel, with the release
 each channel is on and when it was last used; the release the server runs; the plugin
-folder's release; where each app's plugin comes from and its release; and whether the CAD
-kernel loads.
+folder's release; where each app's plugin comes from and its release; any app an update
+could not reach, and why; and whether the CAD kernel loads.
 
 `cad doctor --prune` removes what nothing needs: a channel no command has used for 30
 days (its release's documents and Recents go to the default channel's release), any
-release no channel is on, a release installed and never used, and what releases before
-0.11.11 left behind. It prints exactly what it will remove first, and removes that once
-you say yes (`--yes` where it cannot ask). Nothing does this by itself.
+release no channel is on, a release installed and never used, one whose install was cut
+short, and what releases before 0.11.11 left behind; never a release with work in
+flight. It prints exactly what it will remove first, and removes exactly that once you
+say yes (`--yes` where it cannot ask). Nothing does this by itself.
 
 `cad doctor` starts the CAD server if none is running. `cad doctor --no-server` does not,
 and says whether one runs; `cad doctor --check` only reports, writing and starting nothing.

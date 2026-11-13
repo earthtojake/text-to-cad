@@ -80,7 +80,9 @@ nothing.
 No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
 agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
 <id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
-at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. No tool builds
+at initialize, Claude Code's among them, for an agent that has not loaded the cad skill. The three tools
+0.11.10 removed (`cad_export`, `cad_snapshot`, `cad_inspect`) are never listed, but a call by one of those
+names, from a session that still lists it, answers with the `cad` command that replaced it. No tool builds
 source text: to build a shape, wrap the shape in a decorated function and run its script. The web
 viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
@@ -213,15 +215,16 @@ the launch's `_meta` first (`host/capability.ts`).
   with the page; the page reads it again (`/api/v1/server`) when the person comes back to
   it. A press is the update (`POST /api/v1/local/update`, through `cad_http`): the engine installs
   the release, updates each agent app's plugin and restarts on it, on the same port with
-  the same token (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
+  the same token where the old version's server stops (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
   as the update goes, then a spinner while the engine restarts; once the engine answers
   with the new release, the card loads that release's app in its own place
   (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
-  fails says why in a toast, and the engine stays as it was; one whose switch fails brings
-  the release before back, and the card, reading its own release again with the update failed
-  (`useUpdate`'s `settle`), says why in the same toast and offers the button again. The card's launcher belongs
+  fails says why in a toast, and the engine stays on the release it ran: the card, reading its
+  own release again with the update failed (`useUpdate`'s `settle`), says why in the same toast
+  and offers the button again. The card's launcher belongs
   to the version the update leaves: where every call through it answers that the thread is stale, or the engine
-  says the update is done and it stays (`moved`: another channel is still on its version), the restart ends and
+  says the update is done and it stays (`moved`: another channel is still on its version, or work is in flight
+  there), the restart ends and
   the card says the update is done and to start a new thread (`updateMoved`) -- no spinner waits on an answer the
   thread cannot get.
   A text client gets one line with its first `cad_show` result instead, naming the install
@@ -232,7 +235,7 @@ the launch's `_meta` first (`host/capability.ts`).
   started with `--channel`, whatever version serves it (the session's channel, `ViewerApp._updater`). A store's copy is on the store's
   own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
   name -- and is updated by the store alone; the Cursor Marketplace reads the repository as it is, our
-  own text, so its copy is on the default channel. The telemetry: the server
+  own text, so its copy is on the default channel, and the Marketplace, not the install command, updates it. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --

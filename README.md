@@ -77,7 +77,8 @@ text-to-cad is MIT-licensed and built in the open.
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
-how to turn it off.
+how to turn it off, and the [terms of service](https://www.texttocad.dev/terms-of-service)
+govern using text-to-cad.
 
 
 <a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>

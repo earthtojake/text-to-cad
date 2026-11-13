@@ -29,10 +29,11 @@ It holds no tool, view or document: the server does. What it does on its own:
   version's server when none answers, never another's.
 - **Says a thread is stale**: once its channel's pointer names a newer version than its own (an update moved
   the channel while the app's thread stayed open, or the app still holds an older copy), it installs nothing,
-  starts no server and connects to none, and answers every request with the line the `cad` command prints for
-  a stale pin: which version it is, which its channel is on, and the repair (`cad update` for the default
-  channel, the plugin's update in its app for another), then a new thread. A pointer naming an older version
-  is the channel it is about to move, never stale.
+  starts no server and connects to none, and answers every request with one line: first which version it is
+  and which its channel is on, in the words the `cad` command prints for a stale pin; then the repair for a
+  thread whose transport is old: start a new thread, and where a new thread says the same, bring the app's copy
+  up (`cad update` for the default channel, the plugin's update in its app for another). A pointer naming an
+  older version is the channel it is about to move, never stale.
 - **From a source tree** (a checkout, which has no version) it reaches the server as every transport of 0.11.10
   and earlier does: the flat door, the current installation's server (`installations/current`), and on a
   computer with none, the one its environment carries registered first, else its own release's installed by

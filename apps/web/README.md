@@ -513,13 +513,15 @@ starts (`main.tsx`) and again whenever the person comes back to it. A press upda
 (`POST /api/v1/local/update`): the engine installs the release, updates each agent app and restarts on it,
 on the same port with the same token; the button fills while it works and spins while the engine
 restarts, the page reconnects every quarter second meanwhile (`useEngineReconnect`), and it reloads
-once the engine answers with the new release and nothing on the page is unsaved. Should the switch fail,
-the release before's engine comes back and the page reloads into it all the same: the tab notes that its
-page followed the update (`src/host/followedUpdate.js`), and the page loaded says the update failed, in
-its one line, with the button offered again.
-A Viewer the CAD app's server opens is told of a release only where its install channel allows
-it (a store's copy, which its store updates, hears nothing); one a skill opens names no channel
-— a skills-only install — and is told. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
+once the engine answers with the new release and nothing on the page is unsaved. Where the release
+before's engine stays (another channel is on its version, or work is in flight there), the update ends
+with it serving still, and the page goes to the new release's server at its own address
+(`src/host/useUpdateRestart.js`). Should the update fail, the engine stays on the release it ran: the
+page says so in its one line and offers the button again, and a page that reloaded meanwhile says it
+too (the tab notes that its page followed the update, `src/host/followedUpdate.js`).
+A page is told of a release only where its server has an updater (the default channel's version, on a
+device the install command set up, never a development build: `cad_server/_internal/channel.py`'s
+`told`); the browser page names no channel, so it is told wherever its server is. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
 over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this

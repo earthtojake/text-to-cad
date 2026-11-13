@@ -43,9 +43,9 @@ export default function PrivacyPolicyPage() {
                 clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
-                which of them sent it, the text-to-cad version, which channel delivered your copy (our
-                install command, a plugin directory, or a development install) and which agent app ran
-                it, your operating
+                which of them sent it, the text-to-cad version, the channel that delivered your copy (the
+                name its commands carry, such as a plugin directory’s, or “default” for our install command)
+                and the agent app that ran it, as text-to-cad detects it, your operating
                 system and processor type, and the name and version of your agent app and how it shows
                 CAD (or that it is the browser viewer);
               </li>
@@ -109,8 +109,8 @@ export default function PrivacyPolicyPage() {
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
-            updates, and section 5 says how to turn it off. An update you ask
+            time and a user agent (“cadgen”). It is made only where our install command set text-to-cad up,
+            never in CI, and section 5 says how to turn it off. An update you ask
             for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
             release from PyPI, as the install command does.
           </li>
@@ -208,8 +208,9 @@ export default function PrivacyPolicyPage() {
             policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
-            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off also turns
-            off analytics in an earlier version still installed, and deletes what it sent. Nothing waits to
+            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off, in any
+            version, turns it off in every version on your computer, and analytics in an earlier one still
+            installed, and deletes what it sent. Nothing waits to
             send: what a command or a model script counts, and what any part of text-to-cad counted since its
             last send when it exits, wait in small files beside that setting until the next part of text-to-cad
             sends them, or a sender the next command starts once they have waited five minutes; turning

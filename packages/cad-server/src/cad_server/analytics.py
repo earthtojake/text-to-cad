@@ -616,8 +616,9 @@ _FUNCTION = re.compile(r"[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79}")
 _TYPE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,127}")
 _TOOL = re.compile(r"cad_[a-z_]{1,40}")
 # The receiver read the request and will never take it: malformed (400), too large (413), not JSON (415).
-# Anything else -- a 404 where no receiver is deployed yet, a firewall's 403, a 429, a 5xx -- is tried
-# again: dropping it would lose counts, and a deletion an opt-out owes, for good.
+# Anything else -- a 404 where no receiver is deployed yet, a firewall's 403, a 429, a 5xx (the receiver's 503
+# for a schema newer than it reads yet among them) -- is tried again: dropping it would lose counts, and a
+# deletion an opt-out owes, for good.
 REFUSED = frozenset({400, 413, 415, 422})
 FILES_PER_DAY = 1024  # past this many files in a day, a process tells no more apart
 # What a status is when it cannot be read: not sharing, and nothing said either (a broken state

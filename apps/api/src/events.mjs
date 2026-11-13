@@ -240,6 +240,12 @@ export const FIELDS = {
 };
 
 export class Invalid extends Error {}
+/**
+ * A batch of a schema newer than this receiver reads: a release that reached people before the receiver that reads
+ * its schema was deployed. Never refused, which the sender would take as final: answered "try later" (503), so the
+ * sender keeps it and sends it again once this receiver reads it.
+ */
+export class Later extends Error {}
 
 const fail = message => { throw new Invalid(message); };
 const token = (value, name, limit = 64) =>
@@ -445,6 +451,7 @@ const SCHEMAS = new Map([
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
 ]);
+const NEWEST = Math.max(...SCHEMAS.keys()); // a later schema is a newer release's (`Later`), never a refusal
 
 /**
  * The app an MCP client's name stands for (`AGENT_APPS`), else the name itself made a token: lower case, a run of
@@ -489,6 +496,7 @@ export const idOf = (batch, key) => uuidV5(`${batch}/${key}`);
 /** The rows a batch stores, or `Invalid`. */
 export function rowsOf(batch) {
   if (!batch || typeof batch !== 'object' || Array.isArray(batch)) fail('a batch is an object');
+  if (Number.isInteger(batch.schema) && batch.schema > NEWEST) throw new Later(`schema ${batch.schema} is newer than ${NEWEST}`);
   const schema = SCHEMAS.get(batch.schema) ?? fail(`schema is not one of ${[...SCHEMAS.keys()].join(', ')}`);
   for (const key of Object.keys(batch)) if (!schema.fields.includes(key) && !SHARED.has(key)) fail(`unknown field ${key}`);
   if (!isUuid(batch.install)) fail('install is not a uuid');

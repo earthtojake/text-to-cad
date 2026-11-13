@@ -471,6 +471,26 @@ test('schema 11 names the delivery channel and the agent app, each checked by it
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 120));
 });
 
+test('a schema newer than the receiver reads is "try later", never refused: the sender keeps it for when it does', async () => {
+  // A release can reach people before the receiver that reads its schema is deployed: its batches wait, not lost.
+  const store = memory();
+  const lines = await logged(async () => {
+    for (const schema of [12, 40]) {
+      const later = await send(store, 'POST', '/v1/events', { ...PINNED, schema, somethingNew: true });
+      assert.deepEqual([later.status, later.headers.get('retry-after'), await later.json()],
+        [503, '3600', { error: 'schema not read yet' }], `schema ${schema}`);
+    }
+  });
+  assert.deepEqual(store.rows, []);
+  assert.deepEqual(lines.warn, ['telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 12, release 0.8.0)',
+    'telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 40, release 0.8.0)']);
+  // Anything else unknown is refused as ever: a schema that is not a whole number, or one no release sent.
+  for (const schema of [11.5, '12', 0, -1, null]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...PINNED, schema })).status, 400, `schema ${schema}`);
+  }
+  assert.equal((await send(memory(), 'POST', '/v1/events', PINNED)).status, 204);
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);

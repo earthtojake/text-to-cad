@@ -35,7 +35,9 @@ src/cad_server/
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
                          #   (robots), Quick Edit's packets (prompt_files)
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
-                         #   engine sessions (http), tools and launches (server), how a host
+                         #   engine sessions (http), tools and launches (server: the tools
+                         #   0.11.10 removed answer by name with the `cad` command that replaced
+                         #   them), how a host
                          #   presents CAD (host), open views (views), sidebar views shared in
                          #   memory (sidebar), the viewer routes in-process (tunnel), the page
                          #   (ui), and the CAD Viewer link for a host that renders no MCP Apps
@@ -277,14 +279,17 @@ and only the default channel's also answers the flat door every client of 0.11.1
 with no version finds (`engine/daemon.py`'s `Bridge`, the only code for earlier releases). What moves each: a
 channel's move stops its old version's server once no pointer names that version and nothing is in flight on it
 -- a build, a draw, an export, an agent's tool call; never an idle app or an open page --, and the new version's
-serves on the old one's port with the page token it imported; a server whose version no pointer names stops
+serves on the old one's port with the page token it imported; where the old one stays (another channel is on its
+version, or work is in flight there), the new one takes the next free port, the update ends there, and the page
+that asked for it goes to the new server's address (a CAD app card says to start a new thread); a server whose version no pointer names stops
 itself once idle, and another server's sweep, the next move or `cad doctor --prune` removes its folder, its data
 carried into the version its channel moved to; where that is unknown, the folder stays and `cad doctor` says why.
 `cad stop`
 and `cad status` act on one version's server: the pinned one, or the default's. Only the default channel's
 version, on a device where the install command has run (its receipt), has an updater: every other server's page
 and CAD app card show no update notice, no update button and no automatic-updates switch (the settings route
-answers its `updates` null, `_internal/channel.py`'s `told`).
+answers its `updates` null, `_internal/channel.py`'s `told`), and neither does a CAD app card whose launcher is on a
+named channel, even where that channel shares the default's version.
 
 Telemetry (`analytics.py`) describes each batch with two fields: `channel`, the delivery channel of the
 requests or sessions it counted (a pin's or a launcher's, `default` for none, `dev` from a development build),

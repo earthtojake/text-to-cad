@@ -567,6 +567,39 @@ class ServerCountsTest(_Tmp):
         url = f"http://127.0.0.1:{server.server_address[1]}/v1/events"
         self.assertEqual([_post(url, {}) for _ in range(5)], ["failed", "failed", "failed", "failed", "refused"])
 
+    def test_a_batch_the_receiver_cannot_read_yet_waits_for_it_through_an_exit(self) -> None:
+        # A receiver deployed after the release answers its newer schema "try later" (503, apps/api): the batch is
+        # kept whole, through the process's exit, and sent again, byte for byte, until a receiver takes it.
+        codes, bodies = [503, 503, 204], []
+
+        class Answer(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                bodies.append(self.rfile.read(int(self.headers["content-length"])))
+                self.send_response(codes.pop(0))
+                self.send_header("content-length", "0")
+                self.end_headers()
+
+            def log_message(self, *args) -> None:
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Answer)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        choose(True, by="cli", path=self.path)
+        with mock.patch.dict(os.environ, {"CAD_API_URL": f"http://127.0.0.1:{server.server_address[1]}/v1"}):
+            recorder = Recorder(path=self.path)
+            recorder.called("cad_show", True)
+            self.assertFalse(recorder.flush())
+            recorder.close()
+            Recorder(path=self.path).send_kept()  # not read yet: kept again
+            self.assertTrue(self.path.with_name(KEPT).read_text(encoding="utf-8").strip())
+            Recorder(path=self.path).send_kept()  # read: taken
+        self.assertEqual(len(bodies), 3)
+        self.assertEqual(bodies, [bodies[0]] * 3)
+        self.assertEqual(json.loads(bodies[0])["schema"], analytics.SCHEMA)
+        self.assertFalse(self.path.with_name(KEPT).exists() and self.path.with_name(KEPT).read_text(encoding="utf-8").strip())
+
     def test_files_are_counted_once_a_day_by_format_and_never_named(self) -> None:
         sent: list[dict] = []
         choose(True, by="cli", path=self.path)

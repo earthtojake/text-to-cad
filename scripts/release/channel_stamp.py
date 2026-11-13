@@ -30,8 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLACES = REPO_ROOT / "packages/cad/src/cad/engine/places.py"
 # Files a copy carries that are not text, and hold no pin: images (each checked as one by its builder).
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico")
-# A command that runs `cad` with a pin: `cad +<word>`, the Windows `cad.exe` too.
-_COMMAND_PIN = re.compile(r"(?<![\w.$/+-])cad(?:\.exe)? \+(?P<pin>[^\s`'\")\]]+)")
+# A command that runs `cad` with a pin: `cad +<word>`, the Windows `cad.exe` too; or written as a list, a
+# `+<digit>` word beside `cad` (`["cad", "+0.11.9", ...]`).
+_COMMAND_PIN = re.compile(r"(?<![\w.$/+-])cad(?:\.exe)?(?: \+|[\"']?[ \t]*,[ \t]*[\"']\+(?=[0-9]))"
+                          r"(?P<pin>[^\s`'\")\],]+)")
 
 
 @functools.cache

@@ -54,7 +54,12 @@ skills/<name>/
 - **No runtime of its own.** A skill that uses the server runs the `cad` command, every command
   pinned to the skill's release: `cad +<VERSION> <verb>`, written with the current `VERSION`, which the
   release script stamps (`scripts/release/sync-version.mjs`). It installs nothing: no `requirements.txt`, no vendored packages. Code a skill needs is
-  the library's or the server's, reached by a command or an import.
+  the library's or the server's, reached by a command or an import. Its SKILL.md carries the setup block
+  every such skill carries, word for word (`tests/python/global/test_skill_requirements.py`): the store
+  builders rewrite it in their copies (each pin given the store's channel; in claude.ai's directory copy,
+  the install line the `uvx` command), and an install line or Windows sentence the builder does not find
+  exactly once fails the release
+  ([The install branches](../../CONTRIBUTING.md#the-install-branches)).
 - **Independent of other skills.** A skill never imports another, and never puts `skills/` or the
   repository root on a lookup path. Each installs alone through the Skills CLI.
 

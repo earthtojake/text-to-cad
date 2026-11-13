@@ -27,6 +27,16 @@ delivers, so its updates move that channel alone. No MCP config names a channel 
 the launcher of a store that delivers one is given it as an argument (`cad-mcp --channel NAME`), and
 the directory's copy carries no server at all.
 
+The directory's copy differs from main's text in three more places, each a strict substitution that fails
+the build when what it replaces is not there exactly once (`by_uvx`, `unlisted`). claude.ai's directory
+flags a download piped to a shell (`curl ... | sh`) as an install-time risk, so the copy installs by the
+`uvx` command the software itself runs for a version it lacks (`UVX_INSTALL`), the same on every system:
+in each skill's setup block that command replaces the install script's line and the Windows sentence goes,
+and in the README it replaces the Quickstart's two one-liners and the paragraph after them. Its manifest
+leaves out the listing links the directory's validation does not know (`UNLISTED`); the README, which the
+directory shows as the listing's description, links the same pages. No pipe-to-shell download is left
+anywhere in the copy (`PIPE_TO_SHELL`).
+
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
 one is held for a reviewer, or never validates. Publish Release runs `--check`
@@ -76,11 +86,18 @@ class Copy(NamedTuple):
     # Whether the copy holds only what claude.ai's directory accepts from an organization it has not
     # verified: the skills alone, in the file types `type_errors` allows.
     skills_only: bool = False
+    # Whether the copy installs by `UVX_INSTALL` in place of the install script (`by_uvx`).
+    uvx: bool = False
+    # Keys of Claude's manifest the copy leaves out (`unlisted`).
+    unlisted: tuple[str, ...] = ()
 
 
+# The listing links claude.ai's directory's validation does not know (`UNKNOWN_KEY`); main's and `latest`'s
+# manifests keep them.
+UNLISTED = ("documentationUrl", "privacyPolicyUrl", "supportUrl", "termsOfServiceUrl")
 COPIES = {
     "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES + GROK_FILES, None),
-    "directory": Copy(DIRECTORY_FILES, "claude", skills_only=True),
+    "directory": Copy(DIRECTORY_FILES, "claude", skills_only=True, uvx=True, unlisted=UNLISTED),
 }
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -110,6 +127,38 @@ PACKAGE_CONFIGS = {"package.json", "package-lock.json", "npm-shrinkwrap.json", "
                    "requirements.txt", "constraints.txt", "uv.lock", "pyproject.toml", "Pipfile"}
 # What the directory's copy of Claude's manifest must not name: it carries the skills alone.
 NOT_SKILLS = ("mcpServers", "hooks", "lspServers")
+# The install script, as main's skills and README run it (`cad_server.updates.INSTALL` and `INSTALL_WINDOWS`'s
+# script), and the `uvx` command a copy installs by in its place: the server's own line for a version
+# (`cad_server._internal.launch.launch_command`) running `cad setup --add`. test_plugin_branch.py holds the three
+# to the server's.
+INSTALL_SCRIPT = "curl -fsSL https://texttocad.dev/install.sh | sh"
+INSTALL_SCRIPT_WINDOWS = "https://www.texttocad.dev/install.ps1"
+UVX_INSTALL = "uvx --no-config --managed-python --python 3.14 --from cad-server=={version} cad setup --add"
+# A skill's setup block: the install script's line, and the sentence that runs it on Windows.
+SKILL_DOC = re.compile(r"skills/[^/]+/SKILL\.md")
+SETUP_LINE = INSTALL_SCRIPT + " -s -- --add {version}\n"
+SETUP_WINDOWS = ("On Windows, in PowerShell: `& ([scriptblock]::Create((irm " + INSTALL_SCRIPT_WINDOWS
+                 + "))) --add {version}`.\n")
+# The README's install section: the Quickstart's two one-liners and the paragraph after them.
+README_INSTALL = re.compile(
+    r"^macOS and Linux:\n\n```bash\n" + re.escape(INSTALL_SCRIPT) + r"\n```\n\n"
+    r"Windows, in PowerShell:\n\n```powershell\n" + re.escape(f"irm {INSTALL_SCRIPT_WINDOWS} | iex") + r"\n```\n\n"
+    r"(?:[^\n]+\n)+", re.M)
+README_UVX = """```bash
+{command}
+```
+
+The skills run text-to-cad's `cad` command. The first time, your agent installs it with
+[uv](https://docs.astral.sh/uv/), with your permission, or you run the command above yourself. It installs
+text-to-cad {version} and the `cad` command and changes nothing else.
+"""
+# A download piped to a shell or run as a script block: what claude.ai's directory flags (`RUNTIME_FETCH_EXEC`).
+_FETCH = r"(?:irm|iwr|invoke-restmethod|invoke-webrequest)"
+PIPE_TO_SHELL = re.compile(
+    r"\b(?:curl|wget)\b[^\n]*\|[ \t]*(?:sudo[ \t]+)?(?:ba|da|k|z)?sh\b"
+    r"|\b(?:ba|z)?sh[ \t]+(?:-c[ \t]+[\"']?\$\(|<\()[ \t]*(?:curl|wget)\b"
+    rf"|\b{_FETCH}\b[^\n]*\|[ \t]*(?:iex|invoke-expression)\b"
+    rf"|\[scriptblock\]::create\(\(?[ \t]*{_FETCH}\b", re.I)
 
 
 def git(root: Path, *args: str, stdin: bytes | None = None, env: dict | None = None) -> bytes:
@@ -167,6 +216,73 @@ def stamped(tree: dict[str, tuple[str, bytes]], version: object,
         return tree, [f"{MANIFEST}: no `version`, so its pins cannot be stamped @{channel}"]
     files, errors = channel_stamp.stamp({path: data for path, (_mode, data) in tree.items()}, version, channel)
     return {path: (mode, files[path]) for path, (mode, _data) in tree.items()}, errors
+
+
+def by_uvx(tree: dict[str, tuple[str, bytes]], version: str) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree installing by `UVX_INSTALL` for `version` in place of the install script, and what fails the build.
+
+    In each skill's setup block the script's line becomes the command and the Windows sentence goes; a skill with
+    neither carries no setup block. The README's install section (`README_INSTALL`) becomes the command and one
+    paragraph. Each must be there exactly once."""
+    command = UVX_INSTALL.format(version=version)
+    line, windows = SETUP_LINE.format(version=version), SETUP_WINDOWS.format(version=version)
+    out, errors = dict(tree), []
+    for path, (mode, data) in sorted(tree.items()):
+        if not SKILL_DOC.fullmatch(path):
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue  # not text: `type_errors` and the stamp refuse it
+        found = (text.count(line), text.count(windows))
+        if found == (0, 0):
+            continue
+        if found != (1, 1):
+            errors.append(f"{path}: the setup block's install line and Windows sentence for {version} are not there "
+                          f"once each ({found[0]} and {found[1]}), so the uvx command cannot replace them")
+            continue
+        out[path] = (mode, text.replace(line, command + "\n").replace(windows, "").encode("utf-8"))
+    if README in tree:
+        text = tree[README][1].decode("utf-8")
+        sections = list(README_INSTALL.finditer(text))
+        if len(sections) != 1:
+            errors.append(f"{README}: the Quickstart's two install one-liners and the paragraph after them are there "
+                          f"{len(sections)} times, not once, so the uvx command cannot replace them")
+        else:
+            section = sections[0]
+            text = text[:section.start()] + README_UVX.format(command=command, version=version) + text[section.end():]
+            out[README] = (tree[README][0], text.encode("utf-8"))
+    return out, errors
+
+
+def unlisted(tree: dict[str, tuple[str, bytes]], keys: tuple[str, ...]) -> tuple[dict[str, tuple[str, bytes]], list[str]]:
+    """The tree with each of `keys` taken out of Claude's manifest, line by line so the rest stays main's, and what
+    fails the build: a key that is not there exactly once as a line of its own, or a manifest that no longer reads."""
+    if not keys or MANIFEST not in tree:
+        return tree, []
+    mode, data = tree[MANIFEST]
+    text, errors = data.decode("utf-8"), []
+    for key in keys:
+        text, found = re.subn(rf'^[ \t]*"{re.escape(key)}":[ \t]*"[^"\n]*",[ \t]*\n', "", text, flags=re.M)
+        if found != 1:
+            errors.append(f"{MANIFEST}: `{key}` is there {found} times as a line of its own, not once")
+    try:
+        left = [key for key in keys if key in json.loads(text)]
+    except ValueError as error:
+        return tree, errors + [f"{MANIFEST}: without {', '.join(keys)} it does not read: {error}"]
+    errors += [f"{MANIFEST}: still names `{key}`" for key in left]
+    return {**tree, MANIFEST: (mode, text.encode("utf-8"))}, errors
+
+
+def pipes_to_shell(tree: dict[str, tuple[str, bytes]]) -> list[str]:
+    """Each download piped to a shell in the tree's text (`PIPE_TO_SHELL`)."""
+    found = []
+    for path, (_mode, data) in sorted(tree.items()):
+        if path.lower().endswith(tuple(IMAGES)):
+            continue
+        text = data.decode("utf-8", errors="replace")
+        found += [f"{path}: {match[0]!r} downloads and runs a script" for match in PIPE_TO_SHELL.finditer(text)]
+    return found
 
 
 def type_error(path: str, data: bytes) -> str | None:
@@ -227,7 +343,7 @@ def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
 
 def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
     """A copy's tree as path -> (git mode, bytes), what breaks the directory's rules, and the manifest."""
-    files, channel, skills_only = COPIES[copy]
+    files, channel, skills_only, uvx, leaves_out = COPIES[copy]
     entries = tracked(root)
     chosen = {path: entry for path, entry in entries.items()
               if path in files or path.startswith(DIRECTORIES)}
@@ -251,8 +367,17 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
     head = git(root, "rev-parse", "HEAD").decode().strip()
     text = readme_for_tree(text, set(tree), set(entries), url, head, errors)
     tree[README] = ("100644", text.encode("utf-8"))
+    version = manifest.get("version")
+    if uvx:
+        if isinstance(version, str) and version:
+            tree, substituting = by_uvx(tree, version)
+            errors += substituting + pipes_to_shell(tree)
+        else:
+            errors.append(f"{MANIFEST}: no `version`, so the uvx command cannot name the release")
+    tree, leaving = unlisted(tree, leaves_out)
+    errors += leaving
     if channel is not None:
-        tree, stamping = stamped(tree, manifest.get("version"), channel)
+        tree, stamping = stamped(tree, version, channel)
         errors += stamping
     return tree, errors + rule_errors(tree) + (type_errors(tree) if skills_only else []), manifest
 

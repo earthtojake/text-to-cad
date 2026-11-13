@@ -6,7 +6,8 @@
  *
  *   GET    /v1/versions        the version feed, PyPI's latest (versions.mjs) -> 200, the same for everyone,
  *                              or 503 while PyPI cannot be read and nothing has been
- *   POST   /v1/events          a batch of counts (events.mjs) -> 204
+ *   POST   /v1/events          a batch of counts (events.mjs) -> 204, or 503 for a schema newer than this
+ *                              receiver reads (`Later`), which the sender keeps and sends again
  *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204, or 429 past
  *                              the limit per address and per install id (limit.mjs)
  *   GET    /v1/health          -> 200, or 503 naming a missing setting (posthog.mjs: SETTINGS)
@@ -16,12 +17,13 @@
  * country the host places the request in, on each of the batch's events: never the address it came from,
  * nor anything finer.
  */
-import { Invalid, isUuid, MAX_BYTES, rowsOf } from './events.mjs';
+import { Invalid, isUuid, Later, MAX_BYTES, rowsOf } from './events.mjs';
 import { withoutNoise } from './noise.mjs';
 
 const COUNTRY = /^[A-Z]{2}$/; // ISO 3166-1 alpha-2, as the host gives it; anything else is no country
 const JSON_TYPE = /^application\/json\s*(?:;|$)/i; // a parameter, such as `; charset=utf-8`, is still JSON
 const FEED_CACHE = 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800';
+const LATER_SECONDS = 3600; // when a sender may try a schema this receiver does not read yet again
 
 // No CORS headers, so no page can read a reply. A page can still make its visitors' browsers post here
 // (a form, `sendBeacon`, a no-cors fetch): `handle` refuses every POST a browser sends.
@@ -144,6 +146,13 @@ export async function handle(request, store, { missing = [], country, versions, 
     return reply(404, { error: 'not found' });
   } catch (error) {
     if (error instanceof Invalid) return refuse(400, path, reasonOf(error.message), batch);
+    // A newer release's schema, before this receiver reads it: kept by the sender, never lost.
+    if (error instanceof Later) {
+      console.warn(`telemetry ${path} deferred 503: a schema newer than this receiver reads${senderOf(batch)}`);
+      const later = reply(503, { error: 'schema not read yet' });
+      later.headers.set('retry-after', String(LATER_SECONDS));
+      return later;
+    }
     console.error('telemetry request failed:', codeOf(error));
     return reply(500, { error: 'internal error' });
   }

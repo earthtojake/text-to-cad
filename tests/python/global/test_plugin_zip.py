@@ -53,6 +53,8 @@ class PluginZipTests(unittest.TestCase):
         self.assertIn(".codex-plugin/", members)
         self.assertEqual(changed, [])
         self.assertGreater(pinned, 100, "the skills' pins were found")
+        # Only claude.ai's directory's copy installs by uvx (plugin_branch.py): this one keeps the install script.
+        self.assertIn(f"curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add {version}\n", skills["skills/cad/SKILL.md"])
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
         roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())

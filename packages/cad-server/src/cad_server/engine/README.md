@@ -585,7 +585,7 @@ package is so another environment: the next run makes it, saying `making the env
 model's packages again, as <path> changed: ...`, and builds in a fresh worker of its Python. Its
 marker, written last, names the installation, the requirements (`with`), the spec, the
 integrations, its Python's version and the local fingerprints (`local`); a lock makes one maker. A
-process there reaches the device's engine as one in the base does, and -- the environment not being
+process there reaches its version's engine as one in the base does, and -- the environment not being
 the base (`places.SEPARATE`) -- names its Python in its orders, with how `cad run` named its
 environment (`places.RUN_WITH`: the options and requirements its command line was given, one word
 an option, and the script whose header named the rest); the engine builds the script in a warm
@@ -696,7 +696,7 @@ every kernel process asked for meanwhile waits on it; those processes start only
 standby stands only once the base exists -- at the engine's start where it is made already, else the
 moment its making is done -- and until then none stands and nothing waits on one. An
 engine a host's CAD app started runs outside any sandbox, where an agent's command may not write the
-cache folder: a `cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`,
+cache folder: a `cad run` that finds no base asks its version's engine over its door (`{"op": "base"}`,
 its key naming the installation's base) and follows its making, each line said as it comes; it makes the
 base itself only when no engine of its installation answers. A base that cannot be made fails the
 request that needed it in one line (`serve.KernelProcessesUnavailable`) that says what to do next. The
@@ -1417,7 +1417,7 @@ logs from native code to file descriptor 1 and can die on a mesh it cannot repai
 kernel never loads it), keeping what it made. One decomposition is one mesh with one set of options. Each hull is a
 mesh asset `<mesh>_hull<i>` (a file in the engine's cache) and a collision geom `<part>_hull<i>`. A decomposition
 the cache does not hold needs coacd: where the calling environment does not hold it (a script `cad run` runs, whose
-imports name `cad[mujoco]`, or a Python of its own), the device's engine makes `cad[coacd]`'s environment on first
+imports name `cad[mujoco]`, or a Python of its own), its version's engine makes `cad[coacd]`'s environment on first
 need over its door (`{"op": "integration", "integration": "coacd"}`, `integration_env.made`) and the child runs
 there, so no script names it in its header. It is refused by name, naming the part and the extra, only where CoACD
 has no wheel, no engine answers, or the making fails; a hit needs no coacd at all. `cad[coacd]` is one wheel, about
@@ -1469,7 +1469,7 @@ which also avoids pybind11's unmatched profile events on Python 3.12 and later.
 
 ## The engine server and its workers
 
-One engine server for the device (`daemon.py`: a daemon, which `cad server` runs in the
+One engine server (`daemon.py`: a daemon, which `cad server` runs in the
 foreground) for each installed version in use (**Starting and updating**), started on demand by the first command that needs it. **No timer stops it**: a
 person may be using a page or the CAD app for hours without a build. It stops in five ways: on
 `cad stop` (or a terminate); for an update, once it has drained (**Starting and updating**); once no
