@@ -28,9 +28,8 @@ build). `cad run gsl ...` installs it on first use and runs it as it is:
 `gsl compile`'s defaults are the right ones: dual contouring (`--algo mdc`, flat faces flat and sharp edges sharp),
 octree depth 9 (`--subdivision`), in the `@scene` box. Do not pass `--bbox auto`: its box is a fit by sampling,
 which misses features thinner than its cells (a 0.4 mm fin 30 mm long is cut off near its root, and `gsl` exits
-0). Keep dual
-contouring over `--algo marching-cubes`, which rounds sharp edges and can leave small holes in a concave wall,
-such as a hollow part's cavity.
+0). Keep dual contouring over `--algo marching-cubes`, which rounds sharp edges and can leave small holes in a
+concave wall, such as a hollow part's cavity.
 
 ## Write a model
 
@@ -94,7 +93,7 @@ return min(skin, infill);
 ## Idioms for mechanical parts
 
 ```gsl
-@scene(120, 10)
+@scene(140, 10)
 @range(3, 12) t = 6.0;
 
 // Extrude: a 2D XY profile made solid between z = 0 and z = t.
