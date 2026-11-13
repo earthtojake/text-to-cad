@@ -1,0 +1,210 @@
+"""Which installed version each delivery channel of text-to-cad is on: the pointers.
+
+A channel is whoever delivers and updates a copy of the plugin. The **default** channel has no name: the
+install command's copies and anything installed by hand. Any other channel is a free-form name of safe
+characters (``CHANNEL``, ``channel_name``); this code holds no list of names and no rule for any one of them.
+Each channel's pointer names the one version (``versions/<version>`` in the state folder,
+``cad_server._internal.versions``) that channel runs:
+
+- ``<state>/default``: the default channel's version, one line.
+- ``<state>/channels/<name>``: a named channel's, one line, a file per channel.
+
+A pointer is written whole (``registry.Folder``: beside it, then renamed over), so a reader meets the one
+before or the one after (``write``); moving a channel to another version is ``versions.move``, which is the
+one writer of a pointer outside a test. ``listing`` says every pointer, ``named`` the versions they name.
+
+**The default channel's version** (``default``): its pointer; with none, the version the layout before 0.12
+names current (``installations/current``) where the install command has run here (its receipt,
+``install-receipt.json``); else the newest version present. With no pointer that is a resolution, not a
+pointer: what ``versions.move`` leaves for the default channel is ``leaving``'s, the pointer or the layout
+before 0.12.
+
+**The mirror for releases before 0.12.** Every client before 0.12 finds the device's server through
+``installations/current`` and the record it names (``cad_server._internal.installations``). So writing the
+default pointer writes them too (``mirror``): ``current`` names the default's version and its record the
+version's server environment, as its code marker says it (``places.version_record``). Only clients before 0.12
+read them.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from cad.engine import places
+
+__all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "Pointer", "channel_name", "default", "forget", "leaving",
+           "listing", "mirror", "named", "read", "write"]
+
+# A named channel: a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. Safe as a
+# file's name on every system, and in a pin (``cad +<version>@<channel>``).
+CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
+DEFAULT = "default"
+CHANNELS = "channels"
+# The install command's record of what it changed, whose presence says the install command ran here.
+RECEIPT = "install-receipt.json"
+
+
+def channel_name(text: object) -> str | None:
+    """``text`` as a channel's name, or ``ValueError`` saying the rule: an empty one, as in ``@`` with
+    nothing after it, among them. ``default`` is the default channel itself, None: never a named channel of
+    that name, so ``channels/default`` is never made and ``default`` means one thing everywhere."""
+    if text == DEFAULT:
+        return None
+    if isinstance(text, str) and CHANNEL.fullmatch(text):
+        return text
+    raise ValueError(f"not a channel: {text!r} (a channel is a lower-case letter or digit, then up to 31 "
+                     "lower-case letters, digits, '.', '_' or '-')")
+
+
+def _folder(state: Path | None = None):
+    from cad_server.engine.registry import Folder
+
+    return Folder(state or places.state_dir())
+
+
+def _inside(channel: str | None) -> str:
+    """The pointer's file in the state folder: ``default`` for the default channel (None, or ``default``),
+    else ``channels/<name>``."""
+    name = None if channel is None else channel_name(channel)
+    return DEFAULT if name is None else f"{CHANNELS}/{name}"
+
+
+def read(channel: str | None = None, state: Path | None = None) -> str | None:
+    """The version channel ``channel``'s pointer names (None: the default channel's), present or not; None
+    with no pointer, or one that names no version."""
+    data = _folder(state).read(_inside(channel))
+    text = data.decode("utf-8", "replace").strip() if data is not None else ""
+    return text if places.VERSION.fullmatch(text) else None
+
+
+def write(channel: str | None, version: str, state: Path | None = None, *, mirrored: bool = True) -> Path:
+    """Channel ``channel``'s pointer (None: the default's) set to ``version``, landed whole: its file. Writing
+    the default's writes the mirror for releases before 0.12 too (``mirror``), after it, unless ``mirrored`` is
+    false (``versions.move`` writes it itself, after the pointer, so it tells a failure of the one from the
+    other): a mirror that cannot be written is ``OSError``, with the pointer moved. ``ValueError`` for a name
+    that is no channel or no version."""
+    if not places.VERSION.fullmatch(version or ""):
+        raise ValueError(f"not a version: {version!r}")
+    path = _folder(state).write(_inside(channel), f"{version}\n".encode("utf-8"))
+    if _inside(channel) == DEFAULT and mirrored:
+        mirror(version, state)
+    return path
+
+
+def forget(channel: str, state: Path | None = None) -> None:
+    """Named channel ``channel``'s pointer removed (``cad doctor --prune``'s, for a channel no longer used).
+    The default's is never forgotten: a device's default moves, and is gone only with the device's install
+    (``ValueError``)."""
+    if channel_name(channel) is None:
+        raise ValueError("the default channel's pointer is never forgotten")
+    _folder(state).remove(_inside(channel))
+
+
+@dataclass(frozen=True)
+class Pointer:
+    """A channel's pointer: its channel (None: the default), the version it names, and its file (whose time
+    is when the channel last moved)."""
+
+    channel: str | None
+    version: str
+    path: Path
+
+
+def listing(state: Path | None = None) -> list[Pointer]:
+    """Every pointer on this device, the default's first, then the named channels' by name. A file that names
+    no version, or a name that is no channel, is none."""
+    folder = _folder(state)
+    found = []
+    version = read(None, state)
+    if version is not None:
+        found.append(Pointer(None, version, folder.path(DEFAULT)))
+    for name in folder.names(CHANNELS):
+        if CHANNEL.fullmatch(name) and name != DEFAULT:
+            version = read(name, state)
+            if version is not None:
+                found.append(Pointer(name, version, folder.path(f"{CHANNELS}/{name}")))
+    return found
+
+
+def named(state: Path | None = None) -> set[str]:
+    """The versions some pointer names."""
+    return {pointer.version for pointer in listing(state)}
+
+
+@dataclass(frozen=True)
+class Default:
+    """The default channel's version and where it was found (``source``): ``pointer``; ``current``, the
+    version ``installations/current`` names where the install command has run here and no pointer is
+    (``legacy``: one of the layout before 0.12, not the mirror of a version); ``newest``, the newest version
+    present. ``version`` None with none of them."""
+
+    version: str | None
+    source: str | None
+    legacy: bool = False
+
+
+def default(state: Path | None = None) -> Default:
+    """The default channel's version, for a command with no pin: its pointer; with none, the version the
+    layout before 0.12 names current where the install command has run here (its receipt); else the newest
+    version present (``versions.present``); else none."""
+    found = read(None, state)
+    if found is not None:
+        return Default(found, "pointer")
+    current = _current(state)
+    if current is not None:
+        return Default(current[0], "current", current[1])
+    from cad_server._internal import versions
+
+    present = versions.present(state)
+    return Default(present[-1], "newest") if present else Default(None, None)
+
+
+def leaving(state: Path | None = None) -> Default:
+    """What the default channel leaves at its next move (``versions.move``): its pointer's version; with no
+    pointer, the layout before 0.12 where the install command has run here and its ``current`` is not a
+    version's mirror (``legacy``); else nothing -- the channel's first use."""
+    found = read(None, state)
+    if found is not None:
+        return Default(found, "pointer")
+    current = _current(state)
+    if current is not None and current[1]:
+        return Default(current[0], "current", True)
+    return Default(None, None)
+
+
+def _current(state: Path | None) -> tuple[str, bool] | None:
+    """The version ``installations/current`` names, and whether it is one of the layout before 0.12 (its
+    record's environment outside ``versions/``), where the install command's receipt is here; else None."""
+    from cad_server._internal import installations
+
+    folder = _folder(state)
+    if folder.read(RECEIPT) is None:
+        return None
+    version = installations.current_version(folder)
+    if version is None:
+        return None
+    record = places.installation_record(folder.read(f"{installations.FOLDER}/{version}.json"))
+    return version, not (record is not None and _in_versions(record["prefix"], Path(folder.root)))
+
+
+def _in_versions(prefix: str, state: Path) -> bool:
+    inside = os.path.normcase(os.path.realpath(state / places.VERSIONS)).rstrip(os.sep) + os.sep
+    return os.path.normcase(os.path.realpath(prefix)).startswith(inside)
+
+
+def mirror(version: str, state: Path | None = None) -> bool:
+    """``installations/current`` and the record it names written for present version ``version`` (its code
+    marker's interpreter, console script and environment), so a client before 0.12 finds the default's
+    server: whether it was written (False: ``version`` is not present). ``OSError`` when it cannot be."""
+    from cad_server._internal import installations
+
+    record = places.version_record(version, (state or places.state_dir()) / places.VERSIONS)
+    if record is None:
+        return False
+    folder = _folder(state)
+    installations.register(version, (record["cad"], record["python"], record["prefix"]), folder)
+    installations.point(version, folder)
+    return True

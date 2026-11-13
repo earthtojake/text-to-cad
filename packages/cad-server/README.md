@@ -70,7 +70,10 @@ src/cad_server/
                          #   written by `cad doctor`, `cad setup` and a CAD app's first
                          #   registration), the proxy (proxy), the releases an update
                          #   installs (releases), the update the button starts (update) and its
-                         #   switch (switch), the plugin folder every agent app is pointed at
+                         #   switch (switch), the versions installed in their own folders and the
+                         #   one routine that moves a channel between them (versions), the pointer
+                         #   per channel (pointers), a version's first-start import (imports), the
+                         #   layout before 0.12 (legacy), the plugin folder every agent app is pointed at
                          #   (plugin), the agent apps setup reads and writes (providers),
                          #   what earlier releases left behind (leftovers), the daemon's entry
                          #   (engine_daemon) and what it is composed of (engine_host), the
@@ -201,7 +204,13 @@ port, the telemetry spool, the version feed's cache, and its caches under `data/
 (`code/`: its environments, the kernel's and `cad run`'s under `code/base/`, and their bytecode), and
 its engine's door in `<version>` in the engine folder; a process with no version (a checkout or a test
 under `CAD_STATE_DIR`, `CAD_ENGINE_DIR` and `CAD_CACHE_DIR`, a release before 0.12) keeps the flat
-layout below, in the state and cache folders (`cad.engine.places`).
+layout below, in the state and cache folders (`cad.engine.places`). A version is made present whole --
+its server and kernel environments, then its code marker -- by `cad setup --add` (`_internal/versions.py`),
+which changes nothing else; each delivery channel's pointer (`default`, `channels/<name>` in the state folder:
+`_internal/pointers.py`) names its version, moved by one routine that imports the new version's settings,
+Recents, records, page token and port from the version it replaces at its first start (`_internal/imports.py`)
+and removes the versions no pointer names; the layout before 0.12 is imported from and, once the default
+channel has left it and that is safe, its code, records and caches removed (`_internal/legacy.py`).
 
 The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
 place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and

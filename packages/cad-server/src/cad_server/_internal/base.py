@@ -27,8 +27,10 @@ exists (``Making.made``), never before.
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
-- **Made on first need**, never ahead of it: nothing makes it at install time or at the engine's
-  start. The one exception is an automatic update's first half (``cli.setup``'s ``PREPARE_ENV``): the
+- **Made on first need** for a process with no version, never ahead of it: nothing makes it at the
+  engine's start. Two exceptions: a version of the per-version layout has its base made as it is installed
+  (``cad_server._internal.versions.make_present``), so a version that is present has nothing left to make --
+  a sandboxed command of it cannot write its code folder --; and an automatic update's first half (``cli.setup``'s ``PREPARE_ENV``): the
   release the engine will switch to by itself makes its base before the switch, so that the person's first
   build after it, which they never asked to wait for an update, waits on nothing. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
   worker, a view or an operation that reads a STEP or an xbf or meshes one -- makes it (``kernel``,
@@ -617,12 +619,15 @@ def _say(line: str) -> None:
     print(f"cad: {line}", file=sys.stderr, flush=True)
 
 
-def _make(env: Path, installation: Installation, told: Callable[[str], None]) -> dict[str, Any]:
+def _make(env: Path, installation: Installation, told: Callable[[str], None],
+          inputs: dict[str, Any] | None = None) -> dict[str, Any]:
     """The base at ``env`` made (``make``): the import path its Python starts with asked of it, and its
-    marker, naming the installation it belongs to, written last."""
+    marker, naming the installation it belongs to, written last. ``inputs``: what its key digests, as the
+    installation's own process works it out (``cad_server._internal.versions`` makes a version's base from
+    another process); by default this process's (``_inputs``)."""
 
     def finish(steps: list[list[str]], seconds: float) -> dict[str, Any]:
-        return {"schema": SCHEMA, "key": env.name, "inputs": _inputs(installation),
+        return {"schema": SCHEMA, "key": env.name, "inputs": inputs if inputs is not None else _inputs(installation),
                 "installation": dataclasses.asdict(installation), "path": _path(env), "commands": steps,
                 "seconds": round(seconds, 2), "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
 

@@ -2046,6 +2046,28 @@ def _identity(path: Path) -> tuple[int, int] | None:
     return found.st_dev, found.st_ino
 
 
+def _first_start() -> None:
+    """A version's engine, its lock taken and before it reads its data or serves anything: that version's data
+    imported where it is not (``cad_server._internal.imports.ensure``: a version started with no data, or data
+    someone removed), what was skipped said in the engine's log. Never keeps the engine from starting. Nothing
+    for an engine with no version."""
+    from cad.engine.places import versioned
+
+    name = versioned()
+    if name is None:
+        return
+    try:
+        from cad_server._internal import imports
+
+        found = imports.ensure(name, told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
+    except Exception as error:  # noqa: BLE001 - said, and the engine starts on what data there is
+        print(f"cad: the data of text-to-cad {name} could not be imported: {type(error).__name__}: {error}",
+              file=sys.stderr, flush=True)
+        return
+    if found.done and found.source is not None:
+        print(f"cad: imported {found.source.words()} into text-to-cad {name}", file=sys.stderr, flush=True)
+
+
 def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool = False,
          foreground: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server --port``);
@@ -2079,6 +2101,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
                   file=sys.stderr)
             return 1 if port is not None else 0
         return 0  # another daemon is up
+    _first_start()
     if rotate:
         try:
             if rotate_token() is None:

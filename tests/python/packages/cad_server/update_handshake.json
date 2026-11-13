@@ -97,12 +97,14 @@
   "command": "setup",
   "engine_update_flag": "--engine-update",
   "flags": [
+   "--add",
    "--dry-run",
    "--engine-update",
    "--help",
    "--json",
    "--no-telemetry",
    "--only",
+   "--quiet",
    "-h"
   ]
  },

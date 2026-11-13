@@ -76,6 +76,12 @@ kernel environment (step 5's, the one no other setup makes: left to its first ne
 the person's first build after the engine switched by itself) and stops there, no app changed; and again,
 whole, once the engine is idle.
 
+``--add [--quiet]`` installs this release and stops (``cad_server._internal.versions.add``): its folder,
+``versions/<release>``, made present -- its server and kernel environments --, and nothing else: no step above,
+no pointer, no app, no setting, no receipt. A skill's setup block and the install command's ``--add X`` run it
+(``uvx --from cad-server==X cad setup --add``). Exit 3 where this shell cannot install it (an agent's sandbox, no
+uv, no network), with the command to run outside it.
+
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
 Cursor's copy deleted, the skills removed by ``npx skills remove``, Claude Desktop's server an earlier release
@@ -102,7 +108,7 @@ installation current already -- its Python installed outside --, runs there as a
 says it before the plan.
 
 Exit status: 0 done, or nothing to do; 1 a step failed, an agent lacks its skills, or nothing was installed
-inside an app package; 2 bad arguments.
+inside an app package; 2 bad arguments; 3 ``--add`` could not install from this shell.
 """
 
 from __future__ import annotations
@@ -120,12 +126,13 @@ from typing import Any
 DEFAULT_PROG = "cad setup"
 SCHEMA = 1
 RECEIPT = "install-receipt.json"
-LOCK = "install.lock"
+LOCK = "install.lock"  # ``cad_server._internal.versions.LOCK``: the device's install lock
 # What text-to-cad keeps in the two folders ``--purge`` removes. A folder of that name that holds other things
 # and none of these is another program's that shares the name, and purge leaves it as it is (the engine's own
 # cache touches only its ``documents/``, ``engine/cache.py``).
 STATE_OURS = frozenset({"versions", "installations", "engines", "documents", "recents", "releases", "plugin", "settings.json",
-                        "settings.lock", "plugin.lock", "versions.json", "install-channels.json", RECEIPT})
+                        "settings.lock", "plugin.lock", "versions.json", "install-channels.json", "default", "channels",
+                        RECEIPT})
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
 ASIDE = "install-aside"
@@ -194,6 +201,10 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
         else:
             # The engine's own run, for its update button (``cad_server._internal.update``): no switch, progress on stdout.
             parser.add_argument("--engine-update", action="store_true", help=argparse.SUPPRESS)
+            parser.add_argument("--add", action="store_true",
+                                help="install this release in its own folder and stop: no app, no default, no "
+                                     "setting changed (a skill's setup block, and the install command's --add)")
+            parser.add_argument("--quiet", action="store_true", help="with --add: say nothing unless it fails")
     parser.add_argument("--json", action="store_true",
                         help="print the plan and what was done as JSON on stdout (progress goes to stderr)")
     return parser
@@ -208,6 +219,15 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
 
     parser = build_parser(prog, uninstall=uninstall)
     args = parser.parse_args(argv)
+    if getattr(args, "add", False) or getattr(args, "quiet", False):
+        given = [option for option, on in (("--dry-run", args.dry_run), ("--only", args.only),
+                                           ("--no-telemetry", args.no_telemetry), ("--engine-update", args.engine_update),
+                                           ("--json", args.json)) if on]
+        if not args.add or given:
+            parser.error("--quiet goes with --add alone" if not args.add else f"--add takes no {', '.join(given)}")
+        from cad_server._internal import versions
+
+        return versions.add(quiet=args.quiet)
     only = []
     for given in args.only or ():
         only += [name.strip() for name in given.split(",") if name.strip()]

@@ -5,7 +5,8 @@
 an argument missing or out of range, a file of another document type, an input that is not there, a
 destructive command run where no one can be asked and no ``--yes`` given (``consent``) -- which fails the
 same way until the call changes; 1 for a failure of the work itself (a build, a render, a tool, the engine
-out of reach, a mistake of ours, a destructive command the person said no to); 130 for an interrupt.
+out of reach, a mistake of ours, a destructive command the person said no to); 3 for a release this shell
+cannot install (an agent's sandbox, no uv, no network: ``cad_server._internal.versions``); 130 for an interrupt.
 Under ``--json`` every failure is ONE JSON document on stdout,
 the result's channel, so a caller reading it always finds an answer, and nothing else is written there:
 ``{"ok": false, "error": <its words>, "reason": <a stable snake_case code>}``, with
@@ -47,6 +48,9 @@ REASONS: dict[str, int] = {
     "engine_unavailable": 1,     # the engine server could not be reached or started
     "failed": 1,                 # the work failed: a build, a render, an export, a tool it ran
     "internal_error": 1,         # a mistake in text-to-cad's own code
+    # A release this shell cannot install: no uv, no network for what uv's cache lacks, or a folder the system
+    # (an agent's sandbox) will not let it write. The one line says the command to run outside the sandbox.
+    "cannot_install_here": 3,
     # An interrupt (Ctrl-C).
     "canceled": 130,
 }

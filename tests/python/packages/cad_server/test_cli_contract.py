@@ -68,7 +68,7 @@ class TheReasons(unittest.TestCase):
         # The table an agent branches on: a reason is added, never renamed, and its class sets the status.
         self.assertEqual(REASONS, {"usage": 2, "invalid_argument": 2, "wrong_type": 2, "not_found": 2,
                                    "confirmation_required": 2, "declined": 1, "engine_unavailable": 1, "failed": 1,
-                                   "internal_error": 1, "canceled": 130})
+                                   "internal_error": 1, "cannot_install_here": 3, "canceled": 130})
         with self.assertRaises(ValueError):
             Failure("words", "no_such_reason")
 

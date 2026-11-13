@@ -106,7 +106,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "server": frozenset({"port", "rotate_token", "yes"}),
     # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
     # for which apps; and `uninstall`, which takes it out again.
-    "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update"}),
+    "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update", "add", "quiet"}),
     # `update` runs the newest release's `setup` with its options; the switch's helper is its own.
     "update": frozenset({"dry_run", "only", "no_telemetry", "json", "switch", "port", "previous"}),
     # Automatic updates, the person's setting: status, on or off (a verb of its own, as `update`'s options
