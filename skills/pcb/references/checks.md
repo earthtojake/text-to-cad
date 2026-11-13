@@ -10,10 +10,10 @@ print(pin.at, pin.net)
 print(board.resolve("#J1.1"))
 ```
 
-Run it with `cad +0.11.10@claude run inspect_board.py`, and KiCad's rule check with the command:
+Run it with `cad +0.11.11@claude run inspect_board.py`, and KiCad's rule check with the command:
 
 ```bash
-cad +0.11.10@claude kicad_pcb drc board.kicad_pcb --json
+cad +0.11.11@claude kicad_pcb drc board.kicad_pcb --json
 ```
 
 Each `kicad_pcb.read` call reads the current file. Its dataclasses hold a read-only view of that
@@ -24,14 +24,14 @@ the board as drawn; a track's arc is coarser (10 degree chords). It does not lau
 Project netclass names are read from the sibling `.kicad_pro` when present. Refresh the index
 after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
 `from cad.kicad_pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
-outline) by the even-odd rule, in the same millimetres. DRC is `cad +0.11.10@claude kicad_pcb drc` (`--json`: each
+outline) by the even-odd rule, in the same millimetres. DRC is `cad +0.11.11@claude kicad_pcb drc` (`--json`: each
 finding's `items`, as under `measurements.drc`, each with KiCad's `uuid`, `description` and `pos`, and what the
 board says it is: `kind` (track, via, pad, zone, footprint, shape, text, field), `layers`, `net`, `ref` (the
 reference `board.resolve` takes: `#track:<uuid>`, `#U3.7`, `#U3`) and `part`; each `measurements.drc` entry
 adds the `layer` its description ends with. KiCad reports a copper sliver with no item or position: the
 check finds it again in that layer's saved copper (`at_source: "board"`, the finding's location), and where
 it cannot, says why in `note`), and
-`cad.kicad_pcb.drc(path)` in a script run with `cad +0.11.10@claude run` whose header names `cad[kicad]` (a
+`cad.kicad_pcb.drc(path)` in a script run with `cad +0.11.11@claude run` whose header names `cad[kicad]` (a
 `# /// script` block's `dependencies`); both run kicode's `kicad-cli`.
 
 ## References
@@ -68,7 +68,7 @@ an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A 
 item is gone raises `ValueError`.
 Quote a path containing spaces before its reference, such as `"my board.kicad_pcb"#U1.3`.
 
-A Quick Edit's packet (`cad +0.11.10@claude kicad_pcb snapshot --job PACKET`) lights the same references on the
+A Quick Edit's packet (`cad +0.11.11@claude kicad_pcb snapshot --job PACKET`) lights the same references on the
 board it draws, as the person saw them; one that no longer resolves is listed in its warnings.
 
 Check facts DRC does not establish from the actual saved geometry: distance from each power
@@ -78,6 +78,6 @@ return paths under signals. Thresholds come from the circuit/datasheets and stac
 apply an arbitrary universal distance or current rule. Report assumptions and inaccessible
 information. Measure repeated pad shapes together and account for vias and both copper sides.
 
-KiCad's `cad +0.11.10@claude kicad_pcb drc` result is the connectivity and rule gate. A zone outline is not proof
+KiCad's `cad +0.11.11@claude kicad_pcb drc` result is the connectivity and rule gate. A zone outline is not proof
 of connected copper: regenerate the fill in KiCad, save it, then run DRC. An unfilled or stale
 zone must not be called routed solely because its outline encloses a pin.

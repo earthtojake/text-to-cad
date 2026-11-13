@@ -28,7 +28,7 @@ one. The keys are in [study-file.md](study-file.md).
 ## Choosing faces
 
 A face the user selected in the CAD Viewer arrives as `/work/bracket.step#bracket/face 17` and is
-exact. Otherwise the setup (`cad +0.11.10@claude step solve part.step`) lists each face with its area, centre,
+exact. Otherwise the setup (`cad +0.11.11@claude step solve part.step`) lists each face with its area, centre,
 surface type and a hint (`plane, normal -Z, largest`): "the base" or "the mounting face" is usually
 the largest planar face with a downward normal, "the top of the upright" a small planar face at the
 highest Z, a hole a `cylinder`. A face and its mirror image match a description equally; ask
@@ -112,7 +112,7 @@ in g (1 g = 9.81 m/s²).
   at each element's integration points back. There is no fallback solver: a missing `ccx`, or one
   older than 2.20, stops the solve before meshing with an error naming how to install it.
 - `--deck` keeps the input of the solve written as `ccx.inp` in the results folder, which
-  `cad +0.11.10@claude run ccx -i ccx` runs again. The result's `mesh.solver` names the version that ran
+  `cad +0.11.11@claude run ccx -i ccx` runs again. The result's `mesh.solver` names the version that ran
   (`calculix 2.23 (C3D10)`). A solve that runs past an hour is stopped and says so.
 
 ## Judging the answer

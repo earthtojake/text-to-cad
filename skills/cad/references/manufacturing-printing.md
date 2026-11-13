@@ -44,15 +44,15 @@ technology is named; a machine datasheet moves them):
   is of the part lying its best way -- on any side, turned any way on the bed, across its corners -- so it
   does not change with how the model is turned. The material and the
   process on the part, `part.material = plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`,
-  `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad +0.11.10@claude model dfm "$ID"` then needs no
+  `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad +0.11.11@claude model dfm "$ID"` then needs no
   `--process`, `--technology` or `--layer-height`.
 
 ## Check it
 
 ```bash
-cad +0.11.10@claude stl dfm stand.stl --process printing --technology fdm --material petg
-cad +0.11.10@claude model dfm "$ID" --process printing --technology sla --build-volume 145x145x185
-cad +0.11.10@claude step dfm housing.step --process printing --technology fdm --layer-height 0.12 --candidates
+cad +0.11.11@claude stl dfm stand.stl --process printing --technology fdm --material petg
+cad +0.11.11@claude model dfm "$ID" --process printing --technology sla --build-volume 145x145x185
+cad +0.11.11@claude step dfm housing.step --process printing --technology fdm --layer-height 0.12 --candidates
 ```
 
 The check measures the part as it stands on the plate: its lowest point, Z up. The options that change
