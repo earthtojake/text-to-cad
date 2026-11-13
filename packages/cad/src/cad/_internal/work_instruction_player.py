@@ -113,83 +113,108 @@ _PAGE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
+/* text-to-cad's own tokens (packages/ui's tokens.css, light and dark) and the viewer's chrome: the
+   system sans at 13px, the popover surfaces with a border and a shadow over the grey canvas, shadcn's
+   buttons, the tool strip's 24px icon buttons. The manual's own marks stay: the big step number, the
+   parts box, the line art. */
 :root {
-  --paper: #ffffff; --ink: #111111; --soft: #555555; --faint: #d9d9d9; --wash: #f4f4f4; --open: #9a5b00;
-  --sans: Verdana, "DejaVu Sans", Geneva, sans-serif;
+  color-scheme: light dark;
+  --radius: 10px;
+  --background: #ffffff; --foreground: #171717; --muted-foreground: #737373; --border: #e5e5e5;
+  --popover: #ffffff; --accent: #e5e5e5; --secondary: #f5f5f5; --primary: #171717; --primary-foreground: #fafafa;
+  --sidebar: #fafafa; --canvas: #ebebeb; --ring: #a1a1a1;
+  --warning: oklch(0.473 0.137 46.201); --warning-bg: oklch(0.962 0.059 95.617); --warning-border: oklch(0.85 0.13 85);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #292929; --foreground: #fafafa; --muted-foreground: #b4b4b4; --border: rgb(255 255 255 / 10%);
+    --popover: #303030; --accent: #3d3d3d; --secondary: #363636; --primary: #e5e5e5; --primary-foreground: #262626;
+    --sidebar: #2e2e2e; --canvas: #1e1e1e; --ring: #737373;
+    --warning: oklch(0.879 0.169 91.605); --warning-bg: oklch(0.269 0.077 45.635); --warning-border: oklch(0.5 0.12 70);
+  }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; background: var(--paper); color: var(--ink);
-  font: 15px/1.45 var(--sans); }
-#stage { position: relative; min-height: 0; touch-action: none; }
+body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; background: var(--background); color: var(--foreground);
+  font: 13px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+#stage { position: relative; min-height: 0; background: var(--canvas); touch-action: none; }
 canvas { display: block; width: 100%; height: 100%; outline: none; }
-#hint { position: absolute; right: 24px; bottom: 20px; color: var(--soft); font-size: 13px; pointer-events: none; }
-#card { position: absolute; left: 24px; top: 20px; max-width: min(360px, calc(100% - 48px)); pointer-events: none; }
-#num { font-size: 88px; font-weight: 700; line-height: 0.9; letter-spacing: -0.03em; }
+.surface { border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--popover) 92%, transparent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04); backdrop-filter: blur(4px); }
+#hint { position: absolute; right: 16px; bottom: 16px; color: var(--muted-foreground); font-size: 12px; pointer-events: none; }
+#card { position: absolute; left: 16px; top: 16px; max-width: min(360px, calc(100% - 32px)); pointer-events: none; }
+#num { font-size: 72px; font-weight: 700; line-height: 0.9; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
 #num:empty { display: none; }
-.box { margin-top: 10px; padding: 10px 12px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); }
+.box { margin-top: 10px; padding: 10px 12px; }
 .box:empty { display: none; }
-.box h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.box h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
 .tiles { display: flex; flex-wrap: wrap; gap: 6px 12px; }
-.tile { width: 72px; }
-.tile img { display: block; width: 72px; height: 72px; object-fit: contain; }
-.tile b { display: block; font-size: 13px; }
-.tile span { display: block; color: var(--soft); font-size: 11px; line-height: 1.25; }
-.wide .tile { width: 96px; } .wide .tile img { width: 96px; height: 96px; }
-.row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; font-weight: 700; }
-.row svg { flex: none; width: 30px; height: 16px; }
-.row small { color: var(--soft); font-weight: 400; }
-aside { display: flex; flex-direction: column; min-height: 0; border-left: 1.5px solid var(--ink); }
-header { padding: 26px 24px 16px; }
-h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.1; text-transform: uppercase; letter-spacing: 0.01em; }
-header p { margin: 8px 0 0; color: var(--soft); }
-ol { flex: 1; margin: 0; padding: 0; overflow-y: auto; list-style: none; border-top: 1.5px solid var(--ink); }
-li { border-bottom: 1px solid var(--faint); }
-li > button { display: grid; grid-template-columns: 40px 1fr 20px; align-items: center; gap: 4px; width: 100%;
-  padding: 12px 24px; border: 0; background: none; color: var(--soft); font: inherit; text-align: left; cursor: pointer; }
-li > button b { font-size: 22px; font-weight: 700; line-height: 1; }
-li > button i { width: 18px; height: 18px; border: 1.5px solid var(--faint); border-radius: 3px; }
-li.done > button { color: var(--ink); }
-li.done > button i { border-color: var(--ink); background: var(--ink)
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E") center/14px no-repeat; }
-li.now { background: var(--wash); }
-li.now > button { color: var(--ink); }
-li.now > button i { border-color: var(--ink); }
-.more { padding: 0 24px 14px 68px; font-size: 14px; }
+.tile { width: 64px; }
+.tile img { display: block; width: 64px; height: 64px; object-fit: contain; border-radius: 6px; background: #fff; }
+.tile b { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; }
+.tile span { display: block; color: var(--muted-foreground); font-size: 11px; line-height: 1.3; }
+.wide .tile { width: 84px; } .wide .tile img { width: 84px; height: 84px; }
+.row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; font-weight: 600; }
+.row svg { flex: none; width: 28px; height: 15px; }
+.row small { color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
+.paper { fill: var(--popover); }
+aside { display: flex; flex-direction: column; min-height: 0; background: var(--sidebar); border-left: 1px solid var(--border); }
+header { padding: 16px 16px 12px; }
+h1 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
+header p { margin: 2px 0 0; color: var(--muted-foreground); }
+ol { flex: 1; margin: 0; padding: 0 8px 8px; overflow-y: auto; list-style: none; }
+li { border-radius: 8px; }
+li > button { display: grid; grid-template-columns: 24px 1fr 16px; align-items: center; gap: 6px; width: 100%; min-height: 32px;
+  padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--muted-foreground); font: inherit; text-align: left; cursor: pointer; }
+li > button:hover { background: var(--accent); color: var(--foreground); }
+li > button b { font-weight: 600; font-variant-numeric: tabular-nums; }
+li > button i { width: 16px; height: 16px; border: 1px solid var(--ring); border-radius: 4px; background: var(--background); }
+li.done > button { color: var(--foreground); }
+li.done > button i { border-color: var(--primary); background: var(--primary)
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5 5.5-6' fill='none' stroke='%23fafafa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat; }
+li.now { background: var(--accent); }
+li.now > button { color: var(--foreground); }
+li.now > button:hover { background: none; }
+.more { padding: 0 8px 10px 38px; }
 .more p { margin: 4px 0; }
-.more .small { color: var(--soft); font-size: 12px; }
-.more .open { color: var(--open); }
-.notice { display: flex; gap: 10px; align-items: center; margin: 4px 0 8px; padding: 8px 10px;
-  border: 1.5px solid var(--ink); border-radius: 10px; }
-.notice svg { flex: none; width: 24px; height: 24px; }
-footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 16px 24px; border-top: 1.5px solid var(--ink); }
-footer button { height: 44px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); color: var(--ink);
-  font: 700 15px var(--sans); cursor: pointer; }
-footer button:disabled { border-color: var(--faint); color: var(--faint); cursor: default; }
-footer #next { background: var(--ink); color: var(--paper); }
-footer #next:disabled { border-color: var(--faint); background: var(--paper); color: var(--faint); }
-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-#modes { position: absolute; left: 24px; bottom: 14px; display: flex; gap: 4px; padding: 4px;
-  border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); }
-#modes button { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 9px; border: 0; border-radius: 7px;
-  background: none; color: var(--ink); font: 12px var(--sans); cursor: pointer; }
-#modes button svg { width: 18px; height: 18px; flex: none; }
-#modes button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
-#fail { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; color: var(--soft); text-align: center; }
+.more .small { color: var(--muted-foreground); font-size: 11px; }
+.more .open { color: var(--warning); }
+.notice { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 8px; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--background); }
+.notice.careful { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
+.notice svg { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+footer button { height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground);
+  font: 500 13px var(--sans); cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
+footer button:hover { background: var(--accent); }
+footer button:disabled { opacity: 0.5; cursor: default; }
+footer #next { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+footer #next:hover { opacity: 0.9; }
+button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent); }
+#modes { position: absolute; left: 16px; bottom: 12px; display: flex; gap: 2px; padding: 4px; }
+#modes button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+  background: none; color: color-mix(in srgb, var(--foreground) 70%, transparent); cursor: pointer; }
+#modes button:hover { background: var(--accent); color: var(--foreground); }
+#modes button[aria-checked="true"] { background: var(--accent); color: var(--foreground); }
+#modes button svg { width: 16px; height: 16px; }
+#modes span { display: none; }
+#modes output { align-self: center; padding: 0 6px 0 4px; color: var(--muted-foreground); font-size: 12px; }
+#fail { position: absolute; inset: 0; display: none; place-items: center; padding: 24px; color: var(--muted-foreground); text-align: center; }
 @media (max-width: 760px) {
-  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 52vh minmax(0, 1fr); }
-  aside { border-left: 0; border-top: 1.5px solid var(--ink); }
-  header { padding: 14px 16px 10px; } h1 { font-size: 22px; }
+  body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 52vh minmax(0, 1fr); font-size: 15px; }
+  aside { border-left: 0; border-top: 1px solid var(--border); }
+  header { padding: 12px 16px 8px; }
   #card { left: 12px; top: 10px; display: flex; align-items: flex-start; gap: 10px; max-width: calc(100% - 24px);
-    max-height: calc(100% - 36px); overflow: hidden; }
+    max-height: calc(100% - 52px); overflow: hidden; }
   #num { font-size: 48px; }
-  .box { margin-top: 0; padding: 6px 8px; border-radius: 8px; } .box h2 { font-size: 12px; margin-bottom: 4px; }
+  .box { margin-top: 0; padding: 6px 8px; } .box h2 { font-size: 12px; margin-bottom: 4px; }
   .tiles { gap: 4px 8px; } .tile, .wide .tile { width: 40px; } .tile img, .wide .tile img { width: 40px; height: 40px; }
   .tile b { font-size: 11px; } .tile span { display: none; }
   .row { margin-top: 3px; gap: 6px; font-size: 11px; } .row svg { width: 24px; height: 13px; } .row small { display: none; }
-  li > button { padding: 12px 16px; } .more { padding: 0 16px 12px 60px; } footer { padding: 12px 16px; }
+  li > button { min-height: 40px; } footer button { height: 40px; font-size: 15px; } footer { padding: 10px 12px; }
   #hint { display: none; }
-  #modes { left: 12px; bottom: 8px; } #modes button { padding: 0 7px; } #modes button span { display: none; }
+  #modes { left: 12px; bottom: 8px; } #modes button { width: 36px; height: 36px; } #modes output { display: none; }
 }
 </style>
 <script type="importmap">
@@ -198,8 +223,8 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 </script>
 </head>
 <body>
-<main id="stage"><div id="card"><div id="num"></div><div id="box" class="box"></div></div>
-  <div id="modes" role="radiogroup" aria-label="Display"></div>
+<main id="stage"><div id="card"><div id="num"></div><div id="box" class="box surface"></div></div>
+  <div id="modes" class="surface" role="radiogroup" aria-label="Display"></div>
   <div id="hint">Drag to turn it.</div><div id="fail"></div></main>
 <aside>
   <header><h1 id="title"></h1><p id="scope"></p></header>
@@ -221,11 +246,11 @@ const landed = (index) => start(index) + data.travel;
 
 // Small drawings, the PDF's: screws, nuts and washers side on, the tools by what their names say.
 const SVG = (body, box = "0 0 30 16") =>
-  `<svg viewBox="${box}" fill="white" stroke="#111" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  `<svg viewBox="${box}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const GLYPHS = {
-  screw: SVG('<rect x="1" y="3" width="6" height="10"/><rect x="7" y="5.5" width="21" height="5"/>' +
+  screw: SVG('<rect class="paper" x="1" y="3" width="6" height="10"/><rect class="paper" x="7" y="5.5" width="21" height="5"/>' +
              '<path d="M10 5.5l1.6 5M13 5.5l1.6 5M16 5.5l1.6 5M19 5.5l1.6 5M22 5.5l1.6 5M25 5.5l1.6 5" stroke-width="0.8"/>'),
-  nut: SVG('<path d="M15 1.5l6 3.5v6l-6 3.5-6-3.5v-6z"/><circle cx="15" cy="8" r="2.6"/>'),
+  nut: SVG('<path class="paper" d="M15 1.5l6 3.5v6l-6 3.5-6-3.5v-6z"/><circle cx="15" cy="8" r="2.6"/>'),
   washer: SVG('<circle cx="15" cy="8" r="6.5"/><circle cx="15" cy="8" r="2.8"/>'),
 };
 function toolGlyph(name) {
@@ -233,11 +258,11 @@ function toolGlyph(name) {
   if (/hex|allen/.test(lowered)) return SVG('<path d="M9 2v11h12" fill="none" stroke-width="3" stroke-linecap="round"/>');
   if (/screwdriver/.test(lowered)) return SVG('<rect x="2" y="5" width="11" height="6" rx="2"/><path d="M13 8h15" stroke-width="2"/>');
   if (/wrench|spanner/.test(lowered)) return SVG('<path d="M3 13L19 5" stroke-width="3" stroke-linecap="round"/><circle cx="22" cy="4" r="3.5"/>');
-  return SVG('<circle cx="15" cy="8" r="3" fill="#111"/>');
+  return SVG('<circle cx="15" cy="8" r="3" fill="currentColor"/>');
 }
 const SIGNS = {
-  careful: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5L22.5 21h-21z" fill="white" stroke="#111" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3" fill="#111"/></svg>',
-  tip: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="white" stroke="#111" stroke-width="1.8"/><path d="M12 11v6" stroke="#111" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1.3" fill="#111"/></svg>',
+  careful: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  tip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
 };
 
 function el(tag, className, text) {
@@ -293,7 +318,7 @@ const rows = data.steps.map((step, index) => {
   const more = el("div", "more");
   more.hidden = true;
   for (const notice of step.notices) {
-    const line = el("div", "notice");
+    const line = el("div", notice.careful ? "notice careful" : "notice");
     line.innerHTML = notice.careful ? SIGNS.careful : SIGNS.tip;
     line.append(el("span", "", notice.text));
     more.append(line);
@@ -346,8 +371,11 @@ const modeButtons = MODES.map((option) => {
   $("modes").append(button);
   return button;
 });
+const modeName = el("output");
+$("modes").append(modeName);
 function showMode() {
   MODES.forEach((option, index) => modeButtons[index].setAttribute("aria-checked", String(option.value === mode)));
+  modeName.textContent = MODES.find((option) => option.value === mode).label;
   paint();
 }
 showMode();
@@ -426,7 +454,7 @@ void main() {
   if (length2 > 1e-8) clip.xy += way * inversesqrt(length2) * thickness * clip.w * 2.0 / resolution;
   gl_Position = clip;
 }`;
-const HULL_FRAGMENT = `void main() { gl_FragColor = vec4(0.067, 0.067, 0.067, 1.0); }`;
+const HULL_FRAGMENT = `uniform vec3 ink; void main() { gl_FragColor = vec4(ink, 1.0); }`;
 
 try {
   const THREE = await import("three");
@@ -440,7 +468,7 @@ try {
   const stage = $("stage");
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setClearColor(0xffffff, 1);
+
   stage.prepend(renderer.domElement);
   const scene = new THREE.Scene();
   // One camera with no perspective, as the PDF's pictures are drawn.
@@ -532,7 +560,7 @@ try {
   const creaseInk = new LineMaterial({ color: 0x111111, linewidth: 1.5 });
   const creaseNew = new LineMaterial({ color: new THREE.Color("__FILL__"), linewidth: 1.5 });
   const hullInk = new THREE.ShaderMaterial({
-    uniforms: { thickness: { value: 1.6 }, resolution: { value: new THREE.Vector2(1, 1) } },
+    uniforms: { thickness: { value: 1.6 }, resolution: { value: new THREE.Vector2(1, 1) }, ink: { value: new THREE.Color() } },
     vertexShader: HULL_VERTEX, fragmentShader: HULL_FRAGMENT, side: THREE.BackSide,
   });
   // Parts' own colours: none blue (blue is what a step adds), none red, amber or green.
@@ -585,7 +613,23 @@ try {
   watch.observe($("card"));
 
   const blue = new THREE.Color("__FILL__");  // what a step adds, as the PDF's pictures show it, in every mode
+  // The app's canvas behind the model, and Hidden line's paper and ink in the theme: white paper
+  // and dark ink in light, the app's dark surface and light ink in dark.
   const white = new THREE.Color(0xffffff);
+  const dark = matchMedia("(prefers-color-scheme: dark)");
+  const token = (name) => new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  const tone = () => {
+    renderer.setClearColor(token("--canvas"), 1);
+    white.copy(dark.matches ? token("--background") : new THREE.Color(0xffffff));
+    const ink = token("--foreground");
+    creaseInk.color.copy(ink);
+    hullInk.uniforms.ink.value.copy(ink);
+    const line = dark.matches ? token("--muted-foreground") : new THREE.Color("__LINE__");
+    lineInk.color.copy(line);
+    headInk.color.copy(line);
+    paint();
+  };
+  dark.addEventListener("change", tone);
   paint = () => {
     const through = mode === "xray" || mode === "wireframe";
     creaseInk.depthTest = creaseNew.depthTest = !through;
@@ -609,6 +653,7 @@ try {
       look.hull.visible = mode === "hidden-line" || mode === "solid" || mode === "parts";
     }
   };
+  tone();
   glow = (index) => {
     paint();
     guides.forEach((group, at) => { group.visible = at === index; });

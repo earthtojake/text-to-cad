@@ -206,7 +206,7 @@ footer. With `pictures=False` it is the table below with a done column.
 
 So a picture guide has two outputs: the PDF to print, and beside it a 3D page,
 `<name>.html` with `<name>.glb` (`animated=False` writes neither). The page is one
-file to open or send, drawn like the PDF: the same line art on a camera with no
+file to open or send, in text-to-cad's own look (its CAD Viewer's canvas, panel, buttons and light or dark theme) with the PDF's drawings: the same line art on a camera with no
 perspective, the step's new parts in blue, its big number and parts box (the PDF's
 own picture of each part, its screws by size, its tools), What you need before the
 first step, and the same words and notes. It opens in that line art (Hidden line) and
