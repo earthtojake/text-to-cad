@@ -241,6 +241,30 @@ test("the floor is matte until Glossy is chosen, and a snapshot's Preview is the
   assert.deepEqual(snapshot, viewer);
 });
 
+test("the parts reflect each other only where Preview is asked to, and a snapshot's Preview only where its job says", () => {
+  const on = { reflections: { enabled: true } };
+  assert.deepEqual(normalizePreviewSettings(on), on);
+  assert.throws(() => normalizePreviewSettings({ reflections: { enabled: "yes" } }), /must be a boolean/);
+  assert.throws(() => normalizePreviewSettings({ reflections: { strength: 1 } }), /Unsupported preview.reflections fields/);
+  assert.equal(previewSettingsChanged({ reflections: { enabled: false } }), false, "off is the default");
+  assert.equal(previewSettingsChanged(on), true);
+  // A stored record keeps what this build reads of it, group by group.
+  assert.deepEqual(readPreviewSettings({ ...on, lighting: { exposure: 1 } }), { ...on, lighting: { exposure: 1 } });
+  assert.deepEqual(readPreviewSettings({ reflections: { enabled: 1 }, lighting: { exposure: 1 } }), { lighting: { exposure: 1 } });
+
+  assert.equal(resolveViewSettings({}, PREVIEW).reflections.enabled, false);
+  assert.equal(resolveViewSettings({}, { ...PREVIEW, previewSettings: on }).reflections.enabled, true);
+  assert.equal(resolveViewSettings({ mode: "solid" }, { previewSettings: on }).reflections.enabled, false, "Preview's alone");
+  assert.equal(resolveViewSceneSettings({ display: {}, ...PREVIEW }).render.configuration.reflections, false);
+  assert.equal(resolveViewSceneSettings({ display: {}, ...PREVIEW, previewSettings: on }).render.configuration.reflections, true);
+
+  const job = { kind: "xbf", display: {}, ...PREVIEW };
+  assert.equal(renderJobContext(mesh(), job).sceneSettings.render.configuration.reflections, false);
+  assert.equal(renderJobContext(mesh(), { ...job, previewSettings: on }).sceneSettings.render.configuration.reflections, true);
+  assert.throws(() => renderJobContext(mesh(), { kind: "xbf", display: {}, previewSettings: on }), /previewSettings needs preview: true/);
+  assert.throws(() => renderJobContext(mesh(), { ...job, previewSettings: { reflections: { enabled: 1 } } }), /must be a boolean/);
+});
+
 test("Preview's floor stands at the model's lowest point until Model origin is chosen, and a snapshot's stands where the viewer's does", () => {
   assert.equal(RENDER_FLOOR_PLACEMENT, "lowest");
   for (const appearance of ["light", "dark"]) assert.equal(resolveViewSettings({}, { appearance, ...PREVIEW }).floor.placement, "lowest");

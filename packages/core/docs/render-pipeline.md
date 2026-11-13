@@ -91,7 +91,7 @@ anything else (a per-mode tree, a style group) fails validation.
 
 Preview's photographic look (Render) is no mode: it is asked for on its own, by the
 viewer's Preview and the parity page, over the same display. Its own settings
-(`PreviewSettings`: `parts`, `lighting`, `background`, `floor`) are the viewer's,
+(`PreviewSettings`: `parts`, `lighting`, `background`, `floor`, `reflections`) are the viewer's,
 kept beside the display, never in it (`normalizePreviewSettings`,
 `resolvePreviewSettings`, `previewSettingsChanged`). `readViewSettings` and
 `readPreviewSettings` read a stored record setting by setting, leaving out what this
@@ -224,6 +224,35 @@ its depth is kept. Small full-screen passes then add:
   what it shades and soft away from it, on the model and, through the floor shadow's
   composite, on the floor. A shadow pass that only moved the key holds the floor shadow's
   heights (`holdHeights`) and re-composites its key shadow alone.
+- **Reflections** (`studioReflections.js`), only when Preview asks for them
+  (`previewSettings.reflections.enabled`, off by default; `configuration.reflections`).
+  Three's draw gives every surface the studio's environment in its specular light, as if the
+  model's other parts were not there: a polished pillar on a plate shows the softboxes and
+  never the plate. With reflections on, the samples of a still view also carry what the parts
+  mirror of each other, from what the frame already holds:
+  - a geometry draw, the scene's opaque meshes again in stand-in materials (one shared
+    program; the frame's own draw keeps its one program per material), into two half-float
+    attachments: the view-space shading normal and roughness, the base colour and metalness;
+  - one ray per pixel along a direction of the surface's GGX lobe, marched through the
+    frame's depth (16 steps growing with the square of the distance, then 4 bisections).
+    Where it meets the front of a visible surface, that surface's radiance takes the
+    environment's place in the specular light, weighed by the split sum of the surface's F0.
+    The radiance is read from the picture so far (the accumulation), so each sample carries
+    the light one reflection further. A ray that meets nothing drawn changes nothing;
+  - a blur of that among pixels of one surface, wider the rougher it is, and a composite
+    that takes the frame's own place: the colour under its occlusion, and then, in
+    scene-linear light (PBR Neutral inverted), the reflection added and tone mapped again.
+
+  A picture's first sample carries none of it: one sample of a reflection is grain, and a
+  moving view is one sample a frame. So a moving view is drawn by the frame's own passes,
+  exactly as without reflections and at the same cost. Once the view rests, each later sample
+  carries a growing share (over 8 samples), scaled so the converged picture holds all of it
+  (`studioReflectionShares`): the reflections fade in as the picture converges. What it does
+  not know stays the environment's: a surface the camera does not see (a part's far side,
+  anything off the frame) and whatever writes no depth (the floor, a see-through part). A
+  hit surface's environment reflection is re-aimed at the surface that gathers it; its
+  diffuse light and the key's highlight are taken to leave the same in every direction, and
+  a clear coat is not weighed.
 
 The frame's caller says whether a frame is `still`: nothing but, perhaps, the camera changed
 since the last. A still frame is the next sample unless the camera has moved the model by
@@ -243,11 +272,19 @@ half-float accumulation and two half-resolution occlusion targets: about 200 MB 
 size, released with the studio. Software rendering has no frame: three's single draw, as
 before, whose key casts no shadow to soften.
 
+Reflections add to a still view's samples after the first one more draw of the opaque
+meshes and three more full-screen passes at the drawing buffer's resolution, and 36 bytes a
+pixel (two half-float attachments and their depth, two half-float reflection targets):
+about 215 MB at that size, made when the setting turns on and released when it turns off.
+Their cost on a GPU has not been measured: by what each pass reads, a sample with
+reflections is several times a sample without. A moving view pays none of it.
+
 `applyPhotographicStudio(THREE, runtime, configuration, options)` owns the
 synchronous light, ground and renderer state and updates those objects in place.
 `disposePhotographicStudio(runtime)` releases only those objects, the studio's frame
 included (`applyPhotographicStudio`'s `frame`: false for none, or its `samples` and
-`multisample`). The caller
+`multisample`; `configuration.reflections` asks that frame for the parts' reflections,
+`frame.configure({ reflections })`). The caller
 separately owns the PMREM returned by
 `createEnvironmentResource(renderer, configuration, {size})` — synchronous GPU
 work, returned directly rather than as a promise — assigns its
@@ -367,7 +404,10 @@ remain supported. An STL, a colour-only 3MF and a robot use the viewer/studio fa
 their source colours (a 3MF's object colours, a robot description's colour, else its link mesh's own).
 
 Snapshots use the same grouped display contract. Photographic lighting supports
-only the `view` capture mode. Camera,
+only the `view` capture mode. A job that asks for Preview (`preview: true`) draws it at
+Preview's defaults unless it brings Preview settings of its own (`previewSettings`, the
+viewer's `PreviewSettings`, refused without `preview: true`): how the parity page draws a
+still with reflections. Camera,
 selection, clipping, exploded view, guides, part colour, animation,
 kinematics, robot joints, per-output cameras and output sizing remain
 composable.

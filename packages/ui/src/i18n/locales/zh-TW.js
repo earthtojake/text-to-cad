@@ -444,6 +444,7 @@ export default {
   "render.finish": "表面處理",
   "render.finish.matte": "霧面",
   "render.finish.glossy": "亮面",
+  "render.reflections": "反射",
   "render.reset": "還原預設值",
 
   "colorPicker.saturationBrightness": "飽和度與亮度",

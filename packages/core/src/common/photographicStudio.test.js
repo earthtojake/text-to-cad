@@ -666,6 +666,29 @@ test("the studio's lighting is drawn through its frame, more samples at Final, n
   assert.throws(() => owned.render(disposed.renderer, disposed.scene, new THREE.PerspectiveCamera()), /disposed/);
 });
 
+test("the frame draws the parts' reflections of each other only while the studio is asked for them", () => {
+  const value = runtime();
+  const state = applyPhotographicStudio(THREE, value, configuration());
+  assert.equal(state.frame.reflections, false, "none unless asked");
+  const frame = state.frame;
+  applyPhotographicStudio(THREE, value, { ...configuration(), reflections: true });
+  assert.equal(state.frame, frame, "the same frame");
+  assert.equal(frame.reflections, true);
+  applyPhotographicStudio(THREE, value, { ...configuration(), reflections: true, exposure: 1 });
+  assert.equal(frame.reflections, true);
+  applyPhotographicStudio(THREE, value, configuration());
+  assert.equal(frame.reflections, false, "released with the setting");
+  disposePhotographicStudio(value);
+
+  // Without a frame there is nothing to draw them: in software, and unlit.
+  const software = { ...runtime(), softwareRendering: true };
+  assert.equal(applyPhotographicStudio(THREE, software, { ...configuration(), reflections: true }).frame, null);
+  const unlit = runtime();
+  const off = { ...configuration(), reflections: true, lighting: { ...configuration().lighting, enabled: false } };
+  assert.equal(applyPhotographicStudio(THREE, unlit, off).frame, null);
+  disposePhotographicStudio(unlit);
+});
+
 test("a still frame's samples move the key across its softbox, square to it and as wide as Size makes it, and back to rest", () => {
   const value = runtime();
   const state = applyPhotographicStudio(THREE, value, configuration());

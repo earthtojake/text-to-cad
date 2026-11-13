@@ -36,10 +36,11 @@ perspective without overwriting that shared camera choice.
 Omitted mode is Solid, and `mode` is one of the six; `grid` is a boolean, off unless said.
 The display also takes `clip` and `exploded`. Anything else is refused: there are no
 per-mode settings, style groups or axes. Preview's own settings (`parts`, `lighting`,
-`background`, `floor`) are a separate sparse object (`normalizePreviewSettings`): `parts`
+`background`, `floor`, `reflections`) are a separate sparse object (`normalizePreviewSettings`): `parts`
 contains `colorMode` (`original`, `single`, `by-part`), `color` and `colors`; `lighting`
 contains `quality`, `exposure`, `rotation`, `size`, `fill`; `background` contains `color`,
-`opacity`; `floor` contains `enabled`, `placement`, `color`, `opacity`, `finish`.
+`opacity`; `floor` contains `enabled`, `placement`, `color`, `opacity`, `finish`;
+`reflections` contains `enabled`.
 
 Viewer appearance inherits the host. A snapshot is always light, whatever the viewer's: `cad <type> snapshot`'s
 display takes no `appearance`, and a view a Quick Edit packet carries names none. Preview's lighting quality
@@ -114,6 +115,16 @@ orbiting pays one draw and a few small passes a frame (about 1.5 ms more at 3024
 an M1 Max) and a still view converges in about half a second. A snapshot is OCCT's, drawn in
 the engine (`engine/render/occt.py`), not through this frame. Software WebGL has no frame: one
 draw, as before.
+
+Reflections (off by default) add what the model's parts mirror of each other: a polished
+pillar shows the plate it stands on, where otherwise every surface reflects the studio alone.
+They are the frame's too (core's `studioReflections.js`), and a still view's only: while the
+view moves nothing of them is drawn, and once it rests they fade in over the picture's
+samples. Each of those samples draws the opaque parts once more and three more passes, and
+their targets are 36 bytes a pixel, made when Reflections turns on and released when it
+turns off. Only what the camera sees is reflected: not a part's far side, nothing off the
+frame, and not the floor (its Glossy finish is the floor's own reflection of the model). In
+software there is no frame, so there are none. A snapshot's Preview, OCCT's, has none either.
 
 Each interactive viewport keeps its renderer (a view of the page's one GPU device:
 [the GPU device](cad-renderer.md#the-gpu-device)), canvas and camera controls
