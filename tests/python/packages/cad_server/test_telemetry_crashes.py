@@ -207,6 +207,13 @@ class SignatureTest(unittest.TestCase):
         # status, and the crash says it as a signal's would.
         self.assertEqual(analytics.died(0xC0000005)["status"], 0xC0000005)
         self.assertTrue(analytics.valid_signature(analytics.died(0xC0000005)))
+        # The engine's crash of no kernel process says which failure it was, a word of ours; no other crash does.
+        unavailable = {"where": "tool", "type": analytics.KERNEL_UNAVAILABLE, "handled": True, "frames": [],
+                       "cause": "network"}
+        self.assertTrue(analytics.valid_signature(unavailable))
+        for bad in ({**unavailable, "cause": "dns error: failed to lookup address"}, {**good, "cause": "network"}):
+            with self.subTest(bad=bad):
+                self.assertFalse(analytics.valid_signature(bad))
         for status in (70000, -0xC0000005, 0x100000000):
             with self.subTest(status=status):
                 self.assertNotIn("status", analytics.died(status))
@@ -385,6 +392,53 @@ class ServerCrashTest(_Recording):
                 self.call(server, "cad_show", {"source": "a.step"})
         [crash] = self.crashes()
         self.assertEqual((crash["where"], crash["tool"], crash["type"], crash["count"]), ("tool", "cad_show", "KeyError", 1))
+        self.assertNotIn("secret", json.dumps(self.sent))
+
+    def test_a_kernel_environment_that_cannot_be_made_is_one_crash_with_its_cause_however_many_calls_it_fails(self) -> None:
+        # 0.11.9: 93 crashes from 12 installs, each call making the base again and failing, and nothing said why.
+        # Now the failure is remembered, every call is counted as failed for it, and its crash is sent once per
+        # making that failed, with a word for which failure it was.
+        import contextlib
+        import io
+        import subprocess
+
+        from cad.engine import places
+        from cad_server._internal import base
+
+        core = self.tmp / "core"
+        installation = base.Installation(release="9.9.9", name="9.9.9", python="3.14.2",
+                                         executable=str(base.interpreter(core)), prefix=str(core),
+                                         root=str(core / "site-packages"), source=None, arch="arm64", kernel=False)
+        making = base.Making(clock=lambda: 0.0)
+        asked: list[str] = []
+
+        def uv(step, folder, settings=None):
+            asked.append(step[1])
+            return subprocess.CompletedProcess(step, 2, "", "error: Failed to inspect Python interpreter at secret_path")
+
+        server = self.serve()
+        server.warm = places.kernel  # as the engine's pool asks it
+        step = self.tmp / "arm.step"
+        step.write_bytes(b"\0")
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(self.tmp / "cache")}), \
+                mock.patch.object(places, "KERNEL", base.kernel), mock.patch.object(base, "MAKING", making), \
+                mock.patch.object(base, "_uv", uv), mock.patch.object(base, "find_uv", return_value="uv"), \
+                mock.patch.object(base.Installation, "here", return_value=installation), \
+                contextlib.redirect_stderr(io.StringIO()):
+            answers = [self.call(server, "cad_open", {"source": str(step)}) for _ in range(3)]
+            self.assertEqual(asked, ["venv"], "made once: the later calls are told the failure")
+            [crash] = self.crashes()
+            failed = [event for event in self.sent[-1]["events"] if event["name"] == "tool_failure"]
+            making.follow(lambda _line: None)  # `cad run` makes it again, and it fails again: one crash more
+            self.call(server, "cad_open", {"source": str(step)})
+            [again] = self.crashes()
+        self.assertTrue(all(answer["isError"] for answer in answers))
+        self.assertIn('`cad run -c "import build123d"` tries again', answers[0]["content"][0]["text"])
+        self.assertIn("nothing made since", answers[2]["content"][0]["text"])
+        self.assertEqual((crash["type"], crash["cause"], crash["count"]),
+                         ("cad.engine.serve.KernelProcessesUnavailable", "python", 1))
+        self.assertEqual(failed, [{"name": "tool_failure", "tool": "cad_open", "reason": "no_kernel", "count": 3}])
+        self.assertEqual((again["cause"], again["count"]), ("python", 1))
         self.assertNotIn("secret", json.dumps(self.sent))
 
 

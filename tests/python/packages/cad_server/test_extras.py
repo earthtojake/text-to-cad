@@ -244,7 +244,8 @@ class NamingTest(unittest.TestCase):
                                      "as the system does to a process when memory runs out: run this again "
                                      "(the last uv said: Downloaded numpy)")
         self.assertEqual(base.failure(["uv", "pip", "install"], "Downloaded numpy\n", recipe, 2),
-                         "uv could not make the environment of the model's packages: Downloaded numpy")
+                         "uv could not make the environment of the model's packages, from its cache, then from the "
+                         "network: Downloaded numpy (the last of what uv said; the rest is kept nowhere)")
 
     def test_making_one_removes_releases_older_than_the_one_before_but_the_bases_and_one_a_process_runs_from(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))

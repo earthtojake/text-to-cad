@@ -216,6 +216,15 @@ class DrawingTest(unittest.TestCase):
         [written] = api.export(self.folder / "XBF/plate.xbf", self.folder / "verb.dxf", daemon=False)
         self.assertEqual((written.kind, written.path.read_bytes()), ("dxf", self.bytes))
 
+    def test_a_drawing_exported_beside_other_files_writes_them_all(self) -> None:
+        out = self.folder / "mixed"
+        written = api.export(self.folder / "XBF/plate.xbf", out / "plate.step", out / "plate.glb", out / "plate.dxf",
+                             daemon=False)
+        self.assertEqual([(row.path.name, row.kind) for row in written],
+                         [("plate.step", "step"), ("plate.glb", "glb"), ("plate.dxf", "dxf")])
+        self.assertTrue(all(row.path.stat().st_size == row.bytes for row in written))
+        self.assertEqual((out / "plate.dxf").read_bytes(), self.bytes, "the build's drawing, byte for byte")
+
     def test_a_drawing_takes_out_alone_and_a_dxf_path(self) -> None:
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*layer"):
             dxf("a.dxf", layer="CUT")
@@ -281,6 +290,13 @@ class RefusedTest(unittest.TestCase):
         # The xbf, written first, is no planar document either.
         with self.assertRaisesRegex(ExportRefused, "solid.xbf is 3D"):
             translate(self.folder / "XBF/solid.xbf", None, self.folder / "solid.dxf")
+
+    def test_an_export_naming_a_refused_dxf_writes_none_of_its_files(self) -> None:
+        out = self.folder / "mixed"
+        destinations = [out / "solid.step", out / "solid.stl", out / "solid.dxf"]
+        with self.assertRaisesRegex(ExportRefused, "solid.xbf is 3D: a DXF is drawn from 2D geometry"):
+            api.export(self.folder / "XBF/solid.xbf", *destinations, daemon=False)
+        self.assertFalse(out.exists(), "nothing is written, not even the folder")
 
     def test_an_edge_off_the_plane_is_refused_by_its_name(self) -> None:
         error = self.refused("lifted")
