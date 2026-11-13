@@ -25,7 +25,8 @@ import { DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "../lib/vi
  *   parts?: ViewParts,
  *   lighting?: {quality?: "preview" | "final", exposure?: number, rotation?: number, size?: number, fill?: number},
  *   background?: {color?: string, opacity?: number},
- *   floor?: {enabled?: boolean, placement?: "origin" | "lowest", color?: string, opacity?: number, finish?: "matte" | "glossy"}
+ *   floor?: {enabled?: boolean, placement?: "origin" | "lowest", color?: string, opacity?: number, finish?: "matte" | "glossy"},
+ *   reflections?: {enabled?: boolean}
  * }} PreviewSettings
  */
 /** @typedef {{enabled: boolean, projection: "orthographic" | "perspective", focalLength: number}} ViewCamera */
@@ -45,6 +46,7 @@ import { DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "../lib/vi
  * @property {ViewLighting} lighting
  * @property {ViewPaint} background
  * @property {ViewFloor} floor
+ * @property {{enabled: boolean}} reflections
  * @property {ViewPaint & {density: number}} grid
  * @property {ViewPaint} axes
  * @property {ReturnType<typeof normalizeStepClipSettings>} clip
@@ -60,12 +62,14 @@ export const VIEW_MODE_VALUES = Object.freeze(["solid", "shaded", "parts", "xray
 export const VIEW_SETTINGS_KEYS = Object.freeze(["mode", "grid", "appearance", "camera", "clip", "exploded"]);
 export const VIEW_CAMERA_KEYS = Object.freeze(["projection", "focalLength"]);
 // Preview's settings, in the order its panel lists them, and each group's fields.
-export const PREVIEW_SETTING_KEYS = Object.freeze(["parts", "lighting", "background", "floor"]);
+export const PREVIEW_SETTING_KEYS = Object.freeze(["parts", "lighting", "background", "floor", "reflections"]);
 const PREVIEW_GROUP_FIELDS = {
   parts: ["colorMode", "color", "colors"],
   lighting: ["quality", "exposure", "rotation", "size", "fill"],
   background: ["color", "opacity"],
-  floor: ["enabled", "placement", "color", "opacity", "finish"]
+  floor: ["enabled", "placement", "color", "opacity", "finish"],
+  // What the model's parts mirror of each other in a still view (studioReflections.js): on or off.
+  reflections: ["enabled"]
 };
 export const VIEW_COLOR_MODE_VALUES = Object.freeze(["original", "single", "by-part"]);
 // Matte is the studio floor; glossy also reflects the model (photographicStudio.js).
@@ -213,7 +217,8 @@ export function previewDefaults({ appearance = "light", lightingQuality = "final
     parts: { colorMode: "original", color: DEFAULT_PART_COLOR_SETTINGS.color, colors: [...DEFAULT_PART_COLOR_SETTINGS.colors] },
     lighting: { quality: choice(lightingQuality, VIEW_LIGHTING_QUALITY_VALUES, "lightingQuality"), exposure: 0, rotation: 0, size: 1, fill: 0.25 },
     background: { color: dark ? "#222222" : "#ffffff", opacity: 1 },
-    floor: { enabled: true, placement: RENDER_FLOOR_PLACEMENT, color: dark ? "#222222" : "#e7e7e5", opacity: 0.6, finish: "matte" }
+    floor: { enabled: true, placement: RENDER_FLOOR_PLACEMENT, color: dark ? "#222222" : "#e7e7e5", opacity: 0.6, finish: "matte" },
+    reflections: { enabled: false }
   };
 }
 
@@ -347,6 +352,7 @@ export function resolveViewSettings(input = {}, {
     lighting: { enabled: lit, ...studio.lighting },
     background: { enabled: lit, ...studio.background },
     floor: { ...studio.floor, enabled: lit && studio.floor.enabled },
+    reflections: { enabled: lit && studio.reflections.enabled },
     grid: { enabled: !lit && saved.grid === true, ...viewGridDefaults(resolvedAppearance) },
     // The scene still has an axis guide; no view turns it on.
     axes: { enabled: false, color: dark ? "#5b8cff" : "#3d6fe8", opacity: 0.85 },

@@ -93,7 +93,7 @@ perspective. It is the picture for a person, and the one that shows form on a pa
 gloss-black shell, a white fairing. Review geometry in the display modes, where edges are drawn.
 The first Preview of a document takes some seconds longer than a mode. It is drawn by the same
 renderer, not a path tracer: glass is a see-through tint, a polished metal reads lighter than the
-viewer's, and nothing is reflected in the floor. A drawing, a board and a schematic have none.
+viewer's, and nothing is reflected in the floor or in another part. A drawing, a board and a schematic have none.
 
 `--camera` is a preset (`iso`, `front`, `back`, `left`, `right`, `top`, `bottom`),
 an `azimuth:elevation` pair in degrees (`--camera 45:30`; `0:90` looks straight down), a camera
