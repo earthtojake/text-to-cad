@@ -149,8 +149,8 @@ A document of several parts is solved as an assembly, bonded where parts touch. 
   use a ref. A part named twice is refused.
 - `connections`: optional overrides, `{"between": [A, B], "type": ...}` with `bonded` or `free`.
   Without it every pair that touches within the tolerance is bonded. `bonded` needs the pair to
-  touch within the tolerance; `free` leaves them unjoined (their faces stay separate and may not
-  pass load). A `free` pair that is still joined through other bonded parts is refused. Parts that press
+  touch within the tolerance; `free` leaves them unjoined (their faces stay separate and carry no
+  load). A `free` pair that is still joined through other bonded parts is refused. Parts that press
   and slide, and bolts, are not in this version.
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap within it is closed to
   bond the pair, and so is an overlap no thicker than it (an interference; a `gap_closed` finding
