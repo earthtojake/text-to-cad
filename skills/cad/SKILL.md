@@ -41,10 +41,9 @@ If `cad` is missing, or says it does not know `+0.11.10@claude` (an older text-t
 outside the sandbox or with its permission, then run the command again:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh | sh -s -- --add 0.11.10
+uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.10 cad setup --add
 ```
 
-On Windows, in PowerShell: `& ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --add 0.11.10`.
 It installs 0.11.10 and the `cad` command and changes nothing else.
 
 When a command fails, its exit code says why:
