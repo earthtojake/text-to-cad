@@ -1,7 +1,7 @@
 name: Windows installer rehearsal
 
 # install.ps1 on a fresh Windows runner, the way a person runs it: Windows PowerShell 5.1, the
-# piped `irm | iex` form and the script form with options, against the wheel this tree builds.
+# piped `irm | iex` form, against the wheel this tree builds.
 # uv installed by its own installer when the image has none, `cad setup` run with nothing
 # asked, the `cad` command (cad.exe) registered, the doctor's verdict and a second run; then models
 # built on it (a box, a box with a hand-made wheel through `--with`, by a version range on the command
@@ -119,9 +119,10 @@ jobs:
             if (-not $release) { throw "the version feed names no release" }
           } else {
             "CAD_SCRIPT=scripts\install\install.ps1" >> $env:GITHUB_ENV
+            # This tree's install.py, not the site's.
+            "CAD_INSTALL_PY=$PWD\scripts\install\install.py" >> $env:GITHUB_ENV
             $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\cad_server-*.whl" | Select-Object -First 1).FullName
             if (-not $wheel) { throw "no server wheel in $env:RUNNER_TEMP\wheel" }
-            "CAD_FROM=--from `"$wheel`"" >> $env:GITHUB_ENV
             $release = (Get-Content VERSION -Raw).Trim()
           }
           "CAD_WHEEL=$wheel" >> $env:GITHUB_ENV
@@ -146,30 +147,6 @@ jobs:
           except OSError as error:
               print('closed port raises', type(error).__name__, getattr(error, 'winerror', None), error)"
 
-      - name: Usage, under PowerShell 7
-        shell: pwsh
-        run: |
-          & powershell -NoProfile -ExecutionPolicy Bypass -File $env:CAD_SCRIPT --help
-          pwsh -NoProfile -File $env:CAD_SCRIPT --help
-
-      # cmd redirects the streams, so Windows PowerShell 5.1 sees a console as a person does: no
-      # stderr line of uv's becomes a PowerShell error record.
-      - name: Dry run, as a script with options (5.1)
-        shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File "%CAD_SCRIPT%" %CAD_FROM% --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
-
-      - name: The dry run's plan
-        shell: pwsh
-        run: |
-          $out = Get-Content "$env:RUNNER_TEMP\dry-run.txt" -Raw
-          Write-Host $out
-          if ($out -match 'cad setup exited') { throw "cad setup failed" }
-          if ($out -notmatch "text-to-cad $([regex]::Escape($env:CAD_RELEASE)) for this machine") { throw "the plan does not name the release" }
-          if ($out -notmatch 'Dry run: nothing was changed\.') { throw "the dry run did not end as one" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.exe'
-          if (Test-Path $cmd) { throw "a dry run wrote $cmd" }
-          if (Test-Path (Join-Path $env:USERPROFILE '.local\bin\cad-launcher')) { throw "a dry run made the command's Python" }
-
       - name: Install, piped as the docs say (irm | iex, 5.1)
         shell: cmd
         env:
@@ -181,7 +158,7 @@ jobs:
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\install.txt" -Raw
           Write-Host $out
-          if ($out -match 'cad setup exited') { throw "cad setup failed" }
+          if ($out -match 'cad setup: failed') { throw "cad setup failed" }
           if ($out -notmatch "default\s+text-to-cad $([regex]::Escape($env:CAD_RELEASE))") { throw "the default channel is not on the release" }
           $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.exe'
           if (-not (Test-Path $cmd)) { throw "the cad command was not written at $cmd" }
@@ -199,24 +176,6 @@ jobs:
           if ($LASTEXITCODE) { throw "cad doctor exited $LASTEXITCODE" }
           & $env:CAD_CMD setup --dry-run
           if ($LASTEXITCODE) { throw "a second cad setup --dry-run exited $LASTEXITCODE" }
-
-      # The skills' setup block's Windows line, `& ([scriptblock]::Create((irm .../install.ps1))) --add X`: that
-      # release installed alone, the script block's arguments handed to the installer, and the pinned command run.
-      - name: --add, as a skill's setup block runs it (5.1)
-        if: ${{ !inputs.published }}
-        shell: cmd
-        env:
-          CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((Get-Content -Raw '%CAD_SCRIPT%'))) --add %CAD_RELEASE%" > "%RUNNER_TEMP%\add.txt" 2>&1
-
-      - name: What --add did
-        if: ${{ !inputs.published }}
-        shell: pwsh
-        run: |
-          Write-Host (Get-Content "$env:RUNNER_TEMP\add.txt" -Raw)
-          if ((Get-Content "$env:RUNNER_TEMP\add.txt" -Raw) -match 'cad setup exited') { throw "cad setup --add failed" }
-          $said = & $env:CAD_CMD "+$env:CAD_RELEASE" --version
-          if ($LASTEXITCODE -or $said -ne "cad $env:CAD_RELEASE") { throw "cad +$env:CAD_RELEASE --version said $said" }
 
       # What the model steps share: run a program and keep its stdout and stderr together (Windows
       # PowerShell 5.1 turns a native command's stderr lines into error records, so they are
@@ -534,18 +493,22 @@ jobs:
             & $env:CAD_CMD doctor
           }
 
-      # The uninstall as the docs give it, through the installer: never through the command it removes,
-      # whose release folder it runs from.
-      - name: Uninstall, through the installer (5.1)
-        shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File "%CAD_SCRIPT%" %CAD_FROM% --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
+      # The uninstall through uvx, never through the command it removes, whose version folder it runs from.
+      - name: Uninstall, through uvx
+        shell: pwsh
+        run: |
+          $uvx = (Get-Command uvx -ErrorAction SilentlyContinue).Source
+          if (-not $uvx) { $uvx = Join-Path $env:USERPROFILE '.local\bin\uvx.exe' }
+          $from = if ($env:CAD_WHEEL) { $env:CAD_WHEEL } else { "cad-server==$env:CAD_RELEASE" }
+          & $uvx --no-config --managed-python --python 3.14 --from $from cad uninstall *> "$env:RUNNER_TEMP\uninstall.txt"
+          "CAD_UNINSTALL_EXIT=$LASTEXITCODE" >> $env:GITHUB_ENV
 
       - name: What the uninstall did
         shell: pwsh
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\uninstall.txt" -Raw
           Write-Host $out
-          if ($out -match 'cad uninstall exited') { throw "cad uninstall failed" }
+          if ($env:CAD_UNINSTALL_EXIT -ne '0') { throw "cad uninstall exited $env:CAD_UNINSTALL_EXIT" }
           if (Test-Path $env:CAD_CMD) { throw "the proxy is still there after the uninstall: $env:CAD_CMD" }
           $python = Join-Path (Split-Path $env:CAD_CMD) 'cad-launcher'
           if (Test-Path $python) { throw "the cad command's Python is still there after the uninstall: $python" }
@@ -601,9 +564,15 @@ jobs:
           $r = Invoke-Native cad run box.py
           Need $r 'cad run box.py, accented state folder' @('(?m)^built \S+', 'bounds 40\D+20\D+6 mm')
 
-      - name: Uninstall the accented state folder's installation (5.1)
+      - name: Uninstall the accented state folder's installation
         if: always()
-        shell: cmd
+        shell: pwsh
         env:
           CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File "%CAD_SCRIPT%" %CAD_FROM% --uninstall > "%RUNNER_TEMP%\uninstall-accented.txt" 2>&1 & type "%RUNNER_TEMP%\uninstall-accented.txt"
+        run: |
+          $uvx = (Get-Command uvx -ErrorAction SilentlyContinue).Source
+          if (-not $uvx) { $uvx = Join-Path $env:USERPROFILE '.local\bin\uvx.exe' }
+          $from = if ($env:CAD_WHEEL) { $env:CAD_WHEEL } else { "cad-server==$env:CAD_RELEASE" }
+          & $uvx --no-config --managed-python --python 3.14 --from $from cad uninstall *> "$env:RUNNER_TEMP\uninstall-accented.txt"
+          "CAD_UNINSTALL_EXIT=$LASTEXITCODE" >> $env:GITHUB_ENV
+          Get-Content "$env:RUNNER_TEMP\uninstall-accented.txt"
