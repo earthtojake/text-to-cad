@@ -65,13 +65,13 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         # An integration has operations of its own only on a file of its tool's that is no document type (a file
-        # cad checks and never shows): a MuJoCo model's, which mujoco checks, and a GSL model's, whose mesh omega
-        # checks. A name is a type's or an integration's, a suffix one or the other's, and a type's file has its
-        # operations there alone.
-        self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf")), "omega": (("check", "mesh"), (".gsl",))},
+        # cad checks and never shows): a MuJoCo model's, which mujoco checks. A name is a type's or an
+        # integration's, a suffix one or the other's, and a type's file has its operations there alone: a GSL
+        # model is a type, shown as a field, and omega is the tool behind its operations.
+        self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf"))},
                          {name: (found.operation_names, found.files)
                           for name, found in registry.INTEGRATIONS.items() if found.operations})
-        self.assertEqual(("check", "mesh"), registry.INTEGRATION_OPERATIONS)
+        self.assertEqual(("check",), registry.INTEGRATION_OPERATIONS)
         self.assertFalse(set(registry.INTEGRATIONS) & set(registry.DOCUMENT_TYPES))
         for found in registry.INTEGRATIONS.values():
             self.assertEqual(bool(found.operations), bool(found.files))

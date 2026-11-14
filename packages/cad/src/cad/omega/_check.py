@@ -1,5 +1,5 @@
-"""``check``: a GSL model meshed by omega's ``gsl`` and the mesh judged against the model's field, as ``cad omega
-check FILE`` does.
+"""``check``: a GSL model meshed by omega's ``gsl`` and the mesh judged against the model's field, as ``cad gsl
+validate FILE`` does.
 
 ``gsl compile -t stl`` exits 0 on a mesh it got wrong: an empty one when every wall is thinner than a cell, one
 that keeps a floor and loses the walls standing on it, one cut off where the part leaves the box it was meshed in,

@@ -583,6 +583,42 @@ def _kicad_rules(document_type: str, operation: str) -> Callable[[list[str], str
     return run
 
 
+def _omega_checked(operation: str) -> Callable[[list[str], str], int]:
+    """A GSL model's operation (``validate``, ``mesh``), the omega integration's: its options its function's
+    signature, run here where this environment holds omega-core (a checkout's), else in the environment of
+    ``cad[omega]``, made on first need, its file refused here first."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad.results import CheckFinding, CheckResult
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                            _verb, emit, generated_parser)
+
+        target = ("cad.gsl", operation)
+        verb = _verb(target)
+        parser = _present(_typed(generated_parser(target, prog=prog), "gsl", operation, _first_parameter(target)))
+        parsed = parser.parse_args(argv)
+        positional, keywords = _call_arguments(verb, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+
+        def said(line: str) -> None:
+            print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+        def elsewhere() -> CheckResult:
+            found = integration_env.call(integration_env.environment("omega", said), "gsl", operation,
+                                         [str(Path(value).expanduser().resolve()) for value in positional], keywords)
+            return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                               findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                               summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+        def here() -> object:
+            return verb(*positional, **keywords)
+
+        return emit(here if integration_env.carries("omega") else elsewhere, prog=prog,
+                    as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=bool(getattr(parsed, "verbose", False)))
+
+    return run
+
+
 def _first_parameter(target: tuple[str, str]) -> str:
     import inspect
 
@@ -893,6 +929,8 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
+    ("gsl", "validate"): _omega_checked("validate"),
+    ("gsl", "mesh"): _omega_checked("mesh"),
 }
 
 

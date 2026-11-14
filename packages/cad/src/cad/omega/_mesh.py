@@ -229,8 +229,8 @@ def mesh(path: Path, out: Path | None = None, *, define: tuple[str, ...] = (), d
                 said = str(error)
                 if 'op "mesh"' in said and "one of" in said:
                     findings.add("error", "gsl_cannot_mesh", f"this gsl's eval has no mesh ({gsl}): it is older "
-                                 "than the one cad omega mesh needs", path=where,
-                                 hint="set CAD_GSL to the gsl of an omega-core after 0.1.2; `cad omega check` meshes "
+                                 "than the one cad gsl mesh needs", path=where,
+                                 hint="set CAD_GSL to the gsl of an omega-core after 0.1.2; `cad gsl validate` meshes "
                                       "with this one")
                 else:
                     findings.add("error", "compile_failed", f"gsl refused the model: {said}", path=where)

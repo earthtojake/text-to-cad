@@ -56,8 +56,9 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone. A document type is a file cad
   shows: each has a view. A file cad writes or checks and never shows is none, whatever cad does with it: an
   MJCF, MuJoCo's own model file, is an export's destination and the mujoco integration's to check, and
-  MuJoCo Studio shows it; a GSL model (`.gsl`), omega's, is text an agent writes, which omega's `gsl` meshes to an
-  STL (a document type) and the omega integration checks.
+  MuJoCo Studio shows it. A GSL model (`.gsl`), omega's, is a document type though it is text an agent writes:
+  cad shows it as the field it is (its view is `field`, the page marching it with no mesh), and the omega
+  integration's `gsl` is the tool behind its operations.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
   `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`, `omega`),
@@ -91,9 +92,9 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a MuJoCo model's
 check (`cad.mujoco.check`: an MJCF compiled by MuJoCo's own compiler, what collides as what, its contact excludes); a GSL
-model's mesh checked against its field (`cad.omega.check`: omega's `gsl` meshes it, and the mesh is held closed,
+model's mesh checked against its field (`cad.gsl.validate`: omega's `gsl` meshes it, and the mesh is held closed,
 manifold, outward, inside its `@scene` box and to the volume omega's evaluator proves), and written as a GLB once
-it passes (`cad.omega.mesh`: with values for the model's names, kept by what made it); a 3D
+it passes (`cad.gsl.mesh`: with values for the model's names, kept by what made it); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
 exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); a
 B-rep document's interference check (`cad.<type>.interference(source, poses=..., fits=...)`: every

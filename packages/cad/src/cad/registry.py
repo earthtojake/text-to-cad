@@ -43,15 +43,14 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIO
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate",
+              "mesh")
 #: What an integration does to a file of its tool's own that is no document type (a file we check and never
 #: show): a closed set too. ``check`` answers findings, as a type's check does (``cad.results.CheckResult``).
-#: ``mesh`` writes a file of a type we do show from one we do not (a GLB of a GSL model), and answers as a check
-#: does: the file is written only where its findings do not block.
-INTEGRATION_OPERATIONS = ("check", "mesh")
+INTEGRATION_OPERATIONS = ("check",)
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
-#: drawing, a robot description, a plot.
-VIEWS = ("document", "mesh", "drawing", "robot", "plot")
+#: drawing, a robot description, a plot, a field (an implicit model the page marches itself, with no mesh of it).
+VIEWS = ("document", "mesh", "drawing", "robot", "plot", "field")
 #: Where an integration's code runs: inside the Python process that calls it, as a separate program, or both.
 PROCESS_KINDS = ("in-process", "separate", "both")
 #: The platforms the server runs on, in the words an integration's ``platforms`` names them by (``platform_of``).
@@ -365,6 +364,19 @@ _TYPES = (
         edit=Edit("kicad", "schematic", "the open schematic, its project's symbol libraries loaded, through KiCad's IPC API "
                            "(kicode's KiPy)",
                   ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"))),
+    # An implicit model: a field, negative inside, which the page draws by marching it and which is meshed only
+    # when a file of triangles is wanted. Authored as text, compiled, queried and meshed by the omega integration's
+    # gsl (``cad.omega``).
+    DocumentTypeEntry(
+        "gsl", "GSL", "an implicit (signed-distance) model in GSL, omega-core's language: a field, drawn as it is "
+                      "and meshed on request", (".gsl",), "text/plain; charset=utf-8", "field",
+        ("field", "bodies", "sliders"),
+        (Operation("validate", "mesh it with gsl and check the mesh against the field: it compiles, it is closed and "
+                               "manifold, it points outward, it stops short of the @scene box, and its volume is "
+                               "the field's", "omega"),
+         Operation("mesh", "write it as a GLB, with values for its names, once a mesh is wanted: the mesh is checked "
+                           "against the field as validate does before it is written, and kept, so the same model and "
+                           "values are meshed once", "omega"))),
 )
 
 #: Every document type, by id, in the table's order.
@@ -447,23 +459,14 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         holds="CalculiX's ccx solver", download_mb=13),
     "omega": Integration(
         "omega", "omega-core's gsl, the compiler and mesher of GSL, Gradient Control Laboratories' language for implicit "
-                 "(signed-distance) models, and its client for the field's queries: `cad run gsl compile -t stl "
-                 "part.gsl` meshes a model as gsl does, `cad omega check part.gsl` judges the mesh against the "
-                 "field, since gsl exits 0 on one it got wrong, and `cad omega mesh part.gsl part.glb` writes the "
-                 "mesh once it passes",
+                 "(signed-distance) models, and its client for the field's queries: `cad run gsl ...` is gsl as it "
+                 "is, and a GSL model's own operations (`cad gsl validate`, `cad gsl mesh`) run it",
         extra="omega", process="separate",
         # gsl is the omega-core wheel's (the extra's), or the one CAD_GSL names; one on PATH is never run.
         probe=Probe("gsl", "0.1.1", "gsl comes with cad's omega integration, cad[omega] (the omega-core wheel, macOS "
                                     "and Linux), which the cad command installs on first need (a script run with cad "
                                     "run: name cad[omega] in its header); or set CAD_GSL to a gsl of omega-core 0.1.1 "
                                     "or newer", "CAD_GSL"),
-        operations=(Operation("check", "mesh a GSL model with gsl and check the mesh against the field: it compiles, "
-                                       "it is closed and manifold, it points outward, it stops short of the @scene "
-                                       "box, and its volume is the field's", "omega"),
-                    Operation("mesh", "mesh a GSL model into a GLB, with values for its names, once it is wanted: the "
-                                      "mesh is checked against the field as check does before it is written, and "
-                                      "kept, so the same model and values are meshed once", "omega")),
-        files=(".gsl",),
         modules=("omega_core",), distributions=("omega-core",), identity=("omega-core",), commands=("gsl",),
         # omega-core publishes wheels for macOS (arm64, x86-64) and Linux with glibc (x86-64, arm64) alone.
         platforms=("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64"),

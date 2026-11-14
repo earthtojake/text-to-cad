@@ -1,4 +1,4 @@
-"""``cad omega mesh``: a GSL model meshed on request, judged as ``cad omega check`` judges one, and kept.
+"""``cad gsl mesh``: a GSL model meshed on request, judged as ``cad gsl validate`` judges one, and kept.
 
 A model is asked about through its field (``cad run gsl eval``, ``cad run gsl render``) and meshed only when a
 file is wanted. ``mesh`` is that step: omega's ``gsl eval`` meshes the model with the values given into a GLB, the
@@ -179,7 +179,7 @@ class Mesh(unittest.TestCase):
         return {finding.code for finding in result.findings if finding.severity == "error"}
 
     def test_a_sound_part_is_written_as_a_glb_whose_volume_is_the_field_s(self) -> None:
-        from cad.omega import mesh
+        from cad.gsl import mesh
         from cad.omega._check import measure
         from cad.omega._mesh import read_glb
 
@@ -199,7 +199,7 @@ class Mesh(unittest.TestCase):
         self.assertEqual((0, 0), (written["open_edges"], written["non_manifold_edges"]))
 
     def test_a_value_given_moves_the_part_and_the_volume_it_is_held_to(self) -> None:
-        from cad.omega import mesh
+        from cad.gsl import mesh
 
         result = mesh(self.model("ball", BALL), self.folder / "big.glb", define=("r=12",), depth=6)
         self.assertTrue(result.ok, result.findings)
@@ -210,7 +210,8 @@ class Mesh(unittest.TestCase):
         self.assertGreater(high, 4 / 3 * np.pi * 12 ** 3)
 
     def test_the_same_model_and_values_are_meshed_once(self) -> None:
-        from cad.omega import _mesh, mesh
+        from cad.gsl import mesh
+        from cad.omega import _mesh
 
         model = self.model("ball", BALL)
         first = mesh(model, self.folder / "a.glb", depth=6)
@@ -227,7 +228,7 @@ class Mesh(unittest.TestCase):
         self.assertFalse(mesh(model, depth=6).measurements["cached"])
 
     def test_with_no_file_named_the_mesh_is_where_it_is_kept(self) -> None:
-        from cad.omega import mesh
+        from cad.gsl import mesh
 
         result = mesh(self.model("ball", BALL), depth=6)
         self.assertTrue(result.ok, result.findings)
@@ -236,7 +237,7 @@ class Mesh(unittest.TestCase):
         self.assertEqual(self.folder / "cache" / "omega", kept.parent)
 
     def test_a_part_that_leaves_its_scene_is_refused_and_nothing_is_written_or_kept(self) -> None:
-        from cad.omega import mesh
+        from cad.gsl import mesh
 
         out = self.folder / "cut.glb"
         model = self.model("ball", "@scene(40)\nr = 8.0;\nball = length(p) - r;\nreturn ball;\n")
@@ -249,14 +250,15 @@ class Mesh(unittest.TestCase):
         self.assertFalse(mesh(model, out, define=("r=25",), depth=6).ok)
 
     def test_a_value_outside_its_slider_s_range_is_refused_in_gsl_s_words(self) -> None:
-        from cad.omega import mesh
+        from cad.gsl import mesh
 
         result = mesh(self.model("ball", BALL), define=("r=25",), depth=6)
         self.assertEqual({"compile_failed"}, self.codes(result))
         self.assertIn("outside range [2, 15]", result.findings[0].message)
 
     def test_a_model_without_scene_and_a_value_that_is_no_number_are_refused_before_gsl_runs(self) -> None:
-        from cad.omega import _mesh, mesh
+        from cad.gsl import mesh
+        from cad.omega import _mesh
 
         with mock.patch.object(_mesh, "_meshed", side_effect=AssertionError("gsl ran")):
             bare = mesh(self.model("bare", "return sphere(8);\n"))
@@ -265,7 +267,7 @@ class Mesh(unittest.TestCase):
             self.assertEqual({"bad_define"}, self.codes(bad))
 
     def test_a_model_gsl_refuses_is_said_in_gsl_s_words(self) -> None:
-        from cad.omega import mesh
+        from cad.gsl import mesh
 
         result = mesh(self.model("broken", "@scene(40)\nreturn nothing_named_this(p);\n"))
         self.assertFalse(result.ok)
@@ -278,7 +280,8 @@ class OlderGsl(unittest.TestCase):
     def test_a_gsl_whose_eval_does_not_mesh_is_named_with_what_to_do(self) -> None:
         import omega_core
 
-        from cad.omega import _mesh, mesh
+        from cad.gsl import mesh
+        from cad.omega import _mesh
 
         with tempfile.TemporaryDirectory() as folder, \
                 mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(Path(folder) / "cache")}), \

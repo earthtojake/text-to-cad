@@ -21,9 +21,9 @@ build). `cad run gsl ...` installs it on first use and runs it as it is:
 | Check it parses and links | `cad run gsl compile -t ast --no-meta -o - part.gsl > /dev/null` (silent when it is fine; errors name the line) |
 | Picture the field, no mesh | `cad run gsl render --views iso,top --light -o part.png part.gsl` |
 | Ask the field (values, extrema, volume, proofs) | `cad run gsl eval REQUEST.json`, or `omega_core.Session` in a script run with `cad run` |
-| Mesh it, checked, when a file is wanted | `cad omega mesh part.gsl part.glb` (a value for one of its names: `--define r=6.5`) |
+| Mesh it, checked, when a file is wanted | `cad gsl mesh part.gsl part.glb` (a value for one of its names: `--define r=6.5`) |
 | The mesh as STL or 3MF | `cad glb export part.glb part.stl` |
-| An STL as gsl writes it, and that mesh judged | `cad run gsl compile -t stl -o part.stl part.gsl`, then `cad omega check part.gsl --mesh part.stl` |
+| An STL as gsl writes it, and that mesh judged | `cad run gsl compile -t stl -o part.stl part.gsl`, then `cad gsl validate part.gsl --mesh part.stl` |
 
 `gsl compile`'s defaults are the right ones: dual contouring (`--algo mdc`, flat faces flat and sharp edges sharp),
 octree depth 9 (`--subdivision`), in the `@scene` box. Do not pass `--bbox auto`: its box is a fit by sampling,
@@ -50,7 +50,7 @@ return min(skin, infill);
 
 - **Always `@scene(size)` first.** It names the box the model is meshed in: an edge of `size` mm centred on the
   origin, which must hold the whole part with room to spare. Without it `gsl` guesses the box and cuts off thin
-  features; `cad omega mesh` and `cad omega check` refuse a model without one.
+  features; `cad gsl mesh` and `cad gsl validate` refuse a model without one.
 - Lengths are millimetres; `p` is the point. `boxCentered`, `sphere`, `cylinderCapped`, `torus` and the rest,
   `unionRound` / `differenceSharp` / `intersectChamfer` and their families, are the `builtin` package's. A blend
   argument is an operator, not a radius: `boxCentered(center, size, intersectRound(4))` rounds a box's edges.
@@ -213,8 +213,8 @@ A mesh is a translation of the field for something that needs triangles: a slice
 Make one when a file is wanted, not on every edit:
 
 ```sh
-cad omega mesh part.gsl part.glb                 # meshed, judged, and only then written
-cad omega mesh part.gsl part.glb --define r=6.5  # the same model with r = 6.5
+cad gsl mesh part.gsl part.glb                 # meshed, judged, and only then written
+cad gsl mesh part.gsl part.glb --define r=6.5  # the same model with r = 6.5
 ```
 
 `gsl` exits 0 on a mesh it got wrong: empty, open, non-manifold, inside out, cut off at its box, or missing a wall
@@ -222,14 +222,14 @@ thinner than a cell. So the mesh is judged before it is written: its triangles a
 edges, signed volume, box) and its volume held to the bracket omega's evaluator proves for the field, with the
 same values, over the `@scene` box. A mesh that fails is not written. One that passes is kept, so the same model
 and values are meshed once; the proof takes from a few seconds to half a minute the first time. `--depth 10`
-meshes finer (gsl's own is 9); `--json` gives every measurement. `cad omega check part.gsl` judges without
+meshes finer (gsl's own is 9); `--json` gives every measurement. `cad gsl validate part.gsl` judges without
 writing, and `--mesh part.stl` judges a mesh made another way.
 
 | Finding | What to do |
 | --- | --- |
 | `no_scene` | Add `@scene(size)` as the first line. |
 | `cut_off` | The part reaches the box: make `size` larger, or bound a field that never ends (a plane). |
-| `volume_mismatch`, `empty_mesh` | A wall is thinner than a cell: thicken it, or mesh finer (`cad omega mesh --depth 10`). |
+| `volume_mismatch`, `empty_mesh` | A wall is thinner than a cell: thicken it, or mesh finer (`cad gsl mesh --depth 10`). |
 | `open_edges`, `non_manifold`, `inside_out` | A mesher fault: mesh at another depth, or simplify the blend where it is. |
 | `compile_failed` | gsl's own words: fix the GSL, or a value given outside its slider's range. |
 
@@ -241,7 +241,7 @@ picture does not show is the mesher's.
 
 Then the GLB is a document like any other: show it, `cad glb snapshot`, and for printing always `cad glb dfm
 part.glb --process printing --technology T` ([Can it be made?](../SKILL.md#can-it-be-made)). It measures what
-`cad omega mesh` does not: the real wall thickness, overhangs, what rests on the bed, and surfaces that pass
+`cad gsl mesh` does not: the real wall thickness, overhangs, what rests on the bed, and surfaces that pass
 through themselves (omega-core 0.1.1's dual contouring can leave a small body inside the material of a lattice
 or a thin shell, which a slicer may fill wrongly).
 

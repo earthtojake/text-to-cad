@@ -1,4 +1,4 @@
-"""The omega integration: ``cad omega check`` judges the mesh omega-core's ``gsl`` writes against the model's field,
+"""The omega integration: ``cad gsl validate`` judges the mesh omega-core's ``gsl`` writes against the model's field,
 and ``cad run gsl`` is ``gsl`` as it is.
 
 The measurements are numpy alone and tested everywhere. What runs ``gsl`` needs the omega-core wheel, which
@@ -120,7 +120,7 @@ class Check(unittest.TestCase):
         return {finding.code for finding in result.findings if finding.severity == "error"}
 
     def test_a_sound_part_passes_with_its_volume_within_the_field_s(self) -> None:
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         result = check(self.model("ball", "@scene(24)\n// a ball\nball = sphere(8);\nreturn ball;\n"))
         self.assertTrue(result.ok, result.findings)
@@ -131,27 +131,27 @@ class Check(unittest.TestCase):
         self.assertAlmostEqual(4 / 3 * np.pi * 8 ** 3, result.measurements["volume_mm3"], delta=2.0)
 
     def test_a_model_without_scene_is_refused_before_gsl_guesses_a_box(self) -> None:
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         result = check(self.model("bare", "return sphere(8);\n"))
         self.assertFalse(result.ok)
         self.assertEqual({"no_scene"}, self.codes(result))
 
     def test_a_model_gsl_refuses_is_said_in_gsl_s_words(self) -> None:
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         result = check(self.model("broken", "@scene(24)\nreturn sphere(8\n"))
         self.assertEqual({"compile_failed"}, self.codes(result))
         self.assertIn("unexpected token", next(f.message for f in result.findings if f.code == "compile_failed"))
 
     def test_a_part_larger_than_its_scene_is_cut_off(self) -> None:
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         result = check(self.model("big", "@scene(20)\nreturn sphere(15);\n"))
         self.assertIn("cut_off", self.codes(result))
 
     def test_a_given_mesh_is_judged_inside_out_empty_or_open(self) -> None:
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         model = self.model("tetra", "@scene(4)\nreturn sphere(1);\n")
         self.assertIn("inside_out", self.codes(check(model, mesh=write_stl(self.folder / "f.stl", TETRA[:, ::-1]))))
@@ -164,7 +164,7 @@ class Check(unittest.TestCase):
 
         import omega_core
 
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         model = self.model("shell", "@scene(40)\nreturn max(sphere(15), -sphere(14.7));\n")
         coarse = self.folder / "coarse.stl"
@@ -177,7 +177,7 @@ class Check(unittest.TestCase):
                         result.findings)
 
     def test_a_file_that_is_no_gsl_model_is_refused(self) -> None:
-        from cad.omega import check
+        from cad.gsl import validate as check
 
         other = self.folder / "part.txt"
         other.write_text("x", encoding="utf-8")

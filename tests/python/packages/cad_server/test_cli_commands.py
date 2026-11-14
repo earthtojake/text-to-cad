@@ -36,6 +36,7 @@ TYPES = {
     "sdf": ("snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
+    "gsl": ("validate", "mesh"),
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "run", "requirement", "doctor", "setup", "update", "update auto", "uninstall", "plugin",
             "viewer", "telemetry")
@@ -253,7 +254,7 @@ class MujocoCheck(unittest.TestCase):
         self.model.write_text(_MJCF, encoding="utf-8")
 
     def test_the_command_table_names_the_integration_apart_from_the_types(self) -> None:
-        self.assertEqual({"mujoco": "cad_server.cli.mujoco", "omega": "cad_server.cli.omega"}, cli.INTEGRATION_COMMANDS)
+        self.assertEqual({"mujoco": "cad_server.cli.mujoco"}, cli.INTEGRATION_COMMANDS)
         self.assertFalse(set(cli.INTEGRATION_COMMANDS) & set(cli.TYPE_COMMANDS), "a name is a type's or an integration's")
         self.assertEqual(("mujoco check", ["arm.xml"]), cli.resolve(["mujoco", "check", "arm.xml"]))
         self.assertIsNone(cli.resolve(["mujoco", "validate", "arm.xml"]))

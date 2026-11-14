@@ -230,7 +230,8 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
                   "kinematics, POST pose, POST mesh")
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
-                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source",
+                "field": "source"}
 # A model's document has no file, so no source.
 _KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}

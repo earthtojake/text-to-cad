@@ -146,7 +146,7 @@ coacd = [
 # gsl program for one platform (Go, with a statically linked render library: Fidget, Manifold, OpenVDB) and a
 # client for its field queries, the standard library alone (omega_core). cad runs gsl and asks the client; `cad run
 # gsl ...` is gsl as it is (cad.omega._command). Pinned exactly: a pre-1.0 toolchain whose meshing defaults moved
-# between 0.1.0 and 0.1.1, and cad.omega.check was measured against this one. MIT, linking MPL-2.0 (Fidget),
+# between 0.1.0 and 0.1.1, and cad.gsl.validate was measured against this one. MIT, linking MPL-2.0 (Fidget),
 # Apache-2.0 (OpenVDB, oneTBB) and BSD code; the wheel carries every licence text. Wheels for macOS (arm64,
 # x86_64) and Linux with glibc 2.28 (x86_64, aarch64) alone, and no sdist, so the extra installs it only there.
 omega = [
