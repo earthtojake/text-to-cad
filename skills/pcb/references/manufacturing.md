@@ -75,8 +75,8 @@ exported outline, holes and thickness and a known connector location before desi
 it. Use `--board-only` only for a deliberately bare-board export and state that limitation.
 
 The STEP is an ordinary foreign CAD file; it is not the PCB's source. Show it as any file
-([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else
-`cad +0.11.11 viewer`), and use `cad +0.11.11 step export mechanical/board.step mechanical/board.glb` (or STL,
+([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else its page
+from `cad +0.11.11 viewer`), and use `cad +0.11.11 step export mechanical/board.step mechanical/board.glb` (or STL,
 3MF) for requested meshes. A text-to-cad model can use `step.read` to fit an enclosure around it.
 Check geometry and millimetre scale after conversion. Re-export after native board edits;
 do not copy STEP changes back into the PCB by guessing at their meaning.

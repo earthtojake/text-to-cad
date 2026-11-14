@@ -570,13 +570,21 @@ and every assumption or departure from the request.
 
 ### Show the model
 
-Show the person each model you create or change, and any model or file they ask to see. If your
-tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
-absolute path; its description says the rest. Otherwise give the person the page's link once, to
-open in the app's browser pane where it has one, or their browser: a model's page is the `view:` line its run prints, and a file's is the `url` that
-`cad +0.11.11 viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
-download: give its path. Never screenshot the viewer to check your own work; review with
-`cad +0.11.11 <type> snapshot`. If it fails to launch, say so.
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad +0.11.11 viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad +0.11.11 <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 Exact selection and measurement need a model's document, an `.xbf` or a STEP; mesh viewers
 measure approximately, on triangles.
