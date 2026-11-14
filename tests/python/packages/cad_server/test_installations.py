@@ -86,13 +86,6 @@ class RegistryTests(Fixture):
         self.assertEqual(sorted(record["version"] for record in installations.records(self.state)), ["0.7.0", "0.8.1"],
                          "0.8.0's code is gone from it: no record names it")
 
-    def test_prune_removes_only_records_whose_interpreter_is_gone(self) -> None:
-        gone, live = self.registered("1.0.0"), self.registered("2.0.0")
-        os.unlink(gone["python"])
-        self.assertEqual(installations.prune(self.state), [gone["path"]])
-        self.assertEqual([record["version"] for record in installations.records(self.state)], ["2.0.0"])
-        self.assertTrue(Path(live["path"]).is_file())
-
     def test_a_source_tree_registers_nothing_unless_named(self) -> None:
         # These tests import the server from the checkout: the release's version is not theirs to register.
         with mock.patch.dict("os.environ", {installations.NAME_ENV: "", "CAD_STATE_DIR": str(self.root / "state")}):
@@ -218,9 +211,8 @@ class ProxyFileTests(Fixture):
         self.assertEqual(Path(path).read_text(encoding="utf-8"), "#!/bin/sh\nexec uv-tool-cadgen\n")
 
     @POSIX
-    def test_the_sh_runs_the_current_installation_of_the_layout_before_0_12_where_the_install_command_ran(self) -> None:
-        # The rest of what it runs -- a pin, the default channel's pointer, the newest version installed -- is
-        # test_pins.py's.
+    def test_the_sh_never_runs_the_layout_before_0_11_11_and_says_none_is_installed(self) -> None:
+        # What it runs -- a pin, the newest version installed -- is test_pins.py's.
         where = str(self.root / "bin")
         installations.write_proxy(where, windows=False)
         proxy_file = installations.proxy_path(where, windows=False)
@@ -229,28 +221,18 @@ class ProxyFileTests(Fixture):
         def run(*args: str) -> subprocess.CompletedProcess:
             return subprocess.run([proxy_file, *args], capture_output=True, text=True, env=environment, cwd=self.root)
 
-        # None installed: the sh and the proxy say it in one wording, the command that installs it.
         none = run("status")
-        self.assertEqual((none.returncode, none.stderr.strip()), (1, proxy.NONE_INSTALLED))
+        self.assertEqual((none.returncode, none.stderr), (3, "cad: text-to-cad is not installed on this computer.\n"))
         with self.assertRaises(proxy.Refused) as refused:
             proxy.choose(None, [])
-        self.assertEqual(str(refused.exception), "cad-server is not installed: run `uvx --no-config --managed-python "
-                                                 "--python 3.14 --from cad-server cad doctor` once, outside any "
-                                                 "sandbox or with its permission")
+        self.assertEqual(str(refused.exception), none.stderr.strip(), "the command of 0.11.10's layout says the same")
         for version in ("1.0.0", "2.0.0"):
             record = self.registered(version)
             Path(record["python"]).write_text(f'#!/bin/sh\necho "{version}" "$@"\n', encoding="utf-8")
             os.chmod(record["python"], 0o755)
         installations.point("2.0.0", self.state)
-        self.assertEqual(run("status").returncode, 1, "a current installation where the install command never ran")
         (self.root / "state/install-receipt.json").write_text("{}", encoding="utf-8")
-        self.assertEqual(run("export", "a b").stdout, "2.0.0 -P -m cad_server._internal.proxy export a b\n",
-                         "the current one, as the command of 0.11.10 and earlier ran it")
-        (self.root / "state/installations/current").write_text("2.0.0; echo planted", encoding="utf-8")
-        self.assertEqual(run("status").returncode, 1, "a current that is no version is none")
-        installations.point("2.0.0", self.state)
-        os.remove(record["cad"])  # uninstalled from its environment: its python stays
-        self.assertEqual(run("status").returncode, 1, "nor one whose console script is gone")
+        self.assertEqual(run("status").returncode, 3, "a current installation of that layout is no version")
 
 
 class WindowsCommandTests(Fixture):
@@ -408,11 +390,13 @@ class WindowsCommandTests(Fixture):
         self.assertEqual(sorted(os.listdir(self.bin)), [os.path.basename(aside)], "no cad command is left")
 
     @POSIX
-    def test_its_main_runs_the_installation_before_0_12_with_the_arguments_as_given(self) -> None:
+    def test_its_main_runs_the_newest_version_with_the_arguments_as_given(self) -> None:
+        import json
         import sys
 
         self.write()
-        environment = {"PATH": os.environ.get("PATH", ""), "CAD_STATE_DIR": str(self.root / "state")}
+        state = self.root / "state"
+        environment = {"PATH": os.environ.get("PATH", ""), "CAD_STATE_DIR": str(state)}
 
         def run(*args: str) -> subprocess.CompletedProcess:
             # The launcher's own command line: its Python, -I, the exe itself, then the arguments (and -S:
@@ -421,23 +405,20 @@ class WindowsCommandTests(Fixture):
                                   env=environment, cwd=self.root)
 
         none = run("status")
-        self.assertEqual((none.returncode, none.stderr.strip()), (1, proxy.NONE_INSTALLED))
+        self.assertEqual((none.returncode, none.stderr), (3, "cad: text-to-cad is not installed on this computer.\n"))
         for version in ("1.0.0", "2.0.0"):
-            record = self.registered(version)
-            Path(record["python"]).write_text(f'#!/bin/sh\nprintf "%s|" "{version}" "$@"\nexit 3\n', encoding="utf-8")
-            os.chmod(record["python"], 0o755)
-        installations.point("2.0.0", self.state)
-        (self.root / "state/install-receipt.json").write_text("{}", encoding="utf-8")
+            code = state / "versions" / version / "code"
+            code.mkdir(parents=True)
+            cad = code / "cad"
+            cad.write_text(f'#!/bin/sh\nprintf "%s|" "{version}" "$@"\nexit 3\n', encoding="utf-8")
+            os.chmod(cad, 0o755)
+            (code / "cad-version.json").write_text(json.dumps({"python": sys.executable, "cad": str(cad)}),
+                                                   encoding="utf-8")
         arguments = ["run", "--with", "pandas>=2", "a&b %PATH% ^!<c>|d.py", 'say "é"']
         ran = run(*arguments)
-        self.assertEqual(ran.stdout, "|".join(["2.0.0", "-P", "-m", "cad_server._internal.proxy", *arguments]) + "|",
-                         "the current one, each argument one, as given")
-        self.assertEqual(ran.returncode, 3, "the installation's exit status")
-        (self.root / "state/installations/current").write_text("2.0.0; echo planted", encoding="utf-8")
-        self.assertEqual(run("status").returncode, 1, "a current that is no version is none")
-        installations.point("2.0.0", self.state)
-        os.remove(record["cad"])  # 2.0.0 uninstalled from its environment: its python stays
-        self.assertEqual(run("status").returncode, 1)
+        self.assertEqual(ran.stdout, "|".join(["2.0.0", *arguments]) + "|", "the newest, each argument one, as given")
+        self.assertEqual(ran.returncode, 3, "the version's exit status")
+        self.assertEqual(run("+1.0.0", "x").stdout, "1.0.0|+1.0.0|x|", "a pin: that version, the pin with the rest")
 
     @unittest.skipUnless(os.name == "nt", "cad.exe runs on Windows")
     def test_on_windows_cad_exe_runs_this_installation_with_the_arguments_as_given(self) -> None:
@@ -447,8 +428,8 @@ class WindowsCommandTests(Fixture):
         python = os.path.join(self.bin, "cad-launcher", "Scripts", "python.exe")
         self.assertTrue(os.path.isfile(python))
         self.assertFalse((self.root / "home").exists(), "uv made it, not the test's stand-in")
-        # A device whose default channel is on this environment's version: its code marker names this interpreter
-        # and the cad.exe beside it.
+        # A device with this environment's version installed: its code marker names this interpreter and the cad.exe
+        # beside it.
         import json
         import sys
 
@@ -460,7 +441,6 @@ class WindowsCommandTests(Fixture):
         marker.write_text(json.dumps({"schema": "cad version/1", "version": version, "python": sys.executable,
                                       "cad": os.path.join(sys.prefix, "Scripts", "cad.exe"), "prefix": sys.prefix}),
                           encoding="utf-8")
-        (device / "default").write_text(f"{version}\n", encoding="utf-8")
         environment = {**os.environ, "CAD_STATE_DIR": str(device)}
         ran = subprocess.run([str(self.exe), "--version"], capture_output=True, text=True, encoding="utf-8",
                              env=environment)

@@ -1,8 +1,8 @@
 """Where an event comes from, and whether this process is told of a new release: the delivery channel and the app.
 
-**The channel** is a pin's (``cad +<version>@<channel> <verb>``) or a launcher's (``cad-mcp --channel NAME``):
-who delivered the text that ran the command, as that text says it; text that names none runs on the default
-channel. Nothing here keeps a list of channels or decides anything by a channel's name: a request carries its channel
+**The channel** is a pin's (``cad +<version>@<name> <verb>``) or a launcher's (``cad-mcp --channel NAME``): who
+delivered the text that ran the command, as that text says it -- a label alone; text that names none is the
+default channel. Nothing here keeps a list of channels or decides anything by a channel's name: a request carries its channel
 (``places.channel``, ``client.with_channel``), a session its launcher's (``mcp.http.Session.channel``), and
 telemetry reports it beside the app (``describe``), ``default`` for none. A server's environment says no
 channel: ``CAD_INSTALL_CHANNEL`` and ``CAD_AUTO_UPDATED``, which releases 0.11.10 and earlier set, are read for
@@ -16,8 +16,8 @@ source tree -- installed editable, or imported from a checkout by path -- that w
 as (``places.INSTALLATION_ENV``). It hears of no release and sends no telemetry by default; what it sends with
 telemetry turned on says the channel ``dev``.
 
-**Told** (``told``): only the default channel's version hears of a new release (a named channel's copy is
-updated by whoever delivers it), and never a development build. A process with no version is the default's.
+**Told** (``told``): every version hears of a new release (``cad_server.updates``) but a development build. A
+command that names a channel says nothing of it (``cad_server.cli``): that copy is updated by whoever delivers it.
 """
 
 from __future__ import annotations
@@ -78,60 +78,8 @@ def development() -> bool:
 
 
 def told() -> bool:
-    """Whether this process hears of a new release: the default channel's version alone (a named channel's copy is
-    updated by whoever delivers it), and never a development build. A process with no version is the default's."""
-    return not development() and default_version()
-
-
-def default_version() -> bool:
-    """Whether this process's version (``places.versioned``) is the default channel's as a command with no pin
-    resolves it (``pointers.default``); a process with no version is the default's. Never raises."""
-    from cad.engine.places import versioned
-
-    name = versioned()
-    if name is None:
-        return True
-    try:
-        from cad_server._internal import pointers
-
-        return pointers.default().version == name
-    except Exception:  # noqa: BLE001 - a state folder it cannot read: told, as before
-        return True
-
-
-# How long a process keeps what ``own`` read of the pointers before reading them again.
-OWN_SECONDS = 60.0
-_OWN: list = [float("-inf"), None]  # when ``own`` last read the pointers (monotonic), and what it found
-
-
-def own() -> str | None:
-    """The delivery channel a version's own use counts under where nothing names one -- the browser viewer's page,
-    which no pin or launcher carries (``analytics.Recorder``'s process-level counts): the one named channel that is
-    on this process's version, when the default channel's pointer does not name it (a version only a store's copy is
-    on, whose one interface is the browser); else None, the
-    default. A process with no version, the default's version, a version two named channels share, or pointers that
-    cannot be read: None. Read at most once every ``OWN_SECONDS``. Never raises."""
-    import time
-
-    now = time.monotonic()
-    if now - _OWN[0] < OWN_SECONDS:
-        return _OWN[1]
-    found = None
-    try:
-        from cad.engine.places import versioned
-
-        name = versioned()
-        if name is not None:
-            from cad_server._internal import pointers
-
-            if pointers.read(None) != name:  # the default channel's pointer: none names nothing
-                on = {pointer.channel for pointer in pointers.listing() if pointer.channel and pointer.version == name}
-                found = next(iter(on)) if len(on) == 1 else None
-    except Exception:  # noqa: BLE001 - pointers that cannot be read now: the default, as before
-        LOG.debug("could not read which channel is on this version", exc_info=True)
-        found = None
-    _OWN[0], _OWN[1] = now, found
-    return found
+    """Whether this process hears of a new release: every version but a development build."""
+    return not development()
 
 
 def describe(channel: str | None = None, client: str | None = None, environ=None) -> dict[str, str]:

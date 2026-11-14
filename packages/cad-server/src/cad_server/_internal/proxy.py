@@ -8,17 +8,13 @@ a. the current installation, while its interpreter and console script are there;
 b. else the installation registered last (no installation is current yet: one from before there was
    a current one).
 
-The command of revision 12 reads a pin and runs a version's own ``cad`` itself; it runs this module only for a
-command with no pin on a device the install command set up with 0.11.10 or earlier and no update has moved yet, with
-that
-installation's interpreter -- that release's own copy of it. This release's copy is run where a command of an
-earlier revision is still on the device while ``installations/current`` names a version of this layout (the record
-clients of 0.11.10 and earlier find its server by, ``pointers.mirror``): it runs that version's ``cad``, which reads
-any pin.
+The command of revision 12 and later runs a version's own ``cad`` itself and never this module. This release's
+copy runs only where a command of an earlier revision is still on the computer (one ``cad setup`` could not replace)
+while ``installations/current`` names a version (``installations.mirror``): it runs that version's ``cad``, which
+reads any pin.
 
 There is one installation a command runs, and nothing here compares versions: the arguments go to it as
-they are. With no installation at all it says, in one line, the command that installs one (``NONE_INSTALLED``,
-which the ``cad`` command says too).
+they are. With no installation at all it says so, in the ``cad`` command's own words (``NONE_INSTALLED``).
 
 The console script runs by ``exec``, so the proxy adds no process and no output of its own -- or,
 when the installation chosen is the one this interpreter is (the usual case), as its console script
@@ -33,11 +29,10 @@ from __future__ import annotations
 import os
 import sys
 
-from cad_server._internal.launch import COMMAND, LAUNCHER, SERVER
+from cad_server._internal.pins import none_installed
 
-# The ``cad`` command's own words (``installations._SH``, ``installations._MAIN``) when no installation is registered.
-NONE_INSTALLED = (f"{SERVER} is not installed: run `" + " ".join(LAUNCHER) + f" {SERVER} {COMMAND} doctor` once, "
-                  "outside any sandbox or with its permission")
+# The ``cad`` command's own words when no version is installed (``pins.none_installed``).
+NONE_INSTALLED = f"cad: {none_installed()}"
 
 
 class Refused(Exception):

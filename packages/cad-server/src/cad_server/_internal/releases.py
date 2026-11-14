@@ -94,7 +94,7 @@ def running(folder: Path | str, *, besides: int | None = None) -> bool:
     process whose own, and its descendants', do not count (a version's server and its workers, asked before the
     server is stopped; this process, which may run from the folder it removes). True when that cannot be asked: a
     folder is kept rather than taken from under a process. On Windows, where it cannot be asked, False: there a
-    folder is renamed aside before it is removed, which the system refuses for a file in use (``versions.remove``,
+    folder is renamed aside before it is removed, which the system refuses for a file in use (``versions.clean``,
     ``legacy.remove``)."""
     found = processes(folder, besides=besides)
     return found is None or bool(found)

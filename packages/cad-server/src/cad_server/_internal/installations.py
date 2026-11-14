@@ -1,43 +1,31 @@
-"""The installations of text-to-cad this user has, the one of them that is ``current``, and the one
-``cad`` command that runs it.
+"""The ``cad`` command every version is run by, and the installation records clients of 0.11.10 and earlier read.
 
 A skill runs the ``cad`` command in the agent's shell, and that shell is often a sandbox that lets a command
 read and execute anything but write only to its working folder and the temporary folder. ``uvx``
 cannot start in one: uv writes its cache before it does anything else. The environment uv built
-starts fine there. So an installation registers itself, and one command runs the current one:
+starts fine there. So each version is installed in its own folder (``cad_server._internal.versions``) and one
+command runs them:
 
-- ``<state>/installations/<version>.json``, the installation's record: ``version``, the absolute
-  paths of its ``python`` and of its console script (``cad``), its environment (``prefix``) and
-  when it registered (``registered``). The state folder's ``Folder`` (``cad_server.engine.registry``) writes
-  it, as it writes everything there.
-- ``<state>/installations/current``, the version of the installation that is the device's for a client of
-  0.11.10 and earlier: its engine is the one such a client starts or attaches to. From the first pinned release it is the mirror of
-  the default channel's pointer (``cad_server._internal.pointers.mirror``), written with it by every move of the
-  default channel (``cad setup``, ``cad update``, the install command run again); a client of 0.11.10 or earlier
-  that finds none -- no installation before it -- points it at itself once (``bootstrap``).
-- ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy -- the ``cad`` command --, a short
-  ``sh`` script every future version is run through, so what it does is small and kept stable. It reads only
-  the first argument. A pin, ``cad +<version>[@<channel>] ...``, runs that version's own ``cad`` (its code
-  marker, ``versions/<version>/code/cad-version.json``, names it) with the whole command line, which reads the pin
-  (``cad_server._internal.pins``); a version not installed is installed by its own release first (``uvx ...
-  --from cad-server==<version> cad setup --add --quiet``), unless its channel's pointer names a newer one already
-  (stale: said, nothing installed); and it never runs another version for a pin. With no pin, the default
-  channel's version (``pointers.default``'s rule): its pointer; else, where the install command has run, the
-  installation the layout of 0.11.10 and earlier names current, run as that layout's command ran it (``python -m
-  cad_server._internal.proxy``); else the newest version installed. Every version writes the same file
-  (``REVISION``), so the proxy is no installation's, and one of an earlier revision never replaces one of a later.
-  On Windows it is ``cad.exe``, the same logic in Python, run by a Python of its own beside it
-  (``cad-launcher``): see "the Windows command" below.
-
-The records and the proxy are written at install moments only: ``cad setup`` (the release it
-sets up), ``cad setup --add`` (the proxy alone, ``versions.add``), ``cad doctor``, the skills' one-time step, which
-says what it found, and the CAD app's
-server (``cad-mcp``) as it starts (:func:`startup`), which the host does outside any sandbox:
-that one writes the proxy, and registers itself only where no installation is current. A folder
-either cannot write (a sandbox's) is skipped, silently by the server and said by ``doctor``. No
-other command writes either. A file named ``cadgen`` there that is not the proxy (``uv tool
-install``'s link) is left alone, and said. ``cad doctor --prune`` removes the records whose
-interpreter is gone.
+- ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy -- the ``cad`` command --, a short ``sh``
+  script every later version is run through, so what it does is small and kept stable. It reads only the first
+  argument. ``cad +<version>[@<name>] ...`` runs exactly that version's own ``cad`` (its code marker,
+  ``versions/<version>/code/cad-version.json``, names it) with the whole command line, which reads the pin
+  (``cad_server._internal.pins``); a version that is not installed is said to be so (``pins.not_installed``, exit
+  3), and nothing is installed, no install command named and no network used. With no pin, the newest version
+  installed runs (the highest version number); with none, ``pins.none_installed``, exit 3. Every version writes the
+  same file (``REVISION``), so the proxy is no installation's, and one of an earlier revision never replaces one of a
+  later. It reads only what every version keeps where every version keeps it (a version's code marker, and a
+  release's ``code/server`` environment), so a command written by one release runs every later one by the same
+  rules. ``cad setup`` writes it where it is missing or of an earlier revision. On Windows it is ``cad.exe``, the
+  same logic in Python, run by a Python of its own beside it (``cad-launcher``): see "the Windows command" below.
+- ``<state>/installations/<version>.json``, an installation's record: ``version``, the absolute paths of its
+  ``python`` and of its console script (``cad``), its environment (``prefix``) and when it registered
+  (``registered``); and ``<state>/installations/current``, the version whose server every client of 0.11.10 and
+  earlier starts or attaches to. Only those clients, and a process with no version (a checkout's, a test's), read
+  them. ``cad setup --engine-update`` writes both for its version (``mirror``: the hand-over from a shipped
+  release, whose switch reads them), and a registration where no installation is current (``cad doctor``, the CAD
+  app's server as it starts: ``setup``, ``startup``) points ``current`` at itself once (``bootstrap``). The server of
+  the version ``current`` names holds the flat door those clients find (``versions.flat``).
 
 An editable install (a checkout's environment) registers nothing by itself: it reports the release's
 version, and its record would take a user's place. A development install names its own
@@ -65,9 +53,10 @@ WINDOWS = os.name == "nt"
 # no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII. 10: the cmd reads
 # the state folder in the user's own folder, out of the local application data (``cad.engine.places``).
 # 11: on Windows, cad.exe and a Python of its own in place of cad.cmd, a batch file (the sh is 9's). 12: the pin,
-# ``cad +<version>[@<channel>]``, and the versions in their own folders (``versions``, ``pointers``).
+# ``cad +<version>[@<channel>]``, and the versions in their own folders. 13: a pin runs exactly its version, and one
+# not installed is said to be so (nothing installed, nothing refused as stale); no pin runs the newest installed.
 MARK = "cad proxy: "
-REVISION = 12
+REVISION = 13
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -305,18 +294,6 @@ def here(folder=None) -> dict | None:
         or max(mine, key=lambda record: str(record.get("registered") or ""))
 
 
-def prune(folder=None) -> list[str]:
-    """Remove every record whose interpreter is gone; return their files."""
-    folder = folder or state()
-    removed = []
-    for record in records(folder):
-        if not alive(record):
-            folder.remove(_inside(record["version"]))
-            removed.append(record["path"])
-    _forget_read()
-    return removed
-
-
 # The per-version launchers an earlier 0.8 build published beside the proxy: ``cadgen-<version>``
 # (a symlink to an environment's console script; on Windows a copy, ``.exe``) and
 # ``cadgen-python-<version>`` (a script whose first lines carry ``LEGACY_MARK``).
@@ -329,8 +306,8 @@ EARLIER_CONSOLE = "cadgen"
 
 def appdata() -> list[dict]:
     """0.10.0's installations on Windows, each by its record in the state folder it kept in the local
-    application data (``cad.engine.places.appdata_state_dir``), as ``earlier`` reads 0.8's: read only so
-    ``cad setup`` stops the engine 0.10.0 runs from there by its own ``cad stop``, once."""
+    application data (``cad.engine.places.appdata_state_dir``), as ``earlier`` reads 0.8's: read only for its
+    releases' What's new (``whats_new``)."""
     from cad.engine.places import appdata_state_dir
 
     folder = appdata_state_dir()
@@ -342,8 +319,8 @@ def earlier(folder: Path | None = None, console: str = EARLIER_CONSOLE) -> list[
     state folder (``folder``; by default where what 0.8 left is looked for,
     ``cad.engine.places.earlier_state_dir``), its ``version``, ``python``, console script
     (``EARLIER_CONSOLE``) and environment (``prefix``), with its file (``path``). No record of this
-    release's is one. Read only to clean 0.8 up: ``cad setup`` stops 0.8's server by 0.8's own stop, and
-    ``cad doctor --prune`` takes out the launchers 0.8 published (``prune_legacy``)."""
+    release's is one. Read only to tell what 0.8 left: the launchers it published (``legacy_launchers``), and its
+    releases' What's new (``whats_new``)."""
     from cad.engine.places import earlier_state_dir
 
     where = Path(folder or earlier_state_dir()) / FOLDER
@@ -399,21 +376,9 @@ def _registered_environment(path: str) -> bool:
     return any(_same_place(record["prefix"], place) for record in earlier())
 
 
-def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]:
-    """Remove the launchers earlier releases published in the proxy's folder (``where``): those
-    ``legacy_launchers`` finds. The paths removed."""
-    removed = []
-    for path in legacy_launchers(where, windows):
-        try:
-            os.remove(path)
-        except OSError:
-            continue
-        removed.append(path)
-    return removed
-
-
 def legacy_launchers(where: str | None = None, windows: bool = WINDOWS) -> list[str]:
-    """The launchers earlier releases published in the proxy's folder (``where``), read and none removed:
+    """The launchers earlier releases published in the proxy's folder (``where``), read and none removed (``cad
+    doctor`` says them):
     0.8's proxy, ``cadgen`` carrying ``EARLIER_MARK``, each ``cadgen-python-<version>`` carrying
     ``LEGACY_MARK``, and each ``cadgen-<version>`` symlink into a cadgen environment (on Windows the ``.exe``
     copy beside a marked ``.cmd``). Anything else there -- the proxy, another program's file -- is not one."""
@@ -460,27 +425,9 @@ def forget(version: str, folder=None) -> None:
 # --- current ----------------------------------------------------------------------------------
 
 
-def current_version(folder=None, *, strict: bool = False) -> str | None:
-    """The version ``current`` names, whether or not its installation is there, or None. ``strict`` (a removal's
-    question, ``versions._kept``, ``legacy.unsafe``): None only where the file is not there; one that is there and
-    cannot be read now, or names no version, is ``pointers.Unreadable``, never taken for none."""
+def current_version(folder=None) -> str | None:
+    """The version ``current`` names, whether or not its installation is there, or None."""
     folder = folder or state()
-    if strict:
-        from cad_server._internal.pointers import Unreadable
-
-        path = folder.path(CURRENT)
-        try:
-            data = path.read_bytes()
-        except FileNotFoundError:
-            if os.path.lexists(path):
-                raise Unreadable(path, "it is a link to nothing") from None
-            return None
-        except OSError as error:
-            raise Unreadable(path, error.strerror or str(error)) from None
-        named = data.decode("utf-8", "replace").strip()
-        if VERSION.fullmatch(named):
-            return named
-        raise Unreadable(path, f"it holds {len(data)} bytes and no version", corrupt=True)
     data = folder.read(CURRENT)
     named = data.decode("utf-8", "replace").strip() if data is not None else ""
     return named if VERSION.fullmatch(named) else None
@@ -547,15 +494,30 @@ def bootstrap(version: str, folder=None) -> bool:
     return True
 
 
+def mirror(version: str, folder=None) -> bool:
+    """The records a client of 0.11.10 or earlier starts a server by, written for installed version ``version``: its
+    record naming its server environment (its code marker's interpreter, console script and environment), and
+    ``current`` naming it, so such a client -- the switch of a shipped updater handing over to it among them -- starts
+    or finds that version's server (``versions.flat``). Written by ``cad setup --engine-update`` alone. Whether it was
+    written (False: ``version`` is not installed). ``OSError`` when it cannot be."""
+    from cad.engine.places import version_record
+
+    record = version_record(version)
+    if record is None:
+        return False
+    folder = folder or state()
+    register(version, (record["cad"], record["python"], record["prefix"]), folder)
+    point(version, folder)
+    return True
+
+
 # --- the proxy --------------------------------------------------------------------------------
 
 _SH = """#!/bin/sh
 # {mark}{revision}
-# The cad command. `cad +<version>[@<channel>] ...` runs that version of text-to-cad and no other: its own cad,
-# which reads the pin. A version not installed is installed first, by its own release, unless its channel is
-# on a newer one already. With no pin: the default channel's version. Every release with pinned commands writes this
-# same
-# file (cad setup, cad setup --add, cad doctor); a release whose revision is older never replaces it.
+# The cad command. `cad +<version>[@<name>] ...` runs that version of text-to-cad and no other: its own cad, which
+# reads the pin. A version not installed is said to be so: nothing is installed. With no pin: the newest version
+# installed. Every release writes this same file (cad setup); a release whose revision is older never replaces it.
 if [ -n "$CAD_STATE_DIR" ]; then state=$CAD_STATE_DIR
 elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cad"
 else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cad"
@@ -600,39 +562,6 @@ BEGIN {{ x = split(n(a), p, "."); y = split(n(b), q, ".")
   for (i = 1; i <= x || i <= y; i++) {{ if (p[i] + 0 < q[i] + 0) exit 0; if (p[i] + 0 > q[i] + 0) exit 1 }}
   if (d(a) < d(b)) exit 0; exit 1 }}'
 }}
-# The version the pointer $1 names, as now, by the rule every reader of a pointer keeps (pointers.version_text):
-# every carriage return taken out and the line ends after the text, what is left one version name. No file there:
-# now and unread empty. There, and it cannot be read now (unreadable) or names no version (corrupt): now empty and
-# unread says which -- never taken for no pointer.
-named() {{
-  now= unread=
-  [ -e "$1" ] || [ -h "$1" ] || return 0
-  if ! now=$(LC_ALL=C tr -d '\\r' < "$1" 2>/dev/null); then now= unread=unreadable; return 0; fi
-  case $now in ''|[!0-9]*|*[!0-9A-Za-z.+_-]*) now= unread=corrupt ;; esac
-}}
-# The pointer $1, which named found there and could not read: refused, nothing run on a guess of what it names.
-unread() {{
-  pointer=$1
-  [ "$unread" = corrupt ] && say "{corrupt}" 1
-  say "{unreadable}" 1
-}}
-# Version $1 installed by its own release (`cad setup --add`, run by uvx), then run with the arguments after it.
-install() {{
-  case $1 in *[!0-9.abcoprst]*) say "{development}" 3 ;; esac
-  uvx=$(command -v uvx 2>/dev/null)
-  for found in "$HOME/.local/bin/uvx" "$HOME/.cargo/bin/uvx"; do
-    [ -z "$uvx" ] && [ -x "$found" ] && uvx=$found
-  done
-  if [ -z "$uvx" ]; then
-    why="uv is not installed"
-  else
-    why=$(unset CAD_INSTALLATION_VERSION; "$uvx" --no-config --managed-python --python {python} \\
-      --from "{server}==$1" {command} setup --add --quiet </dev/null 2>&1) && present "$1" && run "$@"
-    why=$(printf '%s\\n' "$why" | sed '/^[[:space:]]*$/d' | tail -n 1)
-    [ -n "$why" ] || why="it said nothing"
-  fi
-  say "{not_installed}" 3
-}}
 case $1 in
 +*)
   version=${{1#+}}
@@ -641,57 +570,24 @@ case $1 in
   case $version in ''|[!0-9]*|*[!0-9A-Za-z.+_-]*) say "{bad_pin}" 2 ;; esac
   case $1 in
   *@*)
-    case $channel in default) channel= ;; ''|[!a-z0-9]*|*[!a-z0-9._-]*) say "{bad_channel}" 2 ;; esac
+    case $channel in default) ;; ''|[!a-z0-9]*|*[!a-z0-9._-]*) say "{bad_channel}" 2 ;; esac
     [ ${{#channel}} -le 32 ] || say "{bad_channel}" 2 ;;
   esac
-  # Installed: its own cad reads the pin, and moves its channel to it, or says it is stale.
+  # Installed: its own cad reads the pin. Not installed: said, and nothing else.
   present "$version" && run "$version" "$@"
-  # Not installed: stale where its channel is on a newer version already, else installed; refused where its
-  # channel's pointer is there and cannot be read.
-  if [ -n "$channel" ]; then pointer=$state/channels/$channel; else pointer=$state/default; fi
-  named "$pointer"
-  [ -n "$unread" ] && unread "$pointer"
-  if [ -n "$now" ] && older "$version" "$now"; then
-    if [ -n "$channel" ]; then say "{stale_named}" 4; fi
-    say "{stale_default}" 4
-  fi
-  install "$version" "$@"
+  say "{not_installed}" 3
   ;;
 esac
-# No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
-# names current where the install command has run here (its receipt), run as that layout's command ran it; else the
-# newest version installed that has started, else the newest installed. A pointer there that cannot be read refuses
-# every command but cad doctor, which says why and writes one that names no version again: it runs as the newest
-# version that has started.
-named "$state/default"
-if [ -n "$now" ]; then
-  present "$now" && run "$now" "$@"
-  install "$now" "$@"
-fi
-if [ -n "$unread" ]; then
-  [ "$1" = doctor ] || unread "$state/default"
-elif [ -f "$state/install-receipt.json" ]; then
-  named "$state/installations/current"
-  python=$(record python "$state/installations/$now.json")
-  cad=$(record cad "$state/installations/$now.json")
-  [ -n "$now" ] && [ -x "$python" ] && [ -f "$cad" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
-fi
+# No pin: the newest version installed.
 newest=
-started=
 for marker in "$state"/versions/*/code/cad-version.json; do
   name=${{marker%/code/cad-version.json}}
   name=${{name##*/}}
-  [ -e "$state/versions/$name/uninstalled" ] && continue  # cad uninstall took it out; its code goes at a sweep
   present "$name" || continue
   if [ -z "$newest" ] || ! older "$name" "$newest"; then newest=$name; fi
-  [ -f "$state/versions/$name/data/format.json" ] || continue
-  if [ -z "$started" ] || ! older "$name" "$started"; then started=$name; fi
 done
-# The newest that has started: one never started runs its channel's first use before anything else.
-[ -n "$started" ] && newest=$started
 [ -n "$newest" ] && present "$newest" && run "$newest" "$@"
-printf '%s\\n' '{refusal}' >&2
-exit 1
+say "{none_installed}" 3
 """
 
 # --- the Windows command ----------------------------------------------------------------------
@@ -704,7 +600,7 @@ exit 1
 # own folder (``<launcher_dir>``): ``cad-launcher`` beside it (``INTERPRETER``), a virtual environment with
 # nothing installed that uv makes once of the writing installation's interpreter. So the file is the same
 # bytes from every release and every state folder, and an update or a switch never rewrites it: only a
-# later revision does, and a Python that no longer starts (``_interpreter_ok``) is made again. A ``cad.exe`` that runs -- ``cad update``
+# later revision does, and a Python that no longer starts (``_interpreter_ok``) is made again. A ``cad.exe`` that runs -- ``cad setup``
 # runs through it -- cannot be replaced or removed, but it can be renamed: it is set aside
 # (``cad.exe.<hex>.old``) and the new one put in its place, and what was set aside goes at a later write
 # (``_sweep``). The batch file of revisions before (``EARLIER_CMD``) goes once ``cad.exe`` is in place.
@@ -715,27 +611,23 @@ _SHEBANG = f"#!<launcher_dir>\\{INTERPRETER}\\Scripts\\python.exe -I\n"
 ASIDE = ".old"
 
 _MAIN = '''# {mark}{revision}
-# The cad command on Windows (cad.exe), as the sh is elsewhere: `cad +<version>[@<channel>] ...` runs that version
-# of text-to-cad and no other, its own cad, which reads the pin; a version not installed is installed first, by its
-# own release, unless its channel is on a newer one already. With no pin: the default channel's version. Every
-# release with pinned commands writes this same file; a release whose revision is older never replaces it. The standard
-# library alone: its Python has nothing else.
+# The cad command on Windows (cad.exe), as the sh is elsewhere: `cad +<version>[@<name>] ...` runs that version of
+# text-to-cad and no other, its own cad, which reads the pin; a version not installed is said to be so, and nothing is
+# installed. With no pin: the newest version installed. Every release writes this same file; a release whose revision
+# is older never replaces it. The standard library alone: its Python has nothing else.
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{{0,31}}")
-# The characters of a release's name: one installed from the index, and run with no name told.
+# The characters of a release's name: one run with no name told.
 RELEASED = re.compile(r"[0-9.abcoprst]+")
 NAME = "CAD_INSTALLATION_VERSION"
 BAD_PIN, BAD_CHANNEL = {bad_pin!r}, {bad_channel!r}
-STALE_DEFAULT, STALE_NAMED = {stale_default!r}, {stale_named!r}
-NOT_INSTALLED, DEVELOPMENT = {not_installed!r}, {development!r}
-CORRUPT, UNREADABLE = {corrupt!r}, {unreadable!r}
+NOT_INSTALLED, NONE_INSTALLED = {not_installed!r}, {none_installed!r}
 
 
 def say(words, code):
@@ -743,32 +635,8 @@ def say(words, code):
     return code
 
 
-def named(path):
-    """The version the pointer ``path`` names, by the rule every reader of a pointer keeps (pointers.version_text):
-    every carriage return taken out and the line ends after the text, what is left one version name. ``(version,
-    None)``; ``(None, None)`` where the file is not there; ``(None, "unreadable")`` where it is there and cannot be
-    read now, ``(None, "corrupt")`` where it names no version -- never taken for no pointer."""
-    try:
-        with open(path, "rb") as handle:
-            data = handle.read()
-    except FileNotFoundError:
-        return None, ("unreadable" if os.path.lexists(path) else None)
-    except OSError:
-        return None, "unreadable"
-    try:
-        found = data.replace(b"\\r", b"").rstrip(b"\\n").decode("ascii")
-    except UnicodeDecodeError:
-        return None, "corrupt"
-    return (found, None) if VERSION.fullmatch(found) else (None, "corrupt")
-
-
-def unread(path, why):
-    """The pointer ``path``, which ``named`` found there and could not read: refused, nothing run on a guess."""
-    return say((CORRUPT if why == "corrupt" else UNREADABLE) % {{"pointer": path}}, 1)
-
-
 def record(path):
-    """The Python and cad a version's code marker (or an installation's record) names, while both are there."""
+    """The Python and cad a version's code marker names, while both are there."""
     try:
         with open(path, encoding="utf-8") as handle:
             found = json.load(handle)
@@ -820,44 +688,6 @@ def run(version, found, args):
     return wait(subprocess.Popen([found[1], *args], env=environment))
 
 
-def uvx():
-    found = shutil.which("uvx")
-    if found:
-        return found
-    home = os.path.expanduser("~")
-    for folder in (os.path.join(home, ".local", "bin"), os.path.join(home, ".cargo", "bin")):
-        for name in ("uvx.exe", "uvx"):
-            if os.path.isfile(os.path.join(folder, name)):
-                return os.path.join(folder, name)
-    return None
-
-
-def install(state, version, args):
-    """Version ``version`` installed by its own release (`cad setup --add`, run by uvx), then run with ``args``."""
-    if not RELEASED.fullmatch(version):
-        return say(DEVELOPMENT % {{"version": version}}, 3)
-    command = uvx()
-    if command is None:
-        why = "uv is not installed"
-    else:
-        environment = dict(os.environ)
-        environment.pop(NAME, None)
-        try:
-            done = subprocess.run([command, "--no-config", "--managed-python", "--python", {python!r}, "--from",
-                                   {server!r} + "==" + version, {command!r}, "setup", "--add", "--quiet"],
-                                  env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                  stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-            said, code = done.stdout or "", done.returncode
-        except OSError as error:
-            said, code = str(error), 1
-        found = present(state, version) if code == 0 else None
-        if found:
-            return run(version, found, args)
-        lines = [line.strip() for line in said.splitlines() if line.strip()]
-        why = lines[-1] if lines else "it said nothing"
-    return say(NOT_INSTALLED % {{"version": version, "why": why}}, 3)
-
-
 def main():
     # The state folder as cad.engine.places says it: in the user's own folder, out of the local
     # application data an app package virtualizes.
@@ -868,61 +698,25 @@ def main():
         version, at, channel = args[0][1:].partition("@")
         if not VERSION.fullmatch(version):
             return say(BAD_PIN % {{"word": args[0]}}, 2)
-        if at and channel == "default":
-            channel = ""
-        elif at and not CHANNEL.fullmatch(channel):
+        if at and channel != "default" and not CHANNEL.fullmatch(channel):
             return say(BAD_CHANNEL % {{"word": args[0]}}, 2)
-        # Installed: its own cad reads the pin, and moves its channel to it, or says it is stale.
+        # Installed: its own cad reads the pin. Not installed: said, and nothing else.
         found = present(state, version)
         if found:
             return run(version, found, args)
-        # Not installed: stale where its channel is on a newer version already, else installed; refused where its
-        # channel's pointer is there and cannot be read.
-        pointer = os.path.join(state, "channels", channel) if channel else os.path.join(state, "default")
-        now, why = named(pointer)
-        if why:
-            return unread(pointer, why)
-        if now and older(version, now):
-            return say((STALE_NAMED if channel else STALE_DEFAULT) % {{"version": version, "channel": channel,
-                                                                         "now": now}}, 4)
-        return install(state, version, args)
-    # No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
-    # names current where the install command has run here (its receipt), run as that layout's command ran it;
-    # else the newest version installed that has started, else the newest installed. A pointer there that cannot be
-    # read refuses every command but cad doctor, which says why and writes one that names no version again: it runs as
-    # the newest version that has started.
-    now, why = named(os.path.join(state, "default"))
-    if now:
-        found = present(state, now)
-        return run(now, found, args) if found else install(state, now, args)
-    if why:
-        if args[:1] != ["doctor"]:
-            return unread(os.path.join(state, "default"), why)
-    elif os.path.isfile(os.path.join(state, "install-receipt.json")):
-        now = named(os.path.join(state, "installations", "current"))[0]
-        found = record(os.path.join(state, "installations", now + ".json")) if now else None
-        if found:
-            return wait(subprocess.Popen([found[0], "-P", "-m", "cad_server._internal.proxy", *args]))
+        return say(NOT_INSTALLED % {{"version": version}}, 3)
+    # No pin: the newest version installed.
     try:
         names = sorted(os.listdir(os.path.join(state, "versions")))
     except OSError:
         names = []
-    newest = started = None
+    newest = None
     for name in names:
-        # One cad uninstall took out, whose code goes at the next sweep, is none.
-        if VERSION.fullmatch(name) and present(state, name) and not os.path.lexists(
-                os.path.join(state, "versions", name, "uninstalled")):
-            if newest is None or not older(name, newest):
-                newest = name
-            # The newest that has started: one never started runs its channel's first use before anything else.
-            if os.path.isfile(os.path.join(state, "versions", name, "data", "format.json")) and (
-                    started is None or not older(name, started)):
-                started = name
-    newest = started or newest
+        if VERSION.fullmatch(name) and present(state, name) and (newest is None or not older(name, newest)):
+            newest = name
     if newest:
         return run(newest, present(state, newest), args)
-    sys.stderr.write({refusal!r} + "\\n")
-    return 1
+    return say(NONE_INSTALLED, 3)
 
 
 sys.exit(main())
@@ -930,20 +724,13 @@ sys.exit(main())
 
 
 def _main_text() -> str:
-    """The ``__main__.py`` of ``cad.exe``: the same from every version of this revision. Its refusals are
-    ``cad_server._internal.pins``' words, the same as a version says them, filled in as it runs."""
+    """The ``__main__.py`` of ``cad.exe``: the same from every version of this revision. Its words are
+    ``cad_server._internal.pins``' own, filled in as it runs."""
     from cad_server._internal import pins
-    from cad_server._internal.launch import COMMAND, PYTHON, SERVER
-    from cad_server._internal.proxy import NONE_INSTALLED
 
-    return _MAIN.format(mark=MARK, revision=REVISION, refusal=NONE_INSTALLED, python=PYTHON, server=SERVER,
-                        command=COMMAND, bad_pin=pins.bad_pin("%(word)s"), bad_channel=pins.bad_channel("%(word)s"),
-                        stale_default=pins.stale("%(version)s", None, "%(now)s"),
-                        stale_named=pins.stale("%(version)s", "%(channel)s", "%(now)s"),
-                        not_installed=pins.not_installed("%(version)s", "%(why)s", "nt"),
-                        development=pins.development("%(version)s"),
-                        corrupt=pins.unreadable_pointer("%(pointer)s", corrupt=True),
-                        unreadable=pins.unreadable_pointer("%(pointer)s", corrupt=False))
+    return _MAIN.format(mark=MARK, revision=REVISION, bad_pin=pins.bad_pin("%(word)s"),
+                        bad_channel=pins.bad_channel("%(word)s"), not_installed=pins.not_installed("%(version)s"),
+                        none_installed=pins.none_installed())
 
 
 def _archive() -> bytes:
@@ -1088,7 +875,7 @@ def _put(path: str, data: bytes) -> None:
 
 def _write_exe(path: str, data: bytes) -> None:
     """``data`` written to ``path`` whole, a ``cad.exe`` that runs set aside first (``_aside``): Windows
-    refuses to replace it -- this very command, as `cad update` runs through it -- but renames it."""
+    refuses to replace it -- this very command, as `cad setup` runs through it -- but renames it."""
     try:
         _put(path, data)
         return
@@ -1196,29 +983,17 @@ def script(windows: bool = WINDOWS) -> str:
     if windows:
         return _main_text()
     from cad_server._internal import pins
-    from cad_server._internal.launch import COMMAND, PYTHON, SERVER
-    from cad_server._internal.proxy import NONE_INSTALLED
 
-    # Its refusals are ``pins``' words, the same as a version says them, said in double quotes with the
-    # script's variables where the version, channel, reason and word go.
-    # A backtick is said as one (escaped): the stale line names `cad update`.
-    words = {key: text.replace("`", "\\`") for key, text in {
-        "bad_pin": pins.bad_pin("$1"), "bad_channel": pins.bad_channel("$1"),
-        "stale_default": pins.stale("$version", None, "$now"),
-        "stale_named": pins.stale("$version", "$channel", "$now"),
-        "not_installed": pins.not_installed("$1", "$why", "posix"), "development": pins.development("$1"),
-        "corrupt": pins.unreadable_pointer("$pointer", corrupt=True),
-        "unreadable": pins.unreadable_pointer("$pointer", corrupt=False)}.items()}
+    # Its words are ``pins``' own, said in double quotes with the script's variables where the version and the word go.
+    words = {"bad_pin": pins.bad_pin("$1"), "bad_channel": pins.bad_channel("$1"),
+             "not_installed": pins.not_installed("$version"), "none_installed": pins.none_installed()}
     for text in words.values():
-        bare = text.replace("\\`", "")
-        for variable in ("$channel", "$version", "$now", "$why", "$pointer", "$1"):
+        bare = text
+        for variable in ("$version", "$1"):
             bare = bare.replace(variable, "")
         if set(bare) & set('"`$\\'):
             raise ValueError(f"the cad command cannot say {text!r} in double quotes")
-    if "'" in NONE_INSTALLED:
-        raise ValueError("the cad command says its refusal in single quotes")
-    return _SH.format(mark=MARK, revision=REVISION, python=PYTHON, server=SERVER, command=COMMAND,
-                      refusal=NONE_INSTALLED, **words)
+    return _SH.format(mark=MARK, revision=REVISION, **words)
 
 
 def _revision_in(head: str) -> int | None:
@@ -1267,7 +1042,7 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
     folder it cannot write is not raised but returned as the error, for ``cad doctor`` to say. On
     Windows, what earlier writes set aside goes (``_sweep``), and so does a ``cad.cmd`` of a revision
     before once ``cad.exe`` is in place: at the write after the one that put it there, as a ``cad.cmd``
-    that ran the write (``cad update`` through it) is a batch file cmd reads on after it."""
+    that ran the write (``cad setup`` through it) is a batch file cmd reads on after it."""
     where = where or proxy_folder()
     path = proxy_path(where, windows)
     status = proxy_status(path, windows)

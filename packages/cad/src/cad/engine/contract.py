@@ -22,8 +22,9 @@ The server refuses an order whose contract is not its own before it starts any w
 naming which package to update, and to what release, or the ``cad run`` that runs the program as one
 release (``refusal``): a refusal with a remedy, and no window in which the newer side answers the older.
 Such a caller is a process with no version of its own (a person's own environment, ``python model.py``):
-each version's server is reached by its own version's processes alone, and by the rest through the door
-of the default channel's version, which never takes another version's data for a release number. Equal contracts of different releases build, and the
+each version's server is reached by its own version's processes alone, and by the rest through the flat door
+(the server of the installation ``installations/current`` names), which never takes another version's data for a
+release number. Equal contracts of different releases build, and the
 script then says once which package to update for the other's fixes (``notice``). The library's side is
 the cad package in the caller's environment, and no installer is named: the person or the agent has
 their own way. The server's side is ``cad-server``, installed on the computer as a version of its own:

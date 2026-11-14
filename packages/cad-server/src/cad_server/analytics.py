@@ -953,8 +953,8 @@ def everywhere(by: str, *, forget: Callable[[str], bool] | None = None) -> list[
 
 def _forget_elsewhere(forget: Callable[[str], bool]) -> bool:
     """The deletions owed in the device's other settings files (``_settings_everywhere``) asked for by this process's
-    sender, each heard taken off the list that held it: a version removed before it runs again (an update that
-    replaces it, ``cad doctor --prune``) would otherwise take what it owes away unasked. Each file read first, a
+    sender, each heard taken off the list that held it: a version removed before it runs again (one left
+    unused, by the newest version's cleanup) would otherwise take what it owes away unasked. Each file read first, a
     local read, so nothing is asked where nothing is owed; after the first request not heard nothing more is asked,
     and the rest stay owed. It waits on the network where something is owed: only the sender calls it
     (``_forget_owed``). Whether every one asked was heard. Never raises."""
@@ -1906,15 +1906,15 @@ class Recorder:
 
     def _source(self) -> Source:
         """Who counts a use noted now: the session's this thread notes it for (``of``), else this process's own --
-        the channel its version is on (``channel.own``: the one named channel on it where the default is not, else
-        the default), and the app the client it was started for names (``started``; a page's own names none)."""
+        the default channel (a page names none), and the app the client it was started for names (``started``; a
+        page's own names none)."""
         found = getattr(self._local, "source", None)
         if found is not None:
             return found
-        from cad_server._internal.channel import describe, own
+        from cad_server._internal.channel import describe
 
         client = self._context.get("client") or {}
-        described = describe(own(), client.get("name"), {})
+        described = describe(None, client.get("name"), {})
         return (None, described["channel"], described["app"])
 
     def _tally(self, key: Source | None = None) -> _Tally:

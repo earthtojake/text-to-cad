@@ -1,10 +1,11 @@
-"""A pinned command, ``cad +<version>[@<channel>] ...``: the ``cad`` command that reads the pin first (the sh and
-the Windows main, ``cad_server._internal.installations``), and the version that reads it then (``pins``, ``cli``).
+"""A pinned command, ``cad +<version>[@<name>] ...``: the ``cad`` command that reads the pin first (the sh and the
+Windows main, ``cad_server._internal.installations``), the version that reads it then (``pins``, ``cli``), and what
+a version's command says after its output (the update notice, ``cli._notice``) and records (its use).
 
 The command runs for real against a device in a temporary folder whose versions are stubs: a version's code
 marker names a ``python`` that runs what it is given and a ``cad`` that says which version it is, the name it was
-told and its arguments. uv is a stub too (``uvx`` on a PATH of the test's own), which records how it was run and
-installs a version by copying a staged one in, or fails. The Windows main is run by this Python on any system.
+told and its arguments. uv is a stub on a PATH of the test's own, which records any run: the command never runs it.
+The Windows main is run by this Python on any system.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -25,9 +27,10 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cad/src")
 
+import cad_server  # noqa: E402
 from cad.engine import client, places  # noqa: E402
-from cad_server import cli  # noqa: E402
-from cad_server._internal import extras, installations, pins, pointers, proxy, versions  # noqa: E402
+from cad_server import cli, updates  # noqa: E402
+from cad_server._internal import extras, imports, installations, pins, proxy, versions  # noqa: E402
 from cad_server._internal.cli_errors import REASONS, Failure  # noqa: E402
 
 STUBS = unittest.skipIf(os.name == "nt", "the stub programs are sh scripts")
@@ -60,9 +63,8 @@ class Device(unittest.TestCase):
         scripts = code / "server" / "bin"
         scripts.mkdir(parents=True)
         python, cad = scripts / "python", scripts / "cad"
-        # The sh runs ``python cad ARGS``; the Windows main runs ``cad ARGS``; the layout before 0.12 ran
-        # ``python -P -m cad_server._internal.proxy ARGS``.
-        python.write_text('#!/bin/sh\n[ "$1" = -P ] && { echo "legacy $*"; exit 0; }\nexec "$@"\n', encoding="utf-8")
+        # The sh runs ``python cad ARGS``; the Windows main runs ``cad ARGS``.
+        python.write_text('#!/bin/sh\nexec "$@"\n', encoding="utf-8")
         cad.write_text(f'#!/bin/sh\necho "{name} ${{CAD_INSTALLATION_VERSION-unset}} $*"\n', encoding="utf-8")
         python.chmod(0o755)
         cad.chmod(0o755)
@@ -73,28 +75,10 @@ class Device(unittest.TestCase):
         (code / places.VERSION_MARKER).write_text(json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False)
                                                   + "\n", encoding="utf-8")
 
-    def point(self, channel: str | None, name: str) -> None:
-        path = self.state / ("default" if channel is None else f"channels/{channel}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"{name}\n", encoding="utf-8")
-
-    def legacy(self, name: str = "0.11.10") -> None:
-        """A device the install command set up before 0.12: its receipt, and its current installation."""
-        flat = self.state / "releases" / name / "bin"
-        flat.mkdir(parents=True)
-        for script in ("python", "cad"):
-            (flat / script).write_text('#!/bin/sh\n[ "$1" = -P ] && { echo "legacy $*"; exit 0; }\n', encoding="utf-8")
-            (flat / script).chmod(0o755)
-        (self.state / "install-receipt.json").write_text('{"schema": 1}', encoding="utf-8")
-        record = {"version": name, "python": str(flat / "python"), "cad": str(flat / "cad"), "prefix": str(flat.parent)}
-        (self.state / "installations").mkdir()
-        (self.state / "installations" / f"{name}.json").write_text(json.dumps(record, indent=1, sort_keys=True) + "\n",
-                                                                   encoding="utf-8")
-        (self.state / "installations" / "current").write_text(name, encoding="utf-8")
-
     def uvx(self, *, installs: str | None = None, fails: str | None = None) -> None:
         """uv's stub: it records how it was run (and the name it was told), then installs version ``installs`` --
-        staged, copied in as ``cad setup --add`` would make it -- or fails saying ``fails``."""
+        staged, copied in as ``cad setup`` would make it -- or fails saying ``fails``. The ``cad`` command never runs
+        it: it is here to prove so."""
         staged = self.root / "staged"
         lines = ["#!/bin/sh", f'echo "${{CAD_INSTALLATION_VERSION-unset}} $*" >> "{self.uvx_log}"']
         if installs is not None:
@@ -128,72 +112,42 @@ class TheCommand(Device):
     def ran(self, done: subprocess.CompletedProcess, line: str) -> None:
         self.assertEqual((done.returncode, done.stdout, done.stderr), (0, line + "\n", ""))
 
-    def refused(self, done: subprocess.CompletedProcess, reason: str, words: str) -> None:
-        self.assertEqual((done.returncode, done.stdout, done.stderr), (REASONS[reason], "", f"cad: {words}\n"))
+    def refused(self, done: subprocess.CompletedProcess, code: int, words: str) -> None:
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (code, "", f"cad: {words}\n"))
 
-    def test_a_pinned_version_installed_runs_with_the_pin_whatever_its_channel_is_on(self) -> None:
+    def test_a_pinned_version_installed_runs_exactly_it_whatever_else_is_installed(self) -> None:
         def check(how: str) -> None:
-            self.version(X)
-            # Equal, newer than its channel's, the channel's first use, older than its channel's: the command never
-            # judges a version that is there; that version's own cad reads the pin (``pins.apply``).
-            for pointer in (X, OLDER, None, NEWER):
-                if pointer is not None:
-                    self.point("store", pointer)
-                self.ran(self.cad(how, f"+{X}@store", "status", "a b", "$HOME"), f"{X} unset +{X}@store status a b $HOME")
+            self.uvx(installs=X)
+            for name in (OLDER, X, NEWER):
+                self.version(name)
+            # Older or newer than the others, with a name or without: that version's own cad reads the pin.
+            for word in (f"+{X}", f"+{X}@store", f"+{X}@default", f"+{OLDER}@codex"):
+                name = word[1:].split("@")[0]
+                self.ran(self.cad(how, word, "status", "a b", "$HOME"), f"{name} unset {word} status a b $HOME")
             # A release is told no name, whatever this shell inherited (a daemon's children carry one).
             self.ran(self.cad(how, f"+{X}", "run", CAD_INSTALLATION_VERSION="0.9.0"), f"{X} unset +{X} run")
             self.assertEqual(self.uv_runs(), [])
 
         self.both(check)
 
-    def test_a_pin_not_installed_older_than_its_channel_is_stale_and_nothing_is_installed(self) -> None:
+    def test_a_pin_not_installed_says_so_and_installs_nothing_names_no_command_and_uses_no_network(self) -> None:
         def check(how: str) -> None:
-            self.uvx(installs=X)
-            self.point("store", NEWER)
-            done = self.cad(how, f"+{X}@store", "status")
-            self.refused(done, "stale_pin", pins.stale(X, "store", NEWER))
-            # Nothing of the version is here: the line says what the command is for, not what this is.
-            self.assertTrue(done.stderr.startswith(f"cad: this command is for text-to-cad {X}, and its channel (store) "
-                                                   f"is on text-to-cad {NEWER} now: read the skill again"), done.stderr)
-            self.point(None, NEWER)
-            for pin in (f"+{X}", f"+{X}@default"):  # @default is the default channel
-                self.refused(self.cad(how, pin, "status"), "stale_pin", pins.stale(X, None, NEWER))
+            self.uvx(installs=X)  # uv there and able: never run
+            self.version(NEWER)
+            for word in (f"+{X}", f"+{X}@store", f"+{DEV}"):
+                done = self.cad(how, word, "status")
+                self.refused(done, 3, pins.not_installed(word[1:].split("@")[0]))
+                self.assertEqual(done.stderr, f"cad: text-to-cad {word[1:].split('@')[0]} is not installed on this "
+                                              "computer.\n")
             self.assertEqual(self.uv_runs(), [], "nothing installed")
+            self.assertFalse((self.state / "versions" / X).exists())
 
         self.both(check)
 
-    def test_a_pin_not_installed_is_installed_by_its_own_release_then_run(self) -> None:
+    def test_a_development_version_runs_by_its_record_told_its_name(self) -> None:
         def check(how: str) -> None:
-            self.uvx(installs=X)
-            self.point("store", OLDER)  # newer than its channel's: installed (and its own cad moves the channel)
-            self.ran(self.cad(how, f"+{X}@store", "status", CAD_INSTALLATION_VERSION="0.9.0"),
-                     f"{X} unset +{X}@store status")
-            self.assertEqual(self.uv_runs(), [f"unset --no-config --managed-python --python 3.14 --from "
-                                              f"cad-server=={X} cad setup --add --quiet"])
-            self.assertEqual(self.cad(how, f"+{X}@other", "status").returncode, 0, "the first use of a channel")
-            self.assertEqual(len(self.uv_runs()), 1, "installed once")
-
-        self.both(check)
-
-    def test_a_pin_that_cannot_be_installed_from_this_shell_says_the_line_to_run(self) -> None:
-        def check(how: str) -> None:
-            system = "nt" if how == "windows" else "posix"
-            self.refused(self.cad(how, f"+{X}", "status"), "cannot_install_here",
-                         pins.not_installed(X, "uv is not installed", system))
-            self.uvx(fails="error: Failed to fetch: dns error")
-            self.refused(self.cad(how, f"+{X}", "status"), "cannot_install_here",
-                         pins.not_installed(X, "error: Failed to fetch: dns error", system))
-            self.assertEqual(len(self.uv_runs()), 1)
-
-        self.both(check)
-
-    def test_a_development_version_runs_by_its_record_told_its_name_and_is_never_installed(self) -> None:
-        def check(how: str) -> None:
-            self.uvx(installs=X)
-            self.refused(self.cad(how, f"+{DEV}", "status"), "cannot_install_here", pins.development(DEV))
             self.version(DEV)
             self.ran(self.cad(how, f"+{DEV}", "status"), f"{DEV} {DEV} +{DEV} status")
-            self.assertEqual(self.uv_runs(), [])
 
         self.both(check)
 
@@ -201,97 +155,32 @@ class TheCommand(Device):
         def check(how: str) -> None:
             self.version(X)
             for word in ("+", "+abc", "+.1", "+0.12.0;rm", "+@store"):
-                self.refused(self.cad(how, word, "status"), "bad_pin", pins.bad_pin(word))
+                self.refused(self.cad(how, word, "status"), REASONS["bad_pin"], pins.bad_pin(word))
             for word in (f"+{X}@", f"+{X}@Store", f"+{X}@-x", f"+{X}@a@b", f"+{X}@{'a' * 33}"):
-                self.refused(self.cad(how, word, "status"), "bad_pin", pins.bad_channel(word))
+                self.refused(self.cad(how, word, "status"), REASONS["bad_pin"], pins.bad_channel(word))
             self.ran(self.cad(how, f"+{X}@{'a' * 32}", "status"), f"{X} unset +{X}@{'a' * 32} status")
 
         self.both(check)
 
-    def test_no_pin_runs_the_default_channel_s_version(self) -> None:
+    def test_no_pin_runs_the_newest_installed_and_a_later_release_by_the_same_rules(self) -> None:
         def check(how: str) -> None:
-            self.refused_none(how)
+            done = self.cad(how, "status")
+            self.refused(done, 3, pins.none_installed())
+            self.assertEqual(done.stderr, "cad: text-to-cad is not installed on this computer.\n")
             self.version("0.9.0")
             self.version(X)
             self.ran(self.cad(how, "status"), f"{X} unset status")  # the newest installed, by its numbers
-            self.legacy()
-            self.ran(self.cad(how, "status"), "legacy -P -m cad_server._internal.proxy status")  # before 0.12
-            self.point(None, "0.9.0")
-            self.ran(self.cad(how, "status", "x"), "0.9.0 unset status x")  # its pointer
-            self.uvx(installs=NEWER)
-            self.point(None, NEWER)
-            self.ran(self.cad(how, "status"), f"{NEWER} unset status")  # its pointer's, installed
-            self.assertEqual(len(self.uv_runs()), 1)
+            (self.state / "versions" / "0.99.0" / "code").mkdir(parents=True)  # an install cut short: not installed
+            self.ran(self.cad(how, "status", "x"), f"{X} unset status x")
+            self.version(DEV)  # a development build of X: newer than X
+            self.ran(self.cad(how, "status"), f"{DEV} {DEV} status")
+            # A release made after this command was written, laid out as every version is: run by the same rules.
+            self.version(NEWER)
+            self.ran(self.cad(how, "status"), f"{NEWER} unset status")
+            self.ran(self.cad(how, f"+{NEWER}", "status"), f"{NEWER} unset +{NEWER} status")
+            self.assertEqual(self.uv_runs(), [])
 
         self.both(check)
-
-    def test_a_pointer_there_that_cannot_be_read_is_never_no_pointer(self) -> None:
-        # D12: the command tells a pointer that is not there from one that is and cannot be read, or names no version,
-        # and refuses on the second; cad doctor alone still runs, as the newest version that has started, to repair it.
-        def check(how: str) -> None:
-            self.uvx(installs=X)
-            self.version(OLDER)
-            (self.state / "versions" / OLDER / "data").mkdir()
-            (self.state / "versions" / OLDER / "data" / "format.json").write_text("{}", encoding="utf-8")
-            default = self.state / "default"
-            for corrupt in (True, False):
-                if corrupt:
-                    default.write_bytes(b"\n")
-                else:
-                    default.unlink()
-                    default.mkdir()  # there, and it cannot be read
-                words = pins.unreadable_pointer(str(default), corrupt=corrupt)
-                for args in ([f"+{X}", "status"], ["status"]):
-                    done = self.cad(how, *args)
-                    self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cad: {words}\n"), args)
-                self.ran(self.cad(how, "doctor"), f"{OLDER} unset doctor")
-            store = self.state / "channels" / "store"
-            store.parent.mkdir()
-            store.write_bytes(b"x")
-            done = self.cad(how, f"+{X}@store", "status")
-            self.assertEqual(done.stderr, f"cad: {pins.unreadable_pointer(str(store), corrupt=True)}\n")
-            self.assertEqual(self.uv_runs(), [], "nothing installed on a guess")
-
-        self.both(check)
-
-    def test_the_command_and_the_versions_read_a_pointer_by_one_rule(self) -> None:
-        # D12: the sh, the Windows main and ``pointers.read`` agree on every pointer: a version, none, or one that
-        # cannot be read (unreadable) or names no version (corrupt).
-        main: dict = {}
-        exec(compile(installations.script(windows=True).replace("sys.exit(main())", ""), "main", "exec"), main)
-        body = installations.script(windows=False).split("\nnamed() {\n", 1)[1].split("\n}\n", 1)[0]
-        program = f'named() {{\n{body}\n}}\nnamed "$1"; printf "%s|%s" "$now" "$unread"'
-        shells = [shell for shell in ("sh", "dash") if shutil.which(shell)] if os.name != "nt" else []
-        cases = [b"0.12.0\n", b"0.12.0", b"0.12.0\r\n", b"\r0.12.0\r\n\n\n", b"0.12.0-dev.20261113000000\n",
-                 b" 0.12.0", b"0.12.0 ", b"0.12.0\n0.13.0\n", b"", b"\n", b"x", b"0.12.0\xff", b"+0.12.0", None, "dir",
-                 "link"]
-        for case in cases:
-            path = self.root / "pointer"
-            if path.is_dir() and not path.is_symlink():
-                path.rmdir()
-            else:
-                path.unlink(missing_ok=True)
-            if isinstance(case, bytes):
-                path.write_bytes(case)
-            elif case == "dir":
-                path.mkdir()
-            elif case == "link":
-                path.symlink_to(self.root / "nothing")
-            try:
-                found = _read_path(path)
-                expected = (found or "", "")
-            except pointers.Unreadable as unreadable:
-                expected = ("", "corrupt" if unreadable.corrupt else "unreadable")
-            with self.subTest(case=case):
-                version, why = main["named"](str(path))
-                self.assertEqual((version or "", why or ""), expected, "the Windows main")
-                for shell in shells:
-                    done = subprocess.run([shell, "-c", program, shell, str(path)], capture_output=True)
-                    self.assertEqual(done.stdout.decode(), "|".join(expected), shell)
-
-    def refused_none(self, how: str) -> None:
-        done = self.cad(how, "status")
-        self.assertEqual((done.returncode, done.stderr), (1, proxy.NONE_INSTALLED + "\n"))
 
     def test_both_order_versions_as_the_versions_do(self) -> None:
         # A10: the sh, the Windows main and ``versions.order`` agree on every name a release or a development build
@@ -313,8 +202,8 @@ class TheCommand(Device):
                         self.assertEqual(done.returncode == 0, expected, shell)
 
     def test_a_state_folder_with_quotes_and_backslashes_in_its_path_runs(self) -> None:
-        # A7: a release is run from where every release puts its Python and cad, no path parsed; a development
-        # version's and the layout before 0.12's read with JSON's escapes undone.
+        # A release is run from where every release puts its Python and cad, no path parsed; a development version's
+        # read with JSON's escapes undone.
         self.state = self.root / 'odd "quoted" \\ back' / "cad"
         self.state.mkdir(parents=True)
         self.version(X)
@@ -322,50 +211,19 @@ class TheCommand(Device):
         self.ran(self.cad("sh", "status"), f"{X} unset status")
         self.version(DEV)
         self.ran(self.cad("sh", f"+{DEV}", "status"), f"{DEV} {DEV} +{DEV} status")
-        shutil.rmtree(self.state / "versions")
-        self.legacy()
-        self.ran(self.cad("sh", "status"), "legacy -P -m cad_server._internal.proxy status")
 
-    def test_no_pin_runs_the_newest_version_that_has_started(self) -> None:
-        def check(how: str) -> None:
-            self.version(X)
-            self.version(NEWER)
-            (self.state / "versions" / X / "data").mkdir()
-            (self.state / "versions" / X / "data" / "format.json").write_text("{}", encoding="utf-8")
-            self.ran(self.cad(how, "status"), f"{X} unset status")
-
-        self.both(check)
-
-    def test_a_stale_line_names_the_repair_for_its_channel(self) -> None:
-        def check(how: str) -> None:
-            self.point("store", NEWER)
-            self.point(None, NEWER)
-            for pin, channel in ((f"+{X}@store", "store"), (f"+{X}", None)):
-                done = self.cad(how, pin, "status")
-                self.assertEqual(done.stderr, f"cad: {pins.stale(X, channel, NEWER)}\n")
-            self.assertIn("`cad update`", pins.stale(X, None, NEWER))
-            self.assertIn("update the text-to-cad plugin in the app it came from", pins.stale(X, "store", NEWER))
-
-        self.both(check)
-
-
-def _read_path(path: Path) -> str | None:
-    """``pointers.read`` of the pointer at ``path``, whatever its name: the default's, in a state folder of its own."""
-    with tempfile.TemporaryDirectory() as folder:
-        default = Path(folder) / "default"
-        if path.is_symlink() or path.exists():
-            default.symlink_to(path)
-        return pointers.read(None, Path(folder))
+    def test_the_command_of_0_11_10_s_layout_says_this_command_s_words(self) -> None:
+        self.assertEqual(proxy.NONE_INSTALLED, f"cad: {pins.none_installed()}")
 
 
 class AnOlderReleaseNeverRewritesIt(unittest.TestCase):
-    def test_a_writer_of_revision_11_finds_revision_12_newer_and_leaves_it(self) -> None:
+    def test_a_writer_of_an_earlier_revision_finds_this_one_newer_and_leaves_it(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             for windows in (False, True):
                 path = Path(installations.proxy_path(folder, windows=windows))
                 data = installations.script(False).encode() if not windows else _exe(installations.script(True))
                 path.write_bytes(data)
-                with mock.patch.object(installations, "REVISION", 11):  # 0.11.10's code, which writes 11
+                with mock.patch.object(installations, "REVISION", installations.REVISION - 1):  # 0.11.11's writer
                     self.assertEqual(installations.proxy_status(str(path), windows=windows), installations.NEWER)
                     self.assertEqual(installations.write_proxy(folder, windows=windows)[1], installations.NEWER)
                 self.assertEqual(path.read_bytes(), data)
@@ -428,86 +286,102 @@ class TheParser(unittest.TestCase):
         self.assertEqual(places.channel(), "default", "a refused pin names no channel")
 
 
-class Applying(unittest.TestCase):
-    """``pins.apply``: the channel's pointer read, and the channel moved, or the pin found stale."""
+class ACommandOfAVersion(unittest.TestCase):
+    """What a version's own ``cad`` does around a command: its use recorded, its data copied in first where it is not
+    there yet, and, after the command's output, the update notice."""
 
     def setUp(self) -> None:
         self.state = Path(tempfile.mkdtemp(prefix="cad-pins-"))
         self.addCleanup(shutil.rmtree, self.state, True)
-        self.moved: list = []
-        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}),
-                      mock.patch.object(places, "versioned", return_value=X),
-                      mock.patch.object(versions, "move", side_effect=self.move)):
+        for patch in (mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state), places.INSTALLATION_ENV: DEV,
+                                                   "CAD_UPDATE_CHECK": "", "CI": ""}),
+                      mock.patch.object(places, "_channel", None), mock.patch.object(places, "HOME", None)):
             patch.start()
             self.addCleanup(patch.stop)
-        self.answer = "moved"
+        places._versioned.cache_clear()
+        self.addCleanup(places._versioned.cache_clear)
 
-    def move(self, channel, version, told=None):
-        self.moved.append(("move", channel, version))
-        return versions.Moved(self.answer, channel, version, NEWER if self.answer == "stale" else None, error="why")
+    def main(self, *argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = cli.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
 
-    def apply(self, word: str) -> Failure | None:
-        try:
-            pins.apply(pins.parse(word))
-        except Failure as failure:
-            return failure
-        return None
+    def installed(self, name: str) -> Path:
+        """Version ``name``'s code marker, as ``versions.make_present`` writes it (its environment this Python's)."""
+        code = self.state / "versions" / name / "code"
+        code.mkdir(parents=True)
+        record = {"schema": places.VERSION_SCHEMA, "version": name, "python": sys.executable, "cad": sys.executable,
+                  "prefix": sys.prefix}
+        (code / places.VERSION_MARKER).write_text(json.dumps(record), encoding="utf-8")
+        places._versioned.cache_clear()
+        return self.state / "versions" / name
 
-    def test_equal_runs_reads_the_pointer_and_marks_the_channel_used_once_a_day(self) -> None:
-        pointers.write("store", X, self.state)
-        with mock.patch.dict(pointers._used, clear=True):
-            self.assertIsNone(self.apply(f"+{X}@store"))
-        self.assertEqual((self.moved, sorted(os.listdir(self.state))), ([], ["channels", "used"]), "no move, no lock")
-        stamp = self.state / "used" / "store"
-        os.utime(stamp, (1_000_000, 1_000_000))
-        with mock.patch.dict(pointers._used, clear=True):
-            self.assertIsNone(self.apply(f"+{X}@store"))
-        self.assertGreater(stamp.stat().st_mtime, 1_000_000, "a pinned command that reaches no server is a use too")
-        os.utime(stamp, None)
-        with mock.patch.dict(pointers._used, clear=True), mock.patch("os.utime", side_effect=PermissionError(1, "no")):
-            self.assertIsNone(self.apply(f"+{X}@store"), "within the day: nothing written; and a mark never fails it")
+    def test_its_own_version_s_pin_is_read_and_its_name_is_the_command_s_channel(self) -> None:
+        self.assertEqual(self.main(f"+{DEV}@store", "--version"), (0, f"cad {DEV}\n", ""))
+        self.assertEqual(places.channel(), "store")
 
-    def test_a_pointer_that_cannot_be_read_or_names_no_version_runs_nothing_and_moves_nothing(self) -> None:
-        # D2 (this test asserted that an emptied one was moved before): a pin never writes a pointer it cannot read,
-        # or an old chat's would move its channel back.
-        pointers.write("store", X, self.state)
-        path = self.state / "channels" / "store"
-        with mock.patch.object(Path, "read_bytes", side_effect=PermissionError(13, "sharing violation")):
-            refused = self.apply(f"+{X}@store")
-        self.assertEqual((str(refused), refused.reason, self.moved),
-                         (pins.unreadable_pointer(str(path), corrupt=False), "failed", []))
-        for written in (b"", b"0.13.0\n{\"later\": \"form\"}\n"):  # emptied by a crash; a form a later release writes
-            path.write_bytes(written)
-            refused = self.apply(f"+{X}@store")
-            self.assertEqual((str(refused), refused.reason), (pins.unreadable_pointer(str(path), corrupt=True), "failed"))
-        self.assertEqual(self.moved, [])
+    def test_another_version_s_pin_is_refused_in_one_line(self) -> None:
+        self.assertEqual(self.main(f"+{X}", "status"), (5, "", f"cad: {pins.other_version(DEV, X)}\n"))
+        code, out, _ = self.main(f"+{X}@store", "status", "--json")
+        self.assertEqual((code, json.loads(out)["reason"]), (5, "other_version"))
+        self.assertEqual(self.main("+0.12.0@Bad", "status")[0], 2)
+        self.assertEqual(places.channel(), "default", "a refused pin names no channel")
 
-    def test_older_than_its_channel_is_stale(self) -> None:
-        pointers.write("store", NEWER, self.state)
-        stale = self.apply(f"+{X}@store")
-        self.assertEqual((str(stale), stale.reason, stale.status), (pins.stale(X, "store", NEWER), "stale_pin", 4))
-        self.assertEqual(self.moved, [])
+    def test_a_command_records_its_version_s_use_and_copies_its_data_in_first(self) -> None:
+        folder = self.installed(DEV)
+        code, _out, _err = self.main(f"+{DEV}", "requirement")
+        self.assertEqual(code, 0)
+        self.assertTrue((folder / versions.USED).is_file(), "a use recorded")
+        self.assertTrue(imports.imported(DEV), "its settings and store, once, before anything else")
+        os.utime(folder / versions.USED, (1.0, 1.0))
+        self.main("--version")
+        self.assertGreater((folder / versions.USED).stat().st_mtime, 1.0, "an agent's check at a session's start too")
 
-    def test_newer_or_a_first_use_moves_the_channel(self) -> None:
-        self.assertIsNone(self.apply(f"+{X}@store"))  # its first use
-        pointers.write("other", OLDER, self.state)
-        self.assertIsNone(self.apply(f"+{X}@other"))
-        self.assertIsNone(self.apply(f"+{X}"))  # the default channel
-        self.assertEqual(self.moved, [("move", "store", X), ("move", "other", X), ("move", None, X)])
+    def notice(self, latest: str | None = "99.0.0") -> None:
+        """The feed as the last check read it, for this process (its data folder), and this process told."""
+        cache = places.data_dir() / updates.FILE
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps({"checked": time.time(), **({"feed": {"latest": latest}} if latest else {})}),
+                         encoding="utf-8")
+        for patch in (mock.patch.object(updates, "told", return_value=True),
+                      mock.patch.object(pins, "own", return_value=cad_server.__version__)):
+            patch.start()
+            self.addCleanup(patch.stop)
 
-    def test_a_move_that_fails_says_why_and_runs_nothing(self) -> None:
-        for answer, reason in (("cannot", "cannot_install_here"), ("failed", "failed"), ("stale", "stale_pin")):
-            self.answer = answer
-            self.assertEqual(self.apply(f"+{X}@store").reason, reason)
-        with mock.patch.object(versions, "move", side_effect=PermissionError(1, "Operation not permitted")):
-            refused = self.apply(f"+{X}@store")
-        self.assertEqual((str(refused), refused.status),
-                         (pins.cannot_move(pins.parse(f"+{X}@store"), "Operation not permitted"), 3))
+    def test_the_notice_follows_the_output_on_stderr_once_a_day_and_never_with_a_name(self) -> None:
+        self.notice()
+        mine = cad_server.__version__
+        lines = (f"A new release of text-to-cad is available: {mine} -> 99.0.0\n"
+                 "To update, run: curl -fsSL https://texttocad.dev/install.sh | sh\n")
+        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
+            quiet = self.main("requirement")
+        self.assertEqual(quiet[2], "", "the check turned off: nothing")
+        with mock.patch.object(os, "name", "posix"):
+            code, out, err = self.main("requirement")
+        self.assertEqual((code, out), quiet[:2], "stdout as it was")
+        self.assertTrue(err.endswith(lines), err)
+        self.assertNotIn("new release", self.main("requirement")[2], "once a day per computer")
+        stamp = self.state / cli.NOTICE
+        os.utime(stamp, (time.time() - cli.NOTICE_SECONDS, time.time() - cli.NOTICE_SECONDS))
+        code, out, err = self.main(f"+{mine}@claude", "requirement")
+        self.assertEqual((code, out, err), (*quiet[:2], ""), "a name: whoever delivered that copy updates it")
+        self.assertIn("new release", self.main("requirement")[2], "a day later")
+        self.assertIn("irm https://www.texttocad.dev/install.ps1 | iex", updates.line({"version": "1", "latest": "2"}, "nt"))
 
-    def test_a_process_of_another_version_or_none_moves_nothing(self) -> None:
-        with mock.patch.object(places, "versioned", return_value=None):
-            self.assertIsNone(self.apply(f"+{X}@store"))
-        self.assertEqual(self.moved, [])
+    def test_version_says_it_every_time_and_nothing_when_the_check_is_off_or_none_is_newer(self) -> None:
+        self.notice()
+        mine = cad_server.__version__
+        for _ in range(2):
+            code, out, err = self.main("--version")
+            self.assertEqual((code, out), (0, f"cad {mine}\n"))
+            self.assertIn(f"{mine} -> 99.0.0", err)
+        self.assertFalse((self.state / cli.NOTICE).exists(), "no daily stamp for --version")
+        self.assertEqual(self.main(f"+{mine}@codex", "--version"), (0, f"cad {mine}\n", ""))
+        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
+            self.assertEqual(self.main("--version"), (0, f"cad {mine}\n", ""))
+        self.notice(latest=mine)
+        self.assertEqual(self.main("--version"), (0, f"cad {mine}\n", ""), "the newest already")
 
 
 class TheChannel(unittest.TestCase):

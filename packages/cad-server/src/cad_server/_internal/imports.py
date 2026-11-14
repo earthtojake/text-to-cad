@@ -1,8 +1,9 @@
-"""A version's data at its first start, copied in from the version it replaces; and what that version, or the
-layout of 0.11.10 and earlier, writes afterwards, carried over before it is removed.
+"""A version's data, copied in ONCE from the newest older installed version; and what the layout of 0.11.10 and
+earlier wrote after that, carried over before that layout is removed.
 
-A version keeps everything it reads and writes in ``versions/<version>/data`` (``places.data_dir``). The first
-time a process of it needs that folder and finds it not imported (no ``MARKER``), it imports (``ensure``):
+A version keeps everything it reads and writes in ``versions/<version>/data`` (``places.data_dir``): its own settings
+and store. The first time it is set up (``cad setup``), or a process of it needs that folder and finds it not imported
+(no ``MARKER``: a development version, which no ``cad setup`` makes, or a setup cut short), it imports (``ensure``):
 what cannot be made again, copied from a source and never changed there, the source only read --
 
 - ``settings.json``: every setting, the telemetry answer and the install's id among them;
@@ -14,74 +15,58 @@ what cannot be made again, copied from a source and never changed there, the sou
   (``registry.Registry.put_engine``), 0600;
 - each imported record's document bytes, ``cache/documents/<id>/document.xbf`` (``records.FILE``): a shape a
   program handed over has no other source, and a model's would wait on a build no one asked for (the viewer never
-  builds one by itself), so Recents opens every entry after an update. A hard link where both are on one volume,
+  builds one by itself), so Recents opens every entry in the new version. A hard link where both are on one volume,
   else a copy (``_bytes``).
 
 Not imported: the other caches (a document's kept checks and derived views, hulls, MJCF assets, homes); what was
 kept for sending and not sent -- the telemetry spool (``telemetry-spool.jsonl``) and the batches exiting processes
-kept (``telemetry-batches.jsonl``) --, which has one owner at a time: the version it replaces may still be running
-and sending it, and it moves once, whole, to the version that sends next as that version's folder is removed
-(``versions._hand_on``; the layout's kept batches as it is removed, ``legacy.remove``), never copied; the version
-feed's cache (``versions.json``), the updater's
-records (``update-automatic.json``, ``update.json``, ``update.log``), the lock (``settings.lock``) and the
-source's own ``MARKER``. A telemetry no the device keeps is taken into the copy (``analytics.inherit_no``). Every
-format but the engine record's is this release's own already, so nothing else
-is converted; the server's own migrations at its start (``identity.migrate``) run on the copy as on any data.
+kept (``telemetry-batches.jsonl``) --, which stays the version's that counted it (the layout's kept batches move to
+the version that removes it, ``legacy.remove``), never copied; the version feed's cache (``versions.json``), the
+records of the updaters of 0.11.10 and earlier (``update-automatic.json``, ``update.json``, ``update.log``), the lock
+(``settings.lock``) and the source's own ``MARKER``. A telemetry no the computer keeps is taken into the copy
+(``analytics.inherit_no``). Every format but the engine record's is this release's own already, so nothing else is
+converted; the server's own migrations at its start (``identity.migrate``) run on the copy as on any data.
 
-**The source** (``source``), never a newer version: what the channel leaves (``versions.move`` names it) -- a
-version, where it is older and its data is imported; the layout of 0.11.10 and earlier, for the default channel's
-first move on a device with it --; else the highest older version a pointer has named whose data is there (its code
-there or not: ``cad uninstall`` keeps the data alone); else the layout
-of 0.11.10 and earlier while it still has what it imports (``legacy.importable``: its records, Recents, release
-folders); else, once that layout's bulk is removed, the settings it keeps (``legacy.SETTINGS``: a client of 0.11.10
-or earlier reads them, and they carry the device's telemetry no) and nothing else; else nothing, and the data
-starts empty.
+**The source** (``source``), never a newer version: the newest older installed version whose data is imported;
+else the layout of 0.11.10 and earlier while it still has what it imports (``legacy.importable``: its records,
+Recents, release folders) -- a computer coming from it --; else, once that layout's bulk is removed, the settings it
+keeps (``legacy.SETTINGS``: a client of 0.11.10 or earlier reads them, and they carry the computer's telemetry no)
+and nothing else; else nothing, and the data starts empty. Once imported, nothing is copied between versions again:
+each version's settings and store are its own.
 
 **How**, under the version's import lock (``versions/<version>/import.lock``): any ``data.importing-*`` a crash
 left removed; the items copied into a new ``data.importing-*`` beside ``data``; that folder renamed to
-``data``, or, where ``data`` is there already without its marker -- a process of the version wrote there before its
-first start was marked, which never happens by design (``pins.first_use``) but does where an import failed and the
-server started on what data there was -- each copied file moved in where ``data`` has none, and over what is there
-for the settings, the page token and the port record (``WINS``: the copy is the person's, what was written first a
-fresh default); then the marker written last. A crash anywhere before the marker leaves no marker, and the next
-start does it again. Each item that cannot be read is skipped and said in one line; the import never stops a
-start: the server's start (``cad_server.engine.daemon``) and a channel's move (``versions.move``) both call
-``ensure``, the first before it serves anything.
+``data``, or, where ``data`` is there already without its marker -- a process of the version wrote there before the
+import, as a command in a sandbox that could not import may -- each copied file moved in where ``data`` has none, and
+over what is there for the settings, the page token and the port record (``WINS``: the copy is the person's, what
+was written first a fresh default); then the marker written last. A crash anywhere before the marker leaves no
+marker, and the next start does it again. Each item that cannot be read is skipped and said in one line; the import
+never stops a setup or a start: ``cad setup``, the ``cad`` command's first run of a version
+(``cad_server.cli``) and the server's start (``cad_server.engine.daemon``) all call ``ensure``.
 
 The marker, ``data/format.json``: ``{"schema", "version", "imported": {"kind": "version"|"legacy", "version"} or
-None, "at", "skipped"}``. It also says the version has been a channel's: only such a version is ever removed
-by itself (``versions.sweep``). The layout of 0.11.10 and earlier is removed only once the default channel's version
-has it (``legacy.unsafe``).
+None, "at", "skipped"}``.
 
-**The carry-over** (``carry``): what the source holds that the target lacks, added to the target and nothing of
-the target's changed, so the import is not the last word on a version that goes on being written: the version a
-channel leaves keeps serving its work in flight after the new one imported, and the layout of 0.11.10 and earlier
-can stay the default's for hours while another channel moved first. It runs in ``versions.move`` whenever the
-channel leaves something with data (the target has data already or not), and again immediately before any
-removal of a version that has been a channel's or of the layout, when nothing runs from it any more, into the
-version its channel moved to (``versions.successor``; for the layout, the default channel's). Never from a newer
-version into an older one. Additive and idempotent -- run twice, the second adds nothing -- and safe to cut
-anywhere: each item is added whole (a file made where none is, ``registry.Folder.create``) or not at all, so the
-next run adds the rest. What "the target lacks" means, per item:
+**The carry-over** (``carry``): what the layout of 0.11.10 and earlier holds that a version lacks, added to it and
+nothing of the version's changed, run immediately before that layout is removed (``legacy.remove``), into the version
+that removes it: a client of 0.11.10 still running wrote there after the version imported it. Additive and idempotent
+-- run twice, the second adds nothing -- and safe to cut anywhere: each item is added whole (a file made where none
+is, ``registry.Folder.create``) or not at all, so the next run adds the rest. What "the version lacks" means, per
+item:
 
-- a document record, by its id: added with its document's bytes and its Recents pictures where the target has no
-  record of that id and never had one from this source (``LEDGER``: an id the target took from this source once
-  and has not now was deleted there, and stays deleted). Where the target has the record, the target's stays as
-  it is but for its Recents use: the later ``opened`` of the two wins, so an entry opened in the old version
-  after the import sorts as recently in the new;
-- a setting, by its key: a section the target's settings lack, and a key a section of the target's lacks, where the
-  target never had it from a source (``LEDGER`` again: a section or key the person removed since stays removed, as
-  ``cad language`` back to the browser's removes its section); never the telemetry section's own keys, whose answer
-  is the person's in each version, and whose no is said in every version at once (``analytics.everywhere``,
-  ``inherit_no``).
+- a document record, by its id: added with its document's bytes and its Recents pictures where the version has no
+  record of that id and never had one from this source (``LEDGER``: an id the version took from this source once
+  and has not now was deleted there, and stays deleted). Where the version has the record, its own stays as it is
+  but for its Recents use: the later ``opened`` of the two wins;
+- a setting, by its key: a section the version's settings lack, and a key a section of its lacks, where it never
+  had it from a source (``LEDGER`` again: a section or key the person removed since stays removed); never the
+  telemetry section's own keys, whose answer is the person's in each version, and whose no is said in every version
+  at once (``analytics.everywhere``, ``inherit_no``).
 
 The ledger goes with an import: a version imported from another takes that version's ledger into its own, so a
 record the source took from the layout of 0.11.10 and earlier and then deleted stays deleted when the layout is
 carried into the copy. A ledger that is there and cannot be read stops the carry-over whole: nothing carried, the
-source not removed, said (``cad doctor`` says why its folder stays).
-
-Lost all the same: a record the old version changed after the import whose id the target has (its record stays
-as the target holds it), and a setting the old version changed whose key the target has.
+layout not removed, said.
 """
 
 from __future__ import annotations
@@ -182,37 +167,24 @@ def imported(name: str) -> bool:
     return marker(name) is not None
 
 
-def source(name: str, leaving: str | None = None, *, legacy_left: bool = False) -> Source | None:
-    """Where version ``name`` imports from (see the module): what its channel leaves -- ``leaving``, a version,
-    when it is older and imported; the layout of 0.11.10 and earlier when ``legacy_left`` (the default channel's first
-    move on a device with it) and it holds anything to import --; else the highest older version present whose data
-    is imported; else the layout of 0.11.10 and earlier while it holds what a version imports; else its kept
-    settings alone; else None."""
+def source(name: str) -> Source | None:
+    """Where version ``name`` imports from (see the module): the newest older installed version whose data is
+    imported; else the layout of 0.11.10 and earlier while it holds what a version imports; else its kept settings
+    alone; else None."""
     from cad_server._internal import legacy, versions
 
-    def older(other: str) -> bool:
-        return versions.older(other, name)
-
-    if leaving is not None and leaving != name and older(leaving) and imported(leaving):
-        return of_version(leaving)
-    if legacy_left and legacy.importable():
-        return of_legacy()
-    # A version a pointer has named (``versions.used``), its code there or not (``cad uninstall`` keeps the data
-    # alone): one never named holds a copy of another's data at best.
-    candidates = [other for other in versions.folders() if other != name and older(other) and imported(other)
-                  and versions.used(other)]
+    candidates = [other for other in versions.present() if other != name and versions.older(other, name)
+                  and imported(other)]
     if candidates:
-        return of_version(max(candidates, key=versions.order))
+        return of_version(max(candidates, key=versions._order_key))
     if legacy.importable() or os.path.isfile(legacy.root() / SETTINGS):
         return of_legacy()
     return None
 
 
-def ensure(name: str, leaving: str | None = None, *, legacy_left: bool = False,
-           told: Callable[[str], None] | None = None) -> Imported:
-    """Version ``name``'s data imported, if it is not (see the module): from ``source(name, leaving,
-    legacy_left=...)``, each item that cannot be read skipped and said to ``told``. What was done; nothing when it
-    was imported already."""
+def ensure(name: str, *, told: Callable[[str], None] | None = None) -> Imported:
+    """Version ``name``'s data imported, if it is not (see the module): from ``source(name)``, each item that cannot
+    be read skipped and said to ``told``. What was done; nothing when it was imported already."""
     from cad_server._internal.file_lock import exclusive
 
     say = told or (lambda _line: None)
@@ -226,7 +198,7 @@ def ensure(name: str, leaving: str | None = None, *, legacy_left: bool = False,
         for stale in _names(folder):
             if stale.startswith(STAGING):
                 shutil.rmtree(folder / stale, ignore_errors=True)
-        found = source(name, leaving, legacy_left=legacy_left)
+        found = source(name)
         said: list[str] = []
         staging = folder / f"{STAGING}{os.getpid()}-{os.urandom(4).hex()}"
         staging.mkdir()
@@ -465,8 +437,8 @@ def _write_ledger(data: Path, taken: dict[str, dict[str, list[str]]]) -> None:
 
 def carry(found: Source, name: str, *, told: Callable[[str], None] | None = None) -> Carried:
     """What ``found`` holds that version ``name``'s data lacks, added to it (see the module), each item it cannot read
-    or write said to ``told`` and in the result. Never what was kept for sending, which moves once, at a removal
-    (``versions._hand_on``). Nothing for a target with no data yet (``imported``), and never from a newer version into
+    or write said to ``told`` and in the result. Never what was kept for sending (``legacy.remove`` moves the layout's
+    kept batches itself). Nothing for a target with no data yet (``imported``), and never from a newer version into
     an older one: both are failures, so nothing is removed for want of them."""
     from cad.engine.ids import is_id
     from cad.engine.records import RECORD

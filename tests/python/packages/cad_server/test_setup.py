@@ -29,7 +29,7 @@ from tests.python.packages.cad_server.test_version_servers import Servers
 from tests.python.packages.cad_server.test_versions import OLD, Device
 
 from cad.engine import places
-from cad_server._internal import installations, pointers, versions
+from cad_server._internal import imports, installations, versions
 from cad_server.cli import setup, uninstall
 
 X, Y = "0.12.0", "0.12.1"
@@ -117,6 +117,22 @@ class Setup(Computer):
             setup.main(["--only", "claude"])
         self.assertNotIn("--engine-update", setup.build_parser().format_help(), "hidden")
 
+    def test_the_first_setup_copies_settings_and_store_once_from_the_newest_older_version(self) -> None:
+        import json
+
+        self.data(X, {"language": {"locale": "fr"}})
+        with mock.patch.dict(os.environ, {places.INSTALLATION_ENV: DEV}):
+            code, out, err = self.main(setup, [])
+            self.assertEqual(code, 0, out + err)
+            self.assertIn(f"took its settings and store from text-to-cad {X}'s data", err)
+            settings = places.data_dir(DEV) / "settings.json"
+            self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), {"language": {"locale": "fr"}})
+            (places.data_dir(X) / "settings.json").write_text('{"language": {"locale": "de"}}', encoding="utf-8")
+            code, out, err = self.main(setup, [])
+            self.assertEqual((code, err), (0, ""), "again: nothing copied")
+            self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), {"language": {"locale": "fr"}})
+        self.no_app_touched()
+
 
 @unittest.skipIf(os.name == "nt", "the install script's stand-in is a POSIX script")
 class EngineUpdate(Computer):
@@ -140,8 +156,9 @@ class EngineUpdate(Computer):
                 code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual(code, 0, out + err)
             self.assertIsNotNone(places.version_record(Y))
-            self.assertEqual((again, pointers.read(None), installations.current_version()), ([], None, OLD),
+            self.assertEqual((again, installations.current_version()), ([], OLD),
                              "the first run changes nothing but Y's own folder")
+            self.assertEqual(imports.marker(Y)["imported"]["kind"], "legacy", "its data copied in from their layout")
             # The second, from the flat folder: Y's own cad runs it again.
             code, out, err = self.main(setup, ["--engine-update"])
             self.assertEqual((code, again), (0, [places.version_record(Y)["cad"]]), out + err)

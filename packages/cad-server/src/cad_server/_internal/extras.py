@@ -55,8 +55,8 @@ it as in any other; a platform its tool has no build for is refused in one line 
 environments of releases older than the one before the current go -- the current release's and the one
 before's stay, the way back, as ``releases/`` keeps the release before (``kept``) -- and the one its local
 packages' edit superseded (``_collect``), but one a process runs from, which goes at a later making. Those
-of other sets stay until ``cad doctor --prune`` removes those unused for a week (``leftovers``, each use
-marking its marker). Nothing is made ahead of a run: after an update, a new release's environments are
+of other sets stay with their version, and go with its folder (``versions.clean``); each use marks its marker, which
+``cad doctor`` reads for the layout of 0.11.10 and earlier (``leftovers``). Nothing is made ahead of a run: after an update, a new release's environments are
 made as its runs ask for them, from uv's cache.
 """
 
@@ -1052,7 +1052,7 @@ def _collect(folder: Path, keep: set[str], made: Path | None = None, spec: Spec 
     current one and the one before it) removed, those whose Python is gone (``base.marked``: dead, no way
     back), and those the one just ``made`` supersedes -- of its installation's base (``inputs``) and ``spec``,
     a local package since edited --, but one a process runs from (``releases.running``), which goes at a later
-    making: the paths removed. The bases are their versions' to remove (``versions.remove``)."""
+    making: the paths removed. The bases are their versions' to remove (``versions.clean``)."""
     from cad_server._internal.releases import running
 
     removed = []

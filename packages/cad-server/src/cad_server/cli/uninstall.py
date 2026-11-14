@@ -28,7 +28,8 @@ DEFAULT_PROG = "cad uninstall"
 # other things and none of these is another program's that shares the name, and is left alone.
 STATE_OURS = frozenset({"versions", "installations", "engines", "documents", "recents", "releases", "plugin",
                         "settings.json", "settings.lock", "plugin.lock", "versions.json", "install-channels.json",
-                        "default", "channels", "used", "install-receipt.json", "install.lock"})
+                        "default", "channels", "used", "install-receipt.json", "install.lock",
+                        "update-notice"})
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 
 

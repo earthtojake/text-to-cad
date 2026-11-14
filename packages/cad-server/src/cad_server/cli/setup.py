@@ -13,16 +13,20 @@ so running it again is quick and changes nothing:
 6. the ``cad`` command, ``~/.local/bin/cad``, written where it is missing or was written by an older release
    (``cad_server._internal.installations.write_proxy``).
 
-Steps 1 to 5 are ``versions.make_present``. Nothing else on the computer is read or changed.
+Steps 1 to 5 are ``versions.make_present``. The first setup of a version also gives it its own settings and store,
+copied ONCE from the newest older installed version, or, on a computer coming from 0.11.10 and earlier, from that
+layout (``cad_server._internal.imports.ensure``; nothing once they are there). Nothing else on the computer is
+changed.
 
 ``--engine-update`` (hidden, absent from the help) is how releases 0.10.0 to 0.11.10 update themselves: their
 updater makes a flat folder of the newer release and runs its ``cad setup --engine-update``, reading its exit status
 (0: go on and switch the computer's server to it), then starts that release's server through the records and the
 door of their own layout. So this run does the six steps (from the flat folder, the version made present and the
 same command run again from the version's own ``cad``; with ``CAD_UPDATE_PREPARE=1``, an automatic update's first
-half, it stops once the version is present), then the hand-over from that layout (``versions.move``: the data
-imported, the records those releases read written), and then starts the hosted install script once, detached, never
-waited on: ``curl -fsSL https://texttocad.dev/install.sh | sh`` (Windows PowerShell: ``irm
+half, it stops once the version is present), then the hand-over from that layout (the records its switch reads,
+``installations.mirror``: the installation record naming the version's server and ``installations/current`` naming
+the version, so the switch starts this version's server, which holds the flat door its clients find), and then
+starts the hosted install script once, detached, never waited on: ``curl -fsSL https://texttocad.dev/install.sh | sh`` (Windows PowerShell: ``irm
 https://www.texttocad.dev/install.ps1 | iex``). ``CAD_ENGINE_UPDATE_INSTALLER`` names a command to run instead (a test
 names a stand-in), and empty, runs nothing.
 
@@ -97,19 +101,27 @@ def _name() -> str | None:
 
 
 def _present(name: str) -> int | None:
-    """Steps 1 to 5 for ``name``: None once it is present, else the exit status, said."""
-    from cad_server._internal import versions
+    """Steps 1 to 5 for ``name``, then its data copied in once (``imports.ensure``): None once it is present, else
+    the exit status, said."""
+    from cad_server._internal import imports, versions
     from cad_server._internal.cli_errors import FAILED, REASONS
 
     found = versions.make_present(name, told=_say)
-    if found.ok:
+    if not found.ok:
+        if found.cannot is not None:
+            _say(f"text-to-cad {name} could not be installed from this shell: {found.error}. Run this command again "
+                 "outside the sandbox.")
+            return REASONS["cannot_install_here"]
+        _say(f"text-to-cad {name} could not be installed: {found.error}")
+        return FAILED
+    try:
+        copied = imports.ensure(name, told=_say)
+    except OSError as error:  # never a failed setup: the version's server imports at its first start
+        _say(f"text-to-cad {name}'s settings and store were not copied in yet: {error.strerror or error}")
         return None
-    if found.cannot is not None:
-        _say(f"text-to-cad {name} could not be installed from this shell: {found.error}. Run this command again "
-             "outside the sandbox.")
-        return REASONS["cannot_install_here"]
-    _say(f"text-to-cad {name} could not be installed: {found.error}")
-    return FAILED
+    if copied.done and copied.source is not None:
+        _say(f"text-to-cad {name} took its settings and store from {copied.source.words()}")
+    return None
 
 
 def _command(name: str) -> int | None:
@@ -213,21 +225,20 @@ def _again(cad: str) -> int:
 
 
 def _hand_over(name: str) -> int | None:
-    """The hand-over from the layout of 0.11.10 and earlier to version ``name`` (``versions.move``): its data
-    imported, and the records that layout's updater and clients read written, so its switch starts this version's
-    server. None when done; else 1, said: the updater then stays on its own release."""
-    from cad_server._internal import versions
+    """The hand-over from the layout of 0.11.10 and earlier to version ``name``: the records that layout's updater
+    and clients read written (``installations.mirror``), so its switch starts this version's server. None when done;
+    else 1, said: the updater then stays on its own release."""
+    from cad_server._internal import installations
     from cad_server._internal.cli_errors import FAILED
 
     try:
-        moved = versions.move(None, name, told=_say, mend=True)
+        if installations.mirror(name):
+            return None
+        why = "it is not installed"
     except (OSError, ValueError) as error:
-        _say(f"text-to-cad {name} could not take over: {error}")
-        return FAILED
-    if moved.kind not in ("same", "moved"):
-        _say(f"text-to-cad {name} could not take over: {moved.error or moved.kind}")
-        return FAILED
-    return None
+        why = str(error)
+    _say(f"text-to-cad {name} could not take over: {why}")
+    return FAILED
 
 
 def installer() -> list[str]:

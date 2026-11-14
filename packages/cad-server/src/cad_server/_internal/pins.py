@@ -1,70 +1,51 @@
-"""A pinned command, ``cad +<version>[@<channel>] <verb> ...``: read by the version it names.
+"""A pinned command, ``cad +<version>[@<name>] <verb> ...``: read by the version it names.
 
-Every command a skill runs pins the skill's release, and a copy a store delivers names its channel too
-(``@<channel>``; none is the default channel). The ``cad`` command (``~/.local/bin/cad``, written by
-``cad_server._internal.installations``) reads only that first word: it runs that version's own ``cad`` with
-the whole command line, installing the version first, through its own release, where it is missing, and never
-runs another version for it. So the version that reads a pin is the one it names, and here it is read:
+A command can name the version it is for (``cad +X``), and the copy of the text that ran it can name where that
+copy came from too (``cad +X@codex``). The ``cad`` command (``~/.local/bin/cad``, written by
+``cad_server._internal.installations``) reads only that first word: where version X is installed it runs X's own
+``cad`` with the whole command line; where it is not, it says so (``not_installed``, exit 3) and does nothing else --
+it installs nothing, names no install command and uses no network. It never runs another version for a pin. With no
+pin it runs the newest version installed (``none_installed`` where there is none). So the version that reads a pin is
+the one it names, and here it is read:
 
 1. ``take``: the pin taken off the command line (``parse``: ``+``, a version -- a digit, then digits, letters,
-   ``.``, ``+``, ``_`` or ``-`` -- then, optionally, ``@`` and a channel, ``places.CHANNEL``; ``@default`` is the
-   default channel). Anything else that starts with ``+`` is refused (``bad_pin``, exit 2).
+   ``.``, ``+``, ``_`` or ``-`` -- then, optionally, ``@`` and a name, ``places.CHANNEL``; ``@default`` is none).
+   Anything else that starts with ``+`` is refused (``bad_pin``, exit 2).
 2. ``check``: the pin names this version (``own``), or it is refused (``other_version``, exit 5): a version never
-   runs a command pinned to another. The channel is this command's from here (``places.set_channel``), which
-   every request to the engine carries (``cad.engine.client``) and ``cad run`` hands its program.
-3. ``apply``: the version's channel made to run it, for a process that is an installed version
-   (``places.versioned``; a process with no version -- a checkout, a test's device, an installation of the layout
-   of 0.11.10 and earlier -- moves nothing). The channel's pointer (``pointers``) read, no lock taken: equal, the command
-   runs; older than the pin's version, the pin is stale (``stale_pin``, exit 4: the chat's copy of the skill is
-   older than the one installed); newer, or the channel's first use, the channel moved (``versions.move``), and then
-   the command runs. A move this shell
-   cannot make (a sandbox that will not let it write the state folder) is ``cannot_install_here`` (exit 3).
+   runs a command pinned to another. Its ``@name`` is this command's channel from here (``places.set_channel``): a
+   label alone, which every request to the engine carries for telemetry (``cad.engine.client``), ``cad run`` hands
+   its program, and which turns the update notice off (``cad_server.cli``). Nothing else is decided by it.
 
-A command with no pin run by a version that has never started, where the default channel has no pointer, makes the
-default channel's first use first (``first_use``), so no version writes data before its first start is marked.
-
-Help, ``--version`` and a read-only report (``cad doctor --check``) do no work and read no pointer.
-
-The words each refusal says, and its reason, are this module's alone (``stale``, ``not_installed``,
-``development``, ``bad_pin``, ``bad_channel``, ``other_version``, ``unreadable_pointer``): the ``cad`` command's own
-text says the same words where it says them first (a pin to a version not installed, or older than its channel's; a
-word that is no pin; a pointer there that cannot be read), held equal by a test.
-
-A pointer that is there and cannot be read, or names no version, is never "no pointer": a pinned command refuses
-(``unreadable_pointer``, exit 1), and so does a command with no pin that would make the default channel's first use
-(``first_use``). Only ``cad setup --engine-update`` and ``cad doctor`` write one again.
+The words the ``cad`` command says itself -- a word that is no pin, a version not installed, none installed -- are
+this module's (``bad_pin``, ``bad_channel``, ``not_installed``, ``none_installed``): the command's text is made from
+them (``installations``).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from cad.engine import places
 
-__all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "channel_now", "check", "development", "first_use",
-           "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "unreadable_pointer"]
+__all__ = ["PIN", "Pin", "bad_channel", "bad_pin", "check", "none_installed", "not_installed", "other_version",
+           "own", "parse", "released", "take"]
 
 # The characters of a release's name, as the ``cad`` command tells one (``released``).
 RELEASED = re.compile(r"[0-9.abcoprst]+")
-# A pin: ``+``, then the version and, after an ``@``, the channel, each checked by its own rule (``parse``).
+# A pin: ``+``, then the version and, after an ``@``, the name, each checked by its own rule (``parse``).
 PIN = re.compile(r"\+(?P<version>[^@]*)(?:@(?P<channel>.*))?", re.DOTALL)
 
 
 @dataclass(frozen=True)
 class Pin:
-    """A pin as it was read: the ``version`` it names, its ``channel`` (None: the default channel), and the
+    """A pin as it was read: the ``version`` it names, its ``channel`` (the ``@name``; None for none), and the
     ``word`` it was written as."""
 
     version: str
     channel: str | None
     word: str
-
-    @property
-    def label(self) -> str:
-        """The channel as a message names it: its name, or ``default``."""
-        return self.channel or places.DEFAULT_CHANNEL
 
 
 # --- the words ------------------------------------------------------------------------------------------
@@ -72,52 +53,22 @@ class Pin:
 
 def bad_pin(word: str) -> str:
     return (f"'{word}' is not a pin: a pin is + and a version (a digit, then digits, letters, '.', '+', '_' or "
-            "'-'), then, for a channel, @ and its name")
+            "'-'), then, optionally, @ and a name")
 
 
 def bad_channel(word: str) -> str:
-    return (f"'{word}' names no channel: a channel is a lower-case letter or digit, then up to 31 lower-case "
+    return (f"'{word}' names no channel: a name after @ is a lower-case letter or digit, then up to 31 lower-case "
             "letters, digits, '.', '_' or '-'")
 
 
-def channel_now(channel: str | None, now: str | None) -> str:
-    """What a stale pin and a stale launcher (``cad_mcp.engine.stale_line``, held equal by a test) both say of the
-    channel: its name and the version it is on now (``now``; None where its pointer could not be read again: a newer
-    one)."""
-    return (f"its channel ({channel or places.DEFAULT_CHANNEL}) is on "
-            + (f"text-to-cad {now} now" if now else "a newer text-to-cad now"))
+def not_installed(version: str) -> str:
+    """A pinned version that is not installed on this computer: said by the ``cad`` command, exit 3."""
+    return f"text-to-cad {version} is not installed on this computer."
 
 
-def stale_head(version: str, channel: str | None, now: str | None) -> str:
-    """What a stale pin says first: the version the command is for (which need not be installed here), then its
-    channel and the version that channel is on now (``channel_now``)."""
-    return f"this command is for text-to-cad {version}, and {channel_now(channel, now)}"
-
-
-def stale(version: str, channel: str | None, now: str | None) -> str:
-    """A pin older than its channel's version (``stale_pin``), in one sentence an agent reading a skill acts on: the
-    cheapest step first -- the skill read again, since the app may hold its newer copy already --, then the repair
-    of the app's copy: ``cad update`` for the default channel (it gives this app's copy the new text), the plugin's
-    update in its app for a named one (its store delivers it)."""
-    repair = ("run `cad update`" if channel is None
-              else "update the text-to-cad plugin in the app it came from")
-    return (f"{stale_head(version, channel, now)}: read the skill again (the app may have its newer copy already); "
-            f"if it still names {version}, {repair}, then read the skill again or start a new chat")
-
-
-def not_installed(version: str, why: str, system: str | None = None) -> str:
-    """A pinned version missing, which this shell could not install (``cannot_install_here``): the install line
-    for this computer (or ``system``, an ``os.name``) to run outside the sandbox."""
-    from cad_server._internal.versions import add_command
-
-    return (f"text-to-cad {version} is not installed, and could not be installed from this shell ({why}). Run this "
-            f"outside the sandbox, or with its permission, then run the command again: {add_command(version, system)}")
-
-
-def development(version: str) -> str:
-    """A pinned version missing that is no release (a development build's name): no index has it."""
-    return (f"text-to-cad {version} is not installed, and it is no release: a development version is installed "
-            "from its own checkout alone (scripts/install/dev_install.py)")
+def none_installed() -> str:
+    """A command with no pin where no version is installed: said by the ``cad`` command, exit 3."""
+    return "text-to-cad is not installed on this computer."
 
 
 def other_version(mine: str | None, version: str) -> str:
@@ -130,29 +81,6 @@ def other_version(mine: str | None, version: str) -> str:
             f"cad command, which runs {version}")
 
 
-def unreadable_pointer(pointer: str, *, corrupt: bool) -> str:
-    """A channel's pointer that is there and cannot be read now, or names no version (``pointers.Unreadable``):
-    nothing runs on a guess of which version it names. One that names none is written again by ``cad doctor`` (or
-    ``cad setup``, or the updater), never naming a version older than the newest a channel has been on."""
-    if corrupt:
-        return (f"the pointer {pointer} names no version: run `cad doctor`, which writes it again, then run the "
-                "command again")
-    return (f"the pointer {pointer} cannot be read now: run the command again, and if it still cannot be read, "
-            "`cad doctor` says why")
-
-
-def _unreadable(unreadable: "Exception"):
-    """The failure a pointer that cannot be read is (``unreadable_pointer``), reason ``failed``."""
-    return _failure(unreadable_pointer(str(getattr(unreadable, "path", "")), corrupt=bool(getattr(unreadable, "corrupt",
-                                                                                                   False))), "failed")
-
-
-def cannot_move(pin: Pin, why: str) -> str:
-    """A pinned version present whose channel this shell cannot move to it (``cannot_install_here``)."""
-    return (f"text-to-cad {pin.version} is installed, but this shell cannot move the {pin.label} channel to it "
-            f"({why}): run the command again outside the sandbox, or with its permission")
-
-
 # --- reading it -----------------------------------------------------------------------------------------
 
 
@@ -163,8 +91,8 @@ def _failure(words: str, reason: str):
 
 
 def parse(word: str) -> Pin:
-    """``word`` as a pin (``+<version>[@<channel>]``; ``@default`` is the default channel), or the failure
-    ``bad_pin`` saying why it is none."""
+    """``word`` as a pin (``+<version>[@<name>]``; ``@default`` names none), or the failure ``bad_pin`` saying why
+    it is none."""
     found = PIN.fullmatch(word)
     if found is None or not places.VERSION.fullmatch(found["version"]):
         raise _failure(bad_pin(word), "bad_pin")
@@ -193,7 +121,7 @@ def own() -> str | None:
 
 
 def check(pin: Pin) -> None:
-    """``pin`` names this version, or the failure ``other_version``; then this command is on its channel
+    """``pin`` names this version, or the failure ``other_version``; then its name is this command's channel
     (``places.set_channel``)."""
     mine = own()
     if mine != pin.version:
@@ -201,81 +129,9 @@ def check(pin: Pin) -> None:
     places.set_channel(pin.channel)
 
 
-# --- the channel moved ----------------------------------------------------------------------------------
-
-
-def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
-    """The pin's channel made to run this version (see the module): nothing for a process that is no installed
-    version of the pin's; else returns when the command may run, and raises the failure it is (``stale_pin``,
-    ``cannot_install_here``, ``failed``) when not."""
-    from cad_server._internal import pointers, versions
-
-    if places.versioned() != pin.version:
-        return
-    try:
-        now = pointers.read(pin.channel)
-    except pointers.Unreadable as unreadable:
-        # There and not readable now, or naming no version (emptied by a crash, or a form this release does not know):
-        # nothing runs on a guess of which version it names, and a pin never writes it -- an old chat's would move the
-        # channel back. ``cad doctor`` (or ``cad setup``, or the updater) writes one again.
-        raise _unreadable(unreadable) from None
-    if now == pin.version:
-        _used(pin)
-        return
-    if now is not None and versions.older(pin.version, now):
-        raise _failure(stale(pin.version, pin.channel, now), "stale_pin")
-    try:
-        moved = versions.move(pin.channel, pin.version, told=told)
-    except OSError as error:  # the install lock, in a state folder this shell may not write
-        raise _failure(cannot_move(pin, f"{error.strerror or error}"), "cannot_install_here") from None
-    if moved.kind in ("same", "moved"):
-        _used(pin)
-        return
-    if moved.kind == "stale":
-        raise _failure(stale(pin.version, pin.channel, moved.old or "?"), "stale_pin")
-    if moved.kind == "cannot":
-        raise _failure(cannot_move(pin, moved.error or "it cannot be done from this shell"), "cannot_install_here")
-    raise _failure(f"text-to-cad {pin.version} could not be started for the {pin.label} channel: {moved.error}",
-                   "failed")
-
-
-def _used(pin: Pin) -> None:
-    """The pin's channel marked used (``pointers.used``), once a day at most: a pinned command that never reaches a
-    server (``cad +X@ch orcaslicer``) is a use too, which ``cad doctor --prune`` reads. Never a reason a command
-    fails."""
-    from cad_server._internal import pointers
-
-    try:
-        pointers.used(pin.channel, every=pointers.USED_DAILY)
-    except Exception:  # noqa: BLE001 - a mark
-        pass
-
-
-def first_use(*, told: Callable[[str], None] | None = None) -> None:
-    """A command with no pin, run by an installed version that has never started (no data marker) on a device whose
-    default channel has no pointer -- the newest version present, which the ``cad`` command runs where none has
-    started --: the default channel's first use made first (``apply``: its data imported, then its pointer), so the
-    version writes nothing before its first
-    start is marked. Nothing otherwise. A default pointer there that cannot be read is the failure it is
-    (``unreadable_pointer``): the command runs nothing, and writes nothing, on a guess of which version it names. The
-    failure ``apply`` raises."""
-    from cad_server._internal import imports, pointers
-
-    name = places.versioned()
-    if name is None or imports.imported(name):
-        return
-    try:
-        if pointers.read(None) is not None:
-            return
-    except pointers.Unreadable as unreadable:
-        raise _unreadable(unreadable) from None
-    apply(Pin(name, None, f"+{name}"), told=told)
-
-
 def released(version: str) -> bool:
     """Whether ``version`` is a release's name by its characters alone -- digits, ``.``, and the letters of
     ``a``, ``b``, ``rc`` and ``post`` -- as the ``cad`` command's own text tells it (``installations``): one it
-    installs from the index where it is missing, and runs with no name told. Any other (a development build's,
-    ``<release>-dev.<stamp>``) is installed only from its own checkout, and told its name as it runs
+    runs with no name told. Any other (a development build's, ``<release>-dev.<stamp>``) is told its name as it runs
     (``places.INSTALLATION_ENV``), which its code cannot know by itself."""
     return RELEASED.fullmatch(version) is not None

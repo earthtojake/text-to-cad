@@ -1,12 +1,12 @@
-"""What text-to-cad leaves behind that no release running now needs, which ``cad doctor`` reports and
-``cad doctor --prune`` removes. Nothing here removes anything by itself.
+"""What earlier releases of text-to-cad left behind that nothing of this one uses, which ``cad doctor`` reports.
+Nothing here removes anything: the layout of 0.11.10 and earlier goes by itself once it is safe
+(``cad_server._internal.legacy``), and the rest is the person's to delete.
 
 Seven classes, each found by what it is, never by a guess:
 
 - **Engine records of an older format**: ``<state>/engines/<installation>.json`` that the engine
-  does not read (``registry.Registry.engine``: another ``schema``, or not a record), removed; one
-  of this schema carrying more than it reads (an earlier build's ``token``) is written again with
-  what it reads alone, so the port it rolled to is kept.
+  does not read (``registry.Registry.engine``: another ``schema``, or not a record), and those of this schema
+  carrying more than it reads (an earlier build's ``token``).
 - **Bytecode folders of installations no longer registered**: ``<cache>/pycache/<folder>/``, each
   an installation's (``places.bytecode``, named by its ``places.bytecode_tag``), that holds no registered
   installation's environment (``installations/<version>.json``'s ``prefix``, under which the
@@ -23,16 +23,14 @@ Seven classes, each found by what it is, never by a guess:
 - **cadgen 0.7's leftovers**: its store in the cache folder (``objects/``, ``index/``, each of the
   store's own shape) and the files of the state folder only 0.7 writes (``SEVEN_STATE``). 0.8
   never reads them; a 0.7 still installed (a plugin not yet updated) does, and nothing tells from
-  here whether one is -- 0.7 never registered itself -- so they go once nothing in them has been
-  written for ``QUIET_DAYS`` days, or at once when the person says no version needs them
-  (``cad doctor --prune --all-versions``).
+  here whether one is -- 0.7 never registered itself.
 - **0.10.0's Windows folders**: the state and cache folders it kept in the local application data
   (``places.appdata_state_dir``, ``appdata_cache_dir``), which an app package virtualizes. What this release
   keeps of them moved out (``places.adopt_earlier``); the rest -- 0.10.0's installations, release folders
-  and base -- only 0.10.0 runs by. Each goes whole.
+  and base -- only 0.10.0 runs by.
 
-Nothing written in the last ``QUIET_DAYS`` days is removed, of any class (but 0.7's with
-``--all-versions``): a write that recent may be a release at work.
+Anything written in the last ``QUIET_DAYS`` days is set apart (``recent``): a write that recent may be a release at
+work.
 """
 
 from __future__ import annotations
@@ -40,7 +38,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -117,24 +114,6 @@ def _walk(path: Path) -> tuple[int, float | None]:
     return size, newest
 
 
-def _remove(path: Path) -> bool:
-    try:
-        if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
-        else:
-            path.unlink()
-    except FileNotFoundError:
-        return True
-    except OSError:
-        return False
-    return True
-
-
-def remove(paths: list[Path]) -> int:
-    """``paths`` removed, each whole: how many went."""
-    return sum(_remove(path) for path in paths)
-
-
 # --- engine records ------------------------------------------------------------------------------
 
 
@@ -170,25 +149,6 @@ def engine_records(state: Path, now: float | None = None) -> Found:
             found.paths.append(path)
             found.bytes += size
     return found
-
-
-def remove_engine_records(state: Path, found: Found) -> tuple[int, int]:
-    """``found``'s records removed, and those carrying more written again with what the engine reads
-    (``registry.Registry.put_engine``, so the port each rolled to stays): how many of each."""
-    from cad_server.engine.registry import ENGINE_SCHEMA, Folder, Registry
-
-    removed = remove(found.paths)
-    trimmed = 0
-    held = Registry(Folder(state))
-    for path in found.trimmed:
-        try:
-            record = json.loads(path.read_bytes())
-            if isinstance(record, dict) and record.get("schema") == ENGINE_SCHEMA:
-                held.put_engine(path.stem, record)
-                trimmed += 1
-        except (OSError, ValueError):
-            continue
-    return removed, trimmed
 
 
 # --- bytecode folders ----------------------------------------------------------------------------
@@ -364,11 +324,6 @@ def seven(state: Path, cache: Path | None) -> Seven:
         if newest is not None:
             found.newest = newest if found.newest is None else max(found.newest, newest)
     return found
-
-
-def quiet(found: Seven, now: float | None = None) -> bool:
-    """Whether nothing of 0.7's leftovers has been written for ``QUIET_DAYS`` days."""
-    return _quiet(found.newest, time.time() if now is None else now)
 
 
 def appdata(state: Path | None, cache: Path | None, now: float | None = None) -> Found:

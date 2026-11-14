@@ -1,42 +1,40 @@
-"""The layout of 0.11.10 and earlier, as the default channel's old version: what a version imports from where it has no
-version to import from, and what goes once the default channel has left it and it is safe to remove.
+"""The layout of 0.11.10 and earlier: what a version imports from where it has no older version to import from, and
+what goes once it is safe to remove.
 
-In 0.11.10 and earlier every release on a device shared one data folder, the state folder itself, one cache folder
+In 0.11.10 and earlier every release on a computer shared one data folder, the state folder itself, one cache folder
 (``places.legacy_cache_dir``), and kept its code flat in ``releases/<release>``. A version in its own folder
-imports from it (``cad_server._internal.imports``: the same relative names as a version's ``data/``) and never
-writes it. The default channel's first move on a device with this layout imports from it; once the default
-channel has a pointer, the layout's bulk goes as soon as it is safe (``unsafe`` says why not yet): right after
-that move, and else at every ``versions.sweep`` (the next move, a server going idle, ``cad doctor --prune``).
+imports from it at its first setup where no older version is installed (``cad_server._internal.imports``: the same
+relative names as a version's ``data/``) and never writes it. The layout's bulk goes once it is safe (``unsafe`` says
+why not yet), removed by the newest installed version's server in its cleanup, as it starts and every 24 hours
+(``versions.clean``).
 
-Safe means all of: the default's version has its data imported (its marker); it has started and its server
-runs (``versions.serves``); ``installations/current`` names a version, not a release of this layout (a mirror that
-could not be written, or 0.11.10 installed again by hand, sends every client of those releases to it: then nothing of
-the layout goes); no server but that version's own holds the flat engine folder every client of 0.11.10 and earlier
-finds (``flat_server``: one started by uvx outside ``releases/`` among them); no process runs from the layout
+Safe means all of: that version has its data imported (its marker); its server runs (``versions.serves``); no server
+but that version's own holds the flat engine folder every client of 0.11.10 and earlier finds (``flat_server``: one
+of those releases still running, or one started by uvx outside ``releases/``); no process runs from the layout
 (``releases.running`` on its release folders and its kernel environments; on Windows, where that cannot be asked, a
-rename that the system refuses for a file in use keeps the folder). Nothing of an agent app's is read for it, and no
-record is kept: the layout's own folders are the record.
+rename that the system refuses for a file in use keeps the folder). A client of 0.11.10 or earlier that starts after
+it is gone finds the record ``installations/current`` names gone too, and starts a server of its own, as it would on
+a new computer. Nothing of an agent app's is read for it, and no record is kept: the layout's own folders are the
+record.
 
-Before anything goes, what the layout holds that the default channel's version lacks is carried over into it
-(``imports.carry``: records, Recents, settings keys): a channel that moved first imported
-the layout hours before the default left it. A carry-over that could not read or write everything removes nothing,
-and the next sweep tries again.
+Before anything goes, what the layout holds that the version lacks is carried over into it (``imports.carry``:
+records, Recents, settings keys): a client of 0.11.10 still running wrote there after the version imported it. A
+carry-over that could not read or write everything removes nothing, and the next cleanup tries again.
 
 What ``remove`` removes, by name (``REMOVED``, ``CACHES``): each flat ``releases/<release>`` (renamed aside first)
 with its making's lock and its installation's record, and ``releases/`` once empty; the shared ``documents/``
 (the records) and ``recents/`` in the state folder; its kept telemetry batches (``analytics.KEPT``) move, whole, to
-the default channel's version, which sends them from then on (never copied, so never sent twice, nor imported
-again from here); in the cache folder of 0.11.10 and earlier the kernel and ``cad run`` environments (``base``), compiled Python
+the version, which sends them from then on (never copied, so never sent twice, nor imported again from here); in the
+cache folder of 0.11.10 and earlier the kernel and ``cad run`` environments (``base``), compiled Python
 (``pycache``), documents' bytes (``documents``), ``hulls``, ``mjcf``, ``homes`` and the interference checks' cache
 (``interference``), and the cache folder once nothing else is in it.
 
-What it keeps, because a client of 0.11.10 or earlier may still read it and it is small, or it is the device's: the
+What it keeps, because a client of 0.11.10 or earlier may still read it and it is small, or it is the computer's: the
 shared ``settings.json`` (a telemetry no is written there too; a version with nothing older to import from imports
 these settings alone, ``imports.source``), ``engines/`` (the page token and port where a client of 0.11.10 or earlier
 finds them), the other small files there (``settings.lock``, ``install-channels.json``, ``versions.json``, the
-telemetry spool, the updater's records), ``installations/`` (the mirror, ``pointers.mirror``), and every global file:
-the pointers and their stamps, ``install.lock``, ``install-receipt.json``, ``install-aside/``, ``plugin/``,
-``plugin.lock``, ``versions/``.
+telemetry spool, the updaters' records), ``installations/`` (``installations.mirror``), and every global file:
+``install.lock``, ``versions/``.
 """
 
 from __future__ import annotations
@@ -101,26 +99,16 @@ def present() -> bool:
 
 
 def unsafe(version: str, *, read_only: bool = False) -> str | None:
-    """Why the layout cannot be removed yet now that the default channel is on ``version``, in words; None when it
-    is safe: ``version``'s data is imported, its server runs, and no process runs from the layout (see the
+    """Why the layout cannot be removed yet by version ``version``, in words; None when it is safe: ``version``'s data
+    is imported, its server runs, no other server holds the flat door, and no process runs from the layout (see the
     module). ``read_only`` (``cad doctor``'s report): the flat engine folder's lock is read, never taken or made
     (``flat_server``)."""
-    from cad_server._internal import imports, installations, releases, versions
-    from cad_server._internal.pointers import Unreadable
+    from cad_server._internal import imports, releases, versions
 
     if not imports.imported(version):
         return f"text-to-cad {version}'s data is not imported yet"
     if not versions.serves(version):
         return f"text-to-cad {version} has not started yet"
-    try:
-        current = installations.current_version(strict=True)
-    except Unreadable as unreadable:
-        return str(unreadable)
-    if current is not None:
-        record = places.installation_record(installations.state().read(f"{installations.FOLDER}/{current}.json"))
-        if record is None or not _within(record["prefix"], places.versions_dir()):
-            return (f"installations/current names {current}, not a version in {places.versions_dir()}: every client of "
-                    "0.11.10 and earlier still runs that")
     flat = flat_server(take=not read_only)
     if flat is not None and not _within(flat, places.code_dir(version)):
         return f"a server other than text-to-cad {version}'s holds the flat engine folder {places.engines_dir()}"
@@ -179,10 +167,11 @@ def _within(prefix: str, folder: Path) -> bool:
 
 
 def remove(version: str, told: Callable[[str], None] | None = None) -> bool:
-    """The layout's bulk removed (see the module) when the default channel is on ``version`` and it is safe
+    """The layout's bulk removed (see the module) by version ``version``, the newest installed, when it is safe
     (``unsafe``), once what it holds that ``version`` lacks is carried over (``imports.carry``): whether nothing of it
     is left to remove. Each folder is renamed aside before it is removed: one the system refuses to rename (a file
-    in use, on Windows) stays, said to ``told``, for the next sweep. Run under the install lock (``versions.sweep``)."""
+    in use, on Windows) stays, said to ``told``, for the next cleanup. Run under the install lock
+    (``versions.clean``)."""
     say = told or (lambda _line: None)
     if not removable():
         return True

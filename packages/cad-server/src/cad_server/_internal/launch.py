@@ -8,14 +8,12 @@ user's own uv settings (an index, a cache policy) from resolving it differently,
 --python 3.14`` (``PYTHON``) makes the installation the first command creates the same on every machine,
 whatever interpreter a GUI app's PATH happens to find first.
 
-The skills cannot run ``uvx``: an agent's shell is often a sandbox, and uv writes its cache before
-it starts. So each version is installed in its own folder and writes the proxy, ``~/.local/bin/cad``
-(``cad_server._internal.installations``), and every skill runs ``cad +<version> ...``, which runs that version
-and no other (``cad_server._internal.pins``): the same version, so every thread and every skill command of one
-release share its daemon. A version not installed, the command installs by this module's line for it
-(``launch_command``: ``uvx ... --from cad-server==<version> cad setup --add``) where the shell lets it; with no
-pin, it runs the default channel's version. Where nothing is installed, it says the ``uvx`` line that installs,
-registers and writes them (``cad doctor``).
+An agent's shell cannot always run ``uvx``: it is often a sandbox, and uv writes its cache before it starts. So
+each version is installed in its own folder and writes the proxy, ``~/.local/bin/cad``
+(``cad_server._internal.installations``), and a command names its version, ``cad +<version> ...``, which runs that
+version and no other (``cad_server._internal.pins``): every thread and every command of one release share its
+daemon. A version that is not installed the proxy only says so; what installs version X is X's own code, by X's own
+line, ``uvx ... --from cad-server==X cad setup`` (``launch_command("cad setup", X)``), run outside the sandbox.
 
 Error hints and ``cad doctor`` print these from here; the plugin's server configs carry the same
 strings, stamped by the release and held to these by a repository test.
@@ -36,8 +34,9 @@ SHIM, SHIM_COMMAND = "cad-mcp", "cad-mcp"
 
 
 def launch_command(tool: str = COMMAND, version: str | None = None) -> str:
-    """``uvx ... --from cad-server==<version> <tool>``: run ``tool`` (``cad`` or ``python``)
-    from this version's installation, installing it first if uv has none."""
+    """``uvx ... --from cad-server==<version> <tool>``: run ``tool`` (``cad setup``, ``cad``, ``python``) from that
+    version's own installation, installing it first if uv has none: the one line that installs a version is that
+    version's own (``cad setup``)."""
     if version is None:
         from cad_server import __version__ as version
     return " ".join((*LAUNCHER, f"{SERVER}=={version}", tool))

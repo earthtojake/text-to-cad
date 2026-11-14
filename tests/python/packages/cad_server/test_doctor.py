@@ -1,7 +1,7 @@
-"""``cad doctor`` — the skills' one-time setup step and the repair command: it registers the
-installation where none is current, writes the ``cad`` command, says whether the CAD kernel environment
-is made (never making it: it is made on first need), starts the engine, and reports what the device runs -- the current installation, the releases on
-disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 1 when
+"""``cad doctor`` — this version's health and its repair: it registers the installation where none is current,
+writes the ``cad`` command, says whether the CAD kernel environment is made (never making it: it is made on first
+need), starts the engine, and reports what the computer runs -- the versions installed, the current installation and
+the releases of 0.11.10 and earlier on disk, what earlier releases left behind, the engine -- comparing nothing. It exits 0, or 1 when
 the CAD kernel is installed but cannot be loaded -- naming Smart App Control on Windows, where a
 refused ``OCP`` load is otherwise a bare ImportError. A kernel that is simply absent is reported and
 exits 0: the release workflow installs the wheel --no-deps and runs doctor as its smoke test.
@@ -95,7 +95,7 @@ class DoctorTests(unittest.TestCase):
         self.assertTrue(all(call.kwargs.get("start") is False for call in asked.call_args_list), "no engine started")
         self.assertEqual(doctor._probe_kernel.call_args.kwargs, {"read_only": True}, "its import writes no bytecode")
         with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
-            doctor.main(["--check", "--prune"])
+            doctor.main(["--prune"])  # gone: the newest version's server cleans
 
     def test_the_report_registers_and_writes_the_command_and_says_so(self) -> None:
         from cad_server._internal import installations
@@ -117,7 +117,6 @@ class DoctorTests(unittest.TestCase):
             for path in found[:2]:
                 Path(path).unlink()
             gone = _run([])[1]
-            pruned = _run(["--prune", "--yes"])[1]
         self.assertIn(f"registry {record} registered\n", out)
         # Its folder off PATH: the full path to run it by, until the folder is on it.
         folder = os.path.dirname(command)
@@ -128,9 +127,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(f"command  {command} OK\n", on_path, "on PATH: nothing more")
         with mock.patch.dict("os.environ", {"HOME": str(self.state), "USERPROFILE": str(self.state)}):
             self.assertEqual(doctor._home(folder), os.path.join("~", "bin"))
-        self.assertIn(f"registry {record} dangling: its interpreter {found[1]} is gone", gone)
-        self.assertEqual(pruned, f"removed {record}\n")
-        self.assertFalse(record.exists())
+        self.assertIn(f"registry {record} dangling: its interpreter {found[1]} is gone, and nothing reads it", gone)
 
     def test_the_report_warns_when_another_cad_shadows_the_proxy(self) -> None:
         from cad_server._internal import installations
@@ -191,7 +188,7 @@ class DoctorTests(unittest.TestCase):
                          [f"registry {record} OK"])
 
     @unittest.skipIf(os.name == "nt", "the legacy pair on POSIX: a symlink and an sh script")
-    def test_prune_removes_the_per_version_launchers_earlier_builds_published(self) -> None:
+    def test_the_report_says_the_per_version_launchers_earlier_builds_published_and_removes_nothing(self) -> None:
         env = self.state / "env" / "bin"
         env.mkdir(parents=True)
         (env / "cadgen").write_text("", encoding="utf-8")
@@ -226,11 +223,15 @@ class DoctorTests(unittest.TestCase):
              "prefix": str(registered.parent)}), encoding="utf-8")
         into = folder / "cadgen-0.8.3"
         into.symlink_to(registered / "cadgen")
-        code, out, _ = _run(["--prune", "--yes"])
+        code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0)
+        said = next(line for line in out.splitlines() if line.startswith("  leftover "))
+        self.assertIn("5 launchers earlier releases published beside the cad command", said)
         for path in (console, python, gone, earlier, into):
-            self.assertIn(f"removed {path}, a launcher the cad command replaces\n", out)
-            self.assertFalse(os.path.lexists(path), path)
+            self.assertIn(path.name, said)
+            self.assertTrue(os.path.lexists(path), path)
+        for path in (own, *kept):
+            self.assertNotIn(f"{path.name},", said + ",")
         for path, text in kept.items():
             self.assertEqual(path.read_text(encoding="utf-8"), text, "anything else is left alone")
         self.assertTrue(os.path.islink(own), "a person's own cadgen-<v> into a venv of theirs is left alone")
@@ -361,27 +362,6 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]],
                          out.splitlines()[1:])
 
-    def test_prune_removes_every_version_no_channel_is_on(self) -> None:
-        # The flat folders of 0.11.10 and earlier are that layout's to remove once nothing runs from them
-        # (``legacy.remove``); --prune sweeps (``versions.sweep``): every version no pointer names.
-        from cad_server._internal import versions
-
-        with redirect_stdout(io.StringIO()) as helped, self.assertRaises(SystemExit):
-            doctor.main(["--help"])
-        self.assertIn("every installed version no channel is on", " ".join(helped.getvalue().split()))
-        plan = versions.Prune(versions={"1.2.0": "installed and never used"})
-        with mock.patch.object(versions, "prune_plan", return_value=plan) as planned, \
-                mock.patch.object(versions, "prune", return_value={"1.2.0": "removed"}) as pruned, \
-                mock.patch.object(versions, "sweep", side_effect=AssertionError("exactly its plan: no sweep")):
-            code, out, _ = _run(["--prune", "--yes"])
-        self.assertEqual(code, 0)
-        planned.assert_called_once()  # read once, shown, and done: the same plan
-        pruned.assert_called_once_with(plan, told=mock.ANY)
-        self.assertIn("removed text-to-cad 1.2.0\n", out)
-        with mock.patch.object(versions, "prune_plan", return_value=versions.Prune()), \
-                mock.patch.object(versions, "prune", side_effect=AssertionError("an empty plan does nothing")):
-            self.assertEqual(_run(["--prune", "--yes"])[0], 0)
-
     def test_the_report_says_what_the_device_runs(self) -> None:
         from cad_server._internal import installations, releases
 
@@ -399,13 +379,12 @@ class DoctorTests(unittest.TestCase):
         installations.point("1.1.0")
         code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0, out)
-        self.assertIn(f"  current  cad-server 1.1.0 ({releases.root() / '1.1.0'})\n", out)
-        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}: of 0.11.10 or earlier, removed once "
-                      "nothing runs from them\n", out)
-        # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
-        # the CAD kernel to the current one's.
+        self.assertIn(f"  current  cad-server 1.1.0 ({releases.root() / '1.1.0'}): the server clients of 0.11.10 and "
+                      "earlier reach\n", out)
+        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}: of 0.11.10 or earlier, removed with that "
+                      "layout\n", out)
+        # Another installation's doctor registers nothing where one is current.
         self.assertIn("registry cad-server 1.1.0 is the current installation: this one registers nothing", out)
-        self.assertIn("kernel   not made — the current installation's (cad-server 1.1.0): its `cad doctor` checks it", out)
         self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.0.0", "1.1.0"])
 
 
@@ -459,11 +438,11 @@ class PrivateFolders(unittest.TestCase):
 
 
 class LeftoversTest(PrivateFolders):
-    """``cad doctor`` says what earlier releases left behind that nothing needs, and ``--prune`` removes it, a
-    line per kind: never a live engine's bytecode, a registered installation's, a recorded document's
-    cache, nor anything written in the last seven days."""
+    """``cad doctor`` says what earlier releases left behind that nothing of this one uses, a line per kind --
+    never a live engine's bytecode, a registered installation's, a recorded document's cache, nor anything written in
+    the last seven days -- and removes nothing: that is the person's."""
 
-    def test_doctor_says_what_nothing_needs_and_prune_removes_it_but_what_is_live_registered_recorded_or_recent(self) -> None:
+    def test_doctor_says_what_nothing_uses_and_removes_nothing(self) -> None:
         import json
 
         from cad_server._internal import installations
@@ -512,130 +491,28 @@ class LeftoversTest(PrivateFolders):
         base.interpreter(dead).unlink()  # its Python, one uv managed, since uninstalled: it is still one to collect
         before = self.tree()
 
-        with mock.patch.object(installations, "targets", return_value=None):
+        seven = [self.file("cache/objects/ab/" + "c" * 62, "o" * 4089), self.file("cache/index/model/" + "d" * 64, "{}"),
+                 self.file("state/sidebar-views/views.json", "[]")]
+        appdata = self.root / "AppData" / "cad-state"
+        self.file("AppData/cad-state/installations/0.10.0.json", "{}")
+        before = self.tree()
+        with mock.patch.object(installations, "targets", return_value=None), \
+                mock.patch.object(places, "appdata_state_dir", return_value=appdata):
             code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0)
         self.assertIn("  leftover 2 engine records of an older format, 1 bytecode folder of installations no longer "
                       "registered (2.0 KB), 1 cache folder with no record (4.0 KB), 1 file an earlier 0.8 build kept "
-                      "(telemetry-sender), 2 environments of models' packages unused for 7 days: cad doctor --prune "
-                      "removes them\n", out)
-        self.assertEqual(self.tree(), before, "nothing is removed without --prune")
+                      "(telemetry-sender), 2 environments of models' packages unused for 7 days: left by earlier "
+                      "releases, and nothing of this one uses them\n", out)
+        self.assertIn("  0.7      cadgen 0.7's store and 1 state file", out)
+        self.assertIn(f"  0.10     {appdata}, a folder 0.10.0 kept on Windows, which nothing of this release uses\n", out)
         self.assertIn(f"  cache    {self.cache}: 1 document · 1 B, kept until deleted\n", out,
                       "the documents the cache keeps, each a record names, with no cap")
-        # It destroys, so it asks; where no one can be asked, nothing is removed without --yes.
-        code, out, err = _run(["--prune"])
-        self.assertEqual((code, out), (2, ""))
-        self.assertEqual(err, "cad doctor: removing 5 kinds of leftovers needs a yes, and no one can be asked here (no "
-                              "terminal, or --json): nothing was changed; `cad doctor --prune --yes` says yes\n")
-        self.assertEqual(self.tree(), before)
-
-        code, out, _ = _run(["--prune", "--yes"])
-        self.assertEqual(code, 0)
-        self.assertEqual(out, "no registered installation has lost its interpreter\n"
-                              "removed 1 engine record of an older format\n"
-                              "removed the page token 1 engine record still carried (the port each rolled to is kept)\n"
-                              "removed 1 bytecode folder of installations no longer registered (2.0 KB)\n"
-                              "removed 1 cache folder with no record (4.0 KB)\n"
-                              f"removed {stamp}, a file an earlier 0.8 build kept\n"
-                              "removed 2 environments of models' packages unused for 7 days\n")
-        self.assertEqual((unused.exists(), dead.exists(), used.exists(), kernel.exists()), (False, False, True, True))
-        self.assertFalse((self.state / "engines" / "aaaaaaaa.json").exists())
-        self.assertEqual(json.loads(trimmed.read_text(encoding="utf-8")), {"port": 3246, "schema": 3})
-        for kept in (current, recent_record, token, registered, live, recent_bytecode,
-                     self.cache / "documents" / recorded / "document.xbf", self.cache / "documents" / fresh,
-                     self.cache / "documents" / "not-a-document"):
-            self.assertTrue(kept.exists(), kept)
-        self.assertFalse((self.cache / "pycache" / "bbbbbbbbbbbb").exists())
-        self.assertFalse((self.cache / "documents" / forgotten).exists())
-        code, out, _ = _run(["--prune", "--yes"])
-        self.assertEqual(out, "no registered installation has lost its interpreter\n", "nothing is left to remove")
-
-
-class SevenLeftoversTest(PrivateFolders):
-    """cadgen 0.7's store and state files retire themselves: ``cad doctor`` says they are there,
-    ``--prune`` removes them once nothing has written them for seven days, ``--all-versions`` at
-    once; a folder of that name that is not 0.7's store, and 0.8's own files, are never touched."""
-
-    def seven(self, *, recent: str | None = None) -> list[Path]:
-        made = [self.file("cache/objects/ab/" + "c" * 62, "o" * 4089), self.file("cache/index/model/" + "d" * 64, "{}"),
-                self.file("state/sidebar-views/views.json", "[]"), self.file("state/snapshot-browser.lock", ""),
-                self.file("state/recents/recents.jsonl", "{}\n"), self.file("state/install-channels.json.lock", "")]
-        if recent:
-            made.append(self.file(recent, "written now", old=False))
-        return made
-
-    def ours(self) -> list[Path]:
-        """0.8's own files beside 0.7's, which nothing here touches."""
-        return [self.file("state/settings.json", "{}"), self.file("state/settings.lock", ""),
-                self.file("state/install-channels.json", "{}"), self.file("state/recents/thumbnails/" + "e" * 32 + ".png", "p"),
-                self.file("cache/pycache/aaaaaaaaaaaa/x.pyc", old=False),
-                self.file("cache/documents/11111111-1111-5111-8111-111111111111/document.xbf", old=False)]
-
-    def last(self, paths: list[Path]) -> str:
-        import time
-
-        return time.strftime("%Y-%m-%d", time.localtime(max(os.lstat(path).st_mtime for path in paths)))
-
-    def test_a_quiet_0_7_is_said_with_its_size_and_age_and_pruned(self) -> None:
-        made, ours = self.seven(), self.ours()
-        said = f"cadgen 0.7's store and 4 state files (4.0 KB), last written {self.last(made)}"
-        code, out, _ = _run(["--no-server"])
-        self.assertEqual(code, 0)
-        self.assertIn(f"  0.7      {said}: cad doctor --prune removes it\n", out)
-        self.assertTrue(all(path.exists() for path in made), "nothing is removed without --prune")
-        code, out, _ = _run(["--prune", "--yes"])
-        self.assertEqual(out, f"no registered installation has lost its interpreter\nremoved {said}\n")
-        for gone in ("cache/objects", "cache/index", "state/sidebar-views", "state/snapshot-browser.lock",
-                     "state/recents/recents.jsonl", "state/install-channels.json.lock"):
-            self.assertFalse((self.root / gone).exists(), gone)
-        self.assertTrue(all(path.exists() for path in ours), "0.8's own files stay")
-        self.assertNotIn("0.7", _run(["--no-server"])[1])
-
-    def test_a_0_7_written_in_the_last_week_stays_until_all_versions_says_none_needs_it(self) -> None:
-        made, ours = self.seven(recent="state/viewer.log"), self.ours()
-        said = f"cadgen 0.7's store and 5 state files (4.0 KB), last written {self.last(made)}"
-        code, out, _ = _run(["--no-server"])
-        self.assertIn(f"  0.7      {said}: cad doctor --prune removes it once nothing has written it for 7 days, "
-                      "or now with --all-versions\n", out)
-        code, out, _ = _run(["--prune", "--yes"])
-        self.assertEqual(out, f"no registered installation has lost its interpreter\nkept {said}: a cadgen 0.7 still "
-                              "installed may use it; it goes once nothing has written it for 7 days, or now with "
-                              "--all-versions\n")
-        self.assertTrue(all(path.exists() for path in made), "a 0.7 written this week may be in use")
+        self.assertEqual(self.tree(), before, "nothing removed")
+        self.assertTrue(all(path.exists() for path in (*seven, stamp, trimmed, unused, dead, appdata)))
+        self.assertNotIn("--prune", doctor.__doc__ or "")
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            doctor.main(["--all-versions"])  # with --prune alone
-        code, out, _ = _run(["--prune", "--yes", "--all-versions"])
-        self.assertEqual(out, f"no registered installation has lost its interpreter\nremoved {said}\n")
-        self.assertFalse(any(path.exists() for path in made))
-        self.assertTrue(all(path.exists() for path in ours), "0.8's own files stay")
-
-    def test_a_folder_of_the_store_s_name_that_is_not_0_7_s_store_is_left_alone(self) -> None:
-        theirs = [self.file("cache/objects/notes.txt", "another program's"), self.file("cache/index/README", "")]
-        code, out, _ = _run(["--prune", "--yes", "--all-versions"])
-        self.assertEqual(out, "no registered installation has lost its interpreter\n")
-        self.assertTrue(all(path.exists() for path in theirs))
-
-
-class TenWindowsLeftoversTest(PrivateFolders):
-    """0.10.0's Windows folders in the local application data, what this release took of them moved out:
-    ``cad doctor`` names each, and ``--prune`` removes each whole once nothing has written it for a week."""
-
-    def test_a_quiet_folder_goes_whole_and_a_recent_one_stays(self) -> None:
-        from cad.engine import places
-
-        state, cache = self.root / "AppData" / "cad-state", self.root / "AppData" / "cad"
-        self.file("AppData/cad-state/installations/0.10.0.json", "{}")
-        self.file("AppData/cad/base/0123/pyvenv.cfg", "", old=False)
-        with mock.patch.object(places, "appdata_state_dir", return_value=state), \
-                mock.patch.object(places, "appdata_cache_dir", return_value=cache):
-            _code, out, _ = _run(["--no-server"])
-            self.assertIn(f"  0.10     {state}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it\n", out)
-            self.assertIn(f"  0.10     {cache}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it once "
-                          "nothing has written it for 7 days\n", out)
-            _code, out, _ = _run(["--prune", "--yes"])
-        self.assertIn(f"removed {state}, a folder 0.10.0 kept on Windows\n", out)
-        self.assertFalse(state.exists())
-        self.assertTrue((cache / "base" / "0123" / "pyvenv.cfg").exists(), "written this week: it stays")
+            doctor.main(["--prune", "--yes"])
 
 
 class KernelProbeTest(unittest.TestCase):

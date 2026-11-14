@@ -963,7 +963,7 @@ def status_text(answer: dict[str, Any]) -> str:
                          + f", up {_span(answer.get('up'))}", workers_text(answer),
                          *([f"held by {answer['holders']} app server{'' if answer['holders'] == 1 else 's'}"]
                            if answer.get("holders") else []),
-                         # The default channel's version's server answers clients of 0.11.10 and earlier too.
+                         # The server of the version installations/current names answers clients of 0.11.10 too.
                          *(["also answers clients of 0.11.10 and earlier"] if answer.get("bridge") else []),
                          memory])]
     names = [Path(str(worker["script"])).name for worker in workers]

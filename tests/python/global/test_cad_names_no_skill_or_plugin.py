@@ -22,8 +22,6 @@ NOT_MESSAGES = {
     "cad/engine/sdf_source.py": None,  # the same element, read
     "cad_server/cli/uninstall.py": {"plugin", "plugin.lock"},  # folder names earlier releases left
 }
-# Messages other lanes of the change that removed the rest reword or remove; this set only shrinks.
-PENDING = {"cad_server/_internal/pins.py", "cad_mcp/engine.py", "cad_mcp/shim.py"}
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -43,7 +41,7 @@ def offenders() -> list[str]:
         source = project / "src"
         for path in sorted(source.rglob("*.py")):
             relative = path.relative_to(source).as_posix()
-            if ".egg-info" in relative or relative in PENDING:
+            if ".egg-info" in relative:
                 continue
             allowed = NOT_MESSAGES.get(relative, set())
             if allowed is None:

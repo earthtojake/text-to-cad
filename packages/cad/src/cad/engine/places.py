@@ -104,9 +104,9 @@ VERSION_SCHEMA = "cad version/1"
 INSTALLATIONS = "installations"
 CURRENT = f"{INSTALLATIONS}/current"
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
-# A delivery channel's name (``cad +<version>@<channel>``; the server's pointers, ``cad_server._internal.pointers``,
-# name their files by it): a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. The
-# default channel, a pin that names none, is ``default``, never a name of this shape's file.
+# A delivery channel's name (``cad +<version>@<channel>``: a label, which telemetry reports and which turns the
+# server's update notice off): a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``.
+# The default channel, a pin that names none, is ``default``.
 CHANNEL = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
 DEFAULT_CHANNEL = "default"
 # The marker the server writes last in the environment it makes for the kernel (the base), naming the
@@ -202,7 +202,7 @@ def appdata_state_dir() -> Path | None:
 
 def appdata_cache_dir() -> Path | None:
     """Where 0.10.0 kept its cache on Windows, ``%LOCALAPPDATA%\\cad``: its documents' bytes move with their
-    records (``adopt_earlier``), the rest is left to ``cad doctor --prune``; None elsewhere, or where
+    records (``adopt_earlier``), the rest is left where it is; None elsewhere, or where
     ``CAD_CACHE_DIR`` names the cache folder."""
     return _appdata() / APPDATA_CACHE if WINDOWS and not os.environ.get("CAD_CACHE_DIR", "").strip() else None
 

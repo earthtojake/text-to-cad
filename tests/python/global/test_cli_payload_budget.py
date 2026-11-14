@@ -21,7 +21,7 @@ class CompactStdoutTests(unittest.TestCase):
     STDOUT_JSON_SOURCES = (
         # `cad requirement --json`: the requirement, its indexes and find-links.
         "packages/cad-server/src/cad_server/cli/requirement.py",
-        # `cad doctor --json`: each check of the report, and what --prune removed.
+        # `cad doctor --json`: each check of the report.
         "packages/cad-server/src/cad_server/cli/doctor.py",
         # Every command's failure under --json: the contract's one document.
         "packages/cad-server/src/cad_server/_internal/cli_errors.py",

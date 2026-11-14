@@ -1,14 +1,14 @@
-"""One server per installed version, each reached through its own door; the flat door every client of 0.11.10 and
-earlier finds, held by the default channel's version's server alone; and what an update of the default channel does
-to the servers, their port and their pages (``cad_server._internal.versions``, ``cad_server.engine.daemon``).
+"""One server per installed version, side by side, each reached through its own door and on its own port; the flat
+door every client of 0.11.10 and earlier finds, held by the server of the version ``installations/current`` names;
+and the cleanup the newest version's server runs (``cad_server._internal.versions``, ``cad_server.engine.daemon``).
 
-Real servers: two (or three) versions made present in one temporary device (``test_versions.Device``: uv stood in
-for, each version a virtual environment of this Python that imports this checkout and this interpreter's packages),
-each server started from its own version's Python under its own name. ``CAD_ENGINE_DEFAULT_PORT`` stands in for
-3245, so no test binds the machine's. A client of 0.11.10 and earlier is this library's client as a process with no
-version: its flat path (the flat engine folder, ``installations/current`` and the record it names) is that release's
-unchanged (``git diff v0.11.10 -- packages/cad/src/cad/engine/client.py``: the channel field and the engine folder's
-making alone).
+Real servers: two versions made present in one temporary device (``test_versions.Device``: uv stood in for, each
+version a virtual environment of this Python that imports this checkout and this interpreter's packages), each server
+started from its own version's Python under its own name. ``CAD_ENGINE_DEFAULT_PORT`` stands in for 3245, so no test
+binds the machine's. A client of 0.11.10 and earlier is this library's client as a process with no version: its flat
+path (the flat engine folder, ``installations/current`` and the record it names) is that release's unchanged (``git
+diff v0.11.10 -- packages/cad/src/cad/engine/client.py``: the channel field and the engine folder's making alone).
+An older version is made unused by its files' times (``Device.aged``): nothing waits two days.
 """
 
 from __future__ import annotations
@@ -24,10 +24,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.python.packages.cad_server.test_versions import Device, Uv, site_packages
+from tests.python.packages.cad_server.test_versions import DAY, Device, Uv, site_packages
 
 from cad.engine import client, contract, places
-from cad_server._internal import base, pointers, versions
+from cad_server._internal import base, installations, versions
 
 X, Y, Z = "0.12.0", "0.12.1", "0.12.2"
 # How long a server is given to come up, or to go.
@@ -70,26 +70,24 @@ class Servers(Device):
     # --- the device ------------------------------------------------------------------------------------
 
     def version(self, name: str) -> None:
-        """Version ``name`` present; its data is imported by its first start (the move, else its server's)."""
+        """Version ``name`` present; its data is copied in by its server's first start."""
         self.present(name)
 
     def start(self, name: str, *, tend: float | None = None) -> int:
-        """Version ``name``'s server started from its own Python (``versions.start_server``), or, with ``tend``, the
-        same daemon tending itself every ``tend`` seconds rather than ``TEND_SECONDS``: its pid."""
-        if tend is None:
-            self.assertTrue(versions.start_server(name), f"{name}'s server started")
-        else:
-            record = places.version_record(name)
-            env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-            env[places.INSTALLATION_ENV] = name
-            folder = places.make_engine_dir(places.engine_dir(name))
-            code = ("import sys\nfrom cad_server.engine import daemon\n"
-                    f"daemon.TEND_SECONDS = {tend!r}\nsys.exit(daemon.main())\n")
-            process = subprocess.Popen([record["python"], "-P", "-c", code], stdin=subprocess.DEVNULL,
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=str(folder),
-                                       **places.detached())
-            threading.Thread(target=process.wait, daemon=True).start()
-            self.until(lambda: versions.ask(name, {"op": "pid"}, seconds=2.0) is not None, f"{name}'s server answers")
+        """Version ``name``'s server started from its own Python, detached, its name told, as a client of that version
+        starts it (``client._start``) -- with ``tend``, tending itself every ``tend`` seconds rather than
+        ``TEND_SECONDS`` --: its pid once it answers at its own door."""
+        record = places.version_record(name)
+        env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        env[places.INSTALLATION_ENV] = name
+        folder = places.make_engine_dir(places.engine_dir(name))
+        code = ("import sys\nfrom cad_server.engine import daemon\n"
+                + (f"daemon.TEND_SECONDS = {tend!r}\n" if tend is not None else "") + "sys.exit(daemon.main())\n")
+        process = subprocess.Popen([record["python"], "-P", "-c", code], stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=str(folder),
+                                   **places.detached())
+        threading.Thread(target=process.wait, daemon=True).start()
+        self.until(lambda: versions.ask(name, {"op": "pid"}, seconds=2.0) is not None, f"{name}'s server answers")
         return versions.ask(name, {"op": "pid"})["pid"]
 
     def stop_all(self) -> None:
@@ -133,35 +131,10 @@ class Servers(Device):
         return os.path.realpath(prefix).startswith(inside)
 
 
-class DefaultMove(Servers):
-    def test_nothing_in_flight_the_new_version_serves_on_the_old_port_with_the_old_token(self) -> None:
-        for name in (X, Y):
-            self.version(name)
-        self.assertEqual(versions.move(None, X).kind, "moved")
-        self.start(X)
-        endpoint = self.serve(X)
-        self.assertEqual(endpoint["port"], self.port, "the default port")
-        status = versions.ask(X, {"op": "status"})
-        self.assertTrue(status["bridge"], "the default's server holds the flat door")
-        old = self.old({"op": "status"}, start=False)
-        self.assertTrue(self.within(old["prefix"], X), "a client of 0.11.10 reaches the default's server")
-        self.assertEqual(self.page(self.port, endpoint["token"]), 200)
-
-        moved = versions.move(None, Y)
-        self.assertEqual((moved.kind, moved.removed), ("moved", {X: "removed"}), moved.said)
-        self.assertIn(f"text-to-cad {Y} serves pages on port {self.port}, as {X} did", moved.said)
-        self.assertFalse(versions.serves(X) or places.version_dir(X).exists(), "the version left is gone")
-        after = self.serve(Y)
-        self.assertEqual((after["port"], after["token"]), (self.port, endpoint["token"]),
-                         "the same port, with the token it imported")
-        self.assertEqual(self.page(self.port, endpoint["token"]), 200, "a page open before reloads into it")
-        self.assertTrue(versions.ask(Y, {"op": "status"})["bridge"], "the flat door moved with the default")
-        old = self.old({"op": "status"}, start=False)
-        self.assertTrue(self.within(old["prefix"], Y), "and a client of 0.11.10 reaches the new default's server")
-
-    def test_a_client_of_0_11_10_starts_the_default_from_the_mirror_and_finds_it_at_the_flat_door(self) -> None:
+class FlatDoor(Servers):
+    def test_a_client_of_0_11_10_starts_the_version_current_names_and_finds_it_at_the_flat_door(self) -> None:
         self.version(X)
-        self.assertEqual(versions.move(None, X).kind, "moved")
+        self.assertTrue(installations.mirror(X))  # what the hand-over from a shipped release writes
         self.assertFalse(versions.serves(X))
         status = self.old({"op": "status"})  # nothing runs: it starts what installations/current names
         self.assertTrue(self.within(status["prefix"], X) and status["bridge"], status.get("prefix"))
@@ -170,16 +143,33 @@ class DefaultMove(Servers):
         self.start(X)
         self.assertTrue(versions.ask(X, {"op": "status"})["bridge"])
 
+    def test_versions_run_side_by_side_and_the_flat_door_follows_current(self) -> None:
+        for name in (X, Y):
+            self.version(name)
+        self.assertTrue(installations.mirror(X))
+        self.start(X, tend=0.5)
+        self.start(Y, tend=0.5)
+        self.assertEqual(self.serve(X)["port"], self.port, "the default port")
+        self.assertNotEqual(self.serve(Y)["port"], self.port, "the second takes the next free port")
+        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], f"{X}'s server holds the flat door")
+        self.assertFalse(versions.ask(Y, {"op": "status"})["bridge"])
+        self.assertTrue(self.within(self.old({"op": "status"}, start=False)["prefix"], X))
+        installations.mirror(Y)
+        self.until(lambda: versions.ask(Y, {"op": "status"})["bridge"] and not versions.ask(X, {"op": "status"})["bridge"],
+                   "the flat door moves to the version current names, at their tending")
+        self.assertTrue(self.within(self.old({"op": "status"}, start=False)["prefix"], Y))
+
 
 class PortHandedToARunningServer(Servers):
     def test_the_flat_door_asked_for_the_old_port_on_a_server_serving_another_takes_it_too_and_never_fails(self) -> None:
-        """0.11.10's switch helper asks the default's server, through the flat door, to serve on the port 0.11.10
+        """0.11.10's switch helper asks the server ``installations/current`` names, through the flat door, to serve on the port 0.11.10
         served (``{"op": "http", "port": P}``) and stops it should the answer say ``failed``. A server that started
         while 0.11.10 still held P serves on another, Q: it takes P too, the port pages were on, which is its own
         from then on, and keeps Q; where P cannot be taken, it answers with where it serves."""
         self.version(X)
-        self.assertEqual(versions.move(None, X).kind, "moved")
+        self.assertTrue(installations.mirror(X))
         x = self.start(X)
+        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], "its server holds the flat door")
         other = free_port()
         served = versions.ask(X, {"op": "http", "port": other}, seconds=WAIT)  # it serves Q: 0.11.10 held P
         self.assertEqual(served["port"], other, served)
@@ -205,12 +195,12 @@ class PortHandedToARunningServer(Servers):
 class PortsHeldAtTheHandover(Servers):
     def test_a_server_serving_nothing_asked_for_a_port_still_held_serves_another_and_never_fails(self) -> None:
         """E4: a new server that holds the flat door but serves no pages yet, asked (by 0.11.10's helper, or a
-        handover) for the old pages' port while the old server still holds it, binds as if no port were asked and
+        bridge) for the old pages' port while the old server still holds it, binds as if no port were asked and
         answers with that address: ``failed`` would have 0.11.10's helper stop it."""
         self.version(X)
-        self.assertEqual(versions.move(None, X).kind, "moved")
+        self.assertTrue(installations.mirror(X))
         x = self.start(X)
-        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], "the default's server holds the flat door")
+        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], "its server holds the flat door")
         taken = socket.socket()
         self.addCleanup(taken.close)
         taken.bind(("127.0.0.1", 0))
@@ -219,76 +209,32 @@ class PortsHeldAtTheHandover(Servers):
         answer = self.old({"op": "http", "port": held}, start=False)
         self.assertNotIn("failed", answer or {})
         self.assertNotEqual(answer["port"], held)
-        self.assertEqual(versions.answered_port(answer), answer["port"])
         self.assertEqual(versions.ask(X, {"op": "pid"})["pid"], x, "still running")
 
-    def test_a_server_that_goes_after_the_handover_hands_its_port_to_its_heir(self) -> None:
-        """E9: the old server took longer to go than the handover waited, so the new one serves another port; as the
-        old one stops, it hands the port pages were on to the version its channel moved to."""
+
+
+class Cleanup(Servers):
+    def test_the_newest_version_s_server_stops_and_removes_an_older_one_unused_for_two_days(self) -> None:
         for name in (X, Y):
             self.version(name)
-        self.assertEqual(versions.move(None, X).kind, "moved")
-        self.start(X)
-        old = self.serve(X)
-        self.assertEqual(old["port"], self.port)
-        self.start(Y)
-        self.assertNotEqual(self.serve(Y)["port"], self.port, "the old one still holds it")
-        pointers.write(None, Y)  # the default channel moved on, X left for Y
-        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
-        versions.ask(X, {"op": "stop", "drain": True})
-        self.until(lambda: (versions.ask(Y, {"op": "status"}) or {}).get("serving", {}).get("port") == self.port,
-                   f"{Y}'s server serves the port {X}'s served")
-        self.assertEqual(self.page(self.port, old["token"]), 200, "a page open on it reloads into the heir")
-
-
-class Kept(Servers):
-    def test_another_pointer_keeps_the_old_version_and_a_named_channel_never_holds_the_flat_door(self) -> None:
-        for name in (X, Y, Z):
-            self.version(name)
-        self.assertEqual(versions.move(None, X).kind, "moved")
-        self.assertEqual(versions.move("store", X).kind, "moved")
-        self.assertEqual(versions.move("other", Z).kind, "moved")
         x = self.start(X)
-        self.assertEqual(self.serve(X)["port"], self.port)
-        self.start(Z)
-        self.assertFalse(versions.ask(Z, {"op": "status"})["bridge"], "a named channel's server: never the flat door")
-        self.assertTrue(self.within(self.old({"op": "status"}, start=False)["prefix"], X))
-
-        moved = versions.move(None, Y)
-        self.assertEqual((moved.kind, moved.removed), ("moved", {}), "the store still names it: never stopped")
-        self.assertEqual(versions.ask(X, {"op": "pid"})["pid"], x, "the old version's server is left as it is")
-        self.assertEqual(versions.ask(X, {"op": "status"})["serving"]["port"], self.port, "with its port and pages")
-        self.start(Y)
-        self.until(lambda: versions.ask(Y, {"op": "status"})["bridge"], "the flat door moves to the new default")
-        self.assertFalse(versions.ask(X, {"op": "status"})["bridge"])
-        self.assertFalse(versions.ask(Z, {"op": "status"})["bridge"])
-        self.assertNotEqual(self.serve(Y)["port"], self.port, "the new version takes the next free port")
-        self.assertTrue(self.within(self.old({"op": "status"}, start=False)["prefix"], Y))
-
-
-class Retiring(Servers):
-    def test_an_unnamed_idle_server_stops_itself_and_another_server_s_sweep_removes_its_folder(self) -> None:
-        for name in (X, Y):
-            self.version(name)
-        pointers.write(None, Y)
-        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")  # the default left it
-        (places.version_dir(X) / versions.NAMED).write_bytes(b"")  # which a pointer named once
-        self.start(X, tend=1.0)  # no pointer names it, nor the default: once idle, it goes
-        self.until(lambda: not versions.serves(X), f"{X}'s server stops itself")
-        self.assertTrue(places.version_dir(X).exists(), "a server never removes the folder it runs from")
-        self.start(Y, tend=1.0)
-        self.until(lambda: not places.version_dir(X).exists(), f"{Y}'s server's sweep removes {X}'s folder")
+        self.serve(X)
+        self.aged(X, installed=time.time() - 30 * DAY, used=time.time() - 3 * DAY)
+        self.start(Y, tend=0.5)  # as it starts, it cleans
+        self.until(lambda: not places.version_dir(X).exists(), f"{Y}'s server removes {X}")
+        self.assertIsNone(versions.ask(X, {"op": "pid"}, seconds=2.0), f"{X}'s server ({x}) stopped first")
         self.assertTrue(versions.serves(Y) and places.version_dir(Y).exists(), "never its own")
 
 
 class NoVersion(Servers):
-    def test_a_process_with_no_version_reaches_the_default_and_another_contract_is_refused(self) -> None:
+    def test_a_process_with_no_version_reaches_the_flat_door_s_server_and_another_contract_is_refused(self) -> None:
         self.version(X)
-        self.assertEqual(versions.move(None, X).kind, "moved")
+        self.assertTrue(installations.mirror(X))
         self.start(X)
+        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], "its server holds the flat door")
         status = self.old({"op": "status"}, start=False)
-        self.assertTrue(self.within(status["prefix"], X), "reached the default's server, never a version's data "
-                                                          "by a release number")
+        self.assertTrue(self.within(status["prefix"], X), "reached the flat door's server, never a version's "
+                                                          "data by a release number")
         forged = {**contract.interpreter(), "release": "0.0.1", "contract": {**contract.CONTRACT, "protocol": 0}}
         answer = self.old({"op": "build", "script": str(self.root / "model.py"), "cwd": str(self.root),
                            "env": {}, "interpreter": forged}, start=False)

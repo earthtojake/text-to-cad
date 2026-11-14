@@ -9,10 +9,14 @@ shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations
 ``delete``, ``server``), ``run``, and the installation's (``setup``, ``uninstall``, ``doctor``, ``viewer``,
 ``telemetry``).
 
-A command line may start with a pin, ``cad +<version>[@<channel>] ...``:
-the ``cad`` command runs the version it names, and that version reads it here before anything else
-(``cad_server._internal.pins``): a pin to another version is refused (exit 5), and the pin's channel is moved to
-this version where it is behind it, or the command refused as stale where it is ahead (exit 4).
+A command line may start with a pin, ``cad +<version>[@<name>] ...``: the ``cad`` command runs the version it
+names, and that version reads it here before anything else (``cad_server._internal.pins``): a pin to another version
+is refused (exit 5); its ``@name`` is a label (the command's channel), nothing more.
+
+Each command a version runs records that version's use (``versions.used``), which the cleanup reads, and, after the
+command's own output, may say on stderr that a newer release is out (``_notice``: the version check's, at most once
+a day per computer, never for a command that names a channel, never with ``CAD_UPDATE_CHECK=0``). ``cad --version``
+says it whenever a newer release is known. Nothing on stdout changes.
 
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the
@@ -254,11 +258,16 @@ def _main(argv: list[str]) -> int:
     if argv[0] in {"-V", "--version"}:
         # The version this is: the installed version it belongs to, the name a pin names it by; else the
         # installation's own version, as doctor's header says it: a development install's name
-        # (0.8.0-dev.<stamp>), so two installations are told apart; else the package's.
+        # (0.8.0-dev.<stamp>), so two installations are told apart; else the package's. Then, on stderr, a newer
+        # release where one is known.
         from cad_server import __version__
         from cad_server._internal import pins
 
         sys.stdout.write(f"cad {pins.own() or __version__}\n")
+        if _maybe_a_version():
+            _first_run()  # an agent's check at the start of a session: a use
+        if pin is None or pin.channel is None:
+            _notice(daily=False)
         return 0
 
     command, rest = argv[0], argv[1:]
@@ -271,36 +280,13 @@ def _main(argv: list[str]) -> int:
     if entry is None:
         return _unknown(command, rest)
 
-    # Help does no work: it moves nothing, writes nothing and says nothing but the help. Nor does a report
-    # asked for read-only (`cad doctor --check`).
+    # Help does no work: it writes nothing and says nothing but the help. Nor does a report asked for read-only
+    # (`cad doctor --check`).
     from cad_server._internal.cli_errors import options
 
     helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
-    # The pin's channel made to run this version: equal, nothing; newer, or its first use, moved to it; older, the
-    # chat's copy of the skill is stale and nothing runs (`pins.apply`). Help reads no pointer.
-    if pin is not None and not helping:
-        from cad_server._internal import pins
-        from cad_server._internal.cli_errors import Failure, wants_json, write
-
-        try:
-            pins.apply(pin)
-        except Failure as failure:
-            return write(failure, prog="cad", as_json=wants_json(rest))
-    # No pin, run by a version that has never started where the default channel has no pointer (the newest version
-    # present, which the cad command runs where none has started): the default channel's first use made first, so
-    # nothing is written before the version's data is imported (`pins.first_use`). `setup` moves the channel itself,
-    # and `uninstall` takes things out.
-    elif pin is None and not helping and command not in _MOVES_ITSELF and _maybe_a_version():
-        from cad.engine.places import versioned
-
-        if versioned() is not None:
-            from cad_server._internal import pins
-            from cad_server._internal.cli_errors import Failure, wants_json, write
-
-            try:
-                pins.first_use()
-            except Failure as failure:
-                return write(failure, prog="cad", as_json=wants_json(rest))
+    if not helping and command not in _UNUSED and _maybe_a_version():
+        _first_run()
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:
@@ -313,7 +299,7 @@ def _main(argv: list[str]) -> int:
     if command not in _UNTOLD and not helping and not wants_json(rest):
         _tell()
     try:
-        return _run(command, entry[0], rest)
+        code = _run(command, entry[0], rest)
     except BrokenPipeError as error:
         from cad_server.analytics import stdout_closed
 
@@ -325,6 +311,10 @@ def _main(argv: list[str]) -> int:
         if command == "run" or not wants_json(rest):  # `run`'s words are its program's: never its own --json
             raise  # its traceback the person's
         return _crashed(command, rest, error)
+    # After the command's own output: a newer release, where one is known (never for a command that names a channel).
+    if not helping and command not in _UNNOTICED and (pin is None or pin.channel is None):
+        _notice(daily=True)
+    return code
 
 
 def _unknown(word: str, rest: list[str]) -> int:
@@ -373,9 +363,74 @@ def _maybe_a_version() -> bool:
     return len(parts) >= 4 and parts[-1] == "server" and parts[-2] == "code" and parts[-4] == "versions"
 
 
-# Commands that never make the default channel's first use before they run (``pins.first_use``): setup moves it
-# itself (an updater's first run of it stops once its release is present), uninstall takes things out.
-_MOVES_ITSELF = frozenset({"setup", "uninstall"})
+def _first_run() -> None:
+    """A command run by an installed version: its use recorded (``versions.used``), and, where its settings and
+    store are not there yet (a development version, which no ``cad setup`` makes, or a setup cut short), copied in
+    first (``imports.ensure``), so nothing is written before them. Never a reason a command fails: a folder it cannot
+    write (an agent's sandbox) leaves both to the version's server."""
+    try:
+        from cad.engine.places import versioned
+
+        name = versioned()
+        if name is None:
+            return
+        from cad_server._internal import imports, versions
+
+        if not imports.imported(name):
+            imports.ensure(name)
+        versions.used(name)
+    except Exception:  # noqa: BLE001 - a record, never a failure
+        return
+
+
+def _notice(*, daily: bool) -> None:
+    """On stderr, after a command's own output: the two lines of a newer release the last version check saw
+    (``updates.line``), where one is known and the check is not turned off (``updates.notice``); ``daily``: at most
+    once every ``NOTICE_SECONDS`` on this computer (a stamp in the state folder, ``NOTICE``). Never a failure, never on
+    stdout, never a wait: the feed is read by the server, in the background. Only an installed version's command says
+    it (``_maybe_a_version``), and with the check turned off nothing is even imported for it: a command imports no
+    more than it uses."""
+    if str(os.environ.get("CAD_UPDATE_CHECK") or "").strip().lower() in ("0", "off", "false", "no") \
+            or not _maybe_a_version():
+        return
+    try:
+        import time
+
+        from cad.engine.places import state_dir
+        from cad_server import updates
+        from cad_server._internal import pins
+
+        found = updates.notice()
+        if found is None:
+            return
+        found = {**found, "version": pins.own() or found["version"]}
+        if daily:
+            stamp = state_dir() / NOTICE
+            now = time.time()
+            try:
+                if 0 <= now - stamp.stat().st_mtime < NOTICE_SECONDS:
+                    return
+            except FileNotFoundError:
+                pass
+            stamp.parent.mkdir(parents=True, exist_ok=True)
+            with open(stamp, "ab"):
+                pass
+            os.utime(stamp, (now, now))
+        sys.stderr.write(updates.line(found) + "\n")
+        sys.stderr.flush()
+    except Exception:  # noqa: BLE001 - a notice never fails the command it follows
+        return
+
+
+# The computer's record of when a command last said a newer release is out (``_notice``), in the state folder.
+NOTICE = "update-notice"
+NOTICE_SECONDS = 24 * 60 * 60.0
+# Commands whose run records no use and copies no data first (``_first_run``): setup makes the version and copies
+# its data itself, uninstall takes everything out.
+_UNUSED = frozenset({"setup", "uninstall"})
+# Commands after which no notice is said (``_notice``): the engine's server, which runs until it stops; setup, which
+# an updater of 0.11.10 and earlier runs with no person to read it; uninstall.
+_UNNOTICED = frozenset({"server", "setup", "uninstall"})
 # Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry`, which says it
 # its own way; `setup`, which an updater of 0.11.10 and earlier runs with no person to read it; `uninstall`; `run`,
 # which is only the python it runs, as the `cad` command's `run` is; and `requirement`, whose output a program reads.
