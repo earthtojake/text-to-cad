@@ -203,7 +203,7 @@ loop leans on, for a plate named `plate`:
 - **`volume` catches a gross error only.** Its bracket is 2 to 4 percent wide on a plain part and wider on a
   lattice, whatever tolerance is asked.
 - **`bounds` is no measure of size.** Its box is fitted on a coarse grid (8 mm cells in `@scene(120)`), so it can
-  be larger or smaller than the part and can miss a wall thinner than a cell. The mesh's box, which `cad omega
+  be larger or smaller than the part and can miss a wall thinner than a cell. The mesh's box, which `cad gsl
   mesh` reports, is the part's.
 
 `"defs"` gives a name another value for that question alone (`"defs": "r = 6.5;"`), so a size is tried without
