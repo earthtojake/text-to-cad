@@ -217,7 +217,7 @@ class DoorTest(unittest.TestCase):
         self.addCleanup(listener.close)
         port_file.write_text(f"{listener.getsockname()[1]} {token}\n", encoding="utf-8")
         handled: list[dict] = []
-        server = types.SimpleNamespace(token=token, refusal=None, unsaid="",
+        server = types.SimpleNamespace(token=token, refusal=None, unsaid="", ended=lambda request: None,
                                        handle=lambda request, send: handled.append(request) or send({"ok": True}))
 
         def accept() -> None:
