@@ -704,6 +704,25 @@ def serves(name: str) -> bool:
     return ask(name, {"op": "pid"}, seconds=SERVES_SECONDS) is not None
 
 
+def stop_command(name: str) -> str | None:
+    """The command that stops version ``name``'s server, as a line may say it: pinned to a channel that is on that
+    version (``cad +<name> stop`` where the default channel is, ``cad +<name>@<channel> stop`` where only a named one
+    is), or ``cad stop`` where it is the version a command with no pin runs and no pointer says so. A pin that names
+    no channel is the default channel's, and one for a version newer than the default's moves the default channel
+    to it: so none is said for a version no channel is on (it stops by itself once nothing is in flight there), nor
+    where the pointers cannot be read. None then."""
+    from cad_server._internal import pointers
+
+    try:
+        on = [pointer.channel for pointer in pointers.listing() if pointer.version == name]
+        if not on:
+            return "cad stop" if pointers.default().version == name else None
+    except OSError:  # ``pointers.Unreadable`` among them: what a pointer names is not known
+        return None
+    channel = None if None in on else sorted(on)[0]
+    return f"cad +{name}{'@' + channel if channel else ''} stop"
+
+
 # --- a version's server, asked through its own door ----------------------------------------------------
 
 # How long a version's server is given to answer one question (``ask``), to stop once asked (``stop_server``),

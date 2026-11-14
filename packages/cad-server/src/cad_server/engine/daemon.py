@@ -648,9 +648,11 @@ def _tell_servers(told: Callable[[str], None]) -> None:
             continue
         answer = versions.ask(name, {"op": "token"})
         if not (isinstance(answer, dict) and answer.get("ok")):
+            # The stop command names a channel that is on the version: a pin with none is the default channel's.
+            stop = versions.stop_command(name)
             told(f"text-to-cad {name}'s server could not take the new token "
-                 f"({(answer or {}).get('failed') or 'it did not answer'}): it admits the one before until it stops "
-                 f"(`cad +{name} stop`)")
+                 f"({(answer or {}).get('failed') or 'it did not answer'}): it admits the one before until it stops"
+                 + (f" (`{stop}`)" if stop else ""))
     answer = versions.ask_flat({"op": "token"})
     if isinstance(answer, dict) and not answer.get("ok"):
         told("the server of 0.11.10 or earlier that runs still admits the token before until it stops (`cad stop`); "

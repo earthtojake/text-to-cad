@@ -1068,6 +1068,24 @@ class TokenRotatedEverywhere(Device):
         self.assertTrue(any(line.startswith(f"text-to-cad {Y}'s server could not take the new token") for line in said), said)
         self.assertTrue(any("0.11.10 or earlier" in line for line in said), said)
 
+    def test_the_command_that_stops_a_version_s_server_names_a_channel_that_is_on_it(self) -> None:
+        """A pin with no channel is the default channel's, and one for a version newer than the default's moves the
+        default channel to it: so the stop command a line says for another version's server is pinned to a channel
+        that is on that version, and none is said for a version no channel is on."""
+        for name in (X, Y, Z):
+            self.present(name)
+        self.assertIsNone(versions.stop_command(X), "no pointer, and not the version a command with no pin runs")
+        self.assertEqual(versions.stop_command(Z), "cad stop", "the newest present: what a command with no pin runs")
+        pointers.write(None, X)
+        pointers.write("store", Y, mirrored=False)
+        self.assertEqual(versions.stop_command(X), f"cad +{X} stop")
+        self.assertEqual(versions.stop_command(Y), f"cad +{Y}@store stop", "never the default channel's pin")
+        self.assertIsNone(versions.stop_command(Z), "no channel is on it: no pin would be its own")
+        pointers.write("a-store", Y, mirrored=False)
+        self.assertEqual(versions.stop_command(Y), f"cad +{Y}@a-store stop", "two named channels: the first by name")
+        pointers.write(None, Y)
+        self.assertEqual(versions.stop_command(Y), f"cad +{Y} stop", "the default channel is on it too: its pin")
+
 
 class DoctorReadsEveryVersion(Device):
     """``cad doctor`` is the one command that reads every version and channel; ``--prune`` forgets the named channels
