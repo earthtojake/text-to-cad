@@ -3,9 +3,9 @@
 Draft: this guide is renamed for its release when it ships. It covers the skills, the library's
 imports, the `cad` command, what `cad run` runs a program in, and setting up and updating, and ends
 with what 0.11.11 changes ([In 0.11.11](#in-01111)).
-The next release is a minor release, so it never installs itself: update with the update button or
-`cad update` when you are ready. Its patch releases then install themselves, with automatic updates on
-([Setting up and updating](#setting-up-and-updating)).
+From 0.11.11, text-to-cad never updates itself: you update it by running the install command again,
+and an agent with a manual install does so when `cad` says a newer release is out
+([In 0.11.11](#in-01111)).
 
 Each change names its tier of the compatibility law ([law 15](../../packages/cad/README.md#the-design-laws),
 "Compatibility, by who pays for a break"), which says what a change of its kind keeps working.
@@ -250,11 +250,6 @@ release, and what it runs a program in follows the program:
   `cad update`, an automatic update, or the first command that names a release not yet installed.
   `cad doctor` never makes it: an image or a CI step that ran `cad doctor` to make it and then built
   offline runs the install command while the network is there.
-- **`cad doctor --prune` removes more** (tier 1); 0.10's left the release folders alone. From 0.11.11
-  it removes what nothing needs -- a channel no command has used for 30 days, a release no channel is
-  on or never used, what releases before 0.11.11 left behind -- never a release with work in flight,
-  and lists it first ([Checking what your computer
-  runs](../install.md#checking-what-your-computer-runs)).
 - **On Windows the command is `cad.exe`** (tier 1), with a Python of its own beside it
   (`cad-launcher`), in place of 0.10's batch file, `cad.cmd`. The install command or `cad update`
   writes it, and deletes `cad.cmd` at the write after, so nothing of yours moves (tier 3). `cad` alone
@@ -262,45 +257,37 @@ release, and what it runs a program in follows the program:
 
 ## In 0.11.11
 
-0.11.11 is a patch release, so with automatic updates on it installs itself
-([Updates](../install.md#updates)). What it changes:
+0.11.11 is a patch release. Computers on 0.10.0 to 0.11.10 take it through their own updater; it then
+runs the install command once, which brings each app's plugin up to date. What it changes:
 
+- **text-to-cad no longer updates itself** (tier 1). Automatic updates, the update button, the
+  Automatic updates switch and `cad update` are gone. Run the install command again to update
+  ([docs/install.md](../install.md)); a plugin store updates its own copy. When a newer release is out,
+  `cad` says so after a command's output, with the command to run.
+- **The install command installs the plugin with each app's own command** (tier 1). It takes no
+  options, installs the newest release and the `cad` command, removes what earlier releases left in
+  the apps, and installs or updates the plugin from GitHub's `latest` branch in each app it finds. It
+  never changes a copy from a plugin store. The Skills CLI is no longer used: agents without a plugin
+  command get the skills in their own skills folder.
+- **cad sets up cad alone** (tier 1). `cad setup` installs its own release and the `cad` command, and
+  changes no app; `cad plugin` is gone. `cad uninstall` removes every release, their settings and
+  data, and the `cad` command, and changes no app: remove the plugin with each app's own command.
 - **Claude gets the skills alone** (tier 1). Claude Code and Claude Desktop get no CAD server, so no
-  CAD cards or CAD tools: a model is shown by the link its run prints (`cad run model.py`), in the
-  desktop app's browser pane or your browser. The install command and every update take out the `cad`
-  entry releases through 0.11.10 wrote into Claude Desktop's config, keeping the rest of the file and a
-  `.bak` beside it ([Claude Desktop](../install.md#claude-desktop)).
+  CAD cards or CAD tools: a model is shown by the link its run prints, in the desktop app's browser
+  pane or your browser. The install command takes out the `cad` entry releases through 0.11.10 wrote
+  into Claude Desktop's config, keeping the rest of the file and a `.bak` beside it.
 - **Every command a skill runs names its release** (tier 1): `cad +0.11.11 <verb>`, and in a plugin
-  directory's copy its channel too (`cad +0.11.11@claude`, `@codex`). It runs exactly that release,
-  installing it first where it is missing ([Releases side by side](../install.md#releases-side-by-side)).
-  A command typed with no release still works: it runs the default channel's release. A pinned command
-  can fail in three new ways, each named in every skill's Setup: exit 3 (`cannot_install_here`), the
-  release could not be installed from this shell: run the line it prints outside the sandbox; exit 4
-  (`stale_pin`), this copy of the skill is older than the release its channel is on: read the skill
-  again, and if it still names the older release, run `cad update` (or update the plugin in the app it
-  came from), then start a new chat; exit 5 (`other_version`), the `cad` found is another copy of
-  text-to-cad: run `~/.local/bin/cad` ([After an update](../install.md#after-an-update)).
+  store's copy the store too (`cad +0.11.11@claude`, `@codex`). It runs exactly that release, or says
+  that release is not installed; the skill's setup then installs it. A command typed with no release
+  runs the newest release installed.
 - **print3d's presets are `cad` commands** (tier 1). `python scripts/orca_presets.py --list <kind>
   --match <text>` is `cad orcaslicer presets <kind> --match <text>`, and `python scripts/orca_presets.py
   --printer ... --process ... --filament ... --out <folder>` is `cad orcaslicer complete` with the same
   options. The script is gone, and no skill ships a program.
 - **Each release has its own folder and data** (tier 3). The state folder's `releases/<release>` is
   `versions/<release>`, its code and its data (settings, Recents, the documents' records) in it, and each
-  release runs its own CAD server. The update to 0.11.11 carries your settings, Recents, records and the
-  pages' port and token into it. The move is one way: going back to a release before 0.11.11 by hand is
-  not supported, and the install command refuses `--version` with one.
-- **`cad status`, `cad stop` and `cad server` act on one release** (tier 1): the default channel's with
-  no release named, a plugin directory's with its release and channel (`cad +0.11.11@claude stop`).
-  `cad doctor` lists every installed release and channel
-  ([Checking what your computer runs](../install.md#checking-what-your-computer-runs)).
-- **What the install command gives, it takes back** (tier 1). It no longer replaces a copy from a
-  plugin directory (claude.ai's, Codex's), and never changes or removes it: the directory updates it, on a
-  release of its own. Every app still gets the install command's copy beside it, so the app loads the skills of both and
-  every skill shows twice; the install command and `cad doctor` say so, and to keep one you remove the
-  directory's copy in the app's plugin manager. `cad uninstall` removes what the install command put on
-  the computer and keeps your settings, Recents and documents' records; a plugin directory's copy stays,
-  with its release and the `cad` command. `--purge` removes everything
-  ([What the install command does](../install.md#what-the-install-command-does)).
+  release runs its own CAD server. A new release starts with a copy of the settings and data of the
+  newest release before it. Going back to a release before 0.11.11 by hand is not supported.
 - **The CAD app's three removed tools answer by name** (tier 1, an exception until the next minor
   release). `cad_export`, `cad_snapshot` and `cad_inspect`, removed in 0.11.10, answer a chat that still
   lists them with one line naming the `cad` command that does the same (`cad model export`, `cad model

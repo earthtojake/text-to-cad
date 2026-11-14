@@ -13,8 +13,8 @@ document is one link from the README of the tree it belongs to (Repo Map).
 `main` is the only branch you develop on: the source tree, and what releases
 are cut from. Branch from `main` and open PRs against `main`; never push it
 directly. There is no development symlink layout — every path in the tree is the
-real file. Installers follow `latest`, and claude.ai's directory
-`claude-plugin`: the plugin alone, one commit per release,
+real file. Installers follow `latest`, claude.ai's directory `claude-plugin` and
+Codex's `codex-plugin`: the plugin alone, one commit per release,
 written only by `Publish Release` once the release is on PyPI (see below); never
 commit to them. `main` stays an installable plugin too: every manifest and MCP
 config lives at its root.
@@ -38,10 +38,11 @@ exact version, ask which one. A release pull request comes one of two ways:
   (`cad==`, `cad-server==`, `cad-mcp==`) with it.
 
 Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
-bumps the minor below 1.0 and the major from 1.0, and a release that breaks nothing installs itself on
-every device (a patch below 1.0, a patch or minor from 1.0), so `Test`'s version check refuses a new migration
-guide in one (an existing guide may be corrected in any release). What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
-bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
+bumps the minor below 1.0 and the major from 1.0, and `Test`'s version check refuses a new migration
+guide in a release that breaks nothing (an existing guide may be corrected in any release). A command,
+option or tool may change or go in any release: every skill command names its release, so removing one
+breaks nothing. What breaks is law 15's tiers and the short list of what must stay the same
+([CONTRIBUTING.md, "Which number a release bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
 
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change (the
@@ -52,7 +53,7 @@ vets the bump (a branch of this repository only, a version past
 and the wheel and sdist of each of the release's four projects on PyPI (`cad`,
 `cad-server`, `cad-mcp`, and the deprecated alias `cadgen`), uploads
 them one project at a time, the library first, waiting until PyPI lists each,
-and only then writes the install branches (`latest`, `claude-plugin`), deploys
+and only then writes the install branches (`latest`, `claude-plugin`, `codex-plugin`), deploys
 the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
 stopped partway is finished by dispatching `Publish Release` on `main`;
 `build-test` is the rehearsal branch, used only when the user asks to test the
@@ -61,15 +62,14 @@ ref without a release. The full flow, the resume path, the rehearsal and the
 local fallbacks are [CONTRIBUTING.md's Releases](CONTRIBUTING.md#releases).
 
 People install text-to-cad with one command, `curl -fsSL https://texttocad.dev/install.sh | sh`
-(Windows: `irm https://www.texttocad.dev/install.ps1 | iex`): the bootstrap in
-`scripts/install/` runs the newest release's `cad setup` through uvx
-(`--from cad-server==<VERSION>`), which installs that release in its own folder
-(`<state>/versions/<release>`), moves the default channel to it, and sets up the plugin in every
-agent app on the device (the skills alone, through the Skills CLI, for the agents without a plugin),
-asking nothing, and, run again, updates them. Its receipt gives the default channel an updater: the
-update button in the browser and the CAD app, `cad update` and the automatic update install the
-newer release and run its own setup (`cad_server/_internal/update.py`, the contract between
-releases).
+(Windows: `irm https://www.texttocad.dev/install.ps1 | iex`). It takes no options: the bootstrap in
+`scripts/install/` runs `install.py`, which runs the newest release's `cad setup` through uvx, removes
+what past releases left behind, and installs the plugin from `latest` in each agent app it finds with
+that app's own command (its `APPS` table is the one list of apps); run again, it updates. Nothing
+installs itself: a store updates its copy, and the agent runs the install command when `cad` says a
+newer release is out. cad knows no app, plugin or skill: `cad setup` sets up its own version and the
+`cad` command, nothing else, and its hidden `--engine-update` is how the updaters of 0.10.0 to
+0.11.10 reach the latest ([decisions](docs/contributing/decisions.md)).
 
 text-to-cad is three distributions from this repository at one `VERSION`: the library `cad`
 (import `cad`, the CAD kernel as its `build123d` extra), the server
@@ -90,44 +90,38 @@ use, in an environment the engine makes per set (`cad_server._internal.extras`),
 folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
 sandbox, the command can), and every command a skill runs pins the skill's release,
-`cad +<VERSION> <verb>`, which the release stamps (`sync-version.mjs`), so a skill runs its own release,
-installed first where it is missing. A store's copy names its delivery channel in every pin too
-(`cad +<VERSION>@claude`, `@codex`), stamped by `plugin_branch.py` and `plugin_zip.py`; ours names none,
-the default channel. The software keeps no list of channels. Every
+`cad +<VERSION> <verb>`, which the release stamps (`sync-version.mjs`): `cad +X` runs exactly X, or says
+X is not installed. A store's copy names its store in every pin too (`cad +<VERSION>@claude`, `@codex`),
+stamped by `plugin_branch.py` and `plugin_zip.py`; ours names none. Every
 requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):
 the three distributions are released in lockstep, one `VERSION`, and the server speaks only its own
 release's library (the worker contract), so the server pins the library at its own release. The release
 stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. Each installed
-version has its own folder, data and server (`<state>/versions/<version>`); each channel is on one
-version (its pointer), a command with no pin runs the default channel's, a version no channel is on
-any more is removed once nothing is in flight there, what it wrote carried first into the version its
-channel moved to (one installed and never used stays for `cad doctor --prune`), and every command acts on one version,
-`cad doctor` alone reading them all. The default channel's server also holds the door and `installations/current` that
-releases before 0.11.11 reach ([CONTRIBUTING.md, "Development
+version has its own folder, data and server (`<state>/versions/<version>`), side by side; a command
+with no pin runs the newest installed ([CONTRIBUTING.md, "Development
 dependencies"](CONTRIBUTING.md#development-dependencies)).
 A test or an experiment gets a server of its own with its own `CAD_STATE_DIR` and
 `CAD_ENGINE_DIR`. In a checkout, install `requirements-dev.txt` (the three editable, the library
-with its `build123d` extra: its own base) and test in agent apps with `scripts/install/dev_install.py`,
-which installs the checkout as a development version and moves the default channel to it.
+with its `build123d` extra: its own base) and test in agent apps with `scripts/install/dev_install.py
+[APP...]`, which installs the checkout as a development version (`--release` goes back).
 
 ## Repo Map
 
-- `skills/`: agent skills and their references/scripts. They ship byte for byte in the server's
-  wheel (`cad_server/_runtime/plugin`, with the plugin manifests), from which the server writes the
-  plugin folder (`<state>/plugin`) that `cad setup` points every agent app at.
+- `skills/`: agent skills and their references. They ship in the plugin alone, never in a wheel.
 - `.claude-plugin/` (the skills alone: Claude gets no CAD server, on any route),
-  `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `gemini-extension.json`, and the
+  `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `.antigravity-plugin/`, `.kimi-plugin/`,
+  `.devin-plugin/`, `.muse-plugin/`, `gemini-extension.json`, and the
   [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
-  `skills/` directly. Installers take it from the `latest` branch, and claude.ai's directory
-  from `claude-plugin` (the skills alone, pinned `@claude`, installing by `uvx` rather than the
-  install script), which
-  `scripts/release/plugin_branch.py` builds from this tree at each release.
+  `skills/` directly. Installers take it from the `latest` branch, claude.ai's directory
+  from `claude-plugin` (the skills alone, pinned `@claude`) and Codex's from `codex-plugin`
+  (pinned `@codex`), which `scripts/release/plugin_branch.py` builds at each release.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
-- `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
-  `docs/contributing/`: [testing](docs/contributing/testing.md) (the rules, adding a test or a CI
+- `docs/install.md`: the install command, installing by hand app by app, updating and removing;
+  `docs/contributing/`: [decisions](docs/contributing/decisions.md) (why install and updates work
+  as they do), [testing](docs/contributing/testing.md) (the rules, adding a test or a CI
   job, a red run), [writing a skill](docs/contributing/writing-a-skill.md),
   [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
@@ -202,8 +196,8 @@ which installs the checkout as a development version and moves the default chann
   `tests/python/global/test_package_boundaries.py`.
   Repo-development guidance for it goes in `CONTRIBUTING.md`.
 - The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
-  share their structure, install commands, summary, the link to `docs/install.md` and
-  Contributing: change them together. The per-app installs, updates and reinstalls live in
+  share their structure, install commands, summary, the apps they name (those `docs/install.md`
+  lists), the link to `docs/install.md` and Contributing: change them together. The per-app installs, updates and reinstalls live in
   `docs/install.md` alone, never in the docs app (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
@@ -216,6 +210,9 @@ which installs the checkout as a development version and moves the default chann
   repository-root module, and must not add `skills/`, the repository root, or a
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
+- cad knows no app, plugin or skill: the three distributions never name, install, remove, update
+  or carry them (the MCP server may read which app connected; `cad setup --engine-update` is the
+  one exception). Knowledge of the apps lives in the plugin and `scripts/install/install.py`.
 - Shared runtime comes from the **`cad-server` distribution**. A skill that uses it
   runs the `cad` command, every command pinned to the skill's release (`cad +<VERSION> <verb>`,
   stamped by the release script), and says how to get the command in its SKILL.md's setup block
@@ -262,7 +259,7 @@ which installs the checkout as a development version and moves the default chann
   (`scripts/test/test-floor.sh`), on every full run: before a release ships, and nightly.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
-- The server's packaged runtime (`_runtime/viewer`, `_runtime/mcp` and `_runtime/plugin`) is BUILT,
+- The server's packaged runtime (`_runtime/viewer` and `_runtime/mcp`) is BUILT,
   never committed: the whole directory is gitignored and ships only inside the
   server's wheel. Build it with the one bundle entry point, `scripts/bundle/bundle.sh`;
   `bundle.sh --check` builds it and asserts every required output. Call
@@ -275,7 +272,7 @@ which installs the checkout as a development version and moves the default chann
   ([CONTRIBUTING.md, "The install branches"](CONTRIBUTING.md#the-install-branches)).
   `tests/python/global/test_plugin_manifests.py` holds both halves.
 - Never let a symlink reach the published tree. Agent installers disagree about
-  symlinks and one loses data silently: the Skills CLI dereferences them, Claude
+  symlinks and one loses data silently: a copied skills folder dereferences them, Claude
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
   a skill with missing files. The shipping contract (Git, below) enforces this;
   do not relax it.
@@ -314,7 +311,7 @@ which installs the checkout as a development version and moves the default chann
   under the current worktree's `skills/` directory over globally installed
   skills or plugins from another checkout.
 - Test skills and the plugin in an agent app with
-  `scripts/install/dev_install.py <host>` ([CONTRIBUTING.md, "Test In Agent
+  `scripts/install/dev_install.py [APP...]` ([CONTRIBUTING.md, "Test In Agent
   Apps"](CONTRIBUTING.md#test-in-agent-apps)). One copy of the plugin per app: never the
   development install beside the published plugin, or beside the skills installed loose.
 - Install dependencies only for the workflow being changed.

@@ -107,10 +107,10 @@ export default function PrivacyPolicyPage() {
             asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is made only where our install command set text-to-cad up,
-            never in CI, and section 5 says how to turn it off. An update you ask
-            for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
-            release from PyPI, as the install command does.
+            time and a user agent (“cadgen”). It is not made for a copy a plugin store keeps up to date,
+            nor in CI, and section 5 says how to turn it off. text-to-cad never updates itself: you
+            update it by running our install command again, which asks the same question, then
+            downloads the release from PyPI.
           </li>
           <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type

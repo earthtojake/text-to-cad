@@ -1,0 +1,131 @@
+# Decisions
+
+How text-to-cad is installed, run and updated, and why. Each entry says the decision, why it was
+made, and what it costs. Read it before changing the install script, `cad setup`, the plugin's
+manifests or the skills' setup text.
+
+## Two layers, one direction of knowledge
+
+**Decision.** text-to-cad is two layers. cad is the software: the `cad`, `cad-server` and
+`cad-mcp` packages on PyPI and the `cad` command. The plugin is the skills, one manifest per agent
+app and the lines that start the MCP server, on this repository's branches. The plugin knows cad:
+its skills run `cad` commands and say how to install cad. cad knows nothing of skills, plugins or
+agent apps: it never names them, installs, removes, updates or carries them, and does not depend on
+them.
+
+**Why.** Every agent app installs plugins its own way, and changes that way often. When cad wrote
+plugin folders, edited app configs and ran app commands, every app change was a cad release, and a
+cad bug could break an app's setup. With one direction, an app change touches the plugin and the
+install script, never the software.
+
+**What it costs.** cad cannot repair a broken plugin install or tell which app a person uses it
+from. Two exceptions are allowed: the MCP server reads which app connected, to choose how to show a
+model, and the viewer's "Open in" menu names apps. Nothing else in cad may name an app, a plugin or
+a skill.
+
+## Versions are self-contained and sit side by side
+
+**Decision.** Each release of cad is installed in its own folder, with its own code, server,
+settings and store. Every command a skill runs names its release (`cad +X ...`), and `cad +X` runs
+exactly release X, or says X is not installed. A new release copies settings and store once from
+the newest older one; after that nothing moves between versions.
+
+**Why.** A chat that started with one release keeps working while a newer one is installed beside
+it, and a store's copy of the plugin can run a different release from a person's own. No release
+has to understand another release's files or commands.
+
+**What it costs.** Disk space, until an old version is cleaned up, and settings changed in one
+version do not reach another.
+
+## Who updates what
+
+**Decision.** A plugin store (Codex's directory, claude.ai's) updates the copy it installed. The
+agent updates a manual install: the skills tell it to run the install command when `cad` says a
+newer release is out. cad only says that a release is available. Nothing installs itself.
+
+**Why.** cad cannot update a plugin without knowing the apps, which the first decision rules out.
+The store already updates its copy, and the agent is already running commands for the person, with
+the person watching.
+
+**What it costs.** A computer whose agent never acts on the notice stays on its release. The
+notice is the only nudge.
+
+## The install script is the one place that knows every app
+
+**Decision.** `scripts/install/install.py`, behind `install.sh` and `install.ps1`, takes no options.
+It installs the newest cad, removes what past releases left behind, and installs or updates the
+plugin in each app it finds with that app's own command. Its table of apps is the only list of apps
+and of past layouts in the repository.
+
+**Why.** Knowledge of the apps, and of every layout a past release left on a computer, has to live
+somewhere. In one hosted script, a correction reaches every computer the next time someone runs it,
+with no release of cad.
+
+**What it costs.** The script is long, and many of its rows follow vendor documentation we cannot
+run here. A row that is wrong fails for that app alone.
+
+## The one exception: `cad setup --engine-update`
+
+**Decision.** `cad setup` takes one hidden option, `--engine-update`. It sets up the release, hands
+over from the layout of earlier releases, and starts the hosted install script once, in the
+background.
+
+**Why.** Releases 0.10.0 to 0.11.10 shipped an updater that installs a newer release and runs its
+`cad setup --engine-update`. That call is the only way those computers reach the new install model
+without a person doing anything. It is kept for as long as those releases are in use, and is left
+out of help and documents.
+
+**What it costs.** One place where cad starts the script that knows the apps. It is the only one.
+
+## No version left behind
+
+**Decision.** As many past releases as reasonable can reach the latest. Releases 0.10.0 to 0.11.10
+get there through their own updater and `--engine-update`. Older ones get there when a person or
+an agent runs the install command, which removes what they left behind. The install command, the
+README's Quickstart and the version feed stay where they are, because old releases point people and
+agents at them.
+
+**Why.** People install and forget. A release that strands its users leaves them with bugs we have
+fixed and a support load we cannot see.
+
+**What it costs.** The install script carries the cleanup of every past layout, and a few addresses
+and names can never change (CONTRIBUTING, "What must stay the same").
+
+## Built to move quickly
+
+**Decision.** A command, option or tool may change or go in any release. Removing one is not a
+breaking change, and leaves no alias or shim behind. Only the short list in CONTRIBUTING, "What
+must stay the same", is fixed.
+
+**Why.** Every command a skill runs names its release, so a skill never meets another release's
+commands. The project ships often, and every fixed surface is code that has to be kept working
+forever.
+
+**What it costs.** A person's own scripts that run `cad` commands may need changes after an update.
+A model's Python imports and a person's data are not covered by this: they keep law 15's tiers 2
+and 3 (`packages/cad/README.md`).
+
+## The MCP server, offered optimistically, with a sure fallback
+
+**Decision.** The MCP server offers its tools only to an app that says, when it connects, that it
+can show MCP app views, and to Codex. Until a view has called back in a chat, every answer that
+shows a model also carries a link to open it in the browser. An app whose views never call back is
+remembered and offered no tools for a while. An app that says nothing gets no tools, and its skills
+open the browser.
+
+**Why.** Apps claim support they do not have, and their support changes between versions. A model
+the person cannot see is the worst outcome; a link they did not need is a small one.
+
+**What it costs.** Some answers carry a link that turns out not to be needed, and an app that gains
+support waits for the retry period to be tried again.
+
+## No Skills CLI route
+
+**Decision.** The install script and the guide never use the Skills CLI (`npx skills`). Agents
+without a plugin command get the skills copied into their own skills folder.
+
+**Why.** The Skills CLI wrote one shared folder, `~/.agents/skills`, that several apps read beside
+their own plugin, so people saw every skill twice. Each agent's own folder is read by that agent
+alone.
+
+**What it costs.** An agent that reads only the shared folder, such as Zed, has no route.

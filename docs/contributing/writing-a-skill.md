@@ -5,7 +5,7 @@ circuit board, describe a robot for simulation, prepare a laser-cut order. It is
 `skills/`, a `SKILL.md` and the references it links, and it ships byte for byte in the plugin.
 
 This guide is how we decide what a skill is, what goes in it, and how it is written. The rules that
-keep skills installable on their own are AGENTS.md's **Repo Rules**; the tests that pin the shared
+keep skills installable on their own are the **Repo Rules** of the repository's agent guidance; the tests that pin the shared
 blocks are under `tests/python/global/`.
 
 ## A skill is an outcome
@@ -55,13 +55,14 @@ skills/<name>/
   pinned to the skill's release: `cad +<VERSION> <verb>`, written with the current `VERSION`, which the
   release script stamps (`scripts/release/sync-version.mjs`). It installs nothing: no `requirements.txt`, no vendored packages. Code a skill needs is
   the library's or the server's, reached by a command or an import. Its SKILL.md carries the setup block
-  every such skill carries, word for word (`tests/python/global/test_skill_requirements.py`): the store
-  builders rewrite it in their copies (each pin given the store's channel; in claude.ai's directory copy,
-  the install line the `uvx` command), and an install line or Windows sentence the builder does not find
-  exactly once fails the release
+  every such skill carries, word for word (`tests/python/global/test_skill_requirements.py`): the `uvx`
+  line that installs `cad` at the skill's release and, in the manual copy only, the paragraph between
+  `<!-- manual-copy-update: start -->` and `<!-- manual-copy-update: end -->` that tells the agent to keep
+  the install up to date. The store builders give each pin the store's name and leave that paragraph
+  out, and a marker the builder does not find exactly once fails the release
   ([The install branches](../../CONTRIBUTING.md#the-install-branches)).
 - **Independent of other skills.** A skill never imports another, and never puts `skills/` or the
-  repository root on a lookup path. Each installs alone through the Skills CLI.
+  repository root on a lookup path. The install script copies each alone into an agent's skills folder.
 
 ## What goes in a skill
 
@@ -95,13 +96,13 @@ section named for each.
 Each skill installs on its own, so the few things every skill must say are copied into each, word
 for word, and tests keep the copies from drifting:
 
-- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command, and what
-  a pinned command's exit codes mean, in every skill that runs the server, and in no other.
+- **Setup** (`tests/python/global/test_skill_requirements.py`): how to get the `cad` command at the
+  skill's release, in every skill that runs the server, and in no other.
 - **Pins** (`tests/python/global/test_skill_commands_pin_their_release.py`): every `cad` command in a
   code block or span, placeholders such as `cad +<VERSION> <type> inspect` too, starts `cad +<VERSION>`.
-  The header's `metadata.version` and these pins are stamped by the release script
-  (`scripts/release/sync-version.mjs`) and never edited by hand; a new skill copies them from one beside it.
-  The source never names a channel: the release adds one to every pin of a store's copy as it builds it
+  These pins are stamped by the release script (`scripts/release/sync-version.mjs`) and never edited
+  by hand; a new skill copies them from one beside it, and its header names no version.
+  The source never names a store: the release adds one to every pin of a store's copy as it builds it
   (`cad +<VERSION>@claude` for claude.ai's directory, `@codex` for OpenAI's).
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at.
@@ -122,4 +123,5 @@ tool's description, which only agents that have the tool read, never in a skill.
 - [ ] The setup and Show the model blocks are the shared text, word for word, where they apply.
 - [ ] It installs nothing and imports no other skill.
 - [ ] A feature in README.md's Features and the docs site's (`features` in
-      `apps/docs/src/lib/content.ts`, the same list) links it, and `skills.sh.json` lists it.
+      `apps/docs/src/lib/content.ts`, the same list) links it, and `.muse-plugin/plugin.json`, which
+      lists every skill by id and path, names it.

@@ -245,13 +245,18 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_the_documented_commands_install_latest(self) -> None:
         # Installing by hand takes `latest`, the plugin alone, written once a release is on PyPI: every
-        # app's command on the install page names it, each in its app's own syntax.
+        # app's command on the install page that can name a branch names it, each in its app's own syntax,
+        # as the install script runs it (scripts/install/install.py).
         commands = (
             "claude plugin marketplace add earthtojake/text-to-cad#latest",
             "codex plugin marketplace add earthtojake/text-to-cad --ref latest",
             "git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad",
             "grok plugin install earthtojake/text-to-cad@latest",
             "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest",
+            "qwen extensions install https://github.com/earthtojake/text-to-cad --ref latest",
+            "copilot plugin marketplace add earthtojake/text-to-cad#latest",
+            "pi install git:github.com/earthtojake/text-to-cad@latest",
+            "/plugins install https://github.com/earthtojake/text-to-cad/tree/latest",
         )
         page = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
         for command in commands:

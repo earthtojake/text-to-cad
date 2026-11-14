@@ -28,7 +28,7 @@ Each app's plugin now comes from a folder on your computer that the release writ
 the copy 0.8's put in each app -- Claude Code's and Codex's `earthtojake` catalog with its
 plugin, Gemini's extension, Cursor's clone -- and puts the folder's in its place: a local
 catalog, `text-to-cad` (`text-to-cad@text-to-cad`), in Claude Code and Codex, the folder
-linked in Gemini, a copy of it in Cursor ([What each app gets](../install.md#what-each-app-gets)).
+linked in Gemini, a copy of it in Cursor ([docs/install.md](../install.md)).
 Codex no longer fetches the repository each time it starts, and no app updates its plugin by
 itself. A plugin you installed by hand from GitHub goes the same way the next time the
 installer runs.
@@ -52,7 +52,7 @@ uvx --no-config --managed-python --python 3.14 --from cad-mcp==0.10.0 cad-mcp
 ```
 
 The server's key stays `cad`. The installer rewrites the Claude Desktop entry it wrote
-([the whole entry](../install.md#claude-desktop)).
+([docs/install.md](../install.md)).
 
 **5. The state and cache folders moved**, named `cad` now:
 

@@ -32,18 +32,19 @@ Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It installs uv if it is missing, then sets up text-to-cad in every agent app on
-your computer with each app's own commands (the plugin, which brings the skills
-and CAD's MCP server, or for an agent without a plugin the skills alone; Claude
-gets the skills alone and shows models in your browser),
-registers the `cad` command, and moves CAD's server to the new release. Run
-it again to update everything, or click CAD's update button when it shows one; it
-lists the apps to restart.
+It installs uv if it is missing, installs the newest release of text-to-cad and the
+`cad` command, then installs the plugin in every agent app on your computer, with each
+app's own command. Run it again to update.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
 script, runs it to build the model and shows it in the CAD viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](docs/install.md)
+It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Hermes Agent,
+Antigravity, Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi,
+Qwen Code, Amp, Cline, Goose, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
+Trae and Windsurf.
+
+Installing by hand, app by app, updating and removing: [docs/install.md](docs/install.md)
 
 ## ✨ Features
 
@@ -70,9 +71,8 @@ text-to-cad is MIT-licensed and built in the open.
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](CONTRIBUTING.md) has the local setup and how to
-  test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](AGENTS.md).
+  anywhere. [CONTRIBUTING.md](CONTRIBUTING.md) has the local setup, how to
+  test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
