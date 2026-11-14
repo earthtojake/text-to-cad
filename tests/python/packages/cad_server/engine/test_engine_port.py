@@ -414,6 +414,10 @@ class EnginePortTest(unittest.TestCase):
         self.assertNotEqual(self.token(), rotated["token"])
         self.assertEqual(self.ask(other, f"/api/v1/server?token={rotated['token']}")[0], 403, "the token before: ended")
         self.assertEqual(self.ask(other, f"/api/v1/server?token={self.token()}")[0], 200, "the new one, at once")
+        # With --port too, a server already running: the token is replaced, which is what was asked -- exit 0.
+        ported = self.cli("server", "--rotate-token", "--port", str(free_port()), "--yes")
+        self.assertEqual(ported.returncode, 0, ported.stderr)
+        self.assertIn("took the new token", ported.stderr)
 
 
 class BuildBoundNoticeTest(unittest.TestCase):

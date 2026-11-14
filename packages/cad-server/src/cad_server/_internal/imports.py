@@ -30,7 +30,8 @@ is converted; the server's own migrations at its start (``identity.migrate``) ru
 
 **The source** (``source``), never a newer version: what the channel leaves (``versions.move`` names it) -- a
 version, where it is older and its data is imported; the layout of 0.11.10 and earlier, for the default channel's
-first move on a device with it --; else the highest older version present whose data is imported; else the layout
+first move on a device with it --; else the highest older version a pointer has named whose data is there (its code
+there or not: ``cad uninstall`` keeps the data alone); else the layout
 of 0.11.10 and earlier while it still has what it imports (``legacy.importable``: its records, Recents, release
 folders); else, once that layout's bulk is removed, the settings it keeps (``legacy.SETTINGS``: a client of 0.11.10
 or earlier reads them, and they carry the device's telemetry no) and nothing else; else nothing, and the data
@@ -68,9 +69,16 @@ next run adds the rest. What "the target lacks" means, per item:
   and has not now was deleted there, and stays deleted). Where the target has the record, the target's stays as
   it is but for its Recents use: the later ``opened`` of the two wins, so an entry opened in the old version
   after the import sorts as recently in the new;
-- a setting, by its key: a section the target's settings lack, and a key a section of the target's lacks; never
-  the telemetry section's own keys, whose answer is the person's in each version, and whose no is said in every
-  version at once (``analytics.everywhere``, ``inherit_no``).
+- a setting, by its key: a section the target's settings lack, and a key a section of the target's lacks, where the
+  target never had it from a source (``LEDGER`` again: a section or key the person removed since stays removed, as
+  ``cad language`` back to the browser's removes its section); never the telemetry section's own keys, whose answer
+  is the person's in each version, and whose no is said in every version at once (``analytics.everywhere``,
+  ``inherit_no``).
+
+The ledger goes with an import: a version imported from another takes that version's ledger into its own, so a
+record the source took from the layout of 0.11.10 and earlier and then deleted stays deleted when the layout is
+carried into the copy. A ledger that is there and cannot be read stops the carry-over whole: nothing carried, the
+source not removed, said (``cad doctor`` says why its folder stays).
 
 Lost all the same: a record the old version changed after the import whose id the target has (its record stays
 as the target holds it), and a setting the old version changed whose key the target has.
@@ -100,7 +108,7 @@ SETTINGS, DOCUMENTS, RECENTS, TOKEN, PORT = ("settings.json", "documents", "rece
                                              "engines/engine.json")
 CACHE = "cache"
 # What an import or a carry-over took from each source (``carry``): ``{"schema", "from": {"<source>": {"documents":
-# [ids]}}}``, so what the target deleted since is never added again.
+# [ids], "settings": [[section], [section, key]]}}}``, so what the target deleted since is never added again.
 LEDGER = "carried.json"
 LEDGER_SCHEMA = "cad carried/1"
 # What a version wrote before its first start was marked loses to the copy (``_merge``).
@@ -189,7 +197,10 @@ def source(name: str, leaving: str | None = None, *, legacy_left: bool = False) 
         return of_version(leaving)
     if legacy_left and legacy.importable():
         return of_legacy()
-    candidates = [other for other in versions.present() if other != name and older(other) and imported(other)]
+    # A version a pointer has named (``versions.used``), its code there or not (``cad uninstall`` keeps the data
+    # alone): one never named holds a copy of another's data at best.
+    candidates = [other for other in versions.folders() if other != name and older(other) and imported(other)
+                  and versions.used(other)]
     if candidates:
         return of_version(max(candidates, key=versions.order))
     if legacy.importable() or os.path.isfile(legacy.root() / SETTINGS):
@@ -258,9 +269,10 @@ def _copy(found: Source, staging: Path, said: list[str]) -> None:
 
     root = found.root
     _item(lambda: _file(root / SETTINGS, staging / SETTINGS, said), root / SETTINGS, said)
+    taken: dict[str, list[Any]] = {"documents": [], "settings": _setting_keys(staging / SETTINGS)}
     if found.settings_only:
+        _item(lambda: _write_ledger(staging, {found.key: taken}), staging / LEDGER, said)
         return
-    taken: dict[str, list[str]] = {"documents": []}
     for ident in _listed(root / DOCUMENTS, said):
         if is_id(ident) and os.path.isfile(root / DOCUMENTS / ident / RECORD):
             record = root / DOCUMENTS / ident / RECORD
@@ -297,7 +309,36 @@ def _copy(found: Source, staging: Path, said: list[str]) -> None:
 
     _item(token, root / TOKEN, said)
     _item(port, root / PORT, said)
-    _item(lambda: _write_ledger(staging, {found.key: taken}), staging / LEDGER, said)
+
+    def ledger() -> None:
+        # What the source took from its own sources and has not now was deleted there: the copy knows it too, so a
+        # later carry-over from those sources does not add it again.
+        earlier: dict[str, dict[str, list[str]]] = {}
+        if found.kind == "version":
+            try:
+                earlier = _read_ledger(root)
+            except OSError as error:
+                said.append(f"{root / LEDGER} was not imported: {error.strerror or error}")
+        _write_ledger(staging, {**earlier, found.key: taken})
+
+    _item(ledger, staging / LEDGER, said)
+
+
+def _setting_keys(path: Path) -> list[list[str]]:
+    """Every section of the settings at ``path``, and every key of each, as a ledger lists them (``LEDGER``): none
+    where there are none or they cannot be read."""
+    from cad_server.settings import _load
+
+    try:
+        held = _load(path)
+    except OSError:
+        return []
+    found: list[list[str]] = []
+    for section, value in sorted(held.items()):
+        found.append([section])
+        if isinstance(value, dict):
+            found += [[section, key] for key in sorted(value)]
+    return found
 
 
 def _item(step: Callable[[], Any], path: Path, said: list[str]) -> Any:
@@ -398,16 +439,20 @@ class Carried:
 
 
 def _read_ledger(data: Path) -> dict[str, dict[str, list[str]]]:
-    """A data folder's ``LEDGER``: ``{source: {"documents": [...]}}``; ``{}`` with none, or one this
-    schema does not read. ``OSError`` when it is there and cannot be read: never taken for none."""
+    """A data folder's ``LEDGER``: ``{source: {"documents": [...]}}``; ``{}`` with none. ``OSError`` when it is there
+    and cannot be read, is no JSON, or is in a form this release does not read: never taken for none, which would let
+    every record deleted since come back (``carry`` then carries nothing, and nothing is removed for want of it)."""
+    path = data / LEDGER
     try:
-        found = json.loads((data / LEDGER).read_text(encoding="utf-8"))
+        found = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
-    except ValueError:
-        return {}
+    except ValueError as error:
+        raise OSError(f"{path} is no ledger this release reads ({error})") from None
     taken = found.get("from") if isinstance(found, dict) and found.get("schema") == LEDGER_SCHEMA else None
-    return {key: value for key, value in taken.items() if isinstance(value, dict)} if isinstance(taken, dict) else {}
+    if not isinstance(taken, dict):
+        raise OSError(f"{path} is no ledger this release reads")
+    return {key: value for key, value in taken.items() if isinstance(value, dict)}
 
 
 def _write_ledger(data: Path, taken: dict[str, dict[str, list[str]]]) -> None:
@@ -454,9 +499,12 @@ def carry(found: Source, name: str, *, told: Callable[[str], None] | None = None
     documents = set(taken.get("documents") or ())
     # What the target took from any source: an id it took once and lacks now was deleted there (sources share ids).
     ever = set().union(*(set(each.get("documents") or ()) for each in ledger.values()))
+    keys = {tuple(key) for key in taken.get("settings") or () if isinstance(key, list)}
+    ever_keys = set().union(*({tuple(key) for key in each.get("settings") or () if isinstance(key, list)}
+                              for each in ledger.values()))
 
-    # Settings: a section, or a key of a section, the target lacks.
-    added = _carry_settings(root / SETTINGS, data / SETTINGS, failed)
+    # Settings: a section, or a key of a section, the target lacks and never had from a source.
+    added = _carry_settings(root / SETTINGS, data / SETTINGS, failed, keys, ever_keys)
     if added:
         done.added.append(f"{added} setting{'s' if added != 1 else ''}")
 
@@ -501,6 +549,7 @@ def carry(found: Source, name: str, *, told: Callable[[str], None] | None = None
         done.added.append(f"{opened} later Recents use{'s' if opened != 1 else ''}")
 
     taken["documents"] = sorted(documents)
+    taken["settings"] = [list(key) for key in sorted(keys)]
     try:
         with state(data):
             on_disk = _read_ledger(data)
@@ -513,9 +562,12 @@ def carry(found: Source, name: str, *, told: Callable[[str], None] | None = None
     return done
 
 
-def _carry_settings(source: Path, target: Path, failed: Callable[[str], None]) -> int:
+def _carry_settings(source: Path, target: Path, failed: Callable[[str], None], keys: set[tuple[str, ...]] | None = None,
+                    ever: set[tuple[str, ...]] | None = None) -> int:
     """The settings at ``source`` the settings at ``target`` lack, added under the target's lock (a section it
-    lacks; a key a section of its lacks, but the telemetry section's); how many. A file that cannot be read fails."""
+    lacks; a key a section of its lacks, but the telemetry section's), unless the target had it from a source once
+    (``ever``: the person removed it since); how many. Each section and key the source has that the target holds now
+    is noted in ``keys`` (what the target took from this source, ``LEDGER``). A file that cannot be read fails."""
     from cad._internal.atomic_replace import write_bytes_atomic
     from cad_server._internal.file_lock import state
     from cad_server.settings import _load
@@ -528,18 +580,30 @@ def _carry_settings(source: Path, target: Path, failed: Callable[[str], None]) -
     if not given:
         return 0
     added = 0
+    keys = set() if keys is None else keys
+    ever = set() if ever is None else ever
     try:
         with state(target.parent):
             held = _load(target)
             for section, value in given.items():
                 if section not in held:
+                    if (section,) in ever:
+                        continue  # had once, and removed since: it stays removed
                     held[section] = value
                     added += 1
-                elif section != "telemetry" and isinstance(held[section], dict) and isinstance(value, dict):
+                    keys.add((section,))
+                    if isinstance(value, dict):
+                        keys.update((section, key) for key in value)
+                    continue
+                keys.add((section,))
+                if section != "telemetry" and isinstance(held[section], dict) and isinstance(value, dict):
                     for key, inner in value.items():
                         if key not in held[section]:
+                            if (section, key) in ever:
+                                continue
                             held[section][key] = inner
                             added += 1
+                        keys.add((section, key))
             if added:
                 write_bytes_atomic(target, (json.dumps(held, indent=2, sort_keys=True) + "\n").encode("utf-8"))
     except OSError as error:

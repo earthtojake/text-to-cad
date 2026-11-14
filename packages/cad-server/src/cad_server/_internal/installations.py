@@ -427,9 +427,28 @@ def forget(version: str, folder=None) -> None:
 # --- current ----------------------------------------------------------------------------------
 
 
-def current_version(folder=None) -> str | None:
-    """The version ``current`` names, whether or not its installation is there, or None."""
-    data = (folder or state()).read(CURRENT)
+def current_version(folder=None, *, strict: bool = False) -> str | None:
+    """The version ``current`` names, whether or not its installation is there, or None. ``strict`` (a removal's
+    question, ``versions._kept``, ``legacy.unsafe``): None only where the file is not there; one that is there and
+    cannot be read now, or names no version, is ``pointers.Unreadable``, never taken for none."""
+    folder = folder or state()
+    if strict:
+        from cad_server._internal.pointers import Unreadable
+
+        path = folder.path(CURRENT)
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            if os.path.lexists(path):
+                raise Unreadable(path, "it is a link to nothing") from None
+            return None
+        except OSError as error:
+            raise Unreadable(path, error.strerror or str(error)) from None
+        named = data.decode("utf-8", "replace").strip()
+        if VERSION.fullmatch(named):
+            return named
+        raise Unreadable(path, f"it holds {len(data)} bytes and no version", corrupt=True)
+    data = folder.read(CURRENT)
     named = data.decode("utf-8", "replace").strip() if data is not None else ""
     return named if VERSION.fullmatch(named) else None
 
@@ -548,10 +567,21 @@ BEGIN {{ x = split(n(a), p, "."); y = split(n(b), q, ".")
   for (i = 1; i <= x || i <= y; i++) {{ if (p[i] + 0 < q[i] + 0) exit 0; if (p[i] + 0 > q[i] + 0) exit 1 }}
   if (d(a) < d(b)) exit 0; exit 1 }}'
 }}
-# The version file $1 names on its first line (a pointer, installations/current), as now; else now is empty.
+# The version the pointer $1 names, as now, by the rule every reader of a pointer keeps (pointers.version_text):
+# every carriage return taken out and the line ends after the text, what is left one version name. No file there:
+# now and unread empty. There, and it cannot be read now (unreadable) or names no version (corrupt): now empty and
+# unread says which -- never taken for no pointer.
 named() {{
-  now=$(sed -n '1p' "$1" 2>/dev/null)
-  case $now in ''|[!0-9]*|*[!0-9A-Za-z.+_-]*) now= ;; esac
+  now= unread=
+  [ -e "$1" ] || [ -h "$1" ] || return 0
+  if ! now=$(LC_ALL=C tr -d '\\r' < "$1" 2>/dev/null); then now= unread=unreadable; return 0; fi
+  case $now in ''|[!0-9]*|*[!0-9A-Za-z.+_-]*) now= unread=corrupt ;; esac
+}}
+# The pointer $1, which named found there and could not read: refused, nothing run on a guess of what it names.
+unread() {{
+  pointer=$1
+  [ "$unread" = corrupt ] && say "{corrupt}" 1
+  say "{unreadable}" 1
 }}
 # Version $1 installed by its own release (`cad setup --add`, run by uvx), then run with the arguments after it.
 install() {{
@@ -583,8 +613,11 @@ case $1 in
   esac
   # Installed: its own cad reads the pin, and moves its channel to it, or says it is stale.
   present "$version" && run "$version" "$@"
-  # Not installed: stale where its channel is on a newer version already, else installed.
-  if [ -n "$channel" ]; then named "$state/channels/$channel"; else named "$state/default"; fi
+  # Not installed: stale where its channel is on a newer version already, else installed; refused where its
+  # channel's pointer is there and cannot be read.
+  if [ -n "$channel" ]; then pointer=$state/channels/$channel; else pointer=$state/default; fi
+  named "$pointer"
+  [ -n "$unread" ] && unread "$pointer"
   if [ -n "$now" ] && older "$version" "$now"; then
     if [ -n "$channel" ]; then say "{stale_named}" 4; fi
     say "{stale_default}" 4
@@ -594,13 +627,17 @@ case $1 in
 esac
 # No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
 # names current where the install command has run here (its receipt), run as that layout's command ran it; else the
-# newest version installed that has started, else the newest installed.
+# newest version installed that has started, else the newest installed. A pointer there that cannot be read refuses
+# every command but cad doctor, which says why and writes one that names no version again: it runs as the newest
+# version that has started.
 named "$state/default"
 if [ -n "$now" ]; then
   present "$now" && run "$now" "$@"
   install "$now" "$@"
 fi
-if [ -f "$state/install-receipt.json" ]; then
+if [ -n "$unread" ]; then
+  [ "$1" = doctor ] || unread "$state/default"
+elif [ -f "$state/install-receipt.json" ]; then
   named "$state/installations/current"
   python=$(record python "$state/installations/$now.json")
   cad=$(record cad "$state/installations/$now.json")
@@ -611,6 +648,7 @@ started=
 for marker in "$state"/versions/*/code/cad-version.json; do
   name=${{marker%/code/cad-version.json}}
   name=${{name##*/}}
+  [ -e "$state/versions/$name/uninstalled" ] && continue  # cad uninstall took it out; its code goes at a sweep
   present "$name" || continue
   if [ -z "$newest" ] || ! older "$name" "$newest"; then newest=$name; fi
   [ -f "$state/versions/$name/data/format.json" ] || continue
@@ -664,6 +702,7 @@ NAME = "CAD_INSTALLATION_VERSION"
 BAD_PIN, BAD_CHANNEL = {bad_pin!r}, {bad_channel!r}
 STALE_DEFAULT, STALE_NAMED = {stale_default!r}, {stale_named!r}
 NOT_INSTALLED, DEVELOPMENT = {not_installed!r}, {development!r}
+CORRUPT, UNREADABLE = {corrupt!r}, {unreadable!r}
 
 
 def say(words, code):
@@ -672,13 +711,27 @@ def say(words, code):
 
 
 def named(path):
-    """The version file ``path`` names on its first line (a pointer, installations/current), or None."""
+    """The version the pointer ``path`` names, by the rule every reader of a pointer keeps (pointers.version_text):
+    every carriage return taken out and the line ends after the text, what is left one version name. ``(version,
+    None)``; ``(None, None)`` where the file is not there; ``(None, "unreadable")`` where it is there and cannot be
+    read now, ``(None, "corrupt")`` where it names no version -- never taken for no pointer."""
     try:
-        with open(path, encoding="utf-8") as handle:
-            found = handle.readline().strip()
-    except (OSError, ValueError):
-        return None
-    return found if VERSION.fullmatch(found) else None
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except FileNotFoundError:
+        return None, ("unreadable" if os.path.lexists(path) else None)
+    except OSError:
+        return None, "unreadable"
+    try:
+        found = data.replace(b"\\r", b"").rstrip(b"\\n").decode("ascii")
+    except UnicodeDecodeError:
+        return None, "corrupt"
+    return (found, None) if VERSION.fullmatch(found) else (None, "corrupt")
+
+
+def unread(path, why):
+    """The pointer ``path``, which ``named`` found there and could not read: refused, nothing run on a guess."""
+    return say((CORRUPT if why == "corrupt" else UNREADABLE) % {{"pointer": path}}, 1)
 
 
 def record(path):
@@ -790,21 +843,30 @@ def main():
         found = present(state, version)
         if found:
             return run(version, found, args)
-        # Not installed: stale where its channel is on a newer version already, else installed.
-        now = named(os.path.join(state, "channels", channel) if channel else os.path.join(state, "default"))
+        # Not installed: stale where its channel is on a newer version already, else installed; refused where its
+        # channel's pointer is there and cannot be read.
+        pointer = os.path.join(state, "channels", channel) if channel else os.path.join(state, "default")
+        now, why = named(pointer)
+        if why:
+            return unread(pointer, why)
         if now and older(version, now):
             return say((STALE_NAMED if channel else STALE_DEFAULT) % {{"version": version, "channel": channel,
                                                                          "now": now}}, 4)
         return install(state, version, args)
     # No pin: the default channel's version (its pointer); with none, the installation the layout of 0.11.10 and earlier
     # names current where the install command has run here (its receipt), run as that layout's command ran it;
-    # else the newest version installed that has started, else the newest installed.
-    now = named(os.path.join(state, "default"))
+    # else the newest version installed that has started, else the newest installed. A pointer there that cannot be
+    # read refuses every command but cad doctor, which says why and writes one that names no version again: it runs as
+    # the newest version that has started.
+    now, why = named(os.path.join(state, "default"))
     if now:
         found = present(state, now)
         return run(now, found, args) if found else install(state, now, args)
-    if os.path.isfile(os.path.join(state, "install-receipt.json")):
-        now = named(os.path.join(state, "installations", "current"))
+    if why:
+        if args[:1] != ["doctor"]:
+            return unread(os.path.join(state, "default"), why)
+    elif os.path.isfile(os.path.join(state, "install-receipt.json")):
+        now = named(os.path.join(state, "installations", "current"))[0]
         found = record(os.path.join(state, "installations", now + ".json")) if now else None
         if found:
             return wait(subprocess.Popen([found[0], "-P", "-m", "cad_server._internal.proxy", *args]))
@@ -814,7 +876,9 @@ def main():
         names = []
     newest = started = None
     for name in names:
-        if VERSION.fullmatch(name) and present(state, name):
+        # One cad uninstall took out, whose code goes at the next sweep, is none.
+        if VERSION.fullmatch(name) and present(state, name) and not os.path.lexists(
+                os.path.join(state, "versions", name, "uninstalled")):
             if newest is None or not older(name, newest):
                 newest = name
             # The newest that has started: one never started runs its channel's first use before anything else.
@@ -844,7 +908,9 @@ def _main_text() -> str:
                         stale_default=pins.stale("%(version)s", None, "%(now)s"),
                         stale_named=pins.stale("%(version)s", "%(channel)s", "%(now)s"),
                         not_installed=pins.not_installed("%(version)s", "%(why)s", "nt"),
-                        development=pins.development("%(version)s"))
+                        development=pins.development("%(version)s"),
+                        corrupt=pins.unreadable_pointer("%(pointer)s", corrupt=True),
+                        unreadable=pins.unreadable_pointer("%(pointer)s", corrupt=False))
 
 
 def _archive() -> bytes:
@@ -1107,10 +1173,12 @@ def script(windows: bool = WINDOWS) -> str:
         "bad_pin": pins.bad_pin("$1"), "bad_channel": pins.bad_channel("$1"),
         "stale_default": pins.stale("$version", None, "$now"),
         "stale_named": pins.stale("$version", "$channel", "$now"),
-        "not_installed": pins.not_installed("$1", "$why", "posix"), "development": pins.development("$1")}.items()}
+        "not_installed": pins.not_installed("$1", "$why", "posix"), "development": pins.development("$1"),
+        "corrupt": pins.unreadable_pointer("$pointer", corrupt=True),
+        "unreadable": pins.unreadable_pointer("$pointer", corrupt=False)}.items()}
     for text in words.values():
         bare = text.replace("\\`", "")
-        for variable in ("$channel", "$version", "$now", "$why", "$1"):
+        for variable in ("$channel", "$version", "$now", "$why", "$pointer", "$1"):
             bare = bare.replace(variable, "")
         if set(bare) & set('"`$\\'):
             raise ValueError(f"the cad command cannot say {text!r} in double quotes")

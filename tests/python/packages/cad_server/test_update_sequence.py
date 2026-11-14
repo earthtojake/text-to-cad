@@ -161,6 +161,7 @@ class FailureAtEachStep(Sequence):
         self.assertEqual(self.working(), Z)
         self.assertEqual(installations.current_version(), Z, "the next move rewrote the mirror")
         self.assertTrue(places.version_dir(Y).exists(), "kept for now")
+        self.own = Z  # the next sweep: Y's heir's (D4)
         self.assertEqual(versions.sweep(), {Y: "removed"}, "removed by the next sweep")
 
     def test_the_apps_step_fails_and_the_device_runs_y_and_the_next_update_does_it_again(self) -> None:
@@ -303,6 +304,7 @@ class LegacyCaller(Sequence):
         self.assertTrue(flat.exists(), "the setup leaves the folder it was run from")
         self.assertTrue((self.state / "releases" / OLD).exists(), "kept until Y serves and nothing runs from it")
         self.serving(Y)
+        self.own = Y  # the default channel's server, tending: the one that removes the layout (D4)
         with mock.patch.object(legacy, "flat_server", return_value=str(places.code_dir(Y) / "server")):
             versions.sweep()
         self.assertFalse((self.state / "releases").exists(), "the layout of 0.11.10 went, Y's flat folder with it")
@@ -446,11 +448,18 @@ class Uninstall(Sequence):
             code = uninstall.main([*argv, "--yes"])
         return code, out.getvalue()
 
-    def test_it_takes_out_the_default_channel_and_its_version(self) -> None:
+    def test_it_takes_out_the_default_channel_and_its_version_s_code_and_keeps_its_data(self) -> None:
+        # D1 (this test asserted the whole folder removed before): settings, Recents and the documents' records stay
+        # for a later install, which finds them; --purge removes them.
         self.on(X)
         code, out = self.run_uninstall(X)
         self.assertEqual(code, 0, out)
-        self.assertFalse(places.version_dir(X).exists())
+        self.assertFalse(places.code_dir(X).exists())
+        self.assertTrue(imports.imported(X), "its data kept")
+        self.assertIn("its data stays for a later install", out)
+        code, out = self.run_uninstall(X, "--purge")
+        self.assertEqual(code, 0, out)
+        self.assertFalse(places.version_dir(X).exists(), "--purge removes it")
         for gone in ("default", setup.RECEIPT, "installations/current", f"installations/{X}.json", "plugin"):
             self.assertFalse((self.state / gone).exists(), gone)
         self.assertEqual(installations.proxy_status(), installations.MISSING)
@@ -479,7 +488,7 @@ class Uninstall(Sequence):
             code, out = self.run_uninstall(X)
         self.assertEqual(code, 0, out)
         self.assertTrue(asked.is_set())
-        self.assertFalse(places.version_dir(X).exists(), out)
+        self.assertFalse(places.code_dir(X).exists(), out)
 
     def test_a_store_s_channel_its_version_and_the_cad_command_stay(self) -> None:
         self.on(X)
@@ -487,7 +496,7 @@ class Uninstall(Sequence):
         versions.move("codex", Y)
         code, out = self.run_uninstall(X)
         self.assertEqual(code, 0, out)
-        self.assertFalse(places.version_dir(X).exists())
+        self.assertFalse(places.code_dir(X).exists())
         self.assertEqual(pointers.read("codex"), Y)
         self.assertTrue(places.version_record(Y))
         self.assertEqual(installations.proxy_status(), installations.OK)

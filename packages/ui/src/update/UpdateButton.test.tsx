@@ -147,6 +147,25 @@ it('an update that ends with this server staying ends the button: the host follo
   }
 });
 
+it('a page reloaded while following an update that ended elsewhere says it once, as done, never updated to its own release', async () => {
+  // The old server stays (`moved`): the page reloaded on it reads that, and it still runs the release before.
+  const moved = reply({ state: 'moved', target: '0.9.1', address: null }, null as never);
+  for (const followedBy of [undefined, vi.fn(() => true)]) {
+    vi.mocked(toast.success).mockClear();
+    const read = vi.fn<UpdateCall>(async () => moved);
+    function Page() {
+      const { notice, phase, update } = useUpdate({ read, start: read }, NOTICE, { followed: true, onMoved: followedBy });
+      return notice || phase.phase !== 'idle' ? <UpdateButton notice={notice} phase={phase} onUpdate={update} /> : <p>No notice</p>;
+    }
+    render(<StrictMode><Page /></StrictMode>);
+    await act(async () => {});
+    expect(toast.success).not.toHaveBeenCalledWith('Updated to 0.9.0.');
+    expect(toast.success).toHaveBeenCalledTimes(followedBy ? 0 : 1);  // the host follows it, or it is said done once
+    if (!followedBy) expect(toast.success).toHaveBeenCalledWith('Updated to 0.9.1.');
+    cleanup();
+  }
+});
+
 it('draws with the page from what the host knew, and reads the server again only when the person comes back', async () => {
   const read = vi.fn<UpdateCall>(async () => reply(null, null as never));
   render(<Host read={read} start={read} />);

@@ -308,7 +308,10 @@ class CadApp:
         self.port = port
         # The delivery channel of the CAD app session this app serves (``mcp.http.Sessions``: its launcher's
         # ``--channel``), None for the default's and for the browser page: a session on a named channel has no
-        # updater, whatever this server's version is (``_updater``).
+        # updater, whatever this server's version is (``_updater``). Only a launcher's session carries one: no host
+        # reaches the engine's HTTP application directly on a named channel today (a browser page, a store's skills'
+        # ``cad viewer``, comes with none), so a request with no session is the default's here, and the update route
+        # refuses it on a server that is not the default channel's version (``channel.told``).
         self.channel = None
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
         # never re-resolve at request time.
@@ -1338,8 +1341,9 @@ class CadApp:
     def _update(self) -> tuple[int, dict]:
         """``POST /api/v1/local/update``: the update button's click. The update starts in the background (or the
         one running is joined) and the request is answered at once with ``_version``'s answer, its state
-        ``working``; with no newer release, ``idle``. Only the engine's application updates: one with no
-        engine under it (a test's) answers 409."""
+        ``working``; with no newer release, ``idle``. Only the engine's application updates, and only where it has an
+        updater (``channel.told``): one with no engine under it (a test's), a store's session, or a server that is not
+        the default channel's version answers 409."""
         from cad_server._internal.update import UPDATE
 
         server = getattr(self, "server", None)
@@ -1348,7 +1352,11 @@ class CadApp:
 
             return 409, {"error": "no engine serves this page: nothing to update",
                          "hint": f"update with the install command: `{command()}`"}
-        if self.channel is not None:
+        from cad_server._internal.channel import told
+
+        if self.channel is not None or not told():
+            # A store's session, or a server that is not the default channel's version (a version only a store's channel
+            # is on, the server an update left): no updater.
             return 409, {"error": "this text-to-cad has no updater",
                          "hint": "only the default channel's version, set up by the install command, updates itself; "
                                  "a store's copy is updated by its store"}

@@ -56,6 +56,7 @@ class CarryOver(Device):
         later = "3b0e0a8e-6d0a-4c6e-9a63-1f2d3c4b5a69"
         self.record(self.state, later, 3.0)
         self.serving(X)
+        self.own = X  # the default channel's server, tending: the one that removes the layout (D4)
         versions.sweep()
         self.assertFalse((self.state / "documents").exists(), "the layout removed")
         self.assertEqual(self.opened(X, later), 3.0)
@@ -75,6 +76,7 @@ class CarryOver(Device):
         self.record(places.data_dir(X), IDENT, 6.0)
         registry.Registry(places.data_dir(Y)).delete(IDENT)
         held.close()
+        self.own = Y  # X's heir's server: the one that carries X and removes it (D4)
         self.assertEqual(versions.sweep(), {X: "removed"})
         self.assertEqual(self.opened(Y, late), 5.0, "written after the import, carried before the removal")
         self.assertIsNone(self.opened(Y, IDENT), "deleted in Y stays deleted")
@@ -103,6 +105,7 @@ class CarryOver(Device):
         pointers.write(None, Y, mirrored=False)
         (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
         self.record(places.data_dir(X), IDENT, 1.0)
+        self.own = Y
         with mock.patch.object(registry.Folder, "create", side_effect=OSError(28, "No space left on device")):
             self.assertEqual(versions.sweep(), {X: "carry"})
         self.assertTrue(places.data_dir(X).is_dir(), "kept: what it holds could not all be carried")
@@ -122,7 +125,7 @@ class CarryOver(Device):
         said = [line for line in doctor._versions() if line.startswith(f"version  text-to-cad {X} ")]
         self.assertIn(f"its data is kept: text-to-cad {Z}, where its data would go, is gone", said[0])
         self.present(Z)
-        self.assertIn("installed and never used: cad doctor --prune removes it",
+        self.assertIn("installed and never a channel's: cad doctor --prune removes it",
                       [line for line in doctor._versions() if line.startswith(f"version  text-to-cad {Z} ")][0])
 
     def test_a_removed_successor_hands_on_to_its_own(self) -> None:
@@ -133,8 +136,10 @@ class CarryOver(Device):
         (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
         (places.version_dir(Y) / versions.SUCCESSOR).write_text(f"{Z}\n", encoding="utf-8")
         held = self.serving(X)
-        self.assertEqual(versions.sweep(), {X: "connected", Y: "removed"})
+        self.own = Z  # Y's heir: X's is Y, so X is left for Y's process (D4) until Y goes and hands it on
+        self.assertEqual(versions.sweep(), {X: "heir", Y: "removed"})
         self.assertEqual((places.version_dir(X) / versions.SUCCESSOR).read_text(encoding="utf-8").strip(), Z)
+        self.assertEqual(versions.sweep(), {X: "connected"})
         held.close()
         self.assertEqual(versions.sweep(), {X: "removed"})
 
@@ -231,8 +236,8 @@ class TheLayoutBefore(Device):
         found = imports.source(Y)
         self.assertEqual((found.kind, found.settings_only), ("legacy", True))
         imports.ensure(Y)
-        self.assertEqual(sorted(os.listdir(places.data_dir(Y))), ["format.json", "settings.json"],
-                         "its kept settings alone: no token, no batches, nothing sent again")
+        self.assertEqual(sorted(os.listdir(places.data_dir(Y))), ["carried.json", "format.json", "settings.json"],
+                         "its kept settings alone (and what it took of them): no token, no batches, nothing sent again")
 
 
 class ReadOnly(Device):

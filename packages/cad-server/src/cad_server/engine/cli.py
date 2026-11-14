@@ -736,7 +736,7 @@ def _server(args: argparse.Namespace, prog: str) -> int:
             raise Failed("cannot replace the page token: there is no state folder to keep it in")
         print("cad: a new page token: every link and browser session made before no longer works, in every version's "
               "server at once", file=sys.stderr, flush=True)
-    return daemon([], port=args.port, foreground=True)
+    return daemon([], port=args.port, foreground=True, rotated=bool(args.rotate_token))
 
 
 def _consent_to_rotate(args: argparse.Namespace, prog: str) -> None:

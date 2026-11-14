@@ -94,6 +94,13 @@ class Device(unittest.TestCase):
         self.addCleanup(places._versioned.cache_clear)
         self.addCleanup(places._registered.cache_clear)
         self.said: list[str] = []
+        # The version this test's process acts as where it sweeps (``versions._own``): a version's data is carried and
+        # its folder removed by a process of its heir alone (``versions._acts_for``). None: a test's own process, which
+        # is no version; a move acts as the version it moves to all the same.
+        self.own: str | None = None
+        own = mock.patch.object(versions, "_own", side_effect=lambda: self.own)
+        own.start()
+        self.addCleanup(own.stop)
         # The versions whose server runs (``serving``): asked of its door by ``versions.serves``, which these tests,
         # running no server, answer from here (``REAL_SERVERS``: a suite whose servers are real asks them).
         self.servers: dict[str, object] = {}
@@ -108,13 +115,16 @@ class Device(unittest.TestCase):
         self.assertTrue(found.ok, found.error)
         return found
 
-    def data(self, name: str, settings: dict | None = None) -> Path:
-        """Version ``name`` present, its data imported with ``settings``."""
+    def data(self, name: str, settings: dict | None = None, *, named: bool = True) -> Path:
+        """Version ``name`` present, its data imported with ``settings``, and a channel's once (``versions.NAMED``)
+        unless ``named`` is false."""
         self.present(name)
         data = places.data_dir(name)
         data.mkdir(parents=True, exist_ok=True)
         (data / "settings.json").write_text(json.dumps(settings or {"language": {"locale": name}}), encoding="utf-8")
         (data / imports.MARKER).write_text(json.dumps({"schema": imports.SCHEMA, "version": name}), encoding="utf-8")
+        if named:
+            (places.version_dir(name) / versions.NAMED).write_bytes(b"")
         return data
 
     def serving(self, name: str):
@@ -471,6 +481,8 @@ class Moving(Device):
         self.assertEqual((moved.kind, moved.removed), ("moved", {X: "connected"}))
         self.assertTrue(places.version_dir(X).exists())
         held.close()
+        self.assertEqual(versions.sweep(), {X: "heir"}, "left for its heir's process (D4)")
+        self.own = Y
         self.assertEqual(versions.sweep(), {X: "removed"})
 
 
@@ -482,6 +494,7 @@ class Removal(Device):
         pointers.write(None, Z, mirrored=False)
         for name in (X, Y):  # left, the channel now on Z
             (places.version_dir(name) / versions.SUCCESSOR).write_text(f"{Z}\n", encoding="utf-8")
+        self.own = Z  # their heir's process (D4)
         self.assertEqual(versions.remove(Z), "named")
         held = self.serving(Y)
         self.assertEqual(versions.remove(Y), "connected", "a running server that cannot say counts as connected")
@@ -514,6 +527,7 @@ class Removal(Device):
         pointers.write(None, Y, mirrored=False)
         (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
         self.serving(X)
+        self.own = Y
         asked: list[dict] = []
 
         def ask(_name, message, **_kwargs):
@@ -566,6 +580,7 @@ class BeforeTwelve(Device):
         self.assertTrue((self.state / "releases" / OLD).exists(), "kept until the new version serves")
         self.assertIn("has not started yet", " ".join(moved.said))
         self.serving(X)
+        self.own = X  # the default channel's server, tending: the one that removes the layout (D4)
         versions.sweep()
         gone = [self.state / "releases", self.state / "documents", self.state / "recents",
                 *(self.cache / name for name in legacy.CACHES)]
@@ -700,6 +715,8 @@ class ServerDecisions(Device):
         # A version a channel left (used, unnamed, its successor known) is: swept, but never by its own server.
         self.data(left)
         (places.version_dir(left) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
+        self.assertFalse(versions.garbage(), "another process than its heir's leaves it (D4)")
+        self.own = Y
         self.assertTrue(versions.garbage())
         self.assertFalse(versions.garbage(spare=left), "a server never sweeps its own version")
         with mock.patch.object(versions, "_remove", return_value="connected") as removing:
@@ -730,7 +747,7 @@ class ServerDecisions(Device):
             self.present(version)
             return {"cad": "the release's cad"}
 
-        def setup(record, frame=None):
+        def setup(record, frame=None, **_kwargs):
             seen.append(places.version_dir(Y).is_dir() and places.version_record(Y) is not None)
             return 0, ""
 
@@ -837,8 +854,11 @@ class ServerDecisions(Device):
             self.assertEqual(moved.kind, "failed", "no move on a guess")
         self.assertTrue(places.version_dir(X).is_dir())
         (self.state / "channels" / "store").write_bytes(b"")
-        self.assertEqual(self.moved("store", Z).old, None, "an emptied pointer is written again by a move")
-        self.assertEqual(pointers.read("store"), Z)
+        # D2 (this test had any move write an emptied pointer again): only a repair does (``mend``: cad setup, the
+        # updater; ``versions.mend``: cad doctor), never naming a version older than the newest a channel was on.
+        self.assertEqual(versions.move("store", Z).kind, "failed")
+        moved = versions.move("store", Z, mend=True)
+        self.assertEqual((moved.kind, moved.old, pointers.read("store")), ("moved", None, Z))
 
     def test_a_pinned_command_s_stop_and_status_reach_its_own_version_alone(self) -> None:
         from cad.engine import client
@@ -931,11 +951,24 @@ class TelemetryAcrossVersions(Device):
         (places.data_dir(X) / analytics.SPOOL).write_text(json.dumps(row) + "\n", encoding="utf-8")
         pointers.write(None, Y)
         (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")  # the default left it
+        self.own = Y  # its heir, which sends next
         self.assertEqual(versions.sweep(), {X: "removed"})
         kept = [json.loads(line) for line in
                 (places.data_dir(Y) / analytics.SPOOL).read_text(encoding="utf-8").splitlines()]
         self.assertEqual(kept, [row], "handed on whole, still saying who counted it")
 
+
+    def test_a_read_only_report_heeds_the_device_s_no_without_writing_it(self) -> None:
+        # E7: cad doctor --check (``status(keep=False)``) writes nothing, the device's no in force all the same.
+        import time
+
+        told = {"telemetry": {"choice": "on", "disclosure": 1, "by": "cli", "decidedAt": time.time() - 60, "id": "an-id"}}
+        settings = self.data(X, told) / "settings.json"
+        before = settings.read_bytes()
+        device = {"telemetry": {"choice": "off", "disclosure": 1, "by": "cli", "decidedAt": time.time()}}
+        (self.state / "settings.json").write_text(json.dumps(device), encoding="utf-8")
+        self.assertFalse(self.sharing(X))
+        self.assertEqual(settings.read_bytes(), before, "nothing written")
 
     def test_a_no_said_through_0_11_10_after_the_import_is_this_version_s_no_and_nothing_is_sent(self) -> None:
         """The default stays on 0.11.10 (automatic updates off), a store's copy at a newer version imports its settings
@@ -1078,6 +1111,7 @@ class DoctorReadsEveryVersion(Device):
         self.assertNotIn("forgets it", line("channel  default: "), "the default channel is never forgotten")
         held.close()
         out = io.StringIO()
+        self.own = Y  # cad doctor with no pin: the default channel's version, the forgotten channel's heir (D4)
         with contextlib.redirect_stdout(out), mock.patch.object(versions, "connected", return_value=False):
             self.assertEqual(doctor.main(["--prune", "--yes"]), 0)
         printed = out.getvalue()

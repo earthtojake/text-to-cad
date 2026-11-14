@@ -171,6 +171,9 @@ class AutomaticTest(Fixture):
                       mock.patch.object(update, "IDLE_POLL_SECONDS", 0.02),
                       mock.patch("cad_server.updates.notice", side_effect=lambda: self.notice),
                       mock.patch("cad_server.updates.refresh", return_value=None),
+                      # The release's setup is a stand-in that moves nothing: this server goes, as a move's drain
+                      # makes it go (``update._moved``; where it stays, the update ends ``moved``: test_update.py).
+                      mock.patch.object(update, "_moved", return_value=None),
                       mock.patch.object(update, "install", side_effect=install)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -370,6 +373,14 @@ class CatchUpTest(Fixture):
         self.assertEqual(self.job.catch_up(self.engine), ["gemini"], "a day later, again")
         self.assertEqual(len(self.caught_up()), 2)
 
+    def test_nothing_runs_unattended_while_automatic_updates_are_off(self) -> None:
+        # E12: a setup run by itself is an automatic update's to run.
+        auto_updates.change({"automatic": False})
+        self.assertIsNone(self.job.catch_up(self.engine))
+        self.assertEqual(self.caught_up(), [])
+        auto_updates.change({"automatic": True})
+        self.assertEqual(self.job.catch_up(self.engine), ["gemini"])
+
     def test_nothing_runs_while_work_goes_on_or_for_an_app_behind_another_release(self) -> None:
         self.engine.worked = time.monotonic()  # a command just ended: not idle
         self.assertIsNone(self.job.catch_up(self.engine))
@@ -389,11 +400,21 @@ class QuietHourTest(unittest.TestCase):
     request through a door but the servers' own asks, and every agent's tool call, starts it again."""
 
     def test_a_short_tool_call_or_a_cad_status_inside_the_hour_resets_it_and_the_servers_own_asks_do_not(self) -> None:
+        # E13: through the wiring the server has -- its door's requests, and an agent's call through the HTTP
+        # application the server binds (``Daemon.serve`` hands it ``Daemon.stamp``) and its own MCP sessions.
+        import socket
+
         from cad_server.engine import daemon
-        from cad_server.mcp.http import Session, Sessions
+        from cad_server.mcp.http import Session
 
         engine = daemon.Daemon(cap=1)
         self.addCleanup(engine.supervisor.stop)
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            free = probe.getsockname()[1]
+        server = engine.serve({"op": "http", "port": free})
+        self.addCleanup(server.stop)
+        sessions = server.http.app.mcp()
         clock = [10000.0]
         quiet = lambda: auto_updates.quiet(engine.worked, clock[0])  # noqa: E731
 
@@ -416,10 +437,9 @@ class QuietHourTest(unittest.TestCase):
             clock[0] += auto_updates.IDLE_SECONDS - 1
             self.assertFalse(quiet())
             # An agent's tool call through the CAD app's HTTP sessions, a second long, building nothing.
-            sessions = Sessions(engine=SimpleNamespace(worked=engine.stamp))
-            server = SimpleNamespace(sidebar_views=SimpleNamespace(close=lambda: None),
-                                     handle=lambda method, params, context: {"content": []})
-            sessions.sessions["held"] = Session(server=server, protocol="2025-11-25", client="codex-mcp-client")  # type: ignore[arg-type]
+            stand_in = SimpleNamespace(sidebar_views=SimpleNamespace(close=lambda: None),
+                                       handle=lambda method, params, context: {"content": []})
+            sessions.sessions["held"] = Session(server=stand_in, protocol="2025-11-25", client="codex-mcp-client")  # type: ignore[arg-type]
             sessions.handle(_Request({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                                       "params": {"name": "cad_view", "arguments": {}}}, "held"), _Response())
             self.assertEqual(engine.worked, clock[0], "the call's end")

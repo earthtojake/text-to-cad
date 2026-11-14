@@ -276,22 +276,27 @@ its server; on two versions, two servers, each on its own port (the second rolls
   served pages on port P, Y's server started and
   bound to P with the page token it imported from X: an open page reconnects to Y and reloads, and every link
   made before still opens. With work in flight on X, or another pointer naming X, X is left as it is -- its
-  process, port and pages -- and Y takes the next free port when it first serves.
+  process, port and pages -- and Y takes the next free port when it first serves. A server asked for a port it
+  cannot take as it first binds (X slow to exit) binds as if none were asked and answers with that address, never
+  `failed`; X, as it stops, hands its port to Y's server (`versions.hand_port`), and the default version's server,
+  as it takes the flat door from a server of 0.11.10 or earlier, takes the port that server served.
 - **A server retires itself** (`Daemon.versions`, at each tending): a server whose version no pointer names
   (nor the default as resolved) stops once nothing is in flight, decided under the install lock so no move is
   under way. It never removes its own folder: each running server's tending sweeps every other version no
-  pointer names that has been a channel's (`versions.garbage`, `versions.fate`, `versions.sweep` sparing its own),
-  as every move and `cad doctor --prune` do, each one's data carried into its successor first (`imports.carry`);
-  a version installed and never used is no sweep's, and none is removed while a pointer cannot be read. The layout
-  of 0.11.10 and earlier goes by the same sweep once it is safe (`legacy.remove`).
+  pointer names that a pointer has named once and whose successor is its own version (`versions.garbage`,
+  `versions.fate`, `versions.sweep` sparing its own), as every move does as the version it moves to, each one's data
+  carried into it first (`imports.carry`), in its own formats; a version installed and never named is no sweep's,
+  nor the data `cad uninstall` kept, and none is removed while a pointer cannot be read. The layout of 0.11.10 and
+  earlier goes by the default channel's version's sweep once it is safe (`legacy.remove`). `versions.fate` has the
+  table of every state a version folder can be in and what each removal does with it.
 - **A removal waits for what is going** (`versions.gone`, `versions.quiet`): a server asked to stop -- by this
   process or another, answered or not -- is gone once its lock is free and no process runs from its version's
   folder any more (it lets the lock go a moment before it and its workers exit), awaited with a bound before the
-  folder is tried; one still running after it keeps the folder for the next sweep. A server is not stopped at all
-  where another process runs from its folder (`releases.running`, the server's own processes aside). As a version's folder goes, what
-  it kept for telemetry and had not sent -- each spool row saying the version, channel and app that counted it,
-  each kept batch whole under its own id -- moves to the version that sends next (`versions._hand_on`,
-  `analytics.hand_on`): the default channel's, else the newest other version a pointer names.
+  folder is tried; one still running after it keeps the folder for the next sweep, which looks once and never
+  waits. A server is not stopped at all where another process runs from its folder (`releases.running`, the
+  server's own processes aside). As a version's folder goes, what it kept for telemetry and had not sent -- each
+  spool row saying the version, channel and app that counted it, each kept batch whole under its own id -- moves to
+  the version that removes it, its heir (`versions._hand_on`, `analytics.hand_on`).
 - `cad stop` and `cad status` act on one version's server: the pinned one, or the default's with no pin. Only `cad
   doctor` reads every version and channel (`cli/doctor.py`'s `_versions`): each version, where it is, the channels
   on it, its server and port (asked of its door: nothing made or taken), what becomes of it where no channel is on
@@ -299,7 +304,9 @@ its server; on two versions, two servers, each on its own port (the second rolls
   marks as it takes a request on that channel and every pinned command once a day, `pointers.used`); each pointer
   that cannot be read. `cad doctor --prune`, a person's command, shows its plan (`versions.prune_plan`), asks, and
   does exactly that (`versions.prune`): the named channels unused for `pointers.FORGOTTEN_DAYS` forgotten (never
-  the default), and the versions no channel is on, those never used among them, removed.
+  the default), and the versions no channel is on, those never named among them, removed; a forgotten channel's
+  version that nothing can take the data of goes whole. `cad doctor` (not `--check`) writes a pointer that names no
+  version again (`versions.mend`).
 
 A process with no version (a checkout, a test's device, a release of 0.11.10 and earlier) keeps that layout: the
 device's one engine is the current installation's, `<state>/installations/current` names it
@@ -345,7 +352,8 @@ installs it by its own `cad setup --add` (uvx, as the `cad` command installs a v
 
 Every page and card keeps its link through it, and reloads once its server answers with the new release. Where the
 server a click went through stays (another channel is on its version, or work is in flight there), the update ends
-there as `moved`, naming the new default's server's address (started for it) and a link for its token: the browser
+there as `moved` -- in every case but this server's own drain, which alone is `restarting` --, naming the default's
+server's address (started for it) and a link for its token: the browser
 page goes to the same document there, and a CAD card, whose launcher belongs to the version before, says the update
 is done and to start a new thread. A CAD app session a store's launcher opened (its `--channel`) shows no update
 notice, button or switch, whatever version serves it. A

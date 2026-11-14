@@ -827,7 +827,13 @@ def status(*, path: Path | None = None, probe: bool = True, keep: bool = True,
     either way sends nothing.
     """
     path = path or settings_path()
-    _heed_device(path)
+    if not keep:
+        # Read-only (``cad doctor --check``): the device's no, where it is newer than this version's answer, in force
+        # without being written here.
+        if _device_no(path):
+            return {"sharing": False, "reason": "choice", "id": None}
+    else:
+        _heed_device(path)
     forced = _environment(env)
     kept = _read(path)
     if kept is None:  # there, but unreadable now: neither sent under nor said
@@ -913,6 +919,31 @@ def everywhere(by: str) -> list[Path]:
         except Exception:  # noqa: BLE001 - as above
             LOG.debug("could not keep the no in %s", target, exc_info=True)
     return done
+
+
+def _device_no(path: Path) -> bool:
+    """Whether the device's no (the state folder's settings, ``everywhere``) is newer than the answer the versioned
+    process's own settings at ``path`` hold, or they hold none -- what ``inherit_no`` would write there --, read and
+    nothing written. Never raises."""
+    try:
+        from cad.engine import places
+        from cad.engine.places import versioned
+        from cad_server.settings import FILE
+
+        if versioned() is None or not _own(path):
+            return False
+        device = places.state_dir() / FILE
+        if os.path.normcase(os.path.realpath(device)) == os.path.normcase(os.path.realpath(path)):
+            return False
+        said = _read(device) or {}
+        if said.get("choice") != "off":
+            return False
+        when = said.get("decidedAt") if isinstance(said.get("decidedAt"), (int, float)) else 0
+        kept = _read(path) or {}
+        held = kept.get("decidedAt") if isinstance(kept.get("decidedAt"), (int, float)) else None
+        return not (kept.get("choice") == "off" or (held is not None and held >= when))
+    except Exception:  # noqa: BLE001 - a read for a report
+        return False
 
 
 def inherit_no(path: Path) -> bool:

@@ -28,9 +28,13 @@ default channel's first use first (``first_use``), so no version writes data bef
 Help, ``--version`` and a read-only report (``cad doctor --check``) do no work and read no pointer.
 
 The words each refusal says, and its reason, are this module's alone (``stale``, ``not_installed``,
-``development``, ``bad_pin``, ``bad_channel``, ``other_version``): the ``cad`` command's own text says the same
-words where it says them first (a pin to a version not installed, or older than its channel's; a word that is
-no pin), held equal by a test.
+``development``, ``bad_pin``, ``bad_channel``, ``other_version``, ``unreadable_pointer``): the ``cad`` command's own
+text says the same words where it says them first (a pin to a version not installed, or older than its channel's; a
+word that is no pin; a pointer there that cannot be read), held equal by a test.
+
+A pointer that is there and cannot be read, or names no version, is never "no pointer": a pinned command refuses
+(``unreadable_pointer``, exit 1), and so does a command with no pin that would make the default channel's first use
+(``first_use``). Only ``cad setup``, the updater and ``cad doctor`` write one again.
 """
 
 from __future__ import annotations
@@ -42,7 +46,8 @@ from dataclasses import dataclass
 from cad.engine import places
 
 __all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "check", "development", "first_use",
-           "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "update_default"]
+           "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "unreadable_pointer",
+           "update_default"]
 
 # The characters of a release's name, as the ``cad`` command tells one (``released``).
 RELEASED = re.compile(r"[0-9.abcoprst]+")
@@ -122,6 +127,23 @@ def other_version(mine: str | None, version: str) -> str:
             f"cad command, which runs {version}")
 
 
+def unreadable_pointer(pointer: str, *, corrupt: bool) -> str:
+    """A channel's pointer that is there and cannot be read now, or names no version (``pointers.Unreadable``):
+    nothing runs on a guess of which version it names. One that names none is written again by ``cad doctor`` (or
+    ``cad setup``, or the updater), never naming a version older than the newest a channel has been on."""
+    if corrupt:
+        return (f"the pointer {pointer} names no version: run `cad doctor`, which writes it again, then run the "
+                "command again")
+    return (f"the pointer {pointer} cannot be read now: run the command again, and if it still cannot be read, "
+            "`cad doctor` says why")
+
+
+def _unreadable(unreadable: "Exception"):
+    """The failure a pointer that cannot be read is (``unreadable_pointer``), reason ``failed``."""
+    return _failure(unreadable_pointer(str(getattr(unreadable, "path", "")), corrupt=bool(getattr(unreadable, "corrupt",
+                                                                                                   False))), "failed")
+
+
 def cannot_move(pin: Pin, why: str) -> str:
     """A pinned version present whose channel this shell cannot move to it (``cannot_install_here``)."""
     return (f"text-to-cad {pin.version} is installed, but this shell cannot move the {pin.label} channel to it "
@@ -190,9 +212,10 @@ def apply(pin: Pin, *, told: Callable[[str], None] | None = None) -> None:
     try:
         now = pointers.read(pin.channel)
     except pointers.Unreadable as unreadable:
-        if not unreadable.corrupt:  # there and not readable now: nothing runs on a guess of which version it names
-            raise _failure(f"{unreadable}: run the command again", "failed") from None
-        now = None  # emptied by a crash: the move writes it again
+        # There and not readable now, or naming no version (emptied by a crash, or a form this release does not know):
+        # nothing runs on a guess of which version it names, and a pin never writes it -- an old chat's would move the
+        # channel back. ``cad doctor`` (or ``cad setup``, or the updater) writes one again.
+        raise _unreadable(unreadable) from None
     if now == pin.version:
         _used(pin)
         return
@@ -233,7 +256,9 @@ def first_use(*, told: Callable[[str], None] | None = None) -> None:
     default channel has no pointer -- the newest version present, which the ``cad`` command runs where none has
     started --: the default channel's first use made first (``apply``: its data imported, then its pointer, or the
     updater's own sequence where the install command has run here), so the version writes nothing before its first
-    start is marked. Nothing otherwise, nor where a pointer cannot be read; the failure ``apply`` raises."""
+    start is marked. Nothing otherwise. A default pointer there that cannot be read is the failure it is
+    (``unreadable_pointer``): the command runs nothing, and writes nothing, on a guess of which version it names. The
+    failure ``apply`` raises."""
     from cad_server._internal import imports, pointers
 
     name = places.versioned()
@@ -242,8 +267,8 @@ def first_use(*, told: Callable[[str], None] | None = None) -> None:
     try:
         if pointers.read(None) is not None:
             return
-    except pointers.Unreadable:
-        return
+    except pointers.Unreadable as unreadable:
+        raise _unreadable(unreadable) from None
     apply(Pin(name, None, f"+{name}"), told=told)
 
 

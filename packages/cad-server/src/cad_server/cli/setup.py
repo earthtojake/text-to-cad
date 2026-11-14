@@ -75,10 +75,13 @@ outside it.
 says were made, newest first (the catalog removed with its plugin, the extension uninstalled, Cursor's copy deleted,
 the skills removed by ``npx skills remove``, Claude Desktop's server an earlier release wrote taken out; with no
 receipt, every copy of ours found); the plugin folder; the default pointer and the mirror; the default channel's
-version, its server stopped, unless another pointer names it; the layout of 0.11.10 and earlier; and the receipt.
+version's code, its server stopped, unless another pointer names it -- its data (settings, Recents, the documents'
+records, the page token and port) stays for a later install, which finds it (``versions.remove_code``); the layout
+of 0.11.10 and earlier; and the receipt.
 A named channel's pointer, version and data stay -- a store delivered them -- and so does the ``cad`` command while
 one is there, with a line saying which channel still uses it and to remove that plugin in its app. ``--purge``
-removes everything: every version and channel, the state and cache folders, and the ``cad`` command. ``--only``
+removes everything: every version and channel, their data with them, the state and cache folders, and the ``cad``
+command. ``--only``
 limits it to some apps (and then leaves the command, the versions and the plugin folder alone). ``cad setup`` asks
 nothing: the plan is printed and done -- installing is what was asked. ``cad uninstall`` destroys, so after its plan
 it asks (``cad_server._internal.consent``): at a terminal ``Take text-to-cad out as planned? (y/N)``, and where no
@@ -154,9 +157,10 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             prog=prog,
             allow_abbrev=False,
             description="Take out what the install command put on this machine: our copies of the plugin in every "
-                        "agent app (with no receipt, every copy of ours found), the default channel and its version, "
-                        "its server stopped; the cad command when no store's copy still uses it. A copy a store "
-                        "delivered stays, with its version; --purge removes everything.",
+                        "agent app (with no receipt, every copy of ours found), the default channel and its version's "
+                        "code, its server stopped; the cad command when no store's copy still uses it. Your settings, "
+                        "Recents and documents' records stay for a later install. A copy a store delivered stays, "
+                        "with its version; --purge removes everything.",
         )
     elif update:
         parser = command_parser(
@@ -185,8 +189,8 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
         from cad_server._internal.consent import add_yes
 
         parser.add_argument("--purge", action="store_true",
-                            help="remove everything: every version and channel, a store's among them, and "
-                                 "text-to-cad's state and cache folders")
+                            help="remove everything: every version and channel, a store's among them, your "
+                                 "settings, Recents and documents' records, and text-to-cad's state and cache folders")
         add_yes(parser, "take it out as planned")
     else:
         parser.add_argument("--no-telemetry", action="store_true",
@@ -722,7 +726,8 @@ class Installer:
         try:
             # A person's install goes back from a development install (``dev_install.py``) to a release.
             moved = versions.move(None, name, told=lambda line: self.say(f"default  {line}"),
-                                  from_development=not self.engine_update and not self.pinned)
+                                  from_development=not self.engine_update and not self.pinned,
+                                  mend=not self.pinned)
         except (OSError, ValueError) as error:
             self.say(f"default  the default channel could not be moved to text-to-cad {name}: {error}")
             return True, None
@@ -747,8 +752,9 @@ class Installer:
     def _take_over(self, name: str, before: dict[str, Any]) -> None:
         """A server of 0.11.10 or earlier, which held the flat door as this run began (``before``, its ``status``),
         asked to drain -- ``{"op": "stop", "drain": true}``, which every release since 0.10 speaks -- and waited for
-        while its work in flight ends (``DRAIN_SECONDS`` at most); then version ``name``'s server started, holding
-        that door now (``daemon.Bridge``), on the port the old one served pages on, with the page token it imported,
+        while its work in flight ends (``DRAIN_SECONDS`` at most); then the default channel's version read again --
+        ``name``, this run's, unless an update moved it meanwhile -- and its server started, holding that door now
+        (``daemon.Bridge``), on the port the old one served pages on, with the page token it imported,
         so a page open on it reloads into this version and every link still opens; then the layout of 0.11.10 and
         earlier removed, now that nothing of it runs (``versions.sweep``, ``legacy.remove``). What did not happen is
         said, and fails nothing: the next command starts this version's server, on the next free port. Run with no
@@ -771,8 +777,18 @@ class Installer:
         if not gone:
             self.say(f"engine   cad-server {old}'s server is still busy: it stops once its work ends")
             return
-        if not versions.start_server(name):
-            self.say(f"engine   text-to-cad {name}'s server did not start: the next command starts it")
+        # The wait may have been long: the default channel may be on another version now (an update meanwhile). Its
+        # server takes the old one's place, or none does.
+        from cad_server._internal import pointers
+
+        try:
+            name = pointers.default().version
+        except OSError as error:
+            self.say(f"engine   the default channel cannot be read now ({error}): the next command starts its server")
+            return
+        if name is None or not versions.start_server(name):
+            self.say(f"engine   text-to-cad {name}'s server did not start: the next command starts it" if name else
+                     "engine   the default channel is on no version now: no server takes its place")
             return
         versions.ask(name, {"op": "bridge"})
         if port:
@@ -780,6 +796,9 @@ class Installer:
             if not isinstance(answer, dict) or "failed" in answer or not answer.get("url"):
                 why = (answer or {}).get("failed") or "it did not answer"
                 self.say(f"engine   text-to-cad {name}'s server could not take port {port}: {why}")
+            elif versions.answered_port(answer) != port:
+                self.say(f"engine   text-to-cad {name} serves pages on port {versions.answered_port(answer)}: port "
+                         f"{port} is still held")
             else:
                 self.say(f"engine   text-to-cad {name} serves pages on port {port}, as cad-server {old} did")
         versions.sweep(told=lambda line: self.say(f"default  {line}"))
@@ -1276,7 +1295,9 @@ class Installer:
                                   "subject": f"text-to-cad {default}: the {kept_by[default]} channel is on it"})
             for name in (versions.folders() if purge else [default] if default and default not in kept_by else []):
                 extra.append({"app": "version", "label": "version", "action": "remove",
-                              "subject": providers.shown(str(places.version_dir(name)), self.machine)})
+                              "subject": providers.shown(str(places.version_dir(name)), self.machine) if purge else
+                              f"the code of text-to-cad {name} (its data -- settings, Recents, documents' records -- "
+                              "stays for a later install; --purge removes it)"})
             for pointer in channels if not purge else ():
                 extra.append({"app": "channel", "label": "channel", "action": "leave",
                               "subject": f"{pointer.channel}, on text-to-cad {pointer.version}: its store delivered it"})
@@ -1366,9 +1387,10 @@ class Installer:
 
     def _remove_versions(self, default: str | None, kept_by: dict[str, str | None], purge: bool) -> bool:
         """The default channel taken out: its pointer, the mirror 0.11.10 and earlier read (``installations/current``
-        and the records naming a version), and its version -- its server stopped first -- unless a named channel is
-        on it; with ``purge``, every version, each server stopped. Run under the install lock. True when a version
-        could not be removed whole (on Windows, the folder this command runs from)."""
+        and the records naming a version), and its version's code -- its server stopped first -- unless a named
+        channel is on it, its data kept for a later install (``versions.remove_code``); with ``purge``, every version
+        whole, each server stopped. Run under the install lock. True when a version could not be removed (a process
+        still runs from it); on Windows the code this command runs from goes at the next sweep, said."""
         from cad.engine import places
         from cad_server._internal import installations, pointers, versions
 
@@ -1388,16 +1410,21 @@ class Installer:
             if versions.endpoint(name).lock.exists():  # a server there, or on its way out
                 versions.ask(name, {"op": "stop"})
                 versions.gone(name)
-            done = versions.remove_now(name, told=lambda line: self.say(f"version  {line}"))
-            if done != "removed":
+            said = lambda line: self.say(f"version  {line}")  # noqa: E731
+            # Without --purge the version's data stays for a later install (``versions.remove_code``).
+            done = (versions.remove_now if purge else versions.remove_code)(name, told=said)
+            if done == "refused" and not purge:
+                self.say(f"version  the code of text-to-cad {name} goes at the next sweep (the system refused it now: "
+                         "this command runs from it); its data stays")
+            elif done not in ("removed", "absent"):
                 failed = True
-                self.say(f"version  {places.version_dir(name)} could not be removed whole ({done}): "
+                self.say(f"version  {places.version_dir(name)} could not be removed ({done}): "
                          + ("a process still runs from it: stop it, then run this again" if done in ("in use", "connected")
-                            else "the next update or cad doctor --prune removes it"))
+                            else "run this again once nothing runs from it"))
             else:
                 self.actions.append({"app": "version", "action": "remove", "kind": "remove",
-                                     "path": str(places.version_dir(name)), "ok": True,
-                                     "at": self.providers.stamp()})
+                                     "path": str(places.version_dir(name) if purge else places.code_dir(name)),
+                                     "ok": True, "at": self.providers.stamp()})
         if default is not None:
             self.say("default  removed the default channel" + (f" (on text-to-cad {default})" if default else ""))
         return failed

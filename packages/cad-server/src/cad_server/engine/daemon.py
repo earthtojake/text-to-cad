@@ -82,6 +82,7 @@ pages waiting on a served document the frame's build writes (``serve.Server.buil
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -1093,17 +1094,30 @@ class Daemon:
                                                    provenance=self.provenance, cache=MESHES, isolated=True, host=host,
                                                    http_factory=HTTP_FACTORY, budget=memory_budget(), token=token))
                 except PortHeld as refusal:
-                    if request.get("port"):
+                    if request.get("port") and request.get("op") == "http":
+                        # An updater handing the pages' port on (``{"op": "http", "port"}``: 0.11.10's helper,
+                        # ``versions.handover``) to a server that serves none yet, the port still held (the old
+                        # server not gone yet): bound as if no port were asked -- the default, or the next free --
+                        # and answered with that address, never ``failed``, which 0.11.10's helper answers by
+                        # stopping this server. The old server hands the port on as it goes (``versions.hand_port``).
+                        self.server, where = bind(
+                            host, self.port,
+                            lambda port, token: Server(port=port, touch=self.touch, provenance=self.provenance,
+                                                       cache=MESHES, isolated=True, host=host,
+                                                       http_factory=HTTP_FACTORY, budget=memory_budget(),
+                                                       token=token))
+                    elif request.get("port"):
                         # The request's own port (``cad viewer --port``): that request is refused,
                         # and the engine -- the builds and warm workers of its other clients -- runs
                         # on, unbound, for the next request that serves.
                         raise
-                    # An engine whose own port is held (``cad server --port``, its
-                    # ``CAD_ENGINE_PORT``) can never serve: it says why and stops, once the
-                    # request that found it has its answer (``_serve``).
-                    self.refusal = refusal
-                    _note(str(refusal))
-                    raise
+                    else:
+                        # An engine whose own port is held (``cad server --port``, its
+                        # ``CAD_ENGINE_PORT``) can never serve: it says why and stops, once the
+                        # request that found it has its answer (``_serve``).
+                        self.refusal = refusal
+                        _note(str(refusal))
+                        raise
                 self.port_source, self.port_because = where["source"], where.get("because", "")
                 self.port_notice = where.get("notice", "")
                 if self.port_notice and request:
@@ -1119,6 +1133,10 @@ class Daemon:
                 self.server.leaving = self.models.leaving
                 self.server.delete = self.models.delete
                 self.server.retire = self.drain
+                # What an update a page's click starts reads of the engine it runs in (``update.Update.start``):
+                # whether it is on its way out, and the PATH of the last shell a build came from.
+                self.server.going = lambda: self.draining or self.stopping.is_set()
+                self.server.shell_path = lambda: self.shell_path
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -2350,6 +2368,9 @@ class Bridge:
         self.door: Any = None
         self.identity: tuple[int, int] | None = None
         self.lock = threading.Lock()
+        # The port the server of 0.11.10 or earlier that held the flat door last said it served pages on (``_take``):
+        # this server takes it as it takes the door, should that server's updater not ask in time.
+        self.predecessor: int | None = None
 
     @staticmethod
     def folder() -> Path:
@@ -2385,7 +2406,10 @@ class Bridge:
         except OSError:
             return
         if held is None:
-            return  # another server holds it: one of 0.11.10 or earlier, or a version's still letting it go
+            # Another server holds it: one of 0.11.10 or earlier, or a version's still letting it go. One of 0.11.10 or
+            # earlier is asked which port it serves pages on, so that port is taken with the door once it goes.
+            self.predecessor = _legacy_port(folder) or self.predecessor
+            return
         try:
             if WINDOWS:
                 listener = self.daemon.listener
@@ -2411,6 +2435,18 @@ class Bridge:
             _drop_lock(held, folder / f"{NAME}.lock")
             return
         self.held = held
+        port, self.predecessor = self.predecessor, None
+        if port is not None:
+            # The flat door taken from a server of 0.11.10 or earlier: the pages' port it served taken too, as its
+            # updater's helper would ask (``{"op": "http", "port"}``), should it have come here first.
+            threading.Thread(target=self._take_port, args=(port,), name="cad-bridge-port", daemon=True).start()
+
+    def _take_port(self, port: int) -> None:
+        try:
+            self.daemon.serve({"op": "http", "port": port})
+        except Exception as error:  # noqa: BLE001 - pages there reload into whichever server takes it
+            print(f"cad: the port 0.11.10's server served pages on ({port}) could not be taken: {error}",
+                  file=sys.stderr, flush=True)
 
     def let_go(self) -> None:
         with self.lock:
@@ -2435,6 +2471,26 @@ class Bridge:
         self.held = None
 
 
+def _legacy_port(folder: Path) -> int | None:
+    """The port the server holding the flat door in ``folder`` serves pages on, where that server is of 0.11.10 or
+    earlier (its environment outside ``versions/``): asked of its ``status``, briefly; else None."""
+    try:
+        from cad_server._internal import versions
+
+        answer = versions.ask_flat({"op": "status"}, seconds=2.0)
+        if not isinstance(answer, dict):
+            return None
+        prefix = answer.get("prefix")
+        inside = os.path.normcase(os.path.realpath(_places.versions_dir())).rstrip(os.sep) + os.sep
+        if not isinstance(prefix, str) or os.path.normcase(os.path.realpath(prefix)).startswith(inside):
+            return None  # a version's server letting the door go: its own update hands its port on
+        serving = answer.get("serving")
+        port = serving.get("port") if isinstance(serving, dict) else None
+        return port if type(port) is int and 0 < port < 65536 else None
+    except Exception:  # noqa: BLE001 - a look, never a reason the bridge fails
+        return None
+
+
 def _front() -> None:
     """A process of a version whose server runs already (its lock held): that server asked to look at the flat
     door again (``Bridge``), so a client of 0.11.10 or earlier that started this process from the
@@ -2447,6 +2503,23 @@ def _front() -> None:
 
         versions.ask(name, {"op": "bridge"}, seconds=5.0)
     except Exception:  # noqa: BLE001 - the client tries again
+        pass
+
+
+def _hand_port(port: int | None) -> None:
+    """A version's server as it stops, its pages' listener closed: the port it served pages on handed to the server of
+    the version its channel moved to, where no pointer names this one any more (``versions.hand_port``). Nothing for a
+    server with no version, or one that served no pages. Never raises."""
+    name = versioned()
+    if name is None or not port:
+        return
+    try:
+        from cad_server._internal import versions
+
+        if versions.hand_port(name, port):
+            print(f"cad: port {port} handed to the server of the version this one's channel moved to", file=sys.stderr,
+                  flush=True)
+    except Exception:  # noqa: BLE001 - a stop never fails for it
         pass
 
 
@@ -2475,9 +2548,10 @@ def _first_start() -> None:
 def proof() -> int:
     """A version's proof before its channel's pointer moves to it (``cad_server._internal.versions.proof``): its
     server's own start sequence up to ready to serve -- its lock taken in its engine folder, its data imported
-    (``_first_start``), the server built over that data and the records' migrations run, its door made --, then all of
-    it let go and the process gone: no port bound (a move may run in a sandbox that refuses one), no process left,
-    nothing served. 0 when it got there, or its server runs already; 1, with why on stderr, when not."""
+    (``_first_start``), the server built over that data and the records' migrations run, a door made beside where its
+    own goes (never at it: a client arriving meanwhile would meet a door that answers nothing) --, then all of it let
+    go and the process gone: no port bound (a move may run in a sandbox that refuses one), no process left, nothing
+    served. 0 when it got there, or its server runs already; 1, with why on stderr, when not."""
     from cad_server._internal import imports
 
     name = versioned()
@@ -2505,7 +2579,7 @@ def proof() -> int:
         if not WINDOWS:
             from cad.engine.door import Door
 
-            door = Door(door_path(), lambda _ident, _protocol: None)
+            door = Door(door_path().with_name(f".proof-{os.getpid()}.door"), lambda _ident, _protocol: None)
         return 0
     except Exception as error:  # noqa: BLE001 - the proof says why it did not start, in one line
         print(f"cad: {type(error).__name__}: {error}", file=sys.stderr)
@@ -2513,12 +2587,15 @@ def proof() -> int:
     finally:
         if door is not None:
             door.close()
+            with contextlib.suppress(OSError):
+                door.path.unlink()
         if daemon is not None:
             daemon.shutdown()
         let_go(held)
 
 
-def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False) -> int:
+def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,
+         rotated: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server --port``);
     ``foreground`` (``cad server``): its HTTP server bound before anything else, so a port
     another process holds fails the command at once (``bind``). An engine a client starts binds
@@ -2543,6 +2620,10 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
         _note_failure(f"the engine server cannot take its lock in {engine_dir()}", error)
         return 1
     if held is None:
+        if foreground and rotated:  # ``cad server --rotate-token``: the server running took the new token, as asked
+            print("cad: the engine server is already running, and took the new token: `cad status` says where it "
+                  "serves", file=sys.stderr)
+            return 0
         if foreground:  # ``cad server``: said, never a silent success that serves nothing it asked
             print("cad: the engine server is already running: `cad status` says where it "
                   "serves, `cad stop` stops it" + (f" (to serve on {port})" if port is not None else ""),
@@ -2628,7 +2709,9 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
         if daemon.door is not None:
             daemon.door.close()  # first: no hello is taken while the rest stops
         daemon.bridge.let_go()
+        pages = daemon.server.port if daemon.server is not None else None
         daemon.shutdown()
+        _hand_port(pages)
         # Its port file, its failure note but a failure's, and its lock: nothing of it stays behind.
         let_go(held, failed=failed or daemon.refusal is not None)
     return 1 if daemon.refusal is not None else 0

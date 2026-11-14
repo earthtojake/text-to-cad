@@ -156,13 +156,15 @@ stdout, exit 1 when the kernel is installed and does not load; `--check` the rep
 writes and starts nothing, what a bug report wants; `--json` it as one document, each check's name, status and
 detail) and the one command that reads every version and channel: each installed version (where it is, which
 channels are on it, whether its server runs and on which port, and, where no channel is on it, what becomes of it:
-removed by the next sweep, its data carried into its successor; installed and never used; or its data kept, and why),
-each channel with its version and when it was last used (a stamp beside its pointer), each pointer that cannot be
-read, and what is left of the layout of 0.11.10 and earlier and whether it can go yet. `cad doctor --prune`, a
+carried into its successor and removed by that version's process; installed and never a channel's; its code removed
+by `cad uninstall` and its data kept for a later install; or its data kept, and why), each channel with its version
+and when it was last used (a stamp beside its pointer), each pointer that cannot be read (one that names no version
+it writes again, naming the newest version a channel has been on; never with `--check`), and what is left of the layout of 0.11.10 and earlier and whether it can go yet. `cad doctor --prune`, a
 person's command and never automatic, shows its plan, asks, and does exactly that: it forgets every named channel
-unused for 30 days (never the default; its version's data goes to the default channel's version), removes every
-version no channel is on -- its data carried into its successor first, never one with work in flight -- with the
-versions installed and never used, and the layout of 0.11.10 and earlier once that is safe, saying each thing it
+unused for 30 days (never the default; its version's data goes to the default channel's version, and where that is
+older the version goes whole, its settings and Recents with it, which the plan says), removes every version no channel
+is on -- its data carried into its successor first, never one with work in flight -- with the versions installed and
+never a channel's, and the layout of 0.11.10 and earlier once that is safe, saying each thing it
 did, and what
 earlier releases left behind that nothing needs (`_internal/leftovers.py`: engine records of an older format,
 the bytecode of installations no longer registered, cache folders no record names, the launchers earlier releases
@@ -194,8 +196,9 @@ default version's server installs a newer release that breaks nothing -- a patch
 minor release from 1.0 -- in the background and runs its setup once it has handled no command for an hour; one that
 may break something waits for the update button or `cad update`);
 `cad uninstall` takes out what the install command put here -- our plugin copies, the plugin folder, the default
-channel and its version unless a store's channel is on it, the receipt, and the `cad` command unless a store's copy
-still runs it (said, with which) --, and `--purge` everything; asked first as every command that destroys is (`cad
+channel and its version's code unless a store's channel is on it (its data -- settings, Recents, documents' records,
+page token and port -- stays for a later install, which finds it), the receipt, and the `cad` command unless a store's
+copy still runs it (said, with which) --, and `--purge` everything, that data with it; asked first as every command that destroys is (`cad
 delete`, `cad doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
 `_internal/consent.py`);
 `cad plugin` writes
@@ -264,13 +267,15 @@ layout below, in the state and cache folders (`cad.engine.places`). A version is
 its server and kernel environments, then its code marker -- by `cad setup --add` (`_internal/versions.py`),
 which writes the `cad` command where it is missing or of an older revision and changes nothing else; each delivery
 channel's pointer (`default`, `channels/<name>` in the state folder:
-`_internal/pointers.py`; a pointer that is there and cannot be read is never taken for none: nothing is removed
-while one cannot be) names its version, moved by one routine that imports the new version's settings, Recents,
+`_internal/pointers.py`; a pointer that is there and cannot be read, or names no version, is never taken for none:
+a pinned command refuses, nothing is removed while one cannot be read, and only `cad setup`, the updater and `cad
+doctor` write one again) names its version, moved by one routine that imports the new version's settings, Recents,
 records, page token and port from the version it replaces at its first start (`_internal/imports.py`), proves the
 version's server starts (its own start sequence, up to ready to serve), carries over what the version it leaves
-wrote since, and removes the versions no channel is on that have been a channel's -- a version installed and never
-used is no sweep's -- each carrying what it holds that its successor lacks into it first (records, Recents,
-settings; never what it kept for telemetry, which moves once, to the next sender); the layout of 0.11.10 and earlier
+wrote since, and removes the versions no channel is on that a pointer has named -- a version installed and never
+named is no sweep's -- each carrying what it holds that its successor lacks into it first (records, Recents,
+settings; never what it kept for telemetry, which moves once, to the next sender), in a process of that successor
+alone, which writes them in its own formats; the layout of 0.11.10 and earlier
 is imported from and, once the default channel has left it and that is safe, carried over, its code, records and
 caches removed (`_internal/legacy.py`).
 
@@ -282,8 +287,9 @@ channel's move stops its old version's server once no pointer names that version
 serves on the old one's port with the page token it imported; where the old one stays (another channel is on its
 version, or work is in flight there), the new one takes the next free port, the update ends there, and the page
 that asked for it goes to the new server's address (a CAD app card says to start a new thread); a server whose version no pointer names stops
-itself once idle, and another server's sweep, the next move or `cad doctor --prune` removes its folder, its data
-carried into the version its channel moved to; where that is unknown, the folder stays and `cad doctor` says why.
+itself once idle, handing the port it served pages on to the server of the version its channel moved to, and that
+version's server, or its next move, removes its folder, its data carried in first; where that version is unknown, the
+folder stays and `cad doctor` says why.
 `cad stop`
 and `cad status` act on one version's server: the pinned one, or the default's. Only the default channel's
 version, on a device where the install command has run (its receipt), has an updater: every other server's page

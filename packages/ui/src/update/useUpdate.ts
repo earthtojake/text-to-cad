@@ -148,16 +148,20 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
     }, () => {});
   }, [read, apply, follow]);
   // Where the update this page followed before its reload ended: read once, as the page loads. An engine
-  // whose update neither runs nor failed runs the release the update moved to: said once.
+  // whose update neither runs nor failed nor ended elsewhere (`moved`: `apply` hands that to the host, once, and this
+  // engine still runs the release before) runs the release the update moved to: said once.
   const resumed = useRef(followed);
   useEffect(() => {
     if (!resumed.current) return;
     resumed.current = false;
     following.current = true;
     void read().then(reply => {
+      const state = reply.update?.state;
       const phase = apply(reply);
       if (phase === "working" && polling.current === null) follow();
-      else if (phase === "idle" && reply.update?.state !== "failed" && reply.release && alive.current) updated.current?.(reply.release);
+      else if (phase === "idle" && state !== "failed" && state !== "moved" && reply.release && alive.current) {
+        updated.current?.(reply.release);
+      }
     }, () => {});
   }, [read, apply, follow]);
   // An answer the host read itself while the engine restarted: a switch that failed and went back ends the

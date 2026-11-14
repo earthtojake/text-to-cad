@@ -100,23 +100,28 @@ def present() -> bool:
     return removable()
 
 
-def unsafe(version: str) -> str | None:
+def unsafe(version: str, *, read_only: bool = False) -> str | None:
     """Why the layout cannot be removed yet now that the default channel is on ``version``, in words; None when it
     is safe: ``version``'s data is imported, its server runs, and no process runs from the layout (see the
-    module)."""
+    module). ``read_only`` (``cad doctor``'s report): the flat engine folder's lock is read, never taken or made
+    (``flat_server``)."""
     from cad_server._internal import imports, installations, releases, versions
+    from cad_server._internal.pointers import Unreadable
 
     if not imports.imported(version):
         return f"text-to-cad {version}'s data is not imported yet"
     if not versions.serves(version):
         return f"text-to-cad {version} has not started yet"
-    current = installations.current_version()
+    try:
+        current = installations.current_version(strict=True)
+    except Unreadable as unreadable:
+        return str(unreadable)
     if current is not None:
         record = places.installation_record(installations.state().read(f"{installations.FOLDER}/{current}.json"))
         if record is None or not _within(record["prefix"], places.versions_dir()):
             return (f"installations/current names {current}, not a version in {places.versions_dir()}: every client of "
                     "0.11.10 and earlier still runs that")
-    flat = flat_server()
+    flat = flat_server(take=not read_only)
     if flat is not None and not _within(flat, places.code_dir(version)):
         return f"a server other than text-to-cad {version}'s holds the flat engine folder {places.engines_dir()}"
     for folder in (*(root() / RELEASES / name for name in _releases()), cache_root() / "base"):
@@ -125,26 +130,32 @@ def unsafe(version: str) -> str | None:
     return None
 
 
-def flat_server() -> str | None:
+def flat_server(*, take: bool = True) -> str | None:
     """The environment of the server that holds the flat engine folder every client of 0.11.10 and earlier finds
     (``places.engines_dir``: its ``engine.lock``, and its door, on Windows its port file), as it says it in its
     ``status`` (``prefix``), read and nothing started; ``""`` for one that holds the lock and does not answer or
-    say; None when none holds it. The default version's own server holds it too, as the bridge."""
+    say; None when none holds it. The default version's own server holds it too, as the bridge. ``take`` false
+    (``cad doctor --check``): nothing made or taken -- no lock file and no door there is none; a door that does not
+    answer, ``""`` -- as ``versions.serves`` asks."""
     import threading
 
     from cad.engine import client
     from cad_server._internal.versions import _drop, _take
 
     engines = places.engines_dir()
-    try:
-        held = _take(engines)
-    except OSError:
-        return ""
-    if held is not None:
-        _drop(held, engines)
-        return None
-    answers: list = []
     address = engines / f"{places.NAME}.{'port' if places.WINDOWS else 'door'}"
+    if not take:
+        if not (engines / f"{places.NAME}.lock").exists() or not address.exists():
+            return None
+    else:
+        try:
+            held = _take(engines)
+        except OSError:
+            return ""
+        if held is not None:
+            _drop(held, engines)
+            return None
+    answers: list = []
 
     def ask() -> None:
         try:

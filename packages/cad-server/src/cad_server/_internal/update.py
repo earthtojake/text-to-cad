@@ -168,7 +168,7 @@ def run_setup(record: dict[str, Any], *, frame: Callable[[str, str], None] | Non
                           stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                           env={**environment(), "PYTHONUNBUFFERED": "1", **(environ or {})},
                           **places.detached()) as process:
-        bound = threading.Timer(seconds, process.kill) if seconds else None
+        bound = threading.Timer(seconds, _stop_group, args=(process,)) if seconds else None
         if bound is not None:
             bound.daemon = True
             bound.start()
@@ -193,6 +193,26 @@ def run_setup(record: dict[str, Any], *, frame: Callable[[str, str], None] | Non
     return code, lines[-1] if lines else ""
 
 
+def _stop_group(process: subprocess.Popen) -> None:
+    """A setup past its bound stopped with every process it started (the apps' commands among them): its process
+    group, which ``places.detached`` made its own (on POSIX a session, whose group is its pid; on Windows its tree).
+    Never raises."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], stdin=subprocess.DEVNULL,
+                           capture_output=True, timeout=30)
+        else:
+            import signal
+
+            os.killpg(process.pid, signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        process.kill()
+    except OSError:
+        pass
+
+
 # --- the server's own updater ------------------------------------------------------------------------------------
 
 
@@ -213,6 +233,11 @@ class Update:
         self.failed_at = float("-inf")
         # The setup run again for the apps behind (``catch_up``), while it runs.
         self.catching: threading.Thread | None = None
+        # The engine this updater runs in, as the update was asked (``start``'s server, ``automatic``'s engine):
+        # whether it is on its way out (``going``) and the PATH of the last shell a build came from (``shell``),
+        # where the apps' command lines are.
+        self.going: Callable[[], bool] = lambda: False
+        self.shell: Callable[[], str | None] = lambda: None
 
     def snapshot(self) -> dict[str, Any]:
         """Where the update is: ``state`` (``idle``, ``working``, ``restarting``, ``moved``, ``failed``), the release
@@ -258,12 +283,30 @@ class Update:
                 if stage in ("restart", "apps"):
                     self.state["state"] = "restarting"
 
-    def start(self, server: Any = None) -> dict[str, Any]:
-        """The update started, unless one runs; its state. ``server`` (the HTTP server the click came through) is
-        not needed: the release's setup takes the port from this server's own status. The feed is read with no
-        lock held (``updates.newest``, a few seconds at most): the page's reads of the state never wait on it."""
-        from cad_server import updates
+    def _engine(self, going: Callable[[], bool] | None, shell: Callable[[], str | None] | None) -> None:
+        if callable(going):
+            self.going = going
+        if callable(shell):
+            self.shell = shell
 
+    def start(self, server: Any = None) -> dict[str, Any]:
+        """The update started, unless one runs; its state. ``server``: the engine's server the click came through,
+        which says whether the engine is on its way out (``going``) and the PATH of the last shell a build came from
+        (``shell_path``, which the release's setup runs with: ``run_setup``). Refused, as a failure said, where this
+        process has no updater (``channel.told``: not the default channel's version, or no install command here).
+        The feed is read with no lock held (``updates.newest``, a few seconds at most): the page's reads of the state
+        never wait on it."""
+        from cad_server import updates
+        from cad_server._internal.channel import told
+
+        self._engine(getattr(server, "going", None), getattr(server, "shell_path", None))
+        if not told():
+            with self.lock:
+                if self.state["state"] in ("working", "restarting"):
+                    return dict(self.state)
+            self._failed("this text-to-cad has no updater: only the default channel's version, set up by the install "
+                         "command, updates itself")
+            return self.snapshot()
         with self.lock:
             if self.state["state"] in ("working", "restarting"):
                 return dict(self.state)
@@ -316,13 +359,17 @@ class Update:
 
     def _setup(self, target: str, record: dict[str, Any]) -> None:
         """Step 2: the release's own setup, which moves the default channel to it and may stop this server as it
-        does. Should it return with this server still here, the update held (this server, no channel's now,
-        retires once idle) or failed, said in its one line."""
-        code, said = run_setup(record, frame=self._frame)
+        does, run with the PATH of the last shell a build came from (``shell``: where the apps' command lines are,
+        which a server a GUI app started lacks). Should it return with this server still here, the update held (this
+        server, no channel's now, retires once idle) or failed, said in its one line."""
+        from cad_server._internal.providers import lasting
+
+        shell = self.shell()
+        code, said = run_setup(record, frame=self._frame, environ={"PATH": lasting(shell)} if shell else None)
         if code != 0:
             self._failed(said or f"text-to-cad {target}'s setup failed (exit status {code})")
             return
-        moved = _moved(target)
+        moved = _moved(target, self.going)
         with self.lock:
             if moved is None:  # this server goes: the new default's takes its port, and the page reloads into it
                 self.state = {**self.state, "state": "restarting"}
@@ -344,6 +391,8 @@ class Update:
         None. Never raises; never waits on the network."""
         from cad_server import auto_updates, updates
 
+        self._engine(lambda: bool(getattr(engine, "draining", False)) or engine.stopping.is_set(),
+                     lambda: getattr(engine, "shell_path", None))
         try:
             if not auto_updates.enabled() or not installed_here():
                 return None
@@ -424,9 +473,11 @@ class Update:
         and does the apps step again, recording what it did in the receipt. Only where this server has an updater
         (``channel.told``), once it has handled no command for ``auto_updates.IDLE_SECONDS`` and nothing is in flight
         (as an automatic update waits), with no update running or getting ready and no ``cad setup`` holding the
-        install lock; at most once every ``CATCH_UP_SECONDS`` (``CAUGHT_UP``); in the background, bounded by
-        ``CATCH_UP_BOUND``, with the PATH of the last shell a build came from (``Daemon.shell_path``), where those
-        command lines are. The apps it runs it for, or None. Never raises; never waits on the network."""
+        install lock; at most once every ``CATCH_UP_SECONDS`` (``CAUGHT_UP``); only while automatic updates are on
+        (``auto_updates.enabled``: a setup run unattended is an automatic update's to run); in the background, bounded
+        by ``CATCH_UP_BOUND`` -- past it the setup is stopped with every process it started (``_stop_group``) --, with
+        the PATH of the last shell a build came from (``Daemon.shell_path``), where those command lines are. The apps
+        it runs it for, or None. Never raises; never waits on the network."""
         from cad_server import auto_updates
 
         try:
@@ -434,7 +485,7 @@ class Update:
             from cad_server._internal.channel import told
 
             name = places.versioned()
-            if name is None or not told():
+            if name is None or not told() or not auto_updates.enabled():
                 return None
             lagging = sorted(app for app, row in behind().items() if row.get("release") == name)
             if not lagging:
@@ -560,23 +611,27 @@ def _caught_up(now: float | None = None, apps: list[str] | None = None) -> float
     return now
 
 
-def _moved(target: str) -> dict[str, Any] | None:
-    """After a setup that moved the default channel to ``target`` returned 0 with this server still running: where
-    the new default's server serves pages (``{"url", "token"}``), started for it where it does not run yet -- it
-    takes the next free port, this one still holding its own --; ``{}`` where it could not be started or asked (the
-    update is done all the same). None where this server is on its way out after all, or the update is no move of
-    its own: a process with no version, its own version still the default's, or its door closed (the move's drain:
-    the new default's server takes this one's port, and a page reloads into it there). Never raises."""
+def _moved(target: str, going: Callable[[], bool] = lambda: False) -> dict[str, Any] | None:
+    """After a setup that moved the default channel to ``target`` returned 0 with this server still running: None
+    where this server is itself on its way out (``going``: its drain, which the move asked; its door closed) -- the new
+    default's server takes this one's port, and a page reloads into it there, ``restarting`` --; in every other case,
+    where the default channel's server serves pages now (``{"url", "token"}``: the version the default pointer names,
+    ``target`` or one newer still, started where it does not run yet, taking the next free port while this one holds
+    its own), or ``{}`` where it could not be started or asked: the update is done all the same, and a page is told
+    so, never left waiting on a restart that does not come. Never raises."""
     try:
         from cad.engine.places import versioned
         from cad_server._internal import pointers, versions
 
         name = versioned()
-        if name is None or name == target or pointers.read(None) != target or not versions.serves(name):
+        if going() or (name is not None and not versions.serves(name)):
             return None
-        if not versions.start_server(target):
+        default = pointers.default().version
+        if default is None:
             return {}
-        answer = versions.ask(target, {"op": "http"}, seconds=versions.START_SECONDS)
+        if not versions.start_server(default):
+            return {}
+        answer = versions.ask(default, {"op": "http"}, seconds=versions.START_SECONDS)
         if not isinstance(answer, dict) or "failed" in answer or not isinstance(answer.get("url"), str):
             return {}
         return {"url": answer["url"], "token": answer.get("token") if isinstance(answer.get("token"), str) else None}

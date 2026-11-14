@@ -27,8 +27,8 @@ copy of the tree in which the quiet period an automatic update waits for (``auto
   (it must run to its end in the server it started on), and a document opened in Recents by the old server after
   the new version imported its data (it must be in the new version, and the old version or layout removed only
   after it was carried over). This build's own update with a build in flight ends as ``moved``: the new server takes
-  the next port, which the page goes to, and the pages' port is left to no one once the old server stops (said in a
-  ``note`` line: the known gap);
+  the next port, which the page goes to, and the old server, as it stops once its build ends, hands the pages' port
+  to the new one, which then answers there with the same token;
 - ``early-server``: new skill text before the new software (the design's H4): on a device on 0.11.10 with its server
   serving pages, ``cad setup --add`` and a pinned command of this build (which moves the default channel and leaves
   0.11.10's server running), this build's server up on the next port with a page and a build held open, then
@@ -459,7 +459,12 @@ class Device:
             return None
 
     def proxy(self) -> Path:
-        return self.work / "bin" / ("cad.exe" if WINDOWS else "cad")
+        """The device's ``cad`` command. On Windows it is ``cad.exe``; a release of 0.10 wrote ``cad.cmd`` there, which
+        is the command until an update writes ``cad.exe``."""
+        folder = self.work / "bin"
+        if WINDOWS and not (folder / "cad.exe").exists() and (folder / "cad.cmd").exists():
+            return folder / "cad.cmd"
+        return folder / ("cad.exe" if WINDOWS else "cad")
 
     def opened(self, name: str, port: int | None = None) -> str:
         """A page opening a new file in Recents (``PATCH /api/v1/documents``) on the server at ``port``: the server
@@ -798,12 +803,12 @@ def in_flight(device: Device) -> None:
     address = str(moved.get("address") or "")
     pages = device.port
     device.port = int(address.rsplit(":", 1)[-1].split("/")[0]) if address else device.port
-    # The known gap, said and not failed: NEWER took the next port while NEW held the pages' one, and nothing takes
-    # that port once NEW has stopped, so a page left open there is reopened at the address the update named.
-    left = device.server(port=pages)[0]
-    print(f"note    in flight: after {NEW} stopped, port {pages} (the pages' before the update) "
-          + ("answers nothing: pages open there are reopened at " + address if left is None
-             else f"answers {left}"), flush=True)
+    # NEWER took the next port while NEW held the pages' one; NEW, as it stopped, handed that port to NEWER's server
+    # (``versions.hand_port``), so a page left open there reloads into NEWER, with the same token.
+    def handed():
+        status, said = device.server(port=pages)
+        return status == 200 and said.get("release") == NEWER
+    device.until(handed, f"port {pages} (the pages' before the update) served by {NEWER} once {NEW} stopped")
     device.check(NEWER, documents=(late, later))
 
 

@@ -27,7 +27,11 @@ It is the one command that reads every version and channel on the device (``_ver
 (``versions/<version>``: where it is, whether it is completely installed, which channels are on it, whether its
 server runs and on which port, and what becomes of one no pointer names), each channel with its version and when it
 was last used, each pointer that cannot be read, and what is left of the layout of 0.11.10 and earlier and whether it
-can go yet.
+can go yet. Without ``--check`` it writes again each pointer that names no version (a crash emptied it, or a release
+wrote it in a form this one does not know), naming the newest version present that a channel has been on
+(``versions.mend``): no pinned command runs while one cannot be read, and only it, ``cad setup`` and the updater write
+one again. The ``cad`` command runs ``cad doctor`` with no pin even while the default pointer cannot be read, as the
+newest version that has started, so it can.
 Everything else it does acts on the one version it runs as (the pinned one, or the default with no pin).
 
 It says what the device runs, comparing nothing: the current installation, the flat release folders of
@@ -173,11 +177,16 @@ def _versions() -> list[str]:
         listed = [found for found in surveyed if isinstance(found, pointers.Pointer)]
         unreadable = [found for found in surveyed if isinstance(found, pointers.Unreadable)]
         for found in unreadable:
-            lines.append(f"pointer  {found}: no version is removed until it can be read")
+            repair = "; cad doctor writes it again" if found.corrupt else ""
+            lines.append(f"pointer  {found}: no version is removed, and no command pinned to its channel runs, until it "
+                         f"can be read{repair}")
         try:
             kept = versions._kept()
             default = pointers.default()
-        except pointers.Unreadable:
+        except pointers.Unreadable as mirror:
+            if not any(str(found.path) == str(mirror.path) for found in unreadable):  # the mirror, which survey reads not
+                lines.append(f"pointer  {mirror}: no version is removed until it can be read")
+                unreadable.append(mirror)
             kept, default = {found.version for found in listed}, pointers.Default(None, None)
         for name in versions.folders():
             on = [pointer.channel or "default" for pointer in listed if pointer.version == name]
@@ -193,17 +202,7 @@ def _versions() -> list[str]:
             else:
                 words.append("its server is not running")
             if name not in kept and not unreadable:
-                fate = versions.fate(name, kept)
-                if fate is None:
-                    heir = versions.successor(name)[0]
-                    words.append("the next sweep removes it" + (f", its data carried into text-to-cad {heir} first"
-                                                                if heir and versions.used(name) else ""))
-                elif fate == "unused":
-                    words.append("installed and never used: cad doctor --prune removes it")
-                elif fate == "partial":
-                    words.append("its install is incomplete: cad doctor --prune removes it")
-                elif fate == "successor":
-                    words.append(f"its data is kept: {versions.successor(name)[1]}")
+                words += _fate_words(name, kept)
             lines.append("version  " + "; ".join(words))
         if not versions.folders():
             lines.append("version  none installed in their own folders")
@@ -220,12 +219,46 @@ def _versions() -> list[str]:
             if default.version is None or default.source != "pointer":
                 why = "the default channel has not moved off it yet"
             else:
-                why = legacy.unsafe(default.version)
+                why = legacy.unsafe(default.version, read_only=True)
             lines.append("legacy   the layout of 0.11.10 and earlier is here: "
                          + (f"kept, {why}" if why else "safe to remove: the next sweep, or cad doctor --prune, removes it"))
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         lines.append(f"version  unknown ({type(error).__name__}: {error})")
     return lines
+
+
+def _fate_words(name: str, kept: set[str]) -> list[str]:
+    """What becomes of version ``name``, which no pointer names, in the report's words: what the device does with it
+    (``versions.fate``'s states), whichever version's process removes it -- its heir's, never this report's."""
+    import os
+
+    from cad.engine import places
+    from cad_server._internal import imports, versions
+
+    words = []
+    if versions._code_left(name):
+        words.append("cad uninstall could not remove its code then: the next sweep does")
+    if not versions.used(name):
+        words.append("installed and never a channel's: cad doctor --prune removes it"
+                     if places.version_record(name) is not None
+                     else "its install is incomplete: cad doctor --prune removes it")
+        return words
+    heir, why = versions.successor(name)
+    if heir is not None:
+        try:
+            imports._read_ledger(places.data_dir(heir))
+        except OSError as error:
+            words.append(f"its data is kept for now: text-to-cad {heir}'s record of what it took cannot be read "
+                         f"({error.strerror or error}), so nothing is carried into it")
+            return words
+        words.append(f"text-to-cad {heir} carries its data in and removes it (its server as it tends itself, or its "
+                     "next move)")
+    elif os.path.lexists(places.version_dir(name) / versions.UNINSTALLED):
+        words.append("cad uninstall removed it and kept its data (settings, Recents, documents' records) for a later "
+                     "install, which takes it; cad uninstall --purge removes it")
+    else:
+        words.append(f"its data is kept: {why}")
+    return words
 
 
 def _plugin() -> list[str]:
@@ -750,7 +783,7 @@ def _prune(args, prog: str) -> int:
 
     from cad_server._internal import pointers, versions
 
-    lines = []
+    lines = _mend()
     try:
         pruning = versions.prune_plan()
     except pointers.Unreadable as unreadable:
@@ -787,7 +820,7 @@ def _prune(args, prog: str) -> int:
         except OSError as error:
             lines.append(f"the versions could not be pruned: {error}")
     for name, why in (pruning.kept.items() if pruning is not None else ()):
-        lines.append(f"kept text-to-cad {name}: no channel is on it, and its data is kept: {why}")
+        lines.append(f"kept text-to-cad {name}: no channel is on it, and {why}")
     # And the launchers earlier releases published beside the cad command: 0.8's proxy among them.
     lines += [f"removed {path}, a launcher the cad command replaces" for path in installations.prune_legacy()]
     # And what no cadgen needs any more: old engine records, bytecode, cache folders no record names.
@@ -803,7 +836,20 @@ def _prune(args, prog: str) -> int:
 VERDICTS = {"named": "a channel is on it", "connected": "it has work in flight, or its server cannot say",
             "in use": "a process still runs from it", "refused": "the system refused to move it (a file in use)",
             "successor": "where its data would go is unknown", "carry": "what it holds could not all be carried over",
-            "used": "it has been used", "unused": "installed and never used", "partial": "its install is incomplete"}
+            "heir": "the version its data goes to carries it in and removes it, by its server or its next move",
+            "uninstalled": "cad uninstall kept its data for a later install",
+            "used": "it has been a channel's", "unused": "installed and never a channel's",
+            "partial": "its install is incomplete"}
+
+
+def _mend() -> list[str]:
+    """Each pointer that names no version written again (``versions.mend``), in the report's words. Never raises."""
+    try:
+        from cad_server._internal import versions
+
+        return versions.mend()
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return [f"the pointers could not be looked at ({type(error).__name__}: {error})"]
 
 
 def _check(name: str, status: str, detail: str, more: list[str] | None = None) -> dict:
@@ -840,6 +886,10 @@ def _report(*, check: bool, start: bool) -> tuple[str, list[dict]]:
     checks += [_line(line, status) for status, line in _setup(check)]
     # What the device runs: the current installation, and the flat release folders of 0.11.10 and earlier.
     checks += [_line(line) for line in _current()]
+    # A pointer that names no version written again (never with --check), naming no version older than the newest a
+    # channel has been on (``versions.mend``).
+    if not check:
+        checks += [_line(f"pointer  {line}") for line in _mend()]
     # Every installed version and every channel: the one report that reads them all.
     checks += [_line(line) for line in _versions()]
     # The engine's document cache: what it keeps, until a person deletes it.

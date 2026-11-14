@@ -202,6 +202,45 @@ class PortHandedToARunningServer(Servers):
         self.assertEqual(versions.ask(X, {"op": "pid"})["pid"], x, "still running")
 
 
+class PortsHeldAtTheHandover(Servers):
+    def test_a_server_serving_nothing_asked_for_a_port_still_held_serves_another_and_never_fails(self) -> None:
+        """E4: a new server that holds the flat door but serves no pages yet, asked (by 0.11.10's helper, or a
+        handover) for the old pages' port while the old server still holds it, binds as if no port were asked and
+        answers with that address: ``failed`` would have 0.11.10's helper stop it."""
+        self.version(X)
+        self.assertEqual(versions.move(None, X).kind, "moved")
+        x = self.start(X)
+        self.until(lambda: versions.ask(X, {"op": "status"})["bridge"], "the default's server holds the flat door")
+        taken = socket.socket()
+        self.addCleanup(taken.close)
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        held = taken.getsockname()[1]
+        answer = self.old({"op": "http", "port": held}, start=False)
+        self.assertNotIn("failed", answer or {})
+        self.assertNotEqual(answer["port"], held)
+        self.assertEqual(versions.answered_port(answer), answer["port"])
+        self.assertEqual(versions.ask(X, {"op": "pid"})["pid"], x, "still running")
+
+    def test_a_server_that_goes_after_the_handover_hands_its_port_to_its_heir(self) -> None:
+        """E9: the old server took longer to go than the handover waited, so the new one serves another port; as the
+        old one stops, it hands the port pages were on to the version its channel moved to."""
+        for name in (X, Y):
+            self.version(name)
+        self.assertEqual(versions.move(None, X).kind, "moved")
+        self.start(X)
+        old = self.serve(X)
+        self.assertEqual(old["port"], self.port)
+        self.start(Y)
+        self.assertNotEqual(self.serve(Y)["port"], self.port, "the old one still holds it")
+        pointers.write(None, Y)  # the default channel moved on, X left for Y
+        (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")
+        versions.ask(X, {"op": "stop", "drain": True})
+        self.until(lambda: (versions.ask(Y, {"op": "status"}) or {}).get("serving", {}).get("port") == self.port,
+                   f"{Y}'s server serves the port {X}'s served")
+        self.assertEqual(self.page(self.port, old["token"]), 200, "a page open on it reloads into the heir")
+
+
 class Kept(Servers):
     def test_another_pointer_keeps_the_old_version_and_a_named_channel_never_holds_the_flat_door(self) -> None:
         for name in (X, Y, Z):
@@ -233,6 +272,7 @@ class Retiring(Servers):
             self.version(name)
         pointers.write(None, Y)
         (places.version_dir(X) / versions.SUCCESSOR).write_text(f"{Y}\n", encoding="utf-8")  # the default left it
+        (places.version_dir(X) / versions.NAMED).write_bytes(b"")  # which a pointer named once
         self.start(X, tend=1.0)  # no pointer names it, nor the default: once idle, it goes
         self.until(lambda: not versions.serves(X), f"{X}'s server stops itself")
         self.assertTrue(places.version_dir(X).exists(), "a server never removes the folder it runs from")

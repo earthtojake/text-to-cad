@@ -221,6 +221,70 @@ class TheCommand(Device):
 
         self.both(check)
 
+    def test_a_pointer_there_that_cannot_be_read_is_never_no_pointer(self) -> None:
+        # D12: the command tells a pointer that is not there from one that is and cannot be read, or names no version,
+        # and refuses on the second; cad doctor alone still runs, as the newest version that has started, to repair it.
+        def check(how: str) -> None:
+            self.uvx(installs=X)
+            self.version(OLDER)
+            (self.state / "versions" / OLDER / "data").mkdir()
+            (self.state / "versions" / OLDER / "data" / "format.json").write_text("{}", encoding="utf-8")
+            default = self.state / "default"
+            for corrupt in (True, False):
+                if corrupt:
+                    default.write_bytes(b"\n")
+                else:
+                    default.unlink()
+                    default.mkdir()  # there, and it cannot be read
+                words = pins.unreadable_pointer(str(default), corrupt=corrupt)
+                for args in ([f"+{X}", "status"], ["status"]):
+                    done = self.cad(how, *args)
+                    self.assertEqual((done.returncode, done.stdout, done.stderr), (1, "", f"cad: {words}\n"), args)
+                self.ran(self.cad(how, "doctor"), f"{OLDER} unset doctor")
+            store = self.state / "channels" / "store"
+            store.parent.mkdir()
+            store.write_bytes(b"x")
+            done = self.cad(how, f"+{X}@store", "status")
+            self.assertEqual(done.stderr, f"cad: {pins.unreadable_pointer(str(store), corrupt=True)}\n")
+            self.assertEqual(self.uv_runs(), [], "nothing installed on a guess")
+
+        self.both(check)
+
+    def test_the_command_and_the_versions_read_a_pointer_by_one_rule(self) -> None:
+        # D12: the sh, the Windows main and ``pointers.read`` agree on every pointer: a version, none, or one that
+        # cannot be read (unreadable) or names no version (corrupt).
+        main: dict = {}
+        exec(compile(installations.script(windows=True).replace("sys.exit(main())", ""), "main", "exec"), main)
+        body = installations.script(windows=False).split("\nnamed() {\n", 1)[1].split("\n}\n", 1)[0]
+        program = f'named() {{\n{body}\n}}\nnamed "$1"; printf "%s|%s" "$now" "$unread"'
+        shells = [shell for shell in ("sh", "dash") if shutil.which(shell)] if os.name != "nt" else []
+        cases = [b"0.12.0\n", b"0.12.0", b"0.12.0\r\n", b"\r0.12.0\r\n\n\n", b"0.12.0-dev.20261113000000\n",
+                 b" 0.12.0", b"0.12.0 ", b"0.12.0\n0.13.0\n", b"", b"\n", b"x", b"0.12.0\xff", b"+0.12.0", None, "dir",
+                 "link"]
+        for case in cases:
+            path = self.root / "pointer"
+            if path.is_dir() and not path.is_symlink():
+                path.rmdir()
+            else:
+                path.unlink(missing_ok=True)
+            if isinstance(case, bytes):
+                path.write_bytes(case)
+            elif case == "dir":
+                path.mkdir()
+            elif case == "link":
+                path.symlink_to(self.root / "nothing")
+            try:
+                found = _read_path(path)
+                expected = (found or "", "")
+            except pointers.Unreadable as unreadable:
+                expected = ("", "corrupt" if unreadable.corrupt else "unreadable")
+            with self.subTest(case=case):
+                version, why = main["named"](str(path))
+                self.assertEqual((version or "", why or ""), expected, "the Windows main")
+                for shell in shells:
+                    done = subprocess.run([shell, "-c", program, shell, str(path)], capture_output=True)
+                    self.assertEqual(done.stdout.decode(), "|".join(expected), shell)
+
     def refused_none(self, how: str) -> None:
         done = self.cad(how, "status")
         self.assertEqual((done.returncode, done.stderr), (1, proxy.NONE_INSTALLED + "\n"))
@@ -279,6 +343,15 @@ class TheCommand(Device):
             self.assertIn("update the text-to-cad plugin in the app it came from", pins.stale(X, "store", NEWER))
 
         self.both(check)
+
+
+def _read_path(path: Path) -> str | None:
+    """``pointers.read`` of the pointer at ``path``, whatever its name: the default's, in a state folder of its own."""
+    with tempfile.TemporaryDirectory() as folder:
+        default = Path(folder) / "default"
+        if path.is_symlink() or path.exists():
+            default.symlink_to(path)
+        return pointers.read(None, Path(folder))
 
 
 class AnOlderReleaseNeverRewritesIt(unittest.TestCase):
@@ -395,15 +468,20 @@ class Applying(unittest.TestCase):
         with mock.patch.dict(pointers._used, clear=True), mock.patch("os.utime", side_effect=PermissionError(1, "no")):
             self.assertIsNone(self.apply(f"+{X}@store"), "within the day: nothing written; and a mark never fails it")
 
-    def test_a_pointer_that_cannot_be_read_runs_nothing_and_an_emptied_one_is_moved(self) -> None:
+    def test_a_pointer_that_cannot_be_read_or_names_no_version_runs_nothing_and_moves_nothing(self) -> None:
+        # D2 (this test asserted that an emptied one was moved before): a pin never writes a pointer it cannot read,
+        # or an old chat's would move its channel back.
         pointers.write("store", X, self.state)
+        path = self.state / "channels" / "store"
         with mock.patch.object(Path, "read_bytes", side_effect=PermissionError(13, "sharing violation")):
             refused = self.apply(f"+{X}@store")
-        self.assertEqual((refused.reason, self.moved), ("failed", []))
-        self.assertIn("cannot be read", str(refused))
-        (self.state / "channels" / "store").write_bytes(b"")
-        self.assertIsNone(self.apply(f"+{X}@store"))
-        self.assertEqual(self.moved, [("move", "store", X)])
+        self.assertEqual((str(refused), refused.reason, self.moved),
+                         (pins.unreadable_pointer(str(path), corrupt=False), "failed", []))
+        for written in (b"", b"0.13.0\n{\"later\": \"form\"}\n"):  # emptied by a crash; a form a later release writes
+            path.write_bytes(written)
+            refused = self.apply(f"+{X}@store")
+            self.assertEqual((str(refused), refused.reason), (pins.unreadable_pointer(str(path), corrupt=True), "failed"))
+        self.assertEqual(self.moved, [])
 
     def test_older_than_its_channel_is_stale(self) -> None:
         pointers.write("store", NEWER, self.state)

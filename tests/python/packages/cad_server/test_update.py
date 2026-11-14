@@ -240,6 +240,14 @@ class DrainTest(unittest.TestCase):
 
 
 class UpdateJobTest(Fixture):
+    def setUp(self) -> None:
+        super().setUp()
+        # This process has an updater (``channel.told``): the default channel's version, with the install command's
+        # receipt; a test's checkout would otherwise be a development build, which has none.
+        told = mock.patch("cad_server._internal.channel.told", return_value=True)
+        told.start()
+        self.addCleanup(told.stop)
+
     def wait(self, job: update.Update, *states: str) -> dict:
         deadline = time.monotonic() + 30
         while (state := job.snapshot())["state"] not in states:
@@ -253,8 +261,10 @@ class UpdateJobTest(Fixture):
                               "done": 3, "total": 4, "elapsedMs": 0}}
         command = self.setup_script(json.dumps(frame))
         job = update.Update()
-        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+        # Its setup a stand-in that moves nothing: this server goes, as a move's drain makes it (``_moved``).
+        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(update, "_moved"), \
                 mock.patch.object(update, "install", return_value={"cad": command}) as installed:
+            update._moved.return_value = None
             started = job.start(SimpleNamespace(port=4567))
             self.assertEqual((started["state"], started["target"]), ("working", "1.2.0"))
             again = job.start()  # a second click joins the update running
@@ -335,6 +345,101 @@ class UpdateJobTest(Fixture):
                     self.assertIsNone(job.moved_token())
                     started.assert_not_called()
 
+
+    def test_its_setup_runs_with_the_path_of_the_last_shell_a_build_came_from(self) -> None:
+        # E1: the apps' command lines are on the agent's shell's PATH, which a server a GUI app started lacks.
+        from cad_server._internal.providers import lasting
+
+        self.installed()
+        ran: list = []
+        engine = SimpleNamespace(going=lambda: False, shell_path=lambda: "/opt/apps/bin:/usr/bin")
+        job = update.Update()
+        with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                mock.patch.object(update, "install", return_value={"cad": "cad"}), \
+                mock.patch.object(update, "_moved", return_value=None), \
+                mock.patch.object(update, "run_setup", side_effect=lambda record, **kw: ran.append(kw) or (0, "")):
+            job.start(engine)
+            self.wait(job, "restarting", "failed")
+        self.assertEqual(ran[0]["environ"], {"PATH": lasting("/opt/apps/bin:/usr/bin")})
+
+    def test_a_server_with_no_updater_refuses_the_click(self) -> None:
+        # E2: a page on a server that is not the default channel's version (one only a store's channel is on, the
+        # server an update left) never starts an update of the default channel.
+        from cad_server.viewer.http_app import create_cad_app
+
+        self.installed()
+        job = update.Update()
+        with mock.patch("cad_server._internal.channel.told", return_value=False), \
+                mock.patch("cad_server.updates.newest", side_effect=AssertionError("no feed read")):
+            state = job.start()
+            self.assertEqual(state["state"], "failed")
+            self.assertIn("has no updater", state["error"])
+            (self.root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            app = create_cad_app(host="127.0.0.1", port=0, dist_dir=str(self.root))
+            app.server = SimpleNamespace(retire=lambda then=None: None)
+            with mock.patch.object(update, "UPDATE", job), mock.patch.object(job, "start") as started:
+                status, said = app._update()
+            self.assertEqual((status, said["error"]), (409, "this text-to-cad has no updater"))
+            started.assert_not_called()
+
+    def test_restarting_only_while_this_server_goes_and_moved_with_the_default_s_address_otherwise(self) -> None:
+        # E3: a page never spins on a restart that does not come.
+        from cad.engine import places
+        from cad_server._internal import pointers, versions
+
+        self.installed()
+        command = self.setup_script()
+        answered = {"ok": True, "url": "http://127.0.0.1:3247", "port": 3247, "token": "t"}
+        for going, versioned, default, expected in ((True, "1.1.0", "1.2.0", "restarting"),
+                                                    (False, "1.1.0", "1.3.0", "moved"),  # the pointer moved further
+                                                    (False, None, "1.2.0", "moved")):  # a server of no version
+            job = update.Update()
+            with self.subTest(going=going, versioned=versioned, default=default), \
+                    mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
+                    mock.patch.object(update, "install", return_value={"cad": command}), \
+                    mock.patch.object(places, "versioned", return_value=versioned), \
+                    mock.patch.object(pointers, "read", return_value=default), \
+                    mock.patch.object(versions, "serves", return_value=True), \
+                    mock.patch.object(versions, "start_server", return_value=True) as started, \
+                    mock.patch.object(versions, "ask", return_value=answered):
+                job.start(SimpleNamespace(going=lambda: going, shell_path=lambda: None))
+                state = self.wait(job, "moved", "restarting", "failed")
+                self.assertEqual(state["state"], expected, state)
+                if expected == "moved":
+                    self.assertEqual(state["address"], answered["url"])
+                    started.assert_called_once_with(default)
+
+    @unittest.skipIf(os.name == "nt", "the process group's stop on Windows is taskkill's (unverified here)")
+    def test_a_setup_past_its_bound_is_stopped_with_every_process_it_started(self) -> None:
+        # E12: the bound stops the whole process group, an app's command the setup started among it.
+        child = self.root / "child.pid"
+        script = self.root / "slow.sh"
+        script.write_text(f'#!/bin/sh\nsleep 300 &\necho $! > "{child}.part" && mv "{child}.part" "{child}"\nwait\n',
+                          encoding="utf-8")
+        script.chmod(0o755)
+        thread = threading.Thread(target=update.run_setup, args=({"cad": str(script)},), kwargs={"seconds": 5.0})
+        thread.start()
+        thread.join(60)
+        self.assertFalse(thread.is_alive())
+        pid = int(child.read_text(encoding="utf-8"))
+        deadline = time.monotonic() + 10
+        while _alive(pid):
+            self.assertLess(time.monotonic(), deadline, "its child outlived the bound")
+            time.sleep(0.05)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:  # a child reaped by no one is a zombie: gone all the same
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        return True
+    return bool(state) and not state.startswith("Z")
 
 
 class StoreSessionTest(Fixture):

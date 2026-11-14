@@ -650,7 +650,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.cursor()
         with self.as_version():
             code, out, _err = self.run_setup()
-            versions.move.assert_called_once_with(None, RELEASE, told=mock.ANY, from_development=True)
+            versions.move.assert_called_once_with(None, RELEASE, told=mock.ANY, from_development=True, mend=True)
         self.assertEqual(code, 0, out)
         self.assertIn(f"default  text-to-cad {RELEASE} (was 0.0.1)\n", out)
         self.assertLess(out.index("default  text-to-cad"), out.index("Cursor: install"),
@@ -693,8 +693,11 @@ class InstallUpdateAndUninstall(Fixture):
             return {"ok": True, "url": "http://127.0.0.1:4321/"} if message.get("op") == "http" else {"ok": True}
 
         from cad.engine import client
+        from cad_server._internal import pointers
 
+        default = [RELEASE]  # what the default pointer names once the old server has drained (read again: D8)
         with self.as_version(versions.Moved("moved", None, RELEASE, "0.11.10")), \
+                mock.patch.object(pointers, "default", side_effect=lambda *_a: pointers.Default(default[0], "pointer")), \
                 mock.patch.object(versions, "ask_flat", side_effect=lambda message, **_kw: asked.append(("flat", message)) or {"ok": True}), \
                 mock.patch.object(versions, "ask", side_effect=ask), \
                 mock.patch.object(versions, "start_server", return_value=True) as started, \
@@ -710,6 +713,15 @@ class InstallUpdateAndUninstall(Fixture):
             asked.clear()
             code, out, _err = self.run_setup("--engine-update")
             self.assertEqual((code, asked), (0, []), "an updater's run: the old release's updater drains it")
+            # An update moved the default channel on while the old server drained: that version's server takes its
+            # place, never this run's.
+            asked.clear()
+            started.reset_mock()
+            default[0] = "99.0.0"
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            started.assert_called_once_with("99.0.0")
+            self.assertEqual(asked[1:], [("99.0.0", {"op": "bridge"}), ("99.0.0", {"op": "http", "port": 4321})])
 
     def test_a_release_makes_itself_present_and_sets_itself_up_from_there(self) -> None:
         """Run from uvx's environment (the install command) or a flat folder an updater of 0.11.10 made, a release

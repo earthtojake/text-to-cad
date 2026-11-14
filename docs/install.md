@@ -110,7 +110,8 @@ agent's shell. It works for 0.11.11 and later.
 install command put on your computer. That is the copies of text-to-cad it gave your
 apps (with no receipt, every copy of ours it finds), the plugin folder, the release
 your computer runs and its server, the folders of releases before 0.11.11, and the
-receipt. A copy from a plugin directory stays, with its release, its settings and its
+receipt. Your settings, Recents and documents' records stay: install again and the
+release finds them, or a newer release takes them over. A copy from a plugin directory stays, with its release, its settings and its
 Recents: its store delivered it. While one does, so does the `cad` command it runs,
 and a line says which channel is still installed, on which release: its store's plugin
 uses the command, and `cad uninstall --purge` removes it too. Nothing is removed from
@@ -495,10 +496,12 @@ nothing to update and names the install command.
   work was in flight there, its server keeps the address. A page that started the update
   goes to the new release's server at its own address, and a CAD card says "Updated to
   <release>. Start a new thread to use it."
+- Where the release before takes a while to stop, the new release's server serves on
+  another port meanwhile, and takes the old one too as the release before stops: a page
+  open there reloads into it.
 - After an update from 0.11.10, the new release's server serves the old port too where
   it is free, and `cad status` lists every port it serves. Where 0.11.10's server still
-  held the old port, nothing takes it when that server stops: reopen a page that was open
-  there.
+  held the old port, the new release's server takes it once that server stops.
 - A Codex, Cursor, Gemini or Grok Build chat that was open when the update came says its
   CAD server is out of date: start a new chat. If a new chat says the same, run `cad update`,
   or for a plugin directory's copy update the plugin in the app it came from.
@@ -529,10 +532,15 @@ type with no release runs the default channel's release, and so do `cad status` 
 
 A release a channel has left is removed once no channel is on it and no work is in flight
 there (an open page or an idle chat does not keep it), after what it wrote that the
-channel's new release lacks (documents, Recents, settings) is carried over. A release
-installed and never used, like an update waiting to run, is kept: `cad doctor --prune`
-removes it, and an update that downloads a newer release removes the one it downloaded
-before.
+channel's new release lacks (documents, Recents, settings) is carried over. The channel's
+new release does that, by its server or its next update. A release installed and never
+used by a channel, like an update waiting to run, is kept: `cad doctor --prune` removes
+it, and an update that downloads a newer release removes the one it downloaded before.
+
+Which release each channel is on is kept in a small file per channel. A command for a
+channel whose file is there but cannot be read refuses to run, and nothing is removed
+until it can be read. `cad doctor` says which file and why, and writes one that names no
+release again, naming the newest release a channel has been on.
 
 Each release keeps its own settings, and a new one starts with a copy of the settings
 of the release it replaces. Turning telemetry off is the exception: a no, said through
@@ -568,10 +576,11 @@ folder's release; where each app's plugin comes from and its release; any app an
 could not reach, and why; and whether the CAD kernel loads.
 
 `cad doctor --prune` removes what nothing needs: a channel no command has used for 30
-days (its release's documents and Recents go to the default channel's release), any
-release no channel is on, a release installed and never used, one whose install was cut
-short, and what releases before 0.11.11 left behind; never a release with work in
-flight. It prints exactly what it will remove first, and removes exactly that once you
+days (its release's documents and Recents go to the default channel's release; where
+that release is older, the channel's release goes with its settings and Recents, and the
+plan says so), any release no channel is on, a release installed and never used, one
+whose install was cut short, and what releases before 0.11.11 left behind; never a
+release with work in flight, and never the settings and Recents `cad uninstall` kept. It prints exactly what it will remove first, and removes exactly that once you
 say yes (`--yes` where it cannot ask). Nothing does this by itself.
 
 `cad doctor` starts the CAD server if none is running. `cad doctor --no-server` does not,

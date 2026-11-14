@@ -15,10 +15,14 @@ leaves an empty one; moving a channel to another version is ``versions.move``, w
 outside a test. ``listing`` says every pointer, ``named`` the versions they name.
 
 **A pointer that cannot be read is not "no pointer".** Only a file that is not there is none (``read``: None).
-One that is there and cannot be read now (a sharing violation on Windows, an antivirus scan, a permission), or
-holds no version (emptied by a crash), and a ``channels`` folder that cannot be listed, are ``Unreadable``: every
-removal reads the pointers that way (``versions._kept``) and removes nothing that pass, rather than take a
-channel's version for no one's. ``cad doctor`` says which.
+One that is there and cannot be read now (a sharing violation on Windows, an antivirus scan, a permission, a link to
+nothing), or does not hold one version name (``version_text``: emptied by a crash, or written in a form this release
+does not know), a ``channels`` folder that cannot be listed, and an entry there whose name is no channel's (but a
+write's own, a dot first), are ``Unreadable``. Nothing reads one as "nothing": a pinned command refuses to run
+(``pins.apply``), as the ``cad`` command does (``installations``: the sh, the Windows main and this module read a
+pointer by the one rule, held equal by a test); every removal removes nothing that pass (``versions._kept``); only
+``cad setup``, the updater and ``cad doctor`` write one again (``versions.move``'s ``mend``, ``versions.mend``),
+never naming a version older than the newest a channel has been on. ``cad doctor`` says which.
 
 **When a channel was last used** (``used``, ``last_used``): a stamp of its own beside the pointers,
 ``used/default`` or ``used/<name>``, whose time a server sets as it takes the channel's requests; so a pointer
@@ -49,7 +53,7 @@ from cad.engine.atomic_replace import replace_atomic
 
 __all__ = ["CHANNEL", "CHANNELS", "DEFAULT", "Default", "FORGOTTEN_DAYS", "Pointer", "USED", "Unreadable", "channel_name",
            "default", "forget", "last_used", "leaving", "listing", "mirror", "named", "read", "started", "survey", "unused",
-           "used", "write"]
+           "used", "version_text", "write"]
 
 # A named channel: a lower-case letter or digit first, then up to 31 of those, ``.``, ``_`` or ``-``. Safe as a
 # file's name on every system, and in a pin (``cad +<version>@<channel>``): the library's one rule
@@ -108,13 +112,26 @@ def read(channel: str | None = None, state: Path | None = None) -> str | None:
     try:
         data = path.read_bytes()
     except FileNotFoundError:
+        if os.path.lexists(path):  # a link to nothing is there, and names nothing that can be read
+            raise Unreadable(path, "it is a link to nothing") from None
         return None
     except OSError as error:
         raise Unreadable(path, error.strerror or str(error)) from None
-    text = data.decode("utf-8", "replace").strip()
-    if places.VERSION.fullmatch(text):
+    text = version_text(data)
+    if text is not None:
         return text
     raise Unreadable(path, f"it holds {len(data)} bytes and no version", corrupt=True)
+
+
+def version_text(data: bytes) -> str | None:
+    """The version a pointer's bytes name, by the one rule the ``cad`` command reads one by too
+    (``installations``): every carriage return taken out and the line ends after the text, what is left one version
+    name (``places.VERSION``) and nothing else; else None."""
+    try:
+        text = data.replace(b"\r", b"").rstrip(b"\n").decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    return text if places.VERSION.fullmatch(text) else None
 
 
 def write(channel: str | None, version: str, state: Path | None = None, *, mirrored: bool = True) -> Path:
@@ -265,27 +282,39 @@ def unused(now: float | None = None, state: Path | None = None) -> list[Pointer]
     return found
 
 
+def _entries(channels: Path) -> list[str]:
+    """The names in the channels' folder but a write's own (a dot first), sorted: none where the folder is not there.
+    ``Unreadable`` when it cannot be listed."""
+    try:
+        return sorted(name for name in os.listdir(channels) if not name.startswith("."))
+    except FileNotFoundError:
+        return []
+    except OSError as error:
+        raise Unreadable(channels, error.strerror or str(error)) from None
+
+
+def _channel_file(name: str) -> bool:
+    """Whether ``name``, in the channels' folder, is a named channel's pointer as this release names one."""
+    return CHANNEL.fullmatch(name) is not None and name != DEFAULT
+
+
 def listing(state: Path | None = None) -> list[Pointer]:
-    """Every pointer on this device, the default's first, then the named channels' by name; a name that is no
-    channel's (a write's own file, a dot first) is none. ``Unreadable`` when a pointer there cannot be read, or the
-    channels' folder cannot be listed: never a shorter list."""
+    """Every pointer on this device, the default's first, then the named channels' by name; a write's own file (a dot
+    first) is none. ``Unreadable`` when a pointer there cannot be read, the channels' folder cannot be listed, or holds
+    an entry whose name is no channel's (written by a release that names them otherwise, or by hand): what it would
+    name is not known, so never a shorter list."""
     folder = _folder(state)
     found = []
     version = read(None, state)
     if version is not None:
         found.append(Pointer(None, version, folder.path(DEFAULT)))
     channels = folder.path(CHANNELS)
-    try:
-        names = sorted(os.listdir(channels))
-    except FileNotFoundError:
-        names = []
-    except OSError as error:
-        raise Unreadable(channels, error.strerror or str(error)) from None
-    for name in names:
-        if CHANNEL.fullmatch(name) and name != DEFAULT:
-            version = read(name, state)
-            if version is not None:
-                found.append(Pointer(name, version, folder.path(f"{CHANNELS}/{name}")))
+    for name in _entries(channels):
+        if not _channel_file(name):
+            raise Unreadable(channels / name, "its name is no channel's, so which version it keeps is not known")
+        version = read(name, state)
+        if version is not None:
+            found.append(Pointer(name, version, folder.path(f"{CHANNELS}/{name}")))
     return found
 
 
@@ -297,11 +326,14 @@ def survey(state: Path | None = None) -> list[Pointer | Unreadable]:
     names: list[str | None] = [None]
     channels = folder.path(CHANNELS)
     try:
-        names += [name for name in sorted(os.listdir(channels)) if CHANNEL.fullmatch(name) and name != DEFAULT]
-    except FileNotFoundError:
-        pass
-    except OSError as error:
-        found.append(Unreadable(channels, error.strerror or str(error)))
+        for name in _entries(channels):
+            if _channel_file(name):
+                names.append(name)
+            else:
+                found.append(Unreadable(channels / name, "its name is no channel's, so which version it keeps is "
+                                                         "not known"))
+    except Unreadable as unreadable:
+        found.append(unreadable)
     for name in names:
         try:
             version = read(name, state)
@@ -350,7 +382,9 @@ def default(state: Path | None = None) -> Default:
         return Default(current[0], "current", current[1])
     from cad_server._internal import versions
 
-    present = versions.present(state)
+    # A version ``cad uninstall`` took out whose code the system kept (``versions.UNINSTALLED``) is no default.
+    present = [name for name in versions.present(state)
+               if not os.path.lexists((state or places.state_dir()) / places.VERSIONS / name / versions.UNINSTALLED)]
     used = [name for name in present if started(name, state)]
     return Default((used or present)[-1], "newest") if present else Default(None, None)
 
