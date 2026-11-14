@@ -3,7 +3,6 @@ import { Maximize2 } from 'lucide-react';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { translator, useI18n, useLanguage } from '@cad/ui/i18n';
-import { UpdateButton, useAutomaticUpdates, useUpdate } from '@cad/ui/update';
 import { viewerLinks } from '@cad/ui/links';
 import { Button } from '@cad/ui/primitives/button';
 import { TooltipHint } from '@cad/ui/primitives/tooltip';
@@ -17,7 +16,6 @@ import { captureSettled, fitCapture } from './host/capture';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import { followedUpdate, forgetFollowedUpdate, loadNextRelease, useNextRelease } from './host/release';
 import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import { createTunnelClient, createTunnelFetch, TUNNEL_ORIGIN } from './host/tunnel';
@@ -49,14 +47,6 @@ export const LOST: Record<Presentation, string> = {
 };
 export function lostNotice(say: (key: string, params?: Record<string, unknown>) => string, presentation: Presentation, hostName: string | null | undefined): string {
   return say(LOST[presentation], { host: hostDisplayName(hostName) ?? say('cad.lost.thisApp') });
-}
-
-// What a card says once the update it started is done and its server stays (the update's `moved`: another channel is
-// on its version): the new release runs, but this thread's launcher belongs to the version before, so a new thread
-// uses it. No spinner waits on a server that does not go.
-export function updateMoved(say: (key: string, params?: Record<string, unknown>) => string,
-  update: { target?: string | null }): string {
-  return say('update.newThread', { version: update.target ?? '' });
 }
 
 // A card's What's new: none, and nothing read for it.
@@ -223,9 +213,6 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // The server stopped answering (its process has gone), or answers refusing this view (what it said):
   // the view keeps its model, and says so.
   const [lost, setLost] = useState<boolean | string>(false);
-  // The update this card started is done, and its server stays (another channel is on its version): this thread's
-  // launcher belongs to that version, so the card says to start a new thread for the new one (`updateMoved`).
-  const [moved, setMoved] = useState<string | null>(null);
   const shown = useRef<string | null>(null);
   // The pages the launches carried: the first one's, then each the agent's shows bring.
   const [pages, setPages] = useState<Pages>(() => withPage(new Map(), initial));
@@ -253,7 +240,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     },
   }), [sync]);
   // Everything else the view asks of the server travels as viewer requests over `cad_http`: its
-  // model, the library, Open, Reveal, the person's settings and the update check. The client polls
+  // model, the library, Open, Reveal and the person's settings. The client polls
   // nothing: the sync says when the file's catalog entry moved.
   const tunnel = useMemo(() => direct ?? createTunnelFetch(server), [server, direct]);
   const client = useMemo(() => createTunnelClient(tunnel, direct ? {} : { pollIntervalMs: 0 }), [tunnel, direct]);
@@ -297,39 +284,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // view (`useLanguage`, the same as the browser viewer's).
   const { locale, language } = useLanguage(client.language, { preferred: [context.locale, ...(navigator.languages ?? [navigator.language])] });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
-  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
-  // Automatic updates, after Telemetry: the person's, shared with the browser viewer and `cad update auto`.
-  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
-  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
-    [telemetry, automaticUpdates]);
-  // What's new, once after an update to a release with notes, where the view has the page (a tab):
+  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  // What's new, once after a release with notes is installed, where the view has the page (a tab):
   // never in a card, whose few hundred pixels in a chat are no place for a dialog, nor while the
   // card says its server is gone.
   const whatsNew = useWhatsNew(presentation === 'tabs' ? client.whatsNew : NO_WHATS_NEW);
-  // A newer text-to-cad (`cad_server/updates.py`), from the launch's notice at once, while this install is
-  // behind: the update button, an icon last among the navbar's controls (in the file handler, which
-  // has no navbar, in its corner). A click updates; once the engine restarts for it -- or goes from
-  // under this card, another view's click -- the card asks for its release, and loads the engine's app
-  // of the new one in place of its own (the shell a host keeps: `host/shell.ts`); should the switch fail
-  // and go back, the engine of its own release says so, and the button says it once and is offered again.
-  // The card loaded in place of one that followed an update to this release says so, once, and suggests
-  // restarting the host app: the card and the engine run the new release already, but the app reads its
-  // skills only as a session starts.
-  const [followed] = useState(followedUpdate);
-  useEffect(() => { forgetFollowedUpdate(); }, []);
-  const updater = useUpdate({ read: client.version, start: client.startUpdate }, initial.notice ?? null,
-    { followed, restartForSkills: true, onMoved: update => { setMoved(updateMoved(translator(locale), update)); return true; } });
-  useNextRelease({ read: client.version, release: initial.version, watching: updater.phase.phase === 'restarting' || Boolean(lost),
-    onNewRelease: loadNextRelease, onSameRelease: updater.settle });
-  // This thread's launcher belongs to the version the update left: once the default channel moved, every call through
-  // it is answered with its line that the thread is stale (`lost`, the server's own words, never the engine's
-  // release). The restart this card follows is over then -- whether the old server went or stays --: the update is
-  // done, and a new thread uses it. No spinner waits on an answer this thread cannot get.
-  const restarting = updater.phase.phase === 'restarting';
-  const target = updater.notice?.latest ?? null;
-  useEffect(() => {
-    if (restarting && typeof lost === 'string') updater.settle({ notice: null, update: { state: 'moved', target } });
-  }, [restarting, lost, target, updater.settle]);
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
@@ -350,12 +309,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}
-    overlay={moved ? <Banner message={moved} />
-      : lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
+    overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
-      whatsNew={presentation === 'tabs' && !lost && updater.phase.phase !== 'restarting' ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
-      update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
+      whatsNew={presentation === 'tabs' && !lost ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />

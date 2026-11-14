@@ -12,8 +12,7 @@ This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
 
 **Owns:** URL selection (`/<id>`: `src/client/workbench/fileParam.js`), browser history, document title/appearance, browser
-persistence, the file menu's reveal route, and the app menu's links (the update notice is
-the server's, read from `/api/v1/server`).
+persistence, the file menu's reveal route, and the app menu's links.
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@cad/ui/cad-viewer`), which registers one renderer per file
 family and draws the navbar and the explorer. The catalog exposes CAD
@@ -33,7 +32,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
-  host/                 browser clipboard, prompt delivery, the app menu's links, the update notice, reload under a new server
+  host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
   shared/               app build/runtime configuration helpers
@@ -201,8 +200,8 @@ inspected first. A held model's menu also has Copy path and Open in › Finder (
 File manager) on the script that builds it; where that script was moved or deleted, Open in is
 disabled, its hint "The source was moved or deleted." Open in also lists the apps the server finds
 on this computer for the document's files (`GET /api/v1/local/open-in`, as the menu opens): the
-source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds only the update button
-(and a dismissed alert's icon). For a model it captures the displayed revision and writes the document as its code built it: every
+source's, each export's as "App (file name)", then Default app; a choice is `POST /api/v1/local/open`. The navbar's right end holds only a dismissed alert's
+icon, when there is one. For a model it captures the displayed revision and writes the document as its code built it: every
 part, as authored. The menu chooses a format alone; a posed or partial file is a function
 in the model's code. A STEP, XBF or held model offers STEP, STL, 3MF, GLB and XBF (an XBF's
 XBF is its own bytes), and DXF where the view draws it flat on z=0; on a GLB, STL or 3MF page Export converts the file shown, at the
@@ -411,8 +410,7 @@ script and exported files kept, and no other model with it; a file's "Delete bra
 engine's record of the file alone. From a file, Back to home in
 the menu the navbar's C logo opens leads back to it. The home has the same navbar, the same C
 logo (one 16px mark on every page) and the same menu (without Back to home, and with GitHub, Discord and X as
-over a file) at the left and
-the update button at the right while a newer cad-server release is out. The home is a step of
+over a file) at the left. The home is a step of
 the browser's history, as a file is: the browser's Back and Forward walk between them (the
 navbar draws no arrows of its own here). A `/<id>` the server knows no file for, and no model the engine
 holds, shows "This model is no longer held" with the engine's words -- the command that builds it
@@ -442,10 +440,10 @@ user's state directory, shared with the CAD app.
 
 ### What's new
 
-After an update to a release whose notes say what it brought, the page shows them once, over the
+Once a release whose notes say what it brought is installed, the page shows them once, over the
 home or a file's view once it is up (`@cad/ui/whats-new`): read through the CAD client (`whatsNew`,
 `/api/v1/settings`' `whats_new`) and kept seen in the person's settings for every CAD view. A new
-person is shown nothing new, and nothing shows while the engine is gone or an update restarts.
+person is shown nothing new, and nothing shows while the engine is gone.
 
 ### Usage stats (telemetry)
 
@@ -496,8 +494,7 @@ and the web stay consistent without host-specific copies of those controls.
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the logo (the C mark, on the home and over a file alike), which opens the app menu, then the open file's name (no glyph),
-which opens the name menu (Models and Files), with its ⋯; at the right the blue update button, while a newer cad-server release
-is out, and Export over a file that writes formats. The app menu holds Back to home (the home), the
+which opens the name menu (Models and Files), with its ⋯ (Export, over a file that writes formats). The app menu holds Back to home (the home), the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
@@ -507,21 +504,7 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer cad-server release is the blue update button's, at the navbar's right as in the CAD app: the server's
-hourly version check, read from `/api/v1/server` with the server's description as the page
-starts (`main.tsx`) and again whenever the person comes back to it. A press updates
-(`POST /api/v1/local/update`): the engine installs the release, updates each agent app and restarts on it,
-on the same port with the same token; the button fills while it works and spins while the engine
-restarts, the page reconnects every quarter second meanwhile (`useEngineReconnect`), and it reloads
-once the engine answers with the new release and nothing on the page is unsaved. Where the release
-before's engine stays (another channel is on its version, or work is in flight there), the update ends
-with it serving still, and the page goes to the new release's server at its own address
-(`src/host/useUpdateRestart.js`). Should the update fail, the engine stays on the release it ran: the
-page says so in its one line and offers the button again, and a page that reloaded meanwhile says it
-too (the tab notes that its page followed the update, `src/host/followedUpdate.js`).
-A page is told of a release only where its server has an updater (the default channel's version, on a
-device the install command set up, never a development build: `cad_server/_internal/channel.py`'s
-`told`); the browser page names no channel, so it is told wherever its server is. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
+links open in a new tab. The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 Appearance (System, Light, Dark) is the app menu's Theme row, the tab's choice (`colorScheme`,
 over a file and on the home); the page has no light/dark button of its own. The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this

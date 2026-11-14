@@ -6,8 +6,8 @@ const I18nContext = createContext({ locale: DEFAULT_LOCALE, t: translator(DEFAUL
 
 /**
  * The language a view reads in, from its host (`environment.locale`): `FileViewer` and
- * `CadViewer` put it around everything they draw, the nodes a host hands them (the update
- * button, the home's links) included. A locale this viewer does not speak reads English.
+ * `CadViewer` put it around everything they draw, the nodes a host hands them (Full size,
+ * the home's links) included. A locale this viewer does not speak reads English.
  *
  * @param {{ locale?: string, children?: import("react").ReactNode }} props
  */

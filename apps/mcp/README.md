@@ -38,8 +38,7 @@ terminal UI show none and are served as text clients.
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
   (file name)", then Default app) — no Export, as this host has no downloads;
-  then, at the right, only Full size where the host can show a view full size and, last, the update
-  button; Back and Forward are dropped on a phone-width view), the tool strip ending
+  then, at the right, only Full size where the host can show a view full size; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. Claude is set up with no CAD server, on any route; a Claude host
@@ -180,13 +179,13 @@ the launch's `_meta` first (`host/capability.ts`).
 - **A launch is enough to start.** It also carries what the server is — its
   `protocol`, `version` and `platform` — and the home's carries its `recents`,
   so the page asks nothing before it draws. A launch from another build (a tab
-  the host restored after an update, a past chat's card) says so: the page
+  the host restored after another release was installed, a past chat's card) says so: the page
   reads only its own protocol's.
 - **Every view but a file handler's has a home**: the library (the documents opened or built
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward, Full size and the update button; no file, so no ⋯); it starts with its control
+  and Forward and Full size; no file, so no ⋯); it starts with its control
   row, its links the app menu's.
 - **A view browses from its file's folder.** The file name in the navbar opens the name menu:
   Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
@@ -201,7 +200,7 @@ the launch's `_meta` first (`host/capability.ts`).
   It is the view's, in memory: another tab or card has its own, and a view opened
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
-- **What's new is a tab's.** After an update to a release with notes, a tab (the sidebar, a
+- **What's new is a tab's.** Once a release with notes is installed, a tab (the sidebar, a
   thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
   kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
   chat are no room for a dialog, and a chat keeps several cards at once.
@@ -212,7 +211,7 @@ the launch's `_meta` first (`host/capability.ts`).
   view with no navbar (`chrome: "bare"`): no logo or app menu, no name or name menu, no ⋯
   (so no Open in › Browser); what the navbar would carry that it still has is its corner at
   the viewport's top-right (`CardCorner.tsx`, the viewer's `notice`, Quick Edit under it):
-  Full size where the host offers it, then the update notice. Preview's bar hides the
+  Full size where the host offers it. Preview's bar hides the
   corner as it hides a navbar. Its launch carries no page (`browser`). The agent reads it
   (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
   the page ignores a show that reaches it anyway.
@@ -223,37 +222,14 @@ the launch's `_meta` first (`host/capability.ts`).
   the sidebar’s view. A session closing removes its sidebar views; stale views expire
   by the same heartbeat rule as other views.
 - **Two requests to the network of its own: the version check, and analytics with consent.**
-  Both go to `api.texttocad.dev` (`apps/api`); installing a release, the person's update or an automatic
-  patch update, downloads it from PyPI as `cad update` does. At most once an hour, the server
+  Both go to `api.texttocad.dev` (`apps/api`). At most once an hour, the server
   reads the version feed (`cad_server/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CAD_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). A server of a newer release than the engine's -- an app whose plugin
-  moved ahead -- says a release is out too, with no request (`updates.see`). While this
-  install is behind, the navbar shows the shared blue `UpdateButton`
-  (`@cad/ui/update`), an icon and nothing else, last and outermost of its controls, over a
-  file and over the home; the file handler, which has no navbar, shows it in its corner,
-  under Full size. A launch carries the notice the server last read, so the button draws
-  with the page; the page reads it again (`/api/v1/server`) when the person comes back to
-  it. A press is the update (`POST /api/v1/local/update`, through `cad_http`): the engine installs
-  the release, updates each agent app's plugin and restarts on it, on the same port with
-  the same token where the old version's server stops (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
-  as the update goes, then a spinner while the engine restarts; once the engine answers
-  with the new release, the card loads that release's app in its own place
-  (`host/release.ts`, the shell's `reload`), and nothing goes to the chat. An update that
-  fails says why in a toast, and the engine stays on the release it ran: the card, reading its
-  own release again with the update failed (`useUpdate`'s `settle`), says why in the same toast
-  and offers the button again. The card's launcher belongs
-  to the version the update leaves: where every call through it answers that the thread is stale, or the engine
-  says the update is done and it stays (`moved`: another channel is still on its version, or work is in flight
-  there), the restart ends and
-  the card says the update is done and to start a new thread (`updateMoved`) -- no spinner waits on an answer the
-  thread cannot get.
+  moved ahead -- says a release is out too, with no request (`updates.see`). The card says
+  nothing of it.
   A text client gets one line with its first `cad_show` result instead, naming the install
-  command. Only the
-  default channel's version, on a device where the install command has run, has an updater
-  (`cad_server/_internal/channel.py`'s `told`): every other server's card shows no notice, no button
-  and no automatic-updates switch (its settings answer `updates` null), and neither does a card whose launcher was
-  started with `--channel`, whatever version serves it (the session's channel, `ViewerApp._updater`). A store's copy is on the store's
+  command. A store's copy is on the store's
   own channel -- its launcher is started with `--channel NAME` and every pin in its skills carries the
   name -- and is updated by the store alone; a copy Cursor installed from a marketplace added in Cursor is the
   repository as Cursor fetched it, our own text, so it is on the default channel, and only Cursor fetching the
@@ -319,7 +295,7 @@ the launch's `_meta` first (`host/capability.ts`).
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
   that serves them (`/api/v1/documents/<kind>/<id>/...`) -- the
   library and its pictures, Reveal, the person's analytics
-  answer and language, the update check. One route is the server's own, not the
+  answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows
   in the person's browser, for the file menu's Open in › Browser. Only the clipboard stays the host's: a
   view copies through its frame. `cad_sync`, `cad_capture_reply` and `cad_http` are
@@ -360,7 +336,7 @@ the launch's `_meta` first (`host/capability.ts`).
   never a cookie; where neither reaches the engine it shows the app's own notice that this chat
   cannot connect (**A card says why it cannot work**, below), in words taken from `@cad/ui`'s
   dictionaries as it is built (`scripts/shell-words.mjs`), so it carries no dictionary of its own.
-  So a card a host kept runs the engine's release, and an update needs no
+  So a card a host kept runs the engine's release, and a new release needs no
   new resource. The app is one module, with its styles, scripts and workers (as blobs)
   inside it, and the build fails if anything would be left outside the two: the host
   serves one resource and nothing beside it. Its scripts are still split where
@@ -477,10 +453,9 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
-| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`); where neither way reaches the engine, the no-channel notice (`unconnected`) |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch and the opening result); where neither way reaches the engine, the no-channel notice (`unconnected`) |
 | `capability.ts` | the page's capability: the launch's result `_meta`, else the launching tool's (`hostContext.toolInfo.tool`, Cursor) |
 | `unreachable.js` | the can't-connect notice's words, which the app's notice (`Notice.tsx`) and the shell both say in one look (`src/notice.css`): the line by whether there is a page and a model, or a capability from before CAD restarted (`refusalOf`), the button, the card's measured height, and the launch's page |
-| `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@cad/ui/cad-viewer`,
@@ -499,7 +474,7 @@ presentation but the file handler's (`chrome: "bare"`, above). Inline, where the
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
 icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's
 actions at the navbar's right, over a file and on the home (the corner's first in the file
-handler); with the update button after it, outermost, it is all the navbar's right end holds. The file menu's
+handler); it is all the navbar's right end holds. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s
 `openBrowserPage` implements) opens the web viewer's page of the document on screen: the page each launch carries (`browser`: the document's, `/<id>`
 with the link, or the home's), and for a file the person opened that no launch named, the

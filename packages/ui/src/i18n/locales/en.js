@@ -250,9 +250,6 @@ export default {
   "consent.shareUsage": "Telemetry",
   "consent.shareUsageEnvironment": "Telemetry (set by your environment)",
   "consent.telemetryInfo": "Anonymous usage data and crash reports that help improve text-to-cad. Your prompts, models and files are never sent.",
-  "update.automatic": "Automatic updates",
-  "update.automaticEnvironment": "Automatic updates (off in your environment)",
-  "update.automaticInfo": "Installs text-to-cad’s releases that break nothing (fixes and additions) by itself and restarts CAD’s server once nothing is running. A release that may break something waits for you: update with the update button or the install command.",
 
   // The colour schemes (the app menu's Theme, the web home's appearance button).
   "appearance.system": "System",
@@ -329,16 +326,6 @@ export default {
   "home.ageHours": "{n}h ago",
   "home.ageDays": "{n}d ago",
 
-  // The update button: offered, updating, restarting, failed.
-  "update.label": "Update",
-  "update.toAria": "Update to {version}",
-  "update.updating": "Updating to {version}",
-  "update.progress": "Updating, {percent}%",
-  "update.restarting": "Restarting with {version}",
-  "update.failed": "The update failed: {error}",
-  "update.updated": "Updated to {version}.",
-  "update.updatedRestart": "Updated to {version}. Restart the app to load its new skills.",
-  "update.newThread": "Updated to {version}. Start a new thread to use it.",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "Got it",
   "whatsNew.title": "What's New (v{version})",
@@ -394,10 +381,6 @@ export default {
   "progress.snapshot.draw": "Drawing the picture",
   "progress.snapshot.write": "Writing the picture",
   "progress.inspect-measure.measure": "Measuring parts",
-  "progress.update.install": "Installing the update",
-  "progress.update.build123d": "Installing build123d",
-  "progress.update.apps": "Updating the apps",
-  "progress.update.restart": "Restarting",
 
   // Display: its tile and menu, the modes (`DisplayModeOptions.js`, by value) and the Grid switch.
   "display.label": "Display",
@@ -745,7 +728,7 @@ export default {
   "alert.schema.summary": "Version mismatch",
   "alert.schema.title": "This app and the server disagree about drawings",
   "alert.schema.message": "The viewer received a drawing payload at schemaVersion {received}, but this build of the app reads version {version}.",
-  "alert.schema.recovery": "Update cad-server with the Update button or `cad update`, then reload this page, or restart the app that shows it.",
+  "alert.schema.recovery": "Reload this page, or restart the app that shows it.",
   "alert.srdf.summary": "URDF not found",
   "alert.srdf.title": "No URDF beside this SRDF",
   "alert.srdf.message": "An SRDF says how a robot is planned, not what it looks like, so the viewer draws the URDF it belongs to. It looked in “{folder}” for exactly one .urdf file with the same <robot name>, and found none, or more than one. {detail}",

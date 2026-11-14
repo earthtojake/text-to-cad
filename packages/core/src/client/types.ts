@@ -49,8 +49,6 @@ export interface CadServerInfo {
   pid?: number;
   /** This start of the engine, a random token: another one answering after the engine was gone is a new engine, which reloads the page. */
   instance?: string;
-  /** The release the engine runs: another one answering after an update reloads the page into it. */
-  release?: string;
   [key: string]: unknown;
 }
 /**
@@ -88,23 +86,6 @@ export interface CadRecent {
 export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
 /** What's new (`/api/v1/settings`' `whats_new`): the releases, by their minor (`0.11`), whose notes the person has seen, and the one the engine runs. */
 export interface CadWhatsNew { seen: string[]; release: string | null }
-/** Whether the engine updates by itself (`/api/v1/settings`' `updates`: `cad_server/auto_updates.py`), and why:
- * the default, the person's choice, or the environment (`CAD_UPDATE_CHECK=0`, CI), which no click changes. */
-export interface CadAutomaticUpdates { automatic: boolean; reason: 'default' | 'choice' | 'environment' }
-/** A newer text-to-cad, as the server's version check says it (`/api/v1/server`'s `notice`): the release offered, and this install's. */
-export interface CadUpdateNotice { latest: string; version: string }
-/** Where an update the update button started is (`cad_server/_internal/update.py`). */
-export interface CadUpdateState {
-  state: 'idle' | 'working' | 'restarting' | 'failed';
-  target?: string | null;
-  progress?: { kind?: string; stage?: string; done?: number; total?: number | null } | null;
-  error?: string | null;
-}
-/**
- * What `GET /api/v1/server` says of an update, and `POST /api/v1/local/update`'s answer: the notice,
- * the engine's release, this start of it (`instance`), the update's state.
- */
-export interface CadVersion { notice: CadUpdateNotice | null; release?: string; instance?: string; update?: CadUpdateState | null }
 export interface CadCatalog {
   entries: CadEntry[];
   /** Why an id asked for has no row: the engine holds no such document (its words name the command that builds it again). */
@@ -256,13 +237,6 @@ export interface CadWorkspaceService {
   language(locale?: string | null): Promise<{ locale: string | null }>;
   /** What's new: the releases whose notes the person has seen and the one the engine runs (null from a server before it); with `seen`, releases to add to them. */
   whatsNew(seen?: readonly string[]): Promise<CadWhatsNew | null>;
-  /** Whether the engine updates by itself; with `automatic`, the person's answer (the app menu's Automatic updates).
-   * Null from a server with no updater (a named channel's version, a device the install command never set up). */
-  automaticUpdates(automatic?: boolean): Promise<CadAutomaticUpdates | null>;
-  /** Whether a newer text-to-cad is out (the update button's notice, or null), the release the engine runs and where an update is. */
-  version(): Promise<CadVersion>;
-  /** The update button's click: the engine updates in the background, and answers as `version` does. */
-  startUpdate(): Promise<CadVersion>;
   /** A fresh link (`<expires>.<mac>`) for the page's own address, and when it expires (Unix seconds). */
   link(): Promise<{ link: string; expires: number }>;
   /**
