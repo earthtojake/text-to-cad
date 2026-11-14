@@ -326,6 +326,27 @@ test('schema 8 separates live models from XBF files without reinterpreting older
   }
 });
 
+test('schema 10 counts a GSL model as a kind of its own, and no earlier schema does', async () => {
+  const file = { name: 'files', kind: 'gsl', count: 2 };
+  const batch = { ...ENGINE, schema: 10, batch: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', events: [file] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(row => row.kind), ['gsl']);
+  // Everything schema 9 took, schema 10 takes: it adds a kind and changes nothing else.
+  const earlier = memory();
+  assert.equal((await send(earlier, 'POST', '/v1/events', { ...PARTS, schema: 10 })).status, 204);
+  assert.equal(earlier.rows.length, PARTS.events.length);
+  for (const schema of [8, 9]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema, events: [file] })).status, 400);
+  }
+  // Safe deployment probe: the kind with a count of nothing reaches count validation and stores nothing.
+  const refused = memory();
+  const response = await send(refused, 'POST', '/v1/events', { ...batch, events: [{ ...file, count: 0 }] });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'events[0].count counts nothing');
+  assert.deepEqual(refused.rows, []);
+});
+
 // Schema 9: which part of a snapshot's request a refusal named, and the machine's no OpenGL context and no kernel.
 const PARTS = {
   ...ENGINE, schema: 9, batch: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
