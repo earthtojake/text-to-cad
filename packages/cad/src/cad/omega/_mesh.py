@@ -86,9 +86,11 @@ def read_glb(path: Path):
     Positions are as stored (omega writes each body in the model's own millimetres, with no node transform)."""
     import numpy as np
 
+    from cad.engine.export.glb import MAGIC  # the container's magic, declared once, in the engine's writer
+
     data = Path(path).read_bytes()
     try:
-        if data[:4] != b"glTF" or len(data) < 28:
+        if len(data) < 28 or int.from_bytes(data[:4], "little") != MAGIC:
             raise ValueError
         size = int.from_bytes(data[12:16], "little")
         document = json.loads(data[20:20 + size])
