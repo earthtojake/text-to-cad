@@ -45,7 +45,7 @@ from dataclasses import dataclass
 
 from cad.engine import places
 
-__all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "check", "development", "first_use",
+__all__ = ["PIN", "Pin", "apply", "bad_channel", "bad_pin", "cannot_move", "channel_now", "check", "development", "first_use",
            "not_installed", "other_version", "own", "parse", "released", "stale", "stale_head", "take", "unreadable_pointer",
            "update_default"]
 
@@ -83,12 +83,18 @@ def bad_channel(word: str) -> str:
             "letters, digits, '.', '_' or '-'")
 
 
-def stale_head(version: str, channel: str | None, now: str | None) -> str:
-    """What a stale pin, and a stale launcher (``cad_mcp.engine.stale_line``, held equal by a test), say first: which
-    version this is, its channel, and the version that channel is on now (``now``; None where its pointer could not be
-    read again: a newer one)."""
-    return (f"this is text-to-cad {version}, and its channel ({channel or places.DEFAULT_CHANNEL}) is on "
+def channel_now(channel: str | None, now: str | None) -> str:
+    """What a stale pin and a stale launcher (``cad_mcp.engine.stale_line``, held equal by a test) both say of the
+    channel: its name and the version it is on now (``now``; None where its pointer could not be read again: a newer
+    one)."""
+    return (f"its channel ({channel or places.DEFAULT_CHANNEL}) is on "
             + (f"text-to-cad {now} now" if now else "a newer text-to-cad now"))
+
+
+def stale_head(version: str, channel: str | None, now: str | None) -> str:
+    """What a stale pin says first: the version the command is for (which need not be installed here), then its
+    channel and the version that channel is on now (``channel_now``)."""
+    return f"this command is for text-to-cad {version}, and {channel_now(channel, now)}"
 
 
 def stale(version: str, channel: str | None, now: str | None) -> str:

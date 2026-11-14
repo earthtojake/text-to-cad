@@ -307,11 +307,13 @@ Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. Teams
 can import the repository instead, under **Dashboard → Plugins & MCPs → Team
 Marketplaces**.
 
-The Cursor Marketplace lists text-to-cad too. Its copy reads this repository's `main`,
-so it runs on the default channel, but the Marketplace updates it: the install command
-keeps it and never changes it. After an update, its chats may say they are out of date
-until the Marketplace reads the repository again. To use the install command's copy
-instead, uninstall it in Cursor, then run the install command again.
+The Cursor Marketplace lists text-to-cad too. The Marketplace takes the plugin from
+this repository's default branch when it updates its listing. text-to-cad does not
+update that copy and does not know when the Marketplace will, so it can be many
+releases behind. A copy that old runs its own release's commands (before 0.8 they were
+`cadgen` commands), and updating text-to-cad on the same computer does not change it.
+To get the current release in Cursor, uninstall the Marketplace's copy in Cursor, then
+run the install command.
 
 To update, pull the latest release, then restart Cursor:
 
@@ -483,9 +485,9 @@ terminal where the app's command is found, gives it the text now.
 Only what the install command set up updates itself; the receipt it writes is what says
 so. A copy from a plugin directory (claude.ai's, Codex's) is updated by its store: CAD
 shows no update button or automatic-updates switch in its chats, and `cad update` there
-says its store updates it. The Cursor Marketplace's copy reads this repository's `main`,
-so it is on the default channel, but the Marketplace updates it, not the install
-command. On a computer where the install command never ran, `cad update` says there is
+says its store updates it. The Cursor Marketplace's copy changes only when the
+Marketplace takes the repository again, which text-to-cad does not control
+([Cursor](#cursor)). On a computer where the install command never ran, `cad update` says there is
 nothing to update and names the install command.
 
 ### After an update
@@ -512,8 +514,8 @@ nothing to update and names the install command.
 - A copy of the plugin you installed yourself, with an app's own plugin commands rather
   than the install command, says the same until you update it in that app
   ([App by app](#app-by-app)), or until `cad update` replaces it with the install
-  command's. The Cursor Marketplace's copy says it until the Marketplace reads the
-  repository again; `cad update` does not change it.
+  command's. `cad update` never changes the Cursor Marketplace's copy: it stays at the
+  release the Marketplace last took.
 
 ### Releases side by side
 

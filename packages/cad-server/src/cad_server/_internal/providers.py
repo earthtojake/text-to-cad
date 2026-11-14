@@ -830,7 +830,10 @@ class Copy:
         what = {"server": f"the server {self.name}", "skills": f"loose skill {shown(self.name, machine)}",
                 "folder": shown(self.name, machine), "store": shown(self.name, machine)}.get(self.kind, self.name)
         version = f" {self.version}" if self.version and self.kind not in ("skills", "folder", "store") else ""
-        return f"{what}{version}" + (f" ({self.detail})" if self.detail else "")
+        # A store's folder is named by the store, not by the release: the release it holds is said beside whose it is.
+        detail = ", ".join(word for word in (self.detail, f"{PLUGIN} {self.version}"
+                                             if self.kind == "store" and self.version else "") if word)
+        return f"{what}{version}" + (f" ({detail})" if detail else "")
 
     def origin(self, machine: Optional[Machine] = None) -> str:
         """Where an app's copy of ours comes from, as a person reads it: ``reads ~/x/plugin in place``,
@@ -1212,7 +1215,7 @@ def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
         # Cursor keeps the install in its own app data, by the Marketplace's id, and has no command to
         # uninstall it: a folder removed here would come back.
         app.copies.append(Copy("cursor", "store", str(path), path=str(path), store=True, detail=CURSOR_STORE + "'s",
-                               held_by="Cursor has no command to uninstall it"))
+                               held_by="Cursor has no command to uninstall it", version=_cursor_store_version(path)))
     servers, problem = _json(home / "mcp.json")
     if problem:
         app.notes.append(f"{shown(home / 'mcp.json', machine)} {problem}")
@@ -1220,6 +1223,23 @@ def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
         _servers(app, servers.get("mcpServers"), home / "mcp.json")
     _loose(app, machine)
     return app
+
+
+def _cursor_store_version(path: Path) -> Optional[str]:
+    """The release of the Cursor Marketplace's copy at ``path``: the Marketplace keeps the repository it took in a
+    folder per commit under it (the newest is the one Cursor loads), whose manifest or ``VERSION`` file names it;
+    None where none says."""
+    folders = [found for found in path.iterdir() if found.is_dir()] if path.is_dir() else []
+    for folder in sorted(folders, key=lambda found: found.stat().st_mtime, reverse=True) + [path]:
+        version = _manifest_version(folder, ".cursor-plugin/plugin.json", "plugin.json")
+        if version is None:
+            try:
+                version = (folder / "VERSION").read_text(encoding="utf-8").strip() or None
+            except (OSError, UnicodeDecodeError):
+                version = None
+        if version is not None:
+            return version
+    return None
 
 
 def _grok_plugins(folder: Path) -> List[Dict[str, Any]]:

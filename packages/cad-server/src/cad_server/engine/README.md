@@ -692,11 +692,13 @@ Every other process of the engine's that loads the kernel runs the base's Python
 which the distribution makes as `places.KERNEL`): a model's worker but one in its script's own Python,
 the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
 processes start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is
-made on first need**, never ahead of it: nothing makes it at install time (`cad setup`, `cad doctor` and an
-update the person asks for leave it alone; a version made present makes its own, so the first build after an
-update nobody asked for waits on nothing: **An automatic update never
-interrupts**, under **Architecture**), and the engine starts and serves with none made -- pages, the home, documents
-held in the cache, `status`. The first thing that needs it makes it: a `cad run` of a script whose
+made with its version**: whatever installs a version -- the install command, a pinned command for a version
+that is not here yet, an update a person asks for or an automatic one -- makes its base before the version is
+used (`versions.make_present`), so the first build after an install or an update waits on nothing (**An
+automatic update never interrupts**, under **Architecture**). **Where none is there it is made on first
+need**: an environment that was not installed as a version, or a base that was removed. The engine starts and
+serves with none made -- pages, the home, documents held in the cache, `status` -- and `cad doctor` reports
+one that is missing without making it. The first thing that needs it makes it: a `cad run` of a script whose
 environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
 an operation that opens or draws a STEP or an xbf, or meshes one (`places.kernel`, `base.kernel`) --, by
 the engine's one making (`base.Making`, its lines in the engine's log and its state in `status`), and

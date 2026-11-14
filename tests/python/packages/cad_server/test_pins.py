@@ -150,7 +150,11 @@ class TheCommand(Device):
         def check(how: str) -> None:
             self.uvx(installs=X)
             self.point("store", NEWER)
-            self.refused(self.cad(how, f"+{X}@store", "status"), "stale_pin", pins.stale(X, "store", NEWER))
+            done = self.cad(how, f"+{X}@store", "status")
+            self.refused(done, "stale_pin", pins.stale(X, "store", NEWER))
+            # Nothing of the version is here: the line says what the command is for, not what this is.
+            self.assertTrue(done.stderr.startswith(f"cad: this command is for text-to-cad {X}, and its channel (store) "
+                                                   f"is on text-to-cad {NEWER} now: read the skill again"), done.stderr)
             self.point(None, NEWER)
             for pin in (f"+{X}", f"+{X}@default"):  # @default is the default channel
                 self.refused(self.cad(how, pin, "status"), "stale_pin", pins.stale(X, None, NEWER))

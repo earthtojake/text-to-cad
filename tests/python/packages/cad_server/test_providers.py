@@ -709,11 +709,16 @@ class DetectionAndPlan(Fixture):
 
     def test_without_claude_code_the_cursor_marketplace_s_copy_keeps_ours_out(self) -> None:
         # Cursor keeps a Marketplace install in its own app data and has no command to uninstall it.
+        # The Marketplace keeps the repository it took in a folder per commit, whose VERSION says which release it
+        # is: said, since the Marketplace's copy can be far behind.
         home = self.make()
-        (home.home / ".cursor" / "plugins" / "cache" / "earthtojake" / "text-to-cad" / "0123abc").mkdir(parents=True)
+        taken = home.home / ".cursor" / "plugins" / "cache" / "earthtojake" / "text-to-cad" / "0123abc"
+        taken.mkdir(parents=True)
+        (taken / "VERSION").write_text("0.7.12\n", encoding="utf-8")
         (step,) = home.plan()
         self.assertEqual((step.app, step.action), ("cursor", "leave"))
-        self.assertIn("(the Cursor Marketplace's): the Marketplace's copy, which the Marketplace updates, so it stays, "
+        self.assertIn("(the Cursor Marketplace's, text-to-cad 0.7.12): the Marketplace's copy, which the Marketplace "
+                      "updates, so it stays, "
                       "and ours is not added beside it; for ours, uninstall it in Cursor, then run the install command "
                       "again", step.subject)
 

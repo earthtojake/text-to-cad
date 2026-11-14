@@ -420,22 +420,24 @@ class TheCommand(Fixture):
 
     def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
         """The install command runs ``cad setup`` from uvx's environment: a real run makes this release present in
-        ``versions/<release>`` and moves there first, and the base is keyed by its server environment; a dry run
-        stays, says the same folder, and plans the version's install and the default channel's move."""
+        ``versions/<release>``, its kernel environment with it in its ``code/base``, and moves there first; a dry run
+        stays, says that folder (the key is the version's own server's, not known before it is there), and plans the
+        version's install and the default channel's move."""
         from cad.engine import places
         from cad_server._internal import base
 
         uvx = dataclasses.replace(base.Installation.here(), prefix=str(self.root / "uvx-env"), python="3.14.6",
                                   kernel=False)
-        kernel = re.compile(r"build123d +leave +.+, made on first need in (.+)\n")
-        server = places.code_dir(RELEASE) / "server"
         with mock.patch.object(base.Installation, "here", return_value=uvx), \
                 mock.patch.object(setup.Installer, "_home", return_value=RELEASE):
             code, out, _err = self.run_setup("--dry-run")
         self.assertEqual(code, 0, out)
-        found = Path(str(kernel.search(out).group(1)).replace("~", str(self.home), 1))
-        self.assertEqual(found, base.where(dataclasses.replace(uvx, prefix=str(server))))
-        self.assertNotEqual(found, base.where(uvx), "not the folder of the environment it runs from")
+        folder = re.escape(providers.shown(str(places.code_dir(RELEASE) / "base"), self.machine))
+        self.assertRegex(out, rf"\n  build123d +leave +cad\[build123d\] {re.escape(RELEASE)}, made with the version "
+                              rf"in {folder}\n")
+        self.assertNotIn("made on first need", out)
+        self.assertNotIn(providers.shown(str(base.where(uvx).parent), self.machine), out,
+                         "not the folder of the environment it runs from")
         where = re.escape(providers.shown(str(places.version_dir(RELEASE)), self.machine))
         self.assertRegex(out, rf"\n  version +install +text-to-cad {re.escape(RELEASE)} in {where}, once\n")
         self.assertRegex(out, rf"\n  default +move +text-to-cad {re.escape(RELEASE)}\n")

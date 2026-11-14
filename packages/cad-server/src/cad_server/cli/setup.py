@@ -634,13 +634,25 @@ class Installer:
 
     def _kernel(self) -> dict[str, Any] | None:
         """The CAD kernel environment, the base the engine's own kernel processes start from
-        (``cad_server._internal.base``), as the plan says it: made, or made on first need -- never by this
-        run. None for an installation that carries the kernel itself."""
+        (``cad_server._internal.base``), as the plan says it: made, made with the version this run installs, or (a
+        process with no version) made on first need -- never by this row. None for an installation that carries the
+        kernel itself."""
+        from cad.engine import places
         from cad_server._internal import base
 
         row: dict[str, Any] = {"app": "build123d", "label": "build123d", "action": "leave"}
+        home = self._home()
         try:
-            installation = self._as_set_up(base.Installation.here())
+            installation = base.Installation.here()
+            if home is not None:
+                # Run from anywhere but this release's own folder (uvx's environment): the real run moves into
+                # versions/<release> first, and the version is made present with its base there
+                # (``versions.make_present``), whose key is read from the version's own server, not known before it
+                # is there. A dry run names the folder.
+                shown = self.providers.shown(str(places.code_dir(home) / base.BASE), self.machine)
+                if places.version_record(home) is not None:
+                    return {**row, "subject": f"cad[{base.EXTRA}] {self.release} in {shown}, made with the version"}
+                return {**row, "subject": f"cad[{base.EXTRA}] {self.release}, made with the version in {shown}"}
             if installation.kernel:
                 return None
             found = base.ensure(installation, make=False)
@@ -651,18 +663,6 @@ class Installer:
         if found is not None:
             return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
         return {**row, "subject": f"cad[{base.EXTRA}] {installation.release}, made on first need in {shown}"}
-
-    def _as_set_up(self, installation: Any) -> Any:
-        """``installation`` as the run that sets it up will be: a dry run stops short of step 1, so run from
-        anywhere but this release's own folder (uvx's environment) it says what it would do from there."""
-        import dataclasses
-
-        from cad.engine import places
-
-        name = self._home()
-        if name is None:
-            return installation
-        return dataclasses.replace(installation, prefix=str(places.code_dir(name) / "server"))
 
     def _stop_earlier(self, row: dict[str, Any]) -> None:
         """Step 3: a 0.8 installation's server stopped by its own ``cadgen stop`` (``stop_earlier``), and what

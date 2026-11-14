@@ -305,8 +305,9 @@ def older(one: str, other: str) -> bool:
 
 def stale_line(version: str, channel: str | None, now: str | None) -> str:
     """What a transport whose channel moved past its version answers with, in one sentence: first which version this
-    is and which its channel is on now (``now``; None where the pointer could not be read again: a newer one), the
-    same words as the server's ``pins.stale_head`` (held equal by a test); then the repair for a tool call in a thread
+    is (the transport is that version) and which its channel is on now (``now``; None where the pointer could not be
+    read again: a newer one), the channel's half in the same words as the server's ``pins.channel_now`` (held equal by
+    a test); then the repair for a tool call in a thread
     whose transport is old, cheapest first: a new thread, which starts the app's newer copy where it has one; then,
     where a new thread says the same, the app's copy brought up: ``cad update`` for the default channel, the plugin's
     update in the app that delivered it for a named one."""

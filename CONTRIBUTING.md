@@ -815,7 +815,7 @@ green: that is the release. `Publish Release`, on the merge commit:
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
 wheels. Only an install of `main` itself sees that: a command that names no
-branch, and the Cursor Marketplace, which takes the repository.
+branch, and the Cursor Marketplace, should it take the repository in those minutes.
 
 When two pull requests bump at once, the first merged wins. The other then
 conflicts on the stamps if it bumped differently (take `main`'s side and run
@@ -890,7 +890,7 @@ What each store and installer reads:
 | Cursor, by hand | `latest` (`git clone --branch latest`) |
 | The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`text-to-cad`) |
 | claude.ai's directory | `claude-plugin` |
-| Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch. `main`'s text names no channel, so this copy is on the default channel |
+| Cursor Marketplace | the repository's default branch, `main`, as it is when the Marketplace updates its listing, on the Marketplace's schedule: its submission takes a repository, not a branch. Nothing here updates that copy or knows when the Marketplace will, so a person's copy can be many releases behind (one was 0.7.12, whose skills run `cadgen` commands, long after 0.11). `main`'s text names no channel, so a copy recent enough to pin its commands is on the default channel |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release, its pins stamped `@codex` |
 
 Who delivers a copy is its channel, and the copy's own text says so: every command its
@@ -910,7 +910,7 @@ The channel is a flag, not a variable: a config runs the launcher of its own rel
 | Copy | Channel | Updated by | Stamped by |
 | ---- | ------- | ---------- | ---------- |
 | `main` and `latest`, every manifest and config; the plugin folder the install command points every app at; a copy a person installs by hand | default | the install command's updater, where it ran here; else the person, in the app | nothing: the text names no channel |
-| the Cursor Marketplace's, which reads `main` | default | the Marketplace: the install command keeps it and never changes it, so after an update its chats may say they are out of date until the Marketplace reads `main` again | nothing |
+| the Cursor Marketplace's: `main` as the Marketplace last took it | default | the Marketplace alone, when it takes the repository again: the install command keeps it and never changes it, and an update of text-to-cad leaves it at its own release | nothing |
 | `claude-plugin`, which claude.ai's directory follows | `claude` | the directory | `plugin_branch.py` |
 | the OpenAI ZIP | `codex` | the directory | `plugin_zip.py` |
 | a development install | default (its telemetry says `dev`) | `dev_install.py`, run again | `dev_install.py` pins its own version name |

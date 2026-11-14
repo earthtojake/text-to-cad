@@ -354,8 +354,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # Main's text is our own, the default channel: no config names a channel or says who updates the copy
         # (the variables 0.11.10 and earlier read, which a copy of those releases still sets, are ignored now),
         # and no launcher is given `--channel`. A store's copy is told its channel by the builder that makes it
-        # (scripts/release/plugin_branch.py, plugin_zip.py). The Cursor Marketplace reads main as it is, so its
-        # copies are on the default channel too.
+        # (scripts/release/plugin_branch.py, plugin_zip.py). The Cursor Marketplace takes main as it is when it
+        # updates its listing, so its copies are on the default channel too.
         for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]

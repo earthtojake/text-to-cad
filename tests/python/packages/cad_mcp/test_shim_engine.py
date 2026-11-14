@@ -632,16 +632,19 @@ class SameFoldersTest(unittest.TestCase):
                 self.assertEqual(engine.older(one, other), versions.older(one, other), (one, other))
 
     def test_the_stale_line_says_what_the_cad_command_s_says_then_its_own_repair(self) -> None:
-        # What a stale launcher says first is what the cad command says first for a stale pin; the repair is each
-        # one's own: a new thread first here, the skill read again there.
+        # What a stale launcher says of its channel is what the cad command says of a stale pin's; the opening is each
+        # one's own (the launcher is its version, a command is only for one), and so is the repair: a new thread
+        # first here, the skill read again there.
         from cad_server._internal import pins
 
         for channel, now in ((None, "0.12.1"), ("codex", "0.12.1"), (None, None)):
             with self.subTest(channel=channel, now=now):
-                head = pins.stale_head("0.12.0", channel, now) + ": "
+                shared = pins.channel_now(channel, now) + ": "
                 line = engine.stale_line("0.12.0", channel, now)
-                self.assertTrue(line.startswith(head + "start a new thread; if a new thread says the same, "), line)
-                self.assertTrue(pins.stale("0.12.0", channel, now).startswith(head + "read the skill again"))
+                self.assertTrue(line.startswith(f"this is text-to-cad 0.12.0, and {shared}start a new thread; if a new "
+                                                "thread says the same, "), line)
+                self.assertTrue(pins.stale("0.12.0", channel, now).startswith(
+                    f"this command is for text-to-cad 0.12.0, and {shared}read the skill again"))
                 self.assertIn("`cad update`" if channel is None else "update the text-to-cad plugin in the app", line)
 
 
