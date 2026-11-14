@@ -1,4 +1,8 @@
-"""The host's stdio transport: forward JSON-RPC to the device's CAD server.
+"""The host's stdio transport: forward JSON-RPC to this version's CAD server.
+
+What it does, in order: find its own version (``engine.configure``); install that version where it is missing, in
+the background, with the version's own line (``engine.prepare``); start that version's server and hold it while
+the host runs (``Holder``); pass the host's requests on and the server's answers back (``Proxy``).
 
 Only connection metadata lives here. Tools, views, pages and document state belong to the server. Host
 capability corrections are made at this boundary: what the person said (``CAD_MCP_PRESENTATION``), and
@@ -8,30 +12,23 @@ browser: made here, in the environment the host gave this process, never in the 
 (``browser.deliver``), and its outcome told to the server before the host has the answer
 (``browser.OPENED``). Nothing of it outlives the request it serves.
 
-**Answered here** (``Proxy.handle``): where this transport cannot reach its own version's server now
-(``engine.unavailable``), a request is answered by this process, never left waiting, and nothing reaches any
-server. Four cases: its version is being installed, or its channel moved to it (``engine.prepare``, at start;
-minutes on a slow network); its channel is on a newer version (stale, ``engine.stale``: for good, this process
-never installs, starts or connects); its channel, once on its version, is not on this computer any more (taken off
-by ``cad uninstall``, ``--purge`` or ``cad doctor --prune``: the stale kind too, ``engine.removed_line``, so a server
-that stops under the thread is never started again; until an install writes the channel's pointer again, when this
-process serves again); or its version could not be made ready (failed). Each request waits for the version
-``engine.READY_SECONDS`` at most (``ping`` not at all; ``initialize`` ``initialize_seconds``: 80% of the app's own
-startup timeout where its server config gives it, ``--startup-timeout``, the rest left to uvx starting this process
-before the initialize arrives and to the server's start and its answer after, never less than ``INITIALIZE_SECONDS``, so
-a first start that installs the version is answered by the server's own session wherever the app waits for it: Codex
-adds a late start's tools to the running turn, but acts on no ``list_changed`` within a turn), then:
+**Answered here** (``Proxy.handle``): while its version is being installed (minutes on a slow network), or where it
+could not be installed, a request is answered by this process, never left waiting, and nothing reaches any
+server. Each request waits for the version ``engine.READY_SECONDS`` at most (``ping`` not at all; ``initialize``
+``initialize_seconds``: 80% of the app's own startup timeout where its server config gives it,
+``--startup-timeout``, the rest left to uvx starting this process before the initialize arrives and to the server's
+start and its answer after, never less than ``INITIALIZE_SECONDS``, so a first start that installs the version is
+answered by the server's own session wherever the app waits for it: Codex adds a late start's tools to the running
+turn, but acts on no ``list_changed`` within a turn), then:
 
 - ``initialize``: being installed, a greeting of this process's own (``_greeting``) that says the tool and
   resource lists can change, and the server's session opened at the first request after the version is ready.
-  Stale or failed, a JSON-RPC error carrying the line: the app's start says why, and a new thread after the
-  repair starts again.
-- ``tools/call``: a result marked ``isError`` whose text is the line (``engine.installing_line``, ``stale_line``,
-  ``removed_line`` or why it failed), which the agent reads and relays; nothing ran.
+  Not installable, a JSON-RPC error carrying the line (``engine.prepare``'s ``failed``): the app's start says why.
+- ``tools/call``: a result marked ``isError`` whose text is the line (``engine.installing_line``, or why it could
+  not be installed), which the agent reads and relays; nothing ran.
 - ``tools/list``, ``resources/list``, ``resources/templates/list``: being installed, an empty list, and once the
-  version is ready ``notifications/tools/list_changed`` (``resources/list_changed``) so the app asks again.
-  Stale or failed, the list this process last had from its server, where it had one (a thread open across its
-  channel's update keeps its tools, each answering with the stale line); else a JSON-RPC error carrying the line.
+  version is ready ``notifications/tools/list_changed`` (``resources/list_changed``) so the app asks again. Not
+  installable, a JSON-RPC error carrying the line.
 - ``ping``: an empty result, at once (it is answered on the reader, which nothing may hold).
 - ``resources/read`` and every other request: a JSON-RPC error (``UNAVAILABLE``) carrying the line, which the app
   may ask again.
@@ -89,16 +86,11 @@ def initialize_params(params, launcher=None, holder=None, app=None):
     (``host.launcher``), for the server to weigh (its ``host.presentation``), ``holder``, the name of this
     process's hold (``Holder``), whose end ends the session, ``app``, the capability the session hands its
     views (``Proxy.app``), ``browser``: that this process opens the browser a text host's ``cad_show`` asks
-    for (``browser.deliver``), and whether it can here, ``release``: the release this process is, which
-    the server's update button offers when it is newer than the server's own, ``pin``: this process's version
-    and delivery channel (``engine.PIN``: its ``--channel``, none for the default), which the session's events
-    carry, ``claudeCode``:
-    the ``CLAUDE_CODE_ENTRYPOINT`` Claude Code put in this process's environment, where it started it, and
-    ``cards``: ``CAD_MCP_CARDS=1``, which keeps CAD's tools in such a session (the server's
-    ``host.claude_code``). Nothing in this process's environment names a channel: ``CAD_INSTALL_CHANNEL`` and
-    ``CAD_AUTO_UPDATED``, which configs of 0.11.10 and earlier set, are read for nothing."""
-    from cad_mcp import __version__
-
+    for (``browser.deliver``), and whether it can here, ``pin``: this process's version and delivery label
+    (``engine.PIN``: its ``--channel``), which the session's counts carry, ``claudeCode``: the
+    ``CLAUDE_CODE_ENTRYPOINT`` Claude Code put in this process's environment, where it started it, and
+    ``cards``: ``CAD_MCP_CARDS=1``, which keeps CAD's tools for an app the server lists as showing no views
+    (the server's ``host.broken``)."""
     params = copy.deepcopy(params)
     offered = params.setdefault("capabilities", {})
     extensions = offered.setdefault("extensions", {})
@@ -112,7 +104,7 @@ def initialize_params(params, launcher=None, holder=None, app=None):
     claude_code = str(os.environ.get("CLAUDE_CODE_ENTRYPOINT") or "").strip()
     params.setdefault("_meta", {})["dev.texttocad/transport"] = {
         "appDir": os.environ.get("CAD_MCP_APP_DIR", ""), "cwd": os.getcwd(), "launcher": launcher,
-        "browser": transport_browser(), "release": __version__,
+        "browser": transport_browser(),
         "pin": {"version": engine.PIN.version, "channel": engine.PIN.channel},
         **({"claudeCode": claude_code} if claude_code else {}),
         **({"cards": True} if str(os.environ.get("CAD_MCP_CARDS") or "").strip() == "1" else {}),
@@ -123,15 +115,12 @@ def initialize_params(params, launcher=None, holder=None, app=None):
 
 class Holder:
     """This transport's hold on the server (``engine.hold``): taken as the transport starts, once its version is
-    ready (``engine.prepare``), starting the server when none runs -- its own version's (a transport with no
-    version: the current installation's) -- and kept while the host runs, so a shell the host runs in a sandbox
-    that cannot start a server always finds one. A stale transport holds nothing and starts nothing
-    (``engine.connect``), nor does one whose channel is gone from this computer: a server an uninstall stops is not
-    started again here. A hold does not keep a version whose channel moved on: its
-    server stops once nothing is in flight, and the next call is told the thread is stale. Once the host has
-    quit, and this process with it, the server runs on unheld until it is stopped or an update replaces it. A
-    server that goes while held (``cad stop``, a crash, an update) is held again at the host's next request,
-    never at once: a stop is obeyed."""
+    installed (``engine.prepare``), starting the server when none runs -- its own version's (a transport with no
+    version: the one its environment carries) -- and kept while the host runs, so a shell the host runs in a
+    sandbox that cannot start a server always finds one. One whose version could not be installed holds nothing
+    and starts nothing (``engine.connect``). Once the host has quit, and this process with it, the server runs on
+    unheld until it is stopped. A server that goes while held (``cad stop``, a crash) is held again at the host's
+    next request, never at once: a stop is obeyed."""
 
     def __init__(self, host=lambda: None):
         self.host = host  # the host this transport serves, said with the hold (``host.family``)
@@ -155,8 +144,8 @@ class Holder:
         while True:
             self.wanted.wait()
             self.wanted.clear()
-            # Its version made ready first (``engine.prepare``, whose runs bound this wait); then ``hold`` refuses
-            # where the transport cannot serve: stale, or failed.
+            # Its version installed first (``engine.prepare``, whose run bounds this wait); then ``hold`` refuses
+            # where it could not be.
             engine.PIN.ready.wait(engine.READY_LIMIT)
             try:
                 connection = hold(host=self.host, holder=self.ident)
@@ -199,7 +188,7 @@ class Proxy:
         self.app = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
         self.tell = None  # what sends the host a notification (``protocol.Connection.notify``), once serving
-        self.listed = {}  # each list the server last answered (``LISTS``), for a thread that has gone stale
+        self.offered = False  # whether the tools the server offers were logged (once: ``_declared``'s pair)
         self.unlisted = set()  # the list-changed notifications owed once the version is ready
 
     def _send(self, message, session, *, fresh=False):
@@ -279,11 +268,13 @@ class Proxy:
 
     def handle(self, method, params, context: RequestContext):
         if method == "initialize":
-            params = initialize_params(params, self.launcher(), self.holder.ident if self.holder is not None else None,
+            launched = self.launcher()
+            _declared(params, launched)
+            params = initialize_params(params, launched, self.holder.ident if self.holder is not None else None,
                                        self.app)
             why = engine.unavailable(initialize_seconds(self.startup))
             if why is not None and why[0] != engine.INSTALLING:
-                raise RpcError(UNAVAILABLE, why[1])  # stale or failed: the app's start says why
+                raise RpcError(UNAVAILABLE, why[1])  # not installable: the app's start says why
             if why is not None:
                 # Its version is still being installed: the host is greeted here, inside its start window, and the
                 # server's session opened at its first request once the version is ready (``_post``).
@@ -296,16 +287,17 @@ class Proxy:
             with self.lock:
                 self.initialize = params
             return result
-        # Where its server cannot be reached now -- its version being installed, its channel on a newer one, or
-        # its version not made ready -- the request is answered here (the module's "Answered here"). A ping is
-        # answered on the reader, which nothing may hold: it waits for nothing.
+        # Where its server cannot be reached now -- its version being installed, or not installable -- the request is
+        # answered here (the module's "Answered here"). A ping is answered on the reader, which nothing may hold: it
+        # waits for nothing.
         why = engine.unavailable(0.0 if method == "ping" else engine.READY_SECONDS)
         if why is not None:
             return self._local(method, params, *why)
         result = self._post({"jsonrpc": "2.0", "id": context.request_id, "method": method, "params": params})
-        if method in LISTS and not params.get("cursor"):
-            with self.lock:
-                self.listed[method] = result
+        if method == "tools/list" and not self.offered:
+            self.offered = True
+            names = [tool.get("name") for tool in result.get("tools", []) if isinstance(tool, dict)]
+            LOG.info("the server offers this app %s", ", ".join(map(str, names)) if names else "no tools")
         # A text host's cad_show: the page the server names is opened here, never by the server, and the
         # server told whether it opened before the host is answered.
         return deliver(result, self.opener, self._tell) if method == "tools/call" else result
@@ -317,15 +309,10 @@ class Proxy:
             return {}
         if method == "tools/call":
             return {"content": [{"type": "text", "text": line}], "isError": True}
-        if method in LISTS:
+        if method in LISTS and why == engine.INSTALLING:
             key, changed = LISTS[method]
-            if why == engine.INSTALLING:
-                self._owe(changed)
-                return {key: []}
-            with self.lock:
-                kept = None if params.get("cursor") else self.listed.get(method)
-            if kept is not None:
-                return kept
+            self._owe(changed)
+            return {key: []}
         raise RpcError(UNAVAILABLE, line)
 
     def _owe(self, changed):
@@ -375,6 +362,20 @@ class Proxy:
                 pass
 
 
+def _declared(params, launched):
+    """What the app said of itself at ``initialize``, logged to this process's stderr (the app's log of its MCP
+    servers): its client's name and version, the extensions it declares (``io.modelcontextprotocol/ui`` and
+    ``dev.texttocad/tabs`` decide whether the server offers it tools) and the program that launched this process. The
+    server's answer is logged with the first ``tools/list``."""
+    params = params if isinstance(params, dict) else {}
+    client = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
+    offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
+    extensions = offered.get("extensions") if isinstance(offered.get("extensions"), dict) else {}
+    said = [f"{name} {json.dumps(value, sort_keys=True)}" for name, value in sorted(extensions.items())]
+    LOG.info("%s %s declares %s; launched by %s", client.get("name", "an app"), client.get("version", ""),
+             "; ".join(said) or "no extensions", (launched or {}).get("host") if isinstance(launched, dict) else "an unknown program")
+
+
 def _greeting(params):
     """The host's initialize answered here, while this transport's version is installed (``Proxy.handle``): the
     protocol it asked for, the capabilities every session of the server has, with lists that change (a list asked
@@ -394,8 +395,8 @@ def _leave(number, _frame):
 
 
 def serve(argv=None, channel=None, startup=None):
-    """Serve the host on standard input and output until it closes them, or ends this process: on channel
-    ``channel`` (None: the default), this transport's version made ready in the background first
+    """Serve the host on standard input and output until it closes them, or ends this process: with delivery label
+    ``channel`` (None: none), this transport's version installed in the background first where it is missing
     (``engine.prepare``), which every request to the server waits for -- the host's initialize the longest where
     ``startup``, the app's startup timeout in seconds, says the app waits that long (``initialize_seconds``)."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cad-mcp: %(message)s")
@@ -413,8 +414,7 @@ def serve(argv=None, channel=None, startup=None):
         reading.join(5)
         return found.get("host")
 
-    # The server up and held from the start, not from the first card; the hold names the host once it is
-    # read, so the `cad` command in that host's shells runs this installation.
+    # The server up and held from the start, not from the first card; the hold names the host once it is read.
     holder = Holder(host=lambda: family(launched()))
     holder.start()
 
@@ -437,14 +437,13 @@ def serve(argv=None, channel=None, startup=None):
     return 0
 
 
-USAGE = ("usage: cad-mcp [--channel NAME] [--startup-timeout SECONDS]\n\nServe CAD to an agent app over MCP (stdio). "
-         "The app starts one process per thread, from its plugin's startup config. --channel names the delivery "
-         "channel of the plugin copy that config belongs to (a store's), none for the default channel; it is the "
-         "config's to say. --startup-timeout is how long that app waits for this process to start, as the same config "
-         "says it, in seconds, a day at most: the app's first request waits up to 80% of it (never less than 20 "
-         "seconds; 20 without it) for this version to be installed, the rest left to uvx starting this process before "
-         "and to the server's start and answer after, so an app that never asks for its tools again in a turn gets them "
-         "in the one that started it.\n")
+USAGE = ("usage: cad-mcp [--channel NAME] [--startup-timeout SECONDS]\n\nServe CAD over MCP on standard input and "
+         "output, as this package's version of text-to-cad: installed first where it is missing, then its server started "
+         "and every request passed on to it. --channel NAME labels where this copy came from, for the server's usage "
+         "counts alone. --startup-timeout is how long the app that starts this process waits for it to start, in "
+         "seconds, a day at most: the app's first request waits up to 80% of it (never less than 20 seconds; 20 "
+         "without it) for this version to be installed, the rest left to uvx starting this process before and to the "
+         "server's start and answer after.\n")
 
 
 def _seconds(text):
@@ -460,8 +459,8 @@ def _seconds(text):
 
 
 def arguments(args):
-    """``cad-mcp``'s arguments: ``(channel, startup)``, the channel ``--channel NAME`` (or ``--channel=NAME``) names,
-    None for none or ``default``, and the app's startup timeout in seconds ``--startup-timeout SECONDS`` (or
+    """``cad-mcp``'s arguments: ``(channel, startup)``, the delivery label ``--channel NAME`` (or ``--channel=NAME``)
+    names, None for none or ``default``, and the app's startup timeout in seconds ``--startup-timeout SECONDS`` (or
     ``--startup-timeout=SECONDS``) gives, None for none. ``ValueError`` saying what is wrong."""
     channel, startup, rest = None, None, list(args)
     while rest:
@@ -481,9 +480,9 @@ def arguments(args):
 
 
 def main(argv=None):
-    """``cad-mcp [--channel NAME] [--startup-timeout SECONDS]``: serve CAD to the agent app that started this process,
-    over MCP on standard input and output, as this package's version on that delivery channel, its first request
-    waiting as long as the app's startup timeout allows. The app's plugin starts it."""
+    """``cad-mcp [--channel NAME] [--startup-timeout SECONDS]``: serve CAD to the app that started this process, over
+    MCP on standard input and output, as this package's version with that delivery label, its first request waiting
+    as long as the app's startup timeout allows."""
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
         sys.stdout.write(USAGE)

@@ -1,4 +1,5 @@
-"""The one act of its own a text host's ``cad_show`` asks of this process: opening the person's browser.
+"""The one act of its own a ``cad_show`` that shows no view (a ``codex exec`` turn's) asks of this process: opening
+the person's browser.
 
 The server runs in the environment of whatever started it (another agent's shell, another ``BROWSER``, no
 display), so it never opens a browser itself: this process, which the host started in the person's own

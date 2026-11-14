@@ -1,16 +1,17 @@
-"""How a host presents CAD: the evidence its initialize and its calls carry, weighed.
+"""Which apps are offered CAD's tools, from what their initialize and their calls carry.
 
-A host's greeting does not always say whether it shows CAD cards: Codex greets the server as
-``codex-mcp-client`` and declares no MCP Apps extension from its desktop app (which shows them as
-tabs), from ``codex exec`` or from its terminal UI (which show none), and Claude Code's terminal
-declares none either. The stdio transport that host started does say which host launched it, read
-from its parent processes (``cad_mcp.host.launcher``), and hands it to the server with the host's
-initialize (``launcher``).
+CAD's tools show models as views in the app (tabs or cards), so an app is offered them only when it says it
+shows MCP Apps: it declares the ``io.modelcontextprotocol/ui`` extension with CAD's page type, or
+``dev.texttocad/tabs``. An app that declares neither is offered no tools at all, and shows models the way it
+shows any web page (the ``cad viewer`` link).
 
-What decides, strongest first (``presentation`` at initialize, then the server at each call): an
-extension the host declares; a view that reached the server (only a host that shows cards draws
-one); the call's own metadata (a ``codex exec`` turn says ``turn_trigger: exec``); the host that
-launched the shim; and last the client's name, which never on its own claims that a tab opened.
+Codex is the one exception: its desktop app shows CAD tabs and declares nothing, and so do ``codex exec`` and
+its terminal UI, which show none, all greeting the server as ``codex-mcp-client``. The stdio transport that
+Codex started says which program launched it, read from its parent processes (``cad_mcp.host.launcher``), and
+hands it to the server with the initialize (``launcher``); a call made in a ``codex exec`` turn says so in its
+metadata (``headless``).
+
+An app on the tested-as-broken list (``BROKEN``) is offered no tools whatever it declares.
 """
 from __future__ import annotations
 
@@ -26,6 +27,11 @@ CODEX_CLIENT = "codex-mcp-client"
 # launch's ``_meta`` never reaches it: Cursor's card takes its capability from its tool's (``carries_capability``).
 CURSOR_CLIENT = "cursor-vscode"
 
+# The apps tested to show no CAD views, whatever they declare: offered no tools until their views are verified,
+# by the name their MCP client gives. Claude Code (its terminal, and the desktop app's Code tab, which runs it)
+# is also told by ``CLAUDE_CODE_ENTRYPOINT``, which it sets in every server it starts (``broken``).
+BROKEN = {"claude-code": "Claude Code"}
+
 # Where a Codex call says its turn shows no app: ``codex exec`` (and its ``resume``) runs the turn
 # headless, though it greets the server as the Codex app does. Seen from the 0.163 app server's
 # binary; codex-cli 0.153 sends no such field, which is why the launcher is read too.
@@ -34,28 +40,40 @@ HEADLESS_TRIGGERS = frozenset({"exec"})
 
 
 def presentation(client: dict[str, Any], offered: dict[str, Any], launched: Any) -> tuple[str, bool | None, str]:
-    """How a host presents CAD, from its initialize: ``(presentation, renders, why)``. ``presentation``
-    is ``tabs``, ``inline`` or ``text``, the catalog the host is listed; ``renders`` whether it shows
-    CAD cards, None where nothing says yet (a view reaching the server, or a call, will); ``why`` the
-    evidence, in words for the log."""
+    """How an app is served CAD, from its initialize: ``(presentation, renders, why)``. ``presentation`` is
+    ``tabs`` or ``inline`` (the catalog it is offered) or ``text`` (no tools); ``renders`` whether it shows CAD
+    views, None where nothing says yet (a Codex whose launcher is unknown: a view reaching the server, or a
+    call, will); ``why`` the evidence, in words for the log."""
     extensions = offered.get("extensions") if isinstance(offered.get("extensions"), dict) else {}
     declared = extensions.get(TABS_EXTENSION)
     entrypoints = declared.get("entrypoints") if isinstance(declared, dict) else None
     if isinstance(entrypoints, list) and TAB_ENTRYPOINTS <= set(entrypoints):
         return "tabs", True, "declared tabs"
     codex = client.get("name") == CODEX_CLIENT  # Codex presents what it renders as tabs, never inline
-    if codex and not (isinstance(launched, dict) and str(launched.get("host", "")).startswith("codex")):
-        launched = None  # a Codex client another program launched: that program says nothing of Codex
     ui = extensions.get(UI_EXTENSION)
     if isinstance(ui, dict) and MIME in (ui.get("mimeTypes") or []):
         return ("tabs" if codex else "inline"), True, "declared apps"
-    renders = launched.get("renders") if isinstance(launched, dict) else None
-    if renders is not None:
-        shown = ("tabs" if codex else "inline") if renders else "text"
-        return shown, renders, f"launched by {launched.get('host')}"
-    if codex:
-        return "tabs", None, "named codex, launched by " + (str(launched.get("host")) if isinstance(launched, dict) else "an unknown host")
-    return "text", False, "no extension, no known launcher"
+    if not codex:
+        return "text", False, "declares no MCP Apps support"
+    if not (isinstance(launched, dict) and str(launched.get("host", "")).startswith("codex")):
+        return "tabs", None, "named codex, launched by an unknown host"  # another program's word says nothing of Codex
+    renders = launched.get("renders")
+    if renders is False:
+        return "text", False, f"named codex, launched by {launched.get('host')}, which shows no CAD views"
+    return "tabs", renders, f"named codex, launched by {launched.get('host')}"
+
+
+def broken(client: dict[str, Any], transport: Any) -> str | None:
+    """The app's name where it is on the tested-as-broken list (``BROKEN``), else None: by its client's name, or
+    Claude Code by ``CLAUDE_CODE_ENTRYPOINT`` in the transport's environment (``claudeCode``). ``CAD_MCP_CARDS=1``
+    there (``cards``) keeps the tools, for testing."""
+    transport = transport if isinstance(transport, dict) else {}
+    if transport.get("cards") is True:
+        return None
+    name = client.get("name")
+    if isinstance(name, str) and name in BROKEN:
+        return BROKEN[name]
+    return "Claude Code" if transport.get("claudeCode") else None
 
 
 def carries_capability(client: dict[str, Any], presentation: str) -> bool:
@@ -66,17 +84,6 @@ def carries_capability(client: dict[str, Any], presentation: str) -> bool:
     reads its tools from descriptors that carry name, description and arguments, never ``_meta``. Every
     other host reads the capability from the launch's result, as before."""
     return client.get("name") == CURSOR_CLIENT and presentation == "inline"
-
-
-def claude_code(transport: Any) -> bool:
-    """Whether Claude Code started the session's transport, which then lists no tools: the transport saw
-    ``CLAUDE_CODE_ENTRYPOINT`` in its own environment (``claudeCode``, which Claude Code sets for every server
-    it starts, its terminal's and the desktop app's Code tab's), and was not told ``CAD_MCP_CARDS=1``
-    (``cards``), which keeps CAD's tools there for testing. A server Claude Desktop starts from its own
-    config, which its Code tab also offers, never sees the variable, so it keeps every tool."""
-    if not isinstance(transport, dict):
-        return False
-    return bool(transport.get("claudeCode")) and transport.get("cards") is not True
 
 
 def headless(meta: Any) -> bool:

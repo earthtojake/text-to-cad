@@ -87,24 +87,35 @@ class PresentationTest(unittest.TestCase):
     UI = {"extensions": {host.UI_EXTENSION: {"mimeTypes": [host.MIME]}}}
     TABS = {"extensions": {host.TABS_EXTENSION: {"entrypoints": ["global", "thread", "file"]}}}
 
-    def test_a_declaration_then_the_launcher_then_the_name_and_the_name_never_claims_a_tab(self) -> None:
+    def test_tools_go_to_an_app_that_declares_views_and_to_codex_s_app_alone(self) -> None:
         # What the transport reads of each launcher (``cad_mcp.host.host_of``), as it hands it to the server.
         execd = {"host": "codex exec", "renders": False}
         app = {"host": "codex app-server", "renders": True}
         claude = {"host": "claude code", "renders": False}
+        desktop = {"host": "claude desktop", "renders": True}
         for client, offered, launched, expected in (
-                (self.OTHER, self.TABS, execd, ("tabs", True)),      # what a host declares wins
+                (self.OTHER, self.TABS, execd, ("tabs", True)),      # what an app declares wins
                 (self.CODEX, self.UI, execd, ("tabs", True)),        # Codex shows what it renders as tabs
-                (self.OTHER, self.UI, claude, ("inline", True)),     # Claude Code with CLAUDE_CODE_MCP_APPS_HOST=1
-                (self.CODEX, {}, execd, ("text", False)),            # codex exec, whatever its calls carry
-                (self.CODEX, {}, {"host": "codex", "renders": False}, ("text", False)),
-                (self.CODEX, {}, app, ("tabs", True)),               # the Codex app
+                (self.OTHER, self.UI, claude, ("inline", True)),     # declared: inline cards
+                (self.CODEX, {}, execd, ("text", False)),            # codex exec: no tools
+                (self.CODEX, {}, {"host": "codex", "renders": False}, ("text", False)),  # its terminal UI
+                (self.CODEX, {}, app, ("tabs", True)),               # the Codex app, which declares nothing
                 (self.CODEX, {}, None, ("tabs", None)),              # the name alone: Codex's catalog, no claim
                 (self.CODEX, {}, claude, ("tabs", None)),            # a launcher that is not Codex says nothing of it
-                (self.OTHER, {}, claude, ("text", False)),
+                (self.OTHER, {}, desktop, ("text", False)),          # declares nothing: no tools, whoever launched it
                 (self.OTHER, {}, None, ("text", False))):
             with self.subTest(client=client["name"], offered=list(offered.get("extensions", {})), launched=(launched or {}).get("host")):
                 self.assertEqual(host.presentation(client, offered, launched)[:2], expected)
+
+    def test_the_tested_as_broken_list_names_claude_code_and_cards_keeps_the_tools(self) -> None:
+        for client, transport, expected in (
+                ({"name": "claude-code"}, {}, "Claude Code"),
+                ({"name": "claude-ai"}, {"claudeCode": "claude-desktop"}, "Claude Code"),  # its Code tab, by the variable
+                ({"name": "claude-code"}, {"claudeCode": "cli", "cards": True}, None),     # CAD_MCP_CARDS=1, for testing
+                ({"name": "claude-ai"}, {}, None),                                          # Claude Desktop's chat
+                (self.CODEX, None, None)):
+            with self.subTest(client=client["name"], transport=transport):
+                self.assertEqual(host.broken(client, transport), expected)
 
     def test_a_codex_exec_turn_is_told_by_its_metadata(self) -> None:
         self.assertTrue(host.headless({"x-codex-turn-metadata": {"turn_trigger": "exec"}}))

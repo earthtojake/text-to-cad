@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from cad_server.viewer.engine_app import ViewerApp
 from .protocol import INVALID_REQUEST, INVALID_PARAMS, PARSE_ERROR, INTERNAL_ERROR, RequestContext, RpcError
 from .server import Server, _PROTOCOL_VERSIONS
+from .outcomes import Outcomes, default_path
 from .sidebar import SidebarViews
 from .tunnel import ViewerTunnel
 from .ui import AppPage
@@ -36,11 +37,12 @@ class Session:
     holder: str | None = None  # the name of the stdio server's hold it was opened under (``release``)
     released: bool = False  # that hold is gone: the session ends once nothing runs in it
     calls: int = 0  # an agent's tool calls in flight (``Sessions.working``)
-    # The delivery channel of the launcher that opened it (its ``pin``'s, ``cad_mcp``'s ``--channel``): None is the
-    # default channel, and every launcher of 0.11.10 and earlier, which says none.
+    # The delivery label of the launcher that opened it (its ``pin``'s, ``cad_mcp``'s ``--channel``): None where it
+    # names none, as every launcher of 0.11.10 and earlier.
     channel: str | None = None
 
     def close(self):
+        self.server.ended()  # a model it showed that no view called back for is its app's miss
         self.server.sidebar_views.close()
 
 
@@ -50,6 +52,8 @@ class Sessions:
         self.lock = threading.RLock()
         self.sessions: dict[str, Session] = {}
         self.sidebar = ViewRegistry()
+        # Which apps' views never called back, in this version's data folder (``outcomes.py``).
+        self.outcomes = Outcomes(default_path())
 
     def close(self):
         with self.lock:
@@ -92,17 +96,13 @@ class Sessions:
         meta = params.get('_meta') or {}
         options = meta.get('dev.texttocad/transport', {}) if isinstance(meta, dict) else {}
         options = options if isinstance(options, dict) else {}
-        # The release the peer runs: one newer than this engine's proves a release is out, and the
-        # update button shows it with no network (``cad_server.updates.see``).
-        from cad_server import updates
-        updates.see(options.get('release'))
         directory = options.get('appDir')
         page = AppPage(Path(directory)) if isinstance(directory, str) and directory else AppPage()
         app = ViewerApp(self.engine.server, host=self.engine.host, port=self.engine.server.port,
                          start=options.get('cwd') if isinstance(options.get('cwd'), str) else None)
-        # The session's launcher's delivery channel (its ``pin``: ``cad_mcp``'s ``--channel``; none, or a launcher of
-        # 0.11.10 and earlier, is the default) and its client: every use it counts is counted under the two
-        # (``Recorder.of``), a batch of their own.
+        # The session's launcher's delivery label (its ``pin``: ``cad_mcp``'s ``--channel``; none for a launcher that
+        # names none) and its client: every use it counts is counted under the two (``Recorder.of``), a batch of
+        # their own.
         from cad.engine.places import CHANNEL
         pin = options.get('pin') if isinstance(options.get('pin'), dict) else {}
         channel = pin.get('channel') if isinstance(pin.get('channel'), str) and CHANNEL.fullmatch(pin['channel']) else None
@@ -110,8 +110,6 @@ class Sessions:
         client = client if isinstance(client, dict) else {}
         analytics = self.engine.analytics.of(channel, client.get('name'))
         app.analytics = analytics
-        # A session on a named channel has no updater: no notice, button or switch (``ViewerApp._updater``).
-        app.channel = channel
         app.consent_by = "app"
         # The link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
         # the card's capability already reaches everything a link does.
@@ -130,7 +128,7 @@ class Sessions:
                         sidebar_views=SidebarViews(self.sidebar), viewer_url=viewer_url,
                         sync_document=self.engine.server.sync, warm=self.engine.server.warm,
                         in_browser=self.engine.server.in_page, browser_opened=self.engine.server.page_opening,
-                        engine_origin=self.engine.server.url, updater=channel is None)
+                        engine_origin=self.engine.server.url, outcomes=self.outcomes)
         result = server.handle('initialize', params, RequestContext(None, {}))
         holder = options.get('holder')
         holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None
@@ -229,14 +227,14 @@ class Sessions:
 
     @staticmethod
     def _used(channel):
-        """An agent's tool call on channel ``channel``: the channel marked used (``pointers.used``), by a version's
-        server alone."""
+        """An agent's tool call (on channel ``channel``, a label): this version's use recorded (``versions.used``),
+        by a version's server alone."""
         from cad.engine.places import versioned
         if versioned() is None:
             return
         try:
-            from cad_server._internal import pointers
-            pointers.used(channel)
+            from cad_server._internal import versions
+            versions.used()
         except Exception:  # noqa: BLE001 - a mark, never a reason a call fails
             pass
 

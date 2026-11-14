@@ -1,6 +1,7 @@
-"""The CAD Viewer's page for a text host, and the words the stdio transport and the server say of it.
+"""The CAD Viewer's page for a call that shows no view (a ``codex exec`` turn's), and the words the stdio transport
+and the server say of it.
 
-A text host's ``cad_show`` opens the model's page in the person's browser, but never from the server: the
+Such a ``cad_show`` opens the model's page in the person's browser, but never from the server: the
 server runs in the environment of whatever started it (another agent's shell, another ``BROWSER``, no
 display), so its open could land in the wrong browser, or nowhere. The stdio transport the host started
 (``cad_mcp.browser``), which runs in the agent's own environment, opens it instead. It says at initialize

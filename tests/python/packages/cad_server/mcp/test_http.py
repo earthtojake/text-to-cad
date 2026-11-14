@@ -26,6 +26,8 @@ RELEASE = __import__("cad_server").__version__
 
 INIT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'codex-mcp-client'}, 'capabilities': {}}
 TEXT = {'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'some-cli'}, 'capabilities': {}}
+# What a `codex exec` turn's call carries: the turn shows no app, so a show opens the person's browser.
+HEADLESS = {'x-codex-turn-metadata': {'turn_trigger': 'exec'}}
 # A ``BROWSER`` that records each page it is given, and who gave it (its parent's pid), and opens nothing.
 RECORDER = """import json, os, sys
 from urllib.parse import unquote, urlsplit
@@ -113,20 +115,20 @@ class HttpSessionsTest(unittest.TestCase):
             yield
 
     @unittest.skipIf(os.name == 'nt', 'a BROWSER command here is a script run by its #! line')
-    def test_a_text_hosts_cad_show_opens_the_browser_from_the_stdio_peer_never_the_engine(self):
+    def test_a_headless_turns_cad_show_opens_the_browser_from_the_stdio_peer_never_the_engine(self):
         # The engine runs in the environment of whatever started it -- here a BROWSER that records --
         # and the stdio peer in its host's: only the peer's BROWSER is given the page.
         engine = request({'op': 'status'})['pid']  # running, started with the engine's environment
         before = len(self.recorded())
         with self.peer_environment(BROWSER=self.browser('shim', 0)):
-            proxy = self.proxy(TEXT)
+            proxy = self.proxy()
             model = str(self.model.resolve())
-            shown = self.tool(proxy, 'cad_show', {'source': model})
+            shown = self.tool(proxy, 'cad_show', {'source': model}, HEADLESS)
             self.assertNotIn('_meta', shown)
             text = shown['content'][0]['text']
             self.assertRegex(text, r'^part\.stl opened in your browser at http://127\.0\.0\.1:\d+/[0-9a-f-]{36}\?token=')
             # Opened once: the peer told the engine it opened the page, and a second show opens nothing.
-            again = self.tool(proxy, 'cad_show', {'source': model})['content'][0]['text']
+            again = self.tool(proxy, 'cad_show', {'source': model}, HEADLESS)['content'][0]['text']
             self.assertTrue(again.startswith('part.stl is already open in your browser at '), again)
         opened = self.recorded()[before:]
         self.assertEqual([(row['who'], row['pid']) for row in opened], [('shim', os.getpid())])
@@ -146,9 +148,9 @@ class HttpSessionsTest(unittest.TestCase):
         model.write_bytes(b'solid part\nendsolid part\n')
         before = len(self.recorded())
         with self.peer_environment():
-            proxy = self.proxy(TEXT, opener=webbrowser.GenericBrowser(self.browser('failing', 1)).open)
+            proxy = self.proxy(opener=webbrowser.GenericBrowser(self.browser('failing', 1)).open)
             for attempt in (1, 2):
-                text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())})['content'][0]['text']
+                text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())}, HEADLESS)['content'][0]['text']
                 self.assertTrue(text.startswith('No browser can be opened from here (no browser could be started here'), (attempt, text))
                 self.assertIn("; failing.stl's page is http://127.0.0.1:", text)
         self.assertEqual([row['who'] for row in self.recorded()[before:]], ['failing', 'failing'])
@@ -162,14 +164,15 @@ class HttpSessionsTest(unittest.TestCase):
             self.assertEqual(status, 200, body)
             return {name.lower(): value for name, value in replied.items()}, json.loads(body)['result']
 
-        replied, _ = post({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': TEXT})
+        replied, _ = post({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': INIT})
         session = {'Mcp-Session-Id': replied['mcp-session-id'], 'MCP-Protocol-Version': '2025-11-25'}
         self.addCleanup(client.call, 'DELETE', '/mcp', headers=session)
         model = self.root / 'unopened.stl'
         model.write_bytes(b'solid part\nendsolid part\n')
         before = len(self.recorded())
         _, shown = post({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                         'params': {'name': 'cad_show', 'arguments': {'source': str(model.resolve())}}}, **session)
+                         'params': {'name': 'cad_show', 'arguments': {'source': str(model.resolve())},
+                                    '_meta': HEADLESS}}, **session)
         self.assertNotIn('_meta', shown)
         self.assertRegex(shown['content'][0]['text'], r'^unopened\.stl\'s page is http://127\.0\.0\.1:\d+/\S+; nothing was '
                                                       r'opened, as this client opens no browser\.\n')
@@ -182,8 +185,8 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(status, 202)
         opened = []
         with self.peer_environment():
-            proxy = self.proxy(TEXT, opener=lambda target: opened.append(target) or True)
-            text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())})['content'][0]['text']
+            proxy = self.proxy(opener=lambda target: opened.append(target) or True)
+            text = self.tool(proxy, 'cad_show', {'source': str(model.resolve())}, HEADLESS)['content'][0]['text']
         self.assertTrue(text.startswith('unopened.stl opened in your browser at '), text)
         self.assertEqual((len(opened), self.recorded()[before:]), (1, []))
 
@@ -191,8 +194,15 @@ class HttpSessionsTest(unittest.TestCase):
     def call(proxy, method, params=None):
         return proxy.handle(method, params or {}, RequestContext(1, {}))
 
-    def tool(self, proxy, name, arguments=None):
-        return self.call(proxy, 'tools/call', {'name': name, 'arguments': arguments or {}})
+    def tool(self, proxy, name, arguments=None, meta=None):
+        return self.call(proxy, 'tools/call', {'name': name, 'arguments': arguments or {}, **({'_meta': meta} if meta else {})})
+
+    def test_an_app_that_declares_no_views_completes_its_connection_with_no_tools(self):
+        proxy = self.proxy(TEXT)
+        self.assertEqual(self.call(proxy, 'tools/list'), {'tools': []})
+        self.assertEqual(self.call(proxy, 'ping'), {})
+        with self.assertRaises(RpcError):
+            self.tool(proxy, 'cad_show', {'source': str(self.model.resolve())})
 
     def test_two_sessions_share_engine_and_router_but_not_conversation_views(self):
         first, second = self.proxy(), self.proxy()

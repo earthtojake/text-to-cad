@@ -1,12 +1,11 @@
 """CAD beside an agent's chat: the stdio transport an agent app starts, forwarding MCP to the device's CAD
 server over HTTP (``shim``).
 
-The standard library alone. It is one version (its own release) on one delivery channel (``--channel``), and
-reaches that version's server the way the server's own clients do -- its door in the engine folder (``engine``)
---, makes its version present and its channel on it as it starts, and starts that version's server when none
-answers. A source tree has no version, and reaches the current installation's, as every release of 0.11.10 and
-earlier. Everything CAD is, the server is: this process carries the host's requests to it and its answers
-back, opens the person's browser where a text host's ``cad_show`` asks, and tells the server which host
+The standard library alone. It is one version (its own release), installs that version where it is missing as it
+starts, and reaches that version's server the way the server's own clients do -- its door in the engine folder
+(``engine``) --, starting it when none answers. A source tree has no version, and reaches the server its own
+environment carries. Everything CAD is, the server is: this process carries the host's requests to it and its
+answers back, opens the person's browser where a text host's ``cad_show`` asks, and tells the server which host
 started it.
 """
 
